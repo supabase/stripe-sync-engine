@@ -16,6 +16,26 @@ SET row_security = off;
 CREATE SCHEMA stripe;
 
 
+--
+-- Name: pricing_tiers; Type: TYPE; Schema: stripe; Owner: -
+--
+
+CREATE TYPE stripe.pricing_tiers AS ENUM (
+    'graduated',
+    'volume'
+);
+
+
+--
+-- Name: pricing_type; Type: TYPE; Schema: stripe; Owner: -
+--
+
+CREATE TYPE stripe.pricing_type AS ENUM (
+    'one_time',
+    'recurring'
+);
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -45,6 +65,30 @@ CREATE TABLE stripe.customers (
     next_invoice_sequence integer,
     preferred_locales jsonb,
     tax_exempt text
+);
+
+
+--
+-- Name: prices; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.prices (
+    id text NOT NULL,
+    active boolean,
+    currency text,
+    metadata jsonb,
+    nickname text,
+    recurring jsonb,
+    type stripe.pricing_type,
+    unit_amount integer,
+    billing_scheme text,
+    created integer,
+    livemode boolean,
+    lookup_key text,
+    tiers_mode stripe.pricing_tiers,
+    transform_quantity jsonb,
+    unit_amount_decimal text,
+    product text
 );
 
 
@@ -88,6 +132,14 @@ ALTER TABLE ONLY stripe.customers
 
 
 --
+-- Name: prices prices_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.prices
+    ADD CONSTRAINT prices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
 --
 
@@ -104,6 +156,14 @@ ALTER TABLE ONLY stripe.schema_migrations
 
 
 --
+-- Name: prices prices_product_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.prices
+    ADD CONSTRAINT prices_product_fkey FOREIGN KEY (product) REFERENCES stripe.products(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
@@ -115,4 +175,5 @@ ALTER TABLE ONLY stripe.schema_migrations
 INSERT INTO stripe.schema_migrations (version) VALUES
     ('20210428143758'),
     ('20210428143846'),
-    ('20210429122427');
+    ('20210429122427'),
+    ('20210429132018');

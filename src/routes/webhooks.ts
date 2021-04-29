@@ -3,6 +3,7 @@ import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { upsertCustomer } from '../lib/customers'
 import { upsertProduct } from '../lib/products'
+import { upsertPrice } from '../lib/prices'
 import Product from 'stripe'
 
 const config = getConfig()
@@ -32,6 +33,12 @@ export default async function routes(fastify: FastifyInstance) {
         case 'product.updated': {
           const product = event.data.object as Product
           await upsertProduct(product)
+          break
+        }
+        case 'price.created':
+        case 'price.updated': {
+          const price = event.data.object as Product
+          await upsertPrice(price)
           break
         }
         default:
