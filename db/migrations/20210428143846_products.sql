@@ -1,0 +1,22 @@
+-- migrate:up
+
+create table "stripe"."products" (
+  "id" text primary key,
+  "active" boolean,
+  "description" text,
+  "metadata" jsonb,
+  "name" text,
+  "created" integer,
+  "images" jsonb,
+  "livemode" boolean,
+  "package_dimensions" jsonb,
+  "shippable" boolean,
+  "statement_descriptor" text,
+  "unit_label" text,
+  "updated" integer,
+  "url" text
+);
+
+-- migrate:down
+
+drop table "stripe"."products";
