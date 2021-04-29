@@ -36,6 +36,21 @@ CREATE TYPE stripe.pricing_type AS ENUM (
 );
 
 
+--
+-- Name: subscription_status; Type: TYPE; Schema: stripe; Owner: -
+--
+
+CREATE TYPE stripe.subscription_status AS ENUM (
+    'trialing',
+    'active',
+    'canceled',
+    'incomplete',
+    'incomplete_expired',
+    'past_due',
+    'unpaid'
+);
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -124,6 +139,47 @@ CREATE TABLE stripe.schema_migrations (
 
 
 --
+-- Name: subscriptions; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.subscriptions (
+    id text NOT NULL,
+    cancel_at_period_end boolean,
+    current_period_end integer,
+    current_period_start integer,
+    default_payment_method text,
+    items jsonb,
+    metadata jsonb,
+    pending_setup_intent text,
+    pending_update jsonb,
+    status stripe.subscription_status,
+    application_fee_percent numeric(5,2),
+    billing_cycle_anchor integer,
+    billing_thresholds jsonb,
+    cancel_at integer,
+    canceled_at integer,
+    collection_method text,
+    created integer,
+    days_until_due integer,
+    default_source text,
+    default_tax_rates jsonb,
+    discount jsonb,
+    ended_at integer,
+    livemode boolean,
+    next_pending_invoice_item_invoice integer,
+    pause_collection jsonb,
+    pending_invoice_item_interval jsonb,
+    start_date integer,
+    transfer_data jsonb,
+    trial_end jsonb,
+    trial_start jsonb,
+    schedule text,
+    customer text,
+    latest_invoice text
+);
+
+
+--
 -- Name: customers customers_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
 --
 
@@ -156,11 +212,27 @@ ALTER TABLE ONLY stripe.schema_migrations
 
 
 --
+-- Name: subscriptions subscriptions_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.subscriptions
+    ADD CONSTRAINT subscriptions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: prices prices_product_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
 --
 
 ALTER TABLE ONLY stripe.prices
     ADD CONSTRAINT prices_product_fkey FOREIGN KEY (product) REFERENCES stripe.products(id);
+
+
+--
+-- Name: subscriptions subscriptions_customer_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.subscriptions
+    ADD CONSTRAINT subscriptions_customer_fkey FOREIGN KEY (customer) REFERENCES stripe.customers(id);
 
 
 --
@@ -176,4 +248,5 @@ INSERT INTO stripe.schema_migrations (version) VALUES
     ('20210428143758'),
     ('20210428143846'),
     ('20210429122427'),
-    ('20210429132018');
+    ('20210429132018'),
+    ('20210429140401');

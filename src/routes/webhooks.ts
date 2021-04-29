@@ -4,7 +4,11 @@ import { stripe } from '../utils/StripeClientManager'
 import { upsertCustomer } from '../lib/customers'
 import { upsertProduct } from '../lib/products'
 import { upsertPrice } from '../lib/prices'
+import { upsertSubscription } from '../lib/subscriptions'
+import Customer from 'stripe'
+import Subscription from 'stripe'
 import Product from 'stripe'
+import Price from 'stripe'
 
 const config = getConfig()
 
@@ -25,8 +29,14 @@ export default async function routes(fastify: FastifyInstance) {
       switch (event.type) {
         case 'customer.created':
         case 'customer.updated': {
-          const customer = event.data.object as Product
+          const customer = event.data.object as Customer
           await upsertCustomer(customer)
+          break
+        }
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as Subscription
+          await upsertSubscription(subscription)
           break
         }
         case 'product.created':
@@ -37,7 +47,7 @@ export default async function routes(fastify: FastifyInstance) {
         }
         case 'price.created':
         case 'price.updated': {
-          const price = event.data.object as Product
+          const price = event.data.object as Price
           await upsertPrice(price)
           break
         }

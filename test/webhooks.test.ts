@@ -4,6 +4,7 @@ import { createHmac } from 'crypto'
 import customer_updated from './stripe/customer_updated.json'
 import product_updated from './stripe/product_updated.json'
 import price_updated from './stripe/price_updated.json'
+import subscription_updated from './stripe/subscription_updated.json'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
@@ -66,6 +67,27 @@ describe('/webhooks', () => {
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: price_updated,
+    })
+
+    const json = JSON.parse(response.body)
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * subscription.updated
+   */
+  test('subscription.updated', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(subscription_updated)}`, 'utf8')
+      .digest('hex')
+
+    const response = await app().inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: subscription_updated,
     })
 
     const json = JSON.parse(response.body)
