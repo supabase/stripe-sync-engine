@@ -1,0 +1,54 @@
+{
+  "name": "postgres-stripe-sync",
+  "version": "0.0.1",
+  "description": "Postgres Stripe Sync",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node-dev --log-error --files ./src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "NODE_ENV=production node dist/server.js",
+    "test": "node -r dotenv/config node_modules/.bin/jest",
+    "migrate:new": "dbmate new RENAME",
+    "prod:deploy": "flyctl -c fly.prod.toml deploy",
+    "prod:logs": "flyctl -c fly.prod.toml logs",
+    "prod:secrets:set": "flyctl -c fly.prod.toml secrets import",
+    "prod:secrets:fetch": "AWS_PROFILE=supabase node internals/getSecrets.js prod",
+    "staging:deploy": "flyctl deploy",
+    "staging:logs": "flyctl logs",
+    "staging:secrets:fetch": "node internals/getSecrets.js staging",
+    "staging:secrets:set": "flyctl secrets import"
+  },
+  "author": "Inian",
+  "license": "ISC",
+  "engines": {
+    "node": ">= 12.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "fastify": "^3.14.0",
+    "fastify-autoload": "^3.5.2",
+    "fastify-swagger": "^4.4.1",
+    "pg": "^8.6.0",
+    "stripe": "^8.145.0",
+    "yesql": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^26.0.20",
+    "@types/node": "^14.14.33",
+    "@types/pg": "^7.14.11",
+    "@types/yesql": "^4.1.0",
+    "@typescript-eslint/eslint-plugin": "^4.17.0",
+    "@typescript-eslint/parser": "^4.17.0",
+    "crypto": "^1.0.1",
+    "eslint": "^7.21.0",
+    "eslint-config-prettier": "^8.1.0",
+    "eslint-plugin-prettier": "^3.3.1",
+    "jest": "^26.6.3",
+    "json-schema-to-ts": "^1.6.0",
+    "pino-pretty": "^4.7.1",
+    "prettier": "^2.2.1",
+    "ts-jest": "^26.5.3",
+    "ts-node-dev": "^1.1.6",
+    "typescript": "^4.2.3"
+  }
+}

@@ -1,0 +1,38 @@
+# fly.toml file generated for supabase-api-dev on 2021-01-23T16:07:18+08:00
+
+app = "postgres-stripe-sync-dev"
+
+[build]
+  builtin = "node"
+
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = "80"
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = "443"
+    tls_options = { default_self_signed = true }
+
+  [[services.tcp_checks]]
+    interval = 10000
+    timeout = 2000
+
+[env]
+  NODE_ENV="production"
+  LOG_LEVEL = "debug"
+  PORT = "8080"
+  AUTH0_CLIENT_ID="UwuDuHkLYALBkqCvQneHo9UDyrJ1WN7j"
+  AUTH0_DOMAIN="supabase-dev.auth0.com"
+

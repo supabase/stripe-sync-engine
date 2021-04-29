@@ -1,0 +1,38 @@
+{
+  "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619697430,
+  "data": {
+    "object": {
+      "id": "prod_IsRLOp58Z7V4XN",
+      "object": "product",
+      "active": true,
+      "attributes": [],
+      "created": 1612339919,
+      "description": "Test",
+      "images": [],
+      "livemode": false,
+      "metadata": {},
+      "name": "Pro tier",
+      "package_dimensions": null,
+      "shippable": null,
+      "statement_descriptor": null,
+      "type": "service",
+      "unit_label": null,
+      "updated": 1619697430,
+      "url": null
+    },
+    "previous_attributes": {
+      "description": null,
+      "updated": 1617790475
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_7oRxuBCEqnfaHa",
+    "idempotency_key": null
+  },
+  "type": "product.updated"
+}
