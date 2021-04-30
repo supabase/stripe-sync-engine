@@ -107,6 +107,3 @@ docker run -p 8080:8080 stripe-sync-engine
 **Release**
 
 Handled by GitHub actions whenever their is a commit to the `main` branch with `fix` or `feat` in the description.
-### Todo
-
-- [ ] check that pooling is working (one connection per database)
