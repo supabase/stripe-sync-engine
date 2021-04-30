@@ -32,14 +32,14 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `checkout.session.async_payment_failed`
 - [ ] `checkout.session.async_payment_succeeded`
 - [ ] `checkout.session.completed`
-- [x] `customer.created`
+- [x] `customer.created` 🟢
 - [ ] `customer.deleted`
 - [ ] `customer.source.created`
 - [ ] `customer.source.updated`
-- [x] `customer.subscription.created`
+- [x] `customer.subscription.created` 🟢
 - [ ] `customer.subscription.deleted`
-- [x] `customer.subscription.updated`
-- [x] `customer.updated`
+- [x] `customer.subscription.updated` 🟢
+- [x] `customer.updated` 🟢
 - [ ] `invoice.created`
 - [ ] `invoice.finalized`
 - [ ] `invoice.payment_failed`
@@ -57,12 +57,12 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `plan.created`
 - [ ] `plan.deleted`
 - [ ] `plan.updated`
-- [x] `price.created`
+- [x] `price.created` 🟢
 - [ ] `price.deleted`
-- [x] `price.updated`
-- [x] `product.created`
+- [x] `price.updated` 🟢
+- [x] `product.created` 🟢
 - [ ] `product.deleted`
-- [x] `product.updated`
+- [x] `product.updated` 🟢
 - [ ] `setup_intent.canceled`
 - [ ] `setup_intent.created`
 - [ ] `setup_intent.setup_failed`
