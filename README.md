@@ -1,19 +1,27 @@
-## Postgres Stripe Sync
+![Sync Stripe with Postgres](./docs/stripe-sync-engine.jpg)
+# `Stripe Sync Engine`
 
 Continuously synchronizes a Stripe account to a Postgres database.
 
 ## Motivation
 
-Sometimes you just want to analyze your billing data using SQL. Most importantly, you want to join your billing data to your product/business data.
+Sometimes you want to analyze your billing data using SQL. Even more importantly, you want to join your billing data to your product/business data.
 
-This server will synchronize your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
+This server synchronizes your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
 ## How it works
+
+![How it works](./docs/sync-engine-how.png)
 
 - Creates a new schema `stripe` in a Postgres database, with tables & columns matching Stripe.
 - Exposes a `/webhooks` endpoint that listens to any Stripe webhooks.
-- Inserts/updates the tables whenever there is a change to Stripe.
+- Inserts/updates/deletes changes into the tables whenever there is a change to Stripe.
 
-## Progress
+**Not implemented**
+
+- This will not do an initial load of existing Stripe data. You should use CSV loads for this. We might implement this in the future.
+- We are progressively working through webhooks.
+
+## Webhook Progress
 
 - [ ] `balance.available`
 - [ ] `charge.captured`
@@ -67,38 +75,38 @@ This server will synchronize your Stripe account to a Postgres database. It can 
 
 ## Usage
 
-- Update the `.env` file
-  - Make sure the database URL has search_path `stripe`. eg: `DATABASE_URL=postgres://postgres:postgres@hostname:5432/postgres?sslmode=disable&search_path=stripe`
+- Update your Stripe account with all valid webhooks and get the webhook secret
+- `mv .env.sample .env` and then rename all the variables
+- Make sure the database URL has search_path `stripe`. eg: `DATABASE_URL=postgres://postgres:postgres@hostname:5432/postgres?sslmode=disable&search_path=stripe`
 - Run `dbmate up`
+- Deploy the docker image to your favourite hosting service and expose port `8080`
+- Point your Stripe webooks to your deployed app.
 ## Future ideas
 
 - Expose a "sync" endpoint for each table which will manually fetch and sync from Stripe.
-- Expose endpoints for fetching (read-only) rather than reading from Stripe (could be useful for bulk operations?).
-
-## Built With
-
-- Fastify
-- Strict Typescript support
-- Testing via [Jest](https://jestjs.io/)
-- Reading API in a directory via [fastify-autoload](https://github.com/fastify/fastify-autoload)
-- Documentation generated via [fastify-swagger](https://github.com/fastify/fastify-swagger)
-- Auto generated types from JSON schema with [json-schema-to-ts](https://www.npmjs.com/package/json-schema-to-ts)
-- Linting via [eslint](https://eslint.org/)
-- Watch files and restart server via [ts-node-dev](https://www.npmjs.com/package/ts-node-dev)
-- Code formatting via [Prettier](https://prettier.io/)
-- Pretty logs during development via [pino-pretty](https://github.com/pinojs/pino-pretty)
+- Expose an "initialize" endpoint that will fetch data from Stripe and do an initial load (or perhaps `POST` a CSV to an endpoint).
 
 ## Development
 
-Building Docker
+**Set up**
+- Create a Postgres database on [supabase.com](https://supabase.com) (or another Postgres provider)
+- Update Stripe with all valid webhooks and get the webhook secret
+- `mv .env.sample .env` and then rename all the variables
+
+**Develop**
+
+- `npm run dev` to start the local server
+- `npm run test` to run tests
+
+**Building Docker**
 
 ```
-docker build -t postgres-stripe-sync .
-docker run -p 8080:8080 postgres-stripe-sync
+docker build -t stripe-sync-engine .
+docker run -p 8080:8080 stripe-sync-engine
 ```
+**Release**
 
+Handled by GitHub actions whenever their is a commit to the `main` branch with `fix` or `feat` in the description.
 ### Todo
 
-- fix `USER root` in Dockerfile
-- split dockerfile into builder and runner
-- check that pooling is working (one connection per database)
+- [ ] check that pooling is working (one connection per database)
