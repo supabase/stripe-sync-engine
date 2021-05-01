@@ -2,10 +2,11 @@ import Product from 'stripe'
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
+import { stripe } from '../utils/StripeClientManager'
 
 const config = getConfig()
 
-export const upsertProduct = async (product: Product): Promise<Product[]> => {
+export const upsertProduct = async (product: Product.Product): Promise<Product.Product[]> => {
   const prepared = sql(`
     insert into "${config.SCHEMA}"."products" (
       id,

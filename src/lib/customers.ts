@@ -5,7 +5,7 @@ import { getConfig } from '../utils/config'
 
 const config = getConfig()
 
-export const upsertCustomer = async (customer: Customer): Promise<Customer[]> => {
+export const upsertCustomer = async (customer: Customer.Customer): Promise<Customer.Customer[]> => {
   const prepared = sql(`
     insert into "${config.SCHEMA}"."customers" (
       id,

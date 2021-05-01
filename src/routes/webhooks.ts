@@ -29,25 +29,25 @@ export default async function routes(fastify: FastifyInstance) {
       switch (event.type) {
         case 'customer.created':
         case 'customer.updated': {
-          const customer = event.data.object as Customer
+          const customer = event.data.object as Customer.Customer
           await upsertCustomer(customer)
           break
         }
         case 'customer.subscription.created':
         case 'customer.subscription.updated': {
-          const subscription = event.data.object as Subscription
+          const subscription = event.data.object as Subscription.Subscription
           await upsertSubscription(subscription)
           break
         }
         case 'product.created':
         case 'product.updated': {
-          const product = event.data.object as Product
+          const product = event.data.object as Product.Product
           await upsertProduct(product)
           break
         }
         case 'price.created':
         case 'price.updated': {
-          const price = event.data.object as Price
+          const price = event.data.object as Price.Price
           await upsertPrice(price)
           break
         }
