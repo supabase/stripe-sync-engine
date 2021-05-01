@@ -107,3 +107,13 @@ docker run -p 8080:8080 stripe-sync-engine
 **Release**
 
 Handled by GitHub actions whenever their is a commit to the `main` branch with `fix` or `feat` in the description.
+
+## License 
+
+Apache 2.0
+
+## Sponsors
+
+Supabase is building the features of Firebase using enterprise-grade, open source products. We support existing communities wherever possible, and if the products don’t exist we build them and open source them ourselves. 
+
+[![New Sponsor](https://user-images.githubusercontent.com/10214025/90518111-e74bbb00-e198-11ea-8f88-c9e3c1aa4b5b.png)](https://github.com/sponsors/supabase)
