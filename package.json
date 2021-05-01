@@ -1,7 +1,7 @@
 {
-  "name": "postgres-stripe-sync",
+  "name": "stripe-sync-engine",
   "version": "0.0.1",
-  "description": "Postgres Stripe Sync",
+  "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --log-error --files ./src/server.ts",
