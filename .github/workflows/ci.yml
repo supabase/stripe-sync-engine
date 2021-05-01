@@ -61,7 +61,7 @@ jobs:
       - name: Builds successfully
         run: |
           npm run build
-
-      - name: Tests pass
-        run: |
-          npm test
+      # Run manually for now
+      # - name: Tests pass
+      #   run: |
+      #     npm test
