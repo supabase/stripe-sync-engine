@@ -37,6 +37,6 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: user/app:latest
+          tags: supabase/stripe-sync-engine:latest
           secrets: |
             GH_TOKEN=${{ secrets.GH_TOKEN }}
