@@ -9,6 +9,8 @@
     "start": "NODE_ENV=production node dist/server.js",
     "test": "node -r dotenv/config node_modules/.bin/jest",
     "migrate:new": "dbmate new RENAME",
+    "prettier:check": "prettier -c src/**",
+    "prettier:write": "prettier --write src/**",
     "prod:deploy": "flyctl -c fly.prod.toml deploy",
     "prod:logs": "flyctl -c fly.prod.toml logs",
     "prod:secrets:set": "flyctl -c fly.prod.toml secrets import",
