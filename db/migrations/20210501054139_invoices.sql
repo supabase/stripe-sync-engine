@@ -4,6 +4,7 @@
 create type "stripe"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
 create table "stripe"."invoices" (
   "id" text primary key,
+  "object" text,
   "auto_advance" boolean,
   "collection_method" text,
   "currency" text,

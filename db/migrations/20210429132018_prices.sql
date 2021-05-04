@@ -5,6 +5,7 @@ create type "stripe"."pricing_tiers" as enum ('graduated', 'volume');
 
 create table "stripe"."prices" (
   "id" text primary key,
+  "object" text,
   "active" boolean,
   "currency" text,
   "metadata" jsonb,

@@ -3,6 +3,7 @@
 create type "stripe"."subscription_status" as enum ('trialing', 'active', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid');
 create table "stripe"."subscriptions" (
   "id" text primary key,
+  "object" text,
   "cancel_at_period_end" boolean,
   "current_period_end" integer,
   "current_period_start" integer,
@@ -12,7 +13,7 @@ create table "stripe"."subscriptions" (
   "pending_setup_intent" text,
   "pending_update" jsonb,
   "status" subscription_status,
-  "application_fee_percent" numeric(5, 2),
+  "application_fee_percent" double precision,
   "billing_cycle_anchor" integer,
   "billing_thresholds" jsonb,
   "cancel_at" integer,
