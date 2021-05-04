@@ -62,3 +62,17 @@ export const upsertProduct = async (product: Product.Product): Promise<Product.P
   const { rows } = await query(prepared.text, prepared.values)
   return rows
 }
+
+export const verifyProductExists = async (id: string): Promise<boolean> => {
+  const prepared = sql(`
+    select id from "${config.SCHEMA}"."products" 
+    where id = :id;
+    `)({ id })
+  const { rows } = await query(prepared.text, prepared.values)
+  return rows.length > 0
+}
+
+export const fetchAndInsertProduct = async (id: string): Promise<Product.Product[]> => {
+  const product = await stripe.products.retrieve(id)
+  return upsertProduct(product)
+}

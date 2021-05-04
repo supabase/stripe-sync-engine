@@ -17,6 +17,19 @@ CREATE SCHEMA stripe;
 
 
 --
+-- Name: invoice_status; Type: TYPE; Schema: stripe; Owner: -
+--
+
+CREATE TYPE stripe.invoice_status AS ENUM (
+    'draft',
+    'open',
+    'paid',
+    'uncollectible',
+    'void'
+);
+
+
+--
 -- Name: pricing_tiers; Type: TYPE; Schema: stripe; Owner: -
 --
 
@@ -80,6 +93,79 @@ CREATE TABLE stripe.customers (
     next_invoice_sequence integer,
     preferred_locales jsonb,
     tax_exempt text
+);
+
+
+--
+-- Name: invoices; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.invoices (
+    id text NOT NULL,
+    auto_advance boolean,
+    collection_method text,
+    currency text,
+    description text,
+    hosted_invoice_url text,
+    lines jsonb,
+    metadata jsonb,
+    period_end integer,
+    period_start integer,
+    status stripe.invoice_status,
+    total bigint,
+    account_country text,
+    account_name text,
+    account_tax_ids jsonb,
+    amount_due bigint,
+    amount_paid bigint,
+    amount_remaining bigint,
+    application_fee_amount bigint,
+    attempt_count integer,
+    attempted boolean,
+    billing_reason text,
+    created integer,
+    custom_fields jsonb,
+    customer_address jsonb,
+    customer_email text,
+    customer_name text,
+    customer_phone text,
+    customer_shipping jsonb,
+    customer_tax_exempt text,
+    customer_tax_ids jsonb,
+    default_tax_rates jsonb,
+    discount jsonb,
+    discounts jsonb,
+    due_date integer,
+    ending_balance integer,
+    footer text,
+    invoice_pdf text,
+    last_finalization_error jsonb,
+    livemode boolean,
+    next_payment_attempt integer,
+    number text,
+    paid boolean,
+    payment_settings jsonb,
+    post_payment_credit_notes_amount integer,
+    pre_payment_credit_notes_amount integer,
+    receipt_number text,
+    starting_balance integer,
+    statement_descriptor text,
+    status_transitions jsonb,
+    subscription_proration_date integer,
+    subtotal integer,
+    tax integer,
+    threshold_reason jsonb,
+    total_discount_amounts jsonb,
+    total_tax_amounts jsonb,
+    transfer_data jsonb,
+    webhooks_delivered_at integer,
+    customer text,
+    subscription text,
+    payment_intent text,
+    default_payment_method text,
+    default_source text,
+    on_behalf_of text,
+    charge text
 );
 
 
@@ -188,6 +274,14 @@ ALTER TABLE ONLY stripe.customers
 
 
 --
+-- Name: invoices invoices_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.invoices
+    ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: prices prices_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
 --
 
@@ -220,6 +314,30 @@ ALTER TABLE ONLY stripe.subscriptions
 
 
 --
+-- Name: subscriptions fk_latest_invoice; Type: FK CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.subscriptions
+    ADD CONSTRAINT fk_latest_invoice FOREIGN KEY (latest_invoice) REFERENCES stripe.invoices(id);
+
+
+--
+-- Name: invoices invoices_customer_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.invoices
+    ADD CONSTRAINT invoices_customer_fkey FOREIGN KEY (customer) REFERENCES stripe.customers(id);
+
+
+--
+-- Name: invoices invoices_subscription_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.invoices
+    ADD CONSTRAINT invoices_subscription_fkey FOREIGN KEY (subscription) REFERENCES stripe.subscriptions(id);
+
+
+--
 -- Name: prices prices_product_fkey; Type: FK CONSTRAINT; Schema: stripe; Owner: -
 --
 
@@ -249,4 +367,6 @@ INSERT INTO stripe.schema_migrations (version) VALUES
     ('20210428143846'),
     ('20210429122427'),
     ('20210429132018'),
-    ('20210429140401');
+    ('20210429140401'),
+    ('20210501054139'),
+    ('20210501054140');
