@@ -1,6 +1,8 @@
-# Stripe Sync Engine
+# Stripe Sync Engine (Experimental)
 
 Continuously synchronizes a Stripe account to a Postgres database.
+
+Note: this is experimental. There are no guarantees that it will be supported in the future.
 
 ![Sync Stripe with Postgres](./docs/stripe-sync-engine.jpg)
 ## Motivation
