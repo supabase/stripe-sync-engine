@@ -2,6 +2,20 @@
 
 Continuously synchronizes a Stripe account to a Postgres database.
 
+
+pg_dump \
+-h db.lvitobfuajhevuoidzpc.supabase.co \
+-U postgres \
+--clean \
+--schema-only \
+-n stripe_airbyte \
+> stripe.sql
+
+
+
+
+
+
 ![Sync Stripe with Postgres](./docs/stripe-sync-engine.jpg)
 ## Motivation
 
