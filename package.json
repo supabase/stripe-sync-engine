@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "NODE_ENV=production node dist/server.js",
     "test": "node -r dotenv/config node_modules/.bin/jest",
+    "test:debug": "TERM=dumb node -r dotenv/config node_modules/.bin/jest",
     "migrate:new": "dbmate new RENAME",
     "eslint:check": "eslint 'src/**'",
     "prettier:check": "prettier -c src/**",

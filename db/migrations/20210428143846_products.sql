@@ -2,6 +2,7 @@
 
 create table "stripe"."products" (
   "id" text primary key,
+  "object" text,
   "active" boolean,
   "description" text,
   "metadata" jsonb,

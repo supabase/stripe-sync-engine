@@ -3,6 +3,7 @@
 
 create table "stripe"."customers" (
   "id" text primary key,
+  "object" text,
   "address" jsonb,
   "description" text,
   "email" text,
