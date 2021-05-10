@@ -36,7 +36,8 @@ create table "stripe"."subscriptions" (
 
   "schedule" text,
   "customer" text references "stripe"."customers",
-  "latest_invoice" text -- not yet joined
+  "latest_invoice" text, -- not yet joined
+  "plan" text -- not yet joined
 );
 
 

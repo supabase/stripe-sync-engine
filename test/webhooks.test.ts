@@ -28,6 +28,9 @@ describe('/webhooks', () => {
     })
 
     const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
     expect(response.statusCode).toBe(200)
     expect(json).toMatchObject({ received: true })
   })
@@ -49,6 +52,9 @@ describe('/webhooks', () => {
     })
 
     const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
     expect(response.statusCode).toBe(200)
     expect(json).toMatchObject({ received: true })
   })
@@ -70,6 +76,9 @@ describe('/webhooks', () => {
     })
 
     const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
     expect(response.statusCode).toBe(200)
     expect(json).toMatchObject({ received: true })
   })
@@ -91,6 +100,9 @@ describe('/webhooks', () => {
     })
 
     const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
     expect(response.statusCode).toBe(200)
     expect(json).toMatchObject({ received: true })
   })

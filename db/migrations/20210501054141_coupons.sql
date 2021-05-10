@@ -1,7 +1,7 @@
 -- migrate:up
 
 CREATE TABLE stripe.coupons (
-    id text,
+    id text primary key,
     object text,
     name text,
     valid boolean,

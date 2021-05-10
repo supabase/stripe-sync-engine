@@ -69,11 +69,85 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: charges; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.charges (
+    id text NOT NULL,
+    object text,
+    card jsonb,
+    paid boolean,
+    "order" text,
+    amount bigint,
+    review text,
+    source jsonb,
+    status text,
+    created integer,
+    dispute text,
+    invoice text,
+    outcome jsonb,
+    refunds jsonb,
+    updated integer,
+    captured boolean,
+    currency text,
+    customer text,
+    livemode boolean,
+    metadata jsonb,
+    refunded boolean,
+    shipping jsonb,
+    application text,
+    description text,
+    destination text,
+    failure_code text,
+    on_behalf_of text,
+    fraud_details jsonb,
+    receipt_email text,
+    payment_intent text,
+    receipt_number text,
+    transfer_group text,
+    amount_refunded bigint,
+    application_fee text,
+    failure_message text,
+    source_transfer text,
+    balance_transaction text,
+    statement_descriptor text,
+    statement_description text,
+    payment_method_details jsonb
+);
+
+
+--
+-- Name: coupons; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.coupons (
+    id text NOT NULL,
+    object text,
+    name text,
+    valid boolean,
+    created integer,
+    updated integer,
+    currency text,
+    duration text,
+    livemode boolean,
+    metadata jsonb,
+    redeem_by integer,
+    amount_off bigint,
+    percent_off double precision,
+    times_redeemed bigint,
+    max_redemptions bigint,
+    duration_in_months bigint,
+    percent_off_precise double precision
+);
+
+
+--
 -- Name: customers; Type: TABLE; Schema: stripe; Owner: -
 --
 
 CREATE TABLE stripe.customers (
     id text NOT NULL,
+    object text,
     address jsonb,
     description text,
     email text,
@@ -97,11 +171,53 @@ CREATE TABLE stripe.customers (
 
 
 --
+-- Name: disputes; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.disputes (
+    id text NOT NULL,
+    object text,
+    amount bigint,
+    charge text,
+    reason text,
+    status text,
+    created integer,
+    updated integer,
+    currency text,
+    evidence jsonb,
+    livemode boolean,
+    metadata jsonb,
+    evidence_details jsonb,
+    balance_transactions jsonb,
+    is_charge_refundable boolean
+);
+
+
+--
+-- Name: events; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.events (
+    id text NOT NULL,
+    object text,
+    data jsonb,
+    type text,
+    created integer,
+    request text,
+    updated integer,
+    livemode boolean,
+    api_version text,
+    pending_webhooks bigint
+);
+
+
+--
 -- Name: invoices; Type: TABLE; Schema: stripe; Owner: -
 --
 
 CREATE TABLE stripe.invoices (
     id text NOT NULL,
+    object text,
     auto_advance boolean,
     collection_method text,
     currency text,
@@ -170,11 +286,79 @@ CREATE TABLE stripe.invoices (
 
 
 --
+-- Name: payouts; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.payouts (
+    id text NOT NULL,
+    object text,
+    date text,
+    type text,
+    amount bigint,
+    method text,
+    status text,
+    created integer,
+    updated integer,
+    currency text,
+    livemode boolean,
+    metadata jsonb,
+    automatic boolean,
+    recipient text,
+    description text,
+    destination text,
+    source_type text,
+    arrival_date text,
+    bank_account jsonb,
+    failure_code text,
+    transfer_group text,
+    amount_reversed bigint,
+    failure_message text,
+    source_transaction text,
+    balance_transaction text,
+    statement_descriptor text,
+    statement_description text,
+    failure_balance_transaction text
+);
+
+
+--
+-- Name: plans; Type: TABLE; Schema: stripe; Owner: -
+--
+
+CREATE TABLE stripe.plans (
+    id text NOT NULL,
+    object text,
+    name text,
+    tiers jsonb,
+    active boolean,
+    amount bigint,
+    created integer,
+    product text,
+    updated integer,
+    currency text,
+    "interval" text,
+    livemode boolean,
+    metadata jsonb,
+    nickname text,
+    tiers_mode text,
+    usage_type text,
+    billing_scheme text,
+    interval_count bigint,
+    aggregate_usage text,
+    transform_usage text,
+    trial_period_days bigint,
+    statement_descriptor text,
+    statement_description text
+);
+
+
+--
 -- Name: prices; Type: TABLE; Schema: stripe; Owner: -
 --
 
 CREATE TABLE stripe.prices (
     id text NOT NULL,
+    object text,
     active boolean,
     currency text,
     metadata jsonb,
@@ -199,6 +383,7 @@ CREATE TABLE stripe.prices (
 
 CREATE TABLE stripe.products (
     id text NOT NULL,
+    object text,
     active boolean,
     description text,
     metadata jsonb,
@@ -230,6 +415,7 @@ CREATE TABLE stripe.schema_migrations (
 
 CREATE TABLE stripe.subscriptions (
     id text NOT NULL,
+    object text,
     cancel_at_period_end boolean,
     current_period_end integer,
     current_period_start integer,
@@ -239,7 +425,7 @@ CREATE TABLE stripe.subscriptions (
     pending_setup_intent text,
     pending_update jsonb,
     status stripe.subscription_status,
-    application_fee_percent numeric(5,2),
+    application_fee_percent double precision,
     billing_cycle_anchor integer,
     billing_thresholds jsonb,
     cancel_at integer,
@@ -261,8 +447,25 @@ CREATE TABLE stripe.subscriptions (
     trial_start jsonb,
     schedule text,
     customer text,
-    latest_invoice text
+    latest_invoice text,
+    plan text
 );
+
+
+--
+-- Name: charges charges_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.charges
+    ADD CONSTRAINT charges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: coupons coupons_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.coupons
+    ADD CONSTRAINT coupons_pkey PRIMARY KEY (id);
 
 
 --
@@ -274,11 +477,43 @@ ALTER TABLE ONLY stripe.customers
 
 
 --
+-- Name: disputes disputes_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.disputes
+    ADD CONSTRAINT disputes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: invoices invoices_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
 --
 
 ALTER TABLE ONLY stripe.invoices
     ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payouts payouts_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.payouts
+    ADD CONSTRAINT payouts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plans plans_pkey; Type: CONSTRAINT; Schema: stripe; Owner: -
+--
+
+ALTER TABLE ONLY stripe.plans
+    ADD CONSTRAINT plans_pkey PRIMARY KEY (id);
 
 
 --
@@ -311,14 +546,6 @@ ALTER TABLE ONLY stripe.schema_migrations
 
 ALTER TABLE ONLY stripe.subscriptions
     ADD CONSTRAINT subscriptions_pkey PRIMARY KEY (id);
-
-
---
--- Name: subscriptions fk_latest_invoice; Type: FK CONSTRAINT; Schema: stripe; Owner: -
---
-
-ALTER TABLE ONLY stripe.subscriptions
-    ADD CONSTRAINT fk_latest_invoice FOREIGN KEY (latest_invoice) REFERENCES stripe.invoices(id);
 
 
 --
@@ -369,4 +596,9 @@ INSERT INTO stripe.schema_migrations (version) VALUES
     ('20210429132018'),
     ('20210429140401'),
     ('20210501054139'),
-    ('20210501054140');
+    ('20210501054140'),
+    ('20210501054141'),
+    ('20210501054142'),
+    ('20210501054144'),
+    ('20210501054145'),
+    ('20210501054146');
