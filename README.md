@@ -94,6 +94,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - Create a Postgres database on [supabase.com](https://supabase.com) (or another Postgres provider)
 - Update Stripe with all valid webhooks and get the webhook secret
 - `mv .env.sample .env` and then rename all the variables
+- run `dbmate up` to run all the database migrations
 
 **Develop**
 
