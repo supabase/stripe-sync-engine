@@ -1,0 +1,57 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Implement a webhook",
+  "steps": [
+    {
+      "file": "README.md",
+      "description": "We're going to show all the steps to implement the customer webhook",
+      "line": 37
+    },
+    {
+      "file": "db/migrations/20210429122427_customers.sql",
+      "description": "We created a database table that contains all of the data required to save the Stripe Customer Object: https://stripe.com/docs/api/customers",
+      "line": 4,
+      "selection": {
+        "start": {
+          "line": 4,
+          "character": 24
+        },
+        "end": {
+          "line": 4,
+          "character": 33
+        }
+      }
+    },
+    {
+      "file": "src/schemas/customer.ts",
+      "description": "Then we create a customer schema. This matches the table that we created, except it uses JSON Schema https://json-schema.org/",
+      "line": 31
+    },
+    {
+      "file": "src/lib/customers.ts",
+      "description": "After that, we create a file for managing the customers. It has a few key functions:\n- upsertCustomer \n- verifyCustomerExists\n- fetchAndInsertPrice",
+      "line": 36,
+      "selection": {
+        "start": {
+          "line": 4,
+          "character": 44
+        },
+        "end": {
+          "line": 5,
+          "character": 54
+        }
+      }
+    },
+    {
+      "file": "test/webhooks.test.ts",
+      "description": "Finally we created a test to make sure it is passing. To do this we need to get a Stripe Webhook object (see next step)",
+      "line": 36
+    },
+    {
+      "file": "test/stripe/customer_updated.json",
+      "description": "This is the raw webhook event that stripe sent. To get this, we just need to trigger an event from the dashboard (preferably in Test Mode), then copy/paste the values here.",
+      "line": 1
+    }
+  ],
+  "ref": "main"
+}
