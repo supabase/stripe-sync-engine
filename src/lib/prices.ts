@@ -11,9 +11,9 @@ const config = getConfig()
 
 export const upsertPrice = async (price: Price.Price): Promise<Price.Price[]> => {
   // Backfill product if it doesn't already exist
-  const product_id = price.product.toString()
-  if (price.product && !(await verifyProductExists(product_id))) {
-    await fetchAndInsertProduct(product_id)
+  const productId = price.product.toString()
+  if (productId && !(await verifyProductExists(productId))) {
+    await fetchAndInsertProduct(productId)
   }
 
   // Create the SQL

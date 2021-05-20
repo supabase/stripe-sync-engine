@@ -6,9 +6,11 @@ import { upsertProduct } from '../lib/products'
 import { upsertPrice } from '../lib/prices'
 import { upsertSubscription } from '../lib/subscriptions'
 import Customer from 'stripe'
+import Invoice from 'stripe'
 import Subscription from 'stripe'
 import Product from 'stripe'
 import Price from 'stripe'
+import { upsertInvoice } from '../lib/invoices'
 
 const config = getConfig()
 
@@ -37,6 +39,12 @@ export default async function routes(fastify: FastifyInstance) {
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Subscription.Subscription
           await upsertSubscription(subscription)
+          break
+        }
+        case 'invoice.created':
+        case 'invoice.updated': {
+          const invoice = event.data.object as Invoice.Invoice
+          await upsertInvoice(invoice)
           break
         }
         case 'product.created':

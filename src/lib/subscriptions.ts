@@ -35,7 +35,9 @@ export const verifySubscriptionExists = async (id: string): Promise<boolean> => 
   return rows.length > 0
 }
 
-export const fetchAndInsertPrice = async (id: string): Promise<Subscription.Subscription[]> => {
+export const fetchAndInsertSubscription = async (
+  id: string
+): Promise<Subscription.Subscription[]> => {
   const subscription = await stripe.subscriptions.retrieve(id)
   return upsertSubscription(subscription)
 }
