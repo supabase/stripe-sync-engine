@@ -42,11 +42,11 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `customer.subscription.deleted`
 - [x] `customer.subscription.updated` 🟢
 - [x] `customer.updated` 🟢
-- [ ] `invoice.created`
-- [ ] `invoice.finalized`
-- [ ] `invoice.payment_failed`
-- [ ] `invoice.payment_succeeded`
-- [ ] `invoice.updated`
+- [x] `invoice.created` 🟢
+- [x] `invoice.finalized` 🟢
+- [x] `invoice.payment_failed` 🟢
+- [x] `invoice.payment_succeeded` 🟢
+- [x] `invoice.updated` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`

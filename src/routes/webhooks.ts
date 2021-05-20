@@ -42,6 +42,9 @@ export default async function routes(fastify: FastifyInstance) {
           break
         }
         case 'invoice.created':
+        case 'invoice.finalized':
+        case 'invoice.payment_failed':
+        case 'invoice.payment_succeeded':
         case 'invoice.updated': {
           const invoice = event.data.object as Invoice.Invoice
           await upsertInvoice(invoice)
