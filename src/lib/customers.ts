@@ -29,7 +29,7 @@ export const verifyCustomerExists = async (id: string): Promise<boolean> => {
   return rows.length > 0
 }
 
-export const fetchAndInsertPrice = async (id: string): Promise<Customer.Customer[]> => {
+export const fetchAndInsertCustomer = async (id: string): Promise<Customer.Customer[]> => {
   const customer = await stripe.customers.retrieve(id)
   return upsertCustomer(customer as Customer.Customer)
 }
