@@ -12,7 +12,7 @@ create table "stripe"."subscriptions" (
   "metadata" jsonb,
   "pending_setup_intent" text,
   "pending_update" jsonb,
-  "status" subscription_status,
+  "status" "stripe"."subscription_status", 
   "application_fee_percent" double precision,
   "billing_cycle_anchor" integer,
   "billing_thresholds" jsonb,
