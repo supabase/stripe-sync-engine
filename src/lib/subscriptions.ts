@@ -5,12 +5,19 @@ import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
 import { subscriptionSchema } from '../schemas/subscription'
+import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
 
 const config = getConfig()
 
 export const upsertSubscription = async (
   subscription: Subscription.Subscription
 ): Promise<Subscription.Subscription[]> => {
+  // Backfill customer if it doesn't already exist
+  const customerId = subscription?.customer?.toString()
+  if (customerId && !(await verifyCustomerExists(customerId))) {
+    await fetchAndInsertCustomer(customerId)
+  }
+
   // Create the SQL
   const upsertString = constructUpsertSql(
     config.SCHEMA || 'stripe',
