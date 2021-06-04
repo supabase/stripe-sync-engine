@@ -5,6 +5,7 @@ import customer_updated from './stripe/customer_updated.json'
 import product_updated from './stripe/product_updated.json'
 import price_updated from './stripe/price_updated.json'
 import subscription_updated from './stripe/subscription_updated.json'
+import invoice_paid from './stripe/invoice_paid.json'
 import invoice_updated from './stripe/invoice_updated.json'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
@@ -122,6 +123,30 @@ describe('/webhooks', () => {
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: invoice_updated,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * invoice.paid
+   */
+  test('invoice.paid', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(invoice_paid)}`, 'utf8')
+      .digest('hex')
+
+    const response = await app().inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: invoice_paid,
     })
 
     const json = JSON.parse(response.body)

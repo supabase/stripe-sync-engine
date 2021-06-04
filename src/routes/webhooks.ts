@@ -43,6 +43,7 @@ export default async function routes(fastify: FastifyInstance) {
         }
         case 'invoice.created':
         case 'invoice.finalized':
+        case 'invoice.paid':
         case 'invoice.payment_failed':
         case 'invoice.payment_succeeded':
         case 'invoice.updated': {
