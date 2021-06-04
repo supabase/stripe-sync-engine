@@ -5,12 +5,12 @@ import { upsertCustomer } from '../lib/customers'
 import { upsertProduct } from '../lib/products'
 import { upsertPrice } from '../lib/prices'
 import { upsertSubscription } from '../lib/subscriptions'
+import { upsertInvoice } from '../lib/invoices'
 import Customer from 'stripe'
 import Invoice from 'stripe'
 import Subscription from 'stripe'
 import Product from 'stripe'
 import Price from 'stripe'
-import { upsertInvoice } from '../lib/invoices'
 
 const config = getConfig()
 
