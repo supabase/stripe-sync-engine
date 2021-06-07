@@ -14,7 +14,7 @@ create table "stripe"."invoices" (
   "metadata" jsonb,
   "period_end" integer,
   "period_start" integer,
-  "status" invoice_status,
+  "status" "stripe"."invoice_status",
   "total" bigint,
   "account_country" text,
   "account_name" text,
