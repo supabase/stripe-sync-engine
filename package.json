@@ -1,6 +1,6 @@
 {
   "name": "stripe-sync-engine",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
   "main": "index.js",
   "scripts": {
@@ -22,8 +22,8 @@
     "staging:secrets:fetch": "node internals/getSecrets.js staging",
     "staging:secrets:set": "flyctl secrets import"
   },
-  "author": "Inian",
-  "license": "ISC",
+  "author": "Supabase",
+  "license": "MIT",
   "engines": {
     "node": ">= 12.0.0"
   },
