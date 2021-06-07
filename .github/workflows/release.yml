@@ -4,32 +4,73 @@ on:
   push:
     branches:
       - 'main'
+  workflow_dispatch:
 
 jobs:
-  docker:
-    runs-on: ubuntu-latest
+  release:
+    name: Release / Node ${{ matrix.node }}
+    strategy:
+      matrix:
+        node:
+          - '12'
+
+    runs-on: ubuntu-20.04
+
+    outputs:
+      new-release-published: ${{ steps.semantic-release.outputs.new_release_published }}
+      new-release-version: ${{ steps.semantic-release.outputs.new_release_version }}
+
     steps:
-      -
-        name: Set up QEMU
+      - uses: actions/checkout@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: |
+          npm clean-install
+          npm run build
+
+      - name: Run semantic-release
+        id: semantic-release
+        uses: cycjimmy/semantic-release-action@v2
+        with:
+          semantic_version: 17
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Release on Docker Hub
+
+    needs:
+      - release
+
+    if: ${{ needs.release.outputs.new-release-published }} == true
+
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
-      -
-        name: Set up Docker Buildx
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v1 
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+
+      - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: supabase/stripe-sync-engine:latest
+          tags: supabase/stripe-sync-engine:latest,supabase/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
           secrets: |
             GH_TOKEN=${{ secrets.GH_TOKEN }}
-      -
-        name: Image digest
+
+      - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
