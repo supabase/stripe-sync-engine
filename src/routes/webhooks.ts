@@ -2,8 +2,8 @@ import { FastifyInstance } from 'fastify'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { upsertCustomer } from '../lib/customers'
-import { upsertProduct } from '../lib/products'
-import { upsertPrice } from '../lib/prices'
+import { upsertProduct, deleteProduct } from '../lib/products'
+import { upsertPrice, deletePrice } from '../lib/prices'
 import { upsertSubscription } from '../lib/subscriptions'
 import { upsertInvoice } from '../lib/invoices'
 import Customer from 'stripe'
@@ -36,6 +36,7 @@ export default async function routes(fastify: FastifyInstance) {
           break
         }
         case 'customer.subscription.created':
+        case 'customer.subscription.deleted': // Soft delete using `status = canceled`
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Subscription.Subscription
           await upsertSubscription(subscription)
@@ -57,10 +58,20 @@ export default async function routes(fastify: FastifyInstance) {
           await upsertProduct(product)
           break
         }
+        case 'product.deleted': {
+          const product = event.data.object as Product.Product
+          await deleteProduct(product.id)
+          break
+        }
         case 'price.created':
         case 'price.updated': {
           const price = event.data.object as Price.Price
           await upsertPrice(price)
+          break
+        }
+        case 'price.deleted': {
+          const price = event.data.object as Price.Price
+          await deletePrice(price.id)
           break
         }
         default:
