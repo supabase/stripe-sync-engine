@@ -104,7 +104,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 
 **Building Docker**
 
-```
+```bash
 docker build -t stripe-sync-engine .
 docker run -p 8080:8080 stripe-sync-engine
 ```
