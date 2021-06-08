@@ -40,3 +40,13 @@ export const fetchAndInsertPrice = async (id: string): Promise<Price.Price[]> =>
   const price = await stripe.prices.retrieve(id)
   return upsertPrice(price)
 }
+
+export const deletePrice = async (id: string): Promise<boolean> => {
+  const prepared = sql(`
+    delete from "${config.SCHEMA}"."prices" 
+    where id = :id
+    returning id;
+    `)({ id })
+  const { rows } = await query(prepared.text, prepared.values)
+  return rows.length > 0
+}

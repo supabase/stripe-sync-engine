@@ -33,3 +33,13 @@ export const fetchAndInsertProduct = async (id: string): Promise<Product.Product
   const product = await stripe.products.retrieve(id)
   return upsertProduct(product)
 }
+
+export const deleteProduct = async (id: string): Promise<boolean> => {
+  const prepared = sql(`
+    delete from "${config.SCHEMA}"."products" 
+    where id = :id
+    returning id;
+    `)({ id })
+  const { rows } = await query(prepared.text, prepared.values)
+  return rows.length > 0
+}

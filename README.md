@@ -39,7 +39,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `customer.source.created`
 - [ ] `customer.source.updated`
 - [x] `customer.subscription.created` 🟢
-- [ ] `customer.subscription.deleted`
+- [x] `customer.subscription.deleted` 🟢
 - [x] `customer.subscription.updated` 🟢
 - [x] `customer.updated` 🟢
 - [x] `invoice.created` 🟢
@@ -61,10 +61,10 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `plan.deleted`
 - [ ] `plan.updated`
 - [x] `price.created` 🟢
-- [ ] `price.deleted`
+- [x] `price.deleted` 🟢
 - [x] `price.updated` 🟢
 - [x] `product.created` 🟢
-- [ ] `product.deleted`
+- [x] `product.deleted` 🟢
 - [x] `product.updated` 🟢
 - [ ] `setup_intent.canceled`
 - [ ] `setup_intent.created`

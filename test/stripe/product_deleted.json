@@ -1,0 +1,34 @@
+{
+  "id": "evt_1J02V0JDPojXS6LNWriAyz3n",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1623149373,
+  "data": {
+    "object": {
+      "id": "prod_JdJ6Wt7rsz4EPJ",
+      "object": "product",
+      "active": false,
+      "attributes": [],
+      "created": 1623149335,
+      "description": null,
+      "images": [],
+      "livemode": false,
+      "metadata": {},
+      "name": "fake product",
+      "package_dimensions": null,
+      "shippable": null,
+      "statement_descriptor": null,
+      "type": "service",
+      "unit_label": null,
+      "updated": 1623149373,
+      "url": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_B8BkJF6oirG1zH",
+    "idempotency_key": null
+  },
+  "type": "product.deleted"
+}
