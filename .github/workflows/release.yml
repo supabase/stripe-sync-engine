@@ -46,7 +46,7 @@ jobs:
     needs:
       - release
 
-    if: needs.release.outputs.new-release-published == true
+    if: needs.release.outputs.new-release-published == 'true'
 
     runs-on: ubuntu-20.04
 
