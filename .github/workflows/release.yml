@@ -71,8 +71,7 @@ jobs:
         with:
           push: true
           tags: supabase/stripe-sync-engine:latest,supabase/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
-          secrets: |
-            GH_TOKEN=${{ secrets.GH_TOKEN }}
+          platforms: linux/amd64,linux/arm64
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
