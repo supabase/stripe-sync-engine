@@ -5,11 +5,11 @@ type configType = {
   NODE_ENV: string
   SCHEMA: string
   STRIPE_SECRET_KEY: string
-  STRIPE_WEBHOOK_SECRET: string
+  STRIPE_WEBHOOK_URL: string
 }
 
-function getConfigFromEnv(key: string): string {
-  const value = process.env[key]
+function getConfigFromEnv(key: string, _default?: string): string {
+  const value = process.env[key];
   if (!value) {
     throw new Error(`${key} is undefined`)
   }
@@ -24,6 +24,6 @@ export function getConfig(): configType {
     SCHEMA: getConfigFromEnv('SCHEMA'),
     NODE_ENV: getConfigFromEnv('NODE_ENV'),
     STRIPE_SECRET_KEY: getConfigFromEnv('STRIPE_SECRET_KEY'),
-    STRIPE_WEBHOOK_SECRET: getConfigFromEnv('STRIPE_WEBHOOK_SECRET'),
+    STRIPE_WEBHOOK_URL: getConfigFromEnv('STRIPE_WEBHOOK_URL')
   }
 }
