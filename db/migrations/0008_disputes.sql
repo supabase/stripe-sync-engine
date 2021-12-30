@@ -1,6 +1,4 @@
--- migrate:up
-
-CREATE TABLE stripe.disputes (
+create table if not exists "stripe".disputes (
     id text primary key,
     object text,
     amount bigint,
@@ -17,8 +15,3 @@ CREATE TABLE stripe.disputes (
     balance_transactions jsonb,
     is_charge_refundable boolean
 );
-
-
--- migrate:down
-
-drop table "stripe"."disputes";

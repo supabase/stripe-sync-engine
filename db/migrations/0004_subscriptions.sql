@@ -1,7 +1,21 @@
--- migrate:up
 
-create type "stripe"."subscription_status" as enum ('trialing', 'active', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid');
-create table "stripe"."subscriptions" (
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_status') THEN
+        create type "stripe"."subscription_status" as enum (
+          'trialing',
+          'active',
+          'canceled',
+          'incomplete',
+          'incomplete_expired',
+          'past_due',
+          'unpaid'
+        );
+    END IF;
+END
+$$;
+
+create table if not exists "stripe"."subscriptions" (
   "id" text primary key,
   "object" text,
   "cancel_at_period_end" boolean,
@@ -40,8 +54,3 @@ create table "stripe"."subscriptions" (
   "plan" text -- not yet joined
 );
 
-
--- migrate:down
-
-drop table "stripe"."subscriptions";
-drop type "stripe"."subscription_status";

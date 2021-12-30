@@ -1,9 +1,17 @@
--- migrate:up
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_type') THEN
+        create type "stripe"."pricing_type" as enum ('one_time', 'recurring');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_tiers') THEN
+      create type "stripe"."pricing_tiers" as enum ('graduated', 'volume');
+    END IF;
+    --more types here...
+END
+$$;
 
-create type "stripe"."pricing_type" as enum ('one_time', 'recurring');
-create type "stripe"."pricing_tiers" as enum ('graduated', 'volume');
 
-create table "stripe"."prices" (
+create table if not exists "stripe"."prices" (
   "id" text primary key,
   "object" text,
   "active" boolean,
@@ -23,10 +31,4 @@ create table "stripe"."prices" (
 
   "product" text references stripe.products
 );
-
--- migrate:down
-
-drop table "stripe"."prices";
-drop type "stripe"."pricing_type";
-drop type "stripe"."pricing_tiers";
 

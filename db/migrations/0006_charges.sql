@@ -1,6 +1,5 @@
--- migrate:up
 
-CREATE TABLE stripe.charges (
+create table if not exists "stripe".charges (
     id text primary key,
     object text,
     card jsonb,
@@ -42,7 +41,3 @@ CREATE TABLE stripe.charges (
     statement_description text,
     payment_method_details jsonb
 );
-
--- migrate:down
-
-drop table "stripe"."charges";

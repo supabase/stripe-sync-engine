@@ -1,6 +1,4 @@
--- migrate:up
-
-CREATE TABLE stripe.coupons (
+create table if not exists "stripe".coupons (
     id text primary key,
     object text,
     name text,
@@ -19,7 +17,3 @@ CREATE TABLE stripe.coupons (
     duration_in_months bigint,
     percent_off_precise double precision
 );
-
--- migrate:down
-
-drop table "stripe"."coupons";

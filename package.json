@@ -9,7 +9,6 @@
     "start": "NODE_ENV=production node dist/server.js",
     "test": "node -r dotenv/config node_modules/.bin/jest --runInBand",
     "test:debug": "TERM=dumb node -r dotenv/config node_modules/.bin/jest",
-    "migrate:new": "dbmate new RENAME",
     "eslint:check": "eslint 'src/**'",
     "prettier:check": "prettier -c src/**",
     "prettier:write": "prettier --write src/**",
@@ -33,6 +32,7 @@
     "fastify-autoload": "^3.5.2",
     "fastify-swagger": "^4.4.1",
     "pg": "^8.6.0",
+    "pg-node-migrations": "0.0.7",
     "stripe": "^8.145.0",
     "yesql": "^5.0.0"
   },

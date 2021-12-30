@@ -1,7 +1,4 @@
--- migrate:up
-
-
-CREATE TABLE stripe.payouts (
+create table if not exists "stripe".payouts (
     id text primary key,
     object text,
     date text,
@@ -31,8 +28,3 @@ CREATE TABLE stripe.payouts (
     statement_description text,
     failure_balance_transaction text
 );
-
-
--- migrate:down
-
-drop table "stripe"."payouts";
