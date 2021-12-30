@@ -83,6 +83,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - Make sure the database URL has search_path `stripe`. eg: `DATABASE_URL=postgres://postgres:postgres@hostname:5432/postgres?sslmode=disable&search_path=stripe`
 - Run `dbmate up`
 - Deploy the [docker image](https://hub.docker.com/r/supabase/stripe-sync-engine) to your favourite hosting service and expose port `8080`
+  - eg: `docker run -e PORT=8080 --env-file .env supabase/stripe-sync-engine`
 - Point your Stripe webooks to your deployed app.
 ## Future ideas
 
