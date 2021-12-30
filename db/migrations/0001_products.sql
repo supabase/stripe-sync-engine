@@ -1,6 +1,4 @@
--- migrate:up
-
-create table "stripe"."products" (
+create table if not exists "stripe"."products" (
   "id" text primary key,
   "object" text,
   "active" boolean,
@@ -17,7 +15,3 @@ create table "stripe"."products" (
   "updated" integer,
   "url" text
 );
-
--- migrate:down
-
-drop table "stripe"."products";

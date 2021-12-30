@@ -1,7 +1,4 @@
--- migrate:up
-
-
-CREATE TABLE stripe.events (
+create table if not exists "stripe".events (
     id text primary key,
     object text,
     data jsonb,
@@ -13,8 +10,3 @@ CREATE TABLE stripe.events (
     api_version text,
     pending_webhooks bigint
 );
-
-
--- migrate:down
-
-drop table "stripe"."events";

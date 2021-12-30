@@ -1,8 +1,14 @@
--- migrate:up
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status') THEN
+        create type "stripe"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
+    END IF;
+END
+$$;
 
 
-create type "stripe"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
-create table "stripe"."invoices" (
+create table if not exists "stripe"."invoices" (
   "id" text primary key,
   "object" text,
   "auto_advance" boolean,
@@ -69,10 +75,3 @@ create table "stripe"."invoices" (
   "on_behalf_of" text, -- not yet implemented
   "charge" text -- not yet implemented
 );
-
-
-
--- migrate:down
-
-drop table "stripe"."invoices";
-drop type "stripe"."invoice_status";

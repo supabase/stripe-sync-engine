@@ -1,7 +1,4 @@
--- migrate:up
-
-
-create table "stripe"."customers" (
+create table if not exists "stripe"."customers" (
   "id" text primary key,
   "object" text,
   "address" jsonb,
@@ -24,10 +21,3 @@ create table "stripe"."customers" (
   "preferred_locales" jsonb,
   "tax_exempt" text
 );
-
-
-
--- migrate:down
-
-
-drop table "stripe"."customers";

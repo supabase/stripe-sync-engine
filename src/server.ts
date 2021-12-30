@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'http'
+import { runMigrations } from './utils/migrate'
 import build from './app'
 
 const loggerConfig = {
@@ -15,11 +16,21 @@ const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = build({
   exposeDocs,
 })
 
-const port = process.env.PORT || 8080
-app.listen(port, '0.0.0.0', (err, address) => {
-  if (err) {
-    console.error(err)
-    process.exit(1)
-  }
-  console.log(`Server listening at ${address}`)
-})
+const main = async () => {
+  // Init config
+  const port = process.env.PORT || 8080
+
+  // Run migrations
+  await runMigrations()
+
+  // Start the server
+  app.listen(port, '0.0.0.0', (err, address) => {
+    if (err) {
+      console.error(err)
+      process.exit(1)
+    }
+    console.log(`Server listening at ${address}`)
+  })
+}
+
+main()

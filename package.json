@@ -33,6 +33,7 @@
     "fastify-autoload": "^3.5.2",
     "fastify-swagger": "^4.4.1",
     "pg": "^8.6.0",
+    "pg-node-migrations": "0.0.7",
     "stripe": "^8.145.0",
     "yesql": "^5.0.0"
   },

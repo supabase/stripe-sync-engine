@@ -1,7 +1,4 @@
--- migrate:up
-
-
-CREATE TABLE "stripe"."plans" (
+create table if not exists "stripe"."plans" (
     id text primary key,
     object text,
     name text,
@@ -26,8 +23,3 @@ CREATE TABLE "stripe"."plans" (
     statement_descriptor text,
     statement_description text
 );
-
-
--- migrate:down
-
-drop table "stripe"."plans";
