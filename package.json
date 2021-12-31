@@ -7,7 +7,7 @@
     "dev": "ts-node-dev --log-error --files ./src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "NODE_ENV=production node dist/server.js",
-    "test": "node -r dotenv/config node_modules/.bin/jest --runInBand",
+    "test": "node -r dotenv/config node_modules/.bin/jest --detectOpenHandles",
     "test:debug": "TERM=dumb node -r dotenv/config node_modules/.bin/jest",
     "eslint:check": "eslint 'src/**'",
     "prettier:check": "prettier -c src/**",

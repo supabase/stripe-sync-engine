@@ -13,9 +13,19 @@ import subscription_deleted from './stripe/subscription_deleted.json'
 import subscription_updated from './stripe/subscription_updated.json'
 import invoice_paid from './stripe/invoice_paid.json'
 import invoice_updated from './stripe/invoice_updated.json'
+import { FastifyInstance } from 'fastify'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
+
+let server: FastifyInstance
+
+beforeAll(async () => {
+  server = await app()
+})
+afterAll(async () => {
+  await server.close()
+})
 
 describe('/webhooks', () => {
   /**
@@ -26,7 +36,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(customer_updated)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -50,7 +60,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(product_updated)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -74,7 +84,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(product_created)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -98,7 +108,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(product_deleted)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -122,7 +132,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(price_updated)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -146,7 +156,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(price_created)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -170,7 +180,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(price_deleted)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -194,7 +204,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(subscription_created)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -218,7 +228,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(subscription_deleted)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -242,7 +252,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(subscription_updated)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -266,7 +276,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(invoice_updated)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
@@ -290,7 +300,7 @@ describe('/webhooks', () => {
       .update(`${unixtime}.${JSON.stringify(invoice_paid)}`, 'utf8')
       .digest('hex')
 
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/webhooks`,
       method: 'POST',
       headers: {
