@@ -43,3 +43,21 @@ export const deleteProduct = async (id: string): Promise<boolean> => {
   const { rows } = await query(prepared.text, prepared.values)
   return rows.length > 0
 }
+
+type ProductListResponse = Product.Response<Product.ApiList<Product.Product>>
+type fetchProductsParams = {
+  limit: number
+  id: string | undefined
+}
+const fetchProductsDefaults = {
+  limit: 100,
+  id: undefined,
+}
+export const fetchProducts = async (
+  options: fetchProductsParams = fetchProductsDefaults
+): Promise<ProductListResponse> => {
+  const products = await stripe.products.list({
+    limit: options.limit,
+  })
+  return products
+}
