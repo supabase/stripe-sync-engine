@@ -44,7 +44,7 @@ export const deleteProduct = async (id: string): Promise<boolean> => {
   return rows.length > 0
 }
 
-type ProductListResponse = Product.Response<Product.ApiList<Product.Product>>
+type fetchProductsResponse = Product.Response<Product.ApiList<Product.Product>>
 type fetchProductsParams = {
   limit: number
   id: string | undefined
@@ -55,7 +55,7 @@ const fetchProductsDefaults = {
 }
 export const fetchProducts = async (
   options: fetchProductsParams = fetchProductsDefaults
-): Promise<ProductListResponse> => {
+): Promise<fetchProductsResponse> => {
   const products = await stripe.products.list({
     limit: options.limit,
   })
