@@ -8,7 +8,7 @@ interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
 }
 
-const build = (opts: buildOpts = {}): FastifyInstance => {
+export async function createServer(opts: buildOpts = {}): Promise<FastifyInstance> {
   const app = fastify(opts)
 
   /**
@@ -19,7 +19,7 @@ const build = (opts: buildOpts = {}): FastifyInstance => {
       exposeRoute: true,
       swagger: {
         info: {
-          title: 'Fastify Typescript Starter API',
+          title: 'Stripe Sync Engine',
           version: '0.0.1',
         },
       },
@@ -52,7 +52,8 @@ const build = (opts: buildOpts = {}): FastifyInstance => {
   app.register(autoload, {
     dir: path.join(__dirname, 'routes'),
   })
+
+  await app.ready()
+
   return app
 }
-
-export default build

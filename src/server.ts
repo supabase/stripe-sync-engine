@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'http'
 import { runMigrations } from './utils/migrate'
-import build from './app'
+import { createServer } from './app'
 
 const loggerConfig = {
   prettyPrint: true,
@@ -11,12 +11,13 @@ if (process.env.NODE_ENV === 'production') {
   loggerConfig.prettyPrint = false
   exposeDocs = true
 }
-const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = build({
-  logger: loggerConfig,
-  exposeDocs,
-})
 
 const main = async () => {
+  const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = await createServer({
+    logger: loggerConfig,
+    exposeDocs,
+  })
+
   // Init config
   const port = process.env.PORT || 8080
 
