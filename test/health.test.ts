@@ -1,9 +1,20 @@
 'use strict'
-import app from '../src/app'
+import { FastifyInstance } from 'fastify'
+import { createServer } from '../src/app'
 
 describe('/health', () => {
+  let server: FastifyInstance
+
+  beforeAll(async () => {
+    server = await createServer()
+  })
+
+  afterAll(async () => {
+    await server.close()
+  })
+
   test('is alive', async () => {
-    const response = await app().inject({
+    const response = await server.inject({
       url: `/health`,
       method: 'GET',
     })
