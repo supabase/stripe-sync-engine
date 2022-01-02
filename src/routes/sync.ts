@@ -7,7 +7,7 @@ export default async function routes(server: FastifyInstance) {
    * POST /products/sync
    *    Sync products from Stripe
    */
-  server.get('/sync', {
+  server.post('/sync', {
     handler: async (request, reply) => {
       const products = await syncProducts()
       const prices = await syncPrices()
