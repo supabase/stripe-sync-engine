@@ -38,7 +38,7 @@ export async function syncPrices(): Promise<{ synced: number; lastId: string }> 
 
 // For Test data only
 export async function syncSubscriptions(): Promise<{ synced: number; lastId: string }> {
-  let hasMore = true
+  // let hasMore = true
   let synced = 0
   let lastId = ''
 
