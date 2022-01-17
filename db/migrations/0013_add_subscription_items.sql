@@ -3,6 +3,7 @@ create table if not exists "stripe"."subscription_items" (
   "object" text,
   "billing_thresholds" jsonb,
   "created" integer,
+  "deleted" boolean,
   "metadata" jsonb,
   "quantity" integer,
   "price" text REFERENCES "stripe"."prices",
