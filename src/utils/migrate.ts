@@ -35,6 +35,11 @@ async function connectAndMigrate(
 
 export async function runMigrations(): Promise<void> {
   console.log('Running migrations')
-  await connectAndMigrate(config.DATABASE_URL, './db/migrations')
-  console.log('Finished migrations')
+  try {
+    await connectAndMigrate(config.DATABASE_URL, './db/migrations')
+  } catch (error) {
+    console.error('Migration failed:', error)
+  } finally {
+    console.log('Finished migrations')
+  }
 }
