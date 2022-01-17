@@ -53,3 +53,21 @@ export const fetchAndInsertSubscription = async (
   const subscription = await stripe.subscriptions.retrieve(id)
   return upsertSubscription(subscription)
 }
+
+type fetchSubscriptionsResponse = Subscription.Response<
+  Subscription.ApiList<Subscription.Subscription>
+>
+type fetchSubscriptionsParams = {
+  limit: number
+}
+const fetchSubscriptionsDefaults = {
+  limit: 20,
+}
+export const fetchSubscriptions = async (
+  options: fetchSubscriptionsParams = fetchSubscriptionsDefaults
+): Promise<fetchSubscriptionsResponse> => {
+  const subscriptions = await stripe.subscriptions.list({
+    limit: options.limit,
+  })
+  return subscriptions
+}

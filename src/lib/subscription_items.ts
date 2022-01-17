@@ -13,7 +13,12 @@ export const upsertSubscriptionItem = async (
 ): Promise<Subscription.Subscription[]> => {
   // Modify price object to string id; reference prices table
   const priceId = subscriptionItem.price.id.toString()
-  const modifiedSubscriptionItem = { ...subscriptionItem, price: priceId }
+  const deleted = subscriptionItem.deleted
+  const modifiedSubscriptionItem = {
+    ...subscriptionItem,
+    price: priceId,
+    deleted: deleted ?? false,
+  }
 
   // Create the SQL
   const upsertString = constructUpsertSql(
