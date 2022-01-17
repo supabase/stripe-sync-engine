@@ -6,6 +6,7 @@ import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
 import { subscriptionSchema } from '../schemas/subscription'
 import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
+import { upsertSubscriptionItem } from './subscription_items'
 
 const config = getConfig()
 
@@ -17,6 +18,10 @@ export const upsertSubscription = async (
   if (customerId && !(await verifyCustomerExists(customerId))) {
     await fetchAndInsertCustomer(customerId)
   }
+
+  // Upsert subscription items into a separate table
+  const subscriptionItems = subscription.items.data
+  await Promise.all(subscriptionItems.map((x) => upsertSubscriptionItem(x)))
 
   // Create the SQL
   const upsertString = constructUpsertSql(
