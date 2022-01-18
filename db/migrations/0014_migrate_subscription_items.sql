@@ -15,7 +15,6 @@ select obj->>'id' as "id",
 from subscriptions
 on conflict ("id") 
 do update set "id" = excluded."id",
-  "id" = excluded."id",
   "object" = excluded."object",
   "billing_thresholds" = excluded."billing_thresholds",
   "created" = excluded."created",
