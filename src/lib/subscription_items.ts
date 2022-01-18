@@ -13,6 +13,7 @@ export const upsertSubscriptionItem = async (
 ): Promise<Subscription.Subscription[]> => {
   // Modify price object to string id; reference prices table
   const priceId = subscriptionItem.price.id.toString()
+  // deleted exists only on a deleted item
   const deleted = subscriptionItem.deleted
   const modifiedSubscriptionItem = {
     ...subscriptionItem,
