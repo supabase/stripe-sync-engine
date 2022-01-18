@@ -1,52 +1,34 @@
-import { fetchProducts, upsertProduct } from './products'
-import { fetchPrices, upsertPrice } from './prices'
-import { fetchSubscriptions, upsertSubscription } from './subscriptions'
+import { upsertProduct } from './products'
+import { upsertPrice } from './prices'
+import { upsertSubscription } from './subscriptions'
+import { stripe } from '../utils/StripeClientManager'
 
-export async function syncProducts(): Promise<{ synced: number; lastId: string }> {
-  let hasMore = true
+export async function syncProducts(): Promise<{ synced: number }> {
   let synced = 0
-  let lastId = ''
-
-  while (hasMore) {
-    const chunk = await fetchProducts()
-    const data = chunk.data
-    await Promise.all(data.map((x) => upsertProduct(x)))
-    synced += data.length
-    lastId += data[data.length - 1].id
-    hasMore = chunk.has_more
+  for await (const product of stripe.products.list({ limit: 50 })) {
+    await upsertProduct(product)
+    synced++
   }
 
-  return { synced, lastId }
+  return { synced }
 }
 
-export async function syncPrices(): Promise<{ synced: number; lastId: string }> {
-  let hasMore = true
+export async function syncPrices(): Promise<{ synced: number }> {
   let synced = 0
-  let lastId = ''
-
-  while (hasMore) {
-    const chunk = await fetchPrices()
-    const data = chunk.data
-    await Promise.all(data.map((x) => upsertPrice(x)))
-    synced += data.length
-    lastId += data[data.length - 1].id
-    hasMore = chunk.has_more
+  for await (const price of stripe.prices.list({ limit: 50 })) {
+    await upsertPrice(price)
+    synced++
   }
 
-  return { synced, lastId }
+  return { synced }
 }
 
-// For Test data only
-export async function syncSubscriptions(): Promise<{ synced: number; lastId: string }> {
-  // let hasMore = true
+export async function syncSubscriptions(): Promise<{ synced: number }> {
   let synced = 0
-  let lastId = ''
+  for await (const subscription of stripe.subscriptions.list({ limit: 50 })) {
+    await upsertSubscription(subscription)
+    synced++
+  }
 
-  const chunk = await fetchSubscriptions()
-  const data = chunk.data
-  await Promise.all(data.map((x) => upsertSubscription(x)))
-  synced += data.length
-  lastId += data[data.length - 1].id
-
-  return { synced, lastId }
+  return { synced }
 }
