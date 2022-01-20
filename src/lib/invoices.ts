@@ -23,11 +23,25 @@ export const upsertInvoice = async (invoice: Invoice.Invoice): Promise<Invoice.I
     await fetchAndInsertSubscription(subscriptionId)
   }
 
+  /**
+   * For array object field like invoice.custom_fields
+   * ex: [{"name":"Project name","value":"Test Project"}]
+   *
+   * we need to stringify it first cos passing array object directly will end up with
+   * {
+   * invalid input syntax for type json
+   * detail: 'Expected ":", but found "}".',
+   * where: 'JSON data, line 1: ...\\":\\"Project name\\",\\"value\\":\\"Test Project\\"}"}',
+   * }
+   */
+  const customFields = invoice.custom_fields
+  const modifiedInvoice = { ...invoice, custom_fields: JSON.stringify(customFields) }
+
   // Create the SQL
   const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'invoices', invoiceSchema)
 
   // Inject the values
-  const prepared = sql(upsertString)(invoice)
+  const prepared = sql(upsertString)(modifiedInvoice)
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)
