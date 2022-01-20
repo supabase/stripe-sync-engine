@@ -3,7 +3,7 @@ import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
-import { constructUpsertSql } from '../utils/helpers'
+import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
 import { invoiceSchema } from '../schemas/invoice'
 import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
 import { verifySubscriptionExists, fetchAndInsertSubscription } from './subscriptions'
@@ -23,25 +23,12 @@ export const upsertInvoice = async (invoice: Invoice.Invoice): Promise<Invoice.I
     await fetchAndInsertSubscription(subscriptionId)
   }
 
-  /**
-   * For array object field like invoice.custom_fields
-   * ex: [{"name":"Project name","value":"Test Project"}]
-   *
-   * we need to stringify it first cos passing array object directly will end up with
-   * {
-   * invalid input syntax for type json
-   * detail: 'Expected ":", but found "}".',
-   * where: 'JSON data, line 1: ...\\":\\"Project name\\",\\"value\\":\\"Test Project\\"}"}',
-   * }
-   */
-  const customFields = invoice.custom_fields
-  const modifiedInvoice = { ...invoice, custom_fields: JSON.stringify(customFields) }
-
   // Create the SQL
   const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'invoices', invoiceSchema)
 
   // Inject the values
-  const prepared = sql(upsertString)(modifiedInvoice)
+  const cleansed = cleanseArrayField(invoice)
+  const prepared = sql(upsertString)(cleansed)
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)
