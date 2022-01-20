@@ -4,7 +4,7 @@ import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { verifyProductExists, fetchAndInsertProduct } from './products'
-import { constructUpsertSql } from '../utils/helpers'
+import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
 import { priceSchema } from '../schemas/price'
 
 const config = getConfig()
@@ -20,7 +20,8 @@ export const upsertPrice = async (price: Price.Price): Promise<Price.Price[]> =>
   const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'prices', priceSchema)
 
   // Inject the values
-  const prepared = sql(upsertString)(price)
+  const cleansed = cleanseArrayField(price)
+  const prepared = sql(upsertString)(cleansed)
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)

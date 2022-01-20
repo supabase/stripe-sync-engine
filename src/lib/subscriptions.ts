@@ -3,7 +3,7 @@ import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
-import { constructUpsertSql } from '../utils/helpers'
+import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
 import { subscriptionSchema } from '../schemas/subscription'
 import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
 import { upsertSubscriptionItem } from './subscription_items'
@@ -27,7 +27,8 @@ export const upsertSubscription = async (
   )
 
   // Inject the values
-  const prepared = sql(upsertString)(subscription)
+  const cleansed = cleanseArrayField(subscription)
+  const prepared = sql(upsertString)(cleansed)
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)
