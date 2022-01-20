@@ -19,10 +19,6 @@ export const upsertSubscription = async (
     await fetchAndInsertCustomer(customerId)
   }
 
-  // Upsert subscription items into a separate table
-  const subscriptionItems = subscription.items.data
-  await Promise.all(subscriptionItems.map((x) => upsertSubscriptionItem(x)))
-
   // Create the SQL
   const upsertString = constructUpsertSql(
     config.SCHEMA || 'stripe',
@@ -35,6 +31,12 @@ export const upsertSubscription = async (
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)
+
+  // Upsert subscription items into a separate table
+  // need to run after upsert subscription cos subscriptionItems will reference the subscription
+  const subscriptionItems = subscription.items.data
+  await Promise.all(subscriptionItems.map((x) => upsertSubscriptionItem(x)))
+
   return rows
 }
 
