@@ -10,7 +10,8 @@
     "sourceMap": true,
     "strict": true,
     "lib": ["ES6", "DOM"],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "useUnknownInCatchVariables": false,
   },
   "include": [
     "./src/**/*"

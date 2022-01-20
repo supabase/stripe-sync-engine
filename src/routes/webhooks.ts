@@ -24,7 +24,7 @@ export default async function routes(fastify: FastifyInstance) {
       let event
       try {
         event = stripe.webhooks.constructEvent(body.raw, sig, config.STRIPE_WEBHOOK_SECRET)
-      } catch (err: any) {
+      } catch (err) {
         return reply.code(400).send(`Webhook Error: ${err.message}`)
       }
 
