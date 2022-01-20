@@ -6,6 +6,7 @@ import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
 import { subscriptionSchema } from '../schemas/subscription'
 import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
+import { upsertSubscriptionItem } from './subscription_items'
 
 const config = getConfig()
 
@@ -30,6 +31,12 @@ export const upsertSubscription = async (
 
   // Run it
   const { rows } = await query(prepared.text, prepared.values)
+
+  // Upsert subscription items into a separate table
+  // need to run after upsert subscription cos subscriptionItems will reference the subscription
+  const subscriptionItems = subscription.items.data
+  await Promise.all(subscriptionItems.map((x) => upsertSubscriptionItem(x)))
+
   return rows
 }
 
@@ -47,4 +54,22 @@ export const fetchAndInsertSubscription = async (
 ): Promise<Subscription.Subscription[]> => {
   const subscription = await stripe.subscriptions.retrieve(id)
   return upsertSubscription(subscription)
+}
+
+type fetchSubscriptionsResponse = Subscription.Response<
+  Subscription.ApiList<Subscription.Subscription>
+>
+type fetchSubscriptionsParams = {
+  limit: number
+}
+const fetchSubscriptionsDefaults = {
+  limit: 20,
+}
+export const fetchSubscriptions = async (
+  options: fetchSubscriptionsParams = fetchSubscriptionsDefaults
+): Promise<fetchSubscriptionsResponse> => {
+  const subscriptions = await stripe.subscriptions.list({
+    limit: options.limit,
+  })
+  return subscriptions
 }
