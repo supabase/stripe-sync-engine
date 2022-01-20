@@ -6,7 +6,7 @@ create table if not exists "stripe"."subscription_items" (
   "deleted" boolean,
   "metadata" jsonb,
   "quantity" integer,
-  "price" text REFERENCES "stripe"."prices",
-  "subscription" text,
+  "price" text references "stripe"."prices",
+  "subscription" text references "stripe"."subscriptions",
   "tax_rates" jsonb
 );
