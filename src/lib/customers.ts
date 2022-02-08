@@ -4,13 +4,18 @@ import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
-import { customerSchema } from '../schemas/customer'
+import { customerSchema, customerDeletedSchema } from '../schemas/customer'
 
 const config = getConfig()
 
 export const upsertCustomer = async (customer: Customer.Customer): Promise<Customer.Customer[]> => {
   // Create the SQL
-  const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
+  let upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
+
+  // handle deleted customer
+  if (customer.deleted) {
+    upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerDeletedSchema)
+  }
 
   // Inject the values
   const cleansed = cleanseArrayField(customer)
