@@ -27,7 +27,7 @@ export async function syncPrices(): Promise<{ synced: number }> {
 
 export async function syncSubscriptions(): Promise<{ synced: number }> {
   let synced = 0
-  for await (const subscription of stripe.subscriptions.list({ limit: 100 })) {
+  for await (const subscription of stripe.subscriptions.list({ status: 'all', limit: 100 })) {
     await upsertSubscription(subscription)
     synced++
   }
