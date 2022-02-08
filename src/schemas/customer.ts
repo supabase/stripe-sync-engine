@@ -28,3 +28,14 @@ export const customerSchema: JsonSchema = {
   },
   required: ['id'],
 } as const
+
+export const customerDeletedSchema: JsonSchema = {
+  $id: 'customerSchema',
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    object: { type: 'string' },
+    deleted: { type: 'boolean' },
+  },
+  required: ['id'],
+} as const
