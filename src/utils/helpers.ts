@@ -55,9 +55,9 @@ export const constructUpsertSql = (
  */
 
 export const cleanseArrayField = (obj: {
-  [Key: string]: unknown
+  [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
 }): {
-  [Key: string]: unknown
+  [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
 } => {
   const cleansed = { ...obj }
   Object.keys(cleansed).map((k) => {
