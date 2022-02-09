@@ -53,10 +53,11 @@ export const constructUpsertSql = (
  * where: 'JSON data, line 1: ...\\":\\"Project name\\",\\"value\\":\\"Test Project\\"}"}',
  * }
  */
+
 export const cleanseArrayField = (obj: {
-  [Key: string]: any
+  [Key: string]: unknown
 }): {
-  [Key: string]: any
+  [Key: string]: unknown
 } => {
   const cleansed = { ...obj }
   Object.keys(cleansed).map((k) => {
