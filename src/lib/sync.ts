@@ -20,12 +20,10 @@ interface SyncBackfill {
 
 export interface SyncBackfillParams {
   created?: Stripe.RangeQueryParam
-  object?: SyncBackfillParams.Object
+  object?: SyncObject
 }
 
-namespace SyncBackfillParams {
-  export type Object = 'all' | 'customer' | 'invoice' | 'price' | 'product' | 'subscription'
-}
+type SyncObject = 'all' | 'customer' | 'invoice' | 'price' | 'product' | 'subscription'
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
