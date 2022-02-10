@@ -19,7 +19,7 @@ interface SyncBackfill {
 }
 
 export interface SyncBackfillParams {
-  gteCreated?: number
+  created?: Stripe.RangeQueryParam
   object?: SyncBackfillParams.Object
 }
 
@@ -28,31 +28,31 @@ namespace SyncBackfillParams {
 }
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
-  let { gteCreated, object } = params ?? {}
+  const { created, object } = params ?? {}
   let products, prices, customers, subscriptions, invoices
-
+  console.log(params)
   switch (object) {
     case 'all':
-      products = await syncProducts(gteCreated)
-      prices = await syncPrices(gteCreated)
-      customers = await syncCustomers(gteCreated)
-      subscriptions = await syncSubscriptions(gteCreated)
-      invoices = await syncInvoices(gteCreated)
+      products = await syncProducts(created)
+      prices = await syncPrices(created)
+      customers = await syncCustomers(created)
+      subscriptions = await syncSubscriptions(created)
+      invoices = await syncInvoices(created)
       break
     case 'customer':
-      customers = await syncCustomers(gteCreated)
+      customers = await syncCustomers(created)
       break
     case 'invoice':
-      invoices = await syncInvoices(gteCreated)
+      invoices = await syncInvoices(created)
       break
     case 'price':
-      prices = await syncPrices(gteCreated)
+      prices = await syncPrices(created)
       break
     case 'product':
-      products = await syncProducts(gteCreated)
+      products = await syncProducts(created)
       break
     case 'subscription':
-      subscriptions = await syncSubscriptions(gteCreated)
+      subscriptions = await syncSubscriptions(created)
       break
     default:
       break
@@ -67,11 +67,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
   }
 }
 
-export async function syncProducts(gteCreated?: number): Promise<Sync> {
+export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.ProductListParams = { limit: 100 }
-  if (gteCreated) {
-    params.created = { gte: gteCreated }
-  }
+  if (created) params.created = created
 
   let synced = 0
   for await (const product of stripe.products.list(params)) {
@@ -82,11 +80,9 @@ export async function syncProducts(gteCreated?: number): Promise<Sync> {
   return { synced }
 }
 
-export async function syncPrices(gteCreated?: number): Promise<Sync> {
+export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.PriceListParams = { limit: 100 }
-  if (gteCreated) {
-    params.created = { gte: gteCreated }
-  }
+  if (created) params.created = created
 
   let synced = 0
   for await (const price of stripe.prices.list(params)) {
@@ -97,11 +93,9 @@ export async function syncPrices(gteCreated?: number): Promise<Sync> {
   return { synced }
 }
 
-export async function syncCustomers(gteCreated?: number): Promise<Sync> {
+export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.CustomerListParams = { limit: 100 }
-  if (gteCreated) {
-    params.created = { gte: gteCreated }
-  }
+  if (created) params.created = created
 
   let synced = 0
   for await (const customer of stripe.customers.list(params)) {
@@ -112,11 +106,9 @@ export async function syncCustomers(gteCreated?: number): Promise<Sync> {
   return { synced }
 }
 
-export async function syncSubscriptions(gteCreated?: number): Promise<Sync> {
+export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
-  if (gteCreated) {
-    params.created = { gte: gteCreated }
-  }
+  if (created) params.created = created
 
   let synced = 0
   for await (const subscription of stripe.subscriptions.list(params)) {
@@ -127,11 +119,9 @@ export async function syncSubscriptions(gteCreated?: number): Promise<Sync> {
   return { synced }
 }
 
-export async function syncInvoices(gteCreated?: number): Promise<Sync> {
+export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.InvoiceListParams = { limit: 100 }
-  if (gteCreated) {
-    params.created = { gte: gteCreated }
-  }
+  if (created) params.created = created
 
   let synced = 0
   for await (const invoice of stripe.invoices.list(params)) {
