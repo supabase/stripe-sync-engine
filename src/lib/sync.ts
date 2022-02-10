@@ -6,23 +6,58 @@ import { upsertCustomer } from './customers'
 import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
 
-interface SyncResponse {
+interface Sync {
   synced: number
 }
 
-interface SyncBackfillResponse {
-  products: SyncResponse
-  prices: SyncResponse
-  customers: SyncResponse
-  subscriptions: SyncResponse
-  invoices: SyncResponse
+interface SyncBackfill {
+  products?: Sync
+  prices?: Sync
+  customers?: Sync
+  subscriptions?: Sync
+  invoices?: Sync
 }
-export async function syncBackfill(gteCreated?: number): Promise<SyncBackfillResponse> {
-  const products = await syncProducts(gteCreated)
-  const prices = await syncPrices(gteCreated)
-  const customers = await syncCustomers(gteCreated)
-  const subscriptions = await syncSubscriptions(gteCreated)
-  const invoices = await syncInvoices(gteCreated)
+
+export interface SyncBackfillParams {
+  gteCreated?: number
+  object?: SyncBackfillParams.Object
+}
+
+namespace SyncBackfillParams {
+  export type Object = 'all' | 'customer' | 'invoice' | 'price' | 'product' | 'subscription'
+}
+
+export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
+  let { gteCreated, object } = params ?? {}
+  let products, prices, customers, subscriptions, invoices
+
+  switch (object) {
+    case 'all':
+      products = await syncProducts(gteCreated)
+      prices = await syncPrices(gteCreated)
+      customers = await syncCustomers(gteCreated)
+      subscriptions = await syncSubscriptions(gteCreated)
+      invoices = await syncInvoices(gteCreated)
+      break
+    case 'customer':
+      customers = await syncCustomers(gteCreated)
+      break
+    case 'invoice':
+      invoices = await syncInvoices(gteCreated)
+      break
+    case 'price':
+      prices = await syncPrices(gteCreated)
+      break
+    case 'product':
+      products = await syncProducts(gteCreated)
+      break
+    case 'subscription':
+      subscriptions = await syncSubscriptions(gteCreated)
+      break
+    default:
+      break
+  }
+
   return {
     products,
     prices,
@@ -32,7 +67,7 @@ export async function syncBackfill(gteCreated?: number): Promise<SyncBackfillRes
   }
 }
 
-export async function syncProducts(gteCreated?: number): Promise<SyncResponse> {
+export async function syncProducts(gteCreated?: number): Promise<Sync> {
   const params: Stripe.ProductListParams = { limit: 100 }
   if (gteCreated) {
     params.created = { gte: gteCreated }
@@ -47,7 +82,7 @@ export async function syncProducts(gteCreated?: number): Promise<SyncResponse> {
   return { synced }
 }
 
-export async function syncPrices(gteCreated?: number): Promise<SyncResponse> {
+export async function syncPrices(gteCreated?: number): Promise<Sync> {
   const params: Stripe.PriceListParams = { limit: 100 }
   if (gteCreated) {
     params.created = { gte: gteCreated }
@@ -62,7 +97,7 @@ export async function syncPrices(gteCreated?: number): Promise<SyncResponse> {
   return { synced }
 }
 
-export async function syncCustomers(gteCreated?: number): Promise<SyncResponse> {
+export async function syncCustomers(gteCreated?: number): Promise<Sync> {
   const params: Stripe.CustomerListParams = { limit: 100 }
   if (gteCreated) {
     params.created = { gte: gteCreated }
@@ -77,7 +112,7 @@ export async function syncCustomers(gteCreated?: number): Promise<SyncResponse> 
   return { synced }
 }
 
-export async function syncSubscriptions(gteCreated?: number): Promise<SyncResponse> {
+export async function syncSubscriptions(gteCreated?: number): Promise<Sync> {
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
   if (gteCreated) {
     params.created = { gte: gteCreated }
@@ -92,7 +127,7 @@ export async function syncSubscriptions(gteCreated?: number): Promise<SyncRespon
   return { synced }
 }
 
-export async function syncInvoices(gteCreated?: number): Promise<SyncResponse> {
+export async function syncInvoices(gteCreated?: number): Promise<Sync> {
   const params: Stripe.InvoiceListParams = { limit: 100 }
   if (gteCreated) {
     params.created = { gte: gteCreated }
