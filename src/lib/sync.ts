@@ -30,7 +30,7 @@ namespace SyncBackfillParams {
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
   let products, prices, customers, subscriptions, invoices
-  console.log(params)
+
   switch (object) {
     case 'all':
       products = await syncProducts(created)
