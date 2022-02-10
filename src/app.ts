@@ -31,8 +31,14 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
    */
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
     try {
-      const newBody = {
-        raw: body,
+      let newBody
+      switch (req.routerPath) {
+        case '/webhooks':
+          newBody = { raw: body }
+          break
+        default:
+          newBody = JSON.parse(body.toString())
+          break
       }
       done(null, newBody)
     } catch (error) {
