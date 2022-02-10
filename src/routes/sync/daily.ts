@@ -5,13 +5,14 @@ import { syncBackfill, SyncBackfillParams } from '../../lib/sync'
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/daily', {
     handler: async (request, reply) => {
-      const { object } = request.query as { object?: string }
+      const { object } = request.body as { object?: string }
       const currentTimeInSeconds = Math.floor(Date.now() / 1000)
       const dayAgoTimeInSeconds = currentTimeInSeconds - 60 * 60 * 24
       const params = {
-        gteCreated: dayAgoTimeInSeconds,
+        created: { gte: dayAgoTimeInSeconds },
         object: object ?? 'all',
       } as SyncBackfillParams
+
       const result = await syncBackfill(params)
       return reply.send({
         statusCode: 200,
