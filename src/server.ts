@@ -2,20 +2,22 @@ import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'http'
 import { runMigrations } from './utils/migrate'
 import { createServer } from './app'
+import pino from 'pino'
 
-const loggerConfig = {
-  prettyPrint: true,
-}
-let exposeDocs = true
-if (process.env.NODE_ENV === 'production') {
-  loggerConfig.prettyPrint = false
-  exposeDocs = true
-}
+const logger = pino({
+  formatters: {
+    level(label) {
+      return { level: label }
+    },
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+})
 
 const main = async () => {
   const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = await createServer({
-    logger: loggerConfig,
-    exposeDocs,
+    logger,
+    exposeDocs: process.env.NODE_ENV !== 'production',
+    requestIdHeader: 'Request-Id',
   })
 
   // Init config
