@@ -6,7 +6,7 @@ import { stripe } from '../utils/StripeClientManager'
 import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
 import { subscriptionSchema } from '../schemas/subscription'
 import { verifyCustomerExists, fetchAndInsertCustomer } from './customers'
-import { upsertSubscriptionItem } from './subscription_items'
+import { markDeletedSubscriptionItems, upsertSubscriptionItem } from './subscription_items'
 
 const config = getConfig()
 
@@ -37,6 +37,11 @@ export const upsertSubscription = async (
   // need to run after upsert subscription cos subscriptionItems will reference the subscription
   const subscriptionItems = subscription.items.data
   await Promise.all(subscriptionItems.map((x) => upsertSubscriptionItem(x)))
+
+  // We have to mark existing subscription item in db as deleted
+  // if it doesn't exist in current subscriptionItems list
+  const subItemIds = subscriptionItems.map((x: Subscription.SubscriptionItem) => x.id)
+  await markDeletedSubscriptionItems(subscription.id, subItemIds)
 
   return rows
 }

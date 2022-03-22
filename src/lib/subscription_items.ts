@@ -46,6 +46,32 @@ export const verifySubscriptionItemExists = async (id: string): Promise<boolean>
   return rows.length > 0
 }
 
+export const markDeletedSubscriptionItems = async (
+  subscriptionId: string,
+  currentSubItemIds: string[]
+) => {
+  let prepared = sql(`
+    select id from "${config.SCHEMA}"."subscription_items"
+    where subscription = :subscriptionId;
+    `)({ subscriptionId })
+  const { rows } = await query(prepared.text, prepared.values)
+  const deletedIds = rows.filter(
+    ({ id }: { id: string }) => currentSubItemIds.includes(id) === false
+  )
+
+  if (deletedIds.length > 0) {
+    const ids = deletedIds.map(({ id }: { id: string }) => id).join("','")
+    prepared = sql(`
+      update "${config.SCHEMA}"."subscription_items"
+      set deleted = true where id in (:ids);
+      `)({ ids })
+    const { rowCount } = await query(prepared.text, prepared.values)
+    return { rowCount }
+  } else {
+    return { rowCount: 0 }
+  }
+}
+
 export const fetchAndInsertSubscriptionItem = async (
   id: string
 ): Promise<Subscription.Subscription[]> => {
