@@ -52,7 +52,7 @@ export const markDeletedSubscriptionItems = async (
 ) => {
   let prepared = sql(`
     select id from "${config.SCHEMA}"."subscription_items"
-    where subscription = :subscriptionId;
+    where subscription = :subscriptionId and deleted = false;
     `)({ subscriptionId })
   const { rows } = await query(prepared.text, prepared.values)
   const deletedIds = rows.filter(
