@@ -60,10 +60,10 @@ export const markDeletedSubscriptionItems = async (
   )
 
   if (deletedIds.length > 0) {
-    const ids = deletedIds.map(({ id }: { id: string }) => id).join("','")
+    const ids = deletedIds.map(({ id }: { id: string }) => id)
     prepared = sql(`
       update "${config.SCHEMA}"."subscription_items"
-      set deleted = true where id in (:ids);
+      set deleted = true where id=any(:ids::text[]);
       `)({ ids })
     const { rowCount } = await query(prepared.text, prepared.values)
     return { rowCount }
