@@ -15,10 +15,13 @@ export const upsertSubscriptionItem = async (
   const priceId = subscriptionItem.price.id.toString()
   // deleted exists only on a deleted item
   const deleted = subscriptionItem.deleted
+  // quantity not exist on volume tier item
+  const quantity = subscriptionItem.quantity
   const modifiedSubscriptionItem = {
     ...subscriptionItem,
     price: priceId,
     deleted: deleted ?? false,
+    quantity: quantity ?? null,
   }
 
   // Create the SQL
