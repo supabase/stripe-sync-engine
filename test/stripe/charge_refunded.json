@@ -1,0 +1,134 @@
+{
+  "id": "evt_3KtQThJDPojXS6LN0E06aNxq",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619701111,
+  "data": {
+    "object": {
+      "id": "ch_3Kl36gJDPojXS6LN0DCM4A8l",
+      "object": "charge",
+      "amount": 2500,
+      "amount_captured": 2500,
+      "amount_refunded": 2500,
+      "application": null,
+      "application_fee": null,
+      "application_fee_amount": null,
+      "balance_transaction": "txn_3Kl36gJDPojXS6LN0BbaNIHm",
+      "billing_details": {
+        "address": {
+          "city": null,
+          "country": "CA",
+          "line1": null,
+          "line2": null,
+          "postal_code": "V1E 3P2",
+          "state": null
+        },
+        "email": null,
+        "name": null,
+        "phone": null
+      },
+      "calculated_statement_descriptor": "SUPABASE",
+      "captured": true,
+      "created": 1649129463,
+      "currency": "usd",
+      "customer": "cus_J7Mkgr8mvbl1eK",
+      "description": "Subscription creation",
+      "destination": null,
+      "dispute": null,
+      "disputed": false,
+      "failure_balance_transaction": null,
+      "failure_code": null,
+      "failure_message": null,
+      "fraud_details": {},
+      "invoice": "in_1KJdKkJDPojXS6LNSwSWkZSN",
+      "livemode": true,
+      "metadata": {},
+      "on_behalf_of": null,
+      "order": null,
+      "outcome": {
+        "network_status": "approved_by_network",
+        "reason": null,
+        "risk_level": "normal",
+        "seller_message": "Payment complete.",
+        "type": "authorized"
+      },
+      "paid": true,
+      "payment_intent": "pi_3Kl36gJDPojXS6LN02fQVtKR",
+      "payment_method": "pm_1Kl359JDPojXS6LNQHX4X3gn",
+      "payment_method_details": {
+        "card": {
+          "brand": "mastercard",
+          "checks": {
+            "address_line1_check": null,
+            "address_postal_code_check": "pass",
+            "cvc_check": "pass"
+          },
+          "country": "CA",
+          "exp_month": 4,
+          "exp_year": 2023,
+          "fingerprint": "OuJmDKBM84dX9qva",
+          "funding": "credit",
+          "installments": null,
+          "last4": "7572",
+          "mandate": null,
+          "network": "mastercard",
+          "three_d_secure": null,
+          "wallet": null
+        },
+        "type": "card"
+      },
+      "receipt_email": null,
+      "receipt_number": null,
+      "receipt_url": "https://pay.stripe.com/receipts/acct_1GThseJDPojXS6LN/ch_3Kl36gJDPojXS6LN0DCM4A8l/rcpt_LRx06w3TR5WisyLpDA58k6uXjAsHb1e",
+      "refunded": true,
+      "refunds": {
+        "object": "list",
+        "data": [
+          {
+            "id": "re_3Kl36gJDPojXS6LN0eP4yPDz",
+            "object": "refund",
+            "amount": 2500,
+            "balance_transaction": "txn_3Kl36gJDPojXS6LN0MUI8H15",
+            "charge": "ch_3Kl36gJDPojXS6LN0DCM4A8l",
+            "created": 1649321738,
+            "currency": "usd",
+            "metadata": {},
+            "payment_intent": "pi_3Kl36gJDPojXS6LN02fQVtKR",
+            "reason": null,
+            "receipt_number": null,
+            "source_transfer_reversal": null,
+            "status": "succeeded",
+            "transfer_reversal": null
+          }
+        ],
+        "has_more": false,
+        "total_count": 1,
+        "url": "/v1/charges/ch_3Kl36gJDPojXS6LN0DCM4A8l/refunds"
+      },
+      "review": null,
+      "shipping": null,
+      "source": null,
+      "source_transfer": null,
+      "statement_descriptor": null,
+      "statement_descriptor_suffix": null,
+      "status": "succeeded",
+      "transfer_data": null,
+      "transfer_group": null
+    },
+    "previous_attributes": {
+      "amount_refunded": 0,
+      "refunded": false,
+      "refunds": {
+        "data": [],
+        "total_count": 0
+      }
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 4,
+  "request": {
+    "id": "req_QyDCzn33ls4m1t",
+    "idempotency_key": null
+  },
+  "type": "charge.refunded"
+}

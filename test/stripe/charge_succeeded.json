@@ -1,0 +1,110 @@
+{
+  "id": "evt_3KtQThJDPojXS6LN0E06aNxq",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619701111,
+  "data": {
+    "object": {
+      "id": "ch_3KtQThJDPojXS6LN0YmgbxGj",
+      "object": "charge",
+      "amount": 3000,
+      "amount_captured": 3000,
+      "amount_refunded": 0,
+      "application": null,
+      "application_fee": null,
+      "application_fee_amount": null,
+      "balance_transaction": "txn_3KtQThJDPojXS6LN0ClROjTy",
+      "billing_details": {
+        "address": {
+          "city": null,
+          "country": "AU",
+          "line1": null,
+          "line2": null,
+          "postal_code": null,
+          "state": null
+        },
+        "email": null,
+        "name": null,
+        "phone": null
+      },
+      "calculated_statement_descriptor": "SUPABASE",
+      "captured": true,
+      "created": 1651125926,
+      "currency": "usd",
+      "customer": "cus_J7Mkgr8mvbl1eK",
+      "description": "Subscription update",
+      "destination": null,
+      "dispute": null,
+      "disputed": false,
+      "failure_balance_transaction": null,
+      "failure_code": null,
+      "failure_message": null,
+      "fraud_details": {},
+      "invoice": "in_1KJdKkJDPojXS6LNSwSWkZSN",
+      "livemode": false,
+      "metadata": {},
+      "on_behalf_of": null,
+      "order": null,
+      "outcome": {
+        "network_status": "approved_by_network",
+        "reason": null,
+        "risk_level": "normal",
+        "risk_score": 55,
+        "seller_message": "Payment complete.",
+        "type": "authorized"
+      },
+      "paid": true,
+      "payment_intent": "pi_3KtQThJDPojXS6LN0H9EfsjV",
+      "payment_method": "pm_1KtQTCJDPojXS6LNmYLNUmTc",
+      "payment_method_details": {
+        "card": {
+          "brand": "visa",
+          "checks": {
+            "address_line1_check": null,
+            "address_postal_code_check": null,
+            "cvc_check": "pass"
+          },
+          "country": "US",
+          "exp_month": 4,
+          "exp_year": 2024,
+          "fingerprint": "oPS2CZBviZaiMQyc",
+          "funding": "credit",
+          "installments": null,
+          "last4": "4242",
+          "mandate": null,
+          "network": "visa",
+          "three_d_secure": null,
+          "wallet": null
+        },
+        "type": "card"
+      },
+      "receipt_email": null,
+      "receipt_number": null,
+      "receipt_url": "https://pay.stripe.com/receipts/acct_1GThseJDPojXS6LN/ch_3KtQThJDPojXS6LN0YmgbxGj/rcpt_LabhDLLWN1rPswDktT0KujMSqYV8ROm",
+      "refunded": false,
+      "refunds": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "total_count": 0,
+        "url": "/v1/charges/ch_3KtQThJDPojXS6LN0YmgbxGj/refunds"
+      },
+      "review": null,
+      "shipping": null,
+      "source": null,
+      "source_transfer": null,
+      "statement_descriptor": null,
+      "statement_descriptor_suffix": null,
+      "status": "succeeded",
+      "transfer_data": null,
+      "transfer_group": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 4,
+  "request": {
+    "id": "req_QyDCzn33ls4m1t",
+    "idempotency_key": null
+  },
+  "type": "charge.succeeded"
+}

@@ -15,6 +15,9 @@ import subscription_updated from './stripe/subscription_updated.json'
 import invoice_paid from './stripe/invoice_paid.json'
 import invoice_updated from './stripe/invoice_updated.json'
 import invoice_finalized from './stripe/invoice_finalized.json'
+import charge_failed from './stripe/charge_failed.json'
+import charge_refunded from './stripe/charge_refunded.json'
+import charge_succeeded from './stripe/charge_succeeded.json'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
@@ -333,6 +336,78 @@ describe('/webhooks', () => {
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: invoice_finalized,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * charge.failed
+   */
+  test('charge.failed', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(charge_failed)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: charge_failed,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * charge.refunded
+   */
+  test('charge.refunded', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(charge_refunded)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: charge_refunded,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * charge.succeeded
+   */
+  test('charge.succeeded', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(charge_succeeded)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: charge_succeeded,
     })
 
     const json = JSON.parse(response.body)
