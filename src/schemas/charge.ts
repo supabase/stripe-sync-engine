@@ -6,7 +6,6 @@ export const chargeSchema: JsonSchema = {
   properties: {
     id: { type: 'string' },
     object: { type: 'string' },
-    card: { type: 'object' },
     paid: { type: 'boolean' },
     order: { type: 'string' },
     amount: { type: 'number' },
@@ -18,7 +17,6 @@ export const chargeSchema: JsonSchema = {
     invoice: { type: 'string' },
     outcome: { type: 'object' },
     refunds: { type: 'object' },
-    updated: { type: 'number' },
     captured: { type: 'boolean' },
     currency: { type: 'string' },
     customer: { type: 'string' },
@@ -42,7 +40,6 @@ export const chargeSchema: JsonSchema = {
     source_transfer: { type: 'string' },
     balance_transaction: { type: 'string' },
     statement_descriptor: { type: 'string' },
-    statement_description: { type: 'string' },
     payment_method_details: { type: 'object' },
   },
   required: ['id'],
