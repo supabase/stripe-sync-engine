@@ -6,11 +6,8 @@ import { upsertProduct, deleteProduct } from '../lib/products'
 import { upsertPrice, deletePrice } from '../lib/prices'
 import { upsertSubscription } from '../lib/subscriptions'
 import { upsertInvoice } from '../lib/invoices'
-import Customer from 'stripe'
-import Invoice from 'stripe'
-import Subscription from 'stripe'
-import Product from 'stripe'
-import Price from 'stripe'
+import { upsertCharge } from '../lib/charges'
+import Stripe from 'stripe'
 
 const config = getConfig()
 
@@ -29,16 +26,23 @@ export default async function routes(fastify: FastifyInstance) {
       }
 
       switch (event.type) {
+        case 'charge.failed':
+        case 'charge.refunded':
+        case 'charge.succeeded': {
+          const charge = event.data.object as Stripe.Charge
+          await upsertCharge(charge)
+          break
+        }
         case 'customer.created':
         case 'customer.updated': {
-          const customer = event.data.object as Customer.Customer
+          const customer = event.data.object as Stripe.Customer
           await upsertCustomer(customer)
           break
         }
         case 'customer.subscription.created':
         case 'customer.subscription.deleted': // Soft delete using `status = canceled`
         case 'customer.subscription.updated': {
-          const subscription = event.data.object as Subscription.Subscription
+          const subscription = event.data.object as Stripe.Subscription
           await upsertSubscription(subscription)
           break
         }
@@ -48,29 +52,29 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.payment_failed':
         case 'invoice.payment_succeeded':
         case 'invoice.updated': {
-          const invoice = event.data.object as Invoice.Invoice
+          const invoice = event.data.object as Stripe.Invoice
           await upsertInvoice(invoice)
           break
         }
         case 'product.created':
         case 'product.updated': {
-          const product = event.data.object as Product.Product
+          const product = event.data.object as Stripe.Product
           await upsertProduct(product)
           break
         }
         case 'product.deleted': {
-          const product = event.data.object as Product.Product
+          const product = event.data.object as Stripe.Product
           await deleteProduct(product.id)
           break
         }
         case 'price.created':
         case 'price.updated': {
-          const price = event.data.object as Price.Price
+          const price = event.data.object as Stripe.Price
           await upsertPrice(price)
           break
         }
         case 'price.deleted': {
-          const price = event.data.object as Price.Price
+          const price = event.data.object as Stripe.Price
           await deletePrice(price.id)
           break
         }

@@ -52,7 +52,7 @@ export const verifySubscriptionItemExists = async (id: string): Promise<boolean>
 export const markDeletedSubscriptionItems = async (
   subscriptionId: string,
   currentSubItemIds: string[]
-) => {
+): Promise<{ rowCount: number }> => {
   let prepared = sql(`
     select id from "${config.SCHEMA}"."subscription_items"
     where subscription = :subscriptionId and deleted = false;
