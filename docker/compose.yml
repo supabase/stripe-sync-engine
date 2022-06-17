@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  db:
+    container_name: stripe-db
+    image: supabase/postgres:14.1.0.21
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    restart: unless-stopped
+    ports:
+      - 55432:5432
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./db/migrations/schema.sql:/docker-entrypoint-initdb.d/0000_schema.sql
+      - ../db/migrations:/docker-entrypoint-initdb.d

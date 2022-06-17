@@ -3,3 +3,4 @@ dist/
 node_modules/
 .env
 .env.*
+db/migrations/0000_schema.sql
