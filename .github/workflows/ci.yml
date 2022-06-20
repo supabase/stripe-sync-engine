@@ -34,17 +34,12 @@ jobs:
       - name: Set up .env file
         run: |
           touch .env
-          echo ANON_KEY=${{ secrets.ANON_KEY }} >> .env
-          echo SERVICE_KEY=${{ secrets.SERVICE_KEY }} >> .env
-          echo PROJECT_REF=${{ secrets.PROJECT_REF }} >> .env
-          echo REGION=${{ secrets.REGION }} >> .env
-          echo POSTGREST_URL=${{ secrets.POSTGREST_URL }} >> .env
-          echo GLOBAL_S3_BUCKET=${{ secrets.GLOBAL_S3_BUCKET }} >> .env
-          echo PGRST_JWT_SECRET=${{ secrets.PGRST_JWT_SECRET }} >> .env
-          echo AUTHENTICATED_KEY=${{ secrets.AUTHENTICATED_KEY }} >> .env
-          echo DATABASE_URL=postgresql://postgres:postgres@127.0.0.1/postgres >> .env
-          echo PGOPTIONS='-c search_path=storage' >> .env
-          echo FILE_SIZE_LIMIT=52428800 >> .env
+          echo DATABASE_URL='postgres://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable&search_path=stripe' >> .env
+          echo NODE_ENV=dev >> .env
+          echo STRIPE_SECRET_KEY=sk_test_ >> .env
+          echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
+          echo SCHEMA=stripe >> .env
+          echo PORT=8080 >> .env
 
       - name: Install dependencies
         run: |
@@ -61,7 +56,8 @@ jobs:
       - name: Builds successfully
         run: |
           npm run build
-      # Run manually for now
-      # - name: Tests pass
-      #   run: |
-      #     npm test
+
+      - name: Tests
+        run: |
+          docker-compose -f ./docker/compose.yml up -d
+          npm run test

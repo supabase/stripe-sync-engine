@@ -18,6 +18,11 @@ import invoice_finalized from './stripe/invoice_finalized.json'
 import charge_failed from './stripe/charge_failed.json'
 import charge_refunded from './stripe/charge_refunded.json'
 import charge_succeeded from './stripe/charge_succeeded.json'
+import stripeMock from './helpers/stripe'
+
+jest.doMock('stripe', () => {
+  return jest.fn(() => stripeMock)
+})
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
