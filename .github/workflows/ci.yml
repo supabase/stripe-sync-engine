@@ -40,6 +40,7 @@ jobs:
           echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
           echo SCHEMA=stripe >> .env
           echo PORT=8080 >> .env
+          echo API_KEY=api_key_test >> .env
 
       - name: Install dependencies
         run: |
