@@ -5,11 +5,13 @@ Continuously synchronizes a Stripe account to a Postgres database.
 Note: this is experimental. There are no guarantees that it will be supported in the future.
 
 ![Sync Stripe with Postgres](./docs/stripe-sync-engine.jpg)
+
 ## Motivation
 
 Sometimes you want to analyze your billing data using SQL. Even more importantly, you want to join your billing data to your product/business data.
 
 This server synchronizes your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
+
 ## How it works
 
 ![How it works](./docs/sync-engine-how.png)
@@ -75,7 +77,6 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `subscription_schedule.released`
 - [ ] `subscription_schedule.updated`
 
-
 ## Usage
 
 - Update your Stripe account with all valid webhooks and get the webhook secret
@@ -85,14 +86,43 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
   - eg: `docker run -e PORT=8080 --env-file .env supabase/stripe-sync-engine`
   - This will automatically run any migrations on your database
 - Point your Stripe webooks to your deployed app.
+
+## Backfill from Stripe
+
+```
+POST /sync
+body: {
+  "object": "product",
+  "created": {
+    "gte": 1643872333
+  }
+}
+```
+
+- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription**
+- `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
+
+#### Alternative routes to sync `daily/weekly/monthly` data
+
+```
+POST /sync/daily
+
+---
+
+POST /sync/daily
+body: {
+  "object": "product"
+}
+```
+
 ## Future ideas
 
-- Expose a "sync" endpoint for each table which will manually fetch and sync from Stripe.
 - Expose an "initialize" endpoint that will fetch data from Stripe and do an initial load (or perhaps `POST` a CSV to an endpoint).
 
 ## Development
 
 **Set up**
+
 - Create a Postgres database on [supabase.com](https://supabase.com) (or another Postgres provider)
 - Update Stripe with all valid webhooks and get the webhook secret
 - `mv .env.sample .env` and then rename all the variables
@@ -108,16 +138,17 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 docker build -t stripe-sync-engine .
 docker run -p 8080:8080 stripe-sync-engine
 ```
+
 **Release**
 
 Handled by GitHub actions whenever their is a commit to the `main` branch with `fix` or `feat` in the description.
 
-## License 
+## License
 
 Apache 2.0
 
 ## Sponsors
 
-Supabase is building the features of Firebase using enterprise-grade, open source products. We support existing communities wherever possible, and if the products don’t exist we build them and open source them ourselves. 
+Supabase is building the features of Firebase using enterprise-grade, open source products. We support existing communities wherever possible, and if the products don’t exist we build them and open source them ourselves.
 
 [![New Sponsor](https://user-images.githubusercontent.com/10214025/90518111-e74bbb00-e198-11ea-8f88-c9e3c1aa4b5b.png)](https://github.com/sponsors/supabase)
