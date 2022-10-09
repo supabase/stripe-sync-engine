@@ -161,7 +161,7 @@ describe('/webhooks', () => {
   /**
    * price.created
    */
-  test('product.created', async () => {
+  test('price.created', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(price_created)}`, 'utf8')
       .digest('hex')
@@ -185,7 +185,7 @@ describe('/webhooks', () => {
   /**
    * price.deleted
    */
-  test('product.deleted', async () => {
+  test('price.deleted', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(price_deleted)}`, 'utf8')
       .digest('hex')

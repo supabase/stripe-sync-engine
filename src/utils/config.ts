@@ -6,6 +6,7 @@ type configType = {
   SCHEMA: string
   STRIPE_SECRET_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  API_KEY: string
 }
 
 function getConfigFromEnv(key: string): string {
@@ -25,5 +26,6 @@ export function getConfig(): configType {
     NODE_ENV: getConfigFromEnv('NODE_ENV'),
     STRIPE_SECRET_KEY: getConfigFromEnv('STRIPE_SECRET_KEY'),
     STRIPE_WEBHOOK_SECRET: getConfigFromEnv('STRIPE_WEBHOOK_SECRET'),
+    API_KEY: getConfigFromEnv('API_KEY'),
   }
 }
