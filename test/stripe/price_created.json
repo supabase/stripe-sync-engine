@@ -15,7 +15,7 @@
       "lookup_key": null,
       "metadata": {},
       "nickname": null,
-      "product": "prod_JdJ6Wt7rsz4EPJ",
+      "product": "prod_IsRLOp58Z7V4XN",
       "recurring": {
         "aggregate_usage": null,
         "interval": "month",
@@ -36,5 +36,5 @@
     "id": "req_EQwgQ4Z4MBtyBx",
     "idempotency_key": null
   },
-  "type": "price.deleted"
+  "type": "price.created"
 }
