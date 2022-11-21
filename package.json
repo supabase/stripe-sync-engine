@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "dotenv": "^8.2.0",
-    "fastify": "^3.14.0",
+    "fastify": "^3.29.4",
     "fastify-autoload": "^3.5.2",
     "fastify-swagger": "^4.4.1",
     "pg": "^8.6.0",
