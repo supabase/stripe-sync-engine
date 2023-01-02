@@ -58,7 +58,10 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `payment_intent.created`
 - [ ] `payment_intent.payment_failed`
 - [ ] `payment_intent.succeeded`
-- [ ] `payment_method.attached`
+- [x] `payment_method.attached` 🟢
+- [x] `payment_method.automatically_updated` 🟢
+- [x] `payment_method.detached` 🟢
+- [x] `payment_method.updated` 🟢
 - [ ] `plan.created`
 - [ ] `plan.deleted`
 - [ ] `plan.updated`

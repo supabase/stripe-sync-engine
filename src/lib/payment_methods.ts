@@ -4,16 +4,16 @@ import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
 import { pg as sql } from 'yesql'
 import { query } from '../utils/PostgresConnection'
 import { stripe } from '../utils/StripeClientManager'
-import { setupIntentsSchema } from '../schemas/setup_intents'
 import { upsertCustomer } from './customers'
+import { paymentMethodsSchema } from '../schemas/payment_methods'
 
 const config = getConfig()
 
-export const upsertSetupIntent = async (
-  setupIntent: Stripe.SetupIntent
-): Promise<Stripe.SetupIntent[]> => {
+export const upsertPaymentMethod = async (
+  paymentMethod: Stripe.PaymentMethod
+): Promise<Stripe.PaymentMethod[]> => {
   // Backfill customer if it doesn't already exist
-  const customerId = setupIntent.customer?.toString()
+  const customerId = paymentMethod.customer?.toString()
   if (customerId && !(await verifyCustomerExists(customerId))) {
     await fetchAndInsertCustomer(customerId)
   }
@@ -21,12 +21,12 @@ export const upsertSetupIntent = async (
   // Create the SQL
   const upsertString = constructUpsertSql(
     config.SCHEMA || 'stripe',
-    'setup_intents',
-    setupIntentsSchema
+    'payment_methods',
+    paymentMethodsSchema
   )
 
   // Inject the values
-  const cleansed = cleanseArrayField(setupIntent)
+  const cleansed = cleanseArrayField(paymentMethod)
   const prepared = sql(upsertString)(cleansed)
 
   // Run it
@@ -48,20 +48,25 @@ export const fetchAndInsertCustomer = async (customerId: string): Promise<Stripe
   return upsertCustomer(customer as Stripe.Customer)
 }
 
-type fetchSetupIntentResponse = Stripe.Response<Stripe.ApiList<Stripe.SetupIntent>>
-type fetchSetupIntentParams = {
+type fetchPaymentMethodResponse = Stripe.Response<Stripe.ApiList<Stripe.PaymentMethod>>
+type fetchPaymentMethodParams = {
   limit: number
   id: string | undefined
+  type: Stripe.PaymentMethodListParams.Type
 }
-const fetchSetupIntentsDefaults = {
-  limit: 100,
+
+const fetchPaymentMethodsDefaults = {
+  limit: 10,
   id: undefined,
-}
-export const fetchSetupIntents = async (
-  options: fetchSetupIntentParams = fetchSetupIntentsDefaults
-): Promise<fetchSetupIntentResponse> => {
-  const setupIntents = await stripe.setupIntents.list({
+  type: 'card',
+} as fetchPaymentMethodParams
+
+export const fetchPaymentMethods = async (
+  options: fetchPaymentMethodParams = fetchPaymentMethodsDefaults
+): Promise<fetchPaymentMethodResponse> => {
+  const paymentMethods = await stripe.paymentMethods.list({
     limit: options.limit,
+    type: options.type,
   })
-  return setupIntents
+  return paymentMethods
 }

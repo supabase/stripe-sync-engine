@@ -6,6 +6,7 @@ import { upsertCustomer } from './customers'
 import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
 import { upsertSetupIntent } from './setup_intents'
+import { upsertPaymentMethod } from './payment_methods'
 
 interface Sync {
   synced: number
@@ -18,6 +19,7 @@ interface SyncBackfill {
   subscriptions?: Sync
   invoices?: Sync
   setupIntents?: Sync
+  paymentMethods?: Sync
 }
 
 export interface SyncBackfillParams {
@@ -33,10 +35,11 @@ type SyncObject =
   | 'product'
   | 'subscription'
   | 'setup_intent'
+  | 'payment_method'
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
-  let products, prices, customers, subscriptions, invoices, setupIntents
+  let products, prices, customers, subscriptions, invoices, setupIntents, paymentMethods
 
   switch (object) {
     case 'all':
@@ -46,6 +49,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       subscriptions = await syncSubscriptions(created)
       invoices = await syncInvoices(created)
       setupIntents = await syncSetupIntents(created)
+      paymentMethods = await syncPaymentMethods(created)
       break
     case 'customer':
       customers = await syncCustomers(created)
@@ -65,6 +69,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     case 'setup_intent':
       setupIntents = await syncSetupIntents(created)
       break
+    case 'payment_method':
+      paymentMethods = await syncPaymentMethods(created)
+      break
     default:
       break
   }
@@ -76,6 +83,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     subscriptions,
     invoices,
     setupIntents,
+    paymentMethods,
   }
 }
 
@@ -152,6 +160,55 @@ export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promis
   for await (const setupIntent of stripe.setupIntents.list(params)) {
     await upsertSetupIntent(setupIntent)
     synced++
+  }
+
+  return { synced }
+}
+
+const stripePaymentTypes: Stripe.PaymentMethodListParams.Type[] = [
+  'acss_debit',
+  'afterpay_clearpay',
+  'alipay',
+  'au_becs_debit',
+  'bacs_debit',
+  'bancontact',
+  'boleto',
+  'card',
+  'card_present',
+  'customer_balance',
+  'eps',
+  'fpx',
+  'giropay',
+  'grabpay',
+  'ideal',
+  'klarna',
+  'konbini',
+  'oxxo',
+  'p24',
+  'paynow',
+  'sepa_debit',
+  'sofort',
+  'us_bank_account',
+  'wechat_pay',
+]
+
+export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  // We can't filter by date here
+
+  let synced = 0
+  for (const stripePaymentType of stripePaymentTypes) {
+    for await (const paymentMethod of stripe.paymentMethods.list({
+      limit: 100,
+      type: stripePaymentType,
+    })) {
+      const creationDate = new Date(paymentMethod.created * 1000)
+
+      // If a created at filter is set, skip upsert (unfortunately we must always query)
+      if (!created || creationDate >= created) {
+        await upsertPaymentMethod(paymentMethod)
+        synced++
+      }
+    }
   }
 
   return { synced }
