@@ -28,9 +28,13 @@ export default async function routes(fastify: FastifyInstance) {
       }
 
       switch (event.type) {
+        case 'charge.captured':
+        case 'charge.expired':
         case 'charge.failed':
+        case 'charge.pending':
         case 'charge.refunded':
-        case 'charge.succeeded': {
+        case 'charge.succeeded':
+        case 'charge.updated': {
           const charge = event.data.object as Stripe.Charge
           await upsertCharge(charge)
           break
