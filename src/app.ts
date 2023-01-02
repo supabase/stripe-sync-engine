@@ -1,6 +1,7 @@
 import fastify, { FastifyInstance, FastifyServerOptions } from 'fastify'
 import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
+import fastifySwaggerUi from '@fastify/swagger-ui'
 import path from 'path'
 import { errorSchema } from './schemas/error'
 
@@ -15,13 +16,18 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
    * Expose swagger docs
    */
   if (opts.exposeDocs) {
-    app.register(fastifySwagger, {
+    await app.register(fastifySwagger, {
+      mode: 'dynamic',
       swagger: {
         info: {
           title: 'Stripe Sync Engine',
           version: '0.0.1',
         },
       },
+    })
+
+    await app.register(fastifySwaggerUi, {
+      routePrefix: '/docs',
     })
   }
 
@@ -54,7 +60,7 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
   /**
    * Expose all routes in './routes'
    */
-  app.register(autoload, {
+  await app.register(autoload, {
     dir: path.join(__dirname, 'routes'),
   })
 
