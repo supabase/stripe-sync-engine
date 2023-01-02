@@ -72,9 +72,9 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `payment_method.automatically_updated` 🟢
 - [x] `payment_method.detached` 🟢
 - [x] `payment_method.updated` 🟢
-- [ ] `plan.created`
-- [ ] `plan.deleted`
-- [ ] `plan.updated`
+- [x] `plan.created` 🟢
+- [x] `plan.deleted` 🟢
+- [x] `plan.updated` 🟢
 - [x] `price.created` 🟢
 - [x] `price.deleted` 🟢
 - [x] `price.updated` 🟢
@@ -113,7 +113,7 @@ body: {
 }
 ```
 
-- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent** | **payment_method** | **dispute** | **charge** | **payment_intent**
+- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent** | **payment_method** | **dispute** | **charge** | **payment_intent** | **plan**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
 #### Alternative routes to sync `daily/weekly/monthly` data

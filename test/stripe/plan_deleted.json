@@ -1,0 +1,20 @@
+{
+  "id": "evt_1J02UqJDPojXS6LNNADUKUy8",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1623149364,
+  "data": {
+    "object": {
+      "id": "price_1MKL7PJDPojXS6LNpNepgHsK",
+      "object": "plan",
+      "deleted": true
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_EQwgQ4Z4MBtyBx",
+    "idempotency_key": null
+  },
+  "type": "plan.deleted"
+}

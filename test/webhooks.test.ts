@@ -58,6 +58,9 @@ describe('/webhooks', () => {
     'charge_dispute_funds_reinstated',
     'charge_dispute_funds_withdrawn',
     'charge_dispute_updated',
+    'plan_created',
+    'plan_deleted',
+    'plan_updated',
   ])('process event %s', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     const signature = createHmac('sha256', stripeWebhookSecret)

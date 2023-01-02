@@ -11,6 +11,7 @@ import Stripe from 'stripe'
 import { upsertSetupIntents } from '../lib/setup_intents'
 import { upsertPaymentMethods } from '../lib/payment_methods'
 import { upsertDisputes } from '../lib/disputes'
+import { deletePlan, upsertPlans } from '../lib/plans'
 
 const config = getConfig()
 
@@ -83,6 +84,17 @@ export default async function routes(fastify: FastifyInstance) {
         case 'price.deleted': {
           const price = event.data.object as Stripe.Price
           await deletePrice(price.id)
+          break
+        }
+        case 'plan.created':
+        case 'plan.updated': {
+          const plan = event.data.object as Stripe.Plan
+          await upsertPlans([plan])
+          break
+        }
+        case 'plan.deleted': {
+          const plan = event.data.object as Stripe.Plan
+          await deletePlan(plan.id)
           break
         }
         case 'setup_intent.canceled':
