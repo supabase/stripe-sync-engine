@@ -9,7 +9,7 @@
     "outDir": "dist",
     "sourceMap": true,
     "strict": true,
-    "lib": ["ES6", "DOM"],
+    "lib": ["ES2022", "DOM"],
     "resolveJsonModule": true,
     "useUnknownInCatchVariables": false,
   },
@@ -21,7 +21,7 @@
     "dist"
   ],
   "parserOptions":  {
-    "ecmaVersion":  "2020",  // Allows for the parsing of modern ECMAScript features
+    "ecmaVersion":  "2022",  // Allows for the parsing of modern ECMAScript features
     "sourceType":  "module"  // Allows for the use of imports
   }
 }

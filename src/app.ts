@@ -1,7 +1,7 @@
 import fastify, { FastifyInstance, FastifyServerOptions } from 'fastify'
-import autoload from 'fastify-autoload'
+import autoload from '@fastify/autoload'
+import fastifySwagger from '@fastify/swagger'
 import path from 'path'
-import fastifySwagger from 'fastify-swagger'
 import { errorSchema } from './schemas/error'
 
 interface buildOpts extends FastifyServerOptions {
@@ -16,7 +16,6 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
    */
   if (opts.exposeDocs) {
     app.register(fastifySwagger, {
-      exposeRoute: true,
       swagger: {
         info: {
           title: 'Stripe Sync Engine',
