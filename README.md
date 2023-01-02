@@ -68,10 +68,11 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `product.created` 🟢
 - [x] `product.deleted` 🟢
 - [x] `product.updated` 🟢
-- [ ] `setup_intent.canceled`
-- [ ] `setup_intent.created`
-- [ ] `setup_intent.setup_failed`
-- [ ] `setup_intent.succeeded`
+- [x] `setup_intent.canceled` 🟢
+- [x] `setup_intent.created` 🟢
+- [x] `setup_intent.requires_action` 🟢
+- [x] `setup_intent.setup_failed` 🟢
+- [x] `setup_intent.succeeded` 🟢
 - [ ] `subscription_schedule.canceled`
 - [ ] `subscription_schedule.created`
 - [ ] `subscription_schedule.released`
@@ -99,7 +100,7 @@ body: {
 }
 ```
 
-- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription**
+- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
 #### Alternative routes to sync `daily/weekly/monthly` data

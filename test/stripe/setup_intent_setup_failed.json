@@ -1,0 +1,115 @@
+{
+    "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+    "object": "event",
+    "api_version": "2020-03-02",
+    "created": 1619697430,
+    "data": {
+    "object": {
+      "id": "seti_1MH6IjJDPojXS6LNUabF5uNy",
+      "object": "setup_intent",
+      "application": null,
+      "cancellation_reason": null,
+      "client_secret": "seti_1MH6IjJDPojXS6LNUabF5uNy_secret_N18ZYOYLiVNXBxXR2FDlKeRtJeTQm5l",
+      "created": 1671544573,
+      "customer": "cus_MYBJ2IE1JrPgL0",
+      "description": null,
+      "flow_directions": null,
+      "last_setup_error": {
+        "code": "card_declined",
+        "decline_code": "test_mode_live_card",
+        "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+        "message": "Your card was declined. Your request was in test mode, but used a non test (live) card. For a list of valid test cards, visit: https://stripe.com/docs/testing.",
+        "payment_method": {
+          "id": "pm_1MH6JHJDPojXS6LNWsXc9gk0",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": "GB",
+              "line1": null,
+              "line2": null,
+              "postal_code": "ka74jf",
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": "unchecked",
+              "cvc_check": "unchecked"
+            },
+            "country": null,
+            "exp_month": 2,
+            "exp_year": 2042,
+            "fingerprint": "7mGgByDQQxEYS6NZ",
+            "funding": "unknown",
+            "generated_from": null,
+            "last4": "4242",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1671544607,
+          "customer": null,
+          "livemode": false,
+          "metadata": {
+          },
+          "type": "card"
+        },
+        "type": "card_error"
+      },
+      "latest_attempt": "setatt_1MH6JHJDPojXS6LNeM0yKIsL",
+      "livemode": false,
+      "mandate": null,
+      "metadata": {
+      },
+      "next_action": null,
+      "on_behalf_of": null,
+      "payment_method": null,
+      "payment_method_options": {
+        "card": {
+          "mandate_options": {
+            "amount": 350000,
+            "amount_type": "maximum",
+            "currency": "inr",
+            "description": null,
+            "end_date": null,
+            "interval": "month",
+            "interval_count": 1,
+            "reference": "aktvgydprotyenutjadx-n-8Y3HyGF5x76IVjBnxhg",
+            "start_date": 1671544573061,
+            "supported_types": [
+              "india"
+            ]
+          },
+          "network": null,
+          "request_three_d_secure": "automatic"
+        }
+      },
+      "payment_method_types": [
+        "card"
+      ],
+      "single_use_mandate": null,
+      "status": "requires_payment_method",
+      "usage": "off_session"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_7oRxuBCEqnfaHa",
+    "idempotency_key": null
+  },
+  "type": "setup_intent.setup_failed"
+}

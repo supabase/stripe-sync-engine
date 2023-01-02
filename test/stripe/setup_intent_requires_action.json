@@ -1,0 +1,82 @@
+{
+    "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+    "object": "event",
+    "api_version": "2020-03-02",
+    "created": 1619697430,
+    "data": {
+    "object": {
+      "id": "seti_1MLn4...",
+      "object": "setup_intent",
+      "application": null,
+      "cancellation_reason": null,
+      "client_secret": "sec",
+      "created": 1672662288,
+      "customer": "cus_Mtyj...",
+      "description": null,
+      "flow_directions": null,
+      "last_setup_error": null,
+      "latest_attempt": "seti_1MLn4...",
+      "livemode": true,
+      "mandate": null,
+      "metadata": {
+      },
+      "next_action": {
+        "type": "use_stripe_sdk",
+        "use_stripe_sdk": {
+          "directory_server_encryption": {
+            "algorithm": "RSA",
+            "certificate": "-----BEGIN CERTIFICATE-----\nMI....==\n-----END CERTIFICATE-----\n",
+            "directory_server_id": "A000000003",
+            "root_certificate_authorities": [
+              "-----BEGIN CERTIFICATE-----\nM...==\n-----END CERTIFICATE-----\n",
+              "-----BEGIN CERTIFICATE-----\nM...w==\n-----END CERTIFICATE-----\n"
+            ]
+          },
+          "directory_server_name": "visa",
+          "merchant": "acct_1...",
+          "one_click_authn": null,
+          "server_transaction_id": "f0ce10b2-38...",
+          "three_d_secure_2_source": "src_...",
+          "three_ds_method_url": "",
+          "three_ds_optimizations": "kf",
+          "type": "stripe_3ds2_fingerprint"
+        }
+      },
+      "on_behalf_of": null,
+      "payment_method": "pm_1MLn5PJD....",
+      "payment_method_options": {
+        "card": {
+          "mandate_options": {
+            "amount": 350000,
+            "amount_type": "maximum",
+            "currency": "inr",
+            "description": null,
+            "end_date": null,
+            "interval": "month",
+            "interval_count": 1,
+            "reference": "vxxyllsrw...-J0de....",
+            "start_date": 1672662288000,
+            "supported_types": [
+              "india"
+            ]
+          },
+          "network": null,
+          "request_three_d_secure": "automatic"
+        }
+      },
+      "payment_method_types": [
+        "card"
+      ],
+      "single_use_mandate": null,
+      "status": "requires_action",
+      "usage": "off_session"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_7oRxuBCEqnfaHa",
+    "idempotency_key": null
+  },
+  "type": "setup_intent.requires_action"
+}

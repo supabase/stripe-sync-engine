@@ -18,7 +18,13 @@ import invoice_finalized from './stripe/invoice_finalized.json'
 import charge_failed from './stripe/charge_failed.json'
 import charge_refunded from './stripe/charge_refunded.json'
 import charge_succeeded from './stripe/charge_succeeded.json'
+import setup_intent_canceled from './stripe/setup_intent_canceled.json'
+import setup_intent_created from './stripe/setup_intent_created.json'
+import setup_intent_requires_action from './stripe/setup_intent_requires_action.json'
+import setup_intent_setup_failed from './stripe/setup_intent_setup_failed.json'
+import setup_intent_succeeded from './stripe/setup_intent_succeeded.json'
 import stripeMock from './helpers/stripe'
+import 'dotenv/config'
 
 jest.doMock('stripe', () => {
   return jest.fn(() => stripeMock)
@@ -413,6 +419,126 @@ describe('/webhooks', () => {
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: charge_succeeded,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * setup_intent.canceled
+   */
+  test('setup_intent.canceled', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(setup_intent_canceled)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: setup_intent_canceled,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * setup_intent.canceled
+   */
+  test('setup_intent.created', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(setup_intent_created)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: setup_intent_created,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * setup_intent.requires_action
+   */
+  test('setup_intent.created', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(setup_intent_requires_action)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: setup_intent_requires_action,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * setup_intent.setup_failed
+   */
+  test('setup_intent.created', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(setup_intent_setup_failed)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: setup_intent_setup_failed,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /**
+   * setup_intent.succeeded
+   */
+  test('setup_intent.created', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(setup_intent_succeeded)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: setup_intent_succeeded,
     })
 
     const json = JSON.parse(response.body)

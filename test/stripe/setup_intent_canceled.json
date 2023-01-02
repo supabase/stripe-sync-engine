@@ -1,0 +1,45 @@
+{
+  "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619697430,
+  "data": {
+    "object": {
+      "id": "seti_1MKvpQJDPojXS6LNg0luK3Bj",
+      "object": "setup_intent",
+      "application": null,
+      "cancellation_reason": "abandoned",
+      "client_secret": "seti_1MKvpQJDPojXS6LNg0luK3Bj_secret_N561nBElBLKD5eHvQMfv1ck4fwLmM0d",
+      "created": 1672457628,
+      "customer": "cus_L1o0d9VNhs3JWt",
+      "description": null,
+      "flow_directions": null,
+      "last_setup_error": null,
+      "latest_attempt": null,
+      "livemode": false,
+      "mandate": null,
+      "metadata": {},
+      "next_action": null,
+      "on_behalf_of": null,
+      "payment_method": null,
+      "payment_method_options": {
+        "card": {
+          "mandate_options": null,
+          "network": null,
+          "request_three_d_secure": "automatic"
+        }
+      },
+      "payment_method_types": ["card"],
+      "single_use_mandate": null,
+      "status": "canceled",
+      "usage": "off_session"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_7oRxuBCEqnfaHa",
+    "idempotency_key": null
+  },
+  "type": "setup_intent.canceled"
+}
