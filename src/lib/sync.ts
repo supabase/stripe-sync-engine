@@ -90,6 +90,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     invoices,
     setupIntents,
     paymentMethods,
+    disputes,
   }
 }
 
