@@ -10,7 +10,7 @@ import { disputeSchema } from '../schemas/dispute'
 const config = getConfig()
 
 export const upsertDispute = async (charge: Stripe.Dispute): Promise<Stripe.Dispute[]> => {
-  // Backfill customer if it doesn't already exist
+  // Backfill charge if it doesn't already exist
   const chargeId = charge?.charge?.toString()
   if (chargeId && !(await verifyChargeExists(chargeId))) {
     await fetchAndInsertCharge(chargeId)
