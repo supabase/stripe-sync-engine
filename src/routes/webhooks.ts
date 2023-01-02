@@ -8,6 +8,7 @@ import { upsertSubscription } from '../lib/subscriptions'
 import { upsertInvoice } from '../lib/invoices'
 import { upsertCharge } from '../lib/charges'
 import Stripe from 'stripe'
+import { upsertSetupIntent } from '../lib/setup_intents'
 
 const config = getConfig()
 
@@ -78,6 +79,17 @@ export default async function routes(fastify: FastifyInstance) {
           await deletePrice(price.id)
           break
         }
+        case 'setup_intent.canceled':
+        case 'setup_intent.created':
+        case 'setup_intent.requires_action':
+        case 'setup_intent.setup_failed':
+        case 'setup_intent.succeeded': {
+          const setupIntent = event.data.object as Stripe.SetupIntent
+
+          await upsertSetupIntent(setupIntent)
+          break
+        }
+
         default:
           throw new Error('Unhandled webhook event')
       }

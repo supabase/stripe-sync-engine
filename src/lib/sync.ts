@@ -5,6 +5,7 @@ import { upsertInvoice } from './invoices'
 import { upsertCustomer } from './customers'
 import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
+import { upsertSetupIntent } from './setup_intents'
 
 interface Sync {
   synced: number
@@ -16,6 +17,7 @@ interface SyncBackfill {
   customers?: Sync
   subscriptions?: Sync
   invoices?: Sync
+  setupIntents?: Sync
 }
 
 export interface SyncBackfillParams {
@@ -23,11 +25,18 @@ export interface SyncBackfillParams {
   object?: SyncObject
 }
 
-type SyncObject = 'all' | 'customer' | 'invoice' | 'price' | 'product' | 'subscription'
+type SyncObject =
+  | 'all'
+  | 'customer'
+  | 'invoice'
+  | 'price'
+  | 'product'
+  | 'subscription'
+  | 'setup_intent'
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
-  let products, prices, customers, subscriptions, invoices
+  let products, prices, customers, subscriptions, invoices, setupIntents
 
   switch (object) {
     case 'all':
@@ -36,6 +45,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       customers = await syncCustomers(created)
       subscriptions = await syncSubscriptions(created)
       invoices = await syncInvoices(created)
+      setupIntents = await syncSetupIntents(created)
       break
     case 'customer':
       customers = await syncCustomers(created)
@@ -52,6 +62,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     case 'subscription':
       subscriptions = await syncSubscriptions(created)
       break
+    case 'setup_intent':
+      setupIntents = await syncSetupIntents(created)
+      break
     default:
       break
   }
@@ -62,6 +75,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     customers,
     subscriptions,
     invoices,
+    setupIntents,
   }
 }
 
@@ -124,6 +138,19 @@ export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sy
   let synced = 0
   for await (const invoice of stripe.invoices.list(params)) {
     await upsertInvoice(invoice)
+    synced++
+  }
+
+  return { synced }
+}
+
+export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  const params: Stripe.SetupIntentListParams = { limit: 100 }
+  if (created) params.created = created
+
+  let synced = 0
+  for await (const setupIntent of stripe.setupIntents.list(params)) {
+    await upsertSetupIntent(setupIntent)
     synced++
   }
 
