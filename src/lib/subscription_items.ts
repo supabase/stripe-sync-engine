@@ -56,4 +56,3 @@ export const markDeletedSubscriptionItems = async (
     return { rowCount: 0 }
   }
 }
-

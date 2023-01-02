@@ -31,7 +31,7 @@ export const backfillProducts = async (productids: string[]) => {
   await fetchAndInsertProducts(missingProductIds)
 }
 
-export const fetchAndInsertProducts = async (productIds: string[]) => {
+const fetchAndInsertProducts = async (productIds: string[]) => {
   if (!productIds.length) return
 
   const products: Stripe.Product[] = []

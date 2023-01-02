@@ -11,7 +11,7 @@ export const upsertDisputes = async (disputes: Stripe.Dispute[]): Promise<Stripe
   // Backfill charges if they don't exist
   await backfillCharges(getUniqueIds(disputes, 'charge'))
 
-  return await upsertMany(disputes, (_) =>
+  return upsertMany(disputes, (_) =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'disputes', disputeSchema)
   )
 }

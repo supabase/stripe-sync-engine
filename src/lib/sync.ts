@@ -98,78 +98,60 @@ export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.ProductListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const product of stripe.products.list(params)) {
-    await upsertProducts([product])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.products.list(params),
+    (products) => upsertProducts(products)
+  )
 }
 
 export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.PriceListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const price of stripe.prices.list(params)) {
-    await upsertPrices([price])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.prices.list(params),
+    (prices) => upsertPrices(prices)
+  )
 }
 
 export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.CustomerListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const customer of stripe.customers.list(params)) {
-    await upsertCustomers([customer])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.customers.list(params),
+    (disputes) => upsertCustomers(disputes)
+  )
 }
 
 export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const subscription of stripe.subscriptions.list(params)) {
-    await upsertSubscriptions([subscription])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.subscriptions.list(params),
+    (subscription) => upsertSubscriptions(subscription)
+  )
 }
 
 export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.InvoiceListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const invoice of stripe.invoices.list(params)) {
-    await upsertInvoices([invoice])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.invoices.list(params),
+    (invoice) => upsertInvoices(invoice)
+  )
 }
 
 export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
   const params: Stripe.SetupIntentListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const setupIntent of stripe.setupIntents.list(params)) {
-    await upsertSetupIntents([setupIntent])
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(
+    () => stripe.setupIntents.list(params),
+    (setupIntents) => upsertSetupIntents(setupIntents)
+  )
 }
 
 const stripePaymentTypes: Stripe.PaymentMethodListParams.Type[] = [
@@ -204,18 +186,16 @@ export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Prom
 
   let synced = 0
   for (const stripePaymentType of stripePaymentTypes) {
-    for await (const paymentMethod of stripe.paymentMethods.list({
-      limit: 100,
-      type: stripePaymentType,
-    })) {
-      const creationDate = new Date(paymentMethod.created * 1000)
+    const syncResult = await fetchAndUpsert(
+      () =>
+        stripe.paymentMethods.list({
+          limit: 100,
+          type: stripePaymentType,
+        }),
+      (paymentMethods) => upsertPaymentMethods(paymentMethods)
+    )
 
-      // If a created at filter is set, skip upsert (unfortunately we must always query)
-      if (!created || creationDate >= created) {
-        await upsertPaymentMethods([paymentMethod])
-        synced++
-      }
-    }
+    synced += syncResult.synced
   }
 
   return { synced }
@@ -225,11 +205,27 @@ export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.DisputeListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const dispute of stripe.disputes.list(params)) {
-    await upsertDisputes([dispute])
-    synced++
+  return fetchAndUpsert(
+    () => stripe.disputes.list(params),
+    (disputes) => upsertDisputes(disputes)
+  )
+}
+
+async function fetchAndUpsert<T>(
+  fetch: () => Stripe.ApiListPromise<T>,
+  upsert: (items: T[]) => Promise<T[]>
+): Promise<Sync> {
+  const items: T[] = []
+  for await (const item of fetch()) {
+    items.push(item)
   }
 
-  return { synced }
+  const chunkSize = 100
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+
+    await upsert(chunk)
+  }
+
+  return { synced: items.length }
 }

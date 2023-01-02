@@ -26,7 +26,7 @@ export const backfillCharges = async (chargeIds: string[]) => {
   await fetchAndInsertCharges(missingCustomerIds)
 }
 
-export const fetchAndInsertCharges = async (chargeIds: string[]) => {
+const fetchAndInsertCharges = async (chargeIds: string[]) => {
   if (!chargeIds.length) return
 
   const charges: Stripe.Charge[] = []
