@@ -27,7 +27,7 @@ const main = async () => {
   await runMigrations()
 
   // Start the server
-  app.listen(port, '0.0.0.0', (err, address) => {
+  app.listen({ port: Number(port), host: '0.0.0.0' }, (err, address) => {
     if (err) {
       console.error(err)
       process.exit(1)
