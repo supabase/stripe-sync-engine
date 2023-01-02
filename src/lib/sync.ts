@@ -7,6 +7,7 @@ import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
 import { upsertSetupIntent } from './setup_intents'
 import { upsertPaymentMethod } from './payment_methods'
+import { upsertDispute } from './disputes'
 
 interface Sync {
   synced: number
@@ -20,6 +21,7 @@ interface SyncBackfill {
   invoices?: Sync
   setupIntents?: Sync
   paymentMethods?: Sync
+  disputes?: Sync
 }
 
 export interface SyncBackfillParams {
@@ -36,10 +38,11 @@ type SyncObject =
   | 'subscription'
   | 'setup_intent'
   | 'payment_method'
+  | 'dispute'
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
-  let products, prices, customers, subscriptions, invoices, setupIntents, paymentMethods
+  let products, prices, customers, subscriptions, invoices, setupIntents, paymentMethods, disputes
 
   switch (object) {
     case 'all':
@@ -71,6 +74,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       break
     case 'payment_method':
       paymentMethods = await syncPaymentMethods(created)
+      break
+    case 'dispute':
+      disputes = await syncDisputes(created)
       break
     default:
       break
@@ -209,6 +215,19 @@ export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Prom
         synced++
       }
     }
+  }
+
+  return { synced }
+}
+
+export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  const params: Stripe.DisputeListParams = { limit: 100 }
+  if (created) params.created = created
+
+  let synced = 0
+  for await (const dispute of stripe.disputes.list(params)) {
+    await upsertDispute(dispute)
+    synced++
   }
 
   return { synced }
