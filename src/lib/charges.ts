@@ -1,49 +1,40 @@
 import Stripe from 'stripe'
-import { query } from '../utils/PostgresConnection'
-import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
-import { stripe } from '../utils/StripeClientManager'
-import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
+import { constructUpsertSql } from '../utils/helpers'
 import { chargeSchema } from '../schemas/charge'
-import { fetchAndInsertCustomer, verifyCustomerExists } from './customers'
-import { fetchAndInsertInvoice, verifyInvoiceExists } from './invoices'
+import { backfillInvoices } from './invoices'
+import { backfillCustomers } from './customers'
+import { findMissingEntries, getUniqueIds, upsertMany } from './database_utils'
+import { stripe } from '../utils/StripeClientManager'
 
 const config = getConfig()
 
-export const upsertCharge = async (charge: Stripe.Charge): Promise<Stripe.Charge[]> => {
+export const upsertCharges = async (charges: Stripe.Charge[]): Promise<Stripe.Charge[]> => {
   // Backfill customer if it doesn't already exist
-  const customerId = charge?.customer?.toString()
-  if (customerId && !(await verifyCustomerExists(customerId))) {
-    await fetchAndInsertCustomer(customerId)
-  }
+  await backfillCustomers(getUniqueIds(charges, 'customer'))
+
   // Backfill invoice if it doesn't already exist
-  const invoiceId = charge?.invoice?.toString()
-  if (invoiceId && !(await verifyInvoiceExists(invoiceId))) {
-    await fetchAndInsertInvoice(invoiceId)
+  await backfillInvoices(getUniqueIds(charges, 'invoice'))
+
+  return upsertMany(charges, () =>
+    constructUpsertSql(config.SCHEMA || 'stripe', 'charges', chargeSchema)
+  )
+}
+
+export const backfillCharges = async (chargeIds: string[]) => {
+  const missingCustomerIds = await findMissingEntries('charges', chargeIds)
+  await fetchAndInsertCharges(missingCustomerIds)
+}
+
+export const fetchAndInsertCharges = async (chargeIds: string[]) => {
+  if (!chargeIds.length) return
+
+  const charges: Stripe.Charge[] = []
+
+  for (const chargeId of chargeIds) {
+    const charge = await stripe.charges.retrieve(chargeId)
+    charges.push(charge)
   }
 
-  // Create the SQL
-  const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'charges', chargeSchema)
-
-  // Inject the values
-  const cleansed = cleanseArrayField(charge)
-  const prepared = sql(upsertString)(cleansed)
-
-  // Run it
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows
-}
-
-export const verifyChargeExists = async (id: string): Promise<boolean> => {
-  const prepared = sql(`
-    select id from "${config.SCHEMA}"."charges" 
-    where id = :id;
-    `)({ id })
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows.length > 0
-}
-
-export const fetchAndInsertCharge = async (id: string): Promise<Stripe.Charge[]> => {
-  const charge = await stripe.charges.retrieve(id)
-  return upsertCharge(charge)
+  await upsertCharges(charges)
 }

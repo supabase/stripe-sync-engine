@@ -1,8 +1,8 @@
-import { Pool, QueryResult } from 'pg'
+import { Pool, QueryResult, Submittable } from 'pg'
 import { getConfig } from './config'
 
 const config = getConfig()
-const pool = new Pool({ connectionString: config.DATABASE_URL })
+const pool = new Pool({ connectionString: config.DATABASE_URL, max: 25 })
 
 /**
  * Use this inside a route/file

@@ -1,41 +1,46 @@
 import Customer from 'stripe'
-import { query } from '../utils/PostgresConnection'
-import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
-import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
+import { constructUpsertSql } from '../utils/helpers'
 import { customerSchema, customerDeletedSchema } from '../schemas/customer'
+import Stripe from 'stripe'
+import { findMissingEntries, upsertMany } from './database_utils'
 
 const config = getConfig()
 
-export const upsertCustomer = async (customer: Customer.Customer): Promise<Customer.Customer[]> => {
-  // Create the SQL
-  let upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
+export const upsertCustomers = async (
+  customers: Customer.Customer[]
+): Promise<Customer.Customer[]> => {
+  return upsertMany(customers, (customer) => {
+    let upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
 
-  // handle deleted customer
-  if (customer.deleted) {
-    upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerDeletedSchema)
+    // handle deleted customer
+    if (customer.deleted) {
+      upsertString = constructUpsertSql(
+        config.SCHEMA || 'stripe',
+        'customers',
+        customerDeletedSchema
+      )
+    }
+
+    return upsertString
+  })
+}
+
+export const backfillCustomers = async (customerIds: string[]) => {
+  const missingCustomerIds = await findMissingEntries('customers', customerIds)
+  await fetchAndInsertCustomers(missingCustomerIds)
+}
+
+export const fetchAndInsertCustomers = async (customerIds: string[]) => {
+  if (!customerIds.length) return
+
+  const customers: Stripe.Customer[] = []
+
+  for (const customerId of customerIds) {
+    const customer = await stripe.customers.retrieve(customerId)
+    customers.push(customer as Stripe.Customer)
   }
 
-  // Inject the values
-  const cleansed = cleanseArrayField(customer)
-  const prepared = sql(upsertString)(cleansed)
-
-  // Run it
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows
-}
-
-export const verifyCustomerExists = async (id: string): Promise<boolean> => {
-  const prepared = sql(`
-    select id from "${config.SCHEMA}"."customers" 
-    where id = :id;
-    `)({ id })
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows.length > 0
-}
-
-export const fetchAndInsertCustomer = async (id: string): Promise<Customer.Customer[]> => {
-  const customer = await stripe.customers.retrieve(id)
-  return upsertCustomer(customer as Customer.Customer)
+  await upsertCustomers(customers)
 }

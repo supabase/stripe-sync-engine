@@ -1,13 +1,13 @@
-import { upsertProduct } from './products'
-import { upsertPrice } from './prices'
-import { upsertSubscription } from './subscriptions'
-import { upsertInvoice } from './invoices'
-import { upsertCustomer } from './customers'
+import { upsertProducts } from './products'
+import { upsertPrices } from './prices'
+import { upsertSubscriptions } from './subscriptions'
+import { upsertInvoices } from './invoices'
+import { upsertCustomers } from './customers'
 import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
-import { upsertSetupIntent } from './setup_intents'
-import { upsertPaymentMethod } from './payment_methods'
-import { upsertDispute } from './disputes'
+import { upsertSetupIntents } from './setup_intents'
+import { upsertPaymentMethods } from './payment_methods'
+import { upsertDisputes } from './disputes'
 
 interface Sync {
   synced: number
@@ -100,7 +100,7 @@ export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sy
 
   let synced = 0
   for await (const product of stripe.products.list(params)) {
-    await upsertProduct(product)
+    await upsertProducts([product])
     synced++
   }
 
@@ -113,7 +113,7 @@ export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync
 
   let synced = 0
   for await (const price of stripe.prices.list(params)) {
-    await upsertPrice(price)
+    await upsertPrices([price])
     synced++
   }
 
@@ -126,7 +126,7 @@ export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<S
 
   let synced = 0
   for await (const customer of stripe.customers.list(params)) {
-    await upsertCustomer(customer)
+    await upsertCustomers([customer])
     synced++
   }
 
@@ -139,7 +139,7 @@ export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promi
 
   let synced = 0
   for await (const subscription of stripe.subscriptions.list(params)) {
-    await upsertSubscription(subscription)
+    await upsertSubscriptions([subscription])
     synced++
   }
 
@@ -152,7 +152,7 @@ export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sy
 
   let synced = 0
   for await (const invoice of stripe.invoices.list(params)) {
-    await upsertInvoice(invoice)
+    await upsertInvoices([invoice])
     synced++
   }
 
@@ -165,7 +165,7 @@ export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promis
 
   let synced = 0
   for await (const setupIntent of stripe.setupIntents.list(params)) {
-    await upsertSetupIntent(setupIntent)
+    await upsertSetupIntents([setupIntent])
     synced++
   }
 
@@ -212,7 +212,7 @@ export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Prom
 
       // If a created at filter is set, skip upsert (unfortunately we must always query)
       if (!created || creationDate >= created) {
-        await upsertPaymentMethod(paymentMethod)
+        await upsertPaymentMethods([paymentMethod])
         synced++
       }
     }
@@ -227,7 +227,7 @@ export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sy
 
   let synced = 0
   for await (const dispute of stripe.disputes.list(params)) {
-    await upsertDispute(dispute)
+    await upsertDisputes([dispute])
     synced++
   }
 
