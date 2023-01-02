@@ -453,7 +453,7 @@ describe('/webhooks', () => {
     expect(json).toMatchObject({ received: true })
   })
   /**
-   * setup_intent.canceled
+   * setup_intent.created
    */
   test('setup_intent.created', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
@@ -479,7 +479,7 @@ describe('/webhooks', () => {
   /**
    * setup_intent.requires_action
    */
-  test('setup_intent.created', async () => {
+  test('setup_intent.requires_action', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(setup_intent_requires_action)}`, 'utf8')
       .digest('hex')
@@ -503,7 +503,7 @@ describe('/webhooks', () => {
   /**
    * setup_intent.setup_failed
    */
-  test('setup_intent.created', async () => {
+  test('setup_intent.setup_failed', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(setup_intent_setup_failed)}`, 'utf8')
       .digest('hex')
@@ -527,7 +527,7 @@ describe('/webhooks', () => {
   /**
    * setup_intent.succeeded
    */
-  test('setup_intent.created', async () => {
+  test('setup_intent.succeeded', async () => {
     const signature = createHmac('sha256', stripeWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(setup_intent_succeeded)}`, 'utf8')
       .digest('hex')
