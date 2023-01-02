@@ -28,11 +28,14 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 ## Webhook Progress
 
 - [ ] `balance.available`
-- [ ] `charge.captured`
+- [x] `charge.captured` 🟢
+- [x] `charge.expired` 🟢
+- [x] `charge.failed` 🟢
+- [x] `charge.pending` 🟢
+- [x] `charge.refunded` 🟢
+- [x] `charge.succeeded` 🟢
+- [x] `charge.updated` 🟢
 - [ ] `charge.dispute.created`
-- [ ] `charge.failed`
-- [ ] `charge.refunded`
-- [ ] `charge.succeeded`
 - [ ] `checkout.session.async_payment_failed`
 - [ ] `checkout.session.async_payment_succeeded`
 - [ ] `checkout.session.completed`
