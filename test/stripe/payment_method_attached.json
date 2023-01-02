@@ -1,0 +1,60 @@
+{
+  "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619697430,
+  "data": {
+    "object": {
+      "id": "pm_1MKlmhJDPojXS6LNV8Rcj3WO",
+      "object": "payment_method",
+      "billing_details": {
+        "address": {
+          "city": null,
+          "country": "GB",
+          "line1": null,
+          "line2": null,
+          "postal_code": "ka74jf",
+          "state": null
+        },
+        "email": null,
+        "name": null,
+        "phone": null
+      },
+      "card": {
+        "brand": "visa",
+        "checks": {
+          "address_line1_check": null,
+          "address_postal_code_check": "pass",
+          "cvc_check": "pass"
+        },
+        "country": "US",
+        "exp_month": 4,
+        "exp_year": 2024,
+        "fingerprint": "oPS2CZBviZaiMQyc",
+        "funding": "credit",
+        "generated_from": null,
+        "last4": "4242",
+        "networks": {
+          "available": ["visa"],
+          "preferred": null
+        },
+        "three_d_secure_usage": {
+          "supported": true
+        },
+        "wallet": null
+      },
+      "created": 1672419019,
+      "customer": "cus_N4vaPItLFHBqRE",
+      "livemode": false,
+      "metadata": {},
+      "type": "card"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_7oRxuBCEqnfaHa",
+    "idempotency_key": null
+  },
+  "type": "payment_method.attached"
+}

@@ -23,6 +23,10 @@ import setup_intent_created from './stripe/setup_intent_created.json'
 import setup_intent_requires_action from './stripe/setup_intent_requires_action.json'
 import setup_intent_setup_failed from './stripe/setup_intent_setup_failed.json'
 import setup_intent_succeeded from './stripe/setup_intent_succeeded.json'
+import payment_method_attached from './stripe/payment_method_attached.json'
+import payment_method_automatically_updated from './stripe/payment_method_automatically_updated.json'
+import payment_method_detached from './stripe/payment_method_detached.json'
+import payment_method_updated from './stripe/payment_method_updated.json'
 import stripeMock from './helpers/stripe'
 import 'dotenv/config'
 
@@ -539,6 +543,96 @@ describe('/webhooks', () => {
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: setup_intent_succeeded,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /** payment_method.attached */
+  test('payment_method.attached', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(payment_method_attached)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: payment_method_attached,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+  /** payment_method.automatically_updated */
+  test('payment_method.automatically_updated', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(payment_method_automatically_updated)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: payment_method_automatically_updated,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+
+  /** payment_method.detached */
+  test('payment_method.detached', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(payment_method_detached)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: payment_method_detached,
+    })
+
+    const json = JSON.parse(response.body)
+    if (json.error) {
+      console.log('error: ', json.message)
+    }
+    expect(response.statusCode).toBe(200)
+    expect(json).toMatchObject({ received: true })
+  })
+
+  /** payment_method.updated */
+  test('payment_method.updated', async () => {
+    const signature = createHmac('sha256', stripeWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(payment_method_updated)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: payment_method_updated,
     })
 
     const json = JSON.parse(response.body)

@@ -9,6 +9,7 @@ import { upsertInvoice } from '../lib/invoices'
 import { upsertCharge } from '../lib/charges'
 import Stripe from 'stripe'
 import { upsertSetupIntent } from '../lib/setup_intents'
+import { upsertPaymentMethod } from '../lib/payment_methods'
 
 const config = getConfig()
 
@@ -87,6 +88,15 @@ export default async function routes(fastify: FastifyInstance) {
           const setupIntent = event.data.object as Stripe.SetupIntent
 
           await upsertSetupIntent(setupIntent)
+          break
+        }
+        case 'payment_method.attached':
+        case 'payment_method.automatically_updated':
+        case 'payment_method.detached':
+        case 'payment_method.updated': {
+          const paymentMethod = event.data.object as Stripe.PaymentMethod
+
+          await upsertPaymentMethod(paymentMethod)
           break
         }
 
