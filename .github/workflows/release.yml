@@ -14,7 +14,7 @@ jobs:
         node:
           - '18'
 
-    runs-on: ubuntu-lts
+    runs-on: ubuntu-22.04
 
     outputs:
       new-release-published: ${{ steps.semantic-release.outputs.new_release_published }}
@@ -48,7 +48,7 @@ jobs:
 
     if: needs.release.outputs.new-release-published == 'true'
 
-    runs-on: ubuntu-lts
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Set up QEMU
