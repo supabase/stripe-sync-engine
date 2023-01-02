@@ -10,6 +10,7 @@ import { upsertCharge } from '../lib/charges'
 import Stripe from 'stripe'
 import { upsertSetupIntent } from '../lib/setup_intents'
 import { upsertPaymentMethod } from '../lib/payment_methods'
+import { upsertDispute } from '../lib/disputes'
 
 const config = getConfig()
 
@@ -101,6 +102,17 @@ export default async function routes(fastify: FastifyInstance) {
           const paymentMethod = event.data.object as Stripe.PaymentMethod
 
           await upsertPaymentMethod(paymentMethod)
+          break
+        }
+        case 'charge.dispute.closed':
+        case 'charge.dispute.created':
+        case 'charge.dispute.funds_reinstated':
+        case 'charge.dispute.funds_withdrawn':
+        case 'charge.dispute.updated':
+        case 'charge.dispute.closed': {
+          const dispute = event.data.object as Stripe.Dispute
+
+          await upsertDispute(dispute)
           break
         }
 

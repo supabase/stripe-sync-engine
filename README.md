@@ -35,7 +35,11 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `charge.refunded` 🟢
 - [x] `charge.succeeded` 🟢
 - [x] `charge.updated` 🟢
-- [ ] `charge.dispute.created`
+- [x] `charge.dispute.closed` 🟢
+- [x] `charge.dispute.created` 🟢
+- [x] `charge.dispute.funds_reinstated` 🟢
+- [x] `charge.dispute.funds_withdrawn` 🟢
+- [x] `charge.dispute.updated` 🟢
 - [ ] `checkout.session.async_payment_failed`
 - [ ] `checkout.session.async_payment_succeeded`
 - [ ] `checkout.session.completed`
