@@ -105,10 +105,7 @@ export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.ProductListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.products.list(params),
-    (products) => upsertProducts(products)
-  )
+  return fetchAndUpsert(() => stripe.products.list(params), upsertProducts)
 }
 
 export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -117,10 +114,7 @@ export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync
   const params: Stripe.PriceListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.prices.list(params),
-    (prices) => upsertPrices(prices)
-  )
+  return fetchAndUpsert(() => stripe.prices.list(params), upsertPrices)
 }
 
 export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -129,10 +123,7 @@ export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<S
   const params: Stripe.CustomerListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.customers.list(params),
-    (disputes) => upsertCustomers(disputes)
-  )
+  return fetchAndUpsert(() => stripe.customers.list(params), upsertCustomers)
 }
 
 export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -141,10 +132,7 @@ export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promi
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.subscriptions.list(params),
-    (subscription) => upsertSubscriptions(subscription)
-  )
+  return fetchAndUpsert(() => stripe.subscriptions.list(params), upsertSubscriptions)
 }
 
 export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -153,10 +141,7 @@ export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.InvoiceListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.invoices.list(params),
-    (invoice) => upsertInvoices(invoice)
-  )
+  return fetchAndUpsert(() => stripe.invoices.list(params), upsertInvoices)
 }
 
 export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -165,10 +150,7 @@ export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promis
   const params: Stripe.SetupIntentListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.setupIntents.list(params),
-    (setupIntents) => upsertSetupIntents(setupIntents)
-  )
+  return fetchAndUpsert(() => stripe.setupIntents.list(params), upsertSetupIntents)
 }
 
 export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Promise<Sync> {
@@ -196,7 +178,7 @@ export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Prom
           limit: 100,
           customer: customerId,
         }),
-      (paymentMethods) => upsertPaymentMethods(paymentMethods)
+      upsertPaymentMethods
     )
 
     synced += syncResult.synced
@@ -209,10 +191,7 @@ export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.DisputeListParams = { limit: 100 }
   if (created) params.created = created
 
-  return fetchAndUpsert(
-    () => stripe.disputes.list(params),
-    (disputes) => upsertDisputes(disputes)
-  )
+  return fetchAndUpsert(() => stripe.disputes.list(params), upsertDisputes)
 }
 
 async function fetchAndUpsert<T>(
