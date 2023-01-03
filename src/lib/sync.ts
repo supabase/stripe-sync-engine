@@ -8,6 +8,11 @@ import Stripe from 'stripe'
 import { upsertSetupIntents } from './setup_intents'
 import { upsertPaymentMethods } from './payment_methods'
 import { upsertDisputes } from './disputes'
+import { query } from '../utils/PostgresConnection'
+import { getConfig } from '../utils/config'
+import { pg as sql } from 'yesql'
+
+const config = getConfig()
 
 interface Sync {
   synced: number
@@ -166,43 +171,30 @@ export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promis
   )
 }
 
-const stripePaymentTypes: Stripe.PaymentMethodListParams.Type[] = [
-  'acss_debit',
-  'afterpay_clearpay',
-  'alipay',
-  'au_becs_debit',
-  'bacs_debit',
-  'bancontact',
-  'boleto',
-  'card',
-  'card_present',
-  'customer_balance',
-  'eps',
-  'fpx',
-  'giropay',
-  'grabpay',
-  'ideal',
-  'klarna',
-  'konbini',
-  'oxxo',
-  'p24',
-  'paynow',
-  'sepa_debit',
-  'sofort',
-  'us_bank_account',
-  'wechat_pay',
-]
-
 export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  // We can't filter by date here
+  // We can't filter by date here, it is also not possible to get payment methods without specifying a customer (you need Stripe Sigma for that -.-)
+  // Thus, we need to loop through all customers
+  console.log('Syncing payment method')
+
+  const prepared = sql(`select id from "${config.SCHEMA}"."customers" WHERE deleted <> true;`)([])
+
+  const customerIds = await query(prepared.text, prepared.values).then(({ rows }) =>
+    rows.map((it) => it.id)
+  )
+
+  console.log(`Getting payment methods for ${customerIds.length} customers`)
 
   let synced = 0
-  for (const stripePaymentType of stripePaymentTypes) {
+
+  for (const customerId of customerIds) {
     const syncResult = await fetchAndUpsert(
       () =>
+        // The type parameter is optional, types are wrong
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         stripe.paymentMethods.list({
           limit: 100,
-          type: stripePaymentType,
+          customer: customerId,
         }),
       (paymentMethods) => upsertPaymentMethods(paymentMethods)
     )
@@ -230,9 +222,15 @@ async function fetchAndUpsert<T>(
   const items: T[] = []
 
   console.log('Fetching items to sync from Stripe')
-  for await (const item of fetch()) {
-    items.push(item)
+  try {
+    for await (const item of fetch()) {
+      items.push(item)
+    }
+  } catch (err) {
+    console.error(err)
   }
+
+  if (!items.length) return { synced: 0 }
 
   console.log(`Upserting ${items.length} items`)
   const chunkSize = 250
