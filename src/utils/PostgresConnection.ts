@@ -1,4 +1,4 @@
-import { Pool, QueryResult, Submittable } from 'pg'
+import { Pool, QueryResult } from 'pg'
 import { getConfig } from './config'
 
 const config = getConfig()
