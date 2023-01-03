@@ -11,8 +11,10 @@ import { stripe } from '../utils/StripeClientManager'
 const config = getConfig()
 
 export const upsertInvoices = async (invoices: Invoice.Invoice[]): Promise<Invoice.Invoice[]> => {
-  await backfillCustomers(getUniqueIds(invoices, 'customer'))
-  await backfillSubscriptions(getUniqueIds(invoices, 'subscription'))
+  await Promise.all([
+    backfillCustomers(getUniqueIds(invoices, 'customer')),
+    backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
+  ])
 
   return upsertMany(invoices, (_) =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'invoices', invoiceSchema)

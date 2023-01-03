@@ -12,18 +12,12 @@ export const upsertCustomers = async (
   customers: Customer.Customer[]
 ): Promise<Customer.Customer[]> => {
   return upsertMany(customers, (customer) => {
-    let upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
-
     // handle deleted customer
     if (customer.deleted) {
-      upsertString = constructUpsertSql(
-        config.SCHEMA || 'stripe',
-        'customers',
-        customerDeletedSchema
-      )
+      return constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerDeletedSchema)
+    } else {
+      return constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
     }
-
-    return upsertString
   })
 }
 

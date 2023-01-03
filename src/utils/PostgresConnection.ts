@@ -2,7 +2,7 @@ import { Pool, QueryResult } from 'pg'
 import { getConfig } from './config'
 
 const config = getConfig()
-const pool = new Pool({ connectionString: config.DATABASE_URL, max: 25 })
+const pool = new Pool({ connectionString: config.DATABASE_URL })
 
 /**
  * Use this inside a route/file

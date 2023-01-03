@@ -10,8 +10,10 @@ import { stripe } from '../utils/StripeClientManager'
 const config = getConfig()
 
 export const upsertCharges = async (charges: Stripe.Charge[]): Promise<Stripe.Charge[]> => {
-  await backfillCustomers(getUniqueIds(charges, 'customer'))
-  await backfillInvoices(getUniqueIds(charges, 'invoice'))
+  await Promise.all([
+    backfillCustomers(getUniqueIds(charges, 'customer')),
+    backfillInvoices(getUniqueIds(charges, 'invoice')),
+  ])
 
   return upsertMany(charges, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'charges', chargeSchema)
@@ -19,8 +21,8 @@ export const upsertCharges = async (charges: Stripe.Charge[]): Promise<Stripe.Ch
 }
 
 export const backfillCharges = async (chargeIds: string[]) => {
-  const missingCustomerIds = await findMissingEntries('charges', chargeIds)
-  await fetchAndInsertCharges(missingCustomerIds)
+  const missingChargeIds = await findMissingEntries('charges', chargeIds)
+  await fetchAndInsertCharges(missingChargeIds)
 }
 
 const fetchAndInsertCharges = async (chargeIds: string[]) => {

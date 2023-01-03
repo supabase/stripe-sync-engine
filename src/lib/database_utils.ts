@@ -17,8 +17,6 @@ export const upsertMany = async <
   const queries: Promise<QueryResult<any>>[] = []
 
   entries.forEach((entry) => {
-    // Create the SQL
-
     // Inject the values
     const cleansed = cleanseArrayField(entry)
     const prepared = sql(upsertSql(entry))(cleansed)
@@ -27,7 +25,6 @@ export const upsertMany = async <
   })
 
   // Run it
-
   const results = await Promise.all(queries)
 
   return results.flatMap((it) => it.rows)
