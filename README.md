@@ -110,7 +110,7 @@ body: {
 }
 ```
 
-- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent**
+- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent** | **payment_method** | **dispute**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
 #### Alternative routes to sync `daily/weekly/monthly` data

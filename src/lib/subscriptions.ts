@@ -29,12 +29,13 @@ export const upsertSubscriptions = async (
 
   // We have to mark existing subscription item in db as deleted
   // if it doesn't exist in current subscriptionItems list
-  // TODO optimize for bulk in the future
+  const markSubscriptionItemsDeleted: Promise<any>[] = []
   for (const subscription of subscriptions) {
     const subscriptionItems = subscription.items.data
     const subItemIds = subscriptionItems.map((x: Subscription.SubscriptionItem) => x.id)
-    await markDeletedSubscriptionItems(subscription.id, subItemIds)
+    markSubscriptionItemsDeleted.push(markDeletedSubscriptionItems(subscription.id, subItemIds))
   }
+  await Promise.all(markSubscriptionItemsDeleted)
 
   return rows
 }

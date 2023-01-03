@@ -95,6 +95,8 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
 }
 
 export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing products')
+
   const params: Stripe.ProductListParams = { limit: 100 }
   if (created) params.created = created
 
@@ -105,6 +107,8 @@ export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sy
 }
 
 export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing prices')
+
   const params: Stripe.PriceListParams = { limit: 100 }
   if (created) params.created = created
 
@@ -115,6 +119,8 @@ export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync
 }
 
 export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing customers')
+
   const params: Stripe.CustomerListParams = { limit: 100 }
   if (created) params.created = created
 
@@ -125,6 +131,8 @@ export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<S
 }
 
 export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing subscriptions')
+
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
   if (created) params.created = created
 
@@ -135,6 +143,8 @@ export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promi
 }
 
 export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing invoices')
+
   const params: Stripe.InvoiceListParams = { limit: 100 }
   if (created) params.created = created
 
@@ -145,6 +155,8 @@ export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sy
 }
 
 export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing setup_intents')
+
   const params: Stripe.SetupIntentListParams = { limit: 100 }
   if (created) params.created = created
 
@@ -216,16 +228,20 @@ async function fetchAndUpsert<T>(
   upsert: (items: T[]) => Promise<T[]>
 ): Promise<Sync> {
   const items: T[] = []
+
+  console.log('Fetching items to sync from Stripe')
   for await (const item of fetch()) {
     items.push(item)
   }
 
-  const chunkSize = 100
+  console.log(`Upserting ${items.length} items`)
+  const chunkSize = 250
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize)
 
     await upsert(chunk)
   }
+  console.log('Upserted items')
 
   return { synced: items.length }
 }

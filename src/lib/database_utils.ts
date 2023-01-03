@@ -35,13 +35,15 @@ export const findMissingEntries = async (table: string, ids: string[]): Promise<
 
   const prepared = sql(`
     select id from "${config.SCHEMA}"."${table}" 
-    where id in (:ids);
+    where id=any(:ids::text[]);
     `)({ ids })
 
   const { rows } = await query(prepared.text, prepared.values)
-  const existingIds = rows.map((it) => it[0])
+  const existingIds = rows.map((it) => it.id)
 
-  return ids.filter((it) => !existingIds.includes(it))
+  const missingIds = ids.filter((it) => !existingIds.includes(it))
+
+  return missingIds
 }
 
 export const getUniqueIds = <T>(entries: T[], key: keyof T): string[] => {
