@@ -13,7 +13,6 @@ const config = getConfig()
 export const upsertSubscriptions = async (
   subscriptions: Subscription.Subscription[]
 ): Promise<Subscription.Subscription[]> => {
-  // Backfill customer if it doesn't already exist
   const customerIds = getUniqueIds(subscriptions, 'customer')
 
   await backfillCustomers(customerIds)

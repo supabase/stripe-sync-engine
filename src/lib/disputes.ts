@@ -8,7 +8,6 @@ import { getUniqueIds, upsertMany } from './database_utils'
 const config = getConfig()
 
 export const upsertDisputes = async (disputes: Stripe.Dispute[]): Promise<Stripe.Dispute[]> => {
-  // Backfill charges if they don't exist
   await backfillCharges(getUniqueIds(disputes, 'charge'))
 
   return upsertMany(disputes, (_) =>

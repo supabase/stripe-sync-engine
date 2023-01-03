@@ -10,7 +10,6 @@ const config = getConfig()
 export const upsertSetupIntents = async (
   setupIntents: Stripe.SetupIntent[]
 ): Promise<Stripe.SetupIntent[]> => {
-  // Backfill customer if it doesn't already exist
   await backfillCustomers(getUniqueIds(setupIntents, 'customer'))
 
   return upsertMany(setupIntents, () =>

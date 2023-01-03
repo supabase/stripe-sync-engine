@@ -10,7 +10,6 @@ import { getUniqueIds, upsertMany } from './database_utils'
 const config = getConfig()
 
 export const upsertPrices = async (prices: Price.Price[]): Promise<Price.Price[]> => {
-  // Backfill product if it doesn't already exist
   await backfillProducts(getUniqueIds(prices, 'product'))
 
   return upsertMany(prices, () =>

@@ -11,7 +11,6 @@ import { stripe } from '../utils/StripeClientManager'
 const config = getConfig()
 
 export const upsertInvoices = async (invoices: Invoice.Invoice[]): Promise<Invoice.Invoice[]> => {
-  // Backfill customer if it doesn't already exist
   await backfillCustomers(getUniqueIds(invoices, 'customer'))
   await backfillSubscriptions(getUniqueIds(invoices, 'subscription'))
 
