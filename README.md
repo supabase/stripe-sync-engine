@@ -60,11 +60,14 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`
-- [ ] `payment_intent.amount_capturable_updated`
-- [ ] `payment_intent.canceled`
-- [ ] `payment_intent.created`
-- [ ] `payment_intent.payment_failed`
-- [ ] `payment_intent.succeeded`
+- [x] `payment_intent.amount_capturable_updated` 🟢
+- [x] `payment_intent.canceled` 🟢
+- [x] `payment_intent.created` 🟢
+- [x] `payment_intent.partially_refunded` 🟢
+- [x] `payment_intent.payment_failed` 🟢
+- [x] `payment_intent.processing` 🟢
+- [x] `payment_intent.requires_action` 🟢
+- [x] `payment_intent.succeeded` 🟢
 - [x] `payment_method.attached` 🟢
 - [x] `payment_method.automatically_updated` 🟢
 - [x] `payment_method.detached` 🟢
@@ -110,7 +113,7 @@ body: {
 }
 ```
 
-- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent** | **payment_method** | **dispute** | **charge**
+- `object` **all** | **customer** | **invoice** | **price** | **product** | **subscription** | **setup_intent** | **payment_method** | **dispute** | **charge** | **payment_intent**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
 #### Alternative routes to sync `daily/weekly/monthly` data
