@@ -111,6 +111,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     setupIntents,
     paymentMethods,
     disputes,
+    charges,
   }
 }
 
