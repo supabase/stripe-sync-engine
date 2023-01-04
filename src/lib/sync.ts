@@ -8,6 +8,7 @@ import Stripe from 'stripe'
 import { upsertSetupIntents } from './setup_intents'
 import { upsertPaymentMethods } from './payment_methods'
 import { upsertDisputes } from './disputes'
+import { upsertCharges } from './charges'
 import { query } from '../utils/PostgresConnection'
 import { getConfig } from '../utils/config'
 import { pg as sql } from 'yesql'
@@ -27,6 +28,7 @@ interface SyncBackfill {
   setupIntents?: Sync
   paymentMethods?: Sync
   disputes?: Sync
+  charges?: Sync
 }
 
 export interface SyncBackfillParams {
@@ -44,10 +46,19 @@ type SyncObject =
   | 'setup_intent'
   | 'payment_method'
   | 'dispute'
+  | 'charge'
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
-  let products, prices, customers, subscriptions, invoices, setupIntents, paymentMethods, disputes
+  let products,
+    prices,
+    customers,
+    subscriptions,
+    invoices,
+    setupIntents,
+    paymentMethods,
+    disputes,
+    charges
 
   switch (object) {
     case 'all':
@@ -56,6 +67,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       customers = await syncCustomers(created)
       subscriptions = await syncSubscriptions(created)
       invoices = await syncInvoices(created)
+      charges = await syncCharges(created)
       setupIntents = await syncSetupIntents(created)
       paymentMethods = await syncPaymentMethods()
       break
@@ -82,6 +94,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       break
     case 'dispute':
       disputes = await syncDisputes(created)
+      break
+    case 'charge':
+      charges = await syncCharges(created)
       break
     default:
       break
@@ -142,6 +157,15 @@ export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sy
   if (created) params.created = created
 
   return fetchAndUpsert(() => stripe.invoices.list(params), upsertInvoices)
+}
+
+export async function syncCharges(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing charges')
+
+  const params: Stripe.ChargeListParams = { limit: 100 }
+  if (created) params.created = created
+
+  return fetchAndUpsert(() => stripe.charges.list(params), upsertCharges)
 }
 
 export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
