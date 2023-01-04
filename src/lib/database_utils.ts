@@ -14,7 +14,7 @@ export const upsertMany = async <
   entries: T[],
   upsertSql: (entry: T) => string
 ): Promise<T[]> => {
-  const queries: Promise<QueryResult<any>>[] = []
+  const queries: Promise<QueryResult<T>>[] = []
 
   entries.forEach((entry) => {
     // Inject the values

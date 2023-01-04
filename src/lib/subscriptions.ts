@@ -18,7 +18,7 @@ export const upsertSubscriptions = async (
   await backfillCustomers(customerIds)
 
   // Run it
-  const rows = await upsertMany(subscriptions, (_) =>
+  const rows = await upsertMany(subscriptions, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'subscriptions', subscriptionSchema)
   )
 
@@ -29,7 +29,7 @@ export const upsertSubscriptions = async (
 
   // We have to mark existing subscription item in db as deleted
   // if it doesn't exist in current subscriptionItems list
-  const markSubscriptionItemsDeleted: Promise<any>[] = []
+  const markSubscriptionItemsDeleted: Promise<{ rowCount: number }>[] = []
   for (const subscription of subscriptions) {
     const subscriptionItems = subscription.items.data
     const subItemIds = subscriptionItems.map((x: Subscription.SubscriptionItem) => x.id)

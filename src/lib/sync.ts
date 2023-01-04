@@ -57,7 +57,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       subscriptions = await syncSubscriptions(created)
       invoices = await syncInvoices(created)
       setupIntents = await syncSetupIntents(created)
-      paymentMethods = await syncPaymentMethods(created)
+      paymentMethods = await syncPaymentMethods()
       break
     case 'customer':
       customers = await syncCustomers(created)
@@ -78,7 +78,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       setupIntents = await syncSetupIntents(created)
       break
     case 'payment_method':
-      paymentMethods = await syncPaymentMethods(created)
+      paymentMethods = await syncPaymentMethods()
       break
     case 'dispute':
       disputes = await syncDisputes(created)
@@ -153,7 +153,7 @@ export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promis
   return fetchAndUpsert(() => stripe.setupIntents.list(params), upsertSetupIntents)
 }
 
-export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncPaymentMethods(): Promise<Sync> {
   // We can't filter by date here, it is also not possible to get payment methods without specifying a customer (you need Stripe Sigma for that -.-)
   // Thus, we need to loop through all customers
   console.log('Syncing payment method')

@@ -16,7 +16,7 @@ export const upsertInvoices = async (invoices: Invoice.Invoice[]): Promise<Invoi
     backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
   ])
 
-  return upsertMany(invoices, (_) =>
+  return upsertMany(invoices, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'invoices', invoiceSchema)
   )
 }

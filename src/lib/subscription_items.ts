@@ -26,7 +26,7 @@ export const upsertSubscriptionItems = async (
     }
   })
 
-  await upsertMany(modifiedSubscriptionItems, (_) =>
+  await upsertMany(modifiedSubscriptionItems, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'subscription_items', subscriptionItemSchema)
   )
 }

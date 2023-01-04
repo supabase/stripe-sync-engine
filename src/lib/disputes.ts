@@ -10,7 +10,7 @@ const config = getConfig()
 export const upsertDisputes = async (disputes: Stripe.Dispute[]): Promise<Stripe.Dispute[]> => {
   await backfillCharges(getUniqueIds(disputes, 'charge'))
 
-  return upsertMany(disputes, (_) =>
+  return upsertMany(disputes, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'disputes', disputeSchema)
   )
 }
