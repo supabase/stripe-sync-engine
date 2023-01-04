@@ -535,4 +535,27 @@ export default {
       })
     ),
   },
+  products: {
+    retrieve: jest.fn((id) =>
+      Promise.resolve({
+        id,
+        object: 'product',
+        active: true,
+        attributes: [],
+        created: 1623149335,
+        description: null,
+        images: [],
+        livemode: false,
+        metadata: {},
+        name: 'fake product',
+        package_dimensions: null,
+        shippable: null,
+        statement_descriptor: null,
+        type: 'service',
+        unit_label: null,
+        updated: 1623149335,
+        url: null,
+      })
+    ),
+  },
 }

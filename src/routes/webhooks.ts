@@ -1,16 +1,16 @@
 import { FastifyInstance } from 'fastify'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
-import { upsertCustomer } from '../lib/customers'
-import { upsertProduct, deleteProduct } from '../lib/products'
-import { upsertPrice, deletePrice } from '../lib/prices'
-import { upsertSubscription } from '../lib/subscriptions'
-import { upsertInvoice } from '../lib/invoices'
-import { upsertCharge } from '../lib/charges'
+import { upsertCustomers } from '../lib/customers'
+import { upsertProducts, deleteProduct } from '../lib/products'
+import { upsertPrices, deletePrice } from '../lib/prices'
+import { upsertSubscriptions } from '../lib/subscriptions'
+import { upsertInvoices } from '../lib/invoices'
+import { upsertCharges } from '../lib/charges'
 import Stripe from 'stripe'
-import { upsertSetupIntent } from '../lib/setup_intents'
-import { upsertPaymentMethod } from '../lib/payment_methods'
-import { upsertDispute } from '../lib/disputes'
+import { upsertSetupIntents } from '../lib/setup_intents'
+import { upsertPaymentMethods } from '../lib/payment_methods'
+import { upsertDisputes } from '../lib/disputes'
 
 const config = getConfig()
 
@@ -37,20 +37,20 @@ export default async function routes(fastify: FastifyInstance) {
         case 'charge.succeeded':
         case 'charge.updated': {
           const charge = event.data.object as Stripe.Charge
-          await upsertCharge(charge)
+          await upsertCharges([charge])
           break
         }
         case 'customer.created':
         case 'customer.updated': {
           const customer = event.data.object as Stripe.Customer
-          await upsertCustomer(customer)
+          await upsertCustomers([customer])
           break
         }
         case 'customer.subscription.created':
         case 'customer.subscription.deleted': // Soft delete using `status = canceled`
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Stripe.Subscription
-          await upsertSubscription(subscription)
+          await upsertSubscriptions([subscription])
           break
         }
         case 'invoice.created':
@@ -60,13 +60,13 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.payment_succeeded':
         case 'invoice.updated': {
           const invoice = event.data.object as Stripe.Invoice
-          await upsertInvoice(invoice)
+          await upsertInvoices([invoice])
           break
         }
         case 'product.created':
         case 'product.updated': {
           const product = event.data.object as Stripe.Product
-          await upsertProduct(product)
+          await upsertProducts([product])
           break
         }
         case 'product.deleted': {
@@ -77,7 +77,7 @@ export default async function routes(fastify: FastifyInstance) {
         case 'price.created':
         case 'price.updated': {
           const price = event.data.object as Stripe.Price
-          await upsertPrice(price)
+          await upsertPrices([price])
           break
         }
         case 'price.deleted': {
@@ -92,7 +92,7 @@ export default async function routes(fastify: FastifyInstance) {
         case 'setup_intent.succeeded': {
           const setupIntent = event.data.object as Stripe.SetupIntent
 
-          await upsertSetupIntent(setupIntent)
+          await upsertSetupIntents([setupIntent])
           break
         }
         case 'payment_method.attached':
@@ -101,7 +101,7 @@ export default async function routes(fastify: FastifyInstance) {
         case 'payment_method.updated': {
           const paymentMethod = event.data.object as Stripe.PaymentMethod
 
-          await upsertPaymentMethod(paymentMethod)
+          await upsertPaymentMethods([paymentMethod])
           break
         }
         case 'charge.dispute.closed':
@@ -112,7 +112,7 @@ export default async function routes(fastify: FastifyInstance) {
         case 'charge.dispute.closed': {
           const dispute = event.data.object as Stripe.Dispute
 
-          await upsertDispute(dispute)
+          await upsertDisputes([dispute])
           break
         }
 

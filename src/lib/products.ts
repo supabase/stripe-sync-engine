@@ -4,35 +4,16 @@ import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { productSchema } from '../schemas/product'
-import { cleanseArrayField, constructUpsertSql } from '../utils/helpers'
+import { constructUpsertSql } from '../utils/helpers'
+import { findMissingEntries, upsertMany } from './database_utils'
+import Stripe from 'stripe'
 
 const config = getConfig()
 
-export const upsertProduct = async (product: Product.Product): Promise<Product.Product[]> => {
-  // Create the SQL
-  const upsertString = constructUpsertSql(config.SCHEMA || 'stripe', 'products', productSchema)
-
-  // Inject the values
-  const cleansed = cleanseArrayField(product)
-  const prepared = sql(upsertString)(cleansed)
-
-  // Run it
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows
-}
-
-export const verifyProductExists = async (id: string): Promise<boolean> => {
-  const prepared = sql(`
-    select id from "${config.SCHEMA}"."products" 
-    where id = :id;
-    `)({ id })
-  const { rows } = await query(prepared.text, prepared.values)
-  return rows.length > 0
-}
-
-export const fetchAndInsertProduct = async (id: string): Promise<Product.Product[]> => {
-  const product = await stripe.products.retrieve(id)
-  return upsertProduct(product)
+export const upsertProducts = async (products: Product.Product[]): Promise<Product.Product[]> => {
+  return upsertMany(products, () =>
+    constructUpsertSql(config.SCHEMA || 'stripe', 'products', productSchema)
+  )
 }
 
 export const deleteProduct = async (id: string): Promise<boolean> => {
@@ -45,20 +26,20 @@ export const deleteProduct = async (id: string): Promise<boolean> => {
   return rows.length > 0
 }
 
-type fetchProductsResponse = Product.Response<Product.ApiList<Product.Product>>
-type fetchProductsParams = {
-  limit: number
-  id: string | undefined
+export const backfillProducts = async (productids: string[]) => {
+  const missingProductIds = await findMissingEntries('products', productids)
+  await fetchAndInsertProducts(missingProductIds)
 }
-const fetchProductsDefaults = {
-  limit: 100,
-  id: undefined,
-}
-export const fetchProducts = async (
-  options: fetchProductsParams = fetchProductsDefaults
-): Promise<fetchProductsResponse> => {
-  const products = await stripe.products.list({
-    limit: options.limit,
-  })
-  return products
+
+const fetchAndInsertProducts = async (productIds: string[]) => {
+  if (!productIds.length) return
+
+  const products: Stripe.Product[] = []
+
+  for (const productId of productIds) {
+    const product = await stripe.products.retrieve(productId)
+    products.push(product)
+  }
+
+  await upsertProducts(products)
 }

@@ -1,13 +1,18 @@
-import { upsertProduct } from './products'
-import { upsertPrice } from './prices'
-import { upsertSubscription } from './subscriptions'
-import { upsertInvoice } from './invoices'
-import { upsertCustomer } from './customers'
+import { upsertProducts } from './products'
+import { upsertPrices } from './prices'
+import { upsertSubscriptions } from './subscriptions'
+import { upsertInvoices } from './invoices'
+import { upsertCustomers } from './customers'
 import { stripe } from '../utils/StripeClientManager'
 import Stripe from 'stripe'
-import { upsertSetupIntent } from './setup_intents'
-import { upsertPaymentMethod } from './payment_methods'
-import { upsertDispute } from './disputes'
+import { upsertSetupIntents } from './setup_intents'
+import { upsertPaymentMethods } from './payment_methods'
+import { upsertDisputes } from './disputes'
+import { query } from '../utils/PostgresConnection'
+import { getConfig } from '../utils/config'
+import { pg as sql } from 'yesql'
+
+const config = getConfig()
 
 interface Sync {
   synced: number
@@ -52,7 +57,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       subscriptions = await syncSubscriptions(created)
       invoices = await syncInvoices(created)
       setupIntents = await syncSetupIntents(created)
-      paymentMethods = await syncPaymentMethods(created)
+      paymentMethods = await syncPaymentMethods()
       break
     case 'customer':
       customers = await syncCustomers(created)
@@ -73,7 +78,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       setupIntents = await syncSetupIntents(created)
       break
     case 'payment_method':
-      paymentMethods = await syncPaymentMethods(created)
+      paymentMethods = await syncPaymentMethods()
       break
     case 'dispute':
       disputes = await syncDisputes(created)
@@ -95,127 +100,88 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
 }
 
 export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing products')
+
   const params: Stripe.ProductListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const product of stripe.products.list(params)) {
-    await upsertProduct(product)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.products.list(params), upsertProducts)
 }
 
 export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing prices')
+
   const params: Stripe.PriceListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const price of stripe.prices.list(params)) {
-    await upsertPrice(price)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.prices.list(params), upsertPrices)
 }
 
 export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing customers')
+
   const params: Stripe.CustomerListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const customer of stripe.customers.list(params)) {
-    await upsertCustomer(customer)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.customers.list(params), upsertCustomers)
 }
 
 export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing subscriptions')
+
   const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const subscription of stripe.subscriptions.list(params)) {
-    await upsertSubscription(subscription)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.subscriptions.list(params), upsertSubscriptions)
 }
 
 export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing invoices')
+
   const params: Stripe.InvoiceListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const invoice of stripe.invoices.list(params)) {
-    await upsertInvoice(invoice)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.invoices.list(params), upsertInvoices)
 }
 
 export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing setup_intents')
+
   const params: Stripe.SetupIntentListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const setupIntent of stripe.setupIntents.list(params)) {
-    await upsertSetupIntent(setupIntent)
-    synced++
-  }
-
-  return { synced }
+  return fetchAndUpsert(() => stripe.setupIntents.list(params), upsertSetupIntents)
 }
 
-const stripePaymentTypes: Stripe.PaymentMethodListParams.Type[] = [
-  'acss_debit',
-  'afterpay_clearpay',
-  'alipay',
-  'au_becs_debit',
-  'bacs_debit',
-  'bancontact',
-  'boleto',
-  'card',
-  'card_present',
-  'customer_balance',
-  'eps',
-  'fpx',
-  'giropay',
-  'grabpay',
-  'ideal',
-  'klarna',
-  'konbini',
-  'oxxo',
-  'p24',
-  'paynow',
-  'sepa_debit',
-  'sofort',
-  'us_bank_account',
-  'wechat_pay',
-]
+export async function syncPaymentMethods(): Promise<Sync> {
+  // We can't filter by date here, it is also not possible to get payment methods without specifying a customer (you need Stripe Sigma for that -.-)
+  // Thus, we need to loop through all customers
+  console.log('Syncing payment method')
 
-export async function syncPaymentMethods(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  // We can't filter by date here
+  const prepared = sql(`select id from "${config.SCHEMA}"."customers" WHERE deleted <> true;`)([])
+
+  const customerIds = await query(prepared.text, prepared.values).then(({ rows }) =>
+    rows.map((it) => it.id)
+  )
+
+  console.log(`Getting payment methods for ${customerIds.length} customers`)
 
   let synced = 0
-  for (const stripePaymentType of stripePaymentTypes) {
-    for await (const paymentMethod of stripe.paymentMethods.list({
-      limit: 100,
-      type: stripePaymentType,
-    })) {
-      const creationDate = new Date(paymentMethod.created * 1000)
 
-      // If a created at filter is set, skip upsert (unfortunately we must always query)
-      if (!created || creationDate >= created) {
-        await upsertPaymentMethod(paymentMethod)
-        synced++
-      }
-    }
+  for (const customerId of customerIds) {
+    const syncResult = await fetchAndUpsert(
+      () =>
+        // The type parameter is optional, types are wrong
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        stripe.paymentMethods.list({
+          limit: 100,
+          customer: customerId,
+        }),
+      upsertPaymentMethods
+    )
+
+    synced += syncResult.synced
   }
 
   return { synced }
@@ -225,11 +191,34 @@ export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sy
   const params: Stripe.DisputeListParams = { limit: 100 }
   if (created) params.created = created
 
-  let synced = 0
-  for await (const dispute of stripe.disputes.list(params)) {
-    await upsertDispute(dispute)
-    synced++
+  return fetchAndUpsert(() => stripe.disputes.list(params), upsertDisputes)
+}
+
+async function fetchAndUpsert<T>(
+  fetch: () => Stripe.ApiListPromise<T>,
+  upsert: (items: T[]) => Promise<T[]>
+): Promise<Sync> {
+  const items: T[] = []
+
+  console.log('Fetching items to sync from Stripe')
+  try {
+    for await (const item of fetch()) {
+      items.push(item)
+    }
+  } catch (err) {
+    console.error(err)
   }
 
-  return { synced }
+  if (!items.length) return { synced: 0 }
+
+  console.log(`Upserting ${items.length} items`)
+  const chunkSize = 250
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+
+    await upsert(chunk)
+  }
+  console.log('Upserted items')
+
+  return { synced: items.length }
 }
