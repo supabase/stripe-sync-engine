@@ -61,6 +61,14 @@ describe('/webhooks', () => {
     'plan_created',
     'plan_deleted',
     'plan_updated',
+    'payment_intent_amount_capturable_updated',
+    'payment_intent_canceled',
+    'payment_intent_created',
+    'payment_intent_partially_funded',
+    'payment_intent_payment_failed',
+    'payment_intent_processing',
+    'payment_intent_requires_action',
+    'payment_intent_succeeded',
   ])('process event %s', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     const signature = createHmac('sha256', stripeWebhookSecret)
