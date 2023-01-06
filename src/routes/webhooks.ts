@@ -12,6 +12,7 @@ import { upsertSetupIntents } from '../lib/setup_intents'
 import { upsertPaymentMethods } from '../lib/payment_methods'
 import { upsertDisputes } from '../lib/disputes'
 import { deletePlan, upsertPlans } from '../lib/plans'
+import { upsertPaymentIntents } from '../lib/payment_intents'
 
 const config = getConfig()
 
@@ -125,6 +126,19 @@ export default async function routes(fastify: FastifyInstance) {
           const dispute = event.data.object as Stripe.Dispute
 
           await upsertDisputes([dispute])
+          break
+        }
+        case 'payment_intent.amount_capturable_updated':
+        case 'payment_intent.canceled':
+        case 'payment_intent.created':
+        case 'payment_intent.partially_funded':
+        case 'payment_intent.payment_failed':
+        case 'payment_intent.processing':
+        case 'payment_intent.requires_action':
+        case 'payment_intent.succeeded': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent
+
+          await upsertPaymentIntents([paymentIntent])
           break
         }
 
