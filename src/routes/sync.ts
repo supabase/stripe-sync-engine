@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { syncBackfill, SyncBackfillParams } from '../lib/sync'
+import { syncBackfill, SyncBackfillParams, syncSingleEntity } from '../lib/sync'
 import { verifyApiKey } from '../utils/verifyApiKey'
 
 import Stripe from 'stripe'
@@ -20,6 +20,33 @@ export default async function routes(fastify: FastifyInstance) {
         statusCode: 200,
         ts: Date.now(),
         ...result,
+      })
+    },
+  })
+
+  fastify.post<{
+    Params: {
+      stripeId: string
+    }
+  }>('/sync/single/:stripeId', {
+    preHandler: [verifyApiKey],
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          stripeId: { type: 'string' },
+        },
+      },
+    },
+    handler: async (request, reply) => {
+      const { stripeId } = request.params
+
+      const result = await syncSingleEntity(stripeId)
+
+      return reply.send({
+        statusCode: 200,
+        ts: Date.now(),
+        data: result,
       })
     },
   })
