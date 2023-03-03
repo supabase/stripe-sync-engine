@@ -54,6 +54,34 @@ type SyncObject =
   | 'payment_intent'
   | 'plan'
 
+export async function syncSingleEntity(stripeId: string) {
+  if (stripeId.startsWith('cus_')) {
+    return stripe.customers.retrieve(stripeId).then((it) => {
+      if (!it || it.deleted) return
+
+      return upsertCustomers([it])
+    })
+  } else if (stripeId.startsWith('in_')) {
+    return stripe.invoices.retrieve(stripeId).then((it) => upsertInvoices([it]))
+  } else if (stripeId.startsWith('price_')) {
+    return stripe.prices.retrieve(stripeId).then((it) => upsertPrices([it]))
+  } else if (stripeId.startsWith('prod_')) {
+    return stripe.products.retrieve(stripeId).then((it) => upsertProducts([it]))
+  } else if (stripeId.startsWith('sub_')) {
+    return stripe.subscriptions.retrieve(stripeId).then((it) => upsertSubscriptions([it]))
+  } else if (stripeId.startsWith('seti_')) {
+    return stripe.setupIntents.retrieve(stripeId).then((it) => upsertSetupIntents([it]))
+  } else if (stripeId.startsWith('pm_')) {
+    return stripe.paymentMethods.retrieve(stripeId).then((it) => upsertPaymentMethods([it]))
+  } else if (stripeId.startsWith('dp_') || stripeId.startsWith('du_')) {
+    return stripe.disputes.retrieve(stripeId).then((it) => upsertDisputes([it]))
+  } else if (stripeId.startsWith('ch_')) {
+    return stripe.charges.retrieve(stripeId).then((it) => upsertCharges([it]))
+  } else if (stripeId.startsWith('pi_')) {
+    return stripe.paymentIntents.retrieve(stripeId).then((it) => upsertPaymentIntents([it]))
+  }
+}
+
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
   const { created, object } = params ?? {}
   let products,

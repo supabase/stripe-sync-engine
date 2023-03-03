@@ -15,11 +15,11 @@ export default async function routes(fastify: FastifyInstance) {
         object: object ?? 'all',
       } as SyncBackfillParams
 
-      const result = await syncBackfill(params)
+      await syncBackfill(params)
+
       return reply.send({
         statusCode: 200,
         ts: Date.now(),
-        ...result,
       })
     },
   })
