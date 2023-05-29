@@ -50,6 +50,10 @@ export default async function routes(fastify: FastifyInstance) {
         }
         case 'customer.subscription.created':
         case 'customer.subscription.deleted': // Soft delete using `status = canceled`
+        case 'customer.subscription.paused':
+        case 'customer.subscription.pending_update_applied':
+        case 'customer.subscription.pending_update_expired':
+        case 'customer.subscription.resumed':
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Stripe.Subscription
           await upsertSubscriptions([subscription])

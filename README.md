@@ -49,6 +49,10 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `customer.source.updated`
 - [x] `customer.subscription.created` 🟢
 - [x] `customer.subscription.deleted` 🟢
+- [x] `customer.subscription.paused` 🟢
+- [x] `customer.subscription.pending_update_applied` 🟢
+- [x] `customer.subscription.pending_update_expired` 🟢
+- [x] `customer.subscription.resumed` 🟢
 - [x] `customer.subscription.updated` 🟢
 - [x] `customer.updated` 🟢
 - [x] `invoice.created` 🟢
