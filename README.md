@@ -56,6 +56,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `customer.subscription.updated` 🟢
 - [x] `customer.updated` 🟢
 - [x] `invoice.created` 🟢
+- [x] `invoice.deleted` 🟢
 - [x] `invoice.finalized` 🟢
 - [x] `invoice.paid` 🟢
 - [x] `invoice.payment_failed` 🟢
