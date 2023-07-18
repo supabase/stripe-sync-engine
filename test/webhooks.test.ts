@@ -34,6 +34,7 @@ describe('/webhooks', () => {
     'subscription_created.json',
     'subscription_deleted.json',
     'subscription_updated.json',
+    'invoice_deleted.json',
     'invoice_paid.json',
     'invoice_updated.json',
     'invoice_finalized.json',
