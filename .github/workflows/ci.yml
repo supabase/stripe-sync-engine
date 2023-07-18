@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [ubuntu-22.04]
-        node: ['14', '16', '18']
+        node: ['18', '20']
 
     runs-on: ${{ matrix.platform }}
 

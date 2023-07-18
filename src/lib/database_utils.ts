@@ -9,7 +9,7 @@ const config = getConfig()
 export const upsertMany = async <
   T extends {
     [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
-  }
+  },
 >(
   entries: T[],
   upsertSql: (entry: T) => string
