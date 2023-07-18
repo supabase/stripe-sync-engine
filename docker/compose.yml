@@ -3,7 +3,7 @@ version: '3.8'
 services:
   db:
     container_name: stripe-db
-    image: supabase/postgres:15.1.0.86
+    image: supabase/postgres:15.1.0.104
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     restart: unless-stopped
     ports:
