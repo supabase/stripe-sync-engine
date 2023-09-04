@@ -19,7 +19,7 @@ export const upsertMany = async <
   entries.forEach((entry) => {
     // Inject the values
     const cleansed = cleanseArrayField(entry)
-    const prepared = sql(upsertSql(entry))(cleansed)
+    const prepared = sql(upsertSql(entry), { useNullForMissing: true })(cleansed)
 
     queries.push(query(prepared.text, prepared.values))
   })
@@ -34,7 +34,7 @@ export const findMissingEntries = async (table: string, ids: string[]): Promise<
   if (!ids.length) return []
 
   const prepared = sql(`
-    select id from "${config.SCHEMA}"."${table}" 
+    select id from "${config.SCHEMA}"."${table}"
     where id=any(:ids::text[]);
     `)({ ids })
 
