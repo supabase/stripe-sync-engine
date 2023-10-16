@@ -1,6 +1,6 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
-import { createHmac } from 'crypto'
+import { createHmac } from 'node:crypto'
 import { createServer } from '../src/app'
 import stripeMock from './helpers/stripe'
 import 'dotenv/config'
@@ -86,8 +86,8 @@ describe('/webhooks', () => {
     })
 
     const json = JSON.parse(response.body)
-    if (json.error) {
-      console.log('error: ', json.message)
+    if (response.statusCode != 200) {
+      console.log('error: ', json)
     }
     expect(response.statusCode).toBe(200)
     expect(json).toMatchObject({ received: true })

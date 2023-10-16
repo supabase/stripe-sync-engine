@@ -1,6 +1,7 @@
 import { Client } from 'pg'
 import { migrate } from 'pg-node-migrations'
 import { getConfig } from './config'
+import fs from 'node:fs'
 
 const config = getConfig()
 
@@ -9,6 +10,11 @@ async function connectAndMigrate(
   migrationsDirectory: string,
   logOnError = false
 ) {
+  if (!fs.existsSync(migrationsDirectory)) {
+    console.log(`Migrations directory ${migrationsDirectory} not found, skipping`)
+    return
+  }
+
   const dbConfig = {
     connectionString: databaseUrl,
     connectionTimeoutMillis: 1000,
