@@ -43,6 +43,7 @@ export default async function routes(fastify: FastifyInstance) {
           break
         }
         case 'customer.created':
+        case 'customer.deleted':
         case 'customer.updated': {
           const customer = event.data.object as Stripe.Customer
           await upsertCustomers([customer])

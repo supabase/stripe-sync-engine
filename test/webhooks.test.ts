@@ -25,6 +25,7 @@ describe('/webhooks', () => {
 
   test.each([
     'customer_updated.json',
+    'customer_deleted.json',
     'product_created.json',
     'product_deleted.json',
     'product_updated.json',

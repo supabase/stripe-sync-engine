@@ -44,7 +44,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `checkout.session.async_payment_succeeded`
 - [ ] `checkout.session.completed`
 - [x] `customer.created` 🟢
-- [ ] `customer.deleted`
+- [x] `customer.deleted` 🟢
 - [ ] `customer.source.created`
 - [ ] `customer.source.updated`
 - [x] `customer.subscription.created` 🟢
