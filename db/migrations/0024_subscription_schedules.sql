@@ -1,7 +1,7 @@
 do $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_schedule_status') THEN
-        create type "stripe"."subscription_schedule_status" as enum ('not_started', 'active', 'completed', 'released', and 'canceled');
+        create type "stripe"."subscription_schedule_status" as enum ('not_started', 'active', 'completed', 'released', 'canceled');
     END IF;
 END
 $$;
