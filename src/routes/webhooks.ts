@@ -13,6 +13,7 @@ import { upsertPaymentMethods } from '../lib/payment_methods'
 import { upsertDisputes } from '../lib/disputes'
 import { deletePlan, upsertPlans } from '../lib/plans'
 import { upsertPaymentIntents } from '../lib/payment_intents'
+import { upsertSubscriptionSchedules } from '../lib/subscription_schedules'
 
 const config = getConfig()
 
@@ -111,6 +112,18 @@ export default async function routes(fastify: FastifyInstance) {
           const setupIntent = event.data.object as Stripe.SetupIntent
 
           await upsertSetupIntents([setupIntent])
+          break
+        }
+        case 'subscription_schedule.aborted':
+        case 'subscription_schedule.canceled':
+        case 'subscription_schedule.completed':
+        case 'subscription_schedule.created':
+        case 'subscription_schedule.expiring':
+        case 'subscription_schedule.released':
+        case 'subscription_schedule.updated': {
+          const subscriptionSchedule = event.data.object as Stripe.SubscriptionSchedule
+
+          await upsertSubscriptionSchedules([subscriptionSchedule])
           break
         }
         case 'payment_method.attached':
