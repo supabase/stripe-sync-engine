@@ -91,10 +91,13 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `setup_intent.requires_action` 🟢
 - [x] `setup_intent.setup_failed` 🟢
 - [x] `setup_intent.succeeded` 🟢
-- [ ] `subscription_schedule.canceled`
-- [ ] `subscription_schedule.created`
-- [ ] `subscription_schedule.released`
-- [ ] `subscription_schedule.updated`
+- [x] `subscription_schedule.aborted` 🟢
+- [x] `subscription_schedule.canceled` 🟢
+- [x] `subscription_schedule.completed` 🟢
+- [x] `subscription_schedule.created` 🟢
+- [x] `subscription_schedule.expiring` 🟢
+- [x] `subscription_schedule.released` 🟢
+- [x] `subscription_schedule.updated` 🟢
 
 ## Usage
 

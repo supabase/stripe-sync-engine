@@ -14,6 +14,7 @@ import { getConfig } from '../utils/config'
 import { pg as sql } from 'yesql'
 import { upsertPaymentIntents } from './payment_intents'
 import { upsertPlans } from './plans'
+import { upsertSubscriptionSchedules } from './subscription_schedules'
 
 const config = getConfig()
 
@@ -27,6 +28,7 @@ interface SyncBackfill {
   plans?: Sync
   customers?: Sync
   subscriptions?: Sync
+  subscriptionSchedules?: Sync
   invoices?: Sync
   setupIntents?: Sync
   paymentIntents?: Sync
@@ -47,6 +49,7 @@ type SyncObject =
   | 'price'
   | 'product'
   | 'subscription'
+  | 'subscription_schedules'
   | 'setup_intent'
   | 'payment_method'
   | 'dispute'
@@ -88,6 +91,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     prices,
     customers,
     subscriptions,
+    subscriptionSchedules,
     invoices,
     setupIntents,
     paymentMethods,
@@ -103,6 +107,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       plans = await syncPlans(created)
       customers = await syncCustomers(created)
       subscriptions = await syncSubscriptions(created)
+      subscriptionSchedules = await syncSubscriptionSchedules(created)
       invoices = await syncInvoices(created)
       charges = await syncCharges(created)
       setupIntents = await syncSetupIntents(created)
@@ -123,6 +128,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       break
     case 'subscription':
       subscriptions = await syncSubscriptions(created)
+      break
+    case 'subscription_schedules':
+      subscriptionSchedules = await syncSubscriptionSchedules(created)
       break
     case 'setup_intent':
       setupIntents = await syncSetupIntents(created)
@@ -150,6 +158,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     prices,
     customers,
     subscriptions,
+    subscriptionSchedules,
     invoices,
     setupIntents,
     paymentMethods,
@@ -203,6 +212,18 @@ export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promi
   if (created) params.created = created
 
   return fetchAndUpsert(() => stripe.subscriptions.list(params), upsertSubscriptions)
+}
+
+export async function syncSubscriptionSchedules(created?: Stripe.RangeQueryParam): Promise<Sync> {
+  console.log('Syncing subscription schedules')
+
+  const params: Stripe.SubscriptionScheduleListParams = { limit: 100 }
+  if (created) params.created = created
+
+  return fetchAndUpsert(
+    () => stripe.subscriptionSchedules.list(params),
+    upsertSubscriptionSchedules
+  )
 }
 
 export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
