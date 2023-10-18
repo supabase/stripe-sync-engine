@@ -1,0 +1,20 @@
+{
+  "id": "evt_1IlZRsJDPojXS6LN2AbFmnR4",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619701111,
+  "data": {
+    "object": {
+      "id": "cus_IhGfebO16cMIGN",
+      "object": "customer",
+      "deleted": true
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 4,
+  "request": {
+    "id": "req_QyDCzn33ls4m1t",
+    "idempotency_key": null
+  },
+  "type": "customer.deleted"
+}
