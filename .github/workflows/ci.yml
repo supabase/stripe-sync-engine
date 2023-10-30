@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [ubuntu-22.04]
-        node: ['18', '20']
+        node: ['20']
 
     runs-on: ${{ matrix.platform }}
 
@@ -27,7 +27,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
 
