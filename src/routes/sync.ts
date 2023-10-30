@@ -9,12 +9,13 @@ export default async function routes(fastify: FastifyInstance) {
   fastify.post('/sync', {
     preHandler: [verifyApiKey],
     handler: async (request, reply) => {
-      const { created, object } =
+      const { created, object, backfillRelatedEntities } =
         (request.body as {
           created?: Stripe.RangeQueryParam
           object?: string
+          backfillRelatedEntities?: boolean
         }) ?? {}
-      const params = { created, object } as SyncBackfillParams
+      const params = { created, object, backfillRelatedEntities } as SyncBackfillParams
       const result = await syncBackfill(params)
       return reply.send({
         statusCode: 200,
