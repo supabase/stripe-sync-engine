@@ -8,9 +8,12 @@ import { getUniqueIds, upsertMany } from './database_utils'
 const config = getConfig()
 
 export const upsertPaymentMethods = async (
-  paymentMethods: Stripe.PaymentMethod[]
+  paymentMethods: Stripe.PaymentMethod[],
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.PaymentMethod[]> => {
-  await backfillCustomers(getUniqueIds(paymentMethods, 'customer'))
+  if (backfillRelatedEntities) {
+    await backfillCustomers(getUniqueIds(paymentMethods, 'customer'))
+  }
 
   return upsertMany(paymentMethods, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'payment_methods', paymentMethodsSchema)

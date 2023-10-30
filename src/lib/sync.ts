@@ -40,6 +40,7 @@ interface SyncBackfill {
 export interface SyncBackfillParams {
   created?: Stripe.RangeQueryParam
   object?: SyncObject
+  backfillRelatedEntities?: boolean
 }
 
 type SyncObject =
@@ -86,7 +87,7 @@ export async function syncSingleEntity(stripeId: string) {
 }
 
 export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
-  const { created, object } = params ?? {}
+  const { object } = params ?? {}
   let products,
     prices,
     customers,
@@ -102,52 +103,52 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
 
   switch (object) {
     case 'all':
-      products = await syncProducts(created)
-      prices = await syncPrices(created)
-      plans = await syncPlans(created)
-      customers = await syncCustomers(created)
-      subscriptions = await syncSubscriptions(created)
-      subscriptionSchedules = await syncSubscriptionSchedules(created)
-      invoices = await syncInvoices(created)
-      charges = await syncCharges(created)
-      setupIntents = await syncSetupIntents(created)
-      paymentMethods = await syncPaymentMethods()
-      paymentIntents = await syncPaymentIntents(created)
+      products = await syncProducts(params)
+      prices = await syncPrices(params)
+      plans = await syncPlans(params)
+      customers = await syncCustomers(params)
+      subscriptions = await syncSubscriptions(params)
+      subscriptionSchedules = await syncSubscriptionSchedules(params)
+      invoices = await syncInvoices(params)
+      charges = await syncCharges(params)
+      setupIntents = await syncSetupIntents(params)
+      paymentMethods = await syncPaymentMethods(params)
+      paymentIntents = await syncPaymentIntents(params)
       break
     case 'customer':
-      customers = await syncCustomers(created)
+      customers = await syncCustomers(params)
       break
     case 'invoice':
-      invoices = await syncInvoices(created)
+      invoices = await syncInvoices(params)
       break
     case 'price':
-      prices = await syncPrices(created)
+      prices = await syncPrices(params)
       break
     case 'product':
-      products = await syncProducts(created)
+      products = await syncProducts(params)
       break
     case 'subscription':
-      subscriptions = await syncSubscriptions(created)
+      subscriptions = await syncSubscriptions(params)
       break
     case 'subscription_schedules':
-      subscriptionSchedules = await syncSubscriptionSchedules(created)
+      subscriptionSchedules = await syncSubscriptionSchedules(params)
       break
     case 'setup_intent':
-      setupIntents = await syncSetupIntents(created)
+      setupIntents = await syncSetupIntents(params)
       break
     case 'payment_method':
-      paymentMethods = await syncPaymentMethods()
+      paymentMethods = await syncPaymentMethods(params)
       break
     case 'dispute':
-      disputes = await syncDisputes(created)
+      disputes = await syncDisputes(params)
       break
     case 'charge':
-      charges = await syncCharges(created)
+      charges = await syncCharges(params)
       break
     case 'payment_intent':
-      paymentIntents = await syncPaymentIntents(created)
+      paymentIntents = await syncPaymentIntents(params)
     case 'plan':
-      plans = await syncPlans(created)
+      plans = await syncPlans(params)
       break
     default:
       break
@@ -169,100 +170,127 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
   }
 }
 
-export async function syncProducts(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncProducts(syncParams?: SyncBackfillParams): Promise<Sync> {
   console.log('Syncing products')
 
   const params: Stripe.ProductListParams = { limit: 100 }
-  if (created) params.created = created
-
-  return fetchAndUpsert(() => stripe.products.list(params), upsertProducts)
-}
-
-export async function syncPrices(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  console.log('Syncing prices')
-
-  const params: Stripe.PriceListParams = { limit: 100 }
-  if (created) params.created = created
-
-  return fetchAndUpsert(() => stripe.prices.list(params), upsertPrices)
-}
-
-export async function syncPlans(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  console.log('Syncing plans')
-
-  const params: Stripe.PlanListParams = { limit: 100 }
-  if (created) params.created = created
-
-  return fetchAndUpsert(() => stripe.plans.list(params), upsertPlans)
-}
-
-export async function syncCustomers(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  console.log('Syncing customers')
-
-  const params: Stripe.CustomerListParams = { limit: 100 }
-  if (created) params.created = created
-
-  return fetchAndUpsert(() => stripe.customers.list(params), upsertCustomers)
-}
-
-export async function syncSubscriptions(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  console.log('Syncing subscriptions')
-
-  const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
-  if (created) params.created = created
-
-  return fetchAndUpsert(() => stripe.subscriptions.list(params), upsertSubscriptions)
-}
-
-export async function syncSubscriptionSchedules(created?: Stripe.RangeQueryParam): Promise<Sync> {
-  console.log('Syncing subscription schedules')
-
-  const params: Stripe.SubscriptionScheduleListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams?.created
 
   return fetchAndUpsert(
-    () => stripe.subscriptionSchedules.list(params),
-    upsertSubscriptionSchedules
+    () => stripe.products.list(params),
+    (products) => upsertProducts(products)
   )
 }
 
-export async function syncInvoices(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncPrices(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing prices')
+
+  const params: Stripe.PriceListParams = { limit: 100 }
+  if (syncParams?.created) params.created = syncParams?.created
+
+  return fetchAndUpsert(
+    () => stripe.prices.list(params),
+    (prices) => upsertPrices(prices, syncParams?.backfillRelatedEntities)
+  )
+}
+
+export async function syncPlans(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing plans')
+
+  const params: Stripe.PlanListParams = { limit: 100 }
+  if (syncParams?.created) params.created = syncParams?.created
+
+  return fetchAndUpsert(
+    () => stripe.plans.list(params),
+    (plans) => upsertPlans(plans, syncParams?.backfillRelatedEntities)
+  )
+}
+
+export async function syncCustomers(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing customers')
+
+  const params: Stripe.CustomerListParams = { limit: 100 }
+  if (syncParams?.created) params.created = syncParams.created
+
+  return fetchAndUpsert(
+    () => stripe.customers.list(params),
+    (items) => upsertCustomers(items)
+  )
+}
+
+export async function syncSubscriptions(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing subscriptions')
+
+  const params: Stripe.SubscriptionListParams = { status: 'all', limit: 100 }
+  if (syncParams?.created) params.created = syncParams.created
+
+  return fetchAndUpsert(
+    () => stripe.subscriptions.list(params),
+    (items) => upsertSubscriptions(items, syncParams?.backfillRelatedEntities)
+  )
+}
+
+export async function syncSubscriptionSchedules(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing subscription schedules')
+
+  const params: Stripe.SubscriptionScheduleListParams = { limit: 100 }
+  if (syncParams?.created) params.created = syncParams.created
+
+  return fetchAndUpsert(
+    () => stripe.subscriptionSchedules.list(params),
+    (items) => upsertSubscriptionSchedules(items, syncParams?.backfillRelatedEntities)
+  )
+}
+
+export async function syncInvoices(syncParams?: SyncBackfillParams): Promise<Sync> {
   console.log('Syncing invoices')
 
   const params: Stripe.InvoiceListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams.created
 
-  return fetchAndUpsert(() => stripe.invoices.list(params), upsertInvoices)
+  return fetchAndUpsert(
+    () => stripe.invoices.list(params),
+    (items) => upsertInvoices(items, syncParams?.backfillRelatedEntities)
+  )
 }
 
-export async function syncCharges(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncCharges(syncParams?: SyncBackfillParams): Promise<Sync> {
   console.log('Syncing charges')
 
   const params: Stripe.ChargeListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams.created
 
-  return fetchAndUpsert(() => stripe.charges.list(params), upsertCharges)
+  return fetchAndUpsert(
+    () => stripe.charges.list(params),
+    (items) => upsertCharges(items, syncParams?.backfillRelatedEntities)
+  )
 }
 
-export async function syncSetupIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncSetupIntents(syncParams?: SyncBackfillParams): Promise<Sync> {
   console.log('Syncing setup_intents')
 
   const params: Stripe.SetupIntentListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams.created
 
-  return fetchAndUpsert(() => stripe.setupIntents.list(params), upsertSetupIntents)
+  return fetchAndUpsert(
+    () => stripe.setupIntents.list(params),
+    (items) => upsertSetupIntents(items, syncParams?.backfillRelatedEntities)
+  )
 }
 
-export async function syncPaymentIntents(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncPaymentIntents(syncParams?: SyncBackfillParams): Promise<Sync> {
   console.log('Syncing payment_intents')
 
   const params: Stripe.PaymentIntentListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams.created
 
-  return fetchAndUpsert(() => stripe.paymentIntents.list(params), upsertPaymentIntents)
+  return fetchAndUpsert(
+    () => stripe.paymentIntents.list(params),
+    (items) => upsertPaymentIntents(items, syncParams?.backfillRelatedEntities)
+  )
 }
 
-export async function syncPaymentMethods(): Promise<Sync> {
+export async function syncPaymentMethods(syncParams?: SyncBackfillParams): Promise<Sync> {
   // We can't filter by date here, it is also not possible to get payment methods without specifying a customer (you need Stripe Sigma for that -.-)
   // Thus, we need to loop through all customers
   console.log('Syncing payment method')
@@ -287,7 +315,7 @@ export async function syncPaymentMethods(): Promise<Sync> {
           limit: 100,
           customer: customerId,
         }),
-      upsertPaymentMethods
+      (items) => upsertPaymentMethods(items, syncParams?.backfillRelatedEntities)
     )
 
     synced += syncResult.synced
@@ -296,11 +324,14 @@ export async function syncPaymentMethods(): Promise<Sync> {
   return { synced }
 }
 
-export async function syncDisputes(created?: Stripe.RangeQueryParam): Promise<Sync> {
+export async function syncDisputes(syncParams?: SyncBackfillParams): Promise<Sync> {
   const params: Stripe.DisputeListParams = { limit: 100 }
-  if (created) params.created = created
+  if (syncParams?.created) params.created = syncParams.created
 
-  return fetchAndUpsert(() => stripe.disputes.list(params), upsertDisputes)
+  return fetchAndUpsert(
+    () => stripe.disputes.list(params),
+    (items) => upsertDisputes(items, syncParams?.backfillRelatedEntities)
+  )
 }
 
 async function fetchAndUpsert<T>(

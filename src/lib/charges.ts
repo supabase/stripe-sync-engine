@@ -9,11 +9,16 @@ import { stripe } from '../utils/StripeClientManager'
 
 const config = getConfig()
 
-export const upsertCharges = async (charges: Stripe.Charge[]): Promise<Stripe.Charge[]> => {
-  await Promise.all([
-    backfillCustomers(getUniqueIds(charges, 'customer')),
-    backfillInvoices(getUniqueIds(charges, 'invoice')),
-  ])
+export const upsertCharges = async (
+  charges: Stripe.Charge[],
+  backfillRelatedEntities: boolean = true
+): Promise<Stripe.Charge[]> => {
+  if (backfillRelatedEntities) {
+    await Promise.all([
+      backfillCustomers(getUniqueIds(charges, 'customer')),
+      backfillInvoices(getUniqueIds(charges, 'invoice')),
+    ])
+  }
 
   return upsertMany(charges, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'charges', chargeSchema)

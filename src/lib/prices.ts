@@ -9,8 +9,13 @@ import { getUniqueIds, upsertMany } from './database_utils'
 
 const config = getConfig()
 
-export const upsertPrices = async (prices: Price.Price[]): Promise<Price.Price[]> => {
-  await backfillProducts(getUniqueIds(prices, 'product'))
+export const upsertPrices = async (
+  prices: Price.Price[],
+  backfillRelatedEntities: boolean = true
+): Promise<Price.Price[]> => {
+  if (backfillRelatedEntities) {
+    await backfillProducts(getUniqueIds(prices, 'product'))
+  }
 
   return upsertMany(prices, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'prices', priceSchema)
