@@ -9,8 +9,13 @@ import { planSchema } from '../schemas/plan'
 
 const config = getConfig()
 
-export const upsertPlans = async (plans: Stripe.Plan[]): Promise<Stripe.Plan[]> => {
-  await backfillProducts(getUniqueIds(plans, 'product'))
+export const upsertPlans = async (
+  plans: Stripe.Plan[],
+  backfillRelatedEntities: boolean = true
+): Promise<Stripe.Plan[]> => {
+  if (backfillRelatedEntities) {
+    await backfillProducts(getUniqueIds(plans, 'product'))
+  }
 
   return upsertMany(plans, () => constructUpsertSql(config.SCHEMA || 'stripe', 'plans', planSchema))
 }

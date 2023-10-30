@@ -11,11 +11,14 @@ import Stripe from 'stripe'
 const config = getConfig()
 
 export const upsertSubscriptions = async (
-  subscriptions: Subscription.Subscription[]
+  subscriptions: Subscription.Subscription[],
+  backfillRelatedEntities: boolean = true
 ): Promise<Subscription.Subscription[]> => {
-  const customerIds = getUniqueIds(subscriptions, 'customer')
+  if (backfillRelatedEntities) {
+    const customerIds = getUniqueIds(subscriptions, 'customer')
 
-  await backfillCustomers(customerIds)
+    await backfillCustomers(customerIds)
+  }
 
   // Run it
   const rows = await upsertMany(subscriptions, () =>

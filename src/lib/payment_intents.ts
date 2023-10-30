@@ -9,12 +9,15 @@ import { paymentIntentSchema } from '../schemas/payment_intent'
 const config = getConfig()
 
 export const upsertPaymentIntents = async (
-  paymentIntents: Stripe.PaymentIntent[]
+  paymentIntents: Stripe.PaymentIntent[],
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.PaymentIntent[]> => {
-  await Promise.all([
-    backfillCustomers(getUniqueIds(paymentIntents, 'customer')),
-    backfillInvoices(getUniqueIds(paymentIntents, 'invoice')),
-  ])
+  if (backfillRelatedEntities) {
+    await Promise.all([
+      backfillCustomers(getUniqueIds(paymentIntents, 'customer')),
+      backfillInvoices(getUniqueIds(paymentIntents, 'invoice')),
+    ])
+  }
 
   return upsertMany(paymentIntents, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'payment_intents', paymentIntentSchema)

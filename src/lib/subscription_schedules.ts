@@ -10,11 +10,14 @@ import { subscriptionScheduleSchema } from '../schemas/subscription_schedules'
 const config = getConfig()
 
 export const upsertSubscriptionSchedules = async (
-  subscriptionSchedules: Subscription.SubscriptionSchedule[]
+  subscriptionSchedules: Subscription.SubscriptionSchedule[],
+  backfillRelatedEntities: boolean = true
 ): Promise<Subscription.SubscriptionSchedule[]> => {
-  const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
+  if (backfillRelatedEntities) {
+    const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 
-  await backfillCustomers(customerIds)
+    await backfillCustomers(customerIds)
+  }
 
   // Run it
   const rows = await upsertMany(subscriptionSchedules, () =>

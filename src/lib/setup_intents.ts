@@ -8,9 +8,12 @@ import { getUniqueIds, upsertMany } from './database_utils'
 const config = getConfig()
 
 export const upsertSetupIntents = async (
-  setupIntents: Stripe.SetupIntent[]
+  setupIntents: Stripe.SetupIntent[],
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.SetupIntent[]> => {
-  await backfillCustomers(getUniqueIds(setupIntents, 'customer'))
+  if (backfillRelatedEntities) {
+    await backfillCustomers(getUniqueIds(setupIntents, 'customer'))
+  }
 
   return upsertMany(setupIntents, () =>
     constructUpsertSql(config.SCHEMA || 'stripe', 'setup_intents', setupIntentsSchema)
