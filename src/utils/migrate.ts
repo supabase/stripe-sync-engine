@@ -17,7 +17,7 @@ async function connectAndMigrate(
 
   const dbConfig = {
     connectionString: databaseUrl,
-    connectionTimeoutMillis: 1000,
+    connectionTimeoutMillis: 10_000,
   }
   const optionalConfig = {
     schemaName: config.SCHEMA,
