@@ -55,6 +55,7 @@ export default async function routes(fastify: FastifyInstance) {
         case 'customer.subscription.paused':
         case 'customer.subscription.pending_update_applied':
         case 'customer.subscription.pending_update_expired':
+        case 'customer.subscription.trial_will_end':
         case 'customer.subscription.resumed':
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Stripe.Subscription
@@ -64,9 +65,12 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.created':
         case 'invoice.deleted':
         case 'invoice.finalized':
+        case 'invoice.finalization_failed':
         case 'invoice.paid':
+        case 'invoice.payment_action_required':
         case 'invoice.payment_failed':
         case 'invoice.payment_succeeded':
+        case 'invoice.upcoming':
         case 'invoice.updated': {
           const invoice = event.data.object as Stripe.Invoice
           await upsertInvoices([invoice])
