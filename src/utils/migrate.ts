@@ -5,28 +5,18 @@ import fs from 'node:fs'
 
 const config = getConfig()
 
-async function connectAndMigrate(
-  databaseUrl: string | undefined,
-  migrationsDirectory: string,
-  logOnError = false
-) {
+async function connectAndMigrate(client: Client, migrationsDirectory: string, logOnError = false) {
   if (!fs.existsSync(migrationsDirectory)) {
     console.log(`Migrations directory ${migrationsDirectory} not found, skipping`)
     return
   }
 
-  const dbConfig = {
-    connectionString: databaseUrl,
-    connectionTimeoutMillis: 10_000,
-  }
   const optionalConfig = {
     schemaName: config.SCHEMA,
     tableName: 'migrations',
   }
 
-  const client = new Client(dbConfig)
   try {
-    await client.connect()
     await migrate({ client }, migrationsDirectory, optionalConfig)
   } catch (error) {
     if (logOnError && error instanceof Error) {
@@ -34,15 +24,13 @@ async function connectAndMigrate(
     } else {
       throw error
     }
-  } finally {
-    await client.end()
   }
 }
 
-export async function runMigrations(): Promise<void> {
+export async function runMigrations(client: Client): Promise<void> {
   try {
     console.log('Running migrations')
-    await connectAndMigrate(config.DATABASE_URL, './db/migrations')
+    await connectAndMigrate(client, './db/migrations')
   } catch (error) {
     throw error
   } finally {
