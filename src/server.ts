@@ -3,6 +3,10 @@ import { Server, IncomingMessage, ServerResponse } from 'http'
 import { runMigrations } from './utils/migrate'
 import { createServer } from './app'
 import pino from 'pino'
+import { getConfig } from './utils/config'
+import { Client } from 'pg'
+
+const config = getConfig()
 
 const logger = pino({
   formatters: {
@@ -23,8 +27,24 @@ const main = async () => {
   // Init config
   const port = process.env.PORT || 8080
 
+  // Init DB
+  const dbConfig = {
+    connectionString: config.DATABASE_URL,
+    connectionTimeoutMillis: 10_000,
+  }
+  const client = new Client(dbConfig)
+
   // Run migrations
-  await runMigrations()
+  try {
+    await client.connect()
+
+    // Ensure schema exists, not doing it via migration to not break current migration checksums
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
+
+    await runMigrations(client)
+  } finally {
+    await client.end()
+  }
 
   // Start the server
   app.listen({ port: Number(port), host: '0.0.0.0' }, (err, address) => {
