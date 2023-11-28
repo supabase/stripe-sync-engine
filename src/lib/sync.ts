@@ -15,6 +15,7 @@ import { pg as sql } from 'yesql'
 import { upsertPaymentIntents } from './payment_intents'
 import { upsertPlans } from './plans'
 import { upsertSubscriptionSchedules } from './subscription_schedules'
+import pLimit from 'p-limit'
 
 const config = getConfig()
 
@@ -305,21 +306,25 @@ export async function syncPaymentMethods(syncParams?: SyncBackfillParams): Promi
 
   let synced = 0
 
-  for (const customerId of customerIds) {
-    const syncResult = await fetchAndUpsert(
-      () =>
-        // The type parameter is optional, types are wrong
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        stripe.paymentMethods.list({
-          limit: 100,
-          customer: customerId,
-        }),
-      (items) => upsertPaymentMethods(items, syncParams?.backfillRelatedEntities)
-    )
+  // 10 in parallel
+  const limit = pLimit(10)
 
-    synced += syncResult.synced
-  }
+  const syncs = customerIds.map((customerId) =>
+    limit(async () => {
+      const syncResult = await fetchAndUpsert(
+        () =>
+          stripe.paymentMethods.list({
+            limit: 100,
+            customer: customerId,
+          }),
+        (items) => upsertPaymentMethods(items, syncParams?.backfillRelatedEntities)
+      )
+
+      synced += syncResult.synced
+    })
+  )
+
+  await Promise.all(syncs)
 
   return { synced }
 }
