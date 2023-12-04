@@ -4,7 +4,7 @@ import { runMigrations } from './utils/migrate'
 import { createServer } from './app'
 import pino from 'pino'
 import { getConfig } from './utils/config'
-import { Client } from 'pg'
+import { Client, ClientConfig } from 'pg'
 
 const config = getConfig()
 
@@ -28,9 +28,12 @@ const main = async () => {
   const port = process.env.PORT || 8080
 
   // Init DB
-  const dbConfig = {
+  const dbConfig: ClientConfig = {
     connectionString: config.DATABASE_URL,
     connectionTimeoutMillis: 10_000,
+    ssl: {
+      rejectUnauthorized: config.DATABASE_SSL_REJECT_UNAUTHORIZED,
+    },
   }
   const client = new Client(dbConfig)
 

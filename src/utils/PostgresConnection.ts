@@ -2,7 +2,12 @@ import { Pool, QueryResult } from 'pg'
 import { getConfig } from './config'
 
 const config = getConfig()
-const pool = new Pool({ connectionString: config.DATABASE_URL })
+const pool = new Pool({
+  connectionString: config.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: config.DATABASE_SSL_REJECT_UNAUTHORIZED,
+  },
+})
 
 /**
  * Use this inside a route/file
