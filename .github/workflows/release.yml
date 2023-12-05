@@ -70,7 +70,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: true
-          tags: supabase/stripe-sync-engine:latest,supabase/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/stripe-sync-engine:latest,${{ secrets.DOCKERHUB_USERNAME }}/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
           platforms: linux/amd64,linux/arm64
 
       - name: Image digest
