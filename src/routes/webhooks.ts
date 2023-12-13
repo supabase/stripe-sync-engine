@@ -166,7 +166,7 @@ export default async function routes(fastify: FastifyInstance) {
         }
 
         default:
-          throw new Error('Unhandled webhook event')
+          return reply.send({ received: true, handled: false })
       }
 
       return reply.send({ received: true })
