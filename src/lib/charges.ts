@@ -20,7 +20,7 @@ export const upsertCharges = async (
     ])
   }
 
-  // Stripe only sends the first 10 line items by default, the option will actively fetch all refunds
+  // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
   if (getConfig().AUTO_EXPAND_LISTS) {
     for (const charge of charges) {
       if (charge.refunds?.has_more) {

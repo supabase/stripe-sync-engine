@@ -19,7 +19,7 @@ export const upsertSubscriptions = async (
     await backfillCustomers(customerIds)
   }
 
-  // Stripe only sends the first 10 line items by default, the option will actively fetch all items
+  // Stripe only sends the first 10 items by default, the option will actively fetch all items
   if (getConfig().AUTO_EXPAND_LISTS) {
     for (const subscription of subscriptions) {
       if (subscription.items?.has_more) {
