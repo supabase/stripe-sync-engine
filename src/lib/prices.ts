@@ -1,4 +1,4 @@
-import Price from 'stripe'
+import Stripe from 'stripe'
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
@@ -10,9 +10,9 @@ import { getUniqueIds, upsertMany } from './database_utils'
 const config = getConfig()
 
 export const upsertPrices = async (
-  prices: Price.Price[],
+  prices: Stripe.Price[],
   backfillRelatedEntities: boolean = true
-): Promise<Price.Price[]> => {
+): Promise<Stripe.Price[]> => {
   if (backfillRelatedEntities) {
     await backfillProducts(getUniqueIds(prices, 'product'))
   }

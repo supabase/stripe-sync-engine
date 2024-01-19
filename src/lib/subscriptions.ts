@@ -1,4 +1,3 @@
-import Subscription from 'stripe'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
@@ -11,13 +10,34 @@ import Stripe from 'stripe'
 const config = getConfig()
 
 export const upsertSubscriptions = async (
-  subscriptions: Subscription.Subscription[],
+  subscriptions: Stripe.Subscription[],
   backfillRelatedEntities: boolean = true
-): Promise<Subscription.Subscription[]> => {
+): Promise<Stripe.Subscription[]> => {
   if (backfillRelatedEntities) {
     const customerIds = getUniqueIds(subscriptions, 'customer')
 
     await backfillCustomers(customerIds)
+  }
+
+  // Stripe only sends the first 10 items by default, the option will actively fetch all items
+  if (getConfig().AUTO_EXPAND_LISTS) {
+    for (const subscription of subscriptions) {
+      if (subscription.items?.has_more) {
+        const allItems: Stripe.SubscriptionItem[] = []
+        for await (const item of stripe.subscriptionItems.list({
+          subscription: subscription.id,
+          limit: 100,
+        })) {
+          allItems.push(item)
+        }
+
+        subscription.items = {
+          ...subscription.items,
+          data: allItems,
+          has_more: false,
+        }
+      }
+    }
   }
 
   // Run it
@@ -35,7 +55,7 @@ export const upsertSubscriptions = async (
   const markSubscriptionItemsDeleted: Promise<{ rowCount: number }>[] = []
   for (const subscription of subscriptions) {
     const subscriptionItems = subscription.items.data
-    const subItemIds = subscriptionItems.map((x: Subscription.SubscriptionItem) => x.id)
+    const subItemIds = subscriptionItems.map((x: Stripe.SubscriptionItem) => x.id)
     markSubscriptionItemsDeleted.push(markDeletedSubscriptionItems(subscription.id, subItemIds))
   }
   await Promise.all(markSubscriptionItemsDeleted)

@@ -1,4 +1,3 @@
-import Subscription from 'stripe'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
@@ -10,9 +9,9 @@ import { subscriptionScheduleSchema } from '../schemas/subscription_schedules'
 const config = getConfig()
 
 export const upsertSubscriptionSchedules = async (
-  subscriptionSchedules: Subscription.SubscriptionSchedule[],
+  subscriptionSchedules: Stripe.SubscriptionSchedule[],
   backfillRelatedEntities: boolean = true
-): Promise<Subscription.SubscriptionSchedule[]> => {
+): Promise<Stripe.SubscriptionSchedule[]> => {
   if (backfillRelatedEntities) {
     const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 

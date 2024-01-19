@@ -21,7 +21,7 @@ jobs:
       new-release-version: ${{ steps.semantic-release.outputs.new_release_version }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -34,7 +34,7 @@ jobs:
 
       - name: Run semantic-release
         id: semantic-release
-        uses: cycjimmy/semantic-release-action@v3
+        uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 19
         env:

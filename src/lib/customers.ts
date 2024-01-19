@@ -1,4 +1,3 @@
-import Customer from 'stripe'
 import { getConfig } from '../utils/config'
 import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
@@ -8,9 +7,7 @@ import { findMissingEntries, upsertMany } from './database_utils'
 
 const config = getConfig()
 
-export const upsertCustomers = async (
-  customers: Customer.Customer[]
-): Promise<Customer.Customer[]> => {
+export const upsertCustomers = async (customers: Stripe.Customer[]): Promise<Stripe.Customer[]> => {
   return upsertMany(customers, (customer) => {
     // handle deleted customer
     if (customer.deleted) {
