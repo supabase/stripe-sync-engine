@@ -20,12 +20,12 @@ const logger = pino({
 const main = async () => {
   const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = await createServer({
     logger,
-    exposeDocs: process.env.NODE_ENV !== 'production',
+    exposeDocs: getConfig().NODE_ENV !== 'production',
     requestIdHeader: 'Request-Id',
   })
 
   // Init config
-  const port = process.env.PORT || 8080
+  const port = getConfig().PORT
 
   // Init DB
   const dbConfig = {

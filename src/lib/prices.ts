@@ -17,9 +17,7 @@ export const upsertPrices = async (
     await backfillProducts(getUniqueIds(prices, 'product'))
   }
 
-  return upsertMany(prices, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'prices', priceSchema)
-  )
+  return upsertMany(prices, () => constructUpsertSql(config.SCHEMA, 'prices', priceSchema))
 }
 
 export const deletePrice = async (id: string): Promise<boolean> => {

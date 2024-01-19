@@ -11,9 +11,7 @@ import Stripe from 'stripe'
 const config = getConfig()
 
 export const upsertProducts = async (products: Product.Product[]): Promise<Product.Product[]> => {
-  return upsertMany(products, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'products', productSchema)
-  )
+  return upsertMany(products, () => constructUpsertSql(config.SCHEMA, 'products', productSchema))
 }
 
 export const deleteProduct = async (id: string): Promise<boolean> => {

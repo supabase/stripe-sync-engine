@@ -21,9 +21,7 @@ export const upsertInvoices = async (
     ])
   }
 
-  return upsertMany(invoices, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'invoices', invoiceSchema)
-  )
+  return upsertMany(invoices, () => constructUpsertSql(config.SCHEMA, 'invoices', invoiceSchema))
 }
 
 export const backfillInvoices = async (invoiceIds: string[]) => {

@@ -20,6 +20,6 @@ export const upsertPaymentIntents = async (
   }
 
   return upsertMany(paymentIntents, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'payment_intents', paymentIntentSchema)
+    constructUpsertSql(config.SCHEMA, 'payment_intents', paymentIntentSchema)
   )
 }

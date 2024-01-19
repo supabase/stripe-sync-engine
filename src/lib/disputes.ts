@@ -15,7 +15,5 @@ export const upsertDisputes = async (
     await backfillCharges(getUniqueIds(disputes, 'charge'))
   }
 
-  return upsertMany(disputes, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'disputes', disputeSchema)
-  )
+  return upsertMany(disputes, () => constructUpsertSql(config.SCHEMA, 'disputes', disputeSchema))
 }
