@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { Server, IncomingMessage, ServerResponse } from 'http'
+import { Server, IncomingMessage, ServerResponse } from 'node:http'
 import { runMigrations } from './utils/migrate'
 import { createServer } from './app'
 import pino from 'pino'
