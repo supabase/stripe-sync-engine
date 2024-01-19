@@ -20,6 +20,24 @@ export const upsertCharges = async (
     ])
   }
 
+  // Stripe only sends the first 10 line items by default, the option will actively fetch all refunds
+  if (getConfig().AUTO_EXPAND_LISTS) {
+    for (const charge of charges) {
+      if (charge.refunds?.has_more) {
+        const allRefunds: Stripe.Refund[] = []
+        for await (const refund of stripe.refunds.list({ charge: charge.id, limit: 100 })) {
+          allRefunds.push(refund)
+        }
+
+        charge.refunds = {
+          ...charge.refunds,
+          data: allRefunds,
+          has_more: false,
+        }
+      }
+    }
+  }
+
   return upsertMany(charges, () => constructUpsertSql(config.SCHEMA, 'charges', chargeSchema))
 }
 
@@ -38,5 +56,5 @@ const fetchAndInsertCharges = async (chargeIds: string[]) => {
     charges.push(charge)
   }
 
-  await upsertCharges(charges)
+  await upsertCharges(charges, true)
 }

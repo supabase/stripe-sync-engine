@@ -1,4 +1,4 @@
-import Subscription from 'stripe'
+import Stripe from 'stripe'
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
@@ -8,9 +8,7 @@ import { upsertMany } from './database_utils'
 
 const config = getConfig()
 
-export const upsertSubscriptionItems = async (
-  subscriptionItems: Subscription.SubscriptionItem[]
-) => {
+export const upsertSubscriptionItems = async (subscriptionItems: Stripe.SubscriptionItem[]) => {
   const modifiedSubscriptionItems = subscriptionItems.map((subscriptionItem) => {
     // Modify price object to string id; reference prices table
     const priceId = subscriptionItem.price.id.toString()

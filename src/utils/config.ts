@@ -23,6 +23,12 @@ type configType = {
 
   /** Port number the API is running on, defaults to 8080 */
   PORT: number
+
+  /**
+   * Stripe limits related lists like invoice items in an invoice to 10 by default.
+   * By enabling this, sync-engine automatically fetches the remaining elements before saving
+   * */
+  AUTO_EXPAND_LISTS: boolean
 }
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
@@ -45,5 +51,6 @@ export function getConfig(): configType {
     API_KEY: getConfigFromEnv('API_KEY', 'false'),
     STRIPE_API_VERSION: getConfigFromEnv('STRIPE_API_VERSION', '2020-08-27'),
     PORT: Number(getConfigFromEnv('PORT', '8080')),
+    AUTO_EXPAND_LISTS: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
   }
 }

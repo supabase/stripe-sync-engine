@@ -1,4 +1,3 @@
-import Invoice from 'stripe'
 import { getConfig } from '../utils/config'
 import { constructUpsertSql } from '../utils/helpers'
 import { invoiceSchema } from '../schemas/invoice'
@@ -11,14 +10,32 @@ import { stripe } from '../utils/StripeClientManager'
 const config = getConfig()
 
 export const upsertInvoices = async (
-  invoices: Invoice.Invoice[],
+  invoices: Stripe.Invoice[],
   backfillRelatedEntities: boolean = true
-): Promise<Invoice.Invoice[]> => {
+): Promise<Stripe.Invoice[]> => {
   if (backfillRelatedEntities) {
     await Promise.all([
       backfillCustomers(getUniqueIds(invoices, 'customer')),
       backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
     ])
+  }
+
+  // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
+  if (getConfig().AUTO_EXPAND_LISTS) {
+    for (const invoice of invoices) {
+      if (invoice.lines.has_more) {
+        const allLineItems: Stripe.InvoiceLineItem[] = []
+        for await (const lineItem of stripe.invoices.listLineItems(invoice.id, { limit: 100 })) {
+          allLineItems.push(lineItem)
+        }
+
+        invoice.lines = {
+          ...invoice.lines,
+          data: allLineItems,
+          has_more: false,
+        }
+      }
+    }
   }
 
   return upsertMany(invoices, () => constructUpsertSql(config.SCHEMA, 'invoices', invoiceSchema))

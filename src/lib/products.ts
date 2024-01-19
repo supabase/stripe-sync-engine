@@ -1,4 +1,3 @@
-import Product from 'stripe'
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
 import { getConfig } from '../utils/config'
@@ -10,7 +9,7 @@ import Stripe from 'stripe'
 
 const config = getConfig()
 
-export const upsertProducts = async (products: Product.Product[]): Promise<Product.Product[]> => {
+export const upsertProducts = async (products: Stripe.Product[]): Promise<Stripe.Product[]> => {
   return upsertMany(products, () => constructUpsertSql(config.SCHEMA, 'products', productSchema))
 }
 
