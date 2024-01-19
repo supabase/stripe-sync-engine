@@ -51,7 +51,7 @@ export const markDeletedSubscriptionItems = async (
       set deleted = true where id=any(:ids::text[]);
       `)({ ids })
     const { rowCount } = await query(prepared.text, prepared.values)
-    return { rowCount }
+    return { rowCount: rowCount || 0 }
   } else {
     return { rowCount: 0 }
   }

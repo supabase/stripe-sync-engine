@@ -2,7 +2,7 @@ import fastify, { FastifyInstance, FastifyServerOptions } from 'fastify'
 import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
-import path from 'path'
+import path from 'node:path'
 import { errorSchema } from './schemas/error'
 
 interface buildOpts extends FastifyServerOptions {
