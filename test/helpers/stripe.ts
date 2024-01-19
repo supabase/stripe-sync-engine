@@ -1,10 +1,11 @@
 import Stripe from 'stripe'
+import { getConfig } from '../../src/utils/config'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+const stripe = new Stripe(getConfig().STRIPE_SECRET_KEY, {
   // https://github.com/stripe/stripe-node#configuration
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  apiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+  apiVersion: getConfig().STRIPE_API_VERSION,
   appInfo: {
     name: 'Stripe Postgres Sync',
   },

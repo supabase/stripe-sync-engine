@@ -16,6 +16,6 @@ export const upsertSetupIntents = async (
   }
 
   return upsertMany(setupIntents, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'setup_intents', setupIntentsSchema)
+    constructUpsertSql(config.SCHEMA, 'setup_intents', setupIntentsSchema)
   )
 }

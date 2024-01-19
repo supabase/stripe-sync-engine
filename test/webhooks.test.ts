@@ -2,6 +2,7 @@
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
 import { createServer } from '../src/app'
+import { getConfig } from '../src/utils/config'
 import stripeMock from './helpers/stripe'
 import 'dotenv/config'
 
@@ -10,7 +11,7 @@ jest.doMock('stripe', () => {
 })
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
+const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
 
 describe('/webhooks', () => {
   let server: FastifyInstance

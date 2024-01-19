@@ -22,7 +22,7 @@ export const upsertSubscriptions = async (
 
   // Run it
   const rows = await upsertMany(subscriptions, () =>
-    constructUpsertSql(config.SCHEMA || 'stripe', 'subscriptions', subscriptionSchema)
+    constructUpsertSql(config.SCHEMA, 'subscriptions', subscriptionSchema)
   )
 
   // Upsert subscription items into a separate table

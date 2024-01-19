@@ -14,9 +14,9 @@ export const upsertCustomers = async (
   return upsertMany(customers, (customer) => {
     // handle deleted customer
     if (customer.deleted) {
-      return constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerDeletedSchema)
+      return constructUpsertSql(config.SCHEMA, 'customers', customerDeletedSchema)
     } else {
-      return constructUpsertSql(config.SCHEMA || 'stripe', 'customers', customerSchema)
+      return constructUpsertSql(config.SCHEMA, 'customers', customerSchema)
     }
   })
 }

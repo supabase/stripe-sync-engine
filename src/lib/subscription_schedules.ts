@@ -21,11 +21,7 @@ export const upsertSubscriptionSchedules = async (
 
   // Run it
   const rows = await upsertMany(subscriptionSchedules, () =>
-    constructUpsertSql(
-      config.SCHEMA || 'stripe',
-      'subscription_schedules',
-      subscriptionScheduleSchema
-    )
+    constructUpsertSql(config.SCHEMA, 'subscription_schedules', subscriptionScheduleSchema)
   )
 
   return rows
