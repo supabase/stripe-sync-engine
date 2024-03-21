@@ -1,0 +1,30 @@
+{
+  "id": "evt_3KtQThJDPojXS6LN0E06aNxq",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619701111,
+  "data": {
+    "object": {
+      "id": "txi_1NuMB12eZvKYlo2CMecoWkZd",
+      "object": "tax_id",
+      "country": "DE",
+      "created": 123456789,
+      "customer": null,
+      "livemode": false,
+      "type": "eu_vat",
+      "value": "DE123456789",
+      "verification": null,
+      "owner": {
+        "type": "self",
+        "customer": null
+      }
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 4,
+  "request": {
+    "id": "req_QyDCzn33ls4m1t",
+    "idempotency_key": null
+  },
+  "type": "customer.tax_id.updated"
+}

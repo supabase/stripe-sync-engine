@@ -36,7 +36,7 @@
     "pg": "^8.11.3",
     "pg-node-migrations": "0.0.8",
     "pino": "^8.17.2",
-    "stripe": "^14.13.0",
+    "stripe": "^14.21.0",
     "yesql": "^7.0.0"
   },
   "devDependencies": {

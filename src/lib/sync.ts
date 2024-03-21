@@ -16,6 +16,7 @@ import { upsertPaymentIntents } from './payment_intents'
 import { upsertPlans } from './plans'
 import { upsertSubscriptionSchedules } from './subscription_schedules'
 import pLimit from 'p-limit'
+import { upsertTaxIds } from './tax_ids'
 
 const config = getConfig()
 
@@ -36,6 +37,7 @@ interface SyncBackfill {
   paymentMethods?: Sync
   disputes?: Sync
   charges?: Sync
+  taxIds?: Sync
 }
 
 export interface SyncBackfillParams {
@@ -58,6 +60,7 @@ type SyncObject =
   | 'charge'
   | 'payment_intent'
   | 'plan'
+  | 'tax_id'
 
 export async function syncSingleEntity(stripeId: string) {
   if (stripeId.startsWith('cus_')) {
@@ -84,6 +87,8 @@ export async function syncSingleEntity(stripeId: string) {
     return stripe.charges.retrieve(stripeId).then((it) => upsertCharges([it]))
   } else if (stripeId.startsWith('pi_')) {
     return stripe.paymentIntents.retrieve(stripeId).then((it) => upsertPaymentIntents([it]))
+  } else if (stripeId.startsWith('txi_')) {
+    return stripe.taxIds.retrieve(stripeId).then((it) => upsertTaxIds([it]))
   }
 }
 
@@ -100,7 +105,8 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     disputes,
     charges,
     paymentIntents,
-    plans
+    plans,
+    taxIds
 
   switch (object) {
     case 'all':
@@ -115,6 +121,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
       setupIntents = await syncSetupIntents(params)
       paymentMethods = await syncPaymentMethods(params)
       paymentIntents = await syncPaymentIntents(params)
+      taxIds = await syncTaxIds(params)
       break
     case 'customer':
       customers = await syncCustomers(params)
@@ -151,6 +158,9 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     case 'plan':
       plans = await syncPlans(params)
       break
+    case 'tax_id':
+      taxIds = await syncTaxIds(params)
+      break
     default:
       break
   }
@@ -168,6 +178,7 @@ export async function syncBackfill(params?: SyncBackfillParams): Promise<SyncBac
     charges,
     paymentIntents,
     plans,
+    taxIds,
   }
 }
 
@@ -288,6 +299,17 @@ export async function syncPaymentIntents(syncParams?: SyncBackfillParams): Promi
   return fetchAndUpsert(
     () => stripe.paymentIntents.list(params),
     (items) => upsertPaymentIntents(items, syncParams?.backfillRelatedEntities)
+  )
+}
+
+export async function syncTaxIds(syncParams?: SyncBackfillParams): Promise<Sync> {
+  console.log('Syncing tax_ids')
+
+  const params: Stripe.TaxIdListParams = { limit: 100 }
+
+  return fetchAndUpsert(
+    () => stripe.taxIds.list(params),
+    (items) => upsertTaxIds(items, syncParams?.backfillRelatedEntities)
   )
 }
 
