@@ -58,12 +58,15 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `invoice.deleted` 🟢
 - [x] `invoice.finalized` 🟢
 - [x] `invoice.finalization_failed` 🟢
+- [x] `invoice.marked_uncollectible` 🟢
 - [x] `invoice.paid` 🟢
 - [x] `invoice.payment_action_required` 🟢
 - [x] `invoice.payment_failed` 🟢
 - [x] `invoice.payment_succeeded` 🟢
+- [x] `invoice.sent` 🟢
 - [x] `invoice.upcoming` 🟢
 - [x] `invoice.updated` 🟢
+- [x] `invoice.voided` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`

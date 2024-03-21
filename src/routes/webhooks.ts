@@ -71,6 +71,9 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.payment_failed':
         case 'invoice.payment_succeeded':
         case 'invoice.upcoming':
+        case 'invoice.sent':
+        case 'invoice.voided':
+        case 'invoice.marked_uncollectible':
         case 'invoice.updated': {
           const invoice = event.data.object as Stripe.Invoice
           await upsertInvoices([invoice])
