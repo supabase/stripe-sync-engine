@@ -14,6 +14,7 @@ import { upsertDisputes } from '../lib/disputes'
 import { deletePlan, upsertPlans } from '../lib/plans'
 import { upsertPaymentIntents } from '../lib/payment_intents'
 import { upsertSubscriptionSchedules } from '../lib/subscription_schedules'
+import { deleteTaxId, upsertTaxIds } from '../lib/tax_ids'
 
 const config = getConfig()
 
@@ -60,6 +61,17 @@ export default async function routes(fastify: FastifyInstance) {
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Stripe.Subscription
           await upsertSubscriptions([subscription])
+          break
+        }
+        case 'customer.tax_id.updated':
+        case 'customer.tax_id.created': {
+          const taxId = event.data.object as Stripe.TaxId
+          await upsertTaxIds([taxId])
+          break
+        }
+        case 'customer.tax_id.deleted': {
+          const taxId = event.data.object as Stripe.TaxId
+          await deleteTaxId(taxId.id)
           break
         }
         case 'invoice.created':
