@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "dev": "tsx --watch ./src/server.ts",
     "build": "tsc -p tsconfig.json",
@@ -54,5 +55,8 @@
     "ts-jest": "^29.1.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
