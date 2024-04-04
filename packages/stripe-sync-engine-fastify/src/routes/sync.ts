@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { syncBackfill, SyncBackfillParams, syncSingleEntity } from '@stripe-sync-engine/lib'
+import { syncBackfill, SyncBackfillParams, syncSingleEntity } from 'stripe-sync-engine-lib'
 import { verifyApiKey } from '../utils/verifyApiKey'
 
 import Stripe from 'stripe'

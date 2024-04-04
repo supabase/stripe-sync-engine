@@ -2,14 +2,17 @@
   "name": "stripe-sync-engine-fastify",
   "version": "0.0.1",
   "description": "Stripe sync engine node fastify. Sync your Stripe account to your Postgres database",
-  "main": "index.js",
+  "main": "src/server.ts",
   "author": "Supabase",
   "license": "MIT",
   "engines": {
     "node": ">= 20.0.0"
   },
+  "scripts": {
+    "dev": "tsx --watch ./src/server.ts"
+  },
   "dependencies": {
-    "@stripe-sync-engine/lib": "^1.0.0",
+    "stripe-sync-engine-lib": "*",
     "@fastify/autoload": "^5.8.0",
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^2.1.0",
@@ -37,5 +40,6 @@
     "ts-jest": "^29.1.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
-  }
+  },
+  "keywords": []
 }
