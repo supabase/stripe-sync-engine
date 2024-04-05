@@ -1,1 +1,1 @@
-export { syncBackfill, SyncBackfillParams } from './lib/sync'
+export { syncBackfill, SyncBackfillParams, syncSingleEntity } from './lib/sync'

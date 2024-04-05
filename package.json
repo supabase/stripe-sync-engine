@@ -5,7 +5,6 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "dev": "tsx --watch ./src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "NODE_ENV=production node dist/server.js",
     "test": "node -r dotenv/config node_modules/.bin/jest --detectOpenHandles",

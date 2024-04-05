@@ -7,7 +7,6 @@ import { getConfig } from './utils/config'
 import { Client } from 'pg'
 
 const config = getConfig()
-console.log(config)
 
 const logger = pino({
   formatters: {
@@ -37,17 +36,12 @@ const main = async () => {
 
   // Run migrations
   try {
-    console.log('connecting to db')
     await client.connect()
 
-    console.log('connected to db')
     // Ensure schema exists, not doing it via migration to not break current migration checksums
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
 
-    console.log('created schema')
     await runMigrations(client)
-  } catch (e) {
-    console.log(e)
   } finally {
     await client.end()
   }

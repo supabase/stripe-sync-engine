@@ -1,5 +1,5 @@
 {
-  "name": "@stripe-sync-engine/lib",
+  "name": "stripe-sync-engine-lib",
   "version": "0.0.1",
   "description": "Stripe sync engine lib. Sync your Stripe account to your Postgres database",
   "main": "index.js",
@@ -34,8 +34,9 @@
   },
   "exports": {
     ".": {
-      "default": "./lib/index.js"
+      "default": "./src/index.ts"
     },
     "./package.json": "./package.json"
-  }
+  },
+  "keywords": []
 }
