@@ -2,15 +2,15 @@ import Stripe from 'stripe'
 
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
-
-import { getConfig } from '../utils/config'
 import { constructUpsertSql } from '../utils/helpers'
 import { subscriptionItemSchema } from '../schemas/subscription_item'
 import { upsertMany } from './database_utils'
+import { ConfigType } from '../types/types'
 
-const config = getConfig()
-
-export const upsertSubscriptionItems = async (subscriptionItems: Stripe.SubscriptionItem[]) => {
+export const upsertSubscriptionItems = async (
+  subscriptionItems: Stripe.SubscriptionItem[],
+  config: ConfigType
+) => {
   const modifiedSubscriptionItems = subscriptionItems.map((subscriptionItem) => {
     // Modify price object to string id; reference prices table
     const priceId = subscriptionItem.price.id.toString()
@@ -26,20 +26,23 @@ export const upsertSubscriptionItems = async (subscriptionItems: Stripe.Subscrip
     }
   })
 
-  await upsertMany(modifiedSubscriptionItems, () =>
-    constructUpsertSql(config.SCHEMA, 'subscription_items', subscriptionItemSchema)
+  await upsertMany(
+    modifiedSubscriptionItems,
+    () => constructUpsertSql(config.SCHEMA, 'subscription_items', subscriptionItemSchema),
+    config.DATABASE_URL
   )
 }
 
 export const markDeletedSubscriptionItems = async (
   subscriptionId: string,
-  currentSubItemIds: string[]
+  currentSubItemIds: string[],
+  config: ConfigType
 ): Promise<{ rowCount: number }> => {
   let prepared = sql(`
     select id from "${config.SCHEMA}"."subscription_items"
     where subscription = :subscriptionId and deleted = false;
     `)({ subscriptionId })
-  const { rows } = await query(prepared.text, prepared.values)
+  const { rows } = await query(prepared.text, config.DATABASE_URL, prepared.values)
   const deletedIds = rows.filter(
     ({ id }: { id: string }) => currentSubItemIds.includes(id) === false
   )
@@ -50,7 +53,7 @@ export const markDeletedSubscriptionItems = async (
       update "${config.SCHEMA}"."subscription_items"
       set deleted = true where id=any(:ids::text[]);
       `)({ ids })
-    const { rowCount } = await query(prepared.text, prepared.values)
+    const { rowCount } = await query(prepared.text, config.DATABASE_URL, prepared.values)
     return { rowCount: rowCount || 0 }
   } else {
     return { rowCount: 0 }

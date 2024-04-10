@@ -1,45 +1,54 @@
-import { getConfig } from '../utils/config'
-import { stripe } from '../utils/StripeClientManager'
 import { constructUpsertSql } from '../utils/helpers'
 import { backfillCustomers } from './customers'
 import { findMissingEntries, getUniqueIds, upsertMany } from './database_utils'
 import Stripe from 'stripe'
 import { subscriptionScheduleSchema } from '../schemas/subscription_schedules'
-
-const config = getConfig()
+import { ConfigType } from '../types/types'
+import { getStripe } from '../utils/StripeClientManager'
 
 export const upsertSubscriptionSchedules = async (
   subscriptionSchedules: Stripe.SubscriptionSchedule[],
-  backfillRelatedEntities: boolean = true
+  backfillRelatedEntities: boolean = true,
+  config: ConfigType
 ): Promise<Stripe.SubscriptionSchedule[]> => {
   if (backfillRelatedEntities) {
     const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 
-    await backfillCustomers(customerIds)
+    await backfillCustomers(customerIds, config)
   }
 
   // Run it
-  const rows = await upsertMany(subscriptionSchedules, () =>
-    constructUpsertSql(config.SCHEMA, 'subscription_schedules', subscriptionScheduleSchema)
+  const rows = await upsertMany(
+    subscriptionSchedules,
+    () => constructUpsertSql(config.SCHEMA, 'subscription_schedules', subscriptionScheduleSchema),
+    config.DATABASE_URL
   )
 
   return rows
 }
 
-export const backfillSubscriptionSchedules = async (subscriptionIds: string[]) => {
-  const missingSubscriptionIds = await findMissingEntries('subscription_schedules', subscriptionIds)
-  await fetchAndInsertSubscriptions(missingSubscriptionIds)
+export const backfillSubscriptionSchedules = async (
+  subscriptionIds: string[],
+  config: ConfigType
+) => {
+  const missingSubscriptionIds = await findMissingEntries(
+    'subscription_schedules',
+    subscriptionIds,
+    config
+  )
+  await fetchAndInsertSubscriptions(missingSubscriptionIds, config)
 }
 
-const fetchAndInsertSubscriptions = async (subscriptionIds: string[]) => {
+const fetchAndInsertSubscriptions = async (subscriptionIds: string[], config: ConfigType) => {
   if (!subscriptionIds.length) return
 
   const subscriptionSchedules: Stripe.SubscriptionSchedule[] = []
 
   for (const subscriptionScheduleId of subscriptionIds) {
-    const subscriptionSchedule = await stripe.subscriptionSchedules.retrieve(subscriptionScheduleId)
+    const subscriptionSchedule =
+      await getStripe(config).subscriptionSchedules.retrieve(subscriptionScheduleId)
     subscriptionSchedules.push(subscriptionSchedule)
   }
 
-  await upsertSubscriptionSchedules(subscriptionSchedules)
+  await upsertSubscriptionSchedules(subscriptionSchedules, true, config)
 }

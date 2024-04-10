@@ -3,9 +3,7 @@ import { QueryResult } from 'pg'
 import { cleanseArrayField } from '../utils/helpers'
 import { query } from '../utils/PostgresConnection'
 import { pg as sql } from 'yesql'
-import { getConfig } from '../utils/config'
-
-const config = getConfig()
+import { ConfigType } from '../types/types'
 
 export const upsertMany = async <
   T extends {
@@ -13,7 +11,8 @@ export const upsertMany = async <
   },
 >(
   entries: T[],
-  upsertSql: (entry: T) => string
+  upsertSql: (entry: T) => string,
+  databaseURL: string
 ): Promise<T[]> => {
   const queries: Promise<QueryResult<T>>[] = []
 
@@ -22,7 +21,7 @@ export const upsertMany = async <
     const cleansed = cleanseArrayField(entry)
     const prepared = sql(upsertSql(entry), { useNullForMissing: true })(cleansed)
 
-    queries.push(query(prepared.text, prepared.values))
+    queries.push(query(prepared.text, databaseURL, prepared.values))
   })
 
   // Run it
@@ -31,7 +30,11 @@ export const upsertMany = async <
   return results.flatMap((it) => it.rows)
 }
 
-export const findMissingEntries = async (table: string, ids: string[]): Promise<string[]> => {
+export const findMissingEntries = async (
+  table: string,
+  ids: string[],
+  config: ConfigType
+): Promise<string[]> => {
   if (!ids.length) return []
 
   const prepared = sql(`
@@ -39,7 +42,7 @@ export const findMissingEntries = async (table: string, ids: string[]): Promise<
     where id=any(:ids::text[]);
     `)({ ids })
 
-  const { rows } = await query(prepared.text, prepared.values)
+  const { rows } = await query(prepared.text, config.DATABASE_URL, prepared.values)
   const existingIds = rows.map((it) => it.id)
 
   const missingIds = ids.filter((it) => !existingIds.includes(it))

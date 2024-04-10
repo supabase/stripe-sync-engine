@@ -8,11 +8,15 @@ export class StripeSyncEngine {
     this.config = config
   }
 
+  public getConfig(): ConfigType {
+    return this.config
+  }
+
   public syncBackfill(params?: SyncBackfillParams): void {
-    syncBackfill(params)
+    syncBackfill(this.config, params)
   }
 
   public syncSingleEntity(stripeId: string): void {
-    syncSingleEntity(stripeId)
+    syncSingleEntity(stripeId, this.config)
   }
 }

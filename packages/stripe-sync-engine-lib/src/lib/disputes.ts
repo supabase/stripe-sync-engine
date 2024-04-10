@@ -1,19 +1,22 @@
 import Stripe from 'stripe'
-import { getConfig } from '../utils/config'
 import { constructUpsertSql } from '../utils/helpers'
 import { backfillCharges } from './charges'
 import { disputeSchema } from '../schemas/dispute'
 import { getUniqueIds, upsertMany } from './database_utils'
-
-const config = getConfig()
+import { ConfigType } from '../types/types'
 
 export const upsertDisputes = async (
   disputes: Stripe.Dispute[],
-  backfillRelatedEntities: boolean = true
+  backfillRelatedEntities: boolean = true,
+  config: ConfigType
 ): Promise<Stripe.Dispute[]> => {
   if (backfillRelatedEntities) {
-    await backfillCharges(getUniqueIds(disputes, 'charge'))
+    await backfillCharges(getUniqueIds(disputes, 'charge'), config)
   }
 
-  return upsertMany(disputes, () => constructUpsertSql(config.SCHEMA, 'disputes', disputeSchema))
+  return upsertMany(
+    disputes,
+    () => constructUpsertSql(config.SCHEMA, 'disputes', disputeSchema),
+    config.DATABASE_URL
+  )
 }

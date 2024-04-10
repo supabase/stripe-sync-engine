@@ -6,7 +6,7 @@ export interface JsonSchema {
   required: readonly string[]
 }
 
-export type ConfigType = {
+export interface ConfigType {
   /** Postgres database URL including authentication */
   DATABASE_URL: string
 

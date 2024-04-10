@@ -1,31 +1,33 @@
 import Stripe from 'stripe'
-import { getConfig } from '../utils/config'
 import { constructUpsertSql } from '../utils/helpers'
 import { chargeSchema } from '../schemas/charge'
 import { backfillInvoices } from './invoices'
 import { backfillCustomers } from './customers'
 import { findMissingEntries, getUniqueIds, upsertMany } from './database_utils'
-import { stripe } from '../utils/StripeClientManager'
-
-const config = getConfig()
+import { ConfigType } from '../types/types'
+import { getStripe } from '../utils/StripeClientManager'
 
 export const upsertCharges = async (
   charges: Stripe.Charge[],
-  backfillRelatedEntities: boolean = true
+  backfillRelatedEntities: boolean = true,
+  config: ConfigType
 ): Promise<Stripe.Charge[]> => {
   if (backfillRelatedEntities) {
     await Promise.all([
-      backfillCustomers(getUniqueIds(charges, 'customer')),
-      backfillInvoices(getUniqueIds(charges, 'invoice')),
+      backfillCustomers(getUniqueIds(charges, 'customer'), config),
+      backfillInvoices(getUniqueIds(charges, 'invoice'), config),
     ])
   }
 
   // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
-  if (getConfig().AUTO_EXPAND_LISTS) {
+  if (config.AUTO_EXPAND_LISTS) {
     for (const charge of charges) {
       if (charge.refunds?.has_more) {
         const allRefunds: Stripe.Refund[] = []
-        for await (const refund of stripe.refunds.list({ charge: charge.id, limit: 100 })) {
+        for await (const refund of getStripe(config).refunds.list({
+          charge: charge.id,
+          limit: 100,
+        })) {
           allRefunds.push(refund)
         }
 
@@ -38,23 +40,27 @@ export const upsertCharges = async (
     }
   }
 
-  return upsertMany(charges, () => constructUpsertSql(config.SCHEMA, 'charges', chargeSchema))
+  return upsertMany(
+    charges,
+    () => constructUpsertSql(config.SCHEMA, 'charges', chargeSchema),
+    config.DATABASE_URL
+  )
 }
 
-export const backfillCharges = async (chargeIds: string[]) => {
-  const missingChargeIds = await findMissingEntries('charges', chargeIds)
-  await fetchAndInsertCharges(missingChargeIds)
+export const backfillCharges = async (chargeIds: string[], config: ConfigType) => {
+  const missingChargeIds = await findMissingEntries('charges', chargeIds, config)
+  await fetchAndInsertCharges(missingChargeIds, config)
 }
 
-const fetchAndInsertCharges = async (chargeIds: string[]) => {
+const fetchAndInsertCharges = async (chargeIds: string[], config: ConfigType) => {
   if (!chargeIds.length) return
 
   const charges: Stripe.Charge[] = []
 
   for (const chargeId of chargeIds) {
-    const charge = await stripe.charges.retrieve(chargeId)
+    const charge = await getStripe(config).charges.retrieve(chargeId)
     charges.push(charge)
   }
 
-  await upsertCharges(charges, true)
+  await upsertCharges(charges, true, config)
 }
