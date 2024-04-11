@@ -7,8 +7,8 @@ import { ConfigType } from '../types/types'
 
 export const upsertDisputes = async (
   disputes: Stripe.Dispute[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.Dispute[]> => {
   if (backfillRelatedEntities) {
     await backfillCharges(getUniqueIds(disputes, 'charge'), config)

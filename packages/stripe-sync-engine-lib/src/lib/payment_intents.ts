@@ -8,8 +8,8 @@ import { ConfigType } from '../types/types'
 
 export const upsertPaymentIntents = async (
   paymentIntents: Stripe.PaymentIntent[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.PaymentIntent[]> => {
   if (backfillRelatedEntities) {
     await Promise.all([

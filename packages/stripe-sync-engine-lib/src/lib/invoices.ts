@@ -10,8 +10,8 @@ import { getStripe } from '../utils/StripeClientManager'
 
 export const upsertInvoices = async (
   invoices: Stripe.Invoice[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.Invoice[]> => {
   if (backfillRelatedEntities) {
     await Promise.all([
@@ -62,5 +62,5 @@ const fetchAndInsertInvoices = async (invoiceIds: string[], config: ConfigType) 
     invoices.push(invoice)
   }
 
-  await upsertInvoices(invoices, true, config)
+  await upsertInvoices(invoices, config)
 }

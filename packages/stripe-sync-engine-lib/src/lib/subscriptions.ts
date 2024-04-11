@@ -9,8 +9,8 @@ import { getStripe } from '../utils/StripeClientManager'
 
 export const upsertSubscriptions = async (
   subscriptions: Stripe.Subscription[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.Subscription[]> => {
   if (backfillRelatedEntities) {
     const customerIds = getUniqueIds(subscriptions, 'customer')
@@ -82,5 +82,5 @@ const fetchAndInsertSubscriptions = async (subscriptionIds: string[], config: Co
     subscriptions.push(subscription)
   }
 
-  await upsertSubscriptions(subscriptions, true, config)
+  await upsertSubscriptions(subscriptions, config)
 }

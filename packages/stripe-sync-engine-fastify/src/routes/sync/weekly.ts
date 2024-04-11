@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { syncBackfill, SyncBackfillParams } from 'stripe-sync-engine-lib'
+import { SyncBackfillParams } from 'stripe-sync-engine-lib'
 import { verifyApiKey } from '../../utils/verifyApiKey'
 
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -17,7 +17,7 @@ export default async function routes(fastify: FastifyInstance) {
         backfillRelatedEntities,
       } as SyncBackfillParams
 
-      const result = await syncBackfill(params)
+      const result = await fastify.stripeSyncEngine.syncBackfill(params)
       return reply.send({
         statusCode: 200,
         ts: Date.now(),

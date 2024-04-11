@@ -7,8 +7,8 @@ import { ConfigType } from '../types/types'
 
 export const upsertPaymentMethods = async (
   paymentMethods: Stripe.PaymentMethod[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.PaymentMethod[]> => {
   if (backfillRelatedEntities) {
     await backfillCustomers(getUniqueIds(paymentMethods, 'customer'), config)

@@ -7,8 +7,8 @@ import { ConfigType } from '../types/types'
 
 export const upsertSetupIntents = async (
   setupIntents: Stripe.SetupIntent[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.SetupIntent[]> => {
   if (backfillRelatedEntities) {
     await backfillCustomers(getUniqueIds(setupIntents, 'customer'), config)

@@ -9,8 +9,8 @@ import { ConfigType } from '../types/types'
 
 export const upsertPrices = async (
   prices: Stripe.Price[],
-  backfillRelatedEntities: boolean = true,
-  config: ConfigType
+  config: ConfigType,
+  backfillRelatedEntities: boolean = true
 ): Promise<Stripe.Price[]> => {
   if (backfillRelatedEntities) {
     await backfillProducts(getUniqueIds(prices, 'product'), config)

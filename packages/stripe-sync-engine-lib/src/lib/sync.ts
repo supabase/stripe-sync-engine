@@ -76,11 +76,11 @@ export async function syncSingleEntity(stripeId: string, config: ConfigType) {
   } else if (stripeId.startsWith('in_')) {
     return getStripe(config)
       .invoices.retrieve(stripeId)
-      .then((it) => upsertInvoices([it], true, config))
+      .then((it) => upsertInvoices([it], config))
   } else if (stripeId.startsWith('price_')) {
     return getStripe(config)
       .prices.retrieve(stripeId)
-      .then((it) => upsertPrices([it], true, config))
+      .then((it) => upsertPrices([it], config))
   } else if (stripeId.startsWith('prod_')) {
     return getStripe(config)
       .products.retrieve(stripeId)
@@ -88,19 +88,19 @@ export async function syncSingleEntity(stripeId: string, config: ConfigType) {
   } else if (stripeId.startsWith('sub_')) {
     return getStripe(config)
       .subscriptions.retrieve(stripeId)
-      .then((it) => upsertSubscriptions([it], true, config))
+      .then((it) => upsertSubscriptions([it], config))
   } else if (stripeId.startsWith('seti_')) {
     return getStripe(config)
       .setupIntents.retrieve(stripeId)
-      .then((it) => upsertSetupIntents([it], true, config))
+      .then((it) => upsertSetupIntents([it], config))
   } else if (stripeId.startsWith('pm_')) {
     return getStripe(config)
       .paymentMethods.retrieve(stripeId)
-      .then((it) => upsertPaymentMethods([it], true, config))
+      .then((it) => upsertPaymentMethods([it], config))
   } else if (stripeId.startsWith('dp_') || stripeId.startsWith('du_')) {
     return getStripe(config)
       .disputes.retrieve(stripeId)
-      .then((it) => upsertDisputes([it], true, config))
+      .then((it) => upsertDisputes([it], config))
   } else if (stripeId.startsWith('ch_')) {
     return getStripe(config)
       .charges.retrieve(stripeId)
@@ -108,11 +108,11 @@ export async function syncSingleEntity(stripeId: string, config: ConfigType) {
   } else if (stripeId.startsWith('pi_')) {
     return getStripe(config)
       .paymentIntents.retrieve(stripeId)
-      .then((it) => upsertPaymentIntents([it], true, config))
+      .then((it) => upsertPaymentIntents([it], config))
   } else if (stripeId.startsWith('txi_')) {
     return getStripe(config)
       .taxIds.retrieve(stripeId)
-      .then((it) => upsertTaxIds([it]))
+      .then((it) => upsertTaxIds([it], config))
   }
 }
 
@@ -243,7 +243,7 @@ export async function syncPrices(
 
   return fetchAndUpsert(
     () => getStripe(config).prices.list(params),
-    (prices) => upsertPrices(prices, syncParams?.backfillRelatedEntities, config)
+    (prices) => upsertPrices(prices, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -258,7 +258,7 @@ export async function syncPlans(
 
   return fetchAndUpsert(
     () => getStripe(config).plans.list(params),
-    (plans) => upsertPlans(plans, syncParams?.backfillRelatedEntities, config)
+    (plans) => upsertPlans(plans, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -288,7 +288,7 @@ export async function syncSubscriptions(
 
   return fetchAndUpsert(
     () => getStripe(config).subscriptions.list(params),
-    (items) => upsertSubscriptions(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertSubscriptions(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -303,7 +303,7 @@ export async function syncSubscriptionSchedules(
 
   return fetchAndUpsert(
     () => getStripe(config).subscriptionSchedules.list(params),
-    (items) => upsertSubscriptionSchedules(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertSubscriptionSchedules(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -318,7 +318,7 @@ export async function syncInvoices(
 
   return fetchAndUpsert(
     () => getStripe(config).invoices.list(params),
-    (items) => upsertInvoices(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertInvoices(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -348,7 +348,7 @@ export async function syncSetupIntents(
 
   return fetchAndUpsert(
     () => getStripe(config).setupIntents.list(params),
-    (items) => upsertSetupIntents(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertSetupIntents(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -363,7 +363,7 @@ export async function syncPaymentIntents(
 
   return fetchAndUpsert(
     () => getStripe(config).paymentIntents.list(params),
-    (items) => upsertPaymentIntents(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertPaymentIntents(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -378,7 +378,7 @@ export async function syncTaxIds(
   return fetchAndUpsert(
     () => getStripe(config).taxIds.list(params),
 
-    (items) => upsertTaxIds(items, syncParams?.backfillRelatedEntities)
+    (items) => upsertTaxIds(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
@@ -411,7 +411,7 @@ export async function syncPaymentMethods(
             limit: 100,
             customer: customerId,
           }),
-        (items) => upsertPaymentMethods(items, syncParams?.backfillRelatedEntities, config)
+        (items) => upsertPaymentMethods(items, config, syncParams?.backfillRelatedEntities)
       )
 
       synced += syncResult.synced
@@ -432,7 +432,7 @@ export async function syncDisputes(
 
   return fetchAndUpsert(
     () => getStripe(config).disputes.list(params),
-    (items) => upsertDisputes(items, syncParams?.backfillRelatedEntities, config)
+    (items) => upsertDisputes(items, config, syncParams?.backfillRelatedEntities)
   )
 }
 
