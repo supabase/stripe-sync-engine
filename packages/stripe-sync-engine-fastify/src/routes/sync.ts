@@ -1,18 +1,11 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../utils/verifyApiKey'
+import { SyncBackfillParams } from 'stripe-sync-engine-lib'
 
 import Stripe from 'stripe'
-import { getConfig } from '../utils/config'
-import { StripeSyncEngine } from 'stripe-sync-engine-lib'
-
-const config = getConfig()
 
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export default async function routes(fastify: FastifyInstance) {
-  // Add stripe-sync-engine-lib
-  const stripeSyncLib = new StripeSyncEngine(config)
-  fastify.decorate('stripeSyncEngine', stripeSyncLib)
-
   fastify.post('/sync', {
     preHandler: [verifyApiKey],
     handler: async (request, reply) => {

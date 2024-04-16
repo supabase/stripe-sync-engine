@@ -1,34 +1,22 @@
 import Stripe from 'stripe'
-import { query } from '../utils/PostgresConnection'
-import { pg as sql } from 'yesql'
 import { backfillProducts } from './products'
-import { constructUpsertSql } from '../utils/helpers'
-import { getUniqueIds, upsertMany } from './database_utils'
 import { planSchema } from '../schemas/plan'
-import { ConfigType } from '../types/types'
+import { PostgresClient } from '../database/postgres'
+import { getUniqueIds } from '../database/utils'
 
 export const upsertPlans = async (
   plans: Stripe.Plan[],
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   backfillRelatedEntities: boolean = true
 ): Promise<Stripe.Plan[]> => {
   if (backfillRelatedEntities) {
-    await backfillProducts(getUniqueIds(plans, 'product'), config)
+    await backfillProducts(getUniqueIds(plans, 'product'), pgClient, stripe)
   }
 
-  return upsertMany(
-    plans,
-    () => constructUpsertSql(config.SCHEMA, 'plans', planSchema),
-    config.DATABASE_URL
-  )
+  return pgClient.upsertMany(plans, 'plans', planSchema)
 }
 
-export const deletePlan = async (id: string, config: ConfigType): Promise<boolean> => {
-  const prepared = sql(`
-    delete from "${config.SCHEMA}"."plans" 
-    where id = :id
-    returning id;
-    `)({ id })
-  const { rows } = await query(prepared.text, config.DATABASE_URL, prepared.values)
-  return rows.length > 0
+export const deletePlan = async (id: string, pgClient: PostgresClient): Promise<boolean> => {
+  return pgClient.deleteOne('plans', id)
 }

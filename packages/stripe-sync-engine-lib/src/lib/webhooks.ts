@@ -1,6 +1,4 @@
 import Stripe from 'stripe'
-import { ConfigType } from '../types/types'
-import { getStripe } from '../utils/StripeClientManager'
 import { upsertCharges } from './charges'
 import { upsertCustomers } from './customers'
 import { upsertSubscriptions } from './subscriptions'
@@ -14,8 +12,12 @@ import { deleteTaxId, upsertTaxIds } from './tax_ids'
 import { upsertInvoices } from './invoices'
 import { deleteProduct, upsertProducts } from './products'
 import { deletePrice, upsertPrices } from './prices'
+import { PostgresClient } from '../database/postgres'
+import { ConfigType } from '../types/types'
 
 export async function handleWebhookEvent(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   webhookData: Buffer,
   sig: string,
@@ -23,7 +25,7 @@ export async function handleWebhookEvent(
 ) {
   let event
   try {
-    event = getStripe(config).webhooks.constructEvent(webhookData, sig, webhookSecret)
+    event = stripe.webhooks.constructEvent(webhookData, sig, webhookSecret)
   } catch (err) {
     throw new Error('Webhook signature verification failed')
   }
@@ -36,14 +38,14 @@ export async function handleWebhookEvent(
     case 'charge.succeeded':
     case 'charge.updated': {
       const charge = event.data.object as Stripe.Charge
-      await upsertCharges([charge], true, config)
+      await upsertCharges([charge], pgClient, stripe, config)
       break
     }
     case 'customer.created':
     case 'customer.deleted':
     case 'customer.updated': {
       const customer = event.data.object as Stripe.Customer
-      await upsertCustomers([customer], config)
+      await upsertCustomers([customer], pgClient)
       break
     }
     case 'customer.subscription.created':
@@ -55,18 +57,18 @@ export async function handleWebhookEvent(
     case 'customer.subscription.resumed':
     case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription
-      await upsertSubscriptions([subscription], config)
+      await upsertSubscriptions([subscription], pgClient, stripe, config)
       break
     }
     case 'customer.tax_id.updated':
     case 'customer.tax_id.created': {
       const taxId = event.data.object as Stripe.TaxId
-      await upsertTaxIds([taxId], config)
+      await upsertTaxIds([taxId], pgClient, stripe)
       break
     }
     case 'customer.tax_id.deleted': {
       const taxId = event.data.object as Stripe.TaxId
-      await deleteTaxId(taxId.id, config)
+      await deleteTaxId(taxId.id, pgClient)
       break
     }
     case 'invoice.created':
@@ -83,42 +85,42 @@ export async function handleWebhookEvent(
     case 'invoice.marked_uncollectible':
     case 'invoice.updated': {
       const invoice = event.data.object as Stripe.Invoice
-      await upsertInvoices([invoice], config)
+      await upsertInvoices([invoice], pgClient, stripe, config)
 
       break
     }
     case 'product.created':
     case 'product.updated': {
       const product = event.data.object as Stripe.Product
-      await upsertProducts([product], config)
+      await upsertProducts([product], pgClient)
       break
     }
 
     case 'product.deleted': {
       const product = event.data.object as Stripe.Product
-      await deleteProduct(product.id, config)
+      await deleteProduct(product.id, pgClient)
       break
     }
     case 'price.created':
     case 'price.updated': {
       const price = event.data.object as Stripe.Price
-      await upsertPrices([price], config)
+      await upsertPrices([price], pgClient, stripe)
       break
     }
     case 'price.deleted': {
       const price = event.data.object as Stripe.Price
-      await deletePrice(price.id, config)
+      await deletePrice(price.id, pgClient)
       break
     }
     case 'plan.created':
     case 'plan.updated': {
       const plan = event.data.object as Stripe.Plan
-      await upsertPlans([plan], config)
+      await upsertPlans([plan], pgClient, stripe)
       break
     }
     case 'plan.deleted': {
       const plan = event.data.object as Stripe.Plan
-      await deletePlan(plan.id, config)
+      await deletePlan(plan.id, pgClient)
       break
     }
     case 'setup_intent.canceled':
@@ -128,7 +130,7 @@ export async function handleWebhookEvent(
     case 'setup_intent.succeeded': {
       const setupIntent = event.data.object as Stripe.SetupIntent
 
-      await upsertSetupIntents([setupIntent], config)
+      await upsertSetupIntents([setupIntent], pgClient, stripe)
       break
     }
     case 'subscription_schedule.aborted':
@@ -141,7 +143,7 @@ export async function handleWebhookEvent(
     case 'subscription_schedule.updated': {
       const subscriptionSchedule = event.data.object as Stripe.SubscriptionSchedule
 
-      await upsertSubscriptionSchedules([subscriptionSchedule], config)
+      await upsertSubscriptionSchedules([subscriptionSchedule], pgClient, stripe)
       break
     }
     case 'payment_method.attached':
@@ -150,7 +152,7 @@ export async function handleWebhookEvent(
     case 'payment_method.updated': {
       const paymentMethod = event.data.object as Stripe.PaymentMethod
 
-      await upsertPaymentMethods([paymentMethod], config)
+      await upsertPaymentMethods([paymentMethod], pgClient, stripe)
       break
     }
     case 'charge.dispute.closed':
@@ -161,7 +163,7 @@ export async function handleWebhookEvent(
     case 'charge.dispute.closed': {
       const dispute = event.data.object as Stripe.Dispute
 
-      await upsertDisputes([dispute], config)
+      await upsertDisputes([dispute], pgClient, stripe, config)
       break
     }
     case 'payment_intent.amount_capturable_updated':
@@ -174,7 +176,7 @@ export async function handleWebhookEvent(
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent
 
-      await upsertPaymentIntents([paymentIntent], config)
+      await upsertPaymentIntents([paymentIntent], pgClient, stripe, config)
       break
     }
     default:

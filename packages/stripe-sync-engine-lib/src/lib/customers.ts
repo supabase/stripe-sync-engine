@@ -1,42 +1,44 @@
-import { constructUpsertSql } from '../utils/helpers'
 import { customerSchema, customerDeletedSchema } from '../schemas/customer'
 import Stripe from 'stripe'
-import { findMissingEntries, upsertMany } from './database_utils'
-import { ConfigType } from '../types/types'
-import { getStripe } from '../utils/StripeClientManager'
+import { PostgresClient } from '../database/postgres'
 
 export const upsertCustomers = async (
   customers: Stripe.Customer[],
-  config: ConfigType
+  pgClient: PostgresClient
 ): Promise<Stripe.Customer[]> => {
-  return upsertMany(
-    customers,
-    (customer) => {
-      // handle deleted customer
-      if (customer.deleted) {
-        return constructUpsertSql(config.SCHEMA, 'customers', customerDeletedSchema)
-      } else {
-        return constructUpsertSql(config.SCHEMA, 'customers', customerSchema)
-      }
-    },
-    config.DATABASE_URL
-  )
+  return pgClient.upsertMany(customers, 'customers', customerSchema)
+  // return pgClient.upsertMany(customers, 'customers', (customer) => {
+  //   // handle deleted customer
+  //   if (customer.deleted) {
+  //     return customerDeletedSchema
+  //   } else {
+  //     return customerSchema
+  //   }
+  // })
 }
 
-export const backfillCustomers = async (customerIds: string[], config: ConfigType) => {
-  const missingCustomerIds = await findMissingEntries('customers', customerIds, config)
-  await fetchAndInsertCustomers(missingCustomerIds, config)
+export const backfillCustomers = async (
+  customerIds: string[],
+  pgClient: PostgresClient,
+  stripe: Stripe
+) => {
+  const missingCustomerIds = await pgClient.findMissingEntries('customers', customerIds)
+  await fetchAndInsertCustomers(missingCustomerIds, pgClient, stripe)
 }
 
-export const fetchAndInsertCustomers = async (customerIds: string[], config: ConfigType) => {
+export const fetchAndInsertCustomers = async (
+  customerIds: string[],
+  pgClient: PostgresClient,
+  stripe: Stripe
+) => {
   if (!customerIds.length) return
 
   const customers: Stripe.Customer[] = []
 
   for (const customerId of customerIds) {
-    const customer = await getStripe(config).customers.retrieve(customerId)
+    const customer = await stripe.customers.retrieve(customerId)
     customers.push(customer as Stripe.Customer)
   }
 
-  await upsertCustomers(customers, config)
+  await upsertCustomers(customers, pgClient)
 }

@@ -1,26 +1,24 @@
 import Stripe from 'stripe'
-import { constructUpsertSql } from '../utils/helpers'
 import { backfillCustomers } from './customers'
-import { getUniqueIds, upsertMany } from './database_utils'
 import { backfillInvoices } from './invoices'
+import { PostgresClient } from '../database/postgres'
+import { getUniqueIds } from '../database/utils'
 import { paymentIntentSchema } from '../schemas/payment_intent'
 import { ConfigType } from '../types/types'
 
 export const upsertPaymentIntents = async (
   paymentIntents: Stripe.PaymentIntent[],
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   backfillRelatedEntities: boolean = true
 ): Promise<Stripe.PaymentIntent[]> => {
   if (backfillRelatedEntities) {
     await Promise.all([
-      backfillCustomers(getUniqueIds(paymentIntents, 'customer'), config),
-      backfillInvoices(getUniqueIds(paymentIntents, 'invoice'), config),
+      backfillCustomers(getUniqueIds(paymentIntents, 'customer'), pgClient, stripe),
+      backfillInvoices(getUniqueIds(paymentIntents, 'invoice'), pgClient, stripe, config),
     ])
   }
 
-  return upsertMany(
-    paymentIntents,
-    () => constructUpsertSql(config.SCHEMA, 'payment_intents', paymentIntentSchema),
-    config.DATABASE_URL
-  )
+  return pgClient.upsertMany(paymentIntents, 'payment_intents', paymentIntentSchema)
 }

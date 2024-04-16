@@ -1,47 +1,40 @@
-import { query } from '../utils/PostgresConnection'
-import { pg as sql } from 'yesql'
 import { productSchema } from '../schemas/product'
-import { constructUpsertSql } from '../utils/helpers'
-import { findMissingEntries, upsertMany } from './database_utils'
 import Stripe from 'stripe'
-import { ConfigType } from '../types/types'
-import { getStripe } from '../utils/StripeClientManager'
+import { PostgresClient } from '../database/postgres'
 
 export const upsertProducts = async (
   products: Stripe.Product[],
-  config: ConfigType
+  pgClient: PostgresClient
 ): Promise<Stripe.Product[]> => {
-  return upsertMany(
-    products,
-    () => constructUpsertSql(config.SCHEMA, 'products', productSchema),
-    config.DATABASE_URL
-  )
+  return pgClient.upsertMany(products, 'products', productSchema)
 }
 
-export const deleteProduct = async (id: string, config: ConfigType): Promise<boolean> => {
-  const prepared = sql(`
-    delete from "${config.SCHEMA}"."products" 
-    where id = :id
-    returning id;
-    `)({ id })
-  const { rows } = await query(prepared.text, config.DATABASE_URL, prepared.values)
-  return rows.length > 0
+export const deleteProduct = async (id: string, pgClient: PostgresClient): Promise<boolean> => {
+  return pgClient.deleteOne('products', id)
 }
 
-export const backfillProducts = async (productids: string[], config: ConfigType) => {
-  const missingProductIds = await findMissingEntries('products', productids, config)
-  await fetchAndInsertProducts(missingProductIds, config)
+export const backfillProducts = async (
+  productids: string[],
+  pgClient: PostgresClient,
+  stripe: Stripe
+) => {
+  const missingProductIds = await pgClient.findMissingEntries('products', productids)
+  await fetchAndInsertProducts(missingProductIds, pgClient, stripe)
 }
 
-const fetchAndInsertProducts = async (productIds: string[], config: ConfigType) => {
+const fetchAndInsertProducts = async (
+  productIds: string[],
+  pgClient: PostgresClient,
+  stripe: Stripe
+) => {
   if (!productIds.length) return
 
   const products: Stripe.Product[] = []
 
   for (const productId of productIds) {
-    const product = await getStripe(config).products.retrieve(productId)
+    const product = await stripe.products.retrieve(productId)
     products.push(product)
   }
 
-  await upsertProducts(products, config)
+  await upsertProducts(products, pgClient)
 }

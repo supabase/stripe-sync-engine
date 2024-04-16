@@ -4,6 +4,8 @@ import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import path from 'node:path'
 import { errorSchema } from './schemas/error'
+import { getConfig } from './utils/config'
+import { StripeSyncEngine } from 'stripe-sync-engine-lib'
 
 interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
@@ -63,6 +65,11 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
   await app.register(autoload, {
     dir: path.join(__dirname, 'routes'),
   })
+
+  const config = getConfig()
+
+  const stripeSyncEngine = new StripeSyncEngine(config)
+  app.decorate('stripeSyncEngine', stripeSyncEngine)
 
   await app.ready()
 

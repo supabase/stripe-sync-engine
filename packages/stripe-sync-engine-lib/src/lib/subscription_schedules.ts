@@ -1,54 +1,54 @@
-import { constructUpsertSql } from '../utils/helpers'
 import { backfillCustomers } from './customers'
-import { findMissingEntries, getUniqueIds, upsertMany } from './database_utils'
 import Stripe from 'stripe'
 import { subscriptionScheduleSchema } from '../schemas/subscription_schedules'
-import { ConfigType } from '../types/types'
-import { getStripe } from '../utils/StripeClientManager'
+import { PostgresClient } from '../database/postgres'
+import { getUniqueIds } from '../database/utils'
 
 export const upsertSubscriptionSchedules = async (
   subscriptionSchedules: Stripe.SubscriptionSchedule[],
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   backfillRelatedEntities: boolean = true
 ): Promise<Stripe.SubscriptionSchedule[]> => {
   if (backfillRelatedEntities) {
     const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 
-    await backfillCustomers(customerIds, config)
+    await backfillCustomers(customerIds, pgClient, stripe)
   }
 
   // Run it
-  const rows = await upsertMany(
+  return await pgClient.upsertMany(
     subscriptionSchedules,
-    () => constructUpsertSql(config.SCHEMA, 'subscription_schedules', subscriptionScheduleSchema),
-    config.DATABASE_URL
+    'subscription_schedules',
+    subscriptionScheduleSchema
   )
-
-  return rows
 }
 
 export const backfillSubscriptionSchedules = async (
   subscriptionIds: string[],
-  config: ConfigType
+  pgClient: PostgresClient,
+  stripe: Stripe
 ) => {
-  const missingSubscriptionIds = await findMissingEntries(
+  const missingSubscriptionIds = await pgClient.findMissingEntries(
     'subscription_schedules',
-    subscriptionIds,
-    config
+    subscriptionIds
   )
-  await fetchAndInsertSubscriptions(missingSubscriptionIds, config)
+  await fetchAndInsertSubscriptions(missingSubscriptionIds, pgClient, stripe)
 }
 
-const fetchAndInsertSubscriptions = async (subscriptionIds: string[], config: ConfigType) => {
+const fetchAndInsertSubscriptions = async (
+  subscriptionIds: string[],
+  pgClient: PostgresClient,
+  stripe: Stripe
+) => {
   if (!subscriptionIds.length) return
 
   const subscriptionSchedules: Stripe.SubscriptionSchedule[] = []
 
   for (const subscriptionScheduleId of subscriptionIds) {
-    const subscriptionSchedule =
-      await getStripe(config).subscriptionSchedules.retrieve(subscriptionScheduleId)
+    const subscriptionSchedule = await stripe.subscriptionSchedules.retrieve(subscriptionScheduleId)
     subscriptionSchedules.push(subscriptionSchedule)
   }
 
-  await upsertSubscriptionSchedules(subscriptionSchedules, config)
+  await upsertSubscriptionSchedules(subscriptionSchedules, pgClient, stripe)
 }

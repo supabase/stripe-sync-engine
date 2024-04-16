@@ -14,9 +14,8 @@ import { upsertPlans } from './plans'
 import { upsertSubscriptionSchedules } from './subscription_schedules'
 import pLimit from 'p-limit'
 import { pg as sql } from 'yesql'
-import { query } from '../utils/PostgresConnection'
+import { PostgresClient } from '../database/postgres'
 import { ConfigType } from '../types/types'
-import { getStripe } from '../utils/StripeClientManager'
 
 interface Sync {
   synced: number
@@ -64,55 +63,52 @@ type SyncObject =
   | 'plan'
   | 'tax_id'
 
-export async function syncSingleEntity(stripeId: string, config: ConfigType) {
+export async function syncSingleEntity(
+  stripeId: string,
+  pgClient: PostgresClient,
+  stripe: Stripe,
+  config: ConfigType
+) {
   if (stripeId.startsWith('cus_')) {
-    return getStripe(config)
-      .customers.retrieve(stripeId)
-      .then((it) => {
-        if (!it || it.deleted) return
+    return stripe.customers.retrieve(stripeId).then((it) => {
+      if (!it || it.deleted) return
 
-        return upsertCustomers([it], config)
-      })
+      return upsertCustomers([it], pgClient)
+    })
   } else if (stripeId.startsWith('in_')) {
-    return getStripe(config)
-      .invoices.retrieve(stripeId)
-      .then((it) => upsertInvoices([it], config))
+    return stripe.invoices
+      .retrieve(stripeId)
+      .then((it) => upsertInvoices([it], pgClient, stripe, config))
   } else if (stripeId.startsWith('price_')) {
-    return getStripe(config)
-      .prices.retrieve(stripeId)
-      .then((it) => upsertPrices([it], config))
+    return stripe.prices.retrieve(stripeId).then((it) => upsertPrices([it], pgClient, stripe))
   } else if (stripeId.startsWith('prod_')) {
-    return getStripe(config)
-      .products.retrieve(stripeId)
-      .then((it) => upsertProducts([it], config))
+    return stripe.products.retrieve(stripeId).then((it) => upsertProducts([it], pgClient))
   } else if (stripeId.startsWith('sub_')) {
-    return getStripe(config)
-      .subscriptions.retrieve(stripeId)
-      .then((it) => upsertSubscriptions([it], config))
+    return stripe.subscriptions
+      .retrieve(stripeId)
+      .then((it) => upsertSubscriptions([it], pgClient, stripe, config))
   } else if (stripeId.startsWith('seti_')) {
-    return getStripe(config)
-      .setupIntents.retrieve(stripeId)
-      .then((it) => upsertSetupIntents([it], config))
+    return stripe.setupIntents
+      .retrieve(stripeId)
+      .then((it) => upsertSetupIntents([it], pgClient, stripe))
   } else if (stripeId.startsWith('pm_')) {
-    return getStripe(config)
-      .paymentMethods.retrieve(stripeId)
-      .then((it) => upsertPaymentMethods([it], config))
+    return stripe.paymentMethods
+      .retrieve(stripeId)
+      .then((it) => upsertPaymentMethods([it], pgClient, stripe))
   } else if (stripeId.startsWith('dp_') || stripeId.startsWith('du_')) {
-    return getStripe(config)
-      .disputes.retrieve(stripeId)
-      .then((it) => upsertDisputes([it], config))
+    return stripe.disputes
+      .retrieve(stripeId)
+      .then((it) => upsertDisputes([it], pgClient, stripe, config))
   } else if (stripeId.startsWith('ch_')) {
-    return getStripe(config)
-      .charges.retrieve(stripeId)
-      .then((it) => upsertCharges([it], true, config))
+    return stripe.charges
+      .retrieve(stripeId)
+      .then((it) => upsertCharges([it], pgClient, stripe, config))
   } else if (stripeId.startsWith('pi_')) {
-    return getStripe(config)
-      .paymentIntents.retrieve(stripeId)
-      .then((it) => upsertPaymentIntents([it], config))
+    return stripe.paymentIntents
+      .retrieve(stripeId)
+      .then((it) => upsertPaymentIntents([it], pgClient, stripe, config))
   } else if (stripeId.startsWith('txi_')) {
-    return getStripe(config)
-      .taxIds.retrieve(stripeId)
-      .then((it) => upsertTaxIds([it], config))
+    return stripe.taxIds.retrieve(stripeId).then((it) => upsertTaxIds([it], pgClient, stripe))
   }
 }
 
@@ -123,6 +119,8 @@ export interface SyncBackfillParams {
 }
 
 export async function syncBackfill(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   params?: SyncBackfillParams
 ): Promise<SyncBackfill> {
@@ -143,58 +141,58 @@ export async function syncBackfill(
 
   switch (object) {
     case 'all':
-      products = await syncProducts(config, params)
-      prices = await syncPrices(config, params)
-      plans = await syncPlans(config, params)
-      customers = await syncCustomers(config, params)
-      subscriptions = await syncSubscriptions(config, params)
-      subscriptionSchedules = await syncSubscriptionSchedules(config, params)
-      invoices = await syncInvoices(config, params)
-      charges = await syncCharges(config, params)
-      setupIntents = await syncSetupIntents(config, params)
+      products = await syncProducts(pgClient, stripe, params)
+      prices = await syncPrices(pgClient, stripe, params)
+      plans = await syncPlans(pgClient, stripe, params)
+      customers = await syncCustomers(pgClient, stripe, params)
+      subscriptions = await syncSubscriptions(pgClient, stripe, config, params)
+      subscriptionSchedules = await syncSubscriptionSchedules(pgClient, stripe, params)
+      invoices = await syncInvoices(pgClient, stripe, config, params)
+      charges = await syncCharges(pgClient, stripe, config, params)
+      setupIntents = await syncSetupIntents(pgClient, stripe, params)
 
-      paymentMethods = await syncPaymentMethods(config, params)
-      paymentIntents = await syncPaymentIntents(config, params)
-      taxIds = await syncTaxIds(config, params)
+      paymentMethods = await syncPaymentMethods(pgClient, stripe, config, params)
+      paymentIntents = await syncPaymentIntents(pgClient, stripe, config, params)
+      taxIds = await syncTaxIds(pgClient, stripe, params)
       break
     case 'customer':
-      customers = await syncCustomers(config, params)
+      customers = await syncCustomers(pgClient, stripe, params)
       break
     case 'invoice':
-      invoices = await syncInvoices(config, params)
+      invoices = await syncInvoices(pgClient, stripe, config, params)
       break
     case 'price':
-      prices = await syncPrices(config, params)
+      prices = await syncPrices(pgClient, stripe, params)
       break
     case 'product':
-      products = await syncProducts(config, params)
+      products = await syncProducts(pgClient, stripe, params)
       break
 
     case 'subscription':
-      subscriptions = await syncSubscriptions(config, params)
+      subscriptions = await syncSubscriptions(pgClient, stripe, config, params)
       break
     case 'subscription_schedules':
-      subscriptionSchedules = await syncSubscriptionSchedules(config, params)
+      subscriptionSchedules = await syncSubscriptionSchedules(pgClient, stripe, params)
       break
     case 'setup_intent':
-      setupIntents = await syncSetupIntents(config, params)
+      setupIntents = await syncSetupIntents(pgClient, stripe, params)
       break
     case 'payment_method':
-      paymentMethods = await syncPaymentMethods(config, params)
+      paymentMethods = await syncPaymentMethods(pgClient, stripe, config, params)
       break
     case 'dispute':
-      disputes = await syncDisputes(config, params)
+      disputes = await syncDisputes(pgClient, stripe, config, params)
       break
     case 'charge':
-      charges = await syncCharges(config, params)
+      charges = await syncCharges(pgClient, stripe, config, params)
       break
     case 'payment_intent':
-      paymentIntents = await syncPaymentIntents(config, params)
+      paymentIntents = await syncPaymentIntents(pgClient, stripe, config, params)
     case 'plan':
-      plans = await syncPlans(config, params)
+      plans = await syncPlans(pgClient, stripe, params)
       break
     case 'tax_id':
-      taxIds = await syncTaxIds(config, params)
+      taxIds = await syncTaxIds(pgClient, stripe, params)
       break
     default:
       break
@@ -218,7 +216,8 @@ export async function syncBackfill(
 }
 
 export async function syncProducts(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing products')
@@ -227,13 +226,14 @@ export async function syncProducts(
   if (syncParams?.created) params.created = syncParams?.created
 
   return fetchAndUpsert(
-    () => getStripe(config).products.list(params),
-    (products) => upsertProducts(products, config)
+    () => stripe.products.list(params),
+    (products) => upsertProducts(products, pgClient)
   )
 }
 
 export async function syncPrices(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing prices')
@@ -242,13 +242,14 @@ export async function syncPrices(
   if (syncParams?.created) params.created = syncParams?.created
 
   return fetchAndUpsert(
-    () => getStripe(config).prices.list(params),
-    (prices) => upsertPrices(prices, config, syncParams?.backfillRelatedEntities)
+    () => stripe.prices.list(params),
+    (prices) => upsertPrices(prices, pgClient, stripe, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncPlans(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing plans')
@@ -257,13 +258,14 @@ export async function syncPlans(
   if (syncParams?.created) params.created = syncParams?.created
 
   return fetchAndUpsert(
-    () => getStripe(config).plans.list(params),
-    (plans) => upsertPlans(plans, config, syncParams?.backfillRelatedEntities)
+    () => stripe.plans.list(params),
+    (plans) => upsertPlans(plans, pgClient, stripe, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncCustomers(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing customers')
@@ -272,12 +274,14 @@ export async function syncCustomers(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).customers.list(params),
-    (items) => upsertCustomers(items, config)
+    () => stripe.customers.list(params),
+    (items) => upsertCustomers(items, pgClient)
   )
 }
 
 export async function syncSubscriptions(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -287,13 +291,15 @@ export async function syncSubscriptions(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).subscriptions.list(params),
-    (items) => upsertSubscriptions(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.subscriptions.list(params),
+    (items) =>
+      upsertSubscriptions(items, pgClient, stripe, config, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncSubscriptionSchedules(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing subscription schedules')
@@ -302,12 +308,15 @@ export async function syncSubscriptionSchedules(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).subscriptionSchedules.list(params),
-    (items) => upsertSubscriptionSchedules(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.subscriptionSchedules.list(params),
+    (items) =>
+      upsertSubscriptionSchedules(items, pgClient, stripe, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncInvoices(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -317,12 +326,14 @@ export async function syncInvoices(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).invoices.list(params),
-    (items) => upsertInvoices(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.invoices.list(params),
+    (items) => upsertInvoices(items, pgClient, stripe, config, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncCharges(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -332,13 +343,14 @@ export async function syncCharges(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).charges.list(params),
-    (items) => upsertCharges(items, syncParams?.backfillRelatedEntities, config)
+    () => stripe.charges.list(params),
+    (items) => upsertCharges(items, pgClient, stripe, config, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncSetupIntents(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing setup_intents')
@@ -347,12 +359,14 @@ export async function syncSetupIntents(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).setupIntents.list(params),
-    (items) => upsertSetupIntents(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.setupIntents.list(params),
+    (items) => upsertSetupIntents(items, pgClient, stripe, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncPaymentIntents(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -362,13 +376,15 @@ export async function syncPaymentIntents(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).paymentIntents.list(params),
-    (items) => upsertPaymentIntents(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.paymentIntents.list(params),
+    (items) =>
+      upsertPaymentIntents(items, pgClient, stripe, config, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncTaxIds(
-  config: ConfigType,
+  pgClient: PostgresClient,
+  stripe: Stripe,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
   console.log('Syncing tax_ids')
@@ -376,13 +392,15 @@ export async function syncTaxIds(
   const params: Stripe.TaxIdListParams = { limit: 100 }
 
   return fetchAndUpsert(
-    () => getStripe(config).taxIds.list(params),
+    () => stripe.taxIds.list(params),
 
-    (items) => upsertTaxIds(items, config, syncParams?.backfillRelatedEntities)
+    (items) => upsertTaxIds(items, pgClient, stripe, syncParams?.backfillRelatedEntities)
   )
 }
 
 export async function syncPaymentMethods(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -392,9 +410,9 @@ export async function syncPaymentMethods(
 
   const prepared = sql(`select id from "${config.SCHEMA}"."customers" WHERE deleted <> true;`)([])
 
-  const customerIds = await query(prepared.text, config.DATABASE_URL, prepared.values).then(
-    ({ rows }) => rows.map((it) => it.id)
-  )
+  const customerIds = await pgClient
+    .query(prepared.text, prepared.values)
+    .then(({ rows }) => rows.map((it) => it.id))
 
   console.log(`Getting payment methods for ${customerIds.length} customers`)
 
@@ -407,11 +425,12 @@ export async function syncPaymentMethods(
     limit(async () => {
       const syncResult = await fetchAndUpsert(
         () =>
-          getStripe(config).paymentMethods.list({
+          stripe.paymentMethods.list({
             limit: 100,
             customer: customerId,
           }),
-        (items) => upsertPaymentMethods(items, config, syncParams?.backfillRelatedEntities)
+        (items) =>
+          upsertPaymentMethods(items, pgClient, stripe, syncParams?.backfillRelatedEntities)
       )
 
       synced += syncResult.synced
@@ -424,6 +443,8 @@ export async function syncPaymentMethods(
 }
 
 export async function syncDisputes(
+  pgClient: PostgresClient,
+  stripe: Stripe,
   config: ConfigType,
   syncParams?: SyncBackfillParams
 ): Promise<Sync> {
@@ -431,8 +452,8 @@ export async function syncDisputes(
   if (syncParams?.created) params.created = syncParams.created
 
   return fetchAndUpsert(
-    () => getStripe(config).disputes.list(params),
-    (items) => upsertDisputes(items, config, syncParams?.backfillRelatedEntities)
+    () => stripe.disputes.list(params),
+    (items) => upsertDisputes(items, pgClient, stripe, config, syncParams?.backfillRelatedEntities)
   )
 }
 
