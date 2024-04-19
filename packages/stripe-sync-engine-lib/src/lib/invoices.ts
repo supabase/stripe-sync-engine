@@ -22,7 +22,7 @@ export const upsertInvoices = async (
   }
 
   // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
-  if (stripe) {
+  if (config.AUTO_EXPAND_LISTS) {
     for (const invoice of invoices) {
       if (invoice.lines.has_more) {
         const allLineItems: Stripe.InvoiceLineItem[] = []

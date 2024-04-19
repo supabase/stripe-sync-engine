@@ -20,12 +20,11 @@ export async function handleWebhookEvent(
   stripe: Stripe,
   config: ConfigType,
   webhookData: Buffer,
-  sig: string,
-  webhookSecret: string
+  sig: string
 ) {
   let event
   try {
-    event = stripe.webhooks.constructEvent(webhookData, sig, webhookSecret)
+    event = stripe.webhooks.constructEvent(webhookData, sig, config.STRIPE_WEBHOOK_SECRET)
   } catch (err) {
     throw new Error('Webhook signature verification failed')
   }

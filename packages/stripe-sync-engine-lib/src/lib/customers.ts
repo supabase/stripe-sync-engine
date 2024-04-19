@@ -1,4 +1,4 @@
-import { customerSchema, customerDeletedSchema } from '../schemas/customer'
+import { customerSchema } from '../schemas/customer'
 import Stripe from 'stripe'
 import { PostgresClient } from '../database/postgres'
 
@@ -31,6 +31,8 @@ export const fetchAndInsertCustomers = async (
   pgClient: PostgresClient,
   stripe: Stripe
 ) => {
+  console.log('called here')
+  console.log(customerIds)
   if (!customerIds.length) return
 
   const customers: Stripe.Customer[] = []

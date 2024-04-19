@@ -5,9 +5,10 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "dev:node-fastify": "turbo run dev --filter=stripe-sync-engine-fastify",
+    "build": "turbo run build",
     "start": "NODE_ENV=production node dist/server.js",
-    "test": "node -r dotenv/config node_modules/.bin/jest --detectOpenHandles",
+    "test": "turbo run test",
     "test:debug": "TERM=dumb node -r dotenv/config node_modules/.bin/jest",
     "eslint:check": "eslint 'src/**'",
     "prettier:check": "prettier -c src/**",
@@ -56,6 +57,7 @@
     "typescript": "^5.3.3"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ]
 }
