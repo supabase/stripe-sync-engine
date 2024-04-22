@@ -42,13 +42,10 @@ const main = async () => {
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
 
     await runMigrations(client)
-  } catch (error) {
-    logger.error(error)
   } finally {
     await client.end()
   }
 
-  console.log('so 2')
   // Run migrations
   // Start the server
   app.listen({ port: Number(port), host: 'localhost' }, (err, address) => {

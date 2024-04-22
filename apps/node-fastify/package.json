@@ -9,7 +9,14 @@
     "node": ">= 20.0.0"
   },
   "scripts": {
-    "dev": "tsx --watch ./src/server.ts | pino-pretty"
+    "dev": "tsx --watch ./src/server.ts | pino-pretty",
+    "build": "tsc -p tsconfig.json",
+    "start": "NODE_ENV=production node dist/server.js",
+    "lint": "eslint 'src/**'",
+    "lint:check": "eslint 'src/**'",
+    "format": "prettier --write src/**",
+    "format:check": "prettier src/**",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "stripe-sync-engine-lib": "*",

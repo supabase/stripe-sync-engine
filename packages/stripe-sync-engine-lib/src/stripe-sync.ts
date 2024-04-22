@@ -28,7 +28,7 @@ export class StripeSyncEngine {
     syncSingleEntity(stripeId, this.pgClient, this.stripe, this.config)
   }
 
-  public handleWebhookEvent(event: Buffer, sig: string, secret: string): void {
-    handleWebhookEvent(this.pgClient, this.stripe, this.config, event, sig, secret)
+  public handleWebhookEvent(event: Buffer, sig: string): void {
+    handleWebhookEvent(this.pgClient, this.stripe, this.config, event, sig)
   }
 }

@@ -9,8 +9,15 @@
     "node": ">= 20.0.0"
   },
   "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint 'src/**'",
+    "lint:check": "eslint 'src/**'",
+    "format": "prettier --write src/**",
+    "format:check": "prettier src/**",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
-    "dotenv": "^16.3.1",
     "p-limit": "^3.1.0",
     "pg": "^8.11.3",
     "pino": "^8.17.2",
