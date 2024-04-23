@@ -21,7 +21,7 @@ interface Sync {
   synced: number
 }
 
-interface SyncBackfill {
+export interface SyncBackfill {
   products?: Sync
   prices?: Sync
   plans?: Sync

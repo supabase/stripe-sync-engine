@@ -21,7 +21,7 @@ export async function handleWebhookEvent(
   config: ConfigType,
   webhookData: Buffer,
   sig: string
-) {
+): Promise<void> {
   let event
   try {
     event = stripe.webhooks.constructEvent(webhookData, sig, config.STRIPE_WEBHOOK_SECRET)

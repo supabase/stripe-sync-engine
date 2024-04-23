@@ -1,5 +1,5 @@
 import { ConfigType } from './types/types'
-import { syncBackfill, SyncBackfillParams, syncSingleEntity } from './lib/sync'
+import { SyncBackfill, syncBackfill, SyncBackfillParams, syncSingleEntity } from './lib/sync'
 import { handleWebhookEvent } from './lib/webhooks'
 import Stripe from 'stripe'
 import { PostgresClient } from './database/postgres'
@@ -20,15 +20,20 @@ export class StripeSyncEngine {
     this.pgClient = new PostgresClient({ databaseUrl: config.DATABASE_URL, schema: config.SCHEMA })
   }
 
-  public syncBackfill(params?: SyncBackfillParams): void {
-    syncBackfill(this.pgClient, this.stripe, this.config, params)
+  syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
+    return syncBackfill(this.pgClient, this.stripe, this.config, params)
   }
 
-  public syncSingleEntity(stripeId: string): void {
-    syncSingleEntity(stripeId, this.pgClient, this.stripe, this.config)
+  syncSingleEntity(stripeId: string) {
+    return syncSingleEntity(stripeId, this.pgClient, this.stripe, this.config)
   }
 
-  public handleWebhookEvent(event: Buffer, sig: string): void {
-    handleWebhookEvent(this.pgClient, this.stripe, this.config, event, sig)
+  public handleWebhookEvent(event: Buffer, sig: string): Error | null {
+    try {
+      handleWebhookEvent(this.pgClient, this.stripe, this.config, event, sig)
+      return null
+    } catch (err) {
+      return err
+    }
   }
 }

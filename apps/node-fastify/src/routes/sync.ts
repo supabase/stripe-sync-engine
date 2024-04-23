@@ -17,7 +17,7 @@ export default async function routes(fastify: FastifyInstance) {
         }) ?? {}
 
       const params = { created, object, backfillRelatedEntities } as SyncBackfillParams
-      const result = await fastify.stripeSyncEngine.SyncBackfillParam(params)
+      const result = await fastify.stripeSyncEngine.syncBackfill(params)
       return reply.send({
         statusCode: 200,
         ts: Date.now(),
