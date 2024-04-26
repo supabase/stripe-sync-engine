@@ -3,15 +3,16 @@
   "version": "0.0.0",
   "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
   "main": "index.js",
+  "private": true,
   "scripts": {
-    "dev": "tsx --watch ./src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "NODE_ENV=production node dist/server.js",
-    "test": "node -r dotenv/config node_modules/.bin/jest --detectOpenHandles",
+    "dev:node-fastify": "turbo run dev --filter=stripe-sync-engine-fastify",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "test": "turbo run test",
     "test:debug": "TERM=dumb node -r dotenv/config node_modules/.bin/jest",
-    "eslint:check": "eslint 'src/**'",
-    "prettier:check": "prettier -c src/**",
-    "prettier:write": "prettier --write src/**",
+    "lint:check": "turbo run lint",
+    "format:check": "turbo run format:check",
+    "format": "turbo run format",
     "prod:deploy": "flyctl -c fly.prod.toml deploy",
     "prod:logs": "flyctl -c fly.prod.toml logs",
     "prod:secrets:set": "flyctl -c fly.prod.toml secrets import",
@@ -26,33 +27,22 @@
   "engines": {
     "node": ">= 20.0.0"
   },
-  "dependencies": {
-    "@fastify/autoload": "^5.8.0",
-    "@fastify/swagger": "^8.14.0",
-    "@fastify/swagger-ui": "^2.1.0",
-    "dotenv": "^16.3.1",
-    "fastify": "^4.25.2",
-    "p-limit": "^3.1.0",
-    "pg": "^8.11.3",
-    "pg-node-migrations": "0.0.8",
-    "pino": "^8.17.2",
-    "stripe": "^14.21.0",
-    "yesql": "^7.0.0"
-  },
   "devDependencies": {
-    "@types/jest": "^29.5.11",
-    "@types/node": "^20.11.5",
-    "@types/pg": "^8.10.9",
-    "@types/yesql": "^4.1.4",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
-    "jest": "^29.7.0",
     "prettier": "^3.2.4",
-    "ts-jest": "^29.1.1",
-    "tsx": "^4.7.0",
+    "turbo": "^1.13.2",
     "typescript": "^5.3.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/supabase/stripe-sync-engine.git"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }

@@ -1,0 +1,34 @@
+{
+  "name": "stripe-sync-engine-lib",
+  "version": "0.0.1",
+  "description": "Stripe sync engine lib. Sync your Stripe account to your Postgres database",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "author": "Supabase",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 20.0.0"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint 'src/**'",
+    "lint:check": "eslint 'src/**'",
+    "format": "prettier --write src/**",
+    "format:check": "prettier src/**",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "p-limit": "^3.1.0",
+    "pg": "^8.11.3",
+    "pino": "^8.17.2",
+    "stripe": "^14.21.0",
+    "yesql": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "@types/pg": "^8.10.9",
+    "@types/yesql": "^4.1.4"
+  },
+  "keywords": []
+}

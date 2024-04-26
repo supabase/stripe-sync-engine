@@ -12,16 +12,11 @@
     "lib": ["ES2022", "DOM"],
     "resolveJsonModule": true,
     "useUnknownInCatchVariables": false,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "declaration": true
   },
-  "include": [
-    "./src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ],
-  "parserOptions":  {
-    "ecmaVersion":  "2022",  // Allows for the parsing of modern ECMAScript features
-    "sourceType":  "module"  // Allows for the use of imports
-  }
+  "include": ["./src/**/*"],
+  "exclude": ["node_modules", "dist", ".turbo"]
 }
+

@@ -6,3 +6,5 @@ node_modules
 .vscode
 docker
 docs
+.turbo
+.github
