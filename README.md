@@ -41,6 +41,9 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [ ] `checkout.session.async_payment_failed`
 - [ ] `checkout.session.async_payment_succeeded`
 - [ ] `checkout.session.completed`
+- [x] `credit_note.created` 🟢
+- [x] `credit_note.updated` 🟢
+- [x] `credit_note.voided` 🟢
 - [x] `customer.created` 🟢
 - [x] `customer.deleted` 🟢
 - [ ] `customer.source.created`
@@ -129,7 +132,7 @@ body: {
 }
 ```
 
-- `object` **all** | **charge** | **customer** | **dispute** | **invoice** | **payment_method** |  **payment_intent** | **plan** | **price** | **product** | **setup_intent** | **subscription**
+- `object` **all** | **charge** | **customer** | **dispute** | **invoice** | **payment_method** | **payment_intent** | **plan** | **price** | **product** | **setup_intent** | **subscription**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
 #### Alternative routes to sync `daily/weekly/monthly` data

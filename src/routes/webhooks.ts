@@ -15,6 +15,7 @@ import { deletePlan, upsertPlans } from '../lib/plans'
 import { upsertPaymentIntents } from '../lib/payment_intents'
 import { upsertSubscriptionSchedules } from '../lib/subscription_schedules'
 import { deleteTaxId, upsertTaxIds } from '../lib/tax_ids'
+import { upsertCreditNotes } from '../lib/creditNotes'
 
 const config = getConfig()
 
@@ -177,6 +178,15 @@ export default async function routes(fastify: FastifyInstance) {
           const paymentIntent = event.data.object as Stripe.PaymentIntent
 
           await upsertPaymentIntents([paymentIntent])
+          break
+        }
+
+        case 'credit_note.created':
+        case 'credit_note.updated':
+        case 'credit_note.voided': {
+          const creditNote = event.data.object as Stripe.CreditNote
+
+          await upsertCreditNotes([creditNote])
           break
         }
 
