@@ -33,4 +33,4 @@ create table if not exists
 
 create index stripe_credit_notes_customer_idx on "stripe"."credit_notes" using btree (customer);
 
-create index stripe_credit_notes_invoice_idx on "stripe"."credit_notes" using btree (invocie);
+create index stripe_credit_notes_invoice_idx on "stripe"."credit_notes" using btree (invoice);
