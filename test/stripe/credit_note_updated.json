@@ -1,0 +1,73 @@
+{
+  "id": "evt_1KJrLuJDPojXS6LNKLCh0CEr",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1642649422,
+  "data": {
+    "object": {
+      "id": "cn_1MxvRqLkdIwHu7ixY0xbUcxk",
+      "object": "credit_note",
+      "amount": 1099,
+      "amount_shipping": 0,
+      "created": 1681750958,
+      "currency": "usd",
+      "customer": "cus_NjLgPhUokHubJC",
+      "customer_balance_transaction": null,
+      "discount_amount": 0,
+      "discount_amounts": [],
+      "invoice": "in_1MxvRkLkdIwHu7ixABNtI99m",
+      "lines": {
+        "object": "list",
+        "data": [
+          {
+            "id": "cnli_1MxvRqLkdIwHu7ixFpdhBFQf",
+            "object": "credit_note_line_item",
+            "amount": 1099,
+            "amount_excluding_tax": 1099,
+            "description": "T-shirt",
+            "discount_amount": 0,
+            "discount_amounts": [],
+            "invoice_line_item": "il_1MxvRlLkdIwHu7ixnkbntxUV",
+            "livemode": false,
+            "quantity": 1,
+            "tax_amounts": [],
+            "tax_rates": [],
+            "type": "invoice_line_item",
+            "unit_amount": 1099,
+            "unit_amount_decimal": "1099",
+            "unit_amount_excluding_tax": "1099"
+          }
+        ],
+        "has_more": false,
+        "url": "/v1/credit_notes/cn_1MxvRqLkdIwHu7ixY0xbUcxk/lines"
+      },
+      "livemode": false,
+      "memo": null,
+      "metadata": {},
+      "number": "C9E0C52C-0036-CN-01",
+      "out_of_band_amount": null,
+      "pdf": "https://pay.stripe.com/credit_notes/acct_1M2JTkLkdIwHu7ix/test_YWNjdF8xTTJKVGtMa2RJd0h1N2l4LF9Oak9FOUtQNFlPdk52UXhFd2Z4SU45alpEd21kd0Y4LDcyMjkxNzU50200cROQsSK2/pdf?s=ap",
+      "reason": null,
+      "refund": null,
+      "shipping_cost": null,
+      "status": "issued",
+      "subtotal": 1099,
+      "subtotal_excluding_tax": 1099,
+      "tax_amounts": [],
+      "total": 1099,
+      "total_excluding_tax": 1099,
+      "type": "pre_payment",
+      "voided_at": null
+    },
+    "previous_attributes": {
+      "custom_fields": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 3,
+  "request": {
+    "id": "req_m87bnWeVxyQPx0",
+    "idempotency_key": "010d8300-b837-46e0-a795-6247dd0e05e1"
+  },
+  "type": "credit_note.updated"
+}
