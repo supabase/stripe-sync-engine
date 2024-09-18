@@ -31,7 +31,7 @@
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^2.1.0",
     "dotenv": "^16.3.1",
-    "fastify": "^4.25.2",
+    "fastify": "^4.28.1",
     "p-limit": "^3.1.0",
     "pg": "^8.11.3",
     "pg-node-migrations": "0.0.8",
