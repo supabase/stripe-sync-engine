@@ -2,7 +2,6 @@ import { FastifyInstance } from 'fastify'
 import { syncBackfill, SyncBackfillParams } from '../../lib/sync'
 import { verifyApiKey } from '../../utils/verifyApiKey'
 
-// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/weekly', {
     preHandler: [verifyApiKey],

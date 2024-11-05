@@ -19,7 +19,6 @@ import { upsertCreditNotes } from '../lib/creditNotes'
 
 const config = getConfig()
 
-// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/webhooks', {
     handler: async (request, reply) => {
@@ -156,7 +155,6 @@ export default async function routes(fastify: FastifyInstance) {
           await upsertPaymentMethods([paymentMethod])
           break
         }
-        case 'charge.dispute.closed':
         case 'charge.dispute.created':
         case 'charge.dispute.funds_reinstated':
         case 'charge.dispute.funds_withdrawn':
