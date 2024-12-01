@@ -15,7 +15,7 @@ type configType = {
   /** Webhook secret from Stripe to verify the signature of webhook events. */
   STRIPE_WEBHOOK_SECRET: string
 
-  /** API_KEY is used to authenticate requests to the sync-engine. */
+  /** API_KEY is used to authenticate "admin" endpoints (i.e. for backfilling), make sure to generate a secure string. */
   API_KEY: string
 
   /** Stripe API version for the webhooks, defaults to 2020-08-27 */
