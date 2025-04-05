@@ -25,7 +25,7 @@ export const upsertInvoices = async (
     for (const invoice of invoices) {
       if (invoice.lines.has_more) {
         const allLineItems: Stripe.InvoiceLineItem[] = []
-        for await (const lineItem of stripe.invoices.listLineItems(invoice.id, { limit: 100 })) {
+        for await (const lineItem of stripe.invoices.listLineItems(invoice.id!, { limit: 100 })) {
           allLineItems.push(lineItem)
         }
 

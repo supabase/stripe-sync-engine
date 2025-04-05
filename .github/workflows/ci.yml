@@ -13,8 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-22.04]
-        node: ['20']
+        platform: [ubuntu-24.04]
+        node: ['22']
 
     runs-on: ${{ matrix.platform }}
 
@@ -46,13 +46,13 @@ jobs:
         run: |
           npm ci
 
-      - name: Prettier checks
+      - name: Formatting checks
         run: |
-          npm run prettier:check
+          npm run format:check
 
-      - name: ESLint checks
+      - name: Lint
         run: |
-          npm run eslint:check
+          npm run lint
 
       - name: Builds successfully
         run: |

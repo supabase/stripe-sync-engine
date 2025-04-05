@@ -46,7 +46,8 @@ export const findMissingEntries = async (table: string, ids: string[]): Promise<
   return missingIds
 }
 
-export const getUniqueIds = <T>(entries: T[], key: keyof T): string[] => {
+/* eslint-disable  @typescript-eslint/no-explicit-any */
+export const getUniqueIds = (entries: any[], key: string): string[] => {
   const set = new Set(
     entries
       .map((subscription) => subscription?.[key]?.toString())
