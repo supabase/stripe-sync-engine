@@ -12,9 +12,9 @@ jobs:
     strategy:
       matrix:
         node:
-          - '20'
+          - '22'
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     outputs:
       new-release-published: ${{ steps.semantic-release.outputs.new_release_published }}
@@ -48,7 +48,7 @@ jobs:
 
     if: needs.release.outputs.new-release-published == 'true'
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Set up QEMU

@@ -13,8 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-22.04]
-        node: ['20']
+        platform: [ubuntu-24.04]
+        node: ['22']
 
     runs-on: ${{ matrix.platform }}
 
