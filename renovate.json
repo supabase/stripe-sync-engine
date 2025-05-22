@@ -9,5 +9,6 @@
       "description": "Separate Stripe dependency updates",
       "matchPackageNames": ["stripe"]
     }
-  ]
+  ],
+  "ignoreDeps": ["p-limit", "supabase/postgres"]
 }
