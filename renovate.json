@@ -1,0 +1,6 @@
+{
+  "extends": ["config:base", ":disableDependencyDashboard", "group:allNonMajor"],
+  "baseBranches": ["main"],
+  "schedule": ["before 3am on Monday"],
+  "commitMessagePrefix": "chore(deps):"
+}
