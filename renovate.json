@@ -1,6 +1,14 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:base", ":disableDependencyDashboard", "group:allNonMajor"],
   "baseBranches": ["main"],
   "schedule": ["before 3am on Monday"],
-  "commitMessagePrefix": "chore(deps):"
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {
+      "description": "Separate Stripe dependency updates",
+      "matchPackageNames": ["stripe"]
+    }
+  ],
+  "ignoreDeps": ["p-limit", "supabase/postgres"]
 }
