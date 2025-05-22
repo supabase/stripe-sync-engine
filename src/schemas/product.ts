@@ -12,6 +12,7 @@ export const productSchema: JsonSchema = {
     name: { type: 'string' },
     created: { type: 'integer' },
     images: { type: 'object' },
+    marketing_features: { type: 'object' },
     livemode: { type: 'boolean' },
     package_dimensions: { type: 'object' },
     shippable: { type: 'boolean' },
