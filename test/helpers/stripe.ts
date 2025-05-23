@@ -548,6 +548,7 @@ export default {
         created: 1623149335,
         description: null,
         images: [],
+        marketing_features: [],
         livemode: false,
         metadata: {},
         name: 'fake product',
