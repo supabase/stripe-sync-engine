@@ -172,8 +172,8 @@ The entity type is recognized automatically, based on the prefix.
 
 **Develop**
 
-- `npm run dev` to start the local server
-- `npm run test` to run tests
+- `pnpm dev` to start the local server
+- `pnpm t` to run tests
 
 **Building Docker**
 

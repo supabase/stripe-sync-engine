@@ -9,14 +9,8 @@ on:
 
 jobs:
   test:
-    name: Test / OS ${{ matrix.platform }} / Node ${{ matrix.node }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-24.04]
-        node: ['22']
-
-    runs-on: ${{ matrix.platform }}
+    name: Test
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -30,16 +24,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version-file: ./.nvmrc
+          cache: pnpm
 
       - name: Set up .env file
         run: |
@@ -54,20 +47,19 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci
-
+          pnpm install --frozen-lockfile
 
       - name: Formatting checks
         run: |
-          npm run format:check
+          pnpm format:check
 
       - name: Lint
         run: |
-          npm run lint
+          pnpm lint
 
       - name: Builds successfully
         run: |
-          npm run typecheck
+          pnpm typecheck
 
 
       - name: Initialize DB schema
