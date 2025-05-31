@@ -3,4 +3,6 @@ dist/
 node_modules/
 .env
 .env.*
+!.env.sample
 db/migrations/0000_schema.sql
+*.tgz
