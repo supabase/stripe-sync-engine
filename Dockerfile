@@ -6,7 +6,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN npm install -g pnpm@10.10.0
 
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile 
 COPY . /app
 RUN pnpm build 
