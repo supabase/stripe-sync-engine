@@ -24,5 +24,6 @@
     "eslint-plugin-prettier": "^5.4.1",
     "pino": "^9.7.0",
     "rimraf": "^6.0.1"
-  }
+  },
+  "packageManager": "pnpm@10.11.0"
 }
