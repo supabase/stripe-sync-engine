@@ -57,7 +57,7 @@ export class StripeSync {
     })
   }
 
-  async processWebhook(payload: Buffer, signature: string | undefined) {
+  async processWebhook(payload: Buffer | string, signature: string | undefined) {
     const event = this.stripe.webhooks.constructEvent(
       payload,
       signature!,
