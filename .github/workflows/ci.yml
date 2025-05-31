@@ -34,7 +34,7 @@ jobs:
       - name: Set up .env file
         run: |
           touch .env
-          echo DATABASE_URL='postgres://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable&search_path=stripe' >> .env
+          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> .env
           echo NODE_ENV=dev >> .env
           echo STRIPE_SECRET_KEY=sk_test_ >> .env
           echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
