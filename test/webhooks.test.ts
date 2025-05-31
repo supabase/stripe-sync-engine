@@ -102,11 +102,10 @@ describe('/webhooks', () => {
       payload: eventBody,
     })
 
-    const json = JSON.parse(response.body)
     if (response.statusCode != 200) {
-      console.log('error: ', json)
+      console.error('error: ', response.body)
     }
     expect(response.statusCode).toBe(200)
-    expect(json).toMatchObject({ received: true })
+    expect(JSON.parse(response.body)).toMatchObject({ received: true })
   })
 })

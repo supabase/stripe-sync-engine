@@ -782,7 +782,7 @@ export class StripeSync {
 
   async upsertDisputes(
     disputes: Stripe.Dispute[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities: boolean = false
   ): Promise<Stripe.Dispute[]> {
     if (backfillRelatedEntities) {
       await this.backfillCharges(getUniqueIds(disputes, 'charge'))
@@ -903,7 +903,7 @@ export class StripeSync {
 
   async upsertTaxIds(
     taxIds: Stripe.TaxId[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities: boolean = false
   ): Promise<Stripe.TaxId[]> {
     if (backfillRelatedEntities) {
       await this.backfillCustomers(getUniqueIds(taxIds, 'customer'))
