@@ -27,13 +27,26 @@ async function connectAndMigrate(client: Client, migrationsDirectory: string, lo
   }
 }
 
-export async function runMigrations(client: Client): Promise<void> {
+export async function runMigrations(): Promise<void> {
+  // Init DB
+  const dbConfig = {
+    connectionString: config.DATABASE_URL,
+    connectionTimeoutMillis: 10_000,
+  }
+  const client = new Client(dbConfig)
+
   try {
+    // Run migrations
+    await client.connect()
+
+    // Ensure schema exists, not doing it via migration to not break current migration checksums
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
+
     console.log('Running migrations')
+
     await connectAndMigrate(client, './db/migrations')
-  } catch (error) {
-    throw error
   } finally {
+    await client.end()
     console.log('Finished migrations')
   }
 }

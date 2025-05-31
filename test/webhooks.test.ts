@@ -5,6 +5,7 @@ import { createServer } from '../src/app'
 import { getConfig } from '../src/utils/config'
 import stripeMock from './helpers/stripe'
 import 'dotenv/config'
+import { runMigrations } from '../src/utils/migrate'
 
 jest.doMock('stripe', () => {
   return jest.fn(() => stripeMock)
@@ -18,6 +19,7 @@ describe('/webhooks', () => {
 
   beforeAll(async () => {
     server = await createServer()
+    await runMigrations()
   })
 
   afterAll(async () => {

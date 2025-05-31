@@ -10,4 +10,3 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - ./db/migrations/schema.sql:/docker-entrypoint-initdb.d/0000_schema.sql
-      - ../db/migrations:/docker-entrypoint-initdb.d
