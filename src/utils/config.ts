@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 import pino from 'pino'
+import { logger } from '../logger'
 
 export type StripeSyncConfig = {
   /** Postgres database URL including authentication */
@@ -55,5 +56,6 @@ export function getConfig(): StripeSyncConfig {
     STRIPE_API_VERSION: getConfigFromEnv('STRIPE_API_VERSION', '2020-08-27'),
     PORT: Number(getConfigFromEnv('PORT', '8080')),
     AUTO_EXPAND_LISTS: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
+    logger: logger,
   }
 }
