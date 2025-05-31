@@ -18,21 +18,6 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
-    services:
-      postgres:
-        image: postgres:15
-        ports:
-          - 55432:5432
-        env:
-          POSTGRES_DB: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -49,7 +34,7 @@ jobs:
       - name: Set up .env file
         run: |
           touch .env
-          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> .env
+          echo DATABASE_URL='postgres://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable&search_path=stripe' >> .env
           echo NODE_ENV=dev >> .env
           echo STRIPE_SECRET_KEY=sk_test_ >> .env
           echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
@@ -60,22 +45,6 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-
-
-      - name: Wait for Postgres to be ready
-        run: |
-          until pg_isready -h localhost -p 55432 -U postgres; do
-            echo "Waiting for Postgres..."
-            sleep 2
-          done
-
-      - name: Initialize DB schema
-        run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client
-          psql "postgres://postgres:postgres@localhost:55432/postgres" <<'EOF'
-          CREATE SCHEMA IF NOT EXISTS stripe;
-          -- Additional SQL commands can go here
-          EOF
 
       - name: Formatting checks
         run: |
@@ -91,4 +60,5 @@ jobs:
 
       - name: Tests
         run: |
+          docker compose -f ./docker/compose.yml up -d
           npm run test
