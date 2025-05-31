@@ -59,7 +59,7 @@ jobs:
 
       - name: Builds successfully
         run: |
-          pnpm typecheck
+          pnpm build
 
       - name: Initialize DB schema
         run: |
