@@ -1,6 +1,6 @@
 .expo
 .next
 node_modules
-package-lock.json
+pnpm-lock.yaml
 docker*
 Pulumi.*.yaml

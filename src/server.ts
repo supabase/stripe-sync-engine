@@ -11,19 +11,19 @@ const main = async () => {
   const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = await createServer({
     loggerInstance: logger,
     disableRequestLogging: true,
-    exposeDocs: getConfig().NODE_ENV !== 'production',
+    exposeDocs: getConfig().nodeEnv !== 'production',
     requestIdHeader: 'Request-Id',
   })
 
   await runMigrations()
 
   // Start the server
-  app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err, address) => {
+  app.listen({ port: Number(config.port), host: '0.0.0.0' }, (err, address) => {
     if (err) {
-      console.error(err)
+      logger.error(err)
       process.exit(1)
     }
-    console.log(`Server listening at ${address}`)
+    logger.info(`Server listening at ${address}`)
   })
 }
 

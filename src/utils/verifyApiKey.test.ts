@@ -1,4 +1,5 @@
 import { apiKeyMatches } from './verifyApiKey'
+import { describe, test, expect } from 'vitest'
 
 describe('verifyApiKey', () => {
   test.each([

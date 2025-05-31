@@ -1,6 +1,7 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createServer } from '../src/app'
+import { beforeAll, describe, test, expect, afterAll } from 'vitest'
 
 describe('/health', () => {
   let server: FastifyInstance

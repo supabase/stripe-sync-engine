@@ -3,23 +3,38 @@ import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
 import { createServer } from '../src/app'
 import { getConfig } from '../src/utils/config'
-import stripeMock from './helpers/stripe'
 import 'dotenv/config'
 import { runMigrations } from '../src/utils/migrate'
-
-jest.doMock('stripe', () => {
-  return jest.fn(() => stripeMock)
-})
+import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
+import { mockStripe } from './helpers/stripe'
+import { logger } from '../src/logger'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
-const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
+const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
-describe('/webhooks', () => {
+describe('POST /webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
-    server = await createServer()
     await runMigrations()
+
+    vitest.mock('stripe', async () => {
+      const actualStripe = await vitest.importActual('stripe')
+
+      return {
+        default: vitest.fn().mockImplementation(() => ({
+          invoices: mockStripe.invoices,
+          customers: mockStripe.customers,
+          products: mockStripe.products,
+          subscriptions: mockStripe.subscriptions,
+          charges: mockStripe.charges,
+          webhooks: actualStripe.default.webhooks,
+        })),
+      }
+    })
+
+    process.env.AUTO_EXPAND_LISTS = 'false'
+    server = await createServer()
   })
 
   afterAll(async () => {
@@ -102,11 +117,10 @@ describe('/webhooks', () => {
       payload: eventBody,
     })
 
-    const json = JSON.parse(response.body)
     if (response.statusCode != 200) {
-      console.log('error: ', json)
+      logger.error('error: ', response.body)
     }
     expect(response.statusCode).toBe(200)
-    expect(json).toMatchObject({ received: true })
+    expect(JSON.parse(response.body)).toMatchObject({ received: true })
   })
 })
