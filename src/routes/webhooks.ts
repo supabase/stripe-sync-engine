@@ -10,7 +10,7 @@ export default async function routes(fastify: FastifyInstance) {
       try {
         await fastify.stripeSync.processWebhook(body.raw, signature)
       } catch (error) {
-        logger.error('Webhook processing error:', error)
+        logger.error(error, 'Webhook processing error')
         return reply.code(400).send(`Webhook Error: ${error.message}`)
       }
       return reply.send({ received: true })
