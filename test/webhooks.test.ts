@@ -18,6 +18,7 @@ describe('/webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
+    process.env.AUTO_EXPAND_LISTS = 'false'
     server = await createServer()
     await runMigrations()
   })
