@@ -16,6 +16,7 @@ import { upsertPaymentIntents } from '../lib/payment_intents'
 import { upsertSubscriptionSchedules } from '../lib/subscription_schedules'
 import { deleteTaxId, upsertTaxIds } from '../lib/tax_ids'
 import { upsertCreditNotes } from '../lib/creditNotes'
+import { logger } from '../logger'
 
 const config = getConfig()
 
@@ -41,6 +42,9 @@ export default async function routes(fastify: FastifyInstance) {
         case 'charge.succeeded':
         case 'charge.updated': {
           const charge = event.data.object as Stripe.Charge
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for charge ${charge.id}`)
+
           await upsertCharges([charge])
           break
         }
@@ -48,6 +52,9 @@ export default async function routes(fastify: FastifyInstance) {
         case 'customer.deleted':
         case 'customer.updated': {
           const customer = event.data.object as Stripe.Customer
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for customer ${customer.id}`)
+
           await upsertCustomers([customer])
           break
         }
@@ -60,17 +67,28 @@ export default async function routes(fastify: FastifyInstance) {
         case 'customer.subscription.resumed':
         case 'customer.subscription.updated': {
           const subscription = event.data.object as Stripe.Subscription
+
+          logger.info(
+            `Received webhook ${event.id}: ${event.type} for subscription ${subscription.id}`
+          )
+
           await upsertSubscriptions([subscription])
           break
         }
         case 'customer.tax_id.updated':
         case 'customer.tax_id.created': {
           const taxId = event.data.object as Stripe.TaxId
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for taxId ${taxId.id}`)
+
           await upsertTaxIds([taxId])
           break
         }
         case 'customer.tax_id.deleted': {
           const taxId = event.data.object as Stripe.TaxId
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for taxId ${taxId.id}`)
+
           await deleteTaxId(taxId.id)
           break
         }
@@ -88,39 +106,60 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.marked_uncollectible':
         case 'invoice.updated': {
           const invoice = event.data.object as Stripe.Invoice
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for invoice ${invoice.id}`)
+
           await upsertInvoices([invoice])
           break
         }
         case 'product.created':
         case 'product.updated': {
           const product = event.data.object as Stripe.Product
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for product ${product.id}`)
+
           await upsertProducts([product])
           break
         }
         case 'product.deleted': {
           const product = event.data.object as Stripe.Product
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for product ${product.id}`)
+
           await deleteProduct(product.id)
           break
         }
         case 'price.created':
         case 'price.updated': {
           const price = event.data.object as Stripe.Price
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for price ${price.id}`)
+
           await upsertPrices([price])
           break
         }
         case 'price.deleted': {
           const price = event.data.object as Stripe.Price
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for price ${price.id}`)
+
           await deletePrice(price.id)
           break
         }
         case 'plan.created':
         case 'plan.updated': {
           const plan = event.data.object as Stripe.Plan
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for plan ${plan.id}`)
+
           await upsertPlans([plan])
           break
         }
         case 'plan.deleted': {
           const plan = event.data.object as Stripe.Plan
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for plan ${plan.id}`)
+
           await deletePlan(plan.id)
           break
         }
@@ -130,6 +169,10 @@ export default async function routes(fastify: FastifyInstance) {
         case 'setup_intent.setup_failed':
         case 'setup_intent.succeeded': {
           const setupIntent = event.data.object as Stripe.SetupIntent
+
+          logger.info(
+            `Received webhook ${event.id}: ${event.type} for setupIntent ${setupIntent.id}`
+          )
 
           await upsertSetupIntents([setupIntent])
           break
@@ -143,6 +186,10 @@ export default async function routes(fastify: FastifyInstance) {
         case 'subscription_schedule.updated': {
           const subscriptionSchedule = event.data.object as Stripe.SubscriptionSchedule
 
+          logger.info(
+            `Received webhook ${event.id}: ${event.type} for subscriptionSchedule ${subscriptionSchedule.id}`
+          )
+
           await upsertSubscriptionSchedules([subscriptionSchedule])
           break
         }
@@ -151,6 +198,10 @@ export default async function routes(fastify: FastifyInstance) {
         case 'payment_method.detached':
         case 'payment_method.updated': {
           const paymentMethod = event.data.object as Stripe.PaymentMethod
+
+          logger.info(
+            `Received webhook ${event.id}: ${event.type} for paymentMethod ${paymentMethod.id}`
+          )
 
           await upsertPaymentMethods([paymentMethod])
           break
@@ -161,6 +212,8 @@ export default async function routes(fastify: FastifyInstance) {
         case 'charge.dispute.updated':
         case 'charge.dispute.closed': {
           const dispute = event.data.object as Stripe.Dispute
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for dispute ${dispute.id}`)
 
           await upsertDisputes([dispute])
           break
@@ -175,6 +228,10 @@ export default async function routes(fastify: FastifyInstance) {
         case 'payment_intent.succeeded': {
           const paymentIntent = event.data.object as Stripe.PaymentIntent
 
+          logger.info(
+            `Received webhook ${event.id}: ${event.type} for paymentIntent ${paymentIntent.id}`
+          )
+
           await upsertPaymentIntents([paymentIntent])
           break
         }
@@ -183,6 +240,8 @@ export default async function routes(fastify: FastifyInstance) {
         case 'credit_note.updated':
         case 'credit_note.voided': {
           const creditNote = event.data.object as Stripe.CreditNote
+
+          logger.info(`Received webhook ${event.id}: ${event.type} for creditNote ${creditNote.id}`)
 
           await upsertCreditNotes([creditNote])
           break
