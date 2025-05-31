@@ -1,53 +1,31 @@
 {
   "name": "stripe-sync-engine",
-  "version": "0.0.0",
-  "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
-  "main": "index.js",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "tsx --watch ./src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "NODE_ENV=production node dist/server.js",
-    "test": "vitest",
-    "lint": "eslint 'src/**'",
-    "format:check": "prettier -c src/**",
-    "format": "prettier --write src/**",
-    "prod:secrets:fetch": "AWS_PROFILE=supabase node internals/getSecrets.js prod",
-    "staging:secrets:fetch": "node internals/getSecrets.js staging"
-  },
-  "author": "Supabase",
-  "license": "MIT",
-  "engines": {
-    "node": ">= 22.0.0"
-  },
-  "dependencies": {
-    "@fastify/autoload": "^6.3.0",
-    "@fastify/swagger": "^9.5.1",
-    "@fastify/swagger-ui": "^5.2.2",
-    "dotenv": "^16.5.0",
-    "fastify": "^5.3.3",
-    "p-limit": "^3.1.0",
-    "pg": "^8.16.0",
-    "pg-node-migrations": "0.0.8",
-    "pino": "^9.7.0",
-    "stripe": "^18.2.0",
-    "yesql": "^7.0.0"
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.28.0",
-    "@types/node": "^22.15.29",
-    "@types/pg": "^8.15.2",
-    "@types/yesql": "^4.1.4",
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
     "eslint": "^9.28.0",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.4.1",
+    "pino": "^9.7.0",
     "prettier": "^3.5.3",
-    "tsx": "^4.19.4",
+    "rimraf": "^6.0.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.4"
+    "vite": "^6.3.5"
   },
   "packageManager": "pnpm@10.11.0"
 }

@@ -7,40 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@fastify/autoload':
-        specifier: ^6.3.0
-        version: 6.3.0
-      '@fastify/swagger':
-        specifier: ^9.5.1
-        version: 9.5.1
-      '@fastify/swagger-ui':
-        specifier: ^5.2.2
-        version: 5.2.2
-      dotenv:
-        specifier: ^16.5.0
-        version: 16.5.0
-      fastify:
-        specifier: ^5.3.3
-        version: 5.3.3
-      p-limit:
-        specifier: ^3.1.0
-        version: 3.1.0
-      pg:
-        specifier: ^8.16.0
-        version: 8.16.0
-      pg-node-migrations:
-        specifier: 0.0.8
-        version: 0.0.8
-      pino:
-        specifier: ^9.7.0
-        version: 9.7.0
-      stripe:
-        specifier: ^18.2.0
-        version: 18.2.0(@types/node@22.15.29)
-      yesql:
-        specifier: ^7.0.0
-        version: 7.0.0
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.3.1
@@ -48,15 +14,6 @@ importers:
       '@eslint/js':
         specifier: ^9.28.0
         version: 9.28.0
-      '@types/node':
-        specifier: ^22.15.29
-        version: 22.15.29
-      '@types/pg':
-        specifier: ^8.15.2
-        version: 8.15.2
-      '@types/yesql':
-        specifier: ^4.1.4
-        version: 4.1.4
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.33.0
         version: 8.33.0(@typescript-eslint/parser@8.33.0(eslint@9.28.0)(typescript@5.8.3))(eslint@9.28.0)(typescript@5.8.3)
@@ -72,18 +29,77 @@ importers:
       eslint-plugin-prettier:
         specifier: ^5.4.1
         version: 5.4.1(eslint-config-prettier@10.1.5(eslint@9.28.0))(eslint@9.28.0)(prettier@3.5.3)
+      pino:
+        specifier: ^9.7.0
+        version: 9.7.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
-      tsx:
-        specifier: ^4.19.4
-        version: 4.19.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
+      vite:
+        specifier: ^6.3.5
+        version: 6.3.5(@types/node@22.15.29)(tsx@4.19.4)(yaml@2.6.0)
+
+  packages/fastify-app:
+    dependencies:
+      '@fastify/autoload':
+        specifier: ^6.3.0
+        version: 6.3.0
+      '@fastify/swagger':
+        specifier: ^9.5.1
+        version: 9.5.1
+      '@fastify/swagger-ui':
+        specifier: ^5.2.2
+        version: 5.2.2
+      '@supabase/stripe-sync-engine':
+        specifier: 'workspace:'
+        version: link:../sync-engine
+      dotenv:
+        specifier: ^16.5.0
+        version: 16.5.0
+      fastify:
+        specifier: ^5.3.3
+        version: 5.3.3
+      stripe:
+        specifier: ^18.2.0
+        version: 18.2.0(@types/node@22.15.29)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.29
+        version: 22.15.29
+      tsx:
+        specifier: ^4.19.4
+        version: 4.19.4
       vitest:
         specifier: ^3.1.4
         version: 3.1.4(@types/node@22.15.29)(tsx@4.19.4)(yaml@2.6.0)
+
+  packages/sync-engine:
+    dependencies:
+      pg:
+        specifier: ^8.16.0
+        version: 8.16.0
+      pg-node-migrations:
+        specifier: 0.0.8
+        version: 0.0.8
+      stripe:
+        specifier: '> 11'
+        version: 18.2.0(@types/node@22.15.29)
+      yesql:
+        specifier: ^7.0.0
+        version: 7.0.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.15.2
+        version: 8.15.2
+      '@types/yesql':
+        specifier: ^4.1.4
+        version: 4.1.4
 
 packages:
 
@@ -1296,6 +1312,11 @@ packages:
 
   rfdc@1.4.1:
     resolution: {integrity: sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA==}
+
+  rimraf@6.0.1:
+    resolution: {integrity: sha512-9dkvaxAsk/xNXSJzMgFqqMCuFgt2+KsOFek3TMLfo8NCPfWpBmqwyNn5Y+NX56QUYfCtsyhF3ayiboEoUmJk/A==}
+    engines: {node: 20 || >=22}
+    hasBin: true
 
   rollup@4.41.1:
     resolution: {integrity: sha512-cPmwD3FnFv8rKMBc1MxWCwVQFxwf1JEmSX3iQXrRVVG15zerAIXRjMFVWnd5Q5QvgKF7Aj+5ykXFhUl+QGnyOw==}
@@ -2739,6 +2760,11 @@ snapshots:
   reusify@1.0.4: {}
 
   rfdc@1.4.1: {}
+
+  rimraf@6.0.1:
+    dependencies:
+      glob: 11.0.0
+      package-json-from-dist: 1.0.1
 
   rollup@4.41.1:
     dependencies:

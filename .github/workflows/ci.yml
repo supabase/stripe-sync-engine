@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
@@ -36,14 +36,14 @@ jobs:
 
       - name: Set up .env file
         run: |
-          touch .env
-          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> .env
-          echo NODE_ENV=dev >> .env
-          echo STRIPE_SECRET_KEY=sk_test_ >> .env
-          echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
-          echo SCHEMA=stripe >> .env
-          echo PORT=8080 >> .env
-          echo API_KEY=api_key_test >> .env
+          touch packages/fastify-app/.env
+          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> packages/fastify-app/.env
+          echo NODE_ENV=dev >> packages/fastify-app/.env
+          echo STRIPE_SECRET_KEY=sk_test_ >> packages/fastify-app/.env
+          echo STRIPE_WEBHOOK_SECRET=whsec_ >> packages/fastify-app/.env
+          echo SCHEMA=stripe >> packages/fastify-app/.env
+          echo PORT=8080 >> packages/fastify-app/.env
+          echo API_KEY=api_key_test >> packages/fastify-app/.env
 
       - name: Install dependencies
         run: |
@@ -59,8 +59,7 @@ jobs:
 
       - name: Builds successfully
         run: |
-          pnpm typecheck
-
+          pnpm build
 
       - name: Initialize DB schema
         run: |

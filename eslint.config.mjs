@@ -20,5 +20,8 @@ export default [
       ecmaVersion: 2022,
       sourceType: 'module',
     },
+    rules: {
+      '@typescript-eslint/ban-ts-comment': 'off',
+    },
   },
 ]
