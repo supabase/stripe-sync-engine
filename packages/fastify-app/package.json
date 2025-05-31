@@ -4,7 +4,7 @@
   "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
   "main": "index.js",
   "scripts": {
-     "clean": "rimraf dist",
+    "clean": "rimraf dist",
     "dev": "tsx --watch ./src/server.ts",
     "build": "pnpm clean && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
