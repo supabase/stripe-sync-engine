@@ -685,12 +685,8 @@ export class StripeSync {
     const items: T[] = []
 
     logger.info('Fetching items to sync from Stripe')
-    try {
-      for await (const item of fetch()) {
-        items.push(item)
-      }
-    } catch (err) {
-      console.error(err)
+    for await (const item of fetch()) {
+      items.push(item)
     }
 
     if (!items.length) return { synced: 0 }

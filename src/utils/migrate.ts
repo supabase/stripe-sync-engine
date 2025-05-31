@@ -22,7 +22,7 @@ async function connectAndMigrate(client: Client, migrationsDirectory: string, lo
     await migrate({ client }, migrationsDirectory, optionalConfig)
   } catch (error) {
     if (logOnError && error instanceof Error) {
-      console.error('Migration error:', error.message)
+      logger.error(error, 'Migration error:')
     } else {
       throw error
     }

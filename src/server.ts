@@ -20,7 +20,7 @@ const main = async () => {
   // Start the server
   app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err, address) => {
     if (err) {
-      console.error(err)
+      logger.error(err)
       process.exit(1)
     }
     logger.info(`Server listening at ${address}`)

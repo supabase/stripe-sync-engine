@@ -7,6 +7,7 @@ import 'dotenv/config'
 import { runMigrations } from '../src/utils/migrate'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { mockStripe } from './helpers/stripe'
+import { logger } from '../src/logger'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
@@ -117,7 +118,7 @@ describe('POST /webhooks', () => {
     })
 
     if (response.statusCode != 200) {
-      console.error('error: ', response.body)
+      logger.error('error: ', response.body)
     }
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({ received: true })
