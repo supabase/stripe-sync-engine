@@ -75,7 +75,7 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
-  
+
   npm:
     name: Release on NPM
 
