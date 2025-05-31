@@ -27,11 +27,6 @@ jobs:
           POSTGRES_DB: postgres
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -77,11 +72,11 @@ jobs:
 
       - name: Initialize DB schema
         run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client
-          psql "postgres://postgres:postgres@localhost:55432/postgres" <<'EOF'
-          create schema if not exists "stripe";
-          -- Additional SQL commands can go here
-          EOF
+          docker run --rm \
+            --network="host" \
+            -e PGPASSWORD=postgres \
+            postgres:15 \
+            psql -h localhost -p 55432 -U postgres -d postgres -c 'create schema if not exists "stripe";'
 
       - name: Tests
         run: |
