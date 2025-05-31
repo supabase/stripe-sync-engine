@@ -1,5 +1,4 @@
 import pino from 'pino'
-import type Stripe from 'stripe'
 
 export type StripeSyncConfig = {
   /** Postgres database URL including authentication */
@@ -81,7 +80,27 @@ export interface SyncBackfill {
 }
 
 export interface SyncBackfillParams {
-  created?: Stripe.RangeQueryParam
+  created?: {
+    /**
+     * Minimum value to filter by (exclusive)
+     */
+    gt?: number
+
+    /**
+     * Minimum value to filter by (inclusive)
+     */
+    gte?: number
+
+    /**
+     * Maximum value to filter by (exclusive)
+     */
+    lt?: number
+
+    /**
+     * Maximum value to filter by (inclusive)
+     */
+    lte?: number
+  }
   object?: SyncObject
   backfillRelatedEntities?: boolean
 }

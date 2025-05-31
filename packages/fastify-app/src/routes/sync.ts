@@ -1,7 +1,5 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../utils/verifyApiKey'
-
-import Stripe from 'stripe'
 import { SyncBackfillParams } from '@supabase/stripe-sync-engine'
 
 export default async function routes(fastify: FastifyInstance) {
@@ -10,7 +8,7 @@ export default async function routes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { created, object, backfillRelatedEntities } =
         (request.body as {
-          created?: Stripe.RangeQueryParam
+          created?: SyncBackfillParams['created']
           object?: string
           backfillRelatedEntities?: boolean
         }) ?? {}
