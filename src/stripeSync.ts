@@ -90,6 +90,11 @@ export class StripeSync {
       },
     })
 
+    this.config.logger?.info(
+      { autoExpandLists: config.AUTO_EXPAND_LISTS, stripeApiVersion: config.STRIPE_API_VERSION },
+      'StripeSync initialized'
+    )
+
     this.postgresClient = new PostgresClient({
       databaseUrl: config.DATABASE_URL,
       schema: config.SCHEMA,
@@ -714,11 +719,10 @@ export class StripeSync {
     }
 
     // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
-    if (this.config.AUTO_EXPAND_LISTS) {
-      await this.expandEntity(charges, 'refunds', (id) =>
-        this.stripe.refunds.list({ charge: id, limit: 100 })
-      )
-    }
+
+    await this.expandEntity(charges, 'refunds', (id) =>
+      this.stripe.refunds.list({ charge: id, limit: 100 })
+    )
 
     return this.postgresClient.upsertMany(charges, 'charges', chargeSchema)
   }
@@ -743,11 +747,9 @@ export class StripeSync {
     }
 
     // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
-    if (this.config.AUTO_EXPAND_LISTS) {
-      await this.expandEntity(creditNotes, 'lines', (id) =>
-        this.stripe.creditNotes.listLineItems(id, { limit: 100 })
-      )
-    }
+    await this.expandEntity(creditNotes, 'lines', (id) =>
+      this.stripe.creditNotes.listLineItems(id, { limit: 100 })
+    )
 
     return this.postgresClient.upsertMany(creditNotes, 'credit_notes', creditNoteSchema)
   }
@@ -803,11 +805,10 @@ export class StripeSync {
     }
 
     // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
-    if (this.config.AUTO_EXPAND_LISTS) {
-      await this.expandEntity(invoices, 'lines', (id) =>
-        this.stripe.invoices.listLineItems(id, { limit: 100 })
-      )
-    }
+
+    await this.expandEntity(invoices, 'lines', (id) =>
+      this.stripe.invoices.listLineItems(id, { limit: 100 })
+    )
 
     return this.postgresClient.upsertMany(invoices, 'invoices', invoiceSchema)
   }
@@ -996,11 +997,9 @@ export class StripeSync {
     }
 
     // Stripe only sends the first 10 items by default, the option will actively fetch all items
-    if (this.config.AUTO_EXPAND_LISTS) {
-      await this.expandEntity(subscriptions, 'items', (id) =>
-        this.stripe.subscriptionItems.list({ subscription: id, limit: 100 })
-      )
-    }
+    await this.expandEntity(subscriptions, 'items', (id) =>
+      this.stripe.subscriptionItems.list({ subscription: id, limit: 100 })
+    )
 
     // Run it
     const rows = await this.postgresClient.upsertMany(
@@ -1056,19 +1055,19 @@ export class StripeSync {
     P extends string,
     T extends { id?: string } & { [key in P]?: Stripe.ApiList<K> | null },
   >(entities: T[], property: P, list: (id: string) => Stripe.ApiListPromise<K>) {
-    if (this.config.AUTO_EXPAND_LISTS) {
-      for (const entity of entities) {
-        if (entity[property]?.has_more) {
-          const allData: K[] = []
-          for await (const fetchedEntity of list(entity.id!)) {
-            allData.push(fetchedEntity)
-          }
+    if (!this.config.AUTO_EXPAND_LISTS) return
 
-          entity[property] = {
-            ...entity[property],
-            data: allData,
-            has_more: false,
-          }
+    for (const entity of entities) {
+      if (entity[property]?.has_more) {
+        const allData: K[] = []
+        for await (const fetchedEntity of list(entity.id!)) {
+          allData.push(fetchedEntity)
+        }
+
+        entity[property] = {
+          ...entity[property],
+          data: allData,
+          has_more: false,
         }
       }
     }
