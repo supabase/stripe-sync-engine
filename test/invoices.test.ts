@@ -2,17 +2,19 @@ import 'dotenv/config'
 import Stripe from 'stripe'
 import { StripeSync } from '../src/stripeSync'
 import { getConfig } from '../src/utils/config'
+import { vitest, beforeAll, describe, test, expect } from 'vitest'
 
 let stripeSync: StripeSync
 
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => {
-    return {
+vitest.mock('stripe', () => {
+  // This is the shape of the import: { default: fn }
+  return {
+    default: vitest.fn().mockImplementation(() => ({
       invoices: {
         listLineItems: () => [{ id: 'li_123' }, { id: 'li_1234' }],
       },
-    }
-  })
+    })),
+  }
 })
 
 beforeAll(() => {

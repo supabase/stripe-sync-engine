@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { getConfig } from '../../src/utils/config'
+import { vitest } from 'vitest'
 
 const stripe = new Stripe(getConfig().STRIPE_SECRET_KEY, {
   // https://github.com/stripe/stripe-node#configuration
@@ -14,7 +15,7 @@ const stripe = new Stripe(getConfig().STRIPE_SECRET_KEY, {
 export default {
   webhooks: stripe.webhooks,
   invoices: {
-    retrieve: jest.fn((id) =>
+    retrieve: vitest.fn((id) =>
       Promise.resolve({
         id: id,
         object: 'invoice',
@@ -190,7 +191,7 @@ export default {
     ),
   },
   subscriptions: {
-    retrieve: jest.fn((id) =>
+    retrieve: vitest.fn((id) =>
       Promise.resolve({
         id: id,
         object: 'subscription',
@@ -380,7 +381,7 @@ export default {
     ),
   },
   customers: {
-    retrieve: jest.fn((id) =>
+    retrieve: vitest.fn((id) =>
       Promise.resolve({
         id: id,
         object: 'customer',
@@ -439,7 +440,7 @@ export default {
     ),
   },
   charges: {
-    retrieve: jest.fn((id) =>
+    retrieve: vitest.fn((id) =>
       Promise.resolve({
         id,
         object: 'charge',
@@ -539,7 +540,7 @@ export default {
     ),
   },
   products: {
-    retrieve: jest.fn((id) =>
+    retrieve: vitest.fn((id) =>
       Promise.resolve({
         id,
         object: 'product',

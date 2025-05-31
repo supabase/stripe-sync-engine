@@ -6,15 +6,16 @@ import { getConfig } from '../src/utils/config'
 import stripeMock from './helpers/stripe'
 import 'dotenv/config'
 import { runMigrations } from '../src/utils/migrate'
+import { vitest, beforeAll, describe, test, expect, afterAll } from 'vitest'
 
-jest.doMock('stripe', () => {
-  return jest.fn(() => stripeMock)
+vitest.doMock('stripe', () => {
+  return vitest.fn(() => stripeMock)
 })
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
 
-describe('/webhooks', () => {
+describe('POST /webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
