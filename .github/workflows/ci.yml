@@ -18,6 +18,21 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - 55432:5432
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -46,6 +61,7 @@ jobs:
         run: |
           npm ci
 
+
       - name: Formatting checks
         run: |
           npm run format:check
@@ -58,7 +74,15 @@ jobs:
         run: |
           npm run typecheck
 
+
+      - name: Initialize DB schema
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql "postgres://postgres:postgres@localhost:55432/postgres" <<'EOF'
+          create schema if not exists "stripe";
+          -- Additional SQL commands can go here
+          EOF
+
       - name: Tests
         run: |
-          docker compose -f ./docker/compose.yml up -d
           npm run test
