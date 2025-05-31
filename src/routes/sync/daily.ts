@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../../utils/verifyApiKey'
-import { SyncBackfillParams } from '../../stripeSync';
+import { SyncBackfillParams } from '../../stripeSync'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/daily', {
