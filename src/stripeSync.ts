@@ -705,9 +705,9 @@ export class StripeSync {
 
   private async upsertCharges(
     charges: Stripe.Charge[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Charge[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(charges, 'customer')),
         this.backfillInvoices(getUniqueIds(charges, 'invoice')),
@@ -733,9 +733,9 @@ export class StripeSync {
 
   private async upsertCreditNotes(
     creditNotes: Stripe.CreditNote[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.CreditNote[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(creditNotes, 'customer')),
         this.backfillInvoices(getUniqueIds(creditNotes, 'invoice')),
@@ -748,14 +748,6 @@ export class StripeSync {
     )
 
     return this.postgresClient.upsertMany(creditNotes, 'credit_notes', creditNoteSchema)
-  }
-
-  private async backfillCreditNotes(creditNoteIds: string[]) {
-    const missingIds = await this.postgresClient.findMissingEntries('credit_notes', creditNoteIds)
-
-    await this.fetchMissingEntites(missingIds, (id) => this.stripe.creditNotes.retrieve(id)).then(
-      (creditNotes) => this.upsertCreditNotes(creditNotes)
-    )
   }
 
   async upsertCustomers(
@@ -783,9 +775,9 @@ export class StripeSync {
 
   async upsertDisputes(
     disputes: Stripe.Dispute[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Dispute[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillCharges(getUniqueIds(disputes, 'charge'))
     }
 
@@ -794,9 +786,9 @@ export class StripeSync {
 
   async upsertInvoices(
     invoices: Stripe.Invoice[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Invoice[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(invoices, 'customer')),
         this.backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
@@ -821,9 +813,9 @@ export class StripeSync {
 
   async upsertPlans(
     plans: Stripe.Plan[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Plan[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillProducts(getUniqueIds(plans, 'product'))
     }
 
@@ -836,9 +828,9 @@ export class StripeSync {
 
   async upsertPrices(
     prices: Stripe.Price[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Price[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillProducts(getUniqueIds(prices, 'product'))
     }
 
@@ -867,9 +859,9 @@ export class StripeSync {
 
   async upsertPaymentIntents(
     paymentIntents: Stripe.PaymentIntent[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.PaymentIntent[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(paymentIntents, 'customer')),
         this.backfillInvoices(getUniqueIds(paymentIntents, 'invoice')),
@@ -883,7 +875,7 @@ export class StripeSync {
     paymentMethods: Stripe.PaymentMethod[],
     backfillRelatedEntities: boolean = false
   ): Promise<Stripe.PaymentMethod[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillCustomers(getUniqueIds(paymentMethods, 'customer'))
     }
 
@@ -892,9 +884,9 @@ export class StripeSync {
 
   async upsertSetupIntents(
     setupIntents: Stripe.SetupIntent[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.SetupIntent[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillCustomers(getUniqueIds(setupIntents, 'customer'))
     }
 
@@ -903,9 +895,9 @@ export class StripeSync {
 
   async upsertTaxIds(
     taxIds: Stripe.TaxId[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.TaxId[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       await this.backfillCustomers(getUniqueIds(taxIds, 'customer'))
     }
 
@@ -967,9 +959,9 @@ export class StripeSync {
 
   async upsertSubscriptionSchedules(
     subscriptionSchedules: Stripe.SubscriptionSchedule[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.SubscriptionSchedule[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 
       await this.backfillCustomers(customerIds)
@@ -987,9 +979,9 @@ export class StripeSync {
 
   async upsertSubscriptions(
     subscriptions: Stripe.Subscription[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities?: boolean
   ): Promise<Stripe.Subscription[]> {
-    if (backfillRelatedEntities) {
+    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
       const customerIds = getUniqueIds(subscriptions, 'customer')
 
       await this.backfillCustomers(customerIds)

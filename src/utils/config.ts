@@ -32,15 +32,21 @@ export type StripeSyncConfig = {
    * */
   AUTO_EXPAND_LISTS: boolean
 
+  /**
+   * If true, the sync engine will backfill related entities, i.e. when a invoice webhook comes in, it ensures that the customer is present and synced.
+   * This ensures foreign key integrity, but comes at the cost of additional queries to the database (and added latency for Stripe calls if the entity is actually missing).
+   */
+  BACKFILL_RELATED_ENTITIES: boolean
+
   logger?: pino.Logger
 }
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
   const value = process.env[key]
-  if (!value && defaultValue === undefined) {
+  if (value == null && defaultValue === undefined) {
     throw new Error(`${key} is undefined`)
   }
-  return value || defaultValue!
+  return value ?? defaultValue!
 }
 
 export function getConfig(): StripeSyncConfig {
@@ -56,6 +62,7 @@ export function getConfig(): StripeSyncConfig {
     STRIPE_API_VERSION: getConfigFromEnv('STRIPE_API_VERSION', '2020-08-27'),
     PORT: Number(getConfigFromEnv('PORT', '8080')),
     AUTO_EXPAND_LISTS: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
+    BACKFILL_RELATED_ENTITIES: getConfigFromEnv('BACKFILL_RELATED_ENTITIES', 'true') === 'true',
     logger: logger,
   }
 }
