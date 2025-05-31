@@ -70,8 +70,11 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `invoice.payment_failed` 🟢
 - [x] `invoice.payment_succeeded` 🟢
 - [x] `invoice.sent` 🟢
-- [x] `invoice.upcoming` 🟢
+- [x] `invoice.upcoming` 🔴 - Event has no id and cannot be processed
 - [x] `invoice.updated` 🟢
+- [x] `invoice.overdue` 🟢
+- [x] `invoice.overpaid` 🟢
+- [x] `invoice.will_be_due` 🟢
 - [x] `invoice.voided` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`

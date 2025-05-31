@@ -82,7 +82,9 @@ export default async function routes(fastify: FastifyInstance) {
         case 'invoice.payment_action_required':
         case 'invoice.payment_failed':
         case 'invoice.payment_succeeded':
-        case 'invoice.upcoming':
+        case 'invoice.overdue':
+        case 'invoice.overpaid':
+        case 'invoice.will_be_due':
         case 'invoice.sent':
         case 'invoice.voided':
         case 'invoice.marked_uncollectible':
