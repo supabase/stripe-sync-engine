@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
@@ -60,7 +60,6 @@ jobs:
       - name: Builds successfully
         run: |
           pnpm typecheck
-
 
       - name: Initialize DB schema
         run: |

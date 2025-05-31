@@ -1,9 +1,9 @@
 {
-    "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
-    "object": "event",
-    "api_version": "2020-03-02",
-    "created": 1619697430,
-    "data": {
+  "id": "evt_1IlYUUJDPojXS6LN7NEWYSm2",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1619697430,
+  "data": {
     "object": {
       "id": "seti_1MLn4...",
       "object": "setup_intent",
@@ -18,8 +18,7 @@
       "latest_attempt": "seti_1MLn4...",
       "livemode": true,
       "mandate": null,
-      "metadata": {
-      },
+      "metadata": {},
       "next_action": {
         "type": "use_stripe_sdk",
         "use_stripe_sdk": {
@@ -56,17 +55,13 @@
             "interval_count": 1,
             "reference": "vxxyllsrw...-J0de....",
             "start_date": 1672662288000,
-            "supported_types": [
-              "india"
-            ]
+            "supported_types": ["india"]
           },
           "network": null,
           "request_three_d_secure": "automatic"
         }
       },
-      "payment_method_types": [
-        "card"
-      ],
+      "payment_method_types": ["card"],
       "single_use_mandate": null,
       "status": "requires_action",
       "usage": "off_session"

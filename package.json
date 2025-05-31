@@ -10,7 +10,8 @@
     "test": "pnpm -r run test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'src/**'",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --write ."
   },
   "devDependencies": {
     "typescript": "^5.8.3",
