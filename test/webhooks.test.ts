@@ -10,7 +10,7 @@ import { mockStripe } from './helpers/stripe'
 import { logger } from '../src/logger'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
-const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
+const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
 describe('POST /webhooks', () => {
   let server: FastifyInstance
