@@ -8,5 +8,3 @@ services:
       - 55432:5432
     environment:
       POSTGRES_PASSWORD: postgres
-    volumes:
-      - ./db/migrations/schema.sql:/docker-entrypoint-initdb.d/0000_schema.sql

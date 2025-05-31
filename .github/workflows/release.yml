@@ -8,11 +8,7 @@ on:
 
 jobs:
   release:
-    name: Release / Node ${{ matrix.node }}
-    strategy:
-      matrix:
-        node:
-          - '22'
+    name: Release
 
     runs-on: ubuntu-24.04
 
@@ -23,10 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version-file: ./.nvmrc
+          cache: pnpm
 
       - run: |
           pnpm install --frozen-lockfile
@@ -68,9 +68,33 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
+          context: packages/fastify-app
           push: true
           tags: supabase/stripe-sync-engine:latest,supabase/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
           platforms: linux/amd64,linux/arm64
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+
+  npm:
+    name: Release on NPM
+
+    needs:
+      - release
+
+    if: needs.release.outputs.new-release-published == 'true'
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Set new version in sync-engine
+        run: |
+          cd packages/sync-engine
+          pnpm version ${{ needs.release.outputs.new-release-version }} --no-git-tag-version
+
+      - name: Publish sync-engine to npm
+        run: |
+          cd packages/sync-engine
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

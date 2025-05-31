@@ -1,23 +1,20 @@
 {
   "compilerOptions": {
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "esModuleInterop": true,
-    "preserveConstEnums": true,
-    "removeComments": true,
-    "rootDir": "src",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Node",
     "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
     "strict": true,
-    "lib": ["ES2022", "DOM"],
-    "resolveJsonModule": true,
-    "useUnknownInCatchVariables": false,
-    "skipLibCheck": true
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "incremental": true
   },
-  "include": ["./src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "parserOptions": {
-    "ecmaVersion": "2022", // Allows for the parsing of modern ECMAScript features
-    "sourceType": "module" // Allows for the use of imports
-  }
+  "references": [{ "path": "./packages/sync-engine" }, { "path": "./packages/fastify-app" }]
 }
