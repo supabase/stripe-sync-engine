@@ -1,4 +1,4 @@
-import Stripe from 'stripe'
+import type Stripe from 'stripe'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { runMigrations } from '@supabase/stripe-sync-engine'
@@ -24,6 +24,7 @@ beforeAll(async () => {
   await runMigrations({
     databaseUrl: config.databaseUrl,
     schema: config.schema,
+    logger: config.logger,
   })
 
   stripeSync = new StripeSync(config)

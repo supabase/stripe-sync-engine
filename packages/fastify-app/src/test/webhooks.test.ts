@@ -3,10 +3,10 @@ import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
 import { runMigrations } from '@supabase/stripe-sync-engine'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
-import { mockStripe } from './helpers/stripe'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
 import { logger } from '../logger'
+import { mockStripe } from './helpers/stripe'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret
@@ -19,6 +19,7 @@ describe('POST /webhooks', () => {
     await runMigrations({
       databaseUrl: config.databaseUrl,
       schema: config.schema,
+      logger: config.logger,
     })
 
     vitest.mock('stripe', async () => {

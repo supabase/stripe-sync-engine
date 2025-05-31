@@ -2,6 +2,7 @@ import { Client } from 'pg'
 import { migrate } from 'pg-node-migrations'
 import fs from 'node:fs'
 import pino from 'pino'
+import path from 'node:path'
 
 type MigrationConfig = {
   schema: string
@@ -38,11 +39,10 @@ async function connectAndMigrate(
 
 export async function runMigrations(config: MigrationConfig): Promise<void> {
   // Init DB
-  const dbConfig = {
+  const client = new Client({
     connectionString: config.databaseUrl,
     connectionTimeoutMillis: 10_000,
-  }
-  const client = new Client(dbConfig)
+  })
 
   try {
     // Run migrations
@@ -53,7 +53,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
 
     config.logger?.info('Running migrations')
 
-    await connectAndMigrate(client, './db/migrations', config)
+    await connectAndMigrate(client, path.resolve(__dirname, '../../db/migrations'), config)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
   } finally {
