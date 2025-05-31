@@ -4,6 +4,8 @@ import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import path from 'node:path'
 import { errorSchema } from './schemas/error'
+import { getConfig } from './utils/config'
+import { StripeSync } from './stripeSync'
 
 interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
@@ -11,6 +13,11 @@ interface buildOpts extends FastifyServerOptions {
 
 export async function createServer(opts: buildOpts = {}): Promise<FastifyInstance> {
   const app = fastify(opts)
+
+  const config = getConfig()
+  const stripeSync = new StripeSync(config)
+
+  app.decorate('stripeSync', stripeSync)
 
   /**
    * Expose swagger docs

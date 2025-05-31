@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
+import pino from 'pino'
 
-type configType = {
+export type StripeSyncConfig = {
   /** Postgres database URL including authentication */
   DATABASE_URL: string
 
@@ -29,6 +30,8 @@ type configType = {
    * By enabling this, sync-engine automatically fetches the remaining elements before saving
    * */
   AUTO_EXPAND_LISTS: boolean
+
+  logger?: pino.Logger
 }
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
@@ -39,7 +42,7 @@ function getConfigFromEnv(key: string, defaultValue?: string): string {
   return value || defaultValue!
 }
 
-export function getConfig(): configType {
+export function getConfig(): StripeSyncConfig {
   dotenv.config()
 
   return {

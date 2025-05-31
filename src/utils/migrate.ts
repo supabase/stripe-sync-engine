@@ -2,12 +2,13 @@ import { Client } from 'pg'
 import { migrate } from 'pg-node-migrations'
 import { getConfig } from './config'
 import fs from 'node:fs'
+import { logger } from '../logger'
 
 const config = getConfig()
 
 async function connectAndMigrate(client: Client, migrationsDirectory: string, logOnError = false) {
   if (!fs.existsSync(migrationsDirectory)) {
-    console.log(`Migrations directory ${migrationsDirectory} not found, skipping`)
+    logger.info(`Migrations directory ${migrationsDirectory} not found, skipping`)
     return
   }
 
@@ -42,11 +43,11 @@ export async function runMigrations(): Promise<void> {
     // Ensure schema exists, not doing it via migration to not break current migration checksums
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
 
-    console.log('Running migrations')
+    logger.info('Running migrations')
 
     await connectAndMigrate(client, './db/migrations')
   } finally {
     await client.end()
-    console.log('Finished migrations')
+    logger.info('Finished migrations')
   }
 }
