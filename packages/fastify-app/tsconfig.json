@@ -10,5 +10,6 @@
     "resolveJsonModule": true
   },
   "include": ["src"],
+  "exclude": ["src/test", "node_modules", "dist"],
   "references": [{ "path": "../sync-engine" }]
 }
