@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx --watch ./src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "NODE_ENV=production node dist/server.js",
     "test": "vitest",
     "lint": "eslint 'src/**'",

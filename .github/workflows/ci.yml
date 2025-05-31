@@ -56,7 +56,7 @@ jobs:
 
       - name: Builds successfully
         run: |
-          npm run build
+          npm run typecheck
 
       - name: Tests
         run: |
