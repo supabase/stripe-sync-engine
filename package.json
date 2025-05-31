@@ -34,6 +34,8 @@
     "yesql": "^7.0.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.28.0",
     "@types/node": "^22.15.29",
     "@types/pg": "^8.15.2",
     "@types/yesql": "^4.1.4",
