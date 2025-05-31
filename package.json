@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'src/**'",
     "format": "prettier --write .",
-    "format:check": "prettier --write ."
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "typescript": "^5.8.3",
