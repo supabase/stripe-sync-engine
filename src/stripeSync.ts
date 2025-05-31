@@ -777,9 +777,12 @@ export class StripeSync {
   async backfillCustomers(customerIds: string[]) {
     const missingIds = await this.postgresClient.findMissingEntries('customers', customerIds)
 
-    await this.fetchMissingEntites(missingIds, (id) => this.stripe.customers.retrieve(id)).then(
-      (entries) => this.upsertCustomers(entries)
-    )
+    await this.fetchMissingEntites(missingIds, (id) => this.stripe.customers.retrieve(id))
+      .then((entries) => this.upsertCustomers(entries))
+      .catch((err) => {
+        logger.error(err, 'Failed to backfill')
+        throw err
+      })
   }
 
   async upsertDisputes(
@@ -882,7 +885,7 @@ export class StripeSync {
 
   async upsertPaymentMethods(
     paymentMethods: Stripe.PaymentMethod[],
-    backfillRelatedEntities: boolean = true
+    backfillRelatedEntities: boolean = false
   ): Promise<Stripe.PaymentMethod[]> {
     if (backfillRelatedEntities) {
       await this.backfillCustomers(getUniqueIds(paymentMethods, 'customer'))

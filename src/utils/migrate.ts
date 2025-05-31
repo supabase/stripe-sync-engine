@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { Client } from 'pg'
 import { migrate } from 'pg-node-migrations'
 import { getConfig } from './config'
@@ -46,6 +47,8 @@ export async function runMigrations(): Promise<void> {
     logger.info('Running migrations')
 
     await connectAndMigrate(client, './db/migrations')
+  } catch (err) {
+    logger.error(err, 'Error running migrations')
   } finally {
     await client.end()
     logger.info('Finished migrations')

@@ -3,21 +3,24 @@ import Stripe from 'stripe'
 import { StripeSync } from '../src/stripeSync'
 import { getConfig } from '../src/utils/config'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
+import { runMigrations } from '../src/utils/migrate'
 
 let stripeSync: StripeSync
 
-vitest.mock('stripe', () => {
-  // This is the shape of the import: { default: fn }
-  return {
-    default: vitest.fn().mockImplementation(() => ({
-      invoices: {
-        listLineItems: () => [{ id: 'li_123' }, { id: 'li_1234' }],
-      },
-    })),
-  }
-})
+beforeAll(async () => {
+  await runMigrations()
 
-beforeAll(() => {
+  vitest.mock('stripe', () => {
+    // This is the shape of the import: { default: fn }
+    return {
+      default: vitest.fn().mockImplementation(() => ({
+        invoices: {
+          listLineItems: () => [{ id: 'li_123' }, { id: 'li_1234' }],
+        },
+      })),
+    }
+  })
+
   process.env.AUTO_EXPAND_LISTS = 'true'
 
   const config = getConfig()

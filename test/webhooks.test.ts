@@ -3,14 +3,10 @@ import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
 import { createServer } from '../src/app'
 import { getConfig } from '../src/utils/config'
-import stripeMock from './helpers/stripe'
 import 'dotenv/config'
 import { runMigrations } from '../src/utils/migrate'
-import { vitest, beforeAll, describe, test, expect, afterAll } from 'vitest'
-
-vitest.doMock('stripe', () => {
-  return vitest.fn(() => stripeMock)
-})
+import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
+import { mockStripe } from './helpers/stripe'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().STRIPE_WEBHOOK_SECRET
@@ -19,9 +15,25 @@ describe('POST /webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
+    await runMigrations()
+
+    vitest.mock('stripe', async () => {
+      const actualStripe = await vitest.importActual('stripe')
+
+      return {
+        default: vitest.fn().mockImplementation(() => ({
+          invoices: mockStripe.invoices,
+          customers: mockStripe.customers,
+          products: mockStripe.products,
+          subscriptions: mockStripe.subscriptions,
+          charges: mockStripe.charges,
+          webhooks: actualStripe.default.webhooks,
+        })),
+      }
+    })
+
     process.env.AUTO_EXPAND_LISTS = 'false'
     server = await createServer()
-    await runMigrations()
   })
 
   afterAll(async () => {
