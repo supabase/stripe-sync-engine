@@ -9,7 +9,7 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint 'src/**'",
+    "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
