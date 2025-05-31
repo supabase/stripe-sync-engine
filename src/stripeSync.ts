@@ -80,24 +80,25 @@ export class StripeSync {
   postgresClient: PostgresClient
 
   constructor(private config: StripeSyncConfig) {
-    this.stripe = new Stripe(config.STRIPE_SECRET_KEY, {
+    this.stripe = new Stripe(config.stripeSecretKey, {
       // https://github.com/stripe/stripe-node#configuration
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
-      apiVersion: config.STRIPE_API_VERSION,
+      apiVersion: config.stripeApiVersion,
       appInfo: {
         name: 'Stripe Postgres Sync',
       },
     })
 
     this.config.logger?.info(
-      { autoExpandLists: config.AUTO_EXPAND_LISTS, stripeApiVersion: config.STRIPE_API_VERSION },
+      { autoExpandLists: config.autoExpandLists, stripeApiVersion: config.stripeApiVersion },
       'StripeSync initialized'
     )
 
     this.postgresClient = new PostgresClient({
-      databaseUrl: config.DATABASE_URL,
-      schema: config.SCHEMA,
+      databaseUrl: config.databaseUrl,
+      schema: config.schema,
+      maxConnections: config.maxPostgresConnections,
     })
   }
 
@@ -105,7 +106,7 @@ export class StripeSync {
     const event = this.stripe.webhooks.constructEvent(
       payload,
       signature!,
-      this.config.STRIPE_WEBHOOK_SECRET
+      this.config.stripeWebhookSecret
     )
 
     switch (event.type) {
@@ -622,7 +623,7 @@ export class StripeSync {
     logger.info('Syncing payment method')
 
     const prepared = sql(
-      `select id from "${this.config.SCHEMA}"."customers" WHERE deleted <> true;`
+      `select id from "${this.config.schema}"."customers" WHERE deleted <> true;`
     )([])
 
     const customerIds = await this.postgresClient
@@ -707,7 +708,7 @@ export class StripeSync {
     charges: Stripe.Charge[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Charge[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(charges, 'customer')),
         this.backfillInvoices(getUniqueIds(charges, 'invoice')),
@@ -735,7 +736,7 @@ export class StripeSync {
     creditNotes: Stripe.CreditNote[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.CreditNote[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(creditNotes, 'customer')),
         this.backfillInvoices(getUniqueIds(creditNotes, 'invoice')),
@@ -777,7 +778,7 @@ export class StripeSync {
     disputes: Stripe.Dispute[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Dispute[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillCharges(getUniqueIds(disputes, 'charge'))
     }
 
@@ -788,7 +789,7 @@ export class StripeSync {
     invoices: Stripe.Invoice[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Invoice[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(invoices, 'customer')),
         this.backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
@@ -815,7 +816,7 @@ export class StripeSync {
     plans: Stripe.Plan[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Plan[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillProducts(getUniqueIds(plans, 'product'))
     }
 
@@ -830,7 +831,7 @@ export class StripeSync {
     prices: Stripe.Price[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Price[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillProducts(getUniqueIds(prices, 'product'))
     }
 
@@ -861,7 +862,7 @@ export class StripeSync {
     paymentIntents: Stripe.PaymentIntent[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.PaymentIntent[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
         this.backfillCustomers(getUniqueIds(paymentIntents, 'customer')),
         this.backfillInvoices(getUniqueIds(paymentIntents, 'invoice')),
@@ -875,7 +876,7 @@ export class StripeSync {
     paymentMethods: Stripe.PaymentMethod[],
     backfillRelatedEntities: boolean = false
   ): Promise<Stripe.PaymentMethod[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillCustomers(getUniqueIds(paymentMethods, 'customer'))
     }
 
@@ -886,7 +887,7 @@ export class StripeSync {
     setupIntents: Stripe.SetupIntent[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.SetupIntent[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillCustomers(getUniqueIds(setupIntents, 'customer'))
     }
 
@@ -897,7 +898,7 @@ export class StripeSync {
     taxIds: Stripe.TaxId[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.TaxId[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillCustomers(getUniqueIds(taxIds, 'customer'))
     }
 
@@ -936,7 +937,7 @@ export class StripeSync {
     currentSubItemIds: string[]
   ): Promise<{ rowCount: number }> {
     let prepared = sql(`
-    select id from "${this.config.SCHEMA}"."subscription_items"
+    select id from "${this.config.schema}"."subscription_items"
     where subscription = :subscriptionId and deleted = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
@@ -947,7 +948,7 @@ export class StripeSync {
     if (deletedIds.length > 0) {
       const ids = deletedIds.map(({ id }: { id: string }) => id)
       prepared = sql(`
-      update "${this.config.SCHEMA}"."subscription_items"
+      update "${this.config.schema}"."subscription_items"
       set deleted = true where id=any(:ids::text[]);
       `)({ ids })
       const { rowCount } = await await this.postgresClient.query(prepared.text, prepared.values)
@@ -961,7 +962,7 @@ export class StripeSync {
     subscriptionSchedules: Stripe.SubscriptionSchedule[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.SubscriptionSchedule[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       const customerIds = getUniqueIds(subscriptionSchedules, 'customer')
 
       await this.backfillCustomers(customerIds)
@@ -981,7 +982,7 @@ export class StripeSync {
     subscriptions: Stripe.Subscription[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Subscription[]> {
-    if (backfillRelatedEntities ?? this.config.BACKFILL_RELATED_ENTITIES) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       const customerIds = getUniqueIds(subscriptions, 'customer')
 
       await this.backfillCustomers(customerIds)
@@ -1046,7 +1047,7 @@ export class StripeSync {
     P extends string,
     T extends { id?: string } & { [key in P]?: Stripe.ApiList<K> | null },
   >(entities: T[], property: P, list: (id: string) => Stripe.ApiListPromise<K>) {
-    if (!this.config.AUTO_EXPAND_LISTS) return
+    if (!this.config.autoExpandLists) return
 
     for (const entity of entities) {
       if (entity[property]?.has_more) {

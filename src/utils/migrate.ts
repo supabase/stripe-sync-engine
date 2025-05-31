@@ -14,7 +14,7 @@ async function connectAndMigrate(client: Client, migrationsDirectory: string, lo
   }
 
   const optionalConfig = {
-    schemaName: config.SCHEMA,
+    schemaName: config.schema,
     tableName: 'migrations',
   }
 
@@ -32,7 +32,7 @@ async function connectAndMigrate(client: Client, migrationsDirectory: string, lo
 export async function runMigrations(): Promise<void> {
   // Init DB
   const dbConfig = {
-    connectionString: config.DATABASE_URL,
+    connectionString: config.databaseUrl,
     connectionTimeoutMillis: 10_000,
   }
   const client = new Client(dbConfig)
@@ -42,7 +42,7 @@ export async function runMigrations(): Promise<void> {
     await client.connect()
 
     // Ensure schema exists, not doing it via migration to not break current migration checksums
-    await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.SCHEMA};`)
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.schema};`)
 
     logger.info('Running migrations')
 

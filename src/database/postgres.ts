@@ -5,13 +5,18 @@ import { JsonSchema } from '../types/types'
 type PostgresConfig = {
   databaseUrl: string
   schema: string
+  maxConnections?: number
 }
 
 export class PostgresClient {
   pool: pg.Pool
 
   constructor(private config: PostgresConfig) {
-    this.pool = new pg.Pool({ connectionString: config.databaseUrl, max: 25, keepAlive: true })
+    this.pool = new pg.Pool({
+      connectionString: config.databaseUrl,
+      max: config.maxConnections || 10,
+      keepAlive: true,
+    })
   }
 
   async delete(table: string, id: string): Promise<boolean> {
