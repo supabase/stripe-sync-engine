@@ -41,6 +41,8 @@ export type StripeSyncServerConfig = {
 
   maxPostgresConnections?: number
 
+  revalidateEntityViaStripeApi: boolean
+
   port: number
 }
 
@@ -58,5 +60,7 @@ export function getConfig(): StripeSyncServerConfig {
     autoExpandLists: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
     backfillRelatedEntities: getConfigFromEnv('BACKFILL_RELATED_ENTITIES', 'true') === 'true',
     maxPostgresConnections: Number(getConfigFromEnv('MAX_POSTGRES_CONNECTIONS', '10')),
+    revalidateEntityViaStripeApi:
+      getConfigFromEnv('REVALIDATE_ENTITY_VIA_STRIPE_API', 'false') === 'true',
   }
 }

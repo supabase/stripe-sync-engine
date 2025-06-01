@@ -28,6 +28,13 @@ export type StripeSyncConfig = {
    */
   backfillRelatedEntities?: boolean
 
+  /**
+   * If true, the webhook data is not used and instead the webhook is just a trigger to fetch the entity from Stripe again. This ensures that a race condition with failed webhooks can never accidentally overwrite the data with an older state.
+   *
+   * Default: false
+   */
+  revalidateEntityViaStripeApi?: boolean
+
   maxPostgresConnections?: number
 
   logger?: pino.Logger
