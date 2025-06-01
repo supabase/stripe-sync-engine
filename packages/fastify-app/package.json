@@ -2,14 +2,14 @@
   "name": "@supabase/stripe-sync-fastify",
   "version": "0.0.0",
   "description": "Stripe sync engine. Sync your Stripe account to your Postgres database.",
-  "main": "index.js",
+  "main": "src/server.ts",
   "scripts": {
     "clean": "rimraf dist",
     "dev": "tsx --watch ./src/server.ts",
     "build": "pnpm clean && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --ext .ts",
-    "start": "NODE_ENV=production node dist/server.js",
+    "start": "NODE_ENV=production node dist/src/server.js",
     "test": "vitest"
   },
   "author": "Supabase",
