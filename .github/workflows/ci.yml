@@ -9,56 +9,66 @@ on:
 
 jobs:
   test:
-    name: Test / OS ${{ matrix.platform }} / Node ${{ matrix.node }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-24.04]
-        node: ['22']
+    name: Test
+    runs-on: ubuntu-24.04
 
-    runs-on: ${{ matrix.platform }}
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - 55432:5432
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version-file: ./.nvmrc
+          cache: pnpm
 
       - name: Set up .env file
         run: |
-          touch .env
-          echo DATABASE_URL='postgres://postgres:postgres@127.0.0.1:55432/postgres?sslmode=disable&search_path=stripe' >> .env
-          echo NODE_ENV=dev >> .env
-          echo STRIPE_SECRET_KEY=sk_test_ >> .env
-          echo STRIPE_WEBHOOK_SECRET=whsec_ >> .env
-          echo SCHEMA=stripe >> .env
-          echo PORT=8080 >> .env
-          echo API_KEY=api_key_test >> .env
+          touch packages/fastify-app/.env
+          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> packages/fastify-app/.env
+          echo NODE_ENV=dev >> packages/fastify-app/.env
+          echo STRIPE_SECRET_KEY=sk_test_ >> packages/fastify-app/.env
+          echo STRIPE_WEBHOOK_SECRET=whsec_ >> packages/fastify-app/.env
+          echo SCHEMA=stripe >> packages/fastify-app/.env
+          echo PORT=8080 >> packages/fastify-app/.env
+          echo API_KEY=api_key_test >> packages/fastify-app/.env
 
       - name: Install dependencies
         run: |
-          npm ci
+          pnpm install --frozen-lockfile
 
       - name: Formatting checks
         run: |
-          npm run format:check
+          pnpm format:check
 
       - name: Lint
         run: |
-          npm run lint
+          pnpm lint
 
       - name: Builds successfully
         run: |
-          npm run build
+          pnpm build
+
+      - name: Initialize DB schema
+        run: |
+          docker run --rm \
+            --network="host" \
+            -e PGPASSWORD=postgres \
+            postgres:15 \
+            psql -h localhost -p 55432 -U postgres -d postgres -c 'create schema if not exists "stripe";'
 
       - name: Tests
         run: |
-          docker compose -f ./docker/compose.yml up -d
           npm run test

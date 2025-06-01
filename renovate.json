@@ -10,5 +10,5 @@
       "matchPackageNames": ["stripe"]
     }
   ],
-  "ignoreDeps": ["p-limit", "supabase/postgres"]
+  "ignoreDeps": ["supabase/postgres"]
 }
