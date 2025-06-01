@@ -6,6 +6,7 @@ import path from 'node:path'
 import { getConfig } from './utils/config'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { errorSchema } from './error'
+import { logger } from './logger'
 
 interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
@@ -15,7 +16,7 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
   const app = fastify(opts)
 
   const config = getConfig()
-  const stripeSync = new StripeSync(config)
+  const stripeSync = new StripeSync({ ...config, logger })
 
   app.decorate('stripeSync', stripeSync)
 

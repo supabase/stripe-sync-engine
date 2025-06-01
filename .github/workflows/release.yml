@@ -68,7 +68,6 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: packages/fastify-app
           push: true
           tags: supabase/stripe-sync-engine:latest,supabase/stripe-sync-engine:v${{ needs.release.outputs.new-release-version }}
           platforms: linux/amd64,linux/arm64

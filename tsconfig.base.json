@@ -13,6 +13,5 @@
     "skipLibCheck": true,
     "incremental": true
   },
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "./packages/sync-engine" }, { "path": "./packages/fastify-app" }]
+  "exclude": ["node_modules", "dist"]
 }
