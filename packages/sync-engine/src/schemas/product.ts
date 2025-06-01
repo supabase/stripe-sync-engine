@@ -1,25 +1,22 @@
-import type { JsonSchema } from './types'
+import type { EntitySchema } from './types'
 
-export const productSchema: JsonSchema = {
-  $id: 'productSchema',
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    object: { type: 'string' },
-    active: { type: 'boolean' },
-    description: { type: 'string' },
-    metadata: { type: 'object' },
-    name: { type: 'string' },
-    created: { type: 'integer' },
-    images: { type: 'object' },
-    marketing_features: { type: 'object' },
-    livemode: { type: 'boolean' },
-    package_dimensions: { type: 'object' },
-    shippable: { type: 'boolean' },
-    statement_descriptor: { type: 'string' },
-    unit_label: { type: 'string' },
-    updated: { type: 'integer' },
-    url: { type: 'string' },
-  },
-  required: ['id'],
+export const productSchema: EntitySchema = {
+  properties: [
+    'id',
+    'object',
+    'active',
+    'description',
+    'metadata',
+    'name',
+    'created',
+    'images',
+    'marketing_features',
+    'livemode',
+    'package_dimensions',
+    'shippable',
+    'statement_descriptor',
+    'unit_label',
+    'updated',
+    'url',
+  ],
 } as const

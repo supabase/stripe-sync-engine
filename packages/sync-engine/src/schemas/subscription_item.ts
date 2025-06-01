@@ -1,19 +1,16 @@
-import type { JsonSchema } from './types'
+import type { EntitySchema } from './types'
 
-export const subscriptionItemSchema: JsonSchema = {
-  $id: 'subscriptionItemSchema',
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    object: { type: 'string' },
-    billing_thresholds: { type: 'object' },
-    created: { type: 'number' },
-    deleted: { type: 'boolean' },
-    metadata: { type: 'object' },
-    quantity: { type: 'number' },
-    price: { type: 'string' },
-    subscription: { type: 'string' },
-    tax_rates: { type: 'object' },
-  },
-  required: ['id'],
+export const subscriptionItemSchema: EntitySchema = {
+  properties: [
+    'id',
+    'object',
+    'billing_thresholds',
+    'created',
+    'deleted',
+    'metadata',
+    'quantity',
+    'price',
+    'subscription',
+    'tax_rates',
+  ],
 } as const
