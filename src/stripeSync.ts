@@ -420,6 +420,7 @@ export class StripeSync {
         paymentIntents = await this.syncPaymentIntents(params)
         taxIds = await this.syncTaxIds(params)
         creditNotes = await this.syncCreditNotes(params)
+        disputes = await this.syncDisputes(params)
         break
       case 'customer':
         customers = await this.syncCustomers(params)
@@ -727,9 +728,9 @@ export class StripeSync {
   private async backfillCharges(chargeIds: string[]) {
     const missingChargeIds = await this.postgresClient.findMissingEntries('charges', chargeIds)
 
-    await this.fetchMissingEntites(missingChargeIds, (id) => this.stripe.charges.retrieve(id)).then(
-      (charges) => this.upsertCharges(charges)
-    )
+    await this.fetchMissingEntities(missingChargeIds, (id) =>
+      this.stripe.charges.retrieve(id)
+    ).then((charges) => this.upsertCharges(charges))
   }
 
   private async upsertCreditNotes(
@@ -766,7 +767,7 @@ export class StripeSync {
   async backfillCustomers(customerIds: string[]) {
     const missingIds = await this.postgresClient.findMissingEntries('customers', customerIds)
 
-    await this.fetchMissingEntites(missingIds, (id) => this.stripe.customers.retrieve(id))
+    await this.fetchMissingEntities(missingIds, (id) => this.stripe.customers.retrieve(id))
       .then((entries) => this.upsertCustomers(entries))
       .catch((err) => {
         logger.error(err, 'Failed to backfill')
@@ -807,7 +808,7 @@ export class StripeSync {
 
   backfillInvoices = async (invoiceIds: string[]) => {
     const missingIds = await this.postgresClient.findMissingEntries('invoices', invoiceIds)
-    await this.fetchMissingEntites(missingIds, (id) => this.stripe.invoices.retrieve(id)).then(
+    await this.fetchMissingEntities(missingIds, (id) => this.stripe.invoices.retrieve(id)).then(
       (entries) => this.upsertInvoices(entries)
     )
   }
@@ -850,10 +851,10 @@ export class StripeSync {
     return this.postgresClient.delete('products', id)
   }
 
-  async backfillProducts(productids: string[]) {
-    const missingProductIds = await this.postgresClient.findMissingEntries('products', productids)
+  async backfillProducts(productIds: string[]) {
+    const missingProductIds = await this.postgresClient.findMissingEntries('products', productIds)
 
-    await this.fetchMissingEntites(missingProductIds, (id) =>
+    await this.fetchMissingEntities(missingProductIds, (id) =>
       this.stripe.products.retrieve(id)
     ).then((products) => this.upsertProducts(products))
   }
@@ -1026,20 +1027,9 @@ export class StripeSync {
       subscriptionIds
     )
 
-    await this.fetchMissingEntites(missingSubscriptionIds, (id) =>
+    await this.fetchMissingEntities(missingSubscriptionIds, (id) =>
       this.stripe.subscriptions.retrieve(id)
     ).then((subscriptions) => this.upsertSubscriptions(subscriptions))
-  }
-
-  backfillSubscriptionSchedules = async (subscriptionIds: string[]) => {
-    const missingSubscriptionIds = await this.postgresClient.findMissingEntries(
-      'subscription_schedules',
-      subscriptionIds
-    )
-
-    await this.fetchMissingEntites(missingSubscriptionIds, (id) =>
-      this.stripe.subscriptionSchedules.retrieve(id)
-    ).then((subscriptionSchedules) => this.upsertSubscriptionSchedules(subscriptionSchedules))
   }
 
   private async expandEntity<
@@ -1065,7 +1055,7 @@ export class StripeSync {
     }
   }
 
-  private async fetchMissingEntites<T>(
+  private async fetchMissingEntities<T>(
     ids: string[],
     fetch: (id: string) => Promise<Stripe.Response<T>>
   ): Promise<T[]> {
@@ -1074,8 +1064,8 @@ export class StripeSync {
     const entities: T[] = []
 
     for (const id of ids) {
-      const charge = await fetch(id)
-      entities.push(charge)
+      const entity = await fetch(id)
+      entities.push(entity)
     }
 
     return entities
