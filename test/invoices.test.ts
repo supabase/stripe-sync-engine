@@ -1,22 +1,30 @@
 import 'dotenv/config'
 import Stripe from 'stripe'
-import { upsertInvoices } from '../src/lib/invoices'
-import { upsertMany } from '../src/lib/database_utils'
+import { StripeSync } from '../src/stripeSync'
+import { getConfig } from '../src/utils/config'
+import { vitest, beforeAll, describe, test, expect } from 'vitest'
+import { runMigrations } from '../src/utils/migrate'
 
-jest.mock('../src/lib/database_utils')
+let stripeSync: StripeSync
 
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => {
+beforeAll(async () => {
+  await runMigrations()
+
+  vitest.mock('stripe', () => {
+    // This is the shape of the import: { default: fn }
     return {
-      invoices: {
-        listLineItems: () => [{ id: 'li_123' }, { id: 'li_1234' }],
-      },
+      default: vitest.fn().mockImplementation(() => ({
+        invoices: {
+          listLineItems: () => [{ id: 'li_123' }, { id: 'li_1234' }],
+        },
+      })),
     }
   })
-})
 
-beforeAll(() => {
   process.env.AUTO_EXPAND_LISTS = 'true'
+
+  const config = getConfig()
+  stripeSync = new StripeSync(config)
 })
 
 describe('invoices', () => {
@@ -33,9 +41,12 @@ describe('invoices', () => {
       } as Stripe.Invoice,
     ]
 
-    await upsertInvoices(invoices, false)
+    await stripeSync.upsertInvoices(invoices, false)
 
-    expect(upsertMany).toHaveBeenCalledWith(invoices, expect.any(Function))
+    const lineItems = await stripeSync.postgresClient.query(
+      `select lines->'data' as lines from stripe.invoices where id = 'in_xyz' limit 1`
+    )
+    expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }])
   })
 
   test('should expand line items if not exhaustive', async () => {
@@ -51,20 +62,11 @@ describe('invoices', () => {
       } as Stripe.Invoice,
     ]
 
-    await upsertInvoices(invoices, false)
+    await stripeSync.upsertInvoices(invoices, false)
 
-    const expectedInvoices = [
-      {
-        id: 'in_xyz2',
-        object: 'invoice',
-        auto_advance: true,
-        lines: {
-          data: [{ id: 'li_123' }, { id: 'li_1234' }],
-          has_more: false,
-        },
-      } as Stripe.Invoice,
-    ]
-
-    expect(upsertMany).toHaveBeenCalledWith(expectedInvoices, expect.any(Function))
+    const lineItems = await stripeSync.postgresClient.query(
+      `select lines->'data' as lines from stripe.invoices where id = 'in_xyz2' limit 1`
+    )
+    expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }, { id: 'li_1234' }])
   })
 })

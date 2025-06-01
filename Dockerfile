@@ -1,11 +1,14 @@
 # Build step
 FROM node:22-alpine
+
+RUN npm install -g pnpm@10.10.0
+
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci 
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . /app
-RUN npm run build 
-RUN npm prune --production
+RUN pnpm build
+RUN pnpm prune --production
 
 ## Build step complete, copy to working image
 FROM node:22-alpine

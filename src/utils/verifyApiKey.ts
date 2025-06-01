@@ -13,7 +13,7 @@ export const verifyApiKey = (
     return reply.code(401).send('Unauthorized')
   }
   const { authorization } = request.headers
-  if (!apiKeyMatches(authorization, config.API_KEY)) {
+  if (!apiKeyMatches(authorization, config.apiKey)) {
     return reply.code(401).send('Unauthorized')
   }
   done()
