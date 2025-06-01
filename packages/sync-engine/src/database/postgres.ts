@@ -1,6 +1,6 @@
 import pg, { QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
-import { JsonSchema } from '../schemas/types'
+import { EntitySchema } from '../schemas/types'
 
 type PostgresConfig = {
   databaseUrl: string
@@ -37,7 +37,7 @@ export class PostgresClient {
     T extends {
       [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
     },
-  >(entries: T[], table: string, tableSchema: JsonSchema): Promise<T[]> {
+  >(entries: T[], table: string, tableSchema: EntitySchema): Promise<T[]> {
     if (!entries.length) return []
 
     // Max 5 in parallel to avoid exhausting connection pool
@@ -96,7 +96,7 @@ export class PostgresClient {
   private constructUpsertSql(
     schema: string,
     table: string,
-    tableSchema: JsonSchema,
+    tableSchema: EntitySchema,
     options?: {
       conflict?: string
     }
@@ -106,22 +106,16 @@ export class PostgresClient {
 
     return `
     insert into "${schema}"."${table}" (
-      ${Object.keys(properties)
-        .map((x) => `"${x}"`)
-        .join(',')}
+      ${properties.map((x) => `"${x}"`).join(',')}
     )
     values (
-      ${Object.keys(properties)
-        .map((x) => `:${x}`)
-        .join(',')}
+      ${properties.map((x) => `:${x}`).join(',')}
     )
     on conflict (
       ${conflict}
     )
     do update set 
-      ${Object.keys(properties)
-        .map((x) => `"${x}" = :${x}`)
-        .join(',')}
+      ${properties.map((x) => `"${x}" = :${x}`).join(',')}
     ;`
   }
 

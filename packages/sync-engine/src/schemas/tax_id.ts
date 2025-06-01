@@ -1,18 +1,15 @@
-import type { JsonSchema } from './types'
+import type { EntitySchema } from './types'
 
-export const taxIdSchema: JsonSchema = {
-  $id: 'taxIdSchema',
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    country: { type: 'string' },
-    customer: { type: 'string' },
-    type: { type: 'string' },
-    value: { type: 'string' },
-    object: { type: 'string' },
-    created: { type: 'integer' },
-    livemode: { type: 'boolean' },
-    owner: { type: 'object' },
-  },
-  required: ['id'],
+export const taxIdSchema: EntitySchema = {
+  properties: [
+    'id',
+    'country',
+    'customer',
+    'type',
+    'value',
+    'object',
+    'created',
+    'livemode',
+    'owner',
+  ],
 } as const

@@ -1,41 +1,31 @@
-import type { JsonSchema } from './types'
+import type { EntitySchema } from './types'
 
-export const customerSchema: JsonSchema = {
-  $id: 'customerSchema',
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    object: { type: 'string' },
-    address: { type: 'object' },
-    description: { type: 'string' },
-    email: { type: 'string' },
-    metadata: { type: 'object' },
-    name: { type: 'string' },
-    phone: { type: 'string' },
-    shipping: { type: 'object' },
-    balance: { type: 'integer' },
-    created: { type: 'integer' },
-    currency: { type: 'string' },
-    default_source: { type: 'string' },
-    delinquent: { type: 'boolean' },
-    discount: { type: 'object' },
-    invoice_prefix: { type: 'string' },
-    invoice_settings: { type: 'object' },
-    livemode: { type: 'boolean' },
-    next_invoice_sequence: { type: 'integer' },
-    preferred_locales: { type: 'object' },
-    tax_exempt: { type: 'boolean' },
-  },
-  required: ['id'],
+export const customerSchema: EntitySchema = {
+  properties: [
+    'id',
+    'object',
+    'address',
+    'description',
+    'email',
+    'metadata',
+    'name',
+    'phone',
+    'shipping',
+    'balance',
+    'created',
+    'currency',
+    'default_source',
+    'delinquent',
+    'discount',
+    'invoice_prefix',
+    'invoice_settings',
+    'livemode',
+    'next_invoice_sequence',
+    'preferred_locales',
+    'tax_exempt',
+  ],
 } as const
 
-export const customerDeletedSchema: JsonSchema = {
-  $id: 'customerSchema',
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    object: { type: 'string' },
-    deleted: { type: 'boolean' },
-  },
-  required: ['id'],
+export const customerDeletedSchema: EntitySchema = {
+  properties: ['id', 'object', 'deleted'],
 } as const
