@@ -743,7 +743,7 @@ export class StripeSync {
       ])
     }
 
-    // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
+    // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
     await this.expandEntity(creditNotes, 'lines', (id) =>
       this.stripe.creditNotes.listLineItems(id, { limit: 100 })
     )
