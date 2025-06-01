@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify'
-import { syncBackfill, SyncBackfillParams, syncSingleEntity } from '../lib/sync'
 import { verifyApiKey } from '../utils/verifyApiKey'
 
 import Stripe from 'stripe'
+import { SyncBackfillParams } from '../stripeSync'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/sync', {
@@ -15,7 +15,7 @@ export default async function routes(fastify: FastifyInstance) {
           backfillRelatedEntities?: boolean
         }) ?? {}
       const params = { created, object, backfillRelatedEntities } as SyncBackfillParams
-      const result = await syncBackfill(params)
+      const result = await fastify.stripeSync.syncBackfill(params)
       return reply.send({
         statusCode: 200,
         ts: Date.now(),
@@ -41,7 +41,7 @@ export default async function routes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { stripeId } = request.params
 
-      const result = await syncSingleEntity(stripeId)
+      const result = await fastify.stripeSync.syncSingleEntity(stripeId)
 
       return reply.send({
         statusCode: 200,
