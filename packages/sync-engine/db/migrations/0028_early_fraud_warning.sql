@@ -11,9 +11,9 @@ create table
         updated_at timestamptz default timezone('utc'::text, now()) not null
     );
 
-create index stripe_early_fraud_warnings_customer_idx on "stripe"."early_fraud_warnings" using btree (charge);
+create index stripe_early_fraud_warnings_charge_idx on "stripe"."early_fraud_warnings" using btree (charge);
 
-create index stripe_early_fraud_warnings_invoice_idx on "stripe"."early_fraud_warnings" using btree (payment_intent);
+create index stripe_early_fraud_warnings_payment_intent_idx on "stripe"."early_fraud_warnings" using btree (payment_intent);
 
 create trigger handle_updated_at
     before update
