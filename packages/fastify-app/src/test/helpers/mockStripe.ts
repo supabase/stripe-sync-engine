@@ -532,6 +532,59 @@ export const mockStripe = {
       })
     ),
   },
+  paymentIntents: {
+    retrieve: vitest.fn((id) =>
+      Promise.resolve({
+        id,
+        object: 'payment_intent',
+        amount: 1000,
+        amount_capturable: 0,
+        amount_details: {
+          tip: {},
+        },
+        amount_received: 0,
+        application: null,
+        application_fee_amount: null,
+        automatic_payment_methods: null,
+        canceled_at: null,
+        cancellation_reason: null,
+        capture_method: 'automatic',
+        client_secret: 'pi_abc_secret_abc',
+        confirmation_method: 'automatic',
+        created: 1620984482,
+        currency: 'usd',
+        customer: null,
+        description: 'Created by stripe.com/docs demo',
+        invoice: null,
+        last_payment_error: null,
+        latest_charge: null,
+        livemode: false,
+        metadata: {},
+        next_action: null,
+        on_behalf_of: null,
+        payment_method: null,
+        payment_method_options: {
+          card: {
+            installments: null,
+            mandate_options: null,
+            network: null,
+            request_three_d_secure: 'automatic',
+          },
+        },
+        payment_method_types: ['card'],
+        processing: null,
+        receipt_email: null,
+        review: null,
+        setup_future_usage: null,
+        shipping: null,
+        statement_descriptor: null,
+        statement_descriptor_suffix: null,
+        status: 'requires_payment_method',
+        transfer_data: null,
+        transfer_group: null,
+      })
+    ),
+  },
   products: {
     retrieve: vitest.fn((id) =>
       Promise.resolve({

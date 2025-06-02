@@ -19,7 +19,7 @@
       "canceled_at": null,
       "cancellation_reason": null,
       "capture_method": "automatic",
-      "client_secret": "pi_1IqxJOJDPojXS6LN9uOebAea_secret_xAFUlXdrX2V3jcTfidX8eP14p",
+      "client_secret": "pi_abc_secret_abc",
       "confirmation_method": "automatic",
       "created": 1620984482,
       "currency": "usd",

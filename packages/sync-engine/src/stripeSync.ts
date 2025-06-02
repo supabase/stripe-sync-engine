@@ -18,6 +18,7 @@ import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
 import { subscriptionSchema } from './schemas/subscription'
 import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
+import { reviewSchema } from './schemas/review'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -383,6 +384,21 @@ export class StripeSync {
         break
       }
 
+      case 'review.closed':
+      case 'review.opened': {
+        const review = await this.fetchOrUseWebhookData(event.data.object as Stripe.Review, (id) =>
+          this.stripe.reviews.retrieve(id)
+        )
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for review ${review.id}`
+        )
+
+        await this.upsertReviews([review])
+
+        break
+      }
+
       default:
         throw new Error('Unhandled webhook event')
     }
@@ -440,6 +456,8 @@ export class StripeSync {
       return this.stripe.radar.earlyFraudWarnings
         .retrieve(stripeId)
         .then((it) => this.upsertEarlyFraudWarning([it]))
+    } else if (stripeId.startsWith('prv_')) {
+      return this.stripe.reviews.retrieve(stripeId).then((it) => this.upsertReviews([it]))
     }
   }
 
@@ -831,7 +849,7 @@ export class StripeSync {
     return this.postgresClient.upsertMany(creditNotes, 'credit_notes', creditNoteSchema)
   }
 
-  private async upsertEarlyFraudWarning(
+  async upsertEarlyFraudWarning(
     earlyFraudWarnings: Stripe.Radar.EarlyFraudWarning[],
     backfillRelatedEntities?: boolean
   ): Promise<Stripe.Radar.EarlyFraudWarning[]> {
@@ -847,6 +865,20 @@ export class StripeSync {
       'early_fraud_warnings',
       earlyFraudWarningSchema
     )
+  }
+
+  async upsertReviews(
+    reviews: Stripe.Review[],
+    backfillRelatedEntities?: boolean
+  ): Promise<Stripe.Review[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      await Promise.all([
+        this.backfillPaymentIntents(getUniqueIds(reviews, 'payment_intent')),
+        this.backfillCharges(getUniqueIds(reviews, 'charge')),
+      ])
+    }
+
+    return this.postgresClient.upsertMany(reviews, 'reviews', reviewSchema)
   }
 
   async upsertCustomers(
