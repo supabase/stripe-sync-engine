@@ -1,4 +1,4 @@
-name: release
+name: Release
 
 on:
   #push:
@@ -86,6 +86,14 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            packages/sync-engine
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Set new version in sync-engine
         run: |
           cd packages/sync-engine
@@ -94,6 +102,9 @@ jobs:
       - name: Publish sync-engine to npm
         run: |
           cd packages/sync-engine
+          pnpm install --frozen-lockfile
+          pnpm run build
+          pnpm pack
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
