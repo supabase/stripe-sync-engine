@@ -14,7 +14,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         ports:
           - 55432:5432
         env:
