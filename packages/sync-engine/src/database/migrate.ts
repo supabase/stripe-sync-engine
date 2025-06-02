@@ -53,7 +53,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
 
     config.logger?.info('Running migrations')
 
-    await connectAndMigrate(client, path.resolve(__dirname, '../../db/migrations'), config)
+    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
   } finally {
