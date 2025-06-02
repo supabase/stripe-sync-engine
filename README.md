@@ -1,29 +1,46 @@
-# Stripe Sync Engine
+# Stripe Sync Engine Monorepo
 
-Continuously synchronizes a Stripe account to a Postgres database.
+![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
+![NPM Version](https://img.shields.io/npm/v/%40supabase%2Fstripe-sync-engine)
+![Docker Image Version](https://img.shields.io/docker/v/supabase/stripe-sync-engine?label=Docker)
+
+This monorepo contains two packages for synchronizing your Stripe account with a Postgres database:
+
+- [`@supabase/stripe-sync-engine`](./packages/sync-engine/README.md): A TypeScript library for syncing Stripe data to Postgres, designed for integration into your own Node.js backend or serverless environment.
+- [`stripe-sync-fastify`](./packages/fastify-app/README.md): A Fastify-based server and Docker image that exposes a `/webhooks` endpoint for Stripe, providing a ready-to-run service for real-time Stripe-to-Postgres sync.
 
 ![Sync Stripe with Postgres](./docs/stripe-sync-engine.jpg)
+
+---
 
 ## Motivation
 
 Sometimes you want to analyze your billing data using SQL. Even more importantly, you want to join your billing data to your product/business data.
 
-This server synchronizes your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
+This project synchronizes your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
+
+---
 
 ## How it works
 
 ![How it works](./docs/sync-engine-how.png)
 
 - Creates a new schema `stripe` in a Postgres database, with tables & columns matching Stripe.
-- Exposes a `/webhooks` endpoint that listens to any Stripe webhooks.
+- Exposes a `/webhooks` endpoint that listens to any Stripe webhooks (via the Fastify app).
 - Inserts/updates/deletes changes into the tables whenever there is a change to Stripe.
 
-**Not implemented**
+---
 
-- This will not do an initial load of existing Stripe data. You should use CSV loads for this. We might implement this in the future.
-- We are progressively working through webhooks.
+## Packages
 
-## Webhook Progress
+- [Library: @supabase/stripe-sync-engine](./packages/sync-engine/README.md)
+- [Docker/Server: supabase/stripe-sync-engine](./packages/fastify-app/README.md)
+
+Each package has its own README with installation, configuration, and usage instructions.
+
+---
+
+## Webhook Support
 
 - [ ] `balance.available`
 - [x] `charge.captured` 🟢
@@ -120,89 +137,3 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `subscription_schedule.expiring` 🟢
 - [x] `subscription_schedule.released` 🟢
 - [x] `subscription_schedule.updated` 🟢
-
-## Usage
-
-- Update your Stripe account with all valid webhooks and get the webhook secret
-- `mv .env.sample .env` and then rename all the variables
-- Make sure the database URL has search_path `stripe`. eg: `DATABASE_URL=postgres://postgres:postgres@hostname:5432/postgres?sslmode=disable&search_path=stripe`
-- Deploy the [docker image](https://hub.docker.com/r/supabase/stripe-sync-engine) to your favourite hosting service and expose port `8080`
-  - eg: `docker run -e PORT=8080 --env-file .env supabase/stripe-sync-engine`
-  - This will automatically run any migrations on your database
-- Point your Stripe webooks to your deployed app.
-
-## Backfill from Stripe
-
-```
-POST /sync
-body: {
-  "object": "product",
-  "created": {
-    "gte": 1643872333
-  }
-}
-```
-
-- `object` **all** | **charge** | **customer** | **dispute** | **invoice** | **payment_method** | **payment_intent** | **plan** | **price** | **product** | **setup_intent** | **subscription**
-- `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
-
-#### Alternative routes to sync `daily/weekly/monthly` data
-
-```
-POST /sync/daily
-
----
-
-POST /sync/daily
-body: {
-  "object": "product"
-}
-```
-
-### Syncing single entity
-
-To backfill/update a single entity, you can use
-
-```
-POST /sync/single/cus_12345
-```
-
-The entity type is recognized automatically, based on the prefix.
-
-## Future ideas
-
-- Expose an "initialize" endpoint that will fetch data from Stripe and do an initial load (or perhaps `POST` a CSV to an endpoint).
-
-## Development
-
-**Set up**
-
-- Create a Postgres database on [supabase.com](https://supabase.com) (or another Postgres provider)
-- Update Stripe with all valid webhooks and get the webhook secret
-- `mv .env.sample .env` and then rename all the variables
-
-**Develop**
-
-- `pnpm dev` to start the local server
-- `pnpm t` to run tests
-
-**Building Docker**
-
-```bash
-docker build -t stripe-sync-engine .
-docker run -p 8080:8080 stripe-sync-engine
-```
-
-**Release**
-
-Handled by GitHub actions whenever their is a commit to the `main` branch with `fix` or `feat` in the description.
-
-## License
-
-Apache 2.0
-
-## Sponsors
-
-Supabase is building the features of Firebase using enterprise-grade, open source products. We support existing communities wherever possible, and if the products don’t exist we build them and open source them ourselves.
-
-[![New Sponsor](https://user-images.githubusercontent.com/10214025/90518111-e74bbb00-e198-11ea-8f88-c9e3c1aa4b5b.png)](https://github.com/sponsors/supabase)

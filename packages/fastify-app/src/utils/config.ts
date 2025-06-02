@@ -1,4 +1,4 @@
-import dotenv from 'dotenv'
+import { config } from 'dotenv'
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
   const value = process.env[key]
@@ -47,7 +47,7 @@ export type StripeSyncServerConfig = {
 }
 
 export function getConfig(): StripeSyncServerConfig {
-  dotenv.config()
+  config()
 
   return {
     databaseUrl: getConfigFromEnv('DATABASE_URL'),
