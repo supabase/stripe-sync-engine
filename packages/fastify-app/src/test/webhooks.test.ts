@@ -20,7 +20,7 @@ describe('POST /webhooks', () => {
     await runMigrations({
       databaseUrl: config.databaseUrl,
       schema: config.schema,
-      logger: config.logger,
+      logger,
     })
 
     process.env.AUTO_EXPAND_LISTS = 'false'
@@ -96,6 +96,8 @@ describe('POST /webhooks', () => {
     'credit_note_created',
     'credit_note_updated',
     'credit_note_voided',
+    'early_fraud_warning_created',
+    'early_fraud_warning_updated',
   ])('process event %s', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     const signature = createHmac('sha256', stripeWebhookSecret)

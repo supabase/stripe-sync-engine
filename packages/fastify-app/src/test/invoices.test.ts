@@ -4,6 +4,7 @@ import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { runMigrations } from '@supabase/stripe-sync-engine'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
+import { logger } from '../logger'
 
 let stripeSync: StripeSync
 
@@ -15,7 +16,7 @@ beforeAll(async () => {
   await runMigrations({
     databaseUrl: config.databaseUrl,
     schema: config.schema,
-    logger: config.logger,
+    logger,
   })
 
   stripeSync = new StripeSync(config)
