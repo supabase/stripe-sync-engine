@@ -60,7 +60,7 @@ export class StripeSync {
   }
 
   async processWebhook(payload: Buffer | string, signature: string | undefined) {
-    const event = this.stripe.webhooks.constructEvent(
+    const event = await this.stripe.webhooks.constructEventAsync(
       payload,
       signature!,
       this.config.stripeWebhookSecret
