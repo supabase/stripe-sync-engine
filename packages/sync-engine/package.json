@@ -3,18 +3,22 @@
   "version": "0.0.0",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data based on webhooks to Postgres",
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
-  "types": "dist/esm/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.cjs",
   "exports": {
-    ".": {
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+    "import": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "require": {
+      "types": "./dist/index.d.cts",
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "pnpm run clean && tsup && cp -r db dist/db",
+    "prebuild": "npm run clean",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
     "lint": "eslint src --ext .ts"
   },
   "files": [
