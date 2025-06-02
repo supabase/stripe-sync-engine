@@ -40,6 +40,10 @@ Each package has its own README with installation, configuration, and usage inst
 
 ---
 
+## Supabase Edge Function
+
+To deploy the sync-engine to a Supabase edge function, follow this [guide](./edge-function.md).
+
 ## Webhook Support
 
 - [ ] `balance.available`
