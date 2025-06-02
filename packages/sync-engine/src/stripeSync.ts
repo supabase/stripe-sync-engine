@@ -17,12 +17,12 @@ import { subscriptionItemSchema } from './schemas/subscription_item'
 import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
 import { subscriptionSchema } from './schemas/subscription'
 import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
+import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getUniqueIds(entries: any[], key: string): string[] {
+function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
     entries
-      .map((subscription) => subscription?.[key]?.toString())
+      .map((subscription) => subscription?.[key as keyof T]?.toString())
       .filter((it): it is string => Boolean(it))
   )
 
@@ -367,6 +367,22 @@ export class StripeSync {
         break
       }
 
+      case 'radar.early_fraud_warning.created':
+      case 'radar.early_fraud_warning.updated': {
+        const earlyFraudWarning = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.Radar.EarlyFraudWarning,
+          (id) => this.stripe.radar.earlyFraudWarnings.retrieve(id)
+        )
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for earlyFraudWarning ${earlyFraudWarning.id}`
+        )
+
+        await this.upsertEarlyFraudWarning([earlyFraudWarning])
+
+        break
+      }
+
       default:
         throw new Error('Unhandled webhook event')
     }
@@ -420,6 +436,10 @@ export class StripeSync {
       return this.stripe.taxIds.retrieve(stripeId).then((it) => this.upsertTaxIds([it]))
     } else if (stripeId.startsWith('cn_')) {
       return this.stripe.creditNotes.retrieve(stripeId).then((it) => this.upsertCreditNotes([it]))
+    } else if (stripeId.startsWith('issfr_')) {
+      return this.stripe.radar.earlyFraudWarnings
+        .retrieve(stripeId)
+        .then((it) => this.upsertEarlyFraudWarning([it]))
     }
   }
 
@@ -438,7 +458,8 @@ export class StripeSync {
       paymentIntents,
       plans,
       taxIds,
-      creditNotes
+      creditNotes,
+      earlyFraudWarnings
 
     switch (object) {
       case 'all':
@@ -456,6 +477,7 @@ export class StripeSync {
         taxIds = await this.syncTaxIds(params)
         creditNotes = await this.syncCreditNotes(params)
         disputes = await this.syncDisputes(params)
+        earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
         break
       case 'customer':
         customers = await this.syncCustomers(params)
@@ -498,6 +520,9 @@ export class StripeSync {
       case 'credit_note':
         creditNotes = await this.syncCreditNotes(params)
         break
+      case 'early_fraud_warning':
+        earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
+        break
       default:
         break
     }
@@ -517,6 +542,7 @@ export class StripeSync {
       plans,
       taxIds,
       creditNotes,
+      earlyFraudWarnings,
     }
   }
 
@@ -701,6 +727,18 @@ export class StripeSync {
     )
   }
 
+  async syncEarlyFraudWarnings(syncParams?: SyncBackfillParams): Promise<Sync> {
+    this.config.logger?.info('Syncing early fraud warnings')
+
+    const params: Stripe.Radar.EarlyFraudWarningListParams = { limit: 100 }
+    if (syncParams?.created) params.created = syncParams.created
+
+    return this.fetchAndUpsert(
+      () => this.stripe.radar.earlyFraudWarnings.list(params),
+      (items) => this.upsertEarlyFraudWarning(items, syncParams?.backfillRelatedEntities)
+    )
+  }
+
   async syncCreditNotes(syncParams?: SyncBackfillParams): Promise<Sync> {
     this.config.logger?.info('Syncing credit notes')
 
@@ -749,8 +787,6 @@ export class StripeSync {
       ])
     }
 
-    // Stripe only sends the first 10 refunds by default, the option will actively fetch all refunds
-
     await this.expandEntity(charges, 'refunds', (id) =>
       this.stripe.refunds.list({ charge: id, limit: 100 })
     )
@@ -766,6 +802,17 @@ export class StripeSync {
     ).then((charges) => this.upsertCharges(charges))
   }
 
+  private async backfillPaymentIntents(paymentIntentIds: string[]) {
+    const missingIds = await this.postgresClient.findMissingEntries(
+      'payment_intents',
+      paymentIntentIds
+    )
+
+    await this.fetchMissingEntities(missingIds, (id) =>
+      this.stripe.paymentIntents.retrieve(id)
+    ).then((paymentIntents) => this.upsertPaymentIntents(paymentIntents))
+  }
+
   private async upsertCreditNotes(
     creditNotes: Stripe.CreditNote[],
     backfillRelatedEntities?: boolean
@@ -777,12 +824,29 @@ export class StripeSync {
       ])
     }
 
-    // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
     await this.expandEntity(creditNotes, 'lines', (id) =>
       this.stripe.creditNotes.listLineItems(id, { limit: 100 })
     )
 
     return this.postgresClient.upsertMany(creditNotes, 'credit_notes', creditNoteSchema)
+  }
+
+  private async upsertEarlyFraudWarning(
+    earlyFraudWarnings: Stripe.Radar.EarlyFraudWarning[],
+    backfillRelatedEntities?: boolean
+  ): Promise<Stripe.Radar.EarlyFraudWarning[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      await Promise.all([
+        this.backfillPaymentIntents(getUniqueIds(earlyFraudWarnings, 'payment_intent')),
+        this.backfillCharges(getUniqueIds(earlyFraudWarnings, 'charge')),
+      ])
+    }
+
+    return this.postgresClient.upsertMany(
+      earlyFraudWarnings,
+      'early_fraud_warnings',
+      earlyFraudWarningSchema
+    )
   }
 
   async upsertCustomers(
@@ -829,8 +893,6 @@ export class StripeSync {
         this.backfillSubscriptions(getUniqueIds(invoices, 'subscription')),
       ])
     }
-
-    // Stripe only sends the first 10 line items by default, the option will actively fetch all line items
 
     await this.expandEntity(invoices, 'lines', (id) =>
       this.stripe.invoices.listLineItems(id, { limit: 100 })
@@ -1022,7 +1084,6 @@ export class StripeSync {
       await this.backfillCustomers(customerIds)
     }
 
-    // Stripe only sends the first 10 items by default, the option will actively fetch all items
     await this.expandEntity(subscriptions, 'items', (id) =>
       this.stripe.subscriptionItems.list({ subscription: id, limit: 100 })
     )
@@ -1076,9 +1137,12 @@ export class StripeSync {
     ).then((subscriptionSchedules) => this.upsertSubscriptionSchedules(subscriptionSchedules))
   }
 
+  /**
+   * Stripe only sends the first 10 entries by default, the option will actively fetch all entries.
+   */
   private async expandEntity<
     K,
-    P extends string,
+    P extends keyof T,
     T extends { id?: string } & { [key in P]?: Stripe.ApiList<K> | null },
   >(entities: T[], property: P, listFn: (id: string) => Stripe.ApiListPromise<K>) {
     if (!this.config.autoExpandLists) return

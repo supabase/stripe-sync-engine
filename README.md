@@ -100,6 +100,8 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `product.created` 🟢
 - [x] `product.deleted` 🟢
 - [x] `product.updated` 🟢
+- [x] `radar.early_fraud_warning.created` 🟢
+- [x] `radar.early_fraud_warning.updated` 🟢
 - [x] `setup_intent.canceled` 🟢
 - [x] `setup_intent.created` 🟢
 - [x] `setup_intent.requires_action` 🟢

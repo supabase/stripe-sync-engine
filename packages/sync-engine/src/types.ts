@@ -56,6 +56,7 @@ export type SyncObject =
   | 'plan'
   | 'tax_id'
   | 'credit_note'
+  | 'early_fraud_warning'
 
 export interface Sync {
   synced: number
@@ -76,6 +77,7 @@ export interface SyncBackfill {
   charges?: Sync
   taxIds?: Sync
   creditNotes?: Sync
+  earlyFraudWarnings?: Sync
 }
 
 export interface SyncBackfillParams {
