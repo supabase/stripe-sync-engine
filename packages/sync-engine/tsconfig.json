@@ -1,12 +1,13 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "dist",
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node",
     "declaration": true,
-    "declarationMap": true,
-    "composite": true,
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true
   },
-  "include": ["src"]
+  "include": ["src/**/*"]
 }

@@ -14,9 +14,7 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build:cjs": "tsc --build tsconfig.cjs.json",
-    "build:esm": "tsc --build tsconfig.esm.json",
-    "build": "pnpm run clean && pnpm run build:cjs && pnpm run build:esm && cp -r db dist/db",
+    "build": "pnpm run clean && tsup && cp -r db dist/db",
     "lint": "eslint src --ext .ts"
   },
   "files": [

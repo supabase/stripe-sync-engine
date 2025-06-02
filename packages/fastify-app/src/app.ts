@@ -2,7 +2,7 @@ import fastify, { FastifyInstance, FastifyServerOptions } from 'fastify'
 import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
-import path from 'node:path'
+import { join } from 'node:path'
 import { getConfig } from './utils/config'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { errorSchema } from './error'
@@ -55,9 +55,7 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
       }
       done(null, newBody)
     } catch (error) {
-      // @ts-expect-error
       error.statusCode = 400
-      // @ts-expect-error
       done(error, undefined)
     }
   })
@@ -71,7 +69,7 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
    * Expose all routes in './routes'
    */
   await app.register(autoload, {
-    dir: path.join(__dirname, 'routes'),
+    dir: join(__dirname, 'routes'),
   })
 
   await app.ready()
