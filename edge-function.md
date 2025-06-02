@@ -6,7 +6,6 @@ Make sure to run the [migrations](./packages/sync-engine/src/database/migrations
 
 ```ts
 import { runMigrations } from '@supabase/stripe-sync-engine'
-
 ;(async () => {
   await runMigrations({
     databaseUrl: 'postgresql://postgres:..@db.<ref>.supabase.co:5432/postgre',
