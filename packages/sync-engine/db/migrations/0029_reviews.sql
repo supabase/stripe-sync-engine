@@ -17,9 +17,9 @@ create table
         updated_at timestamptz default timezone('utc'::text, now()) not null
     );
 
-create index stripe_reviews_customer_idx on "stripe"."reviews" using btree (charge);
+create index stripe_reviews_charge_idx on "stripe"."reviews" using btree (charge);
 
-create index stripe_reviews_invoice_idx on "stripe"."reviews" using btree (payment_intent);
+create index stripe_reviews_payment_intent_idx on "stripe"."reviews" using btree (payment_intent);
 
 create trigger handle_updated_at
     before update
