@@ -19,6 +19,7 @@ import { subscriptionSchema } from './schemas/subscription'
 import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 import { reviewSchema } from './schemas/review'
+import { refundSchema } from './schemas/refund'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -384,6 +385,22 @@ export class StripeSync {
         break
       }
 
+      case 'refund.created':
+      case 'refund.failed':
+      case 'refund.updated':
+      case 'charge.refund.updated': {
+        const refund = await this.fetchOrUseWebhookData(event.data.object as Stripe.Refund, (id) =>
+          this.stripe.refunds.retrieve(id)
+        )
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for refund ${refund.id}`
+        )
+
+        await this.upsertRefunds([refund])
+        break
+      }
+
       case 'review.closed':
       case 'review.opened': {
         const review = await this.fetchOrUseWebhookData(event.data.object as Stripe.Review, (id) =>
@@ -458,6 +475,8 @@ export class StripeSync {
         .then((it) => this.upsertEarlyFraudWarning([it]))
     } else if (stripeId.startsWith('prv_')) {
       return this.stripe.reviews.retrieve(stripeId).then((it) => this.upsertReviews([it]))
+    } else if (stripeId.startsWith('re_')) {
+      return this.stripe.refunds.retrieve(stripeId).then((it) => this.upsertRefunds([it]))
     }
   }
 
@@ -477,7 +496,8 @@ export class StripeSync {
       plans,
       taxIds,
       creditNotes,
-      earlyFraudWarnings
+      earlyFraudWarnings,
+      refunds
 
     switch (object) {
       case 'all':
@@ -496,6 +516,7 @@ export class StripeSync {
         creditNotes = await this.syncCreditNotes(params)
         disputes = await this.syncDisputes(params)
         earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
+        refunds = await this.syncRefunds(params)
         break
       case 'customer':
         customers = await this.syncCustomers(params)
@@ -541,6 +562,9 @@ export class StripeSync {
       case 'early_fraud_warning':
         earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
         break
+      case 'refund':
+        refunds = await this.syncRefunds(params)
+        break
       default:
         break
     }
@@ -561,6 +585,7 @@ export class StripeSync {
       taxIds,
       creditNotes,
       earlyFraudWarnings,
+      refunds,
     }
   }
 
@@ -757,6 +782,18 @@ export class StripeSync {
     )
   }
 
+  async syncRefunds(syncParams?: SyncBackfillParams): Promise<Sync> {
+    this.config.logger?.info('Syncing refunds')
+
+    const params: Stripe.RefundListParams = { limit: 100 }
+    if (syncParams?.created) params.created = syncParams.created
+
+    return this.fetchAndUpsert(
+      () => this.stripe.refunds.list(params),
+      (items) => this.upsertRefunds(items, syncParams?.backfillRelatedEntities)
+    )
+  }
+
   async syncCreditNotes(syncParams?: SyncBackfillParams): Promise<Sync> {
     this.config.logger?.info('Syncing credit notes')
 
@@ -865,6 +902,20 @@ export class StripeSync {
       'early_fraud_warnings',
       earlyFraudWarningSchema
     )
+  }
+
+  async upsertRefunds(
+    refunds: Stripe.Refund[],
+    backfillRelatedEntities?: boolean
+  ): Promise<Stripe.Refund[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      await Promise.all([
+        this.backfillPaymentIntents(getUniqueIds(refunds, 'payment_intent')),
+        this.backfillCharges(getUniqueIds(refunds, 'charge')),
+      ])
+    }
+
+    return this.postgresClient.upsertMany(refunds, 'refunds', refundSchema)
   }
 
   async upsertReviews(

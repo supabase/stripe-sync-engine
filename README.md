@@ -31,6 +31,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `charge.failed` 🟢
 - [x] `charge.pending` 🟢
 - [x] `charge.refunded` 🟢
+- [x] `charge.refund.updated` 🟡 - For updates on all refunds, listen to `refund.updated` instead
 - [x] `charge.succeeded` 🟢
 - [x] `charge.updated` 🟢
 - [x] `charge.dispute.closed` 🟢
@@ -70,7 +71,7 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `invoice.payment_failed` 🟢
 - [x] `invoice.payment_succeeded` 🟢
 - [x] `invoice.sent` 🟢
-- [x] `invoice.upcoming` 🔴 - Event has no id and cannot be processed
+- [ ] `invoice.upcoming` 🔴 - Event has no id and cannot be processed
 - [x] `invoice.updated` 🟢
 - [x] `invoice.overdue` 🟢
 - [x] `invoice.overpaid` 🟢
@@ -102,6 +103,9 @@ This server synchronizes your Stripe account to a Postgres database. It can be a
 - [x] `product.updated` 🟢
 - [x] `radar.early_fraud_warning.created` 🟢
 - [x] `radar.early_fraud_warning.updated` 🟢
+- [x] `refund.created` 🟢
+- [x] `refund.failed` 🟢
+- [x] `refund.updated` 🟢
 - [x] `review.opened` 🟢
 - [x] `review.closed` 🟢
 - [x] `setup_intent.canceled` 🟢
