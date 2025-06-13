@@ -5,6 +5,7 @@ export const productSchema: EntitySchema = {
     'id',
     'object',
     'active',
+    'default_price',
     'description',
     'metadata',
     'name',
