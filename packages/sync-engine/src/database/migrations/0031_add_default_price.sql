@@ -1,2 +1,2 @@
 alter table "stripe"."products"
-add column "default_price" text;
+add column IF NOT EXISTS "default_price" text;
