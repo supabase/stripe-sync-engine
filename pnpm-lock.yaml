@@ -63,8 +63,8 @@ importers:
         specifier: 'workspace:'
         version: link:../sync-engine
       dotenv:
-        specifier: ^16.5.0
-        version: 16.5.0
+        specifier: ^17.0.0
+        version: 17.0.0
       fastify:
         specifier: ^5.3.3
         version: 5.3.3
@@ -783,8 +783,8 @@ packages:
     resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
     engines: {node: '>= 0.8'}
 
-  dotenv@16.5.0:
-    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
+  dotenv@17.0.0:
+    resolution: {integrity: sha512-A0BJ5lrpJVSfnMMXjmeO0xUnoxqsBHWCoqqTnGwGYVdnctqXXUEhJOO7LxmgxJon9tEZFGpe0xPRX0h2v3AANQ==}
     engines: {node: '>=12'}
 
   eastasianwidth@0.2.0:
@@ -2399,7 +2399,7 @@ snapshots:
 
   depd@2.0.0: {}
 
-  dotenv@16.5.0: {}
+  dotenv@17.0.0: {}
 
   eastasianwidth@0.2.0: {}
 
