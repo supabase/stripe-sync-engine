@@ -1,0 +1,66 @@
+site_name: Stripe Sync Engine
+site_url: https://supabase.github.io/stripe-sync-engine
+site_description: Sync your Stripe account to you Postgres database
+copyright: Copyright &copy; Supabase
+repo_name: supabase/stripe-sync-engine
+repo_url: https://github.com/supabase/stripe-sync-engine
+edit_uri: edit/main/docs/
+
+not_in_nav: |
+  tags.md
+
+nav:
+  - "README.md"
+  - "edge-function.md"
+
+theme:
+  name: "material"
+  favicon: "https://avatars.githubusercontent.com/u/54469796"
+  logo: "https://avatars.githubusercontent.com/u/54469796"
+  homepage: https://supabase.github.io/stripe-sync-engine
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - navigation.expand
+    # - navigation.tabs
+    # - navigation.tabs.sticky
+    # - navigation.sections
+    - navigation.indexes
+    - navigation.footer
+  palette:
+    scheme: slate
+    primary: green
+    accent: green
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/twitter
+      link: https://x.com/supabase
+      name: Supabase on Twitter
+    - icon: fontawesome/brands/reddit
+      link: https://reddit.com/r/supabase
+      name: Supabase on Reddit
+    - icon: fontawesome/brands/github
+      link: https://github.com/supabase/stripe-sync-engine
+      name: Stripe Sync Engine on GitHub
+
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - pymdownx.highlight:
+      linenums: true
+      guess_lang: false
+      use_pygments: true
+      pygments_style: default
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets
+  - pymdownx.tasklist
+  - admonition
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
