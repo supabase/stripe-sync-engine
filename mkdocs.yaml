@@ -10,8 +10,12 @@ not_in_nav: |
   tags.md
 
 nav:
-  - "README.md"
-  - "edge-function.md"
+  - Overview: "index.md"
+  - Usage:
+    - "docker.md"
+    - "typescript.md"
+    - "edge-function.md"
+  - "contributing.md"
 
 theme:
   name: "material"
