@@ -10,17 +10,17 @@ not_in_nav: |
   tags.md
 
 nav:
-  - Overview: "index.md"
+  - Overview: 'index.md'
   - Usage:
-    - "docker.md"
-    - "typescript.md"
-    - "edge-function.md"
-  - "contributing.md"
+      - 'docker.md'
+      - 'typescript.md'
+      - 'edge-function.md'
+  - 'contributing.md'
 
 theme:
-  name: "material"
-  favicon: "https://avatars.githubusercontent.com/u/54469796"
-  logo: "https://avatars.githubusercontent.com/u/54469796"
+  name: 'material'
+  favicon: 'https://avatars.githubusercontent.com/u/54469796'
+  logo: 'https://avatars.githubusercontent.com/u/54469796'
   homepage: https://supabase.github.io/stripe-sync-engine
   features:
     - content.code.annotate

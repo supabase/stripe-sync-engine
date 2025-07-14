@@ -1,4 +1,3 @@
-
 ![Sync Stripe with Postgres](./stripe-sync-engine.jpg)
 
 # Stripe Sync Engine
