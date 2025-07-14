@@ -11,7 +11,6 @@ Building documentation requires Python 3.8+ and uv.
 Create a virtual environment and install mkdocs, themes, and extensions using uv.
 
 ```shell
-uv thi
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -r docs/requirements_docs.txt
 ```
