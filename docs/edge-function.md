@@ -1,6 +1,8 @@
-# Stripe-Sync inside Supabase Edge Function
+# With Supabase Edge Functions
 
 Create a new [Supabase](https://supabase.com) and create a new [Edge Function](https://supabase.com/docs/guides/functions/quickstart).
+
+## Prepare your database
 
 Make sure to run the [migrations](./packages/sync-engine/src/database/migrations/), either by executing them manually, adding them into your CI or running this locally once:
 
@@ -14,6 +16,8 @@ import { runMigrations } from '@supabase/stripe-sync-engine'
   })
 })()
 ```
+
+## Usage
 
 Sample code:
 
