@@ -76,7 +76,7 @@ You can sync or update a single Stripe entity by its ID using the `syncSingleEnt
 await sync.syncSingleEntity('cus_12345')
 ```
 
-The entity type is detected automatically based on the Stripe ID prefix (e.g., `cus_` for customer, `prod_` for product).
+The entity type is detected automatically based on the Stripe ID prefix (e.g., `cus_` for customer, `prod_` for product). `ent_` is not supported at the moment.
 
 ### Backfilling Data
 

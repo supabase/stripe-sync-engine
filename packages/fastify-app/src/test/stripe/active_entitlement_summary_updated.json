@@ -1,0 +1,39 @@
+{
+  "id": "evt_1RqDanBRSrwpzKxHOnFoInVh",
+  "object": "event",
+  "api_version": "2020-03-02",
+  "created": 1753795761,
+  "data": {
+    "object": {
+      "object": "entitlements.active_entitlement_summary",
+      "customer": "cus_Sll319ReSxCmEi",
+      "entitlements": {
+        "object": "list",
+        "data": [
+          {
+            "id": "ent_test_61SzbY9Pui5KGP3yf41BRSrwpzKxHTFY",
+            "object": "entitlements.active_entitlement",
+            "feature": "feat_test_61SzbVaDzF2GIc5ng41BRSrwpzKxHABs",
+            "livemode": false,
+            "lookup_key": "journeys"
+          }
+        ],
+        "has_more": false,
+        "url": "/v1/customer/cus_Sll319ReSxCmEi/entitlements"
+      },
+      "livemode": false
+    },
+    "previous_attributes": {
+      "entitlements": {
+        "data": []
+      }
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": null,
+    "idempotency_key": null
+  },
+  "type": "entitlements.active_entitlement_summary.updated"
+}

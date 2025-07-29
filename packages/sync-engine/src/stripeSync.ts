@@ -16,10 +16,19 @@ import { taxIdSchema } from './schemas/tax_id'
 import { subscriptionItemSchema } from './schemas/subscription_item'
 import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
 import { subscriptionSchema } from './schemas/subscription'
-import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
+import {
+  StripeSyncConfig,
+  Sync,
+  SyncBackfill,
+  SyncBackfillParams,
+  SyncEntitlementsParams,
+  SyncFeaturesParams,
+} from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
+import { activeEntitlementSchema } from './schemas/active_entitlement'
+import { featureSchema } from './schemas/feature'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -415,7 +424,30 @@ export class StripeSync {
 
         break
       }
+      case 'entitlements.active_entitlement_summary.updated': {
+        const activeEntitlementSummary = event.data
+          .object as Stripe.Entitlements.ActiveEntitlementSummary
+        let entitlements = activeEntitlementSummary.entitlements
 
+        if (this.config.revalidateEntityViaStripeApi) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { lastResponse, ...rest } = await this.stripe.entitlements.activeEntitlements.list({
+            customer: activeEntitlementSummary.customer,
+          })
+          entitlements = rest
+        }
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for activeEntitlementSummary for customer ${activeEntitlementSummary.customer}`
+        )
+
+        await this.deleteRemovedActiveEntitlements(
+          activeEntitlementSummary.customer,
+          entitlements.data.map((entitlement) => entitlement.id)
+        )
+        await this.upsertActiveEntitlements(activeEntitlementSummary.customer, entitlements.data)
+        break
+      }
       default:
         throw new Error('Unhandled webhook event')
     }
@@ -477,6 +509,10 @@ export class StripeSync {
       return this.stripe.reviews.retrieve(stripeId).then((it) => this.upsertReviews([it]))
     } else if (stripeId.startsWith('re_')) {
       return this.stripe.refunds.retrieve(stripeId).then((it) => this.upsertRefunds([it]))
+    } else if (stripeId.startsWith('feat_')) {
+      return this.stripe.entitlements.features
+        .retrieve(stripeId)
+        .then((it) => this.upsertFeatures([it]))
     }
   }
 
@@ -803,6 +839,28 @@ export class StripeSync {
     return this.fetchAndUpsert(
       () => this.stripe.creditNotes.list(params),
       (creditNotes) => this.upsertCreditNotes(creditNotes)
+    )
+  }
+
+  async syncFeatures(syncParams?: SyncFeaturesParams): Promise<Sync> {
+    this.config.logger?.info('Syncing features')
+    const params: Stripe.Entitlements.FeatureListParams = { limit: 100, ...syncParams?.pagination }
+    return this.fetchAndUpsert(
+      () => this.stripe.entitlements.features.list(params),
+      (features) => this.upsertFeatures(features)
+    )
+  }
+
+  async syncEntitlements(customerId: string, syncParams?: SyncEntitlementsParams): Promise<Sync> {
+    this.config.logger?.info('Syncing entitlements')
+    const params: Stripe.Entitlements.ActiveEntitlementListParams = {
+      customer: customerId,
+      limit: 100,
+      ...syncParams?.pagination,
+    }
+    return this.fetchAndUpsert(
+      () => this.stripe.entitlements.activeEntitlements.list(params),
+      (entitlements) => this.upsertActiveEntitlements(customerId, entitlements)
     )
   }
 
@@ -1196,6 +1254,77 @@ export class StripeSync {
     await Promise.all(markSubscriptionItemsDeleted)
 
     return rows
+  }
+
+  async deleteRemovedActiveEntitlements(
+    customerId: string,
+    currentActiveEntitlementIds: string[]
+  ): Promise<{ rowCount: number }> {
+    let prepared = sql(`
+    select id from "${this.config.schema}"."active_entitlements"
+    where customer = :customerId;
+    `)({ customerId })
+    const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
+    const deletedIds = rows.filter(
+      ({ id }: { id: string }) => currentActiveEntitlementIds.includes(id) === false
+    )
+
+    if (deletedIds.length > 0) {
+      const ids = deletedIds.map(({ id }: { id: string }) => id)
+      prepared = sql(`
+      delete from "${this.config.schema}"."active_entitlements"
+      where id=any(:ids::text[]);
+      `)({ ids })
+      const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
+      return { rowCount: rowCount || 0 }
+    } else {
+      return { rowCount: 0 }
+    }
+  }
+
+  async upsertFeatures(features: Stripe.Entitlements.Feature[]) {
+    return this.postgresClient.upsertMany(features, 'features', featureSchema)
+  }
+
+  async backfillFeatures(featureIds: string[]) {
+    const missingFeatureIds = await this.postgresClient.findMissingEntries('features', featureIds)
+    await this.fetchMissingEntities(missingFeatureIds, (id) =>
+      this.stripe.entitlements.features.retrieve(id)
+    )
+      .then((features) => this.upsertFeatures(features))
+      .catch((err) => {
+        this.config.logger?.error(err, 'Failed to backfill features')
+        throw err
+      })
+  }
+
+  async upsertActiveEntitlements(
+    customerId: string,
+    activeEntitlements: Stripe.Entitlements.ActiveEntitlement[],
+    backfillRelatedEntities?: boolean
+  ) {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      await Promise.all([
+        this.backfillCustomers(getUniqueIds(activeEntitlements, 'customer')),
+        this.backfillFeatures(getUniqueIds(activeEntitlements, 'feature')),
+      ])
+    }
+
+    const entitlements = activeEntitlements.map((entitlement) => ({
+      id: entitlement.id,
+      object: entitlement.object,
+      feature:
+        typeof entitlement.feature === 'string' ? entitlement.feature : entitlement.feature.id,
+      customer: customerId,
+      livemode: entitlement.livemode,
+      lookup_key: entitlement.lookup_key,
+    }))
+
+    return this.postgresClient.upsertMany(
+      entitlements,
+      'active_entitlements',
+      activeEntitlementSchema
+    )
   }
 
   async backfillSubscriptions(subscriptionIds: string[]) {
