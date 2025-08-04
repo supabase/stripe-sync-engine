@@ -498,10 +498,7 @@ export class StripeSync {
     } else if (stripeId.startsWith('cs_')) {
       return this.stripe.checkout.sessions
         .retrieve(stripeId, { expand: ['line_items'] })
-        .then((it) => {
-          console.log(it)
-          return this.upsertCheckoutSessions([it])
-        })
+        .then((it) => this.upsertCheckoutSessions([it]))
     }
   }
 
