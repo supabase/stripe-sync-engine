@@ -2,6 +2,8 @@ import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import { PostgresClient } from './database/postgres'
 import { chargeSchema } from './schemas/charge'
+import { checkoutSessionSchema } from './schemas/checkout_sessions'
+import { checkoutSessionLineItemSchema } from './schemas/checkout_session_line_items'
 import { creditNoteSchema } from './schemas/credit_note'
 import { customerDeletedSchema, customerSchema } from './schemas/customer'
 import { disputeSchema } from './schemas/dispute'
@@ -83,6 +85,22 @@ export class StripeSync {
         )
 
         await this.upsertCharges([charge])
+        break
+      }
+      case 'checkout.session.async_payment_failed':
+      case 'checkout.session.async_payment_succeeded':
+      case 'checkout.session.completed':
+      case 'checkout.session.expired': {
+        const checkoutSession = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.Checkout.Session,
+          (id) => this.stripe.checkout.sessions.retrieve(id, { expand: ['line_items'] })
+        )
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for checkout session ${checkoutSession.id}`
+        )
+
+        await this.upsertCheckoutSessions([checkoutSession])
         break
       }
       case 'customer.created':
@@ -477,6 +495,13 @@ export class StripeSync {
       return this.stripe.reviews.retrieve(stripeId).then((it) => this.upsertReviews([it]))
     } else if (stripeId.startsWith('re_')) {
       return this.stripe.refunds.retrieve(stripeId).then((it) => this.upsertRefunds([it]))
+    } else if (stripeId.startsWith('cs_')) {
+      return this.stripe.checkout.sessions
+        .retrieve(stripeId, { expand: ['line_items'] })
+        .then((it) => {
+          console.log(it)
+          return this.upsertCheckoutSessions([it])
+        })
     }
   }
 
@@ -497,7 +522,8 @@ export class StripeSync {
       taxIds,
       creditNotes,
       earlyFraudWarnings,
-      refunds
+      refunds,
+      checkoutSessions
 
     switch (object) {
       case 'all':
@@ -517,6 +543,7 @@ export class StripeSync {
         disputes = await this.syncDisputes(params)
         earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
         refunds = await this.syncRefunds(params)
+        checkoutSessions = await this.syncCheckoutSessions(params)
         break
       case 'customer':
         customers = await this.syncCustomers(params)
@@ -565,6 +592,9 @@ export class StripeSync {
       case 'refund':
         refunds = await this.syncRefunds(params)
         break
+      case 'checkout_sessions':
+        checkoutSessions = await this.syncCheckoutSessions(params)
+        break
       default:
         break
     }
@@ -586,6 +616,7 @@ export class StripeSync {
       creditNotes,
       earlyFraudWarnings,
       refunds,
+      checkoutSessions,
     }
   }
 
@@ -806,6 +837,21 @@ export class StripeSync {
     )
   }
 
+  async syncCheckoutSessions(syncParams?: SyncBackfillParams): Promise<Sync> {
+    this.config.logger?.info('Syncing checkout sessions')
+
+    const params: Stripe.Checkout.SessionListParams = {
+      limit: 100,
+      expand: ['data.line_items'],
+    }
+    if (syncParams?.created) params.created = syncParams.created
+
+    return this.fetchAndUpsert(
+      () => this.stripe.checkout.sessions.list(params),
+      (items) => this.upsertCheckoutSessions(items, syncParams?.backfillRelatedEntities)
+    )
+  }
+
   private async fetchAndUpsert<T>(
     fetch: () => Stripe.ApiListPromise<T>,
     upsert: (items: T[]) => Promise<T[]>
@@ -884,6 +930,38 @@ export class StripeSync {
     )
 
     return this.postgresClient.upsertMany(creditNotes, 'credit_notes', creditNoteSchema)
+  }
+
+  private async upsertCheckoutSessions(
+    checkoutSessions: Stripe.Checkout.Session[],
+    backfillRelatedEntities?: boolean
+  ): Promise<Stripe.Checkout.Session[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      await Promise.all([
+        this.backfillCustomers(getUniqueIds(checkoutSessions, 'customer')),
+        this.backfillSubscriptions(getUniqueIds(checkoutSessions, 'subscription')),
+        this.backfillPaymentIntents(getUniqueIds(checkoutSessions, 'payment_intent')),
+        this.backfillInvoices(getUniqueIds(checkoutSessions, 'invoice')),
+      ])
+    }
+
+    // Upsert checkout sessions first
+    const rows = await this.postgresClient.upsertMany(
+      checkoutSessions,
+      'checkout_sessions',
+      checkoutSessionSchema
+    )
+
+    // Upsert line items into separate table
+    const lineItemsPromises = checkoutSessions
+      .filter((session) => session.line_items?.data && session.line_items.data.length > 0)
+      .map((session) => this.upsertCheckoutSessionLineItems(session.line_items!.data, session.id))
+
+    if (lineItemsPromises.length > 0) {
+      await Promise.all(lineItemsPromises)
+    }
+
+    return rows
   }
 
   async upsertEarlyFraudWarning(
@@ -1108,6 +1186,28 @@ export class StripeSync {
       modifiedSubscriptionItems,
       'subscription_items',
       subscriptionItemSchema
+    )
+  }
+
+  async upsertCheckoutSessionLineItems(lineItems: Stripe.LineItem[], checkoutSessionId: string) {
+    const modifiedLineItems = lineItems.map((lineItem) => {
+      // Extract price ID if price is an object, otherwise use the string value
+      const priceId =
+        typeof lineItem.price === 'object' && lineItem.price?.id
+          ? lineItem.price.id.toString()
+          : lineItem.price?.toString() || null
+
+      return {
+        ...lineItem,
+        price: priceId,
+        checkout_session: checkoutSessionId,
+      }
+    })
+
+    await this.postgresClient.upsertMany(
+      modifiedLineItems,
+      'checkout_session_line_items',
+      checkoutSessionLineItemSchema
     )
   }
 
