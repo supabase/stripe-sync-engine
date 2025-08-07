@@ -86,8 +86,7 @@ export class StripeSync {
         break
       }
       case 'customer.deleted': {
-        const customer = event.data.object
-        customer.deleted = true
+        const customer = { ...event.data.object, deleted: true }
 
         this.config.logger?.info(
           `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
