@@ -85,13 +85,9 @@ export class StripeSync {
         await this.upsertCharges([charge])
         break
       }
-      case 'customer.deleted':
-      {
-        const customer = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Customer | Stripe.DeletedCustomer,
-          (id) => this.stripe.customers.retrieve(id)
-        )
-        customer.deleted = true;
+      case 'customer.deleted': {
+        const customer = event.data.object
+        customer.deleted = true
 
         this.config.logger?.info(
           `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
