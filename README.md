@@ -141,3 +141,4 @@ To deploy the sync-engine to a Supabase edge function, follow this [guide](./edg
 - [x] `subscription_schedule.expiring` 🟢
 - [x] `subscription_schedule.released` 🟢
 - [x] `subscription_schedule.updated` 🟢
+- [x] `entitlements.active_entitlement_summary.updated` 🟢
