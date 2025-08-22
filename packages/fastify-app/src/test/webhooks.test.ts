@@ -41,6 +41,20 @@ describe('POST /webhooks', () => {
     await server.close()
   })
 
+
+  function getTableName(entityType: string): string {
+    if (entityType.includes('.')) {
+      // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
+      return entityType.split('.').pop() || entityType
+    }
+    return entityType
+  }
+
+  async function deleteTestData(entityType: string, entityId: string) {
+    const tableName = getTableName(entityType)
+    await postgresClient.query(`DELETE FROM stripe.${tableName}s WHERE id = $1`, [entityId])
+  }
+
   test.each([
     'customer_updated.json',
     'customer_deleted.json',
@@ -175,19 +189,6 @@ describe('POST /webhooks', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({ received: true })
   })
-
-  function getTableName(entityType: string): string {
-    if (entityType.includes('.')) {
-      // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
-      return entityType.split('.').pop() || entityType
-    }
-    return entityType
-  }
-
-  async function deleteTestData(entityType: string, entityId: string) {
-    const tableName = getTableName(entityType)
-    await postgresClient.query(`DELETE FROM stripe.${tableName}s WHERE id = $1`, [entityId])
-  }
 
   test('webhook with older timestamp does not override newer data', async () => {
     const eventBody = await import('./stripe/charge_updated.json').then(
