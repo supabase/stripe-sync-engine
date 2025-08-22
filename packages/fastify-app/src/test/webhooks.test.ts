@@ -28,22 +28,10 @@ describe('POST /webhooks', () => {
       logger,
     })
 
-    // Disable foreign key constraints for the entire database session
-    await postgresClient.query('SET session_replication_role = replica;')
-
     process.env.AUTO_EXPAND_LISTS = 'false'
     server = await createServer()
 
     const stripeSync = server.getDecorator<StripeSync>('stripeSync')
-
-    // Override the StripeSync's postgresClient to use the same connection with disabled constraints
-    const originalQuery = stripeSync.postgresClient.query.bind(stripeSync.postgresClient)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    stripeSync.postgresClient.query = async (text: string, values?: any[]) => {
-      // Ensure foreign key constraints are disabled for this connection
-      await originalQuery('SET session_replication_role = replica;')
-      return originalQuery(text, values)
-    }
 
     const stripe = Object.assign(stripeSync.stripe, mockStripe)
     vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
@@ -187,8 +175,6 @@ describe('POST /webhooks', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({ received: true })
   })
-
-  
 
   function getTableName(entityType: string): string {
     if (entityType.includes('.')) {
