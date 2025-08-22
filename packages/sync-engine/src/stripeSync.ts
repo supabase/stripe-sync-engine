@@ -260,7 +260,7 @@ export class StripeSync {
             `Received webhook ${event.id}: ${event.type} for plan ${plan.id}`
           )
 
-          await this.upsertPlans([plan])
+          await this.upsertPlans([plan], false, syncTimestamp)
         } catch (err) {
           if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
             await this.deletePlan(event.data.object.id)
@@ -413,7 +413,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for refund ${refund.id}`
         )
 
-        await this.upsertRefunds([refund])
+        await this.upsertRefunds([refund], false, syncTimestamp)
         break
       }
 
@@ -936,7 +936,8 @@ export class StripeSync {
 
   async upsertRefunds(
     refunds: Stripe.Refund[],
-    backfillRelatedEntities?: boolean
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
   ): Promise<Stripe.Refund[]> {
     if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
@@ -945,7 +946,12 @@ export class StripeSync {
       ])
     }
 
-    return this.postgresClient.upsertMany(refunds, 'refunds', refundSchema)
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      refunds,
+      'refunds',
+      refundSchema,
+      syncTimestamp
+    )
   }
 
   async upsertReviews(
@@ -1052,13 +1058,19 @@ export class StripeSync {
 
   async upsertPlans(
     plans: Stripe.Plan[],
-    backfillRelatedEntities?: boolean
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
   ): Promise<Stripe.Plan[]> {
     if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await this.backfillProducts(getUniqueIds(plans, 'product'))
     }
 
-    return this.postgresClient.upsertMany(plans, 'plans', planSchema)
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      plans,
+      'plans',
+      planSchema,
+      syncTimestamp
+    )
   }
 
   async deletePlan(id: string): Promise<boolean> {
@@ -1185,7 +1197,10 @@ export class StripeSync {
     return this.postgresClient.delete('tax_ids', id)
   }
 
-  async upsertSubscriptionItems(subscriptionItems: Stripe.SubscriptionItem[]) {
+  async upsertSubscriptionItems(
+    subscriptionItems: Stripe.SubscriptionItem[],
+    syncTimestamp?: string
+  ) {
     const modifiedSubscriptionItems = subscriptionItems.map((subscriptionItem) => {
       // Modify price object to string id; reference prices table
       const priceId = subscriptionItem.price.id.toString()
@@ -1201,10 +1216,11 @@ export class StripeSync {
       }
     })
 
-    await this.postgresClient.upsertMany(
+    await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedSubscriptionItems,
       'subscription_items',
-      subscriptionItemSchema
+      subscriptionItemSchema,
+      syncTimestamp
     )
   }
 
@@ -1282,7 +1298,7 @@ export class StripeSync {
     // Upsert subscription items into a separate table
     // need to run after upsert subscription cos subscriptionItems will reference the subscription
     const allSubscriptionItems = subscriptions.flatMap((subscription) => subscription.items.data)
-    await this.upsertSubscriptionItems(allSubscriptionItems)
+    await this.upsertSubscriptionItems(allSubscriptionItems, syncTimestamp)
 
     // We have to mark existing subscription item in db as deleted
     // if it doesn't exist in current subscriptionItems list
