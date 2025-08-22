@@ -66,8 +66,7 @@ export class StripeSync {
       this.config.stripeWebhookSecret
     )
 
-    const webhook = JSON.parse(payload.toString()) as Stripe.Event
-    const syncTimestamp = new Date(webhook.created * 1000).toISOString()
+    const syncTimestamp = new Date(event.created * 1000).toISOString()
 
     switch (event.type) {
       case 'charge.captured':
