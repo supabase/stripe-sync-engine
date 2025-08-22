@@ -41,7 +41,6 @@ describe('POST /webhooks', () => {
     await server.close()
   })
 
-
   function getTableName(entityType: string): string {
     if (entityType.includes('.')) {
       // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
