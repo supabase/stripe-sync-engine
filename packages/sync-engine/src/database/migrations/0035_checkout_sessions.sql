@@ -61,7 +61,8 @@ create table
         "ui_mode" text,
         "url" text,
         "wallet_options" jsonb,
-        "updated_at" timestamptz default timezone('utc'::text, now()) not null
+        "updated_at" timestamptz default timezone('utc'::text, now()) not null,
+        "last_synced_at" timestamptz
     );
 
 create index stripe_checkout_sessions_customer_idx on "stripe"."checkout_sessions" using btree (customer);

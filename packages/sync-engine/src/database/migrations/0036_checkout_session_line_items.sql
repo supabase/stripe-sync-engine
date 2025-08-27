@@ -12,6 +12,7 @@ create table if not exists "stripe"."checkout_session_line_items" (
   "taxes" jsonb,
   "checkout_session" text references "stripe"."checkout_sessions",
   "updated_at" timestamptz default timezone('utc'::text, now()) not null,
+  "last_synced_at" timestamptz,
   primary key ("checkout_session", "id")
 );
 

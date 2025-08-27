@@ -116,7 +116,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for checkout session ${checkoutSession.id}`
         )
 
-        await this.upsertCheckoutSessions([checkoutSession])
+        await this.upsertCheckoutSessions([checkoutSession], false, syncTimestamp)
         break
       }
       case 'customer.created':
@@ -958,7 +958,8 @@ export class StripeSync {
 
   private async upsertCheckoutSessions(
     checkoutSessions: Stripe.Checkout.Session[],
-    backfillRelatedEntities?: boolean
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
   ): Promise<Stripe.Checkout.Session[]> {
     if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
@@ -970,13 +971,17 @@ export class StripeSync {
     }
 
     // Upsert checkout sessions first
-    const rows = await this.postgresClient.upsertMany(
+    const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       checkoutSessions,
       'checkout_sessions',
-      checkoutSessionSchema
+      checkoutSessionSchema,
+      syncTimestamp
     )
 
-    await this.fillCheckoutSessionsLineItems(checkoutSessions.map((cs) => cs.id))
+    await this.fillCheckoutSessionsLineItems(
+      checkoutSessions.map((cs) => cs.id),
+      syncTimestamp
+    )
 
     return rows
   }
@@ -1291,17 +1296,30 @@ export class StripeSync {
     )
   }
 
-  async fillCheckoutSessionsLineItems(checkoutSessionIds: string[]) {
+  async fillCheckoutSessionsLineItems(checkoutSessionIds: string[], syncTimestamp?: string) {
     for (const checkoutSessionId of checkoutSessionIds) {
       const lineItemResponses = await this.stripe.checkout.sessions.listLineItems(
         checkoutSessionId,
         { limit: 100 }
       )
-      await this.upsertCheckoutSessionLineItems(lineItemResponses.data, checkoutSessionId)
+
+      if (!lineItemResponses.data) {
+        continue
+      }
+
+      await this.upsertCheckoutSessionLineItems(
+        lineItemResponses.data,
+        checkoutSessionId,
+        syncTimestamp
+      )
     }
   }
 
-  async upsertCheckoutSessionLineItems(lineItems: Stripe.LineItem[], checkoutSessionId: string) {
+  async upsertCheckoutSessionLineItems(
+    lineItems: Stripe.LineItem[],
+    checkoutSessionId: string,
+    syncTimestamp?: string
+  ) {
     const modifiedLineItems = lineItems.map((lineItem) => {
       // Extract price ID if price is an object, otherwise use the string value
       const priceId =
@@ -1316,10 +1334,11 @@ export class StripeSync {
       }
     })
 
-    await this.postgresClient.upsertMany(
+    await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedLineItems,
       'checkout_session_line_items',
-      checkoutSessionLineItemSchema
+      checkoutSessionLineItemSchema,
+      syncTimestamp
     )
   }
 

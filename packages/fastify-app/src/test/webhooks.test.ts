@@ -41,6 +41,11 @@ describe('POST /webhooks', () => {
   })
 
   function getTableName(entityType: string): string {
+    // custom handling for checkout.session
+    if (entityType === 'checkout.session') {
+      return 'checkout_session'
+    }
+
     if (entityType.includes('.')) {
       // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
       return entityType.split('.').pop() || entityType
