@@ -32,9 +32,9 @@ This project synchronizes your Stripe account to a Postgres database. It can be 
 - [x] `charge.dispute.funds_reinstated` 🟢
 - [x] `charge.dispute.funds_withdrawn` 🟢
 - [x] `charge.dispute.updated` 🟢
-- [ ] `checkout.session.async_payment_failed`
-- [ ] `checkout.session.async_payment_succeeded`
-- [ ] `checkout.session.completed`
+- [x] `checkout.session.async_payment_failed` 🟢
+- [x] `checkout.session.async_payment_succeeded` 🟢
+- [x] `checkout.session.completed` 🟢
 - [x] `credit_note.created` 🟢
 - [x] `credit_note.updated` 🟢
 - [x] `credit_note.voided` 🟢
