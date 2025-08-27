@@ -1,6 +1,100 @@
 import { vitest } from 'vitest'
 
 export const mockStripe = {
+  checkout: {
+    sessions: {
+      retrieve: vitest.fn((id) =>
+        Promise.resolve({
+          id: id,
+          object: 'checkout.session',
+          customer: 'cus_J7Mkgr8mvbl1eK',
+          payment_intent: 'pi_xyz',
+          invoice: 'in_xyz',
+          subscription: null,
+        })
+      ),
+      listLineItems: vitest.fn((id) => ({
+        async *[Symbol.asyncIterator]() {
+          yield {
+            id: id,
+            object: 'item',
+            description: 'T-shirt',
+            currency: 'usd',
+            amount_discount: 0,
+            amount_subtotal: 2198,
+            amount_tax: 0,
+            amount_total: 2198,
+            price: {
+              id: 'price_1N4AEsLkdIwHu7ix7Ssho8Cl',
+              object: 'price',
+              active: true,
+              billing_scheme: 'per_unit',
+              created: 1683237782,
+              currency: 'usd',
+              custom_unit_amount: null,
+              livemode: false,
+              lookup_key: null,
+              metadata: {},
+              nickname: null,
+              product: 'prod_NppuJWzzNnD5Ut',
+              recurring: null,
+              tax_behavior: 'unspecified',
+              tiers_mode: null,
+              transform_quantity: null,
+              type: 'one_time',
+              unit_amount: 1099,
+              unit_amount_decimal: '1099',
+            },
+            quantity: 1,
+          }
+          yield {
+            id: id,
+            object: 'item',
+            description: 'Hoodie',
+            currency: 'usd',
+            amount_discount: 0,
+            amount_subtotal: 2198,
+            amount_tax: 0,
+            amount_total: 2198,
+            price: {
+              id: 'price_1N4AEsLkdIwHu7ix7Ssho8Cl',
+              object: 'price',
+              active: true,
+              billing_scheme: 'per_unit',
+              created: 1683237782,
+              currency: 'usd',
+              custom_unit_amount: null,
+              livemode: false,
+              lookup_key: null,
+              metadata: {},
+              nickname: null,
+              product: 'prod_NppuJWzzNnD5Ut',
+              recurring: null,
+              tax_behavior: 'unspecified',
+              tiers_mode: null,
+              transform_quantity: null,
+              type: 'one_time',
+              unit_amount: 1099,
+              unit_amount_decimal: '1099',
+            },
+            quantity: 2,
+          }
+        },
+      })),
+      list: vitest.fn((id) => ({
+        async *[Symbol.asyncIterator]() {
+          yield {
+            id: id,
+            object: 'checkout.session',
+            customer: 'cus_123',
+            payment_intent: 'pi_123',
+            invoice: 'in_123',
+            subscription: null,
+          }
+        },
+      })),
+    },
+  },
   invoices: {
     retrieve: vitest.fn((id) =>
       Promise.resolve({
