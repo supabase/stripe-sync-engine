@@ -497,7 +497,7 @@ export class StripeSync {
       return this.stripe.refunds.retrieve(stripeId).then((it) => this.upsertRefunds([it]))
     } else if (stripeId.startsWith('cs_')) {
       return this.stripe.checkout.sessions
-        .retrieve(stripeId, { expand: ['line_items'] })
+        .retrieve(stripeId)
         .then((it) => this.upsertCheckoutSessions([it]))
     }
   }
@@ -507,6 +507,7 @@ export class StripeSync {
     let products,
       prices,
       customers,
+      checkoutSessions,
       subscriptions,
       subscriptionSchedules,
       invoices,
@@ -519,8 +520,7 @@ export class StripeSync {
       taxIds,
       creditNotes,
       earlyFraudWarnings,
-      refunds,
-      checkoutSessions
+      refunds
 
     switch (object) {
       case 'all':
@@ -600,6 +600,7 @@ export class StripeSync {
       products,
       prices,
       customers,
+      checkoutSessions,
       subscriptions,
       subscriptionSchedules,
       invoices,
@@ -613,7 +614,6 @@ export class StripeSync {
       creditNotes,
       earlyFraudWarnings,
       refunds,
-      checkoutSessions,
     }
   }
 
@@ -949,14 +949,7 @@ export class StripeSync {
       checkoutSessionSchema
     )
 
-    // Upsert line items into separate table
-    const lineItemsPromises = checkoutSessions
-      .filter((session) => session.line_items?.data && session.line_items.data.length > 0)
-      .map((session) => this.upsertCheckoutSessionLineItems(session.line_items!.data, session.id))
-
-    if (lineItemsPromises.length > 0) {
-      await Promise.all(lineItemsPromises)
-    }
+    await this.fillCheckoutSessionsLineItems(checkoutSessions.map((cs) => cs.id))
 
     return rows
   }
@@ -1184,6 +1177,16 @@ export class StripeSync {
       'subscription_items',
       subscriptionItemSchema
     )
+  }
+
+  async fillCheckoutSessionsLineItems(checkoutSessionIds: string[]) {
+    for (const checkoutSessionId of checkoutSessionIds) {
+      const lineItemResponses = await this.stripe.checkout.sessions.listLineItems(
+        checkoutSessionId,
+        { limit: 100 }
+      )
+      await this.upsertCheckoutSessionLineItems(lineItemResponses.data, checkoutSessionId)
+    }
   }
 
   async upsertCheckoutSessionLineItems(lineItems: Stripe.LineItem[], checkoutSessionId: string) {
