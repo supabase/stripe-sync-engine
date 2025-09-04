@@ -1,5 +1,5 @@
+import type { RevalidateEntity } from '@supabase/stripe-sync-engine'
 import { config } from 'dotenv'
-import { type RevalidateEntity } from '@stripe-sync-engine/sync-engine'
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
   const value = process.env[key]
