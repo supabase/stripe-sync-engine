@@ -1,3 +1,4 @@
+import type { RevalidateEntity } from '@supabase/stripe-sync-engine'
 import { config } from 'dotenv'
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
@@ -41,7 +42,7 @@ export type StripeSyncServerConfig = {
 
   maxPostgresConnections?: number
 
-  revalidateEntityViaStripeApi: boolean
+  revalidateObjectsViaStripeApi: Array<RevalidateEntity>
 
   port: number
 }
@@ -60,7 +61,9 @@ export function getConfig(): StripeSyncServerConfig {
     autoExpandLists: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
     backfillRelatedEntities: getConfigFromEnv('BACKFILL_RELATED_ENTITIES', 'true') === 'true',
     maxPostgresConnections: Number(getConfigFromEnv('MAX_POSTGRES_CONNECTIONS', '10')),
-    revalidateEntityViaStripeApi:
-      getConfigFromEnv('REVALIDATE_ENTITY_VIA_STRIPE_API', 'false') === 'true',
+    revalidateObjectsViaStripeApi: getConfigFromEnv('REVALIDATE_OBJECTS_VIA_STRIPE_API', '')
+      .split(',')
+      .map((it) => it.trim())
+      .filter((it) => it.length > 0) as Array<RevalidateEntity>,
   }
 }
