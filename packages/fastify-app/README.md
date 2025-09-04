@@ -38,19 +38,19 @@ Set your webhook endpoint in the Stripe dashboard to point to your server’s `/
 
 ## Environment Variables
 
-| Variable                           | Description                                                         | Required |
-| ---------------------------------- | ------------------------------------------------------------------- | -------- |
-| `DATABASE_URL`                     | Postgres connection string (with `search_path=stripe`)              | Yes      |
-| `STRIPE_WEBHOOK_SECRET`            | Stripe webhook signing secret                                       | Yes      |
-| `API_KEY`                          | API key for admin endpoints (backfilling, etc.)                     | Yes      |
-| `SCHEMA`                           | Database schema name (default: `stripe`)                            | No       |
-| `STRIPE_SECRET_KEY`                | Stripe secret key (needed for active sync/backfill)                 | No       |
-| `PORT`                             | Port to run the server on (default: 8080)                           | No       |
-| `STRIPE_API_VERSION`               | Stripe API version (default: `2020-08-27`)                          | No       |
-| `AUTO_EXPAND_LISTS`                | Fetch all list items from Stripe (default: false)                   | No       |
-| `BACKFILL_RELATED_ENTITIES`        | Backfill related entities for foreign key integrity (default: true) | No       |
-| `MAX_POSTGRES_CONNECTIONS`         | Max Postgres connection pool size (default: 10)                     | No       |
-| `REVALIDATE_ENTITY_VIA_STRIPE_API` | Always fetch latest entity from Stripe (default: false)             | No       |
+| Variable                           | Description                                                                                                                                                                                                                                                                                              | Required |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `DATABASE_URL`                     | Postgres connection string (with `search_path=stripe`)                                                                                                                                                                                                                                                   | Yes      |
+| `STRIPE_WEBHOOK_SECRET`            | Stripe webhook signing secret                                                                                                                                                                                                                                                                            | Yes      |
+| `API_KEY`                          | API key for admin endpoints (backfilling, etc.)                                                                                                                                                                                                                                                          | Yes      |
+| `SCHEMA`                           | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 | No       |
+| `STRIPE_SECRET_KEY`                | Stripe secret key (needed for active sync/backfill)                                                                                                                                                                                                                                                      | No       |
+| `PORT`                             | Port to run the server on (default: 8080)                                                                                                                                                                                                                                                                | No       |
+| `STRIPE_API_VERSION`               | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               | No       |
+| `AUTO_EXPAND_LISTS`                | Fetch all list items from Stripe (default: false)                                                                                                                                                                                                                                                        | No       |
+| `BACKFILL_RELATED_ENTITIES`        | Backfill related entities for foreign key integrity (default: true)                                                                                                                                                                                                                                      | No       |
+| `MAX_POSTGRES_CONNECTIONS`         | Max Postgres connection pool size (default: 10)                                                                                                                                                                                                                                                          | No       |
+| `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id | No       |
 
 ## Endpoints
 

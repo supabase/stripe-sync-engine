@@ -16,7 +16,13 @@ import { taxIdSchema } from './schemas/tax_id'
 import { subscriptionItemSchema } from './schemas/subscription_item'
 import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
 import { subscriptionSchema } from './schemas/subscription'
-import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
+import {
+  StripeSyncConfig,
+  Sync,
+  SyncBackfill,
+  SyncBackfillParams,
+  type RevalidateEntity,
+} from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
@@ -436,13 +442,13 @@ export class StripeSync {
     }
   }
 
-  private async fetchOrUseWebhookData<T extends { id?: string }>(
+  private async fetchOrUseWebhookData<T extends { id?: string; object: string }>(
     entity: T,
     fetchFn: (id: string) => Promise<T>
   ): Promise<T> {
     if (!entity.id) return entity
 
-    if (this.config.revalidateEntityViaStripeApi) {
+    if (this.config.revalidateObjectsViaStripeApi?.includes(entity.object as RevalidateEntity)) {
       return fetchFn(entity.id)
     }
 
