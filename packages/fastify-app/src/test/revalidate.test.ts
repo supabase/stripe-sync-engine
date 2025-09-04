@@ -1,10 +1,10 @@
-import type Stripe from 'stripe'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { runMigrations } from '@supabase/stripe-sync-engine'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
+import type Stripe from 'stripe'
 
 let stripeSync: StripeSync
 
@@ -25,24 +25,15 @@ beforeAll(async () => {
 
 describe('invoices', () => {
   test('should revalidate entity if enabled', async () => {
-    const invoices = [
-      {
-        id: 'in_xyz',
-        object: 'invoice',
-        auto_advance: true,
-        lines: {
-          data: [{ id: 'li_123' }],
-          has_more: false,
-        },
-      } as Stripe.Invoice,
-    ]
-
-    await stripeSync.upsertInvoices(invoices, false)
-
-    const lineItems = await stripeSync.postgresClient.query(
-      `select lines->'data' as lines from stripe.invoices where id = 'in_xyz' limit 1`
+    const eventBody = await import(`./stripe/invoice_paid.json`).then(
+      ({ default: myData }) => myData
     )
-    expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }])
-    expect(mockStripe.invoices.retrieve).toHaveBeenCalledTimes(1)
+
+    await stripeSync.processEvent(eventBody as unknown as Stripe.Event)
+
+    const result = await stripeSync.postgresClient.query(
+      `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
+    )
+    expect(result.rows[0].customer).toEqual('cus_J7Mkgr8mvbl1eK') // from stripe mock
   })
 })
