@@ -36,18 +36,18 @@ await sync.processWebhook(payload, signature)
 
 ## Configuration
 
-| Option                         | Type    | Description                                                                |
-| ------------------------------ | ------- | -------------------------------------------------------------------------- |
-| `databaseUrl`                  | string  | Postgres connection string                                                 |
-| `schema`                       | string  | Database schema name (default: `stripe`)                                   |
-| `stripeSecretKey`              | string  | Stripe secret key                                                          |
-| `stripeWebhookSecret`          | string  | Stripe webhook signing secret                                              |
-| `stripeApiVersion`             | string  | Stripe API version (default: `2020-08-27`)                                 |
-| `autoExpandLists`              | boolean | Fetch all list items from Stripe (not just the default 10)                 |
-| `backfillRelatedEntities`      | boolean | Ensure related entities are present for foreign key integrity              |
-| `revalidateEntityViaStripeApi` | boolean | Always fetch latest entity from Stripe instead of trusting webhook payload |
-| `maxPostgresConnections`       | number  | Maximum Postgres connections                                               |
-| `logger`                       | Logger  | Logger instance (pino)                                                     |
+| Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `databaseUrl`                   | string  | Postgres connection string                                                                                                                                                                                                                                                                               |
+| `schema`                        | string  | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 |
+| `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
+| `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
+| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               |
+| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                               |
+| `backfillRelatedEntities`       | boolean | Ensure related entities are present for foreign key integrity                                                                                                                                                                                                                                            |
+| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
+| `maxPostgresConnections`        | number  | Maximum Postgres connections                                                                                                                                                                                                                                                                             |
+| `logger`                        | Logger  | Logger instance (pino)                                                                                                                                                                                                                                                                                   |
 
 ## Database Schema
 

@@ -18,7 +18,13 @@ import { taxIdSchema } from './schemas/tax_id'
 import { subscriptionItemSchema } from './schemas/subscription_item'
 import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
 import { subscriptionSchema } from './schemas/subscription'
-import { StripeSyncConfig, Sync, SyncBackfill, SyncBackfillParams } from './types'
+import {
+  StripeSyncConfig,
+  Sync,
+  SyncBackfill,
+  SyncBackfillParams,
+  type RevalidateEntity,
+} from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
@@ -68,8 +74,10 @@ export class StripeSync {
       this.config.stripeWebhookSecret
     )
 
-    const syncTimestamp = new Date(event.created * 1000).toISOString()
+    return this.processEvent(event)
+  }
 
+  async processEvent(event: Stripe.Event) {
     switch (event.type) {
       case 'charge.captured':
       case 'charge.expired':
@@ -86,7 +94,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for charge ${charge.id}`
         )
 
-        await this.upsertCharges([charge], false, syncTimestamp)
+        await this.upsertCharges([charge], false, this.getSyncTimestamp(event))
         break
       }
       case 'customer.deleted': {
@@ -100,7 +108,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
         )
 
-        await this.upsertCustomers([customer], syncTimestamp)
+        await this.upsertCustomers([customer], this.getSyncTimestamp(event))
         break
       }
       case 'checkout.session.async_payment_failed':
@@ -130,7 +138,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
         )
 
-        await this.upsertCustomers([customer], syncTimestamp)
+        await this.upsertCustomers([customer], this.getSyncTimestamp(event))
         break
       }
       case 'customer.subscription.created':
@@ -150,7 +158,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for subscription ${subscription.id}`
         )
 
-        await this.upsertSubscriptions([subscription], false, syncTimestamp)
+        await this.upsertSubscriptions([subscription], false, this.getSyncTimestamp(event))
         break
       }
       case 'customer.tax_id.updated':
@@ -163,7 +171,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for taxId ${taxId.id}`
         )
 
-        await this.upsertTaxIds([taxId], false, syncTimestamp)
+        await this.upsertTaxIds([taxId], false, this.getSyncTimestamp(event))
         break
       }
       case 'customer.tax_id.deleted': {
@@ -198,7 +206,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for invoice ${invoice.id}`
         )
 
-        await this.upsertInvoices([invoice], false, syncTimestamp)
+        await this.upsertInvoices([invoice], false, this.getSyncTimestamp(event))
         break
       }
       case 'product.created':
@@ -213,7 +221,7 @@ export class StripeSync {
             `Received webhook ${event.id}: ${event.type} for product ${product.id}`
           )
 
-          await this.upsertProducts([product], syncTimestamp)
+          await this.upsertProducts([product], this.getSyncTimestamp(event))
         } catch (err) {
           if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
             await this.deleteProduct(event.data.object.id)
@@ -245,7 +253,7 @@ export class StripeSync {
             `Received webhook ${event.id}: ${event.type} for price ${price.id}`
           )
 
-          await this.upsertPrices([price], false, syncTimestamp)
+          await this.upsertPrices([price], false, this.getSyncTimestamp(event))
         } catch (err) {
           if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
             await this.deletePrice(event.data.object.id)
@@ -277,7 +285,7 @@ export class StripeSync {
             `Received webhook ${event.id}: ${event.type} for plan ${plan.id}`
           )
 
-          await this.upsertPlans([plan], false, syncTimestamp)
+          await this.upsertPlans([plan], false, this.getSyncTimestamp(event))
         } catch (err) {
           if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
             await this.deletePlan(event.data.object.id)
@@ -310,7 +318,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for setupIntent ${setupIntent.id}`
         )
 
-        await this.upsertSetupIntents([setupIntent], false, syncTimestamp)
+        await this.upsertSetupIntents([setupIntent], false, this.getSyncTimestamp(event))
         break
       }
       case 'subscription_schedule.aborted':
@@ -329,7 +337,11 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for subscriptionSchedule ${subscriptionSchedule.id}`
         )
 
-        await this.upsertSubscriptionSchedules([subscriptionSchedule], false, syncTimestamp)
+        await this.upsertSubscriptionSchedules(
+          [subscriptionSchedule],
+          false,
+          this.getSyncTimestamp(event)
+        )
         break
       }
       case 'payment_method.attached':
@@ -345,7 +357,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for paymentMethod ${paymentMethod.id}`
         )
 
-        await this.upsertPaymentMethods([paymentMethod], false, syncTimestamp)
+        await this.upsertPaymentMethods([paymentMethod], false, this.getSyncTimestamp(event))
         break
       }
       case 'charge.dispute.created':
@@ -362,7 +374,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for dispute ${dispute.id}`
         )
 
-        await this.upsertDisputes([dispute], false, syncTimestamp)
+        await this.upsertDisputes([dispute], false, this.getSyncTimestamp(event))
         break
       }
       case 'payment_intent.amount_capturable_updated':
@@ -382,7 +394,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for paymentIntent ${paymentIntent.id}`
         )
 
-        await this.upsertPaymentIntents([paymentIntent], false, syncTimestamp)
+        await this.upsertPaymentIntents([paymentIntent], false, this.getSyncTimestamp(event))
         break
       }
 
@@ -398,7 +410,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for creditNote ${creditNote.id}`
         )
 
-        await this.upsertCreditNotes([creditNote], false, syncTimestamp)
+        await this.upsertCreditNotes([creditNote], false, this.getSyncTimestamp(event))
         break
       }
 
@@ -413,7 +425,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for earlyFraudWarning ${earlyFraudWarning.id}`
         )
 
-        await this.upsertEarlyFraudWarning([earlyFraudWarning], false, syncTimestamp)
+        await this.upsertEarlyFraudWarning([earlyFraudWarning], false, this.getSyncTimestamp(event))
 
         break
       }
@@ -430,7 +442,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for refund ${refund.id}`
         )
 
-        await this.upsertRefunds([refund], false, syncTimestamp)
+        await this.upsertRefunds([refund], false, this.getSyncTimestamp(event))
         break
       }
 
@@ -444,7 +456,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for review ${review.id}`
         )
 
-        await this.upsertReviews([review], false, syncTimestamp)
+        await this.upsertReviews([review], false, this.getSyncTimestamp(event))
 
         break
       }
@@ -454,13 +466,23 @@ export class StripeSync {
     }
   }
 
-  private async fetchOrUseWebhookData<T extends { id?: string }>(
+  private getSyncTimestamp(event: Stripe.Event) {
+    return this.shouldRefetchEntity(event.data.object)
+      ? new Date().toISOString()
+      : new Date(event.created * 1000).toISOString()
+  }
+
+  private shouldRefetchEntity(entity: { object: string }) {
+    return this.config.revalidateObjectsViaStripeApi?.includes(entity.object as RevalidateEntity)
+  }
+
+  private async fetchOrUseWebhookData<T extends { id?: string; object: string }>(
     entity: T,
     fetchFn: (id: string) => Promise<T>
   ): Promise<T> {
     if (!entity.id) return entity
 
-    if (this.config.revalidateEntityViaStripeApi) {
+    if (this.shouldRefetchEntity(entity)) {
       return fetchFn(entity.id)
     }
 
