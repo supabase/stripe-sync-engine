@@ -1,5 +1,5 @@
 create table if not exists "stripe"."checkout_session_line_items" (
-  "id" text,
+  "id" text primary key,
   "object" text,
   "adjustable_quantity" jsonb,
   "amount_subtotal" integer,
@@ -12,8 +12,7 @@ create table if not exists "stripe"."checkout_session_line_items" (
   "taxes" jsonb,
   "checkout_session" text references "stripe"."checkout_sessions",
   "updated_at" timestamptz default timezone('utc'::text, now()) not null,
-  "last_synced_at" timestamptz,
-  primary key ("checkout_session", "id")
+  "last_synced_at" timestamptz
 );
 
 create index stripe_checkout_session_line_items_session_idx on "stripe"."checkout_session_line_items" using btree (checkout_session);
