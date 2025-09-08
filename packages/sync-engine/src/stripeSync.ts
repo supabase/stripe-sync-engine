@@ -124,7 +124,7 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for checkout session ${checkoutSession.id}`
         )
 
-        await this.upsertCheckoutSessions([checkoutSession], false, syncTimestamp)
+        await this.upsertCheckoutSessions([checkoutSession], false, this.getSyncTimestamp(event))
         break
       }
       case 'customer.created':
