@@ -1,4 +1,4 @@
-import pino from 'pino'
+import { pino, stdTimeFunctions } from 'pino'
 
 export const logger = pino({
   formatters: {
@@ -6,5 +6,5 @@ export const logger = pino({
       return { level: label }
     },
   },
-  timestamp: pino.stdTimeFunctions.isoTime,
+  timestamp: stdTimeFunctions.isoTime,
 })
