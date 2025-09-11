@@ -41,6 +41,11 @@ describe('POST /webhooks', () => {
   })
 
   function getTableName(entityType: string): string {
+    // custom handling for checkout.session
+    if (entityType === 'checkout.session') {
+      return 'checkout_session'
+    }
+
     if (entityType.includes('.')) {
       // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
       return entityType.split('.').pop() || entityType
@@ -116,6 +121,7 @@ describe('POST /webhooks', () => {
     'refund_created.json',
     'refund_failed.json',
     'refund_updated.json',
+    'checkout_session_completed.json',
   ])('event %s is upserted', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     // Update the event body created timestamp to be the current time
