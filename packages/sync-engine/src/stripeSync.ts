@@ -84,8 +84,10 @@ export class StripeSync {
       case 'charge.refunded':
       case 'charge.succeeded':
       case 'charge.updated': {
-        const charge = await this.fetchOrUseWebhookData(event.data.object as Stripe.Charge, (id) =>
-          this.stripe.charges.retrieve(id)
+        const charge = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.Charge,
+          (id) => this.stripe.charges.retrieve(id),
+          (charge) => charge.status === 'failed' || charge.status === 'succeeded'
         )
 
         this.config.logger?.info(
@@ -113,7 +115,8 @@ export class StripeSync {
       case 'customer.updated': {
         const customer = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Customer | Stripe.DeletedCustomer,
-          (id) => this.stripe.customers.retrieve(id)
+          (id) => this.stripe.customers.retrieve(id),
+          (customer) => customer.deleted === true
         )
 
         this.config.logger?.info(
@@ -133,7 +136,9 @@ export class StripeSync {
       case 'customer.subscription.updated': {
         const subscription = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Subscription,
-          (id) => this.stripe.subscriptions.retrieve(id)
+          (id) => this.stripe.subscriptions.retrieve(id),
+          (subscription) =>
+            subscription.status === 'canceled' || subscription.status === 'incomplete_expired'
         )
 
         this.config.logger?.info(
@@ -181,7 +186,8 @@ export class StripeSync {
       case 'invoice.updated': {
         const invoice = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Invoice,
-          (id) => this.stripe.invoices.retrieve(id)
+          (id) => this.stripe.invoices.retrieve(id),
+          (invoice) => invoice.status === 'void' || invoice.status === 'paid'
         )
 
         this.config.logger?.info(
@@ -293,7 +299,8 @@ export class StripeSync {
       case 'setup_intent.succeeded': {
         const setupIntent = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.SetupIntent,
-          (id) => this.stripe.setupIntents.retrieve(id)
+          (id) => this.stripe.setupIntents.retrieve(id),
+          (setupIntent) => setupIntent.status === 'canceled' || setupIntent.status === 'succeeded'
         )
 
         this.config.logger?.info(
@@ -312,7 +319,8 @@ export class StripeSync {
       case 'subscription_schedule.updated': {
         const subscriptionSchedule = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.SubscriptionSchedule,
-          (id) => this.stripe.subscriptionSchedules.retrieve(id)
+          (id) => this.stripe.subscriptionSchedules.retrieve(id),
+          (schedule) => schedule.status === 'canceled' || schedule.status === 'completed'
         )
 
         this.config.logger?.info(
@@ -349,7 +357,8 @@ export class StripeSync {
       case 'charge.dispute.closed': {
         const dispute = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Dispute,
-          (id) => this.stripe.disputes.retrieve(id)
+          (id) => this.stripe.disputes.retrieve(id),
+          (dispute) => dispute.status === 'won' || dispute.status === 'lost'
         )
 
         this.config.logger?.info(
@@ -369,7 +378,9 @@ export class StripeSync {
       case 'payment_intent.succeeded': {
         const paymentIntent = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.PaymentIntent,
-          (id) => this.stripe.paymentIntents.retrieve(id)
+          (id) => this.stripe.paymentIntents.retrieve(id),
+          // Final states - do not re-fetch from API
+          (entity) => entity.status === 'canceled' || entity.status === 'succeeded'
         )
 
         this.config.logger?.info(
@@ -385,7 +396,8 @@ export class StripeSync {
       case 'credit_note.voided': {
         const creditNote = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.CreditNote,
-          (id) => this.stripe.creditNotes.retrieve(id)
+          (id) => this.stripe.creditNotes.retrieve(id),
+          (creditNote) => creditNote.status === 'void'
         )
 
         this.config.logger?.info(
@@ -460,9 +472,13 @@ export class StripeSync {
 
   private async fetchOrUseWebhookData<T extends { id?: string; object: string }>(
     entity: T,
-    fetchFn: (id: string) => Promise<T>
+    fetchFn: (id: string) => Promise<T>,
+    entityInFinalState?: (entity: T) => boolean
   ): Promise<T> {
     if (!entity.id) return entity
+
+    // This can be used as an optimization to avoid re-fetching unnecessarily
+    if (entityInFinalState && entityInFinalState(entity)) return entity
 
     if (this.shouldRefetchEntity(entity)) {
       return fetchFn(entity.id)

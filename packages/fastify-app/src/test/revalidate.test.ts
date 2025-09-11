@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 describe('invoices', () => {
   test('should revalidate entity if enabled', async () => {
-    const eventBody = await import(`./stripe/invoice_paid.json`).then(
+    const eventBody = await import(`./stripe/invoice_finalized.json`).then(
       ({ default: myData }) => myData
     )
 
@@ -35,5 +35,18 @@ describe('invoices', () => {
       `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
     )
     expect(result.rows[0].customer).toEqual('cus_J7Mkgr8mvbl1eK') // from stripe mock
+  })
+
+  test('should not revalidate if entity in final status', async () => {
+    const eventBody = await import(`./stripe/invoice_paid.json`).then(
+      ({ default: myData }) => myData
+    )
+
+    await stripeSync.processEvent(eventBody as unknown as Stripe.Event)
+
+    const result = await stripeSync.postgresClient.query(
+      `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
+    )
+    expect(result.rows[0].customer).toEqual('cus_JsuO3bmrj0QlAw') // from webhook, no refetch
   })
 })
