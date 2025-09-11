@@ -1,4 +1,4 @@
-import pg, { QueryResult } from 'pg'
+import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
 import { EntitySchema } from '../schemas/types'
 
@@ -6,6 +6,7 @@ type PostgresConfig = {
   databaseUrl: string
   schema: string
   maxConnections?: number
+  poolConfig?: PoolConfig
 }
 
 export class PostgresClient {
@@ -16,6 +17,7 @@ export class PostgresClient {
       connectionString: config.databaseUrl,
       max: config.maxConnections || 10,
       keepAlive: true,
+      ...config.poolConfig,
     })
   }
 

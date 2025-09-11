@@ -1,3 +1,4 @@
+import { PoolConfig } from 'pg'
 import pino from 'pino'
 
 export type RevalidateEntity =
@@ -55,6 +56,8 @@ export type StripeSyncConfig = {
   revalidateObjectsViaStripeApi?: Array<RevalidateEntity>
 
   maxPostgresConnections?: number
+
+  poolConfig?: PoolConfig
 
   logger?: pino.Logger
 }

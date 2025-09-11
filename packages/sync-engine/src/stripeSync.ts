@@ -62,6 +62,7 @@ export class StripeSync {
       databaseUrl: config.databaseUrl,
       schema: config.schema || DEFAULT_SCHEMA,
       maxConnections: config.maxPostgresConnections,
+      ...config.poolConfig,
     })
   }
 
