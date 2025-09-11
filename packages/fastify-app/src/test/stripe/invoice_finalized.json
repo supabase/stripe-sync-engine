@@ -157,7 +157,7 @@
       "receipt_number": null,
       "starting_balance": 0,
       "statement_descriptor": null,
-      "status": "paid",
+      "status": "open",
       "status_transitions": {
         "finalized_at": 1642599192,
         "marked_uncollectible_at": null,
