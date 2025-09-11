@@ -1,5 +1,5 @@
 import { StripeSync } from '@supabase/stripe-sync-engine'
-import { vitest, beforeAll, describe, test, expect } from 'vitest'
+import { vitest, beforeAll, describe, test, expect, afterEach } from 'vitest'
 import { runMigrations } from '@supabase/stripe-sync-engine'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
@@ -23,6 +23,10 @@ beforeAll(async () => {
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
 })
 
+afterEach(() => {
+  vitest.clearAllMocks()
+})
+
 describe('invoices', () => {
   test('should revalidate entity if enabled', async () => {
     const eventBody = await import(`./stripe/invoice_finalized.json`).then(
@@ -32,13 +36,14 @@ describe('invoices', () => {
     await stripeSync.processEvent(eventBody as unknown as Stripe.Event)
 
     const result = await stripeSync.postgresClient.query(
-      `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
+      `select customer from stripe.invoices where id = 'in_1KJdKkJDPojXS6LNSwSWkZSN' limit 1`
     )
+    expect(mockStripe.invoices.retrieve).toHaveBeenCalled()
     expect(result.rows[0].customer).toEqual('cus_J7Mkgr8mvbl1eK') // from stripe mock
   })
 
   test('should not revalidate if entity in final status', async () => {
-    const eventBody = await import(`./stripe/invoice_paid.json`).then(
+    const eventBody = await import(`./stripe/invoice_voided.json`).then(
       ({ default: myData }) => myData
     )
 
@@ -47,6 +52,7 @@ describe('invoices', () => {
     const result = await stripeSync.postgresClient.query(
       `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
     )
+    expect(mockStripe.invoices.retrieve).not.toHaveBeenCalled()
     expect(result.rows[0].customer).toEqual('cus_JsuO3bmrj0QlAw') // from webhook, no refetch
   })
 })
