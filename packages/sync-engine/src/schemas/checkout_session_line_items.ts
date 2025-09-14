@@ -4,15 +4,14 @@ export const checkoutSessionLineItemSchema: EntitySchema = {
   properties: [
     'id',
     'object',
-    'adjustable_quantity',
+    'amount_discount',
     'amount_subtotal',
+    'amount_tax',
     'amount_total',
     'currency',
     'description',
-    'discounts',
     'price',
     'quantity',
-    'taxes',
     'checkout_session',
   ],
 } as const

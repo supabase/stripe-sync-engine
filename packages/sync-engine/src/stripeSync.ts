@@ -978,7 +978,7 @@ export class StripeSync {
     )
   }
 
-  private async upsertCheckoutSessions(
+  async upsertCheckoutSessions(
     checkoutSessions: Stripe.Checkout.Session[],
     backfillRelatedEntities?: boolean,
     syncTimestamp?: string

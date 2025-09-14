@@ -1,16 +1,15 @@
 create table if not exists "stripe"."checkout_session_line_items" (
   "id" text primary key,
   "object" text,
-  "adjustable_quantity" jsonb,
+  "amount_discount" integer,
   "amount_subtotal" integer,
+  "amount_tax" integer,
   "amount_total" integer,
   "currency" text,
   "description" text,
-  "discounts" jsonb,
-  "price" text,
+  "price" text references "stripe"."prices" on delete cascade,
   "quantity" integer,
-  "taxes" jsonb,
-  "checkout_session" text references "stripe"."checkout_sessions",
+  "checkout_session" text references "stripe"."checkout_sessions" on delete cascade,
   "updated_at" timestamptz default timezone('utc'::text, now()) not null,
   "last_synced_at" timestamptz
 );
