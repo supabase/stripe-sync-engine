@@ -117,7 +117,7 @@ export class StripeSync {
       case 'checkout.session.async_payment_succeeded':
       case 'checkout.session.completed':
       case 'checkout.session.expired': {
-        const checkoutSession = await this.fetchOrUseWebhookData(
+        const { entity: checkoutSession, refetched } = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Checkout.Session,
           (id) => this.stripe.checkout.sessions.retrieve(id, { expand: ['line_items'] })
         )
@@ -126,7 +126,11 @@ export class StripeSync {
           `Received webhook ${event.id}: ${event.type} for checkout session ${checkoutSession.id}`
         )
 
-        await this.upsertCheckoutSessions([checkoutSession], false, this.getSyncTimestamp(event))
+        await this.upsertCheckoutSessions(
+          [checkoutSession],
+          false,
+          this.getSyncTimestamp(event, refetched)
+        )
         break
       }
       case 'customer.created':
