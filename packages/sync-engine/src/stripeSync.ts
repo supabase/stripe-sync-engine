@@ -58,11 +58,25 @@ export class StripeSync {
       'StripeSync initialized'
     )
 
+    if (config.databaseUrl) {
+      config.poolConfig.connectionString = config.databaseUrl
+    }
+
+    if (config.maxPostgresConnections) {
+      config.poolConfig.max = config.maxPostgresConnections
+    }
+
+    if (config.poolConfig.max === undefined) {
+      config.poolConfig.max = 10
+    }
+
+    if (config.poolConfig.keepAlive === undefined) {
+      config.poolConfig.keepAlive = true
+    }
+
     this.postgresClient = new PostgresClient({
-      databaseUrl: config.databaseUrl,
       schema: config.schema || DEFAULT_SCHEMA,
-      maxConnections: config.maxPostgresConnections,
-      ...config.poolConfig,
+      poolConfig: config.poolConfig,
     })
   }
 
