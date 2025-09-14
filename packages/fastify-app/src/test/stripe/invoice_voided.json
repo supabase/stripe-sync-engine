@@ -1,11 +1,11 @@
 {
-  "id": "evt_1KJeHmJDPojXS6LNHTfmcolj",
+  "id": "evt_1KJrGtJDPojXS6LN15fcthM3",
   "object": "event",
   "api_version": "2020-03-02",
-  "created": 1642599194,
+  "created": 1642649111,
   "data": {
     "object": {
-      "id": "in_1KJdKkJDPojXS6LNSwSWkZSN",
+      "id": "in_1KJqKBJDPojXS6LNJbvLUgEy",
       "object": "invoice",
       "account_country": "SG",
       "account_name": "Supabase Pte Ltd",
@@ -24,7 +24,7 @@
       "billing_reason": "subscription_cycle",
       "charge": null,
       "collection_method": "charge_automatically",
-      "created": 1642595534,
+      "created": 1642645471,
       "currency": "usd",
       "custom_fields": [
         {
@@ -32,9 +32,9 @@
           "value": "Test Project"
         }
       ],
-      "customer": "cus_J7Mkgr8mvbl1eK",
+      "customer": "cus_JsuO3bmrj0QlAw",
       "customer_address": null,
-      "customer_email": "tesst@example.com",
+      "customer_email": null,
       "customer_name": null,
       "customer_phone": null,
       "customer_shipping": null,
@@ -49,14 +49,14 @@
       "due_date": null,
       "ending_balance": 0,
       "footer": null,
-      "hosted_invoice_url": "https://invoice.stripe.com/i/acct_1GThseJDPojXS6LN/test_YWNjdF8xR1Roc2VKRFBvalhTNkxOLF9LemNacGRVaG1iQ2NpV0RSTWxUU1lCZmtjcDVvb3pY01008P815B5b",
-      "invoice_pdf": "https://pay.stripe.com/invoice/acct_1GThseJDPojXS6LN/test_YWNjdF8xR1Roc2VKRFBvalhTNkxOLF9LemNacGRVaG1iQ2NpV0RSTWxUU1lCZmtjcDVvb3pY01008P815B5b/pdf",
+      "hosted_invoice_url": "https://invoice.stripe.com/i/acct_1GThseJDPojXS6LN/test_YWNjdF8xR1Roc2VKRFBvalhTNkxOLF9LenEwOGZNa1RoWUFTb1RCZlI3R0VEeGh4UjJ2UWQz01009IJ2lR3y",
+      "invoice_pdf": "https://pay.stripe.com/invoice/acct_1GThseJDPojXS6LN/test_YWNjdF8xR1Roc2VKRFBvalhTNkxOLF9LenEwOGZNa1RoWUFTb1RCZlI3R0VEeGh4UjJ2UWQz01009IJ2lR3y/pdf",
       "last_finalization_error": null,
       "lines": {
         "object": "list",
         "data": [
           {
-            "id": "il_1KJdKkJDPojXS6LN2lyAeJz1",
+            "id": "il_1KJqKBJDPojXS6LND42vdxtT",
             "object": "line_item",
             "amount": 0,
             "currency": "usd",
@@ -67,14 +67,14 @@
             "livemode": false,
             "metadata": {
               "project_id": "295",
-              "project_ref": "zrsqozfrnjaqcdfbhvgq",
-              "project_name": "bar",
-              "organization_id": "46",
-              "organization_slug": "noisy-amethyst-guan"
+              "project_ref": "tpjdrydgwpadfjemnotg",
+              "project_name": "test-phone-auth",
+              "organization_id": "91",
+              "organization_slug": "salty-lavender-canidae"
             },
             "period": {
-              "end": 1645273828,
-              "start": 1642595428
+              "end": 1645323680,
+              "start": 1642645280
             },
             "plan": {
               "id": "price_1IDQm5JDPojXS6LNM31hxKzp",
@@ -126,8 +126,8 @@
             },
             "proration": false,
             "quantity": 1,
-            "subscription": "sub_K4J0aB2bmSyb6b",
-            "subscription_item": "si_K4J0IhgijHnskj",
+            "subscription": "sub_JsuPyCPhXWfZar",
+            "subscription_item": "si_JsuPFzrp9vSWxa",
             "tax_amounts": [],
             "tax_rates": [],
             "type": "subscription"
@@ -135,12 +135,12 @@
         ],
         "has_more": false,
         "total_count": 1,
-        "url": "/v1/invoices/in_1KJdKkJDPojXS6LNSwSWkZSN/lines"
+        "url": "/v1/invoices/in_1KJqKBJDPojXS6LNJbvLUgEy/lines"
       },
       "livemode": false,
       "metadata": {},
       "next_payment_attempt": null,
-      "number": "B1AB464C-0181",
+      "number": "60229DE7-0007",
       "on_behalf_of": null,
       "paid": true,
       "paid_out_of_band": false,
@@ -149,22 +149,22 @@
         "payment_method_options": null,
         "payment_method_types": null
       },
-      "period_end": 1642595428,
-      "period_start": 1639917028,
+      "period_end": 1642645280,
+      "period_start": 1639966880,
       "post_payment_credit_notes_amount": 0,
       "pre_payment_credit_notes_amount": 0,
       "quote": null,
       "receipt_number": null,
       "starting_balance": 0,
       "statement_descriptor": null,
-      "status": "open",
+      "status": "void",
       "status_transitions": {
-        "finalized_at": 1642599192,
+        "finalized_at": 1642649110,
         "marked_uncollectible_at": null,
-        "paid_at": 1642599192,
+        "paid_at": 1642649110,
         "voided_at": null
       },
-      "subscription": "sub_K4J0aB2bmSyb6b",
+      "subscription": "sub_JsuPyCPhXWfZar",
       "subtotal": 0,
       "tax": null,
       "tax_percent": null,
@@ -172,7 +172,7 @@
       "total_discount_amounts": [],
       "total_tax_amounts": [],
       "transfer_data": null,
-      "webhooks_delivered_at": 1642595537
+      "webhooks_delivered_at": 1642645473
     }
   },
   "livemode": false,
@@ -181,5 +181,5 @@
     "id": null,
     "idempotency_key": null
   },
-  "type": "invoice.finalized"
+  "type": "invoice.voided"
 }
