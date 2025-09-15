@@ -1189,6 +1189,13 @@ export class StripeSync {
     )
   }
 
+  backfillPrices = async (priceIds: string[]) => {
+    const missingIds = await this.postgresClient.findMissingEntries('prices', priceIds)
+    await this.fetchMissingEntities(missingIds, (id) => this.stripe.prices.retrieve(id)).then(
+      (entries) => this.upsertPrices(entries)
+    )
+  }
+
   async upsertPlans(
     plans: Stripe.Plan[],
     backfillRelatedEntities?: boolean,
@@ -1359,20 +1366,15 @@ export class StripeSync {
 
   async fillCheckoutSessionsLineItems(checkoutSessionIds: string[], syncTimestamp?: string) {
     for (const checkoutSessionId of checkoutSessionIds) {
-      const lineItemResponses = await this.stripe.checkout.sessions.listLineItems(
-        checkoutSessionId,
-        { limit: 100 }
-      )
+      const lineItemResponses: Stripe.LineItem[] = []
 
-      if (!lineItemResponses.data) {
-        continue
+      for await (const lineItem of this.stripe.checkout.sessions.listLineItems(checkoutSessionId, {
+        limit: 100,
+      })) {
+        lineItemResponses.push(lineItem)
       }
 
-      await this.upsertCheckoutSessionLineItems(
-        lineItemResponses.data,
-        checkoutSessionId,
-        syncTimestamp
-      )
+      await this.upsertCheckoutSessionLineItems(lineItemResponses, checkoutSessionId, syncTimestamp)
     }
   }
 
@@ -1381,6 +1383,13 @@ export class StripeSync {
     checkoutSessionId: string,
     syncTimestamp?: string
   ) {
+    // prices are needed for line items relation
+    await this.backfillPrices(
+      lineItems
+        .map((lineItem) => lineItem.price?.id?.toString() ?? undefined)
+        .filter((id) => id !== undefined)
+    )
+
     const modifiedLineItems = lineItems.map((lineItem) => {
       // Extract price ID if price is an object, otherwise use the string value
       const priceId =
