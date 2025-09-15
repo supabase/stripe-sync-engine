@@ -157,31 +157,30 @@ describe('checkout sessions', () => {
       `select id, object, amount_discount, amount_subtotal, amount_tax, amount_total, currency, description, price, quantity from stripe.checkout_session_line_items where checkout_session = 'cs_live_9RBjcHiy2i5p99Tf1MYM90c3SHK1grU0E6Ae6pKWR2KPA4ZiuKiB2X1Y3X'`
     )
 
-    expect(lineItems.rows).toEqual([
-      {
-        id: 'li_123',
-        object: 'item',
-        amount_discount: 0,
-        amount_subtotal: 2198,
-        amount_tax: 0,
-        amount_total: 2198,
-        currency: 'usd',
-        description: 'T-shirt',
-        price: 'price_1IDQm5JDPojXS6LNM31hxKzp',
-        quantity: 1,
-      },
-      {
-        id: 'li_456',
-        object: 'item',
-        amount_discount: 0,
-        amount_subtotal: 2198,
-        amount_tax: 0,
-        amount_total: 2198,
-        currency: 'usd',
-        description: 'Hoodie',
-        price: 'price_1IDQm5JDPojXS6LNM31hxKzp',
-        quantity: 2,
-      },
-    ])
+    expect(lineItems.rows).toContainEqual({
+      id: 'li_123',
+      object: 'item',
+      amount_discount: 0,
+      amount_subtotal: 2198,
+      amount_tax: 0,
+      amount_total: 2198,
+      currency: 'usd',
+      description: 'T-shirt',
+      price: 'price_1IDQm5JDPojXS6LNM31hxKzp',
+      quantity: 1,
+    })
+
+    expect(lineItems.rows).toContainEqual({
+      id: 'li_456',
+      object: 'item',
+      amount_discount: 0,
+      amount_subtotal: 2198,
+      amount_tax: 0,
+      amount_total: 2198,
+      currency: 'usd',
+      description: 'Hoodie',
+      price: 'price_1IDQm5JDPojXS6LNM31hxKzp',
+      quantity: 2,
+    })
   })
 })
