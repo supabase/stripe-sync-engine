@@ -119,7 +119,7 @@ export class StripeSync {
       case 'checkout.session.expired': {
         const { entity: checkoutSession, refetched } = await this.fetchOrUseWebhookData(
           event.data.object as Stripe.Checkout.Session,
-          (id) => this.stripe.checkout.sessions.retrieve(id, { expand: ['line_items'] })
+          (id) => this.stripe.checkout.sessions.retrieve(id)
         )
 
         this.config.logger?.info(
@@ -916,7 +916,6 @@ export class StripeSync {
 
     const params: Stripe.Checkout.SessionListParams = {
       limit: 100,
-      expand: ['data.line_items'],
     }
     if (syncParams?.created) params.created = syncParams.created
 
