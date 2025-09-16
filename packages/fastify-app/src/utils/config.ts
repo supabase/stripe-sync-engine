@@ -45,6 +45,8 @@ export type StripeSyncServerConfig = {
   revalidateObjectsViaStripeApi: Array<RevalidateEntity>
 
   port: number
+
+  disableMigrations: boolean
 }
 
 export function getConfig(): StripeSyncServerConfig {
@@ -65,5 +67,6 @@ export function getConfig(): StripeSyncServerConfig {
       .split(',')
       .map((it) => it.trim())
       .filter((it) => it.length > 0) as Array<RevalidateEntity>,
+    disableMigrations: getConfigFromEnv('DISABLE_MIGRATIONS', 'false') === 'true',
   }
 }
