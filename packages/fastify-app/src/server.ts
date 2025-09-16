@@ -15,11 +15,13 @@ const main = async () => {
 
   const config = getConfig()
 
-  await runMigrations({
-    databaseUrl: config.databaseUrl,
-    schema: config.schema,
-    logger: logger,
-  })
+  if (!config.disableMigrations) {
+    await runMigrations({
+      databaseUrl: config.databaseUrl,
+      schema: config.schema,
+      logger: logger,
+    })
+  }
 
   // Start the server
   app.listen({ port: Number(config.port), host: '0.0.0.0' }, (err, address) => {

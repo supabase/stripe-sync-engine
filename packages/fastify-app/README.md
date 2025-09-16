@@ -51,6 +51,7 @@ Set your webhook endpoint in the Stripe dashboard to point to your server’s `/
 | `BACKFILL_RELATED_ENTITIES`         | Backfill related entities for foreign key integrity (default: true)                                                                                                                                                                                                                                      | No       |
 | `MAX_POSTGRES_CONNECTIONS`          | Max Postgres connection pool size (default: 10)                                                                                                                                                                                                                                                          | No       |
 | `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id | No       |
+| `DISABLE_MIGRATIONS`                | If you do not want the app to run the migrations and manage them outside of the app, set this to true                                                                                                                                                                                                    | No       |
 
 ## Endpoints
 
