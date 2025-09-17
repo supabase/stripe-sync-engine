@@ -1560,26 +1560,12 @@ export class StripeSync {
     customerId: string,
     currentActiveEntitlementIds: string[]
   ): Promise<{ rowCount: number }> {
-    let prepared = sql(`
-    select id from "${this.config.schema}"."active_entitlements"
-    where customer = :customerId;
-    `)({ customerId })
-    const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
-    const deletedIds = rows.filter(
-      ({ id }: { id: string }) => currentActiveEntitlementIds.includes(id) === false
-    )
-
-    if (deletedIds.length > 0) {
-      const ids = deletedIds.map(({ id }: { id: string }) => id)
-      prepared = sql(`
+    const prepared = sql(`
       delete from "${this.config.schema}"."active_entitlements"
-      where id=any(:ids::text[]);
-      `)({ ids })
-      const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
-      return { rowCount: rowCount || 0 }
-    } else {
-      return { rowCount: 0 }
-    }
+      where customer = :customerId and id not in (select id from "${this.config.schema}"."active_entitlements" where customer = :customerId and id in (:currentActiveEntitlementIds::text[]));
+      `)({ customerId, currentActiveEntitlementIds })
+    const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
+    return { rowCount: rowCount || 0 }
   }
 
   async upsertFeatures(features: Stripe.Entitlements.Feature[]) {
