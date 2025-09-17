@@ -1,5 +1,2 @@
 packages:
   - 'packages/*'
-syncInjectedDepsAfterScripts:
-- build
-injectWorkspacePackages: true

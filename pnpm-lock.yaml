@@ -3,7 +3,6 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
-  injectWorkspacePackages: true
 
 importers:
 
@@ -63,7 +62,7 @@ importers:
         version: 5.2.3
       '@supabase/stripe-sync-engine':
         specifier: 'workspace:'
-        version: file:packages/sync-engine(stripe@18.5.0(@types/node@24.5.0))
+        version: link:../sync-engine
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
@@ -507,11 +506,6 @@ packages:
     resolution: {integrity: sha512-StxAO/8ts62KZVRAm4JZYq9+NqNsV7RvimNK+YM7ry//zebEH6meuugqW/P5OFUCjyQgui+9fUxT6d5NShvMvA==}
     cpu: [x64]
     os: [win32]
-
-  '@supabase/stripe-sync-engine@file:packages/sync-engine':
-    resolution: {directory: packages/sync-engine, type: directory}
-    peerDependencies:
-      stripe: '> 11'
 
   '@types/chai@5.2.2':
     resolution: {integrity: sha512-8kB30R7Hwqf40JPiKhVzodJs2Qc1ZJ5zuT3uzw5Hq/dhNCl3G3l83jfpdI1e20BP348+fV7VIL/+FxaXkqBmWg==}
@@ -2183,15 +2177,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.50.1':
     optional: true
-
-  '@supabase/stripe-sync-engine@file:packages/sync-engine(stripe@18.5.0(@types/node@24.5.0))':
-    dependencies:
-      pg: 8.16.3
-      pg-node-migrations: 0.0.8
-      stripe: 18.5.0(@types/node@24.5.0)
-      yesql: 7.0.0
-    transitivePeerDependencies:
-      - pg-native
 
   '@types/chai@5.2.2':
     dependencies:
