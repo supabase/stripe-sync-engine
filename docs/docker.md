@@ -50,7 +50,8 @@ Set your webhook endpoint in the Stripe dashboard to point to your server’s `/
 | `AUTO_EXPAND_LISTS`                | Fetch all list items from Stripe (default: false)                   | No       |
 | `BACKFILL_RELATED_ENTITIES`        | Backfill related entities for foreign key integrity (default: true) | No       |
 | `MAX_POSTGRES_CONNECTIONS`         | Max Postgres connection pool size (default: 10)                     | No       |
-| `REVALIDATE_ENTITY_VIA_STRIPE_API` | Always fetch latest entity from Stripe (default: false)             | No       |
+| `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe (default: false)             | No       |
+| `DISABLE_MIGRATIONS` | Disable the automated database migrations on app startup (default: false)             | No       |
 
 ## Endpoints
 

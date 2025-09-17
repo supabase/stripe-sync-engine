@@ -12,5 +12,7 @@ export const subscriptionItemSchema: EntitySchema = {
     'price',
     'subscription',
     'tax_rates',
+    'current_period_end',
+    'current_period_start',
   ],
 } as const

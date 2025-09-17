@@ -1,6 +1,25 @@
 import pino from 'pino'
 import Stripe from 'stripe'
 
+export type RevalidateEntity =
+  | 'charge'
+  | 'credit_note'
+  | 'customer'
+  | 'dispute'
+  | 'invoice'
+  | 'payment_intent'
+  | 'payment_method'
+  | 'plan'
+  | 'price'
+  | 'product'
+  | 'refund'
+  | 'review'
+  | 'radar.early_fraud_warning'
+  | 'setup_intent'
+  | 'subscription'
+  | 'subscription_schedule'
+  | 'tax_id'
+
 export type StripeSyncConfig = {
   /** Postgres database URL including authentication */
   databaseUrl: string
@@ -34,7 +53,7 @@ export type StripeSyncConfig = {
    *
    * Default: false
    */
-  revalidateEntityViaStripeApi?: boolean
+  revalidateObjectsViaStripeApi?: Array<RevalidateEntity>
 
   maxPostgresConnections?: number
 
@@ -60,7 +79,7 @@ export type SyncObject =
   | 'credit_note'
   | 'early_fraud_warning'
   | 'refund'
-
+  | 'checkout_sessions'
 export interface Sync {
   synced: number
 }
@@ -82,6 +101,7 @@ export interface SyncBackfill {
   creditNotes?: Sync
   earlyFraudWarnings?: Sync
   refunds?: Sync
+  checkoutSessions?: Sync
 }
 
 export interface SyncBackfillParams {
