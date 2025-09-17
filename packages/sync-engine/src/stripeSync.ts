@@ -1562,7 +1562,7 @@ export class StripeSync {
   ): Promise<{ rowCount: number }> {
     const prepared = sql(`
       delete from "${this.config.schema}"."active_entitlements"
-      where customer = :customerId and id not in (select id from "${this.config.schema}"."active_entitlements" where customer = :customerId and id in (:currentActiveEntitlementIds::text[]));
+      where customer = :customerId and id <> ALL(:currentActiveEntitlementIds::text[]);
       `)({ customerId, currentActiveEntitlementIds })
     const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
     return { rowCount: rowCount || 0 }
