@@ -19,6 +19,7 @@ export type RevalidateEntity =
   | 'subscription'
   | 'subscription_schedule'
   | 'tax_id'
+  | 'entitlements'
 
 export type StripeSyncConfig = {
   /** Postgres database URL including authentication */
