@@ -526,7 +526,7 @@ export class StripeSync {
         await this.upsertActiveEntitlements(
           activeEntitlementSummary.customer,
           entitlements.data,
-          undefined,
+          false,
           this.getSyncTimestamp(event, refetched)
         )
         break
