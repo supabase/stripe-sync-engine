@@ -1574,8 +1574,13 @@ export class StripeSync {
     return { rowCount: rowCount || 0 }
   }
 
-  async upsertFeatures(features: Stripe.Entitlements.Feature[]) {
-    return this.postgresClient.upsertMany(features, 'features', featureSchema)
+  async upsertFeatures(features: Stripe.Entitlements.Feature[], syncTimestamp?: string) {
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      features,
+      'features',
+      featureSchema,
+      syncTimestamp
+    )
   }
 
   async backfillFeatures(featureIds: string[]) {

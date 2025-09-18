@@ -7,7 +7,8 @@ create table
         lookup_key text unique,
         active boolean,
         metadata jsonb,
-        updated_at timestamptz default timezone('utc'::text, now()) not null
+        updated_at timestamptz default timezone('utc'::text, now()) not null,
+        last_synced_at timestamptz
     );
 
 create trigger handle_updated_at
