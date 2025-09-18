@@ -6,7 +6,8 @@ create table
         "feature" text,
         "customer" text,
         "lookup_key" text unique,
-        "updated_at" timestamptz default timezone('utc'::text, now()) not null
+        "updated_at" timestamptz default timezone('utc'::text, now()) not null,
+        "last_synced_at" timestamptz
     );
 
 create index stripe_active_entitlements_customer_idx on "stripe"."active_entitlements" using btree (customer);

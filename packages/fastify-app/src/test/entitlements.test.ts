@@ -53,6 +53,7 @@ describe('entitlements', () => {
         feature: 'feat_test_111',
         livemode: false,
         lookup_key: 'feature_2',
+        last_synced_at: new Date(),
       },
     ]
 
@@ -71,6 +72,7 @@ describe('entitlements', () => {
         ...activeEntitlements[0],
         customer: customerId,
         updated_at: expect.any(Date),
+        last_synced_at: expect.any(Date),
       },
     ])
 
@@ -81,6 +83,7 @@ describe('entitlements', () => {
         feature: 'feat_test_222',
         livemode: false,
         lookup_key: 'feature_3',
+        last_synced_at: new Date(),
       },
       {
         id: 'ent_test_333',
@@ -88,6 +91,7 @@ describe('entitlements', () => {
         feature: 'feat_test_333',
         livemode: false,
         lookup_key: 'feature_4',
+        last_synced_at: new Date(),
       },
     ]
 
@@ -107,6 +111,7 @@ describe('entitlements', () => {
         ...entitlement,
         customer: customerId,
         updated_at: expect.any(Date),
+        last_synced_at: expect.any(Date),
       }))
     )
   })

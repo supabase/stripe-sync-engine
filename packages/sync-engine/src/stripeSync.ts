@@ -505,13 +505,14 @@ export class StripeSync {
         const activeEntitlementSummary = event.data
           .object as Stripe.Entitlements.ActiveEntitlementSummary
         let entitlements = activeEntitlementSummary.entitlements
-
+        let refetched = false
         if (this.config.revalidateObjectsViaStripeApi?.includes('entitlements')) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { lastResponse, ...rest } = await this.stripe.entitlements.activeEntitlements.list({
             customer: activeEntitlementSummary.customer,
           })
           entitlements = rest
+          refetched = true
         }
 
         this.config.logger?.info(
@@ -522,7 +523,12 @@ export class StripeSync {
           activeEntitlementSummary.customer,
           entitlements.data.map((entitlement) => entitlement.id)
         )
-        await this.upsertActiveEntitlements(activeEntitlementSummary.customer, entitlements.data)
+        await this.upsertActiveEntitlements(
+          activeEntitlementSummary.customer,
+          entitlements.data,
+          undefined,
+          this.getSyncTimestamp(event, refetched)
+        )
         break
       }
       default:
@@ -1587,7 +1593,8 @@ export class StripeSync {
   async upsertActiveEntitlements(
     customerId: string,
     activeEntitlements: Stripe.Entitlements.ActiveEntitlement[],
-    backfillRelatedEntities?: boolean
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
   ) {
     if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
       await Promise.all([
@@ -1606,10 +1613,11 @@ export class StripeSync {
       lookup_key: entitlement.lookup_key,
     }))
 
-    return this.postgresClient.upsertMany(
+    return this.postgresClient.upsertManyWithTimestampProtection(
       entitlements,
       'active_entitlements',
-      activeEntitlementSchema
+      activeEntitlementSchema,
+      syncTimestamp
     )
   }
 
