@@ -81,7 +81,7 @@ export type SyncObject =
   | 'credit_note'
   | 'early_fraud_warning'
   | 'refund'
-
+  | 'checkout_sessions'
 export interface Sync {
   synced: number
 }
@@ -103,6 +103,7 @@ export interface SyncBackfill {
   creditNotes?: Sync
   earlyFraudWarnings?: Sync
   refunds?: Sync
+  checkoutSessions?: Sync
 }
 
 export interface SyncBackfillParams {
