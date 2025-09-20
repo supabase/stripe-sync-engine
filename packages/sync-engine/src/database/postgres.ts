@@ -1,22 +1,17 @@
-import pg, { QueryResult } from 'pg'
+import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
 import { EntitySchema } from '../schemas/types'
 
 type PostgresConfig = {
-  databaseUrl: string
   schema: string
-  maxConnections?: number
+  poolConfig: PoolConfig
 }
 
 export class PostgresClient {
   pool: pg.Pool
 
   constructor(private config: PostgresConfig) {
-    this.pool = new pg.Pool({
-      connectionString: config.databaseUrl,
-      max: config.maxConnections || 10,
-      keepAlive: true,
-    })
+    this.pool = new pg.Pool(config.poolConfig)
   }
 
   async delete(table: string, id: string): Promise<boolean> {

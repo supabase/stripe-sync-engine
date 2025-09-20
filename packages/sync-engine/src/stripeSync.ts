@@ -32,6 +32,7 @@ import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
 import { activeEntitlementSchema } from './schemas/active_entitlement'
 import { featureSchema } from './schemas/feature'
+import type { PoolConfig } from 'pg'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -64,10 +65,27 @@ export class StripeSync {
       'StripeSync initialized'
     )
 
+    const poolConfig = config.poolConfig ?? ({} as PoolConfig)
+
+    if (config.databaseUrl) {
+      poolConfig.connectionString = config.databaseUrl
+    }
+
+    if (config.maxPostgresConnections) {
+      poolConfig.max = config.maxPostgresConnections
+    }
+
+    if (poolConfig.max === undefined) {
+      poolConfig.max = 10
+    }
+
+    if (poolConfig.keepAlive === undefined) {
+      poolConfig.keepAlive = true
+    }
+
     this.postgresClient = new PostgresClient({
-      databaseUrl: config.databaseUrl,
       schema: config.schema || DEFAULT_SCHEMA,
-      maxConnections: config.maxPostgresConnections,
+      poolConfig,
     })
   }
 
