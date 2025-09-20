@@ -1,5 +1,6 @@
 import { type PoolConfig } from 'pg'
 import pino from 'pino'
+import Stripe from 'stripe'
 
 export type RevalidateEntity =
   | 'charge'
@@ -19,6 +20,7 @@ export type RevalidateEntity =
   | 'subscription'
   | 'subscription_schedule'
   | 'tax_id'
+  | 'entitlements'
 
 export type StripeSyncConfig = {
   /** @deprecated Use `poolConfig` with a connection string instead. */
@@ -66,6 +68,7 @@ export type StripeSyncConfig = {
 export type SyncObject =
   | 'all'
   | 'customer'
+  | 'customer_with_entitlements'
   | 'invoice'
   | 'price'
   | 'product'
@@ -130,4 +133,14 @@ export interface SyncBackfillParams {
   }
   object?: SyncObject
   backfillRelatedEntities?: boolean
+}
+
+export interface SyncEntitlementsParams {
+  object: 'entitlements'
+  customerId: string
+  pagination?: Pick<Stripe.PaginationParams, 'starting_after' | 'ending_before'>
+}
+export interface SyncFeaturesParams {
+  object: 'features'
+  pagination?: Pick<Stripe.PaginationParams, 'starting_after' | 'ending_before'>
 }

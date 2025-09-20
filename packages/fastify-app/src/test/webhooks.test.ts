@@ -52,6 +52,7 @@ describe('POST /webhooks', () => {
       // Handle cases where entityType has a prefix (e.g., "radar.early_fraud_warning")
       return entityType.split('.').pop() || entityType
     }
+
     return entityType
   }
 
@@ -174,6 +175,7 @@ describe('POST /webhooks', () => {
     'refund_created.json',
     'refund_failed.json',
     'refund_updated.json',
+    'active_entitlement_summary_updated.json',
   ])('process event %s', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     const signature = createHmac('sha256', stripeWebhookSecret)
