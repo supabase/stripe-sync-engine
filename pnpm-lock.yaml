@@ -75,6 +75,9 @@ importers:
       '@types/node':
         specifier: ^22.15.29
         version: 22.18.1
+      '@types/pg':
+        specifier: ^8.15.2
+        version: 8.15.5
       tsx:
         specifier: ^4.19.4
         version: 4.20.5

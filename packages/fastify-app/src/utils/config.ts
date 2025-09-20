@@ -45,6 +45,13 @@ export type StripeSyncServerConfig = {
   revalidateObjectsViaStripeApi: Array<RevalidateEntity>
 
   port: number
+
+  pgSslConfigEnabled: boolean
+  pgSslRejectedUnauthorized: boolean
+  pgSslRequestCert: boolean
+  pgSslCa?: string
+  pgSslCert?: string
+  pgKeepAlive: boolean
 }
 
 export function getConfig(): StripeSyncServerConfig {
@@ -65,5 +72,12 @@ export function getConfig(): StripeSyncServerConfig {
       .split(',')
       .map((it) => it.trim())
       .filter((it) => it.length > 0) as Array<RevalidateEntity>,
+
+    pgSslConfigEnabled: getConfigFromEnv('PG_SSL_CONFIG_ENABLED', 'false') === 'true',
+    pgSslRejectedUnauthorized: getConfigFromEnv('PG_SSL_REJECT_UNAUTHORIZED', 'false') === 'true',
+    pgSslCa: getConfigFromEnv('PG_SSL_CA'),
+    pgSslCert: getConfigFromEnv('PG_SSL_CERT'),
+    pgSslRequestCert: getConfigFromEnv('PG_SSL_REQUEST_CERT', 'false') === 'true',
+    pgKeepAlive: getConfigFromEnv('PG_KEEPALIVE', 'true') === 'true',
   }
 }
