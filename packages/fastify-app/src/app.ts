@@ -22,14 +22,7 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
     max: config.maxPostgresConnections ?? 10,
     connectionString: config.databaseUrl,
     keepAlive: true,
-    ssl: config.pgSslConfigEnabled
-      ? {
-          rejectUnauthorized: config.pgSslRejectedUnauthorized,
-          ca: config.pgSslCa ? config.pgSslCa : undefined,
-          requestCert: config.pgSslRequestCert,
-          cert: config.pgSslCert ? config.pgSslCert : undefined,
-        }
-      : undefined,
+    ssl: config.sslConnectionOptions,
   }
 
   const stripeSync = new StripeSync({ ...config, logger, poolConfig })

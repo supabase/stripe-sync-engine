@@ -1,5 +1,6 @@
 import type { RevalidateEntity } from '@supabase/stripe-sync-engine'
 import { config } from 'dotenv'
+import type { ConnectionOptions } from 'node:tls'
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
   const value = process.env[key]
@@ -45,14 +46,8 @@ export type StripeSyncServerConfig = {
   revalidateObjectsViaStripeApi: Array<RevalidateEntity>
 
   port: number
-
-  pgSslConfigEnabled: boolean
-  pgSslRejectedUnauthorized: boolean
-  pgSslRequestCert: boolean
-  pgSslCa?: string
-  pgSslCert?: string
-  pgKeepAlive: boolean
   disableMigrations: boolean
+  sslConnectionOptions?: ConnectionOptions
 }
 
 export function getConfig(): StripeSyncServerConfig {
@@ -73,12 +68,27 @@ export function getConfig(): StripeSyncServerConfig {
       .split(',')
       .map((it) => it.trim())
       .filter((it) => it.length > 0) as Array<RevalidateEntity>,
-    pgSslConfigEnabled: getConfigFromEnv('PG_SSL_CONFIG_ENABLED', 'false') === 'true',
-    pgSslRejectedUnauthorized: getConfigFromEnv('PG_SSL_REJECT_UNAUTHORIZED', 'false') === 'true',
-    pgSslCa: getConfigFromEnv('PG_SSL_CA', ''),
-    pgSslCert: getConfigFromEnv('PG_SSL_CERT', ''),
-    pgSslRequestCert: getConfigFromEnv('PG_SSL_REQUEST_CERT', 'false') === 'true',
-    pgKeepAlive: getConfigFromEnv('PG_KEEPALIVE', 'true') === 'true',
     disableMigrations: getConfigFromEnv('DISABLE_MIGRATIONS', 'false') === 'true',
+    sslConnectionOptions: sslConnnectionOptionsFromEnv(),
+  }
+}
+
+function sslConnnectionOptionsFromEnv(): ConnectionOptions | undefined {
+  const pgSslConfigEnabled = getConfigFromEnv('PG_SSL_CONFIG_ENABLED', 'false') === 'true'
+  const pgSslRejectedUnauthorized =
+    getConfigFromEnv('PG_SSL_REJECT_UNAUTHORIZED', 'false') === 'true'
+  const pgSslCa = getConfigFromEnv('PG_SSL_CA', '')
+  const pgSslCert = getConfigFromEnv('PG_SSL_CERT', '')
+  const pgSslRequestCert = getConfigFromEnv('PG_SSL_REQUEST_CERT', 'false') === 'true'
+
+  if (pgSslConfigEnabled) {
+    return {
+      rejectUnauthorized: pgSslRejectedUnauthorized,
+      ca: pgSslCa ? pgSslCa : undefined,
+      requestCert: pgSslRequestCert,
+      cert: pgSslCert ? pgSslCert : undefined,
+    }
+  } else {
+    return undefined
   }
 }
