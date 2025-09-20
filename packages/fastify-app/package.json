@@ -27,8 +27,7 @@
     "stripe": "^18.5.0"
   },
   "devDependencies": {
-    "@types/node": "^22.15.29",
-    "@types/pg": "^8.15.2"
+    "@types/pg": "^8.15.2",
     "@types/node": "^24.5.0",
     "tsx": "^4.20.5",
     "vitest": "^3.2.4"
