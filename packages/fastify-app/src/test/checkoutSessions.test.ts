@@ -19,7 +19,12 @@ beforeAll(async () => {
     logger,
   })
 
-  stripeSync = new StripeSync(config)
+  stripeSync = new StripeSync({
+    ...config,
+    poolConfig: {
+      connectionString: config.databaseUrl,
+    },
+  })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
 })

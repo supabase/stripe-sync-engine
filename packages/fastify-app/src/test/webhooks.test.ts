@@ -13,7 +13,9 @@ const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
 const postgresClient = new PostgresClient({
-  databaseUrl: getConfig().databaseUrl,
+  poolConfig: {
+    connectionString: getConfig().databaseUrl,
+  },
   schema: getConfig().schema,
 })
 
