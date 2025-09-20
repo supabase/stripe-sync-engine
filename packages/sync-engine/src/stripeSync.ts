@@ -28,6 +28,7 @@ import {
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
 import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
+import type { PoolConfig } from 'pg'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -60,25 +61,27 @@ export class StripeSync {
       'StripeSync initialized'
     )
 
+    const poolConfig = config.poolConfig ?? ({} as PoolConfig)
+
     if (config.databaseUrl) {
-      config.poolConfig.connectionString = config.databaseUrl
+      poolConfig.connectionString = config.databaseUrl
     }
 
     if (config.maxPostgresConnections) {
-      config.poolConfig.max = config.maxPostgresConnections
+      poolConfig.max = config.maxPostgresConnections
     }
 
-    if (config.poolConfig.max === undefined) {
-      config.poolConfig.max = 10
+    if (poolConfig.max === undefined) {
+      poolConfig.max = 10
     }
 
-    if (config.poolConfig.keepAlive === undefined) {
-      config.poolConfig.keepAlive = true
+    if (poolConfig.keepAlive === undefined) {
+      poolConfig.keepAlive = true
     }
 
     this.postgresClient = new PostgresClient({
       schema: config.schema || DEFAULT_SCHEMA,
-      poolConfig: config.poolConfig,
+      poolConfig,
     })
   }
 
