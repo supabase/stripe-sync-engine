@@ -1,3 +1,4 @@
+import { type PoolConfig } from 'pg'
 import pino from 'pino'
 
 export type RevalidateEntity =
@@ -20,8 +21,8 @@ export type RevalidateEntity =
   | 'tax_id'
 
 export type StripeSyncConfig = {
-  /** Postgres database URL including authentication */
-  databaseUrl: string
+  /** @deprecated Use `poolConfig` with a connection string instead. */
+  databaseUrl?: string
 
   /** Database schema name. */
   schema?: string
@@ -54,7 +55,10 @@ export type StripeSyncConfig = {
    */
   revalidateObjectsViaStripeApi?: Array<RevalidateEntity>
 
+  /** @deprecated Use `poolConfig` instead. */
   maxPostgresConnections?: number
+
+  poolConfig: PoolConfig
 
   logger?: pino.Logger
 }

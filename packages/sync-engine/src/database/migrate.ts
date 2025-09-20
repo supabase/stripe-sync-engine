@@ -3,10 +3,12 @@ import { migrate } from 'pg-node-migrations'
 import fs from 'node:fs'
 import pino from 'pino'
 import path from 'node:path'
+import type { ConnectionOptions } from 'node:tls'
 
 type MigrationConfig = {
   schema: string
   databaseUrl: string
+  ssl?: ConnectionOptions
   logger?: pino.Logger
 }
 
@@ -41,6 +43,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
   // Init DB
   const client = new Client({
     connectionString: config.databaseUrl,
+    ssl: config.ssl,
     connectionTimeoutMillis: 10_000,
   })
 

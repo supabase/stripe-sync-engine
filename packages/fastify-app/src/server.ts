@@ -20,6 +20,7 @@ const main = async () => {
       databaseUrl: config.databaseUrl,
       schema: config.schema,
       logger: logger,
+      ssl: config.sslConnectionOptions,
     })
   }
 

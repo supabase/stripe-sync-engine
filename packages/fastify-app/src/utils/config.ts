@@ -1,5 +1,6 @@
 import type { RevalidateEntity } from '@supabase/stripe-sync-engine'
 import { config } from 'dotenv'
+import type { ConnectionOptions } from 'node:tls'
 
 function getConfigFromEnv(key: string, defaultValue?: string): string {
   const value = process.env[key]
@@ -45,8 +46,8 @@ export type StripeSyncServerConfig = {
   revalidateObjectsViaStripeApi: Array<RevalidateEntity>
 
   port: number
-
   disableMigrations: boolean
+  sslConnectionOptions?: ConnectionOptions
 }
 
 export function getConfig(): StripeSyncServerConfig {
@@ -68,5 +69,26 @@ export function getConfig(): StripeSyncServerConfig {
       .map((it) => it.trim())
       .filter((it) => it.length > 0) as Array<RevalidateEntity>,
     disableMigrations: getConfigFromEnv('DISABLE_MIGRATIONS', 'false') === 'true',
+    sslConnectionOptions: sslConnnectionOptionsFromEnv(),
+  }
+}
+
+function sslConnnectionOptionsFromEnv(): ConnectionOptions | undefined {
+  const pgSslConfigEnabled = getConfigFromEnv('PG_SSL_CONFIG_ENABLED', 'false') === 'true'
+  const pgSslRejectedUnauthorized =
+    getConfigFromEnv('PG_SSL_REJECT_UNAUTHORIZED', 'false') === 'true'
+  const pgSslCa = getConfigFromEnv('PG_SSL_CA', '')
+  const pgSslCert = getConfigFromEnv('PG_SSL_CERT', '')
+  const pgSslRequestCert = getConfigFromEnv('PG_SSL_REQUEST_CERT', 'false') === 'true'
+
+  if (pgSslConfigEnabled) {
+    return {
+      rejectUnauthorized: pgSslRejectedUnauthorized,
+      ca: pgSslCa ? pgSslCa : undefined,
+      requestCert: pgSslRequestCert,
+      cert: pgSslCert ? pgSslCert : undefined,
+    }
+  } else {
+    return undefined
   }
 }

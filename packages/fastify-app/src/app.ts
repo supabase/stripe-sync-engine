@@ -7,6 +7,7 @@ import { getConfig } from './utils/config'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { errorSchema } from './error'
 import { logger } from './logger'
+import { type PoolConfig } from 'pg'
 
 interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
@@ -16,7 +17,15 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
   const app = fastify(opts)
 
   const config = getConfig()
-  const stripeSync = new StripeSync({ ...config, logger })
+
+  const poolConfig: PoolConfig = {
+    max: config.maxPostgresConnections ?? 10,
+    connectionString: config.databaseUrl,
+    keepAlive: true,
+    ssl: config.sslConnectionOptions,
+  }
+
+  const stripeSync = new StripeSync({ ...config, logger, poolConfig })
 
   app.decorate('stripeSync', stripeSync)
 
