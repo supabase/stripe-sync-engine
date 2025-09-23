@@ -1,10 +1,10 @@
-![Sync Stripe with Postgres](./stripe-sync-engine.jpg)
+![Sync Stripe with PostgreSQL](./stripe-sync-engine.jpg)
 
 # Stripe Sync Engine
 
 Sometimes you want to analyze your billing data using SQL. Even more importantly, you want to join your billing data to your product/business data.
 
-This project synchronizes your Stripe account to a Postgres database. It can be a new database, or an existing Postgres database.
+This project synchronizes your Stripe account to a PostgreSQL database. It can be a new database, or an existing PostgreSQL database.
 
 ---
 
@@ -12,9 +12,9 @@ This project synchronizes your Stripe account to a Postgres database. It can be 
 
 ![How it works](./sync-engine-how.png)
 
-- Creates a new schema `stripe` in a Postgres database, with tables & columns matching Stripe.
+- Creates a new schema `stripe` in a PostgreSQL database, with tables and columns matching Stripe.
 - Exposes a `/webhooks` endpoint that listens to any Stripe webhooks (via the Fastify app).
-- Inserts/updates/deletes changes into the tables whenever there is a change to Stripe.
+- Inserts, updates, or deletes changes into the tables whenever there is a change to Stripe.
 
 ## Webhook Support
 

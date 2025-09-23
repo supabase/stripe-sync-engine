@@ -1,10 +1,10 @@
 # With Supabase Edge Functions
 
-Create a new [Supabase](https://supabase.com) and create a new [Edge Function](https://supabase.com/docs/guides/functions/quickstart).
+Create a new [Supabase](https://supabase.com) project and create a new [Edge Function](https://supabase.com/docs/guides/functions/quickstart).
 
 ## Prepare your database
 
-Make sure to run the [migrations](./packages/sync-engine/src/database/migrations/), either by executing them manually, adding them into your CI or running this locally once:
+Make sure to run the [migrations](../packages/sync-engine/src/database/migrations/), either by executing them manually, adding them into your CI, or running this locally once:
 
 ```ts
 import { runMigrations } from '@supabase/stripe-sync-engine'
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
 Deploy your Edge Function initially.
 
-Set up a Stripe webhook with the newly deployed Supabase Edge Function url.
+Set up a Stripe webhook with the newly deployed Supabase Edge Function URL.
 
 Create a new .env file in the `supabase` directory.
 
@@ -78,9 +78,9 @@ STRIPE_SECRET_KEY="sk_test_..."
 
 Load the secrets:
 
-`sh
+```sh
 supabase secrets set --env-file ./supabase/.env
-`.
+```
 
 > **Note:**
 > Replace `<base64-encoded-ca>` with your actual base64-encoded certificate.
