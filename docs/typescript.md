@@ -38,7 +38,7 @@ await sync.processWebhook(payload, signature)
 
 | Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
 | ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `databaseUrl`                   | string  | Postgres connection string                                                                                                                                                                                                                                                                               |
+| `databaseUrl`                   | string  | **Deprecated**: Use `poolConfig` with a connection string instead.                                                                                                                                                                                                                                       |
 | `schema`                        | string  | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 |
 | `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
 | `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
@@ -46,8 +46,44 @@ await sync.processWebhook(payload, signature)
 | `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                               |
 | `backfillRelatedEntities`       | boolean | Ensure related entities are present for foreign key integrity                                                                                                                                                                                                                                            |
 | `revalidateObjectsViaStripeApi` | Array   | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
-| `maxPostgresConnections`        | number  | Maximum Postgres connections                                                                                                                                                                                                                                                                             |
+| `poolConfig`                    | object  | Configuration for the PostgreSQL connection pool. Supports options like `connectionString`, `max`, and `keepAlive`.                                                                                                                                                                                      |
 | `logger`                        | Logger  | Logger instance (pino)                                                                                                                                                                                                                                                                                   |
+
+### Example `poolConfig`
+
+```typescript
+const config = {
+  poolConfig: {
+    connectionString: 'postgresql://user:password@localhost:5432/mydb',
+    max: 20, // Maximum number of connections
+    keepAlive: true, // Keep connections alive
+  },
+};
+```
+
+For more details, refer to the [Node-Postgres Pool API documentation](https://node-postgres.com/apis/pool).
+
+### SSL CA Certificate in Base64 Format
+
+To pass an SSL CA certificate in base64 format, follow these steps:
+
+1. Encode your SSL CA certificate in base64 format:
+   - Download the certificate file from Supabase Dashboard (e.g., `prod-ca-2021.crt`).
+   - Encode it using a command like `base64 -i prod-ca-2021.crt -o CA.base64` on Unix-based systems.
+   - Read the contents of `CA.base64` and copy the base64 string to your ENV variables value.
+2. Add the base64 string to your configuration:
+
+```typescript
+const config = {
+  poolConfig: {
+    ssl: {
+      ca: Buffer.from('<base64-encoded-ca>').toString('utf-8'),
+    },
+  },
+};
+```
+
+> **Note:** Replace `<base64-encoded-ca>` with your actual base64-encoded certificate (development only) or the environment variable containing it (recommended for production).
 
 ## Database Schema
 
