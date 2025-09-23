@@ -24,7 +24,10 @@ yarn add @supabase/stripe-sync-engine stripe
 import { StripeSync } from '@supabase/stripe-sync-engine'
 
 const sync = new StripeSync({
-  databaseUrl: 'postgres://user:pass@host:port/db',
+  poolConfig: {
+    connectionString: 'postgres://user:pass@host:port/db',
+    max: 10, // Maximum number of connections
+  },
   stripeSecretKey: 'sk_test_...',
   stripeWebhookSecret: 'whsec_...',
   // logger: <a pino logger>
