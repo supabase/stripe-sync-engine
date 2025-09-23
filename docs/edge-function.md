@@ -27,13 +27,20 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { StripeSync } from 'npm:@supabase/stripe-sync-engine@0.37.2'
 
 // Load secrets from environment variables
-const databaseUrl = Deno.env.get('DATABASE_URL')!
 const stripeWebhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')!
 const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')!
 
 // Initialize StripeSync
 const stripeSync = new StripeSync({
-  databaseUrl,
+  poolConfig: {
+    connectionString: Deno.env.get('DATABASE_URL')!,
+    max: 20,
+    keepAlive: true,
+    // optional SSL configuration
+    ssl: {
+      ca: Buffer.from(Deno.env.get('DATABASE_SSL_CA')!).toString('utf-8'),
+    },
+  },
   stripeWebhookSecret,
   stripeSecretKey,
   backfillRelatedEntities: false,
@@ -64,6 +71,7 @@ Create a new .env file in the `supabase` directory.
 
 ```.env
 DATABASE_URL="postgresql://postgres:..@db.<ref>.supabase.co:5432/postgres"
+DATABASE_SSL_CA="<base64-encoded-ca>"
 STRIPE_WEBHOOK_SECRET="whsec_"
 STRIPE_SECRET_KEY="sk_test_..."
 ```
@@ -73,3 +81,20 @@ Load the secrets:
 `sh
 supabase secrets set --env-file ./supabase/.env
 `.
+
+> **Note:**
+> Replace `<base64-encoded-ca>` with your actual base64-encoded certificate.
+
+### Generating Base64 from CA Certificate
+
+To generate a base64-encoded CA certificate, follow these steps:
+
+1. Obtain the CA certificate file (e.g., `prod-ca-2021.crt`).
+2. Use the following command on Unix-based systems:
+
+   ```sh
+   base64 -i prod-ca-2021.crt -o CA.base64
+   ```
+
+3. Open the `CA.base64` file and copy its contents.
+4. Use the base64 string in your configuration or environment variables.

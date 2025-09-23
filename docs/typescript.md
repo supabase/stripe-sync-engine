@@ -65,25 +65,33 @@ For more details, refer to the [Node-Postgres Pool API documentation](https://no
 
 ### SSL CA Certificate in Base64 Format
 
-To pass an SSL CA certificate in base64 format, follow these steps:
-
-1. Encode your SSL CA certificate in base64 format:
-   - Download the certificate file from Supabase Dashboard (e.g., `prod-ca-2021.crt`).
-   - Encode it using a command like `base64 -i prod-ca-2021.crt -o CA.base64` on Unix-based systems.
-   - Read the contents of `CA.base64` and copy the base64 string to your ENV variables value.
-2. Add the base64 string to your configuration:
-
 ```typescript
 const config = {
   poolConfig: {
+    // optional SSL configuration
     ssl: {
-      ca: Buffer.from('<base64-encoded-ca>').toString('utf-8'),
+      ca: Buffer.from(process.env.SSL_CA_CERT).toString('utf-8'),
     },
   },
 };
 ```
 
-> **Note:** Replace `<base64-encoded-ca>` with your actual base64-encoded certificate (development only) or the environment variable containing it (recommended for production).
+> **Note:**
+> Replace `<base64-encoded-ca>` with your actual base64-encoded certificate (development only) or the environment variable containing it (recommended for production).
+
+### Generating Base64 from CA Certificate
+
+To generate a base64-encoded CA certificate, follow these steps:
+
+1. Obtain the CA certificate file (e.g., `prod-ca-2021.crt`).
+2. Use the following command on Unix-based systems:
+
+   ```sh
+   base64 -i prod-ca-2021.crt -o CA.base64
+   ```
+
+3. Open the `CA.base64` file and copy its contents.
+4. Use the base64 string in your configuration or environment variables.
 
 ## Database Schema
 

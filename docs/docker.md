@@ -52,6 +52,11 @@ Set your webhook endpoint in the Stripe dashboard to point to your server’s `/
 | `MAX_POSTGRES_CONNECTIONS`         | Max Postgres connection pool size (default: 10)                     | No       |
 | `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe (default: false)             | No       |
 | `DISABLE_MIGRATIONS` | Disable the automated database migrations on app startup (default: false)             | No       |
+| `PG_SSL_CONFIG_ENABLED`      | Enables SSL configuration. Set to `true` to enable.                                            | No   |
+| `PG_SSL_REJECT_UNAUTHORIZED` | Rejects unauthorized SSL connections. Set to `true` to enforce.                                | No   |
+| `PG_SSL_CA`                  | Base64-encoded CA certificate for SSL connections.                                             | No   |
+| `PG_SSL_CERT`                | Certificate chain in PEM format for SSL connections.                                           | No   |
+| `PG_SSL_REQUEST_CERT`        | Requests a certificate from clients and attempts to verify it. Set to `true` to enable.        | No   |
 
 ## Endpoints
 
@@ -136,3 +141,52 @@ POST /sync/single/cus_12345
 ```
 
 The entity type is recognized automatically, based on the prefix.
+
+#### SSL CA Certificate in Base64 Format
+
+To pass an SSL CA certificate in base64 format for the Dockerized application, follow these steps:
+
+1. Obtain the CA certificate file (e.g., `prod-ca-2021.crt`).
+2. Encode it in base64 format using the following command on Unix-based systems:
+
+   ```sh
+   base64 -i prod-ca-2021.crt -o CA.base64
+   ```
+
+3. Open the `CA.base64` file and copy its contents.
+4. Add the base64 string to your environment variables (e.g., `PG_SSL_CA`).
+5. Pass the environment variable to the Docker container:
+
+   ```sh
+   docker run -d \
+     -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+     -e PG_SSL_CA="$(cat CA.base64)" \
+     -e STRIPE_SECRET_KEY=sk_test_... \
+     -e STRIPE_WEBHOOK_SECRET=... \
+     -e API_KEY="my-secret" \
+     -p 8080:8080 \
+     supabase/stripe-sync-engine:latest
+   ```
+
+> **Note:** The `PG_SSL_CA` environment variable should contain the base64-encoded CA certificate. The application will decode and use it automatically during runtime.
+
+### Example Usage
+
+To pass these variables to the Docker container, use the following command:
+
+```sh
+docker run -d \
+  -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+  -e PG_SSL_CONFIG_ENABLED=true \
+  -e PG_SSL_REJECT_UNAUTHORIZED=true \
+  -e PG_SSL_CA="$(cat CA.base64)" \
+  -e PG_SSL_CERT="$(cat cert.pem)" \
+  -e PG_SSL_REQUEST_CERT=true \
+  -e STRIPE_SECRET_KEY=sk_test_... \
+  -e STRIPE_WEBHOOK_SECRET=... \
+  -e API_KEY="my-secret" \
+  -p 8080:8080 \
+  supabase/stripe-sync-engine:latest
+```
+
+> **Note:** Ensure the `PG_SSL_CA` and `PG_SSL_CERT` variables contain valid base64-encoded or PEM-formatted certificates as required.
