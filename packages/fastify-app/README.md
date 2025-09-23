@@ -1,13 +1,13 @@
-# Stripe Sync - Fastify App
+# Stripe Sync Engine - Fastify App
 
 ![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
 ![Docker Image Version](https://img.shields.io/docker/v/supabase/stripe-sync-engine?label=Docker)
 
-A Fastify-based server for syncing your Stripe account to a Postgres database in real time. Built on top of the Stripe Sync Engine.
+A Fastify-based server for syncing your Stripe account to a PostgreSQL database in real time. Built on top of the Stripe Sync Engine.
 
 ## Features
 
-- Exposes a `/webhooks` endpoint to receive Stripe webhooks and sync data to Postgres
+- Exposes a `/webhooks` endpoint to receive Stripe webhooks and sync data to PostgreSQL
 - Supports syncing customers, invoices, products, subscriptions, and more
 - Runs as a lightweight Docker container
 - Designed for easy deployment to any cloud or self-hosted environment
@@ -38,32 +38,31 @@ Set your webhook endpoint in the Stripe dashboard to point to your server’s `/
 
 ## Environment Variables
 
-| Variable                            | Description                                                                                                                                                                                                                                                                                              | Required |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `DATABASE_URL`                      | Postgres connection string (with `search_path=stripe`)                                                                                                                                                                                                                                                   | Yes      |
-| `STRIPE_WEBHOOK_SECRET`             | Stripe webhook signing secret                                                                                                                                                                                                                                                                            | Yes      |
-| `API_KEY`                           | API key for admin endpoints (backfilling, etc.)                                                                                                                                                                                                                                                          | Yes      |
-| `SCHEMA`                            | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 | No       |
-| `STRIPE_SECRET_KEY`                 | Stripe secret key (needed for active sync/backfill)                                                                                                                                                                                                                                                      | No       |
-| `PORT`                              | Port to run the server on (default: 8080)                                                                                                                                                                                                                                                                | No       |
-| `STRIPE_API_VERSION`                | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               | No       |
-| `AUTO_EXPAND_LISTS`                 | Fetch all list items from Stripe (default: false)                                                                                                                                                                                                                                                        | No       |
-| `BACKFILL_RELATED_ENTITIES`         | Backfill related entities for foreign key integrity (default: true)                                                                                                                                                                                                                                      | No       |
-| `MAX_POSTGRES_CONNECTIONS`          | Max Postgres connection pool size (default: 10)                                                                                                                                                                                                                                                          | No       |
-| `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id | No       |
-| `DISABLE_MIGRATIONS`                | Disable the automated database migrations on app startup                                                                                                                                                                                                                                                 |
-| `PG_SSL_CONFIG_ENABLED`             | Whether to explicitly use the SSL configuration, (default: false)                                                                                                                                                                                                                                        | No       |
-| `PG_SSL_REJECT_UNAUTHORIZED`        | If true the server will reject any connection which is not authorized with the list of supplied CAs. This option only has an effect if requestCert is true.                                                                                                                                              | No       |
-| `PG_SSL_REQUEST_CERT`               | If true the server will request a certificate from clients that connect and attempt to verify that certificate. Defaults to false.                                                                                                                                                                       | No       |
-| `PG_SSL_CA`                         | Optionally override the trusted CA certificates.                                                                                                                                                                                                                                                         | No       |
-| `PG_SSL_CERT`                       | Cert Chain in PEM format                                                                                                                                                                                                                                                                                 | No       |
-| No                                  |
+| Variable | Description | Required |
+| -------- | ----------- | -------- |
+| `DATABASE_URL` | PostgreSQL connection string (with `search_path=stripe`) | Yes |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Yes |
+| `API_KEY` | API key for admin endpoints (backfilling, etc.) | Yes |
+| `SCHEMA` | Database schema name (default: `stripe`) | No |
+| `STRIPE_SECRET_KEY` | Stripe secret key (needed for active sync/backfill) | No |
+| `PORT` | Port to run the server on (default: 8080) | No |
+| `STRIPE_API_VERSION` | Stripe API version (default: `2020-08-27`) | No |
+| `AUTO_EXPAND_LISTS` | Fetch all list items from Stripe (default: false) | No |
+| `BACKFILL_RELATED_ENTITIES` | Backfill related entities for foreign key integrity (default: true) | No |
+| `MAX_POSTGRES_CONNECTIONS` | Max PostgreSQL connection pool size (default: 10) | No |
+| `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id | No |
+| `DISABLE_MIGRATIONS` | Disable the automated database migrations on app startup (default: false) | No |
+| `PG_SSL_CONFIG_ENABLED` | Whether to explicitly use the SSL configuration (default: false) | No |
+| `PG_SSL_REJECT_UNAUTHORIZED` | If true the server will reject any connection which is not authorized with the list of supplied CAs. This option only has an effect if requestCert is true | No |
+| `PG_SSL_REQUEST_CERT` | If true the server will request a certificate from clients that connect and attempt to verify that certificate. Defaults to false | No |
+| `PG_SSL_CA` | Optionally override the trusted CA certificates | No |
+| `PG_SSL_CERT` | Certificate chain in PEM format | No |
 
 ## Endpoints
 
-- `POST /webhooks` — Receives Stripe webhook events and syncs data to Postgres
+- `POST /webhooks` — Receives Stripe webhook events and syncs data to PostgreSQL
 - `GET /health` — Health check endpoint
-- `POST /sync` — Backfill Stripe data to Postgres (API key required)
+- `POST /sync` — Backfill Stripe data to PostgreSQL (API key required)
 - `POST /sync/single/:stripeId` — Backfill or update a single Stripe entity by ID (API key required)
 - `POST /daily` — Backfill data from the last 24 hours (API key required)
 - `POST /weekly` — Backfill data from the last 7 days (API key required)
@@ -120,13 +119,13 @@ body: {
 - `object` **all** | **charge** | **customer** | **dispute** | **invoice** | **payment_method** | **payment_intent** | **plan** | **price** | **product** | **setup_intent** | **subscription** | **early_fraud_warning** | **refund** | **credit_note** | **tax_id** | **subscription_schedules**
 - `created` is Stripe.RangeQueryParam. It supports **gt**, **gte**, **lt**, **lte**
 
-#### Alternative routes to sync `daily/weekly/monthly` data
+### Alternative routes to sync `daily/weekly/monthly` data
 
 ```
 POST /sync/daily
+```
 
----
-
+```
 POST /sync/daily
 body: {
   "object": "product"
@@ -135,7 +134,7 @@ body: {
 
 ### Syncing single entity
 
-To backfill/update a single entity, you can use
+To backfill/update a single entity, you can use:
 
 ```
 POST /sync/single/cus_12345

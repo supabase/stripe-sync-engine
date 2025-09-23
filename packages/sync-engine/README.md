@@ -3,11 +3,11 @@
 ![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
 ![NPM Version](https://img.shields.io/npm/v/%40supabase%2Fstripe-sync-engine)
 
-A TypeScript library to synchronize Stripe data into a Postgres database, designed for use in Node.js backends and serverless environments.
+A TypeScript library to synchronize Stripe data into a PostgreSQL database, designed for use in Node.js backends and serverless environments.
 
 ## Features
 
-- Sync Stripe objects (customers, invoices, products, etc.) to your Postgres database.
+- Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database.
 - Handles Stripe webhooks for real-time updates.
 - Supports backfilling and entity revalidation.
 
@@ -27,7 +27,10 @@ yarn add @supabase/stripe-sync-engine stripe
 import { StripeSync } from '@supabase/stripe-sync-engine'
 
 const sync = new StripeSync({
-  databaseUrl: 'postgres://user:pass@host:port/db',
+  poolConfig: {
+    connectionString: 'postgres://user:pass@host:port/db',
+    max: 10, // Maximum number of connections
+  },
   stripeSecretKey: 'sk_test_...',
   stripeWebhookSecret: 'whsec_...',
   // logger: <a pino logger>
@@ -39,22 +42,23 @@ await sync.processWebhook(payload, signature)
 
 ## Configuration
 
-| Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
-| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `databaseUrl`                   | string  | Postgres connection string                                                                                                                                                                                                                                                                               |
-| `schema`                        | string  | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 |
-| `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
-| `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
-| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               |
-| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                               |
-| `backfillRelatedEntities`       | boolean | Ensure related entities are present for foreign key integrity                                                                                                                                                                                                                                            |
-| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
-| `maxPostgresConnections`        | number  | Maximum Postgres connections                                                                                                                                                                                                                                                                             |
-| `logger`                        | Logger  | Logger instance (pino)                                                                                                                                                                                                                                                                                   |
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `databaseUrl` | string | **Deprecated:** Use `poolConfig` with a connection string instead. |
+| `schema` | string | Database schema name (default: `stripe`) |
+| `stripeSecretKey` | string | Stripe secret key |
+| `stripeWebhookSecret` | string | Stripe webhook signing secret |
+| `stripeApiVersion` | string | Stripe API version (default: `2020-08-27`) |
+| `autoExpandLists` | boolean | Fetch all list items from Stripe (not just the default 10) |
+| `backfillRelatedEntities` | boolean | Ensure related entities are present for foreign key integrity |
+| `revalidateObjectsViaStripeApi` | Array | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
+| `poolConfig` | object | Configuration for PostgreSQL connection pooling. Supports options like `connectionString`, `max`, and `keepAlive`. For more details, refer to the [Node-Postgres Pool API documentation](https://node-postgres.com/apis/pool). |
+| `maxPostgresConnections` | number | **Deprecated:** Use `poolConfig.max` instead to configure the maximum number of PostgreSQL connections. |
+| `logger` | Logger | Logger instance (pino) |
 
 ## Database Schema
 
-The library will create and manage a `stripe` schema in your Postgres database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
+The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
 
 ### Migrations
 
