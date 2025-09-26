@@ -42,19 +42,19 @@ await sync.processWebhook(payload, signature)
 
 ## Configuration
 
-| Option | Type | Description |
-| ------ | ---- | ----------- |
-| `databaseUrl` | string | **Deprecated:** Use `poolConfig` with a connection string instead. |
-| `schema` | string | Database schema name (default: `stripe`) |
-| `stripeSecretKey` | string | Stripe secret key |
-| `stripeWebhookSecret` | string | Stripe webhook signing secret |
-| `stripeApiVersion` | string | Stripe API version (default: `2020-08-27`) |
-| `autoExpandLists` | boolean | Fetch all list items from Stripe (not just the default 10) |
-| `backfillRelatedEntities` | boolean | Ensure related entities are present for foreign key integrity |
-| `revalidateObjectsViaStripeApi` | Array | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
-| `poolConfig` | object | Configuration for PostgreSQL connection pooling. Supports options like `connectionString`, `max`, and `keepAlive`. For more details, refer to the [Node-Postgres Pool API documentation](https://node-postgres.com/apis/pool). |
-| `maxPostgresConnections` | number | **Deprecated:** Use `poolConfig.max` instead to configure the maximum number of PostgreSQL connections. |
-| `logger` | Logger | Logger instance (pino) |
+| Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `databaseUrl`                   | string  | **Deprecated:** Use `poolConfig` with a connection string instead.                                                                                                                                                                                                                                       |
+| `schema`                        | string  | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 |
+| `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
+| `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
+| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               |
+| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                               |
+| `backfillRelatedEntities`       | boolean | Ensure related entities are present for foreign key integrity                                                                                                                                                                                                                                            |
+| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
+| `poolConfig`                    | object  | Configuration for PostgreSQL connection pooling. Supports options like `connectionString`, `max`, and `keepAlive`. For more details, refer to the [Node-Postgres Pool API documentation](https://node-postgres.com/apis/pool).                                                                           |
+| `maxPostgresConnections`        | number  | **Deprecated:** Use `poolConfig.max` instead to configure the maximum number of PostgreSQL connections.                                                                                                                                                                                                  |
+| `logger`                        | Logger  | Logger instance (pino)                                                                                                                                                                                                                                                                                   |
 
 ## Database Schema
 
