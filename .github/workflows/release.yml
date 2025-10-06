@@ -41,7 +41,8 @@ jobs:
 
   docker:
     name: Release on Docker Hub
-
+    permissions:
+      contents: read
     needs:
       - release
 
@@ -77,7 +78,9 @@ jobs:
 
   npm:
     name: Release on NPM
-
+    permissions:
+      contents: read
+      id-token: write # OIDC for releasing on npm
     needs:
       - release
 
@@ -99,6 +102,10 @@ jobs:
           cd packages/sync-engine
           pnpm version ${{ needs.release.outputs.new-release-version }} --no-git-tag-version
 
+      # Ensure npm 11.5.1 or later is installed for trusted publishing support
+      - name: Update npm
+        run: npm install -g npm@latest
+
       - name: Publish sync-engine to npm
         run: |
           cd packages/sync-engine
@@ -106,5 +113,3 @@ jobs:
           pnpm run build
           pnpm pack
           npm publish --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
