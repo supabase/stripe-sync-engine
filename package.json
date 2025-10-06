@@ -14,7 +14,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "pino": "^9.9.5"
+    "pino": "^10.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
