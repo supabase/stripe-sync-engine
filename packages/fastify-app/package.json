@@ -32,6 +32,7 @@
     "@types/pg": "^8.15.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.20.6",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.0.6"
   }
 }
