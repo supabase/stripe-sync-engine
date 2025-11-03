@@ -1,6 +1,6 @@
 import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
-import { EntitySchema } from '../schemas/types'
+import { EntitySchema } from '../schemas/types.js'
 
 type PostgresConfig = {
   schema: string
