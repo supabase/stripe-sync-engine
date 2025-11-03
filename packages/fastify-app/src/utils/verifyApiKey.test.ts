@@ -1,4 +1,4 @@
-import { apiKeyMatches } from './verifyApiKey'
+import { apiKeyMatches } from './verifyApiKey.js'
 import { describe, test, expect } from 'vitest'
 
 describe('verifyApiKey', () => {

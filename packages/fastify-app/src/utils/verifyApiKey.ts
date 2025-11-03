@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from 'fastify'
-import { getConfig } from './config'
+import { getConfig } from './config.js'
 import { timingSafeEqual } from 'node:crypto'
 
 const config = getConfig()

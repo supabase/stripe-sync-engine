@@ -3,10 +3,10 @@ import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
-import { getConfig } from './utils/config'
+import { getConfig } from './utils/config.js'
 import { StripeSync } from '@supabase/stripe-sync-engine'
-import { errorSchema } from './error'
-import { logger } from './logger'
+import { errorSchema } from './error.js'
+import { logger } from './logger.js'
 import { type PoolConfig } from 'pg'
 
 interface buildOpts extends FastifyServerOptions {

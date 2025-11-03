@@ -2,9 +2,9 @@ import type Stripe from 'stripe'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { runMigrations } from '@supabase/stripe-sync-engine'
-import { getConfig } from '../utils/config'
-import { mockStripe } from './helpers/mockStripe'
-import { logger } from '../logger'
+import { getConfig } from '../utils/config.js'
+import { mockStripe } from './helpers/mockStripe.js'
+import { logger } from '../logger.js'
 
 let stripeSync: StripeSync
 

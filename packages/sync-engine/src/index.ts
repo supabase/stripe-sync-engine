@@ -1,6 +1,6 @@
-export { StripeSync } from './stripeSync'
+export { StripeSync } from './stripeSync.js'
 
 export type * from './types'
 
-export { runMigrations } from './database/migrate'
-export { PostgresClient } from './database/postgres'
+export { runMigrations } from './database/migrate.js'
+export { PostgresClient } from './database/postgres.js'

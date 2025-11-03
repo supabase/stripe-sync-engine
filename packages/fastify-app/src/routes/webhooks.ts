@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { logger } from '../logger'
+import { logger } from '../logger.js'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/webhooks', {

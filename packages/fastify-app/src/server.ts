@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'node:http'
 import { runMigrations } from '@supabase/stripe-sync-engine'
-import { createServer } from './app'
-import { getConfig } from './utils/config'
-import { logger } from './logger'
+import { createServer } from './app.js'
+import { getConfig } from './utils/config.js'
+import { logger } from './logger.js'
 
 const main = async () => {
   const app: FastifyInstance<Server, IncomingMessage, ServerResponse> = await createServer({

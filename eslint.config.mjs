@@ -1,4 +1,5 @@
 import tsParser from '@typescript-eslint/parser'
+import importPlugin from 'eslint-plugin-import'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import js from '@eslint/js'
@@ -20,8 +21,21 @@ export default [
       ecmaVersion: 2022,
       sourceType: 'module',
     },
+    plugins: {
+      import: importPlugin,
+    },
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
+      'import/extensions': [
+        'error',
+        'always',
+        {
+          js: 'always',
+          jsx: 'always',
+          ts: 'always',
+          tsx: 'always',
+        },
+      ],
     },
   },
 ]

@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { verifyApiKey } from '../../utils/verifyApiKey'
+import { verifyApiKey } from '../../utils/verifyApiKey.js'
 import { SyncBackfillParams } from '@supabase/stripe-sync-engine'
 
 export default async function routes(fastify: FastifyInstance) {
