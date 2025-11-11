@@ -53,10 +53,11 @@ Options:
 
 ### Environment Variables
 
-Create a `.env` file in your project:
+Create a `.env` file in your project (copy from `.env.example`):
 
 ```env
 STRIPE_API_KEY=sk_test_...
+STRIPE_PROJECT_NAME=your_project_name
 NGROK_AUTH_TOKEN=your_ngrok_token
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 ```
@@ -67,6 +68,18 @@ Then run:
 stripe-sync
 ```
 
+### Testing with Stripe Events
+
+Trigger test Stripe events using the built-in script:
+
+```bash
+pnpm stripe:trigger payment_intent.succeeded
+pnpm stripe:trigger customer.created
+pnpm stripe:trigger subscription.created
+```
+
+This uses the Stripe CLI (via Docker) to send test webhook events to your running server.
+
 ## How It Works
 
 1. **Creates Tables**: Runs database migrations to create Stripe schema tables
@@ -75,13 +88,14 @@ stripe-sync
 4. **Streams Changes**: Real-time syncing of all Stripe events to PostgreSQL
 
 The CLI automatically:
-- Starts a Fastify server with `@supabase/stripe-sync-fastify`
+- Starts a Docker container running `supabase/stripe-sync-engine:latest`
 - Creates an ngrok tunnel for webhook delivery
 - Registers a Stripe webhook with all events enabled
-- Cleans up webhook and tunnel on exit (Ctrl-C)
+- Cleans up webhook, container, and tunnel on exit (Ctrl-C)
 
 ## Prerequisites
 
+- Docker to run the sync engine container
 - Node.js >= 22.0.0
 - PostgreSQL database
 - Stripe API key ([Get one here](https://dashboard.stripe.com/apikeys))
@@ -120,6 +134,13 @@ This would:
 4. Shut down after completion
 
 ## Troubleshooting
+
+### "Docker is not running" or "Failed to start Docker container"
+
+Make sure Docker is installed and running:
+- Install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
+- Verify Docker is running: `docker ps`
+- The CLI requires Docker to run the `supabase/stripe-sync-engine:latest` container
 
 ### "Database configuration is required"
 
