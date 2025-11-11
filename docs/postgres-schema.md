@@ -1,0 +1,63 @@
+# Stripe Sync Engine Postgres Schema
+
+This document describes the PostgreSQL objects that `@supabase/stripe-sync-engine` sets up inside the `stripe` schema.
+
+## Overview
+
+- **Schema**: All objects are created under the `stripe` schema.
+- **Sync bookkeeping**:
+  - Migration `0033` adds a `last_synced_at` column to every sync-managed table; only a subset also carry an `updated_at` column maintained by the shared trigger.
+  - Sync logic writes rows via upserts with timestamp protection.
+- **Sync status**: The `sync_status` table tracks the state of each resource’s synchronization, including incremental cursor positions.
+- **Triggers & functions**:
+  - `set_updated_at()` (migration `0012`) updates `updated_at` to `now()` on every row update.
+  - The trigger is attached to core tables when they are created; later tables that define their own `updated_at` also register the trigger.
+- **Foreign keys**: Migration `0034` drops FK constraints between most tables to avoid replication deadlocks. Columns still contain Stripe IDs for manual joins, but referential integrity is unenforced. The only remaining cascading FKs are on `checkout_session_line_items` (to `prices` and `checkout_sessions`).
+- **Schema parity**: Tables are modeled as near 1:1 copies of Stripe’s REST API resources, preserving field names and shapes wherever PostgreSQL types allow.
+
+## Custom Types
+
+| Type | Allowed values | Notes |
+| --- | --- | --- |
+| `stripe.pricing_type` | `one_time`, `recurring` |  |
+| `stripe.pricing_tiers` | `graduated`, `volume` |  |
+| `stripe.subscription_status` | `trialing`, `active`, `canceled`, `incomplete`, `incomplete_expired`, `past_due`, `unpaid`, `paused` | Added in migration `0039`. |
+| `stripe.invoice_status` | `draft`, `open`, `paid`, `uncollectible`, `void`, `deleted` | Added in migration `0023`. |
+| `stripe.subscription_schedule_status` | `not_started`, `active`, `completed`, `released`, `canceled` |  |
+
+## Tables
+
+| Table | Key columns / attributes | Indexes and notes |
+| --- | --- | --- |
+| `products` | `id`, `object`, `active`, `description`, `metadata`, `name`, `created`, `images`, `livemode`, `package_dimensions`, `shippable`, `statement_descriptor`, `unit_label`, `updated` (Stripe timestamp), `url`, `marketing_features`, `default_price`, `updated_at`, `last_synced_at` |  |
+| `customers` | `id`, `object`, `address`, `description`, `email`, `metadata`, `name`, `phone`, `shipping`, `balance`, `created`, `currency`, `default_source`, `delinquent`, `discount`, `invoice_prefix`, `invoice_settings`, `livemode`, `next_invoice_sequence`, `preferred_locales`, `tax_exempt`, `deleted` (boolean, default `false`), `updated_at`, `last_synced_at` |  |
+| `prices` | `id`, `object`, `active`, `currency`, `metadata`, `nickname`, `recurring`, `type` (`pricing_type`), `unit_amount`, `billing_scheme`, `created`, `livemode`, `lookup_key`, `tiers_mode` (`pricing_tiers`), `transform_quantity`, `unit_amount_decimal`, `product`, `updated_at`, `last_synced_at` |  |
+| `plans` | `id`, `object`, `active`, `amount`, `created`, `product`, `currency`, `interval`, `livemode`, `metadata`, `nickname`, `tiers_mode`, `usage_type`, `billing_scheme`, `interval_count`, `aggregate_usage`, `transform_usage`, `trial_period_days`, `updated_at`, `last_synced_at` |  |
+| `subscriptions` | `id`, `object`, `cancel_at_period_end`, `current_period_end`, `current_period_start`, `default_payment_method`, `items` (JSON), `metadata`, `pending_setup_intent`, `pending_update`, `status` (`subscription_status`), `application_fee_percent`, `billing_cycle_anchor`, `billing_thresholds`, `cancel_at`, `canceled_at`, `collection_method`, `created`, `days_until_due`, `default_source`, `default_tax_rates`, `discount`, `ended_at`, `livemode`, `next_pending_invoice_item_invoice`, `pause_collection`, `pending_invoice_item_interval`, `start_date`, `transfer_data`, `trial_end`, `trial_start`, `schedule`, `customer`, `latest_invoice`, `plan`, `updated_at`, `last_synced_at` |  |
+| `subscription_items` | `id`, `object`, `billing_thresholds`, `created`, `deleted` (boolean), `metadata`, `quantity`, `price`, `subscription`, `tax_rates`, `current_period_end`, `current_period_start`, `last_synced_at` | FK constraints removed in migration `0034`. |
+| `subscription_schedules` | `id`, `object`, `application`, `canceled_at`, `completed_at`, `created`, `current_phase`, `customer`, `default_settings`, `end_behavior`, `livemode`, `metadata`, `phases`, `released_at`, `released_subscription`, `status` (`subscription_schedule_status`), `subscription`, `test_clock`, `last_synced_at` |  |
+| `invoices` | Stripe invoice payload plus `customer`, `subscription`, `payment_intent`, `default_payment_method`, `default_source`, `on_behalf_of`, `charge`, `updated_at`, `last_synced_at` | Indexes: `stripe_invoices_customer_idx`, `stripe_invoices_subscription_idx`. Status enum includes `deleted`. |
+| `charges` | `id`, `object`, `paid`, `order`, `amount`, `review`, `source`, `status`, `created`, `dispute`, `invoice`, `outcome`, `refunds`, `updated` (Stripe timestamp), `captured`, `currency`, `customer`, `livemode`, `metadata`, `refunded`, `shipping`, `application`, `description`, `destination`, `failure_code`, `on_behalf_of`, `fraud_details`, `receipt_email`, `payment_intent`, `receipt_number`, `transfer_group`, `amount_refunded`, `application_fee`, `failure_message`, `source_transfer`, `balance_transaction`, `statement_descriptor`, `payment_method_details`, `updated_at`, `last_synced_at` |  |
+| `refunds` | `id`, `object`, `amount`, `balance_transaction`, `charge`, `created`, `currency`, `destination_details`, `metadata`, `payment_intent`, `reason`, `receipt_number`, `source_transfer_reversal`, `status`, `transfer_reversal`, `updated_at`, `last_synced_at` | Indexes: `stripe_refunds_charge_idx`, `stripe_refunds_payment_intent_idx`. |
+| `credit_notes` | `id`, `object`, `amount`, `amount_shipping`, `created`, `currency`, `customer`, `customer_balance_transaction`, `discount_amount`, `discount_amounts`, `invoice`, `lines`, `livemode`, `memo`, `metadata`, `number`, `out_of_band_amount`, `pdf`, `reason`, `refund`, `shipping_cost`, `status`, `subtotal`, `subtotal_excluding_tax`, `tax_amounts`, `total`, `total_excluding_tax`, `type`, `voided_at`, `last_synced_at` | Indexes: `stripe_credit_notes_customer_idx`, `stripe_credit_notes_invoice_idx`. |
+| `disputes` | `id`, `object`, `amount`, `charge`, `reason`, `status`, `created`, `currency`, `evidence`, `livemode`, `metadata`, `evidence_details`, `balance_transactions`, `is_charge_refundable`, `payment_intent`, `updated_at`, `last_synced_at` | Index: `stripe_dispute_created_idx` on `created`. |
+| `events` | `id`, `object`, `data`, `type`, `created`, `request`, `updated`, `livemode`, `api_version`, `pending_webhooks`, `updated_at`, `last_synced_at` |  |
+| `payouts` | `id`, `object`, `date`, `type`, `amount`, `method`, `status`, `created`, `currency`, `livemode`, `metadata`, `automatic`, `recipient`, `description`, `destination`, `source_type`, `arrival_date`, `bank_account`, `failure_code`, `transfer_group`, `amount_reversed`, `failure_message`, `source_transaction`, `balance_transaction`, `statement_descriptor`, `statement_description`, `failure_balance_transaction`, `updated_at`, `last_synced_at` |  |
+| `payment_intents` | `id`, `object`, `amount`, `amount_capturable`, `amount_details`, `amount_received`, `application`, `application_fee_amount`, `automatic_payment_methods`, `canceled_at`, `cancellation_reason`, `capture_method`, `client_secret`, `confirmation_method`, `created`, `currency`, `customer`, `description`, `invoice`, `last_payment_error`, `livemode`, `metadata`, `next_action`, `on_behalf_of`, `payment_method`, `payment_method_options`, `payment_method_types`, `processing`, `receipt_email`, `review`, `setup_future_usage`, `shipping`, `statement_descriptor`, `statement_descriptor_suffix`, `status`, `transfer_data`, `transfer_group`, `last_synced_at` | Indexes: `stripe_payment_intents_customer_idx`, `stripe_payment_intents_invoice_idx`. |
+| `payment_methods` | `id`, `object`, `created`, `customer`, `type`, `billing_details`, `metadata`, `card`, `last_synced_at` | Index: `stripe_payment_methods_customer_idx`. |
+| `setup_intents` | `id`, `object`, `created`, `customer`, `description`, `payment_method`, `status`, `usage`, `cancellation_reason`, `latest_attempt`, `mandate`, `single_use_mandate`, `on_behalf_of`, `last_synced_at` | Index: `stripe_setup_intents_customer_idx`. |
+| `tax_ids` | `id`, `object`, `country`, `customer`, `type`, `value`, `created`, `livemode`, `owner`, `last_synced_at` | Index: `stripe_tax_ids_customer_idx`. |
+| `early_fraud_warnings` | `id`, `object`, `actionable`, `charge`, `created`, `fraud_type`, `livemode`, `payment_intent`, `updated_at`, `last_synced_at` | Indexes: `stripe_early_fraud_warnings_charge_idx`, `stripe_early_fraud_warnings_payment_intent_idx`. |
+| `reviews` | `id`, `object`, `billing_zip`, `charge`, `created`, `closed_reason`, `livemode`, `ip_address`, `ip_address_location`, `open`, `opened_reason`, `payment_intent`, `reason`, `session`, `updated_at`, `last_synced_at` | Indexes: `stripe_reviews_charge_idx`, `stripe_reviews_payment_intent_idx`. |
+| `coupons` | `id`, `object`, `name`, `valid`, `created`, `updated`, `currency`, `duration`, `livemode`, `metadata`, `redeem_by`, `amount_off`, `percent_off`, `times_redeemed`, `max_redemptions`, `duration_in_months`, `percent_off_precise`, `updated_at`, `last_synced_at` |  |
+| `checkout_sessions` | Attributes from migration `0035`, including `customer`, `subscription`, `payment_intent`, `invoice`, plus `updated_at` trigger column and `last_synced_at` | Indexes on `customer`, `subscription`, `payment_intent`, `invoice`. |
+| `checkout_session_line_items` | `id`, `object`, `amount_discount`, `amount_subtotal`, `amount_tax`, `amount_total`, `currency`, `description`, `price`, `quantity`, `checkout_session`, `updated_at`, `last_synced_at` | Indexes on `checkout_session` and `price`. FKs: `price` → `prices`, `checkout_session` → `checkout_sessions` (`ON DELETE CASCADE`). |
+| `features` | `id`, `object`, `livemode`, `name`, `lookup_key` (unique), `active`, `metadata`, `updated_at`, `last_synced_at` |  |
+| `active_entitlements` | `id`, `object`, `livemode`, `feature`, `customer`, `lookup_key` (unique), `updated_at`, `last_synced_at` | Indexes on `customer`, `feature`. |
+| `sync_status` | `id`, `resource` (Stripe object name), `status` (`queued`, `running`, `complete`, `error`), `last_synced_at`, `last_incremental_cursor`, `error_message`, `updated_at` | Primary key on `id`, unique constraint on `resource` to ensure single row per table; used by the sync scheduler to resume incremental runs. |
+
+## Additional Notes
+
+- All timestamp columns sourced from Stripe APIs (`created`, `updated`, etc.) are stored as integers representing UNIX seconds unless noted otherwise.
+- JSON-bearing columns mirror Stripe’s nested structures; application code frequently stringifies arrays before insertion to satisfy PostgreSQL JSON requirements.
+- Even without FK constraints, the sync engine backfills related entities (e.g., subscriptions fetch missing customers) to keep data sets coherent.
