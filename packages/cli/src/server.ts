@@ -1,22 +1,26 @@
-import Docker from 'dockerode'
-import chalk from 'chalk'
+import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
+import fastify, { FastifyInstance } from 'fastify'
+import { type PoolConfig } from 'pg'
+
+// TODO: Ideally we would import createServer from '@supabase/stripe-sync-fastify/src/app'
+// but there's an ESM/CommonJS module mismatch (CLI is ESM, fastify-app is CommonJS).
+// For now, we build the server inline using StripeSync directly.
 
 export interface ServerInstance {
   port: number
   apiKey: string
-  containerId: string
   close: () => Promise<void>
 }
 
 /**
- * Start the Docker container for handling Stripe webhooks.
- * Uses the official supabase/stripe-sync-fastify Docker image.
+ * Start the Fastify server for handling Stripe webhooks using library mode.
+ * Runs migrations and starts the sync engine directly without Docker.
  *
  * @param databaseUrl - Postgres connection string
  * @param stripeApiKey - Stripe secret API key
  * @param stripeWebhookSecret - Webhook signing secret from Stripe
  * @param port - Port to listen on (default: 3000)
- * @returns Server instance with port, apiKey, containerId, and close function
+ * @returns Server instance with port, apiKey, and close function
  */
 export async function startServer(
   databaseUrl: string,
@@ -25,74 +29,85 @@ export async function startServer(
   port: number = 3000
 ): Promise<ServerInstance> {
   try {
-    console.log(chalk.blue(`\nStarting Dockerized server on port ${port}...`))
-
-    // Generate a random API key for this session
     const apiKey = `dev-${Math.random().toString(36).substring(2, 15)}`
+    const schema = process.env.SCHEMA || 'stripe'
 
-    const docker = new Docker()
-
-    // Map database URL for container access:
-    // - Docker Desktop (macOS/Windows): use host.docker.internal
-    // - Linux with bridge network: add --add-host parameter
-    const containerDatabaseUrl = databaseUrl.replace('localhost', 'host.docker.internal')
-
-    // Create and start container with port mapping (works on all platforms)
-    const container = await docker.createContainer({
-      Image: 'supabase/stripe-sync-engine:latest',
-      Env: [
-        `DATABASE_URL=${containerDatabaseUrl}`,
-        `STRIPE_SECRET_KEY=${stripeApiKey}`,
-        `STRIPE_WEBHOOK_SECRET=${stripeWebhookSecret}`,
-        `API_KEY=${apiKey}`,
-        `PORT=${port}`,
-        `SCHEMA=${process.env.SCHEMA || 'stripe'}`,
-        `STRIPE_API_VERSION=${process.env.STRIPE_API_VERSION || '2020-08-27'}`,
-        `AUTO_EXPAND_LISTS=${process.env.AUTO_EXPAND_LISTS || 'true'}`,
-        `BACKFILL_RELATED_ENTITIES=${process.env.BACKFILL_RELATED_ENTITIES || 'true'}`,
-        'DISABLE_MIGRATIONS=false',
-      ],
-      ExposedPorts: {
-        [`${port}/tcp`]: {},
-      },
-      HostConfig: {
-        PortBindings: {
-          [`${port}/tcp`]: [{ HostPort: `${port}` }],
-        },
-        // On Linux, map host.docker.internal to host gateway IP
-        ExtraHosts: ['host.docker.internal:host-gateway'],
-        AutoRemove: true,
-      },
+    // Run migrations
+    await runMigrations({
+      databaseUrl,
+      schema,
     })
 
-    await container.start()
+    // Create StripeSync instance
+    const poolConfig: PoolConfig = {
+      max: 10,
+      connectionString: databaseUrl,
+      keepAlive: true,
+    }
 
-    const containerId = container.id
+    const stripeSync = new StripeSync({
+      databaseUrl,
+      schema,
+      stripeSecretKey: stripeApiKey,
+      stripeWebhookSecret,
+      stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
+      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
+      poolConfig,
+    })
 
-    // Wait for container to be ready
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    // Create Fastify app
+    const app: FastifyInstance = fastify({
+      disableRequestLogging: true,
+    })
 
-    console.log(chalk.green(`✓ Dockerized server started: ${containerId.substring(0, 12)}`))
+    // Add webhook content parser (needs raw buffer for signature verification)
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      try {
+        const newBody = req.routeOptions.url === '/webhooks'
+          ? { raw: body }
+          : JSON.parse(body.toString())
+        done(null, newBody)
+      } catch (error: any) {
+        error.statusCode = 400
+        done(error, undefined)
+      }
+    })
+
+    // Webhook route
+    app.post('/webhooks', async (request, reply) => {
+      const sig = request.headers['stripe-signature']
+      if (!sig || typeof sig !== 'string') {
+        return reply.code(400).send({ error: 'Missing stripe-signature header' })
+      }
+
+      try {
+        const body = (request.body as any).raw
+        await stripeSync.processWebhook(body, sig)
+        return reply.code(200).send({ received: true })
+      } catch (error: any) {
+        request.log.error(error)
+        return reply.code(400).send({ error: error.message })
+      }
+    })
+
+    // Health check
+    app.get('/health', async (request, reply) => {
+      return reply.code(200).send({ status: 'ok' })
+    })
+
+    await app.listen({ port, host: '0.0.0.0' })
 
     return {
       port,
       apiKey,
-      containerId,
       close: async () => {
-        console.log(chalk.blue('\nStopping Docker container...'))
-        try {
-          await container.stop()
-          console.log(chalk.green('✓ Docker container stopped'))
-        } catch (error) {
-          // Container might already be stopped
-          console.log(chalk.yellow('⚠ Container already stopped'))
-        }
+        await app.close()
       },
     }
   } catch (error) {
-    console.error(chalk.red('\nFailed to start Dockerized server:'))
     if (error instanceof Error) {
-      console.error(chalk.red(error.message))
+      throw new Error(`Failed to start server: ${error.message}`)
     }
     throw error
   }
