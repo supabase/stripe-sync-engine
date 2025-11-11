@@ -11,17 +11,17 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 ## Installation
 
 ```sh
-npm install @supabase/stripe-sync-engine stripe
+npm install @stripe-experiment/sync stripe
 # or
-pnpm add @supabase/stripe-sync-engine stripe
+pnpm add @stripe-experiment/sync stripe
 # or
-yarn add @supabase/stripe-sync-engine stripe
+yarn add @stripe-experiment/sync stripe
 ```
 
 ## Usage
 
 ```ts
-import { StripeSync } from '@supabase/stripe-sync-engine'
+import { StripeSync } from '@stripe-experiment/sync'
 
 const sync = new StripeSync({
   poolConfig: {
@@ -99,14 +99,14 @@ To generate a base64-encoded CA certificate, follow these steps:
 
 ## Database Schema
 
-The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
+The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.). The column layout closely mirrors Stripe’s REST API payloads, so the database is effectively an on-disk copy of Stripe’s schema. A companion `sync_status` table keeps a single row per Stripe resource to record synchronization state, including last incremental cursors, job status (`queued`, `running`, `complete`, `error`), and any failure details used for retries.
 
 ### Migrations
 
 Migrations are included in the `db/migrations` directory. You can run them using the provided `runMigrations` function:
 
 ```ts
-import { runMigrations } from '@supabase/stripe-sync-engine'
+import { runMigrations } from '@stripe-experiment/sync'
 
 await runMigrations({ databaseUrl: 'postgres://...' })
 ```
@@ -123,19 +123,28 @@ await sync.syncSingleEntity('cus_12345')
 
 The entity type is detected automatically based on the Stripe ID prefix (e.g., `cus_` for customer, `prod_` for product).
 
-### Backfilling Data
+### Syncing entire tables
 
-To backfill Stripe data (e.g., all products created after a certain date), use the `syncBackfill` method:
+Every Stripe resource sync is resumable and identifiably incremental. The engine stores per-table state in `stripe.sync_status`, which records the last incremental cursor, job status, and any failure context. When a sync restarts, it reads the previous cursor and continues without reprocessing completed windows.
+
+- **Idempotent checkpoints**: Each batch writes its ending Stripe pagination cursor before advancing, and every row is upserted with Stripe IDs plus `last_synced_at` guards. Replaying the same window simply reasserts the latest data without duplication.
+- **Interruptible runs**: You can stop the worker at any time; the next run resumes from the recorded cursor with no duplicated rows thanks to upserts guarded by `last_synced_at`.
+- **Selectable scope**: Schedule incremental jobs per Stripe resource (e.g., invoices, subscriptions) or run them all; the engine guarantees the last-known state is preserved independently for each.
+- **Error recovery**: When a batch fails, the engine marks the status as `error` and preserves the cursor. Fix the issue and rerun to pick up exactly where it stopped.
+- **Incremental backfill**: Initial backfills simply seed the cursor to the earliest desired timestamp and let the incremental runner stream forward, so the same resumable machinery powers ongoing syncs and historical loads without separate code paths.
+
+#### TypeScript API Reference
 
 ```ts
-await sync.syncBackfill({
+// Resume or start a backfill using incremental sync semantics
+await sync.startResumableSync({
   object: 'product',
-  created: { gte: 1643872333 }, // Unix timestamp
+  created: { gte: 1643872333 }, // Unix timestamp cursor seed
 })
 ```
 
-- `object` can be one of: `all`, `charge`, `customer`, `dispute`, `invoice`, `payment_method`, `payment_intent`, `plan`, `price`, `product`, `setup_intent`, `subscription`.
-- `created` is a Stripe RangeQueryParam and supports `gt`, `gte`, `lt`, `lte`.
+- `startResumableSync(options)` seeds the incremental cursor based on the filters you pass (`object`, `created`, etc.) and then streams forward, updating `stripe.sync_status` as batches finish.
+- `syncSingleEntity(id)` revalidates a single Stripe resource and is safe to call repeatedly; updates are idempotent.
 
 > **Note:**
 > For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.
