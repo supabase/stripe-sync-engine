@@ -1,6 +1,7 @@
 import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
 import fastify, { FastifyInstance } from 'fastify'
 import { type PoolConfig } from 'pg'
+import chalk from 'chalk'
 
 // TODO: Ideally we would import createServer from '@supabase/stripe-sync-fastify/src/app'
 // but there's an ESM/CommonJS module mismatch (CLI is ESM, fastify-app is CommonJS).
@@ -56,6 +57,8 @@ export async function startServer(
       poolConfig,
     })
 
+    console.log(chalk.blue(`\nStarting server on port ${port}...`))
+
     // Create Fastify app
     const app: FastifyInstance = fastify({
       disableRequestLogging: true,
@@ -98,16 +101,25 @@ export async function startServer(
 
     await app.listen({ port, host: '0.0.0.0' })
 
+    console.log(chalk.green(`✓ Server started on port ${port}`))
+
     return {
       port,
       apiKey,
       close: async () => {
-        await app.close()
+        console.log(chalk.blue('\nStopping server...'))
+        try {
+          await app.close()
+          console.log(chalk.green('✓ Server stopped'))
+        } catch (error) {
+          console.log(chalk.yellow('⚠ Server already stopped'))
+        }
       },
     }
   } catch (error) {
+    console.log(chalk.red('\nFailed to start server:'))
     if (error instanceof Error) {
-      throw new Error(`Failed to start server: ${error.message}`)
+      console.error(chalk.red(error.message))
     }
     throw error
   }

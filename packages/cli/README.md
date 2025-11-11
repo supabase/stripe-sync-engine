@@ -88,14 +88,13 @@ This uses the Stripe CLI (via Docker) to send test webhook events to your runnin
 4. **Streams Changes**: Real-time syncing of all Stripe events to PostgreSQL
 
 The CLI automatically:
-- Starts a Docker container running `supabase/stripe-sync-engine:latest`
+- Starts a Fastify server with the sync engine running natively
 - Creates an ngrok tunnel for webhook delivery
 - Registers a Stripe webhook with all events enabled
-- Cleans up webhook, container, and tunnel on exit (Ctrl-C)
+- Cleans up webhook and tunnel on exit (Ctrl-C)
 
 ## Prerequisites
 
-- Docker to run the sync engine container
 - Node.js >= 22.0.0
 - PostgreSQL database
 - Stripe API key ([Get one here](https://dashboard.stripe.com/apikeys))
@@ -134,13 +133,6 @@ This would:
 4. Shut down after completion
 
 ## Troubleshooting
-
-### "Docker is not running" or "Failed to start Docker container"
-
-Make sure Docker is installed and running:
-- Install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
-- Verify Docker is running: `docker ps`
-- The CLI requires Docker to run the `supabase/stripe-sync-engine:latest` container
 
 ### "Database configuration is required"
 
