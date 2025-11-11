@@ -32,23 +32,35 @@ export async function startServer(
 
     const docker = new Docker()
 
-    // Create and start container
+    // Map database URL for container access:
+    // - Docker Desktop (macOS/Windows): use host.docker.internal
+    // - Linux with bridge network: add --add-host parameter
+    const containerDatabaseUrl = databaseUrl.replace('localhost', 'host.docker.internal')
+
+    // Create and start container with port mapping (works on all platforms)
     const container = await docker.createContainer({
       Image: 'supabase/stripe-sync-engine:latest',
       Env: [
-        `DATABASE_URL=${databaseUrl}`,
+        `DATABASE_URL=${containerDatabaseUrl}`,
         `STRIPE_SECRET_KEY=${stripeApiKey}`,
         `STRIPE_WEBHOOK_SECRET=${stripeWebhookSecret}`,
         `API_KEY=${apiKey}`,
-        `PORT=${port}`, // Use the actual port since we're on host network
+        `PORT=${port}`,
         `SCHEMA=${process.env.SCHEMA || 'stripe'}`,
         `STRIPE_API_VERSION=${process.env.STRIPE_API_VERSION || '2020-08-27'}`,
         `AUTO_EXPAND_LISTS=${process.env.AUTO_EXPAND_LISTS || 'true'}`,
         `BACKFILL_RELATED_ENTITIES=${process.env.BACKFILL_RELATED_ENTITIES || 'true'}`,
         'DISABLE_MIGRATIONS=false',
       ],
+      ExposedPorts: {
+        [`${port}/tcp`]: {},
+      },
       HostConfig: {
-        NetworkMode: 'host', // Use host network so container can access localhost
+        PortBindings: {
+          [`${port}/tcp`]: [{ HostPort: `${port}` }],
+        },
+        // On Linux, map host.docker.internal to host gateway IP
+        ExtraHosts: ['host.docker.internal:host-gateway'],
         AutoRemove: true,
       },
     })
