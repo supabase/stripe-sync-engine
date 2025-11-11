@@ -1,0 +1,58 @@
+{
+  "name": "@supabase/stripe-sync-cli",
+  "version": "0.0.0",
+  "description": "CLI to sync your stripe data to postgres",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "stripe-sync": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "dev": "tsx src/index.ts",
+    "lint": "eslint src",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "stripe:trigger": "./scripts/stripe-trigger.sh"
+  },
+  "keywords": [
+    "stripe",
+    "webhook",
+    "cli",
+    "development",
+    "ngrok",
+    "sync"
+  ],
+  "dependencies": {
+    "@ngrok/ngrok": "^1.4.1",
+    "@supabase/stripe-sync-engine": "workspace:",
+    "@supabase/stripe-sync-fastify": "workspace:",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dockerode": "^4.0.9",
+    "dotenv": "^16.4.7",
+    "inquirer": "^12.3.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.45",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.10.2",
+    "fastify": "^5.6.2",
+    "stripe": "^17.7.0",
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
