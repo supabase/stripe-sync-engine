@@ -1,23 +1,22 @@
-import { FastifyInstance } from 'fastify'
+import Docker from 'dockerode'
 import chalk from 'chalk'
-import { createServer } from '@supabase/stripe-sync-fastify/dist/src/app.js'
-import { runMigrations } from '@supabase/stripe-sync-engine'
 
 export interface ServerInstance {
   port: number
   apiKey: string
+  containerId: string
   close: () => Promise<void>
 }
 
 /**
- * Start the Fastify server for handling Stripe webhooks.
- * Sets up environment variables required by @supabase/stripe-sync-fastify.
+ * Start the Docker container for handling Stripe webhooks.
+ * Uses the official supabase/stripe-sync-fastify Docker image.
  *
  * @param databaseUrl - Postgres connection string
  * @param stripeApiKey - Stripe secret API key
  * @param stripeWebhookSecret - Webhook signing secret from Stripe
  * @param port - Port to listen on (default: 3000)
- * @returns Server instance with port, apiKey, and close function
+ * @returns Server instance with port, apiKey, containerId, and close function
  */
 export async function startServer(
   databaseUrl: string,
@@ -26,51 +25,60 @@ export async function startServer(
   port: number = 3000
 ): Promise<ServerInstance> {
   try {
-    console.log(chalk.blue(`\nStarting Fastify server on port ${port}...`))
+    console.log(chalk.blue(`\nStarting Dockerized server on port ${port}...`))
 
     // Generate a random API key for this session
     const apiKey = `dev-${Math.random().toString(36).substring(2, 15)}`
 
-    // Set required environment variables for fastify-app
-    process.env.DATABASE_URL = databaseUrl
-    process.env.STRIPE_SECRET_KEY = stripeApiKey
-    process.env.STRIPE_WEBHOOK_SECRET = stripeWebhookSecret
-    process.env.PORT = String(port)
-    process.env.API_KEY = apiKey
-    process.env.SCHEMA = process.env.SCHEMA || 'stripe'
-    process.env.STRIPE_API_VERSION = process.env.STRIPE_API_VERSION || '2020-08-27'
-    process.env.AUTO_EXPAND_LISTS = process.env.AUTO_EXPAND_LISTS || 'true'
-    process.env.BACKFILL_RELATED_ENTITIES = process.env.BACKFILL_RELATED_ENTITIES || 'true'
-    process.env.DISABLE_MIGRATIONS = 'false' // Always run migrations in dev
+    const docker = new Docker()
 
-    // Run migrations first
-    console.log(chalk.blue('Running database migrations...'))
-    await runMigrations({
-      databaseUrl,
-      schema: process.env.SCHEMA,
-    })
-    console.log(chalk.green('✓ Migrations completed'))
-
-    const app: FastifyInstance = await createServer({
-      disableRequestLogging: false,
-      exposeDocs: false,
+    // Create and start container
+    const container = await docker.createContainer({
+      Image: 'supabase/stripe-sync-engine:latest',
+      Env: [
+        `DATABASE_URL=${databaseUrl}`,
+        `STRIPE_SECRET_KEY=${stripeApiKey}`,
+        `STRIPE_WEBHOOK_SECRET=${stripeWebhookSecret}`,
+        `API_KEY=${apiKey}`,
+        `PORT=${port}`, // Use the actual port since we're on host network
+        `SCHEMA=${process.env.SCHEMA || 'stripe'}`,
+        `STRIPE_API_VERSION=${process.env.STRIPE_API_VERSION || '2020-08-27'}`,
+        `AUTO_EXPAND_LISTS=${process.env.AUTO_EXPAND_LISTS || 'true'}`,
+        `BACKFILL_RELATED_ENTITIES=${process.env.BACKFILL_RELATED_ENTITIES || 'true'}`,
+        'DISABLE_MIGRATIONS=false',
+      ],
+      HostConfig: {
+        NetworkMode: 'host', // Use host network so container can access localhost
+        AutoRemove: true,
+      },
     })
 
-    // Start listening
-    await app.listen({ port, host: '0.0.0.0' })
-    console.log(chalk.green(`✓ Server listening on port ${port}`))
+    await container.start()
+
+    const containerId = container.id
+
+    // Wait for container to be ready
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    console.log(chalk.green(`✓ Dockerized server started: ${containerId.substring(0, 12)}`))
 
     return {
       port,
       apiKey,
+      containerId,
       close: async () => {
-        console.log(chalk.blue('\nStopping server...'))
-        await app.close()
-        console.log(chalk.green('✓ Server stopped'))
+        console.log(chalk.blue('\nStopping Docker container...'))
+        try {
+          await container.stop()
+          console.log(chalk.green('✓ Docker container stopped'))
+        } catch (error) {
+          // Container might already be stopped
+          console.log(chalk.yellow('⚠ Container already stopped'))
+        }
       },
     }
   } catch (error) {
-    console.error(chalk.red('\nFailed to start server:'))
+    console.error(chalk.red('\nFailed to start Dockerized server:'))
     if (error instanceof Error) {
       console.error(chalk.red(error.message))
     }
