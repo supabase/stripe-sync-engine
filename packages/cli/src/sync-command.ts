@@ -20,8 +20,8 @@ export async function syncCommand(options: CliOptions): Promise<void> {
   const webhookPath = '/webhooks'
 
   // Setup cleanup handler
-  const cleanup = async () => {
-    console.log(chalk.blue('\n\nCleaning up...'))
+  const cleanup = async (signal?: string) => {
+    console.log(chalk.blue(`\n\nCleaning up... (signal: ${signal || 'manual'})`))
 
     // Delete webhook endpoint
     if (webhookId) {
@@ -36,8 +36,9 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     if (tunnel) {
       try {
         await tunnel.close()
+        console.log(chalk.green('✓ Tunnel closed'))
       } catch (error) {
-        // Best effort cleanup
+        console.log(chalk.yellow('⚠ Could not close tunnel'))
       }
     }
 
@@ -45,16 +46,17 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       try {
         await server.close()
       } catch (error) {
-        // Best effort cleanup
+        console.log(chalk.yellow('⚠ Could not close server'))
       }
     }
 
+    console.log(chalk.green('✓ Cleanup complete'))
     process.exit(0)
   }
 
   // Register cleanup handlers
-  process.on('SIGINT', cleanup)
-  process.on('SIGTERM', cleanup)
+  process.on('SIGINT', () => cleanup('SIGINT'))
+  process.on('SIGTERM', () => cleanup('SIGTERM'))
 
   try {
     // Load configuration (silently)
