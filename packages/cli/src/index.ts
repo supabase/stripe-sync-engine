@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { syncCommand } from './sync-command'
+import { syncCommand } from './command'
 
 const program = new Command()
 
