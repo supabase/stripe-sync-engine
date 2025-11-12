@@ -1,8 +1,9 @@
 import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
-import fastify, { FastifyInstance } from 'fastify'
+import express, { Express } from 'express'
 import { type PoolConfig } from 'pg'
 import chalk from 'chalk'
 import { createTunnel, NgrokTunnel } from './ngrok'
+import http from 'node:http'
 
 export interface StripeSyncServerOptions {
   databaseUrl: string
@@ -27,12 +28,13 @@ export interface StripeSyncServerInfo {
  * - Creates ngrok tunnel
  * - Sets up Stripe webhook
  * - Runs database migrations
- * - Starts Fastify server with webhook handler
+ * - Starts Express server with webhook handler
  */
 export class StripeSyncServer {
   private options: Required<StripeSyncServerOptions>
   private tunnel: NgrokTunnel | null = null
-  private app: FastifyInstance | null = null
+  private app: Express | null = null
+  private server: http.Server | null = null
   private webhookId: string | null = null
   private webhookUuid: string | null = null
   private stripeSync: StripeSync | null = null
@@ -103,10 +105,18 @@ export class StripeSyncServer {
       console.log(chalk.cyan(`  URL: ${webhook.url}`))
       console.log(chalk.cyan(`  Events: All events (*)`))
 
-      // 5. Start Fastify server
+      // 5. Start Express server
       console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
-      this.app = this.createFastifyServer()
-      await this.app.listen({ port: this.options.port, host: '0.0.0.0' })
+      this.app = this.createExpressServer()
+
+      // Wrap Express listen in a promise
+      await new Promise<void>((resolve, reject) => {
+        this.server = this.app!.listen(this.options.port, '0.0.0.0', () => {
+          resolve()
+        })
+        this.server.on('error', reject)
+      })
+
       console.log(chalk.green(`✓ Server started on port ${this.options.port}`))
 
       return {
@@ -132,7 +142,7 @@ export class StripeSyncServer {
    * Stops all services and cleans up resources:
    * 1. Deletes Stripe webhook endpoint
    * 2. Closes ngrok tunnel
-   * 3. Closes Fastify server
+   * 3. Closes Express server
    */
   async stop(): Promise<void> {
     // Delete webhook endpoint using StripeSync
@@ -154,9 +164,14 @@ export class StripeSyncServer {
     }
 
     // Close server
-    if (this.app) {
+    if (this.server) {
       try {
-        await this.app.close()
+        await new Promise<void>((resolve, reject) => {
+          this.server!.close((err) => {
+            if (err) reject(err)
+            else resolve()
+          })
+        })
         console.log(chalk.green('✓ Server stopped'))
       } catch (error) {
         console.log(chalk.yellow('⚠ Server already stopped'))
@@ -167,50 +182,60 @@ export class StripeSyncServer {
   }
 
   /**
-   * Creates and configures the Fastify server with webhook handling.
+   * Mounts the Stripe webhook handler on the provided Express app.
+   * Applies raw body parser middleware for signature verification.
+   * IMPORTANT: Must be called BEFORE app.use(express.json()) to ensure raw body parsing.
    */
-  private createFastifyServer(): FastifyInstance {
-    const app = fastify({
-      disableRequestLogging: true,
-    })
+  private mountWebhook(app: Express): void {
+    // Apply raw body parser ONLY to this webhook route
+    app.use('/webhooks/:uuid', express.raw({ type: 'application/json' }))
 
-    // Add webhook content parser (needs raw buffer for signature verification)
-    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
-      try {
-        // Check if the route is a webhook route (starts with /webhooks/)
-        const isWebhookRoute = req.routeOptions.url?.startsWith('/webhooks/')
-        const newBody = isWebhookRoute
-          ? { raw: body }
-          : JSON.parse(body.toString())
-        done(null, newBody)
-      } catch (error: any) {
-        error.statusCode = 400
-        done(error, undefined)
-      }
-    })
-
-    // Webhook route with UUID parameter
-    app.post('/webhooks/:uuid', async (request, reply) => {
-      const sig = request.headers['stripe-signature']
+    // Mount the webhook handler
+    app.post('/webhooks/:uuid', async (req, res) => {
+      const sig = req.headers['stripe-signature']
       if (!sig || typeof sig !== 'string') {
-        return reply.code(400).send({ error: 'Missing stripe-signature header' })
+        console.error('[Webhook] Missing stripe-signature header')
+        return res.status(400).send({ error: 'Missing stripe-signature header' })
       }
 
-      const { uuid } = request.params as { uuid: string }
+      const { uuid } = req.params
+
+      // express.raw puts the raw body in req.body as a Buffer
+      const rawBody = req.body
+      if (!rawBody || !Buffer.isBuffer(rawBody)) {
+        console.error('[Webhook] Body is not a Buffer!', {
+          hasBody: !!rawBody,
+          bodyType: typeof rawBody,
+          isBuffer: Buffer.isBuffer(rawBody),
+          bodyConstructor: rawBody?.constructor?.name,
+        })
+        return res.status(400).send({ error: 'Missing raw body for signature verification' })
+      }
 
       try {
-        const body = (request.body as any).raw
-        await this.stripeSync!.processWebhook(body, sig, uuid)
-        return reply.code(200).send({ received: true })
+        // Process webhook with Stripe Sync Engine
+        await this.stripeSync!.processWebhook(rawBody, sig, uuid)
+
+        return res.status(200).send({ received: true })
       } catch (error: any) {
-        request.log.error(error)
-        return reply.code(400).send({ error: error.message })
+        console.error('[Webhook] Processing error:', error.message)
+        return res.status(400).send({ error: error.message })
       }
     })
+  }
+
+  /**
+   * Creates and configures the Express server with webhook handling.
+   */
+  private createExpressServer(): Express {
+    const app = express()
+
+    // Mount webhook handler FIRST (before any other middleware)
+    this.mountWebhook(app)
 
     // Health check
-    app.get('/health', async (request, reply) => {
-      return reply.code(200).send({ status: 'ok' })
+    app.get('/health', async (req, res) => {
+      return res.status(200).json({ status: 'ok' })
     })
 
     return app
