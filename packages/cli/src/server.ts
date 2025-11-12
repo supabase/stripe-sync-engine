@@ -1,99 +1,201 @@
-import Docker from 'dockerode'
+import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
+import fastify, { FastifyInstance } from 'fastify'
+import { type PoolConfig } from 'pg'
 import chalk from 'chalk'
+import { createTunnel, NgrokTunnel } from './ngrok'
+import { createWebhook, deleteWebhook } from './stripe-webhook'
 
-export interface ServerInstance {
+export interface StripeSyncServerOptions {
+  databaseUrl: string
+  stripeApiKey: string
+  ngrokAuthToken: string
+  port?: number
+  webhookPath?: string
+  schema?: string
+  stripeApiVersion?: string
+  autoExpandLists?: boolean
+  backfillRelatedEntities?: boolean
+}
+
+export interface StripeSyncServerInfo {
+  tunnelUrl: string
+  webhookUrl: string
   port: number
-  apiKey: string
-  containerId: string
-  close: () => Promise<void>
 }
 
 /**
- * Start the Docker container for handling Stripe webhooks.
- * Uses the official supabase/stripe-sync-fastify Docker image.
- *
- * @param databaseUrl - Postgres connection string
- * @param stripeApiKey - Stripe secret API key
- * @param stripeWebhookSecret - Webhook signing secret from Stripe
- * @param port - Port to listen on (default: 3000)
- * @returns Server instance with port, apiKey, containerId, and close function
+ * Encapsulates the entire Stripe Sync orchestration:
+ * - Creates ngrok tunnel
+ * - Sets up Stripe webhook
+ * - Runs database migrations
+ * - Starts Fastify server with webhook handler
  */
-export async function startServer(
-  databaseUrl: string,
-  stripeApiKey: string,
-  stripeWebhookSecret: string,
-  port: number = 3000
-): Promise<ServerInstance> {
-  try {
-    console.log(chalk.blue(`\nStarting Dockerized server on port ${port}...`))
+export class StripeSyncServer {
+  private options: Required<StripeSyncServerOptions>
+  private tunnel: NgrokTunnel | null = null
+  private app: FastifyInstance | null = null
+  private webhookId: string | null = null
+  private stripeSync: StripeSync | null = null
 
-    // Generate a random API key for this session
-    const apiKey = `dev-${Math.random().toString(36).substring(2, 15)}`
+  constructor(options: StripeSyncServerOptions) {
+    this.options = {
+      port: 3000,
+      webhookPath: '/webhooks',
+      schema: 'stripe',
+      stripeApiVersion: '2020-08-27',
+      autoExpandLists: false,
+      backfillRelatedEntities: true,
+      ...options,
+    }
+  }
 
-    const docker = new Docker()
+  /**
+   * Starts the complete Stripe Sync infrastructure:
+   * 1. Creates ngrok tunnel
+   * 2. Creates Stripe webhook endpoint
+   * 3. Runs database migrations
+   * 4. Starts Fastify server
+   *
+   * @returns Information about the running instance
+   */
+  async start(): Promise<StripeSyncServerInfo> {
+    try {
+      // 1. Create tunnel
+      this.tunnel = await createTunnel(this.options.port, this.options.ngrokAuthToken)
+      const webhookUrl = `${this.tunnel.url}${this.options.webhookPath}`
 
-    // Map database URL for container access:
-    // - Docker Desktop (macOS/Windows): use host.docker.internal
-    // - Linux with bridge network: add --add-host parameter
-    const containerDatabaseUrl = databaseUrl.replace('localhost', 'host.docker.internal')
+      // 2. Create webhook and get the signing secret
+      const webhook = await createWebhook(this.options.stripeApiKey, webhookUrl)
+      this.webhookId = webhook.id
+      const webhookSecret = webhook.secret
 
-    // Create and start container with port mapping (works on all platforms)
-    const container = await docker.createContainer({
-      Image: 'supabase/stripe-sync-engine:latest',
-      Env: [
-        `DATABASE_URL=${containerDatabaseUrl}`,
-        `STRIPE_SECRET_KEY=${stripeApiKey}`,
-        `STRIPE_WEBHOOK_SECRET=${stripeWebhookSecret}`,
-        `API_KEY=${apiKey}`,
-        `PORT=${port}`,
-        `SCHEMA=${process.env.SCHEMA || 'stripe'}`,
-        `STRIPE_API_VERSION=${process.env.STRIPE_API_VERSION || '2020-08-27'}`,
-        `AUTO_EXPAND_LISTS=${process.env.AUTO_EXPAND_LISTS || 'true'}`,
-        `BACKFILL_RELATED_ENTITIES=${process.env.BACKFILL_RELATED_ENTITIES || 'true'}`,
-        'DISABLE_MIGRATIONS=false',
-      ],
-      ExposedPorts: {
-        [`${port}/tcp`]: {},
-      },
-      HostConfig: {
-        PortBindings: {
-          [`${port}/tcp`]: [{ HostPort: `${port}` }],
-        },
-        // On Linux, map host.docker.internal to host gateway IP
-        ExtraHosts: ['host.docker.internal:host-gateway'],
-        AutoRemove: true,
-      },
+      // 3. Run migrations
+      await runMigrations({
+        databaseUrl: this.options.databaseUrl,
+        schema: this.options.schema,
+      })
+
+      // 4. Create StripeSync instance
+      const poolConfig: PoolConfig = {
+        max: 10,
+        connectionString: this.options.databaseUrl,
+        keepAlive: true,
+      }
+
+      this.stripeSync = new StripeSync({
+        databaseUrl: this.options.databaseUrl,
+        schema: this.options.schema,
+        stripeSecretKey: this.options.stripeApiKey,
+        stripeWebhookSecret: webhookSecret,
+        stripeApiVersion: this.options.stripeApiVersion,
+        autoExpandLists: this.options.autoExpandLists,
+        backfillRelatedEntities: this.options.backfillRelatedEntities,
+        poolConfig,
+      })
+
+      // 5. Start Fastify server
+      console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
+      this.app = this.createFastifyServer()
+      await this.app.listen({ port: this.options.port, host: '0.0.0.0' })
+      console.log(chalk.green(`✓ Server started on port ${this.options.port}`))
+
+      return {
+        tunnelUrl: this.tunnel.url,
+        webhookUrl,
+        port: this.options.port,
+      }
+    } catch (error) {
+      console.log(chalk.red('\nFailed to start Stripe Sync:'))
+      if (error instanceof Error) {
+        console.error(chalk.red(error.message))
+      }
+      // Clean up on error
+      await this.stop()
+      throw error
+    }
+  }
+
+  /**
+   * Stops all services and cleans up resources:
+   * 1. Deletes Stripe webhook endpoint
+   * 2. Closes ngrok tunnel
+   * 3. Closes Fastify server
+   */
+  async stop(): Promise<void> {
+    // Delete webhook endpoint
+    if (this.webhookId) {
+      try {
+        await deleteWebhook(this.options.stripeApiKey, this.webhookId)
+      } catch (error) {
+        console.log(chalk.yellow('⚠ Could not delete webhook'))
+      }
+    }
+
+    // Close tunnel
+    if (this.tunnel) {
+      try {
+        await this.tunnel.close()
+      } catch (error) {
+        console.log(chalk.yellow('⚠ Could not close tunnel'))
+      }
+    }
+
+    // Close server
+    if (this.app) {
+      try {
+        await this.app.close()
+        console.log(chalk.green('✓ Server stopped'))
+      } catch (error) {
+        console.log(chalk.yellow('⚠ Server already stopped'))
+      }
+    }
+
+    console.log(chalk.green('✓ Cleanup complete'))
+  }
+
+  /**
+   * Creates and configures the Fastify server with webhook handling.
+   */
+  private createFastifyServer(): FastifyInstance {
+    const app = fastify({
+      disableRequestLogging: true,
     })
 
-    await container.start()
+    // Add webhook content parser (needs raw buffer for signature verification)
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      try {
+        const newBody = req.routeOptions.url === this.options.webhookPath
+          ? { raw: body }
+          : JSON.parse(body.toString())
+        done(null, newBody)
+      } catch (error: any) {
+        error.statusCode = 400
+        done(error, undefined)
+      }
+    })
 
-    const containerId = container.id
+    // Webhook route
+    app.post(this.options.webhookPath, async (request, reply) => {
+      const sig = request.headers['stripe-signature']
+      if (!sig || typeof sig !== 'string') {
+        return reply.code(400).send({ error: 'Missing stripe-signature header' })
+      }
 
-    // Wait for container to be ready
-    await new Promise(resolve => setTimeout(resolve, 3000))
+      try {
+        const body = (request.body as any).raw
+        await this.stripeSync!.processWebhook(body, sig)
+        return reply.code(200).send({ received: true })
+      } catch (error: any) {
+        request.log.error(error)
+        return reply.code(400).send({ error: error.message })
+      }
+    })
 
-    console.log(chalk.green(`✓ Dockerized server started: ${containerId.substring(0, 12)}`))
+    // Health check
+    app.get('/health', async (request, reply) => {
+      return reply.code(200).send({ status: 'ok' })
+    })
 
-    return {
-      port,
-      apiKey,
-      containerId,
-      close: async () => {
-        console.log(chalk.blue('\nStopping Docker container...'))
-        try {
-          await container.stop()
-          console.log(chalk.green('✓ Docker container stopped'))
-        } catch (error) {
-          // Container might already be stopped
-          console.log(chalk.yellow('⚠ Container already stopped'))
-        }
-      },
-    }
-  } catch (error) {
-    console.error(chalk.red('\nFailed to start Dockerized server:'))
-    if (error instanceof Error) {
-      console.error(chalk.red(error.message))
-    }
-    throw error
+    return app
   }
 }

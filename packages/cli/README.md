@@ -78,7 +78,12 @@ pnpm stripe:trigger customer.created
 pnpm stripe:trigger subscription.created
 ```
 
-This uses the Stripe CLI (via Docker) to send test webhook events to your running server.
+This uses the [Stripe CLI](https://stripe.com/docs/stripe-cli) to send test webhook events to your running server.
+
+**Install Stripe CLI:**
+- macOS: `brew install stripe/stripe-cli/stripe`
+- npm: `npm install -g stripe`
+- Download: https://github.com/stripe/stripe-cli/releases/latest
 
 ## How It Works
 
@@ -88,18 +93,18 @@ This uses the Stripe CLI (via Docker) to send test webhook events to your runnin
 4. **Streams Changes**: Real-time syncing of all Stripe events to PostgreSQL
 
 The CLI automatically:
-- Starts a Docker container running `supabase/stripe-sync-engine:latest`
+- Starts a Fastify server with the sync engine running natively
 - Creates an ngrok tunnel for webhook delivery
 - Registers a Stripe webhook with all events enabled
-- Cleans up webhook, container, and tunnel on exit (Ctrl-C)
+- Cleans up webhook and tunnel on exit (Ctrl-C)
 
 ## Prerequisites
 
-- Docker to run the sync engine container
 - Node.js >= 22.0.0
 - PostgreSQL database
 - Stripe API key ([Get one here](https://dashboard.stripe.com/apikeys))
 - ngrok auth token ([Sign up here](https://dashboard.ngrok.com/signup))
+- Stripe CLI (optional, for testing - [Install guide](https://stripe.com/docs/stripe-cli))
 
 ## What Gets Synced
 
@@ -114,33 +119,7 @@ The CLI syncs all Stripe objects supported by `@supabase/stripe-sync-engine`:
 - Disputes & Reviews
 - And 20+ more object types
 
-## Next Steps / Roadmap
-
-### Backfill Command
-
-Backfill historical Stripe data for a specific time period:
-
-```bash
-# Proposed usage (not yet implemented)
-stripe-sync backfill --days 1   # Last 24 hours
-stripe-sync backfill --days 7   # Last week
-stripe-sync backfill --days 30  # Last month
-```
-
-This would:
-1. Start the server
-2. Call the `/sync` endpoint with date range filters
-3. Display sync progress and results
-4. Shut down after completion
-
 ## Troubleshooting
-
-### "Docker is not running" or "Failed to start Docker container"
-
-Make sure Docker is installed and running:
-- Install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
-- Verify Docker is running: `docker ps`
-- The CLI requires Docker to run the `supabase/stripe-sync-engine:latest` container
 
 ### "Database configuration is required"
 

@@ -40,16 +40,14 @@
     "@supabase/stripe-sync-fastify": "workspace:",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
-    "dockerode": "^4.0.9",
     "dotenv": "^16.4.7",
-    "inquirer": "^12.3.0"
+    "inquirer": "^12.3.0",
+    "fastify": "^5.6.2",
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
-    "@types/dockerode": "^3.3.45",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^22.10.2",
-    "fastify": "^5.6.2",
-    "stripe": "^17.7.0",
     "tsx": "^4.19.2"
   },
   "engines": {

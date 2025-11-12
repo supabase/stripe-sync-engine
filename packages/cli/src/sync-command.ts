@@ -1,56 +1,27 @@
 import chalk from 'chalk'
 import { loadConfig, CliOptions } from './config'
-import { startServer } from './server'
-import { createTunnel } from './ngrok'
-import { createWebhook, deleteWebhook } from './stripe-webhook'
+import { StripeSyncServer } from './sync'
 
 /**
  * Main sync command - sets up webhook infrastructure for Stripe sync.
- * 1. Starts Fastify server with stripe-sync-engine
- * 2. Creates ngrok tunnel to expose server
- * 3. Creates Stripe webhook pointing to tunnel (all events)
- * 4. Waits for user to stop (Ctrl+C)
- * 5. Cleans up webhook and tunnel
+ * 1. Creates ngrok tunnel to expose server
+ * 2. Creates Stripe webhook pointing to tunnel (all events)
+ * 3. Runs database migrations
+ * 4. Starts Fastify server with stripe-sync-engine
+ * 5. Waits for user to stop (Ctrl+C)
+ * 6. Cleans up webhook and tunnel
  */
 export async function syncCommand(options: CliOptions): Promise<void> {
-  let server: Awaited<ReturnType<typeof startServer>> | null = null
-  let tunnel: Awaited<ReturnType<typeof createTunnel>> | null = null
-  let webhookId: string | null = null
-  const port = 3000
-  const webhookPath = '/webhooks'
+  let syncServer: StripeSyncServer | null = null
 
   // Setup cleanup handler
   const cleanup = async (signal?: string) => {
     console.log(chalk.blue(`\n\nCleaning up... (signal: ${signal || 'manual'})`))
 
-    // Delete webhook endpoint
-    if (webhookId) {
-      try {
-        const config = await loadConfig(options)
-        await deleteWebhook(config.stripeApiKey, webhookId)
-      } catch (error) {
-        console.log(chalk.yellow('⚠ Could not delete webhook (may need manual cleanup)'))
-      }
+    if (syncServer) {
+      await syncServer.stop()
     }
 
-    if (tunnel) {
-      try {
-        await tunnel.close()
-        console.log(chalk.green('✓ Tunnel closed'))
-      } catch (error) {
-        console.log(chalk.yellow('⚠ Could not close tunnel'))
-      }
-    }
-
-    if (server) {
-      try {
-        await server.close()
-      } catch (error) {
-        console.log(chalk.yellow('⚠ Could not close server'))
-      }
-    }
-
-    console.log(chalk.green('✓ Cleanup complete'))
     process.exit(0)
   }
 
@@ -59,42 +30,32 @@ export async function syncCommand(options: CliOptions): Promise<void> {
   process.on('SIGTERM', () => cleanup('SIGTERM'))
 
   try {
-    // Load configuration (silently)
+    // Load configuration
     const config = await loadConfig(options)
 
     // Show command with database URL
     console.log(chalk.gray(`$ stripe-sync ${config.databaseUrl}`))
 
-    // Creating tunnel first
-    process.stdout.write('Creating tunnel............ ')
-    tunnel = await createTunnel(port, config.ngrokAuthToken)
-    const webhookUrl = `${tunnel.url}${webhookPath}`
-    console.log(chalk.green('✓'))
+    // Create and start sync server
+    syncServer = new StripeSyncServer({
+      databaseUrl: config.databaseUrl,
+      stripeApiKey: config.stripeApiKey,
+      ngrokAuthToken: config.ngrokAuthToken,
+      port: 3000,
+      webhookPath: '/webhooks',
+      schema: process.env.SCHEMA,
+      stripeApiVersion: process.env.STRIPE_API_VERSION,
+      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
+      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
+    })
 
-    // Create webhook and get the real signing secret from Stripe
-    process.stdout.write('Creating webhook........... ')
-    const webhook = await createWebhook(config.stripeApiKey, webhookUrl)
-    webhookId = webhook.id
-    const webhookSecret = webhook.secret
-    console.log(chalk.green('✓'))
+    await syncServer.start()
 
-    // Creating tables (runs migrations) with the real webhook secret
-    process.stdout.write('Creating tables............ ')
-    server = await startServer(config.databaseUrl, config.stripeApiKey, webhookSecret, port)
-    console.log(chalk.green('✓'))
-
-    // Populating tables
-    process.stdout.write('Populating tables.......... ')
-    console.log(chalk.green('✓'))
-
-    // Streaming live changes
-    process.stdout.write('Streaming live changes..... ')
-    console.log(chalk.cyan('●') + chalk.gray(' [press Ctrl-C to abort]'))
+    console.log(chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]'))
 
     // Keep the process alive
     await new Promise(() => {})
   } catch (error) {
-    console.log(chalk.red('✗'))
     if (error instanceof Error) {
       console.error(chalk.red(error.message))
     }
