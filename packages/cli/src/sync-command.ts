@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 import { loadConfig, CliOptions } from './config'
-import { StripeSyncServer } from './sync'
+import { StripeSyncServer } from './server'
 
 /**
  * Main sync command - sets up webhook infrastructure for Stripe sync.

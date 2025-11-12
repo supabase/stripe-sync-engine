@@ -3,7 +3,12 @@ import { migrate } from 'pg-node-migrations'
 import fs from 'node:fs'
 import pino from 'pino'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { ConnectionOptions } from 'node:tls'
+
+// Get __dirname equivalent for ESM
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 type MigrationConfig = {
   schema: string

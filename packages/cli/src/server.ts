@@ -3,7 +3,6 @@ import fastify, { FastifyInstance } from 'fastify'
 import { type PoolConfig } from 'pg'
 import chalk from 'chalk'
 import { createTunnel, NgrokTunnel } from './ngrok'
-import { createWebhook, deleteWebhook } from './stripe-webhook'
 
 export interface StripeSyncServerOptions {
   databaseUrl: string
@@ -35,6 +34,7 @@ export class StripeSyncServer {
   private tunnel: NgrokTunnel | null = null
   private app: FastifyInstance | null = null
   private webhookId: string | null = null
+  private webhookUuid: string | null = null
   private stripeSync: StripeSync | null = null
 
   constructor(options: StripeSyncServerOptions) {
@@ -52,9 +52,10 @@ export class StripeSyncServer {
   /**
    * Starts the complete Stripe Sync infrastructure:
    * 1. Creates ngrok tunnel
-   * 2. Creates Stripe webhook endpoint
-   * 3. Runs database migrations
-   * 4. Starts Fastify server
+   * 2. Runs database migrations
+   * 3. Creates StripeSync instance
+   * 4. Creates managed webhook endpoint
+   * 5. Starts Fastify server
    *
    * @returns Information about the running instance
    */
@@ -62,20 +63,14 @@ export class StripeSyncServer {
     try {
       // 1. Create tunnel
       this.tunnel = await createTunnel(this.options.port, this.options.ngrokAuthToken)
-      const webhookUrl = `${this.tunnel.url}${this.options.webhookPath}`
 
-      // 2. Create webhook and get the signing secret
-      const webhook = await createWebhook(this.options.stripeApiKey, webhookUrl)
-      this.webhookId = webhook.id
-      const webhookSecret = webhook.secret
-
-      // 3. Run migrations
+      // 2. Run migrations
       await runMigrations({
         databaseUrl: this.options.databaseUrl,
         schema: this.options.schema,
       })
 
-      // 4. Create StripeSync instance
+      // 3. Create StripeSync instance (no webhook secret needed)
       const poolConfig: PoolConfig = {
         max: 10,
         connectionString: this.options.databaseUrl,
@@ -86,12 +81,27 @@ export class StripeSyncServer {
         databaseUrl: this.options.databaseUrl,
         schema: this.options.schema,
         stripeSecretKey: this.options.stripeApiKey,
-        stripeWebhookSecret: webhookSecret,
         stripeApiVersion: this.options.stripeApiVersion,
         autoExpandLists: this.options.autoExpandLists,
         backfillRelatedEntities: this.options.backfillRelatedEntities,
         poolConfig,
       })
+
+      // 4. Create managed webhook (generates UUID and stores in DB)
+      console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
+      const { webhook, uuid } = await this.stripeSync.createManagedWebhook(
+        this.tunnel.url,
+        {
+          enabled_events: ['*'], // Subscribe to all events
+          description: 'stripe-sync-cli development webhook',
+        }
+      )
+      this.webhookId = webhook.id
+      this.webhookUuid = uuid
+
+      console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
+      console.log(chalk.cyan(`  URL: ${webhook.url}`))
+      console.log(chalk.cyan(`  Events: All events (*)`))
 
       // 5. Start Fastify server
       console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
@@ -101,13 +111,16 @@ export class StripeSyncServer {
 
       return {
         tunnelUrl: this.tunnel.url,
-        webhookUrl,
+        webhookUrl: webhook.url,
         port: this.options.port,
       }
     } catch (error) {
       console.log(chalk.red('\nFailed to start Stripe Sync:'))
       if (error instanceof Error) {
         console.error(chalk.red(error.message))
+        console.error(chalk.red(error.stack || ''))
+      } else {
+        console.error(chalk.red(String(error)))
       }
       // Clean up on error
       await this.stop()
@@ -122,10 +135,10 @@ export class StripeSyncServer {
    * 3. Closes Fastify server
    */
   async stop(): Promise<void> {
-    // Delete webhook endpoint
-    if (this.webhookId) {
+    // Delete webhook endpoint using StripeSync
+    if (this.webhookId && this.stripeSync) {
       try {
-        await deleteWebhook(this.options.stripeApiKey, this.webhookId)
+        await this.stripeSync.deleteManagedWebhook(this.webhookId)
       } catch (error) {
         console.log(chalk.yellow('⚠ Could not delete webhook'))
       }
@@ -164,7 +177,9 @@ export class StripeSyncServer {
     // Add webhook content parser (needs raw buffer for signature verification)
     app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
       try {
-        const newBody = req.routeOptions.url === this.options.webhookPath
+        // Check if the route is a webhook route (starts with /webhooks/)
+        const isWebhookRoute = req.routeOptions.url?.startsWith('/webhooks/')
+        const newBody = isWebhookRoute
           ? { raw: body }
           : JSON.parse(body.toString())
         done(null, newBody)
@@ -174,16 +189,18 @@ export class StripeSyncServer {
       }
     })
 
-    // Webhook route
-    app.post(this.options.webhookPath, async (request, reply) => {
+    // Webhook route with UUID parameter
+    app.post('/webhooks/:uuid', async (request, reply) => {
       const sig = request.headers['stripe-signature']
       if (!sig || typeof sig !== 'string') {
         return reply.code(400).send({ error: 'Missing stripe-signature header' })
       }
 
+      const { uuid } = request.params as { uuid: string }
+
       try {
         const body = (request.body as any).raw
-        await this.stripeSync!.processWebhook(body, sig)
+        await this.stripeSync!.processWebhook(body, sig, uuid)
         return reply.code(200).send({ received: true })
       } catch (error: any) {
         request.log.error(error)

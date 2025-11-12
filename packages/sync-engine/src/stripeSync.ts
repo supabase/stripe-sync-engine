@@ -32,7 +32,9 @@ import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
 import { activeEntitlementSchema } from './schemas/active_entitlement'
 import { featureSchema } from './schemas/feature'
+import { managedWebhookSchema } from './schemas/managed_webhook'
 import type { PoolConfig } from 'pg'
+import { randomUUID } from 'node:crypto'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -89,11 +91,24 @@ export class StripeSync {
     })
   }
 
-  async processWebhook(payload: Buffer | string, signature: string | undefined) {
+  async processWebhook(payload: Buffer | string, signature: string | undefined, uuid: string) {
+    // Query the webhook secret from the database using the UUID
+    const result = await this.postgresClient.query(
+      `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" WHERE uuid = $1`,
+      [uuid]
+    )
+
+    if (result.rows.length === 0) {
+      throw new Error(`No managed webhook found with UUID: ${uuid}`)
+    }
+
+    const webhookSecret = result.rows[0].secret
+
+    // Verify webhook signature using the secret from DB
     const event = await this.stripe.webhooks.constructEventAsync(
       payload,
       signature!,
-      this.config.stripeWebhookSecret
+      webhookSecret
     )
 
     return this.processEvent(event)
@@ -1640,6 +1655,76 @@ export class StripeSync {
       entitlements,
       'active_entitlements',
       activeEntitlementSchema,
+      syncTimestamp
+    )
+  }
+
+  // Managed Webhook CRUD methods
+  async createManagedWebhook(
+    baseUrl: string,
+    params: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
+  ): Promise<{ webhook: Stripe.WebhookEndpoint; uuid: string }> {
+    // Generate UUID for this webhook
+    const uuid = randomUUID()
+
+    // Create webhook with UUID in the URL path
+    const webhookUrl = `${baseUrl}/webhooks/${uuid}`
+    const webhook = await this.stripe.webhookEndpoints.create({
+      ...params,
+      url: webhookUrl,
+    })
+
+    // Store webhook with UUID in database
+    const webhookWithUuid = { ...webhook, uuid }
+    await this.upsertManagedWebhooks([webhookWithUuid])
+
+    return { webhook, uuid }
+  }
+
+  async getManagedWebhook(
+    id: string
+  ): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
+    const result = await this.postgresClient.query(
+      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" WHERE id = $1`,
+      [id]
+    )
+    return result.rows.length > 0
+      ? (result.rows[0] as Stripe.WebhookEndpoint & { uuid: string })
+      : null
+  }
+
+  async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
+    const result = await this.postgresClient.query(
+      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" ORDER BY created DESC`
+    )
+    return result.rows as Array<Stripe.WebhookEndpoint & { uuid: string }>
+  }
+
+  async updateManagedWebhook(
+    id: string,
+    params: Stripe.WebhookEndpointUpdateParams
+  ): Promise<Stripe.WebhookEndpoint> {
+    const webhook = await this.stripe.webhookEndpoints.update(id, params)
+    // Preserve existing UUID when updating
+    const existing = await this.getManagedWebhook(id)
+    const webhookWithUuid = { ...webhook, uuid: existing?.uuid || randomUUID() }
+    await this.upsertManagedWebhooks([webhookWithUuid])
+    return webhook
+  }
+
+  async deleteManagedWebhook(id: string): Promise<boolean> {
+    await this.stripe.webhookEndpoints.del(id)
+    return this.postgresClient.delete('managed_webhooks', id)
+  }
+
+  private async upsertManagedWebhooks(
+    webhooks: Array<Stripe.WebhookEndpoint & { uuid: string }>,
+    syncTimestamp?: string
+  ): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      webhooks,
+      'managed_webhooks',
+      managedWebhookSchema,
       syncTimestamp
     )
   }
