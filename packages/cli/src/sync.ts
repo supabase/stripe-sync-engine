@@ -5,44 +5,41 @@ import chalk from 'chalk'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import http from 'node:http'
 
-export interface StripeSyncServerOptions {
+export interface StripeAutoSyncOptions {
   databaseUrl: string
   stripeApiKey: string
   ngrokAuthToken: string
   port?: number
-  webhookPath?: string
   schema?: string
   stripeApiVersion?: string
   autoExpandLists?: boolean
   backfillRelatedEntities?: boolean
 }
 
-export interface StripeSyncServerInfo {
+export interface StripeAutoSyncInfo {
   tunnelUrl: string
   webhookUrl: string
-  port: number
+  webhookUuid: string
 }
 
 /**
- * Encapsulates the entire Stripe Sync orchestration:
+ * Manages Stripe webhook auto-sync infrastructure:
  * - Creates ngrok tunnel
- * - Sets up Stripe webhook
  * - Runs database migrations
- * - Starts Express server with webhook handler
+ * - Creates managed webhook in Stripe
+ * - Mounts webhook handler on Express app
  */
-export class StripeSyncServer {
-  private options: Required<StripeSyncServerOptions>
+export class StripeAutoSync {
+  private options: Required<StripeAutoSyncOptions>
   private tunnel: NgrokTunnel | null = null
-  private app: Express | null = null
-  private server: http.Server | null = null
   private webhookId: string | null = null
   private webhookUuid: string | null = null
   private stripeSync: StripeSync | null = null
+  private server: http.Server | null = null
 
-  constructor(options: StripeSyncServerOptions) {
+  constructor(options: StripeAutoSyncOptions) {
     this.options = {
       port: 3000,
-      webhookPath: '/webhooks',
       schema: 'stripe',
       stripeApiVersion: '2020-08-27',
       autoExpandLists: false,
@@ -52,16 +49,18 @@ export class StripeSyncServer {
   }
 
   /**
-   * Starts the complete Stripe Sync infrastructure:
+   * Starts the complete Stripe Sync infrastructure and mounts webhook handler:
    * 1. Creates ngrok tunnel
    * 2. Runs database migrations
    * 3. Creates StripeSync instance
    * 4. Creates managed webhook endpoint
-   * 5. Starts Fastify server
+   * 5. Mounts webhook handler on provided Express app
+   * 6. Starts Express server
    *
+   * @param app - Express app to mount webhook handler on
    * @returns Information about the running instance
    */
-  async start(): Promise<StripeSyncServerInfo> {
+  async start(app: Express): Promise<StripeAutoSyncInfo> {
     try {
       // 1. Create tunnel
       this.tunnel = await createTunnel(this.options.port, this.options.ngrokAuthToken)
@@ -105,13 +104,13 @@ export class StripeSyncServer {
       console.log(chalk.cyan(`  URL: ${webhook.url}`))
       console.log(chalk.cyan(`  Events: All events (*)`))
 
-      // 5. Start Express server
-      console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
-      this.app = this.createExpressServer()
+      // 5. Mount webhook handler on the provided app
+      this.mountWebhook(app)
 
-      // Wrap Express listen in a promise
+      // 6. Start Express server
+      console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
       await new Promise<void>((resolve, reject) => {
-        this.server = this.app!.listen(this.options.port, '0.0.0.0', () => {
+        this.server = app.listen(this.options.port, '0.0.0.0', () => {
           resolve()
         })
         this.server.on('error', reject)
@@ -122,7 +121,7 @@ export class StripeSyncServer {
       return {
         tunnelUrl: this.tunnel.url,
         webhookUrl: webhook.url,
-        port: this.options.port,
+        webhookUuid: uuid,
       }
     } catch (error) {
       console.log(chalk.red('\nFailed to start Stripe Sync:'))
@@ -222,22 +221,5 @@ export class StripeSyncServer {
         return res.status(400).send({ error: error.message })
       }
     })
-  }
-
-  /**
-   * Creates and configures the Express server with webhook handling.
-   */
-  private createExpressServer(): Express {
-    const app = express()
-
-    // Mount webhook handler FIRST (before any other middleware)
-    this.mountWebhook(app)
-
-    // Health check
-    app.get('/health', async (req, res) => {
-      return res.status(200).json({ status: 'ok' })
-    })
-
-    return app
   }
 }
