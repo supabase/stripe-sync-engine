@@ -90,11 +90,8 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     console.log(chalk.cyan(`  URL: ${syncInfo.webhookUrl}`))
     console.log(chalk.cyan(`  Events: All events (*)`))
 
-    // Apply body parsing middleware (skips webhook routes automatically)
-    app.use(stripeSync.getBodyParserMiddleware())
-
-    // Apply default JSON parsing as fallback (webhook routes should already be skipped above)
-    // This tests that getBodyParserMiddleware() correctly protects webhook routes
+    // Body parsing middleware is automatically applied by start()
+    // Apply additional JSON parsing as fallback to test middleware protection
     app.use(express.json())
     app.use(express.urlencoded({ extended: false }))
 

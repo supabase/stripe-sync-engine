@@ -50,6 +50,7 @@ export class StripeAutoSync {
    * 2. Creates StripeSync instance
    * 3. Creates managed webhook endpoint
    * 4. Mounts webhook handler on provided Express app
+   * 5. Applies body parsing middleware (automatically skips webhook routes)
    *
    * @param app - Express app to mount webhook handler on
    * @returns Information about the running instance
@@ -94,6 +95,9 @@ export class StripeAutoSync {
       // 4. Mount webhook handler on the provided app
       this.mountWebhook(app)
 
+      // 5. Apply body parsing middleware (automatically skips webhook routes)
+      app.use(this.getBodyParserMiddleware())
+
       return {
         baseUrl,
         webhookUrl: webhook.url,
@@ -134,7 +138,7 @@ export class StripeAutoSync {
    *
    * @returns Express middleware function
    */
-  getBodyParserMiddleware() {
+  private getBodyParserMiddleware() {
     const webhookPath = this.options.webhookPath
 
     return (req: any, res: any, next: any) => {
