@@ -1,7 +1,9 @@
 import chalk from 'chalk'
 import express from 'express'
+import http from 'node:http'
 import { loadConfig, CliOptions } from './config'
 import { StripeAutoSync } from './sync'
+import { createTunnel, NgrokTunnel } from './ngrok'
 
 /**
  * Main sync command - sets up webhook infrastructure for Stripe sync.
@@ -10,17 +12,43 @@ import { StripeAutoSync } from './sync'
  * 3. Runs database migrations
  * 4. Starts Express server with stripe-sync-engine
  * 5. Waits for user to stop (Ctrl+C)
- * 6. Cleans up webhook and tunnel
+ * 6. Cleans up webhook, server, and tunnel
  */
 export async function syncCommand(options: CliOptions): Promise<void> {
-  let syncServer: StripeAutoSync | null = null
+  let stripeSync: StripeAutoSync | null = null
+  let tunnel: NgrokTunnel | null = null
+  let server: http.Server | null = null
 
   // Setup cleanup handler
   const cleanup = async (signal?: string) => {
     console.log(chalk.blue(`\n\nCleaning up... (signal: ${signal || 'manual'})`))
 
-    if (syncServer) {
-      await syncServer.stop()
+    if (stripeSync) {
+      await stripeSync.stop()
+    }
+
+    // Close server
+    if (server) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server!.close((err) => {
+            if (err) reject(err)
+            else resolve()
+          })
+        })
+        console.log(chalk.green('✓ Server stopped'))
+      } catch (error) {
+        console.log(chalk.yellow('⚠ Server already stopped'))
+      }
+    }
+
+    // Close tunnel
+    if (tunnel) {
+      try {
+        await tunnel.close()
+      } catch (error) {
+        console.log(chalk.yellow('⚠ Could not close tunnel'))
+      }
     }
 
     process.exit(0)
@@ -37,6 +65,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // Show command with database URL
     console.log(chalk.gray(`$ stripe-sync ${config.databaseUrl}`))
 
+    // Create ngrok tunnel
+    const port = 3000
+    tunnel = await createTunnel(port, config.ngrokAuthToken)
+
     // Create Express app
     const app = express()
 
@@ -45,19 +77,28 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       return res.status(200).json({ status: 'ok' })
     })
 
-    // Create and start sync server
-    syncServer = new StripeAutoSync({
+    // Create and start sync (runs migrations, creates webhook, mounts handler)
+    stripeSync = new StripeAutoSync({
       databaseUrl: config.databaseUrl,
       stripeApiKey: config.stripeApiKey,
-      ngrokAuthToken: config.ngrokAuthToken,
-      port: 3000,
+      baseUrl: () => tunnel!.url,
       schema: process.env.SCHEMA,
       stripeApiVersion: process.env.STRIPE_API_VERSION,
       autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
       backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
     })
 
-    await syncServer.start(app)
+    await stripeSync.start(app)
+
+    // Start Express server
+    console.log(chalk.blue(`\nStarting server on port ${port}...`))
+    await new Promise<void>((resolve, reject) => {
+      server = app.listen(port, '0.0.0.0', () => {
+        resolve()
+      })
+      server.on('error', reject)
+    })
+    console.log(chalk.green(`✓ Server started on port ${port}`))
 
     console.log(chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]'))
 
