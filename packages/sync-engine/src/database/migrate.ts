@@ -64,6 +64,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
     await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
+    throw err
   } finally {
     await client.end()
     config.logger?.info('Finished migrations')
