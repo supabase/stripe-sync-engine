@@ -50,6 +50,7 @@ export class StripeAutoSync {
    * 2. Creates StripeSync instance
    * 3. Creates managed webhook endpoint
    * 4. Mounts webhook handler on provided Express app
+   * 5. Applies body parsing middleware (automatically skips webhook routes)
    *
    * @param app - Express app to mount webhook handler on
    * @returns Information about the running instance
@@ -94,6 +95,9 @@ export class StripeAutoSync {
       // 4. Mount webhook handler on the provided app
       this.mountWebhook(app)
 
+      // 5. Apply body parsing middleware (automatically skips webhook routes)
+      app.use(this.getBodyParserMiddleware())
+
       return {
         baseUrl,
         webhookUrl: webhook.url,
@@ -124,6 +128,30 @@ export class StripeAutoSync {
       } catch (error) {
         console.error('Could not delete webhook:', error)
       }
+    }
+  }
+
+  /**
+   * Returns Express middleware for body parsing that automatically skips webhook routes.
+   * This middleware applies JSON and URL-encoded parsers to all routes EXCEPT the webhook path,
+   * which needs raw body for signature verification.
+   *
+   * @returns Express middleware function
+   */
+  private getBodyParserMiddleware() {
+    const webhookPath = this.options.webhookPath
+
+    return (req: any, res: any, next: any) => {
+      // Skip if this is a webhook route (already has raw parser)
+      if (req.path.startsWith(webhookPath)) {
+        return next()
+      }
+
+      // Apply JSON and URL-encoded parsers for other routes
+      express.json()(req, res, (err: any) => {
+        if (err) return next(err)
+        express.urlencoded({ extended: false })(req, res, next)
+      })
     }
   }
 
