@@ -1,4 +1,4 @@
-import { StripeSync } from '@supabase/stripe-sync-engine'
+import { StripeSync } from 'stripe-experiment-sync'
 
 declare module 'fastify' {
   interface FastifyInstance {

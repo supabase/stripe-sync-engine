@@ -24,7 +24,9 @@
     "lint": "eslint src",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "stripe:trigger": "./scripts/stripe-trigger.sh"
+    "stripe:trigger": "./scripts/stripe-trigger.sh",
+    "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
+    "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts"
   },
   "keywords": [
     "stripe",
@@ -37,6 +39,7 @@
   "dependencies": {
     "@ngrok/ngrok": "^1.4.1",
     "@supabase/stripe-sync-engine": "https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz",
+    "stripe-experiment-sync": "workspace:*",
     "@supabase/stripe-sync-fastify": "workspace:",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",

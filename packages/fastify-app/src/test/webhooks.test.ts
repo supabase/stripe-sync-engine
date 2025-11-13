@@ -1,13 +1,13 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
-import { PostgresClient, runMigrations } from '@supabase/stripe-sync-engine'
+import { PostgresClient, runMigrations } from 'stripe-experiment-sync'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
 import { logger } from '../logger'
 import { mockStripe } from './helpers/mockStripe'
-import { StripeSync } from '@supabase/stripe-sync-engine'
+import { StripeSync } from 'stripe-experiment-sync'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret

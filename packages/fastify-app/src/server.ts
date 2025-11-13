@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'node:http'
-import { runMigrations } from '@supabase/stripe-sync-engine'
+import { runMigrations } from 'stripe-experiment-sync'
 import { createServer } from './app'
 import { getConfig } from './utils/config'
 import { logger } from './logger'

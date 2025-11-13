@@ -23,7 +23,7 @@
     "@fastify/swagger-ui": "^5.2.3",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.0",
-    "@supabase/stripe-sync-engine": "workspace:",
+    "stripe-experiment-sync": "workspace:*",
     "stripe": "^19.0.0"
   },
   "devDependencies": {

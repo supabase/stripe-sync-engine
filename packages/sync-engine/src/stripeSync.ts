@@ -60,6 +60,7 @@ export interface StripeAutoSyncOptions {
   stripeApiVersion?: string
   autoExpandLists?: boolean
   backfillRelatedEntities?: boolean
+  keepWebhooksOnShutdown?: boolean
 }
 
 export interface StripeAutoSyncInfo {
@@ -89,6 +90,7 @@ export class StripeAutoSync {
       stripeApiVersion: options.stripeApiVersion || '2020-08-27',
       autoExpandLists: options.autoExpandLists !== undefined ? options.autoExpandLists : false,
       backfillRelatedEntities: options.backfillRelatedEntities !== undefined ? options.backfillRelatedEntities : true,
+      keepWebhooksOnShutdown: options.keepWebhooksOnShutdown !== undefined ? options.keepWebhooksOnShutdown : true,
     }
   }
 
@@ -128,9 +130,9 @@ export class StripeAutoSync {
         poolConfig,
       })
 
-      // 3. Create managed webhook (generates UUID and stores in DB)
+      // 3. Find existing or create managed webhook (generates UUID and stores in DB)
       const baseUrl = this.options.baseUrl()
-      const { webhook, uuid } = await this.stripeSync.createManagedWebhook(
+      const { webhook, uuid } = await this.stripeSync.findOrCreateManagedWebhook(
         `${baseUrl}${this.options.webhookPath}`,
         {
           enabled_events: ['*'], // Subscribe to all events
@@ -166,11 +168,11 @@ export class StripeAutoSync {
 
   /**
    * Stops all services and cleans up resources:
-   * 1. Deletes Stripe webhook endpoint from Stripe and database
+   * 1. Optionally deletes Stripe webhook endpoint from Stripe and database (based on keepWebhooksOnShutdown)
    */
   async stop(): Promise<void> {
-    // Delete webhook endpoint using StripeSync
-    if (this.webhookId && this.stripeSync) {
+    // Delete webhook endpoint using StripeSync (unless keepWebhooksOnShutdown is true)
+    if (this.webhookId && this.stripeSync && !this.options.keepWebhooksOnShutdown) {
       try {
         await this.stripeSync.deleteManagedWebhook(this.webhookId)
       } catch (error) {
@@ -1881,6 +1883,44 @@ class StripeSync {
     await this.upsertManagedWebhooks([webhookWithUuid])
 
     return { webhook, uuid }
+  }
+
+  async findOrCreateManagedWebhook(
+    baseUrl: string,
+    params: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
+  ): Promise<{ webhook: Stripe.WebhookEndpoint; uuid: string }> {
+    // Query database for existing webhooks
+    const existingWebhooks = await this.listManagedWebhooks()
+
+    // Try to find a webhook that matches the base URL
+    for (const existingWebhook of existingWebhooks) {
+      // Extract base URL from webhook URL (remove /stripe-webhooks/{uuid} suffix)
+      const existingBaseUrl = existingWebhook.url.replace(/\/[^/]+$/, '')
+
+      // Check if base URLs match exactly
+      if (existingBaseUrl === baseUrl) {
+        try {
+          // Verify webhook still exists in Stripe and is enabled
+          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(
+            existingWebhook.id
+          )
+
+          if (stripeWebhook.status === 'enabled') {
+            // Webhook is valid, reuse it
+            return {
+              webhook: stripeWebhook,
+              uuid: existingWebhook.uuid,
+            }
+          }
+        } catch (error) {
+          // Webhook doesn't exist in Stripe anymore, continue searching
+          continue
+        }
+      }
+    }
+
+    // No valid matching webhook found, create a new one
+    return this.createManagedWebhook(baseUrl, params)
   }
 
   async getManagedWebhook(
