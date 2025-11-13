@@ -1,6 +1,6 @@
 {
-  "name": "@supabase/stripe-sync-engine",
-  "version": "0.0.0",
+  "name": "stripe-experiment-sync",
+  "version": "0.0.1",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data based on webhooks to Postgres",
   "type": "module",
@@ -40,11 +40,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/supabase/stripe-sync-engine.git"
+    "url": "https://github.com/tx-stripe/stripe-sync-engine.git"
   },
-  "homepage": "https://github.com/supabase/stripe-sync-engine#readme",
+  "homepage": "https://github.com/tx-stripe/stripe-sync-engine#readme",
   "bugs": {
-    "url": "https://github.com/supabase/stripe-sync-engine/issues"
+    "url": "https://github.com/tx-stripe/stripe-sync-engine/issues"
   },
   "keywords": [
     "stripe",

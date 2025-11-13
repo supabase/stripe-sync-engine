@@ -1,30 +1,73 @@
 # Stripe Sync Engine
 
-![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
-![NPM Version](https://img.shields.io/npm/v/%40supabase%2Fstripe-sync-engine)
+![GitHub License](https://img.shields.io/github/license/tx-stripe/stripe-sync-engine)
+![NPM Version](https://img.shields.io/npm/v/stripe-experiment-sync)
 
 A TypeScript library to synchronize Stripe data into a PostgreSQL database, designed for use in Node.js backends and serverless environments.
 
 ## Features
 
-- Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database.
-- Handles Stripe webhooks for real-time updates.
-- Supports backfilling and entity revalidation.
+- Automatically manages Stripe webhooks for real-time updates
+- Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database
+- Automatic database migrations
+- Express middleware integration with automatic body parsing
+- UUID-based webhook routing for security
 
 ## Installation
 
 ```sh
-npm install @supabase/stripe-sync-engine stripe
+npm install stripe-experiment-sync stripe
 # or
-pnpm add @supabase/stripe-sync-engine stripe
+pnpm add stripe-experiment-sync stripe
 # or
-yarn add @supabase/stripe-sync-engine stripe
+yarn add stripe-experiment-sync stripe
 ```
 
-## Usage
+## StripeAutoSync
+
+The easiest way to integrate Stripe sync into your Express application:
+
+```typescript
+import { StripeAutoSync } from 'stripe-experiment-sync'
+
+// baseUrl is a function for dynamic URL generation
+// (e.g., for ngrok tunnels, Replit domains, or environment-based URLs)
+const getPublicUrl = () => {
+  if (process.env.PUBLIC_URL) {
+    return process.env.PUBLIC_URL
+  }
+  // Or dynamically determine from request, ngrok, etc.
+  return `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
+}
+
+const stripeAutoSync = new StripeAutoSync({
+  databaseUrl: process.env.DATABASE_URL,
+  stripeApiKey: process.env.STRIPE_SECRET_KEY,
+  baseUrl: getPublicUrl,
+})
+
+await stripeAutoSync.start(app) // Express app
+// ... later
+await stripeAutoSync.stop() // Cleanup
+```
+
+### Configuration Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `databaseUrl` | Yes | - | PostgreSQL connection string |
+| `stripeApiKey` | Yes | - | Stripe secret key (sk_...) |
+| `baseUrl` | Yes | - | Function returning your public URL |
+| `webhookPath` | No | `/stripe-webhooks` | Path where webhook handler is mounted |
+| `schema` | No | `stripe` | Database schema name |
+| `stripeApiVersion` | No | `2020-08-27` | Stripe API version |
+
+## Low-Level API (Advanced)
+
+For more control, you can use the `StripeSync` class directly:
 
 ```ts
-import { StripeSync } from '@supabase/stripe-sync-engine'
+import { StripeSync } from 'stripe-experiment-sync'
 
 const sync = new StripeSync({
   poolConfig: {

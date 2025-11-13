@@ -4,10 +4,11 @@
 ![NPM Version](https://img.shields.io/npm/v/%40supabase%2Fstripe-sync-engine)
 ![Docker Image Version](https://img.shields.io/docker/v/supabase/stripe-sync-engine?label=Docker)
 
-This monorepo contains two packages for synchronizing your Stripe account with a PostgreSQL database:
+This monorepo contains packages for synchronizing your Stripe account with a PostgreSQL database:
 
-- [`@supabase/stripe-sync-engine`](./packages/sync-engine/README.md): A TypeScript library for syncing Stripe data to PostgreSQL, designed for integration into your own Node.js backend or serverless environment.
-- [`stripe-sync-fastify`](./packages/fastify-app/README.md): A Fastify-based server and Docker image that exposes a `/webhooks` endpoint for Stripe, providing a ready-to-run service for real-time Stripe-to-PostgreSQL sync.
+- [`@supabase/stripe-sync-engine`](./packages/sync-engine/README.md): A TypeScript library with `StripeAutoSync` for easy integration into Express apps, plus lower-level APIs for custom implementations.
+- [`stripe-sync-cli`](./packages/cli/README.md): A CLI tool for development and testing with automatic ngrok tunnel setup.
+- [`stripe-sync-fastify`](./packages/fastify-app/README.md): A Fastify-based server and Docker image for production deployments.
 
 ![Sync Stripe with PostgreSQL](./docs/stripe-sync-engine.jpg)
 
@@ -21,19 +22,64 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 
 ---
 
+## StripeAutoSync
+
+The easiest way to integrate Stripe sync into your Express application:
+
+```typescript
+import { StripeAutoSync } from 'stripe-experiment-sync'
+
+// baseUrl is a function for dynamic URL generation
+// (e.g., for ngrok tunnels, Replit domains, or environment-based URLs)
+const getPublicUrl = () => {
+  if (process.env.PUBLIC_URL) {
+    return process.env.PUBLIC_URL
+  }
+  // Or dynamically determine from request, ngrok, etc.
+  return `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
+}
+
+const stripeAutoSync = new StripeAutoSync({
+  databaseUrl: process.env.DATABASE_URL,
+  stripeApiKey: process.env.STRIPE_SECRET_KEY,
+  baseUrl: getPublicUrl,
+})
+
+await stripeAutoSync.start(app) // Express app
+// ... later
+await stripeAutoSync.stop() // Cleanup
+```
+
+### Configuration Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `databaseUrl` | Yes | - | PostgreSQL connection string |
+| `stripeApiKey` | Yes | - | Stripe secret key (sk_...) |
+| `baseUrl` | Yes | - | Function returning your public URL |
+| `webhookPath` | No | `/stripe-webhooks` | Path where webhook handler is mounted |
+| `schema` | No | `stripe` | Database schema name |
+| `stripeApiVersion` | No | `2020-08-27` | Stripe API version |
+
+---
+
 ## How it works
 
 ![How it works](./docs/sync-engine-how.png)
 
-- Creates a new schema `stripe` in a PostgreSQL database, with tables and columns matching Stripe.
-- Exposes a `/webhooks` endpoint that listens to any Stripe webhooks (via the Fastify app).
-- Inserts, updates, or deletes changes into the tables whenever there is a change to Stripe.
+- Automatically runs database migrations to create the `stripe` schema with tables matching Stripe objects.
+- Creates managed webhooks in Stripe with UUID-based routing for security.
+- Exposes a webhook endpoint that listens to Stripe events.
+- Automatically applies body parsing middleware (protecting webhook routes from JSON parsing).
+- Inserts, updates, or deletes records in the database whenever there is a change to Stripe.
+- Cleans up webhooks automatically on shutdown.
 
 ---
 
 ## Packages
 
 - [Library: @supabase/stripe-sync-engine](./packages/sync-engine/README.md)
+- [CLI: stripe-sync](./packages/cli/README.md)
 - [Docker/Server: supabase/stripe-sync-engine](./packages/fastify-app/README.md)
 
 Each package has its own README with installation, configuration, and usage instructions.
