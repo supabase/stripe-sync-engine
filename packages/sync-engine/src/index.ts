@@ -1,8 +1,6 @@
-export { StripeSync } from './stripeSync'
-export { StripeAutoSync } from './stripeAutoSync'
-export type { StripeAutoSyncOptions, StripeAutoSyncInfo } from './stripeAutoSync'
+export { StripeAutoSync } from './stripeSync'
+export type { StripeAutoSyncOptions, StripeAutoSyncInfo } from './stripeSync'
 
 export type * from './types'
 
-export { runMigrations } from './database/migrate'
 export { PostgresClient } from './database/postgres'

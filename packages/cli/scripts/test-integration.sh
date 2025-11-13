@@ -75,34 +75,14 @@ cleanup() {
 # Register cleanup on exit
 trap cleanup EXIT
 
-# Step 1: Run migrations
-echo "📦 Step 1: Running database migrations..."
-cd ../sync-engine
-npm run build > /dev/null 2>&1
-node -e "
-import { runMigrations } from './dist/index.js';
-await runMigrations({
-  databaseUrl: process.env.DATABASE_URL,
-  schema: 'stripe'
-});
-console.log('✓ Migrations completed');
-"
-echo ""
-
-# Step 2: Verify managed_webhooks table exists
-echo "🔍 Step 2: Verifying managed_webhooks table..."
-docker exec stripe-sync-test-db psql -U postgres -d app_db -c "\d stripe.managed_webhooks" > /dev/null 2>&1 && echo "✓ Table exists with correct schema" || echo "❌ Table not found"
-echo ""
-
-# Step 3: Build CLI
-echo "🔨 Step 3: Building CLI..."
-cd ../cli
+# Step 1: Build CLI
+echo "🔨 Step 1: Building CLI..."
 npm run build > /dev/null 2>&1
 echo "✓ CLI built successfully"
 echo ""
 
-# Step 4: Start CLI in background and test
-echo "🚀 Step 4: Starting CLI to test webhook creation..."
+# Step 2: Start CLI in background and test
+echo "🚀 Step 2: Starting CLI to test webhook creation..."
 echo ""
 
 # Start CLI in background (no timeout - we'll manage shutdown ourselves)
@@ -123,9 +103,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
         echo "   Webhook ID: $WEBHOOK_ID"
     fi
 
-    # Step 5: Verify webhook in database
+    # Step 3: Verify webhook in database
     echo ""
-    echo "🔍 Step 5: Checking database for managed webhook..."
+    echo "🔍 Step 3: Checking database for managed webhook..."
     WEBHOOK_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.managed_webhooks;" | tr -d ' ')
 
     if [ "$WEBHOOK_COUNT" -gt 0 ]; then
@@ -143,9 +123,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
         exit 1
     fi
 
-    # Step 6: Trigger test webhook events
+    # Step 4: Trigger test webhook events
     echo ""
-    echo "🎯 Step 6: Triggering test Stripe webhook events..."
+    echo "🎯 Step 4: Triggering test Stripe webhook events..."
     echo "   This tests end-to-end webhook processing and database writes"
     echo ""
 
@@ -171,9 +151,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
     echo "   Waiting for webhook processing..."
     sleep 3
 
-    # Step 7: Verify webhook data in database tables
+    # Step 5: Verify webhook data in database tables
     echo ""
-    echo "🔍 Step 7: Verifying webhook data in database tables..."
+    echo "🔍 Step 5: Verifying webhook data in database tables..."
 
     # Check customers table
     CUSTOMER_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.customers;" 2>/dev/null | tr -d ' ' || echo "0")
@@ -209,9 +189,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
         echo "   ⚠ No price data found (webhook may not have processed yet)"
     fi
 
-    # Step 8: Gracefully shutdown CLI
+    # Step 6: Gracefully shutdown CLI
     echo ""
-    echo "🛑 Step 8: Shutting down CLI gracefully..."
+    echo "🛑 Step 6: Shutting down CLI gracefully..."
     kill -TERM $CLI_PID 2>/dev/null
 
     # Wait for the process to complete cleanup (important!)
@@ -221,9 +201,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
     # Give database a moment to reflect changes
     sleep 1
 
-    # Step 9: Verify cleanup
+    # Step 7: Verify cleanup
     echo ""
-    echo "🧹 Step 9: Verifying cleanup after shutdown..."
+    echo "🧹 Step 7: Verifying cleanup after shutdown..."
     WEBHOOK_COUNT_AFTER=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.managed_webhooks;" | tr -d ' ')
 
     if [ "$WEBHOOK_COUNT_AFTER" -eq 0 ]; then
@@ -250,9 +230,9 @@ echo ""
 echo "Summary:"
 echo "- ✓ Prerequisites checked (Stripe CLI)"
 echo "- ✓ PostgreSQL started in Docker"
-echo "- ✓ Migrations run successfully"
-echo "- ✓ managed_webhooks table created with UUID support"
+echo "- ✓ CLI built successfully"
 echo "- ✓ CLI started and created webhook in Stripe"
+echo "- ✓ Migrations run automatically via StripeAutoSync"
 echo "- ✓ Webhook persisted to database with UUID-based URL"
 echo "- ✓ Test webhook events triggered (customer, product, price)"
 echo "- ✓ Webhook processing verified ($CUSTOMER_COUNT customers, $PRODUCT_COUNT products, $PRICE_COUNT prices)"
