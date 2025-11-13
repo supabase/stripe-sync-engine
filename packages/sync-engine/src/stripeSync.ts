@@ -108,10 +108,35 @@ export class StripeAutoSync {
   async start(app: Express): Promise<StripeAutoSyncInfo> {
     try {
       // 1. Run migrations
-      await runMigrations({
-        databaseUrl: this.options.databaseUrl,
-        schema: this.options.schema,
-      })
+      try {
+        await runMigrations({
+          databaseUrl: this.options.databaseUrl,
+          schema: this.options.schema,
+        })
+      } catch (migrationError) {
+        // Migration failed - drop schema and retry
+        console.warn('Migration failed, dropping schema and retrying...')
+        console.warn('Migration error:', migrationError instanceof Error ? migrationError.message : String(migrationError))
+
+        const { Client } = await import('pg')
+        const client = new Client({ connectionString: this.options.databaseUrl })
+
+        try {
+          await client.connect()
+          await client.query(`DROP SCHEMA IF EXISTS "${this.options.schema}" CASCADE`)
+          console.log(`✓ Dropped schema: ${this.options.schema}`)
+        } finally {
+          await client.end()
+        }
+
+        // Retry migrations
+        console.log('Retrying migrations...')
+        await runMigrations({
+          databaseUrl: this.options.databaseUrl,
+          schema: this.options.schema,
+        })
+        console.log('✓ Migrations completed successfully after retry')
+      }
 
       // 2. Create StripeSync instance (no webhook secret needed)
       const poolConfig: PoolConfig = {
@@ -142,17 +167,19 @@ export class StripeAutoSync {
       this.webhookId = webhook.id
       this.webhookUuid = uuid
 
-      // 4. Run initial backfill of all Stripe data
+      // 4. Mount webhook handler FIRST (before any body parsing)
+      // CRITICAL: This must be done before any app.use(express.json()) in user code
+      this.mountWebhook(app)
+
+      // 5. Apply body parsing middleware for other routes
+      // This will be skipped for webhook routes
+      app.use(this.getBodyParserMiddleware())
+
+      // 6. Run initial backfill of all Stripe data
       console.log('Starting initial backfill of all Stripe data...')
       const backfillResult = await this.stripeSync.syncBackfill({ object: 'all' })
       const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + (result?.synced || 0), 0)
       console.log(`✓ Backfill complete: ${totalSynced} objects synced`)
-
-      // 5. Mount webhook handler on the provided app
-      this.mountWebhook(app)
-
-      // 6. Apply body parsing middleware (automatically skips webhook routes)
-      app.use(this.getBodyParserMiddleware())
 
       return {
         baseUrl,
@@ -198,8 +225,14 @@ export class StripeAutoSync {
     const webhookPath = this.options.webhookPath
 
     return (req: any, res: any, next: any) => {
-      // Skip if this is a webhook route (already has raw parser)
-      if (req.path.startsWith(webhookPath)) {
+      // Skip if this is a webhook route (needs raw body for Stripe signature verification)
+      // Check both req.path and req.url to handle different Express configurations
+      const path = req.path || req.url || ''
+
+      // Match webhook path with or without UUID parameter
+      // e.g., /stripe-webhooks or /stripe-webhooks/abc-123-uuid
+      if (path.startsWith(webhookPath)) {
+        console.log('[BodyParser] Skipping webhook route:', path)
         return next()
       }
 
@@ -224,6 +257,13 @@ export class StripeAutoSync {
 
     // Mount the webhook handler
     app.post(webhookRoute, async (req, res) => {
+      console.log('[Webhook] Received request:', {
+        path: req.path,
+        url: req.url,
+        method: req.method,
+        contentType: req.headers['content-type'],
+      })
+
       const sig = req.headers['stripe-signature']
       if (!sig || typeof sig !== 'string') {
         console.error('[Webhook] Missing stripe-signature header')
@@ -234,13 +274,18 @@ export class StripeAutoSync {
 
       // express.raw puts the raw body in req.body as a Buffer
       const rawBody = req.body
+
       if (!rawBody || !Buffer.isBuffer(rawBody)) {
         console.error('[Webhook] Body is not a Buffer!', {
           hasBody: !!rawBody,
           bodyType: typeof rawBody,
           isBuffer: Buffer.isBuffer(rawBody),
           bodyConstructor: rawBody?.constructor?.name,
+          path: req.path,
+          url: req.url,
         })
+        console.error('[Webhook] COMMON CAUSE: app.use(express.json()) was called BEFORE stripeAutoSync.start(app)')
+        console.error('[Webhook] SOLUTION: Call stripeAutoSync.start(app) BEFORE any app.use(express.json())')
         return res.status(400).send({ error: 'Missing raw body for signature verification' })
       }
 
