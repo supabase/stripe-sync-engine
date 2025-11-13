@@ -1,7 +1,7 @@
-import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
+import { runMigrations } from './database/migrate'
+import { StripeSync } from './stripeSync'
 import express, { Express } from 'express'
 import { type PoolConfig } from 'pg'
-import chalk from 'chalk'
 import http from 'node:http'
 
 export interface StripeAutoSyncOptions {
@@ -80,7 +80,6 @@ export class StripeAutoSync {
       })
 
       // 3. Create managed webhook (generates UUID and stores in DB)
-      console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
       const baseUrl = this.options.baseUrl()
       const { webhook, uuid } = await this.stripeSync.createManagedWebhook(
         `${baseUrl}${this.options.webhookPath}`,
@@ -92,10 +91,6 @@ export class StripeAutoSync {
       this.webhookId = webhook.id
       this.webhookUuid = uuid
 
-      console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
-      console.log(chalk.cyan(`  URL: ${webhook.url}`))
-      console.log(chalk.cyan(`  Events: All events (*)`))
-
       // 4. Mount webhook handler on the provided app
       this.mountWebhook(app)
 
@@ -105,12 +100,11 @@ export class StripeAutoSync {
         webhookUuid: uuid,
       }
     } catch (error) {
-      console.log(chalk.red('\nFailed to start Stripe Sync:'))
       if (error instanceof Error) {
-        console.error(chalk.red(error.message))
-        console.error(chalk.red(error.stack || ''))
+        console.error('Failed to start Stripe Sync:', error.message)
+        console.error(error.stack || '')
       } else {
-        console.error(chalk.red(String(error)))
+        console.error('Failed to start Stripe Sync:', String(error))
       }
       // Clean up on error
       await this.stop()
@@ -128,11 +122,9 @@ export class StripeAutoSync {
       try {
         await this.stripeSync.deleteManagedWebhook(this.webhookId)
       } catch (error) {
-        console.log(chalk.yellow('⚠ Could not delete webhook'))
+        console.error('Could not delete webhook:', error)
       }
     }
-
-    console.log(chalk.green('✓ Webhook cleanup complete'))
   }
 
   /**

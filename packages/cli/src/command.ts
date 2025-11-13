@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import { loadConfig, CliOptions } from './config'
-import { StripeAutoSync } from './sync'
+import { StripeAutoSync } from '@supabase/stripe-sync-engine'
 import { createTunnel, NgrokTunnel } from './ngrok'
 
 /**
@@ -25,6 +25,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
 
     if (stripeSync) {
       await stripeSync.stop()
+      console.log(chalk.green('✓ Webhook cleanup complete'))
     }
 
     // Close server
@@ -88,7 +89,11 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
     })
 
-    await stripeSync.start(app)
+    console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
+    const syncInfo = await stripeSync.start(app)
+    console.log(chalk.green(`✓ Webhook created: ${syncInfo.webhookUrl.split('/').pop()}`))
+    console.log(chalk.cyan(`  URL: ${syncInfo.webhookUrl}`))
+    console.log(chalk.cyan(`  Events: All events (*)`))
 
     // Start Express server
     console.log(chalk.blue(`\nStarting server on port ${port}...`))
