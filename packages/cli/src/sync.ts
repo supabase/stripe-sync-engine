@@ -8,6 +8,7 @@ export interface StripeAutoSyncOptions {
   databaseUrl: string
   stripeApiKey: string
   baseUrl: () => string
+  webhookPath?: string
   schema?: string
   stripeApiVersion?: string
   autoExpandLists?: boolean
@@ -15,7 +16,7 @@ export interface StripeAutoSyncOptions {
 }
 
 export interface StripeAutoSyncInfo {
-  tunnelUrl: string
+  baseUrl: string
   webhookUrl: string
   webhookUuid: string
 }
@@ -34,6 +35,7 @@ export class StripeAutoSync {
 
   constructor(options: StripeAutoSyncOptions) {
     this.options = {
+      webhookPath: '/stripe-webhooks',
       schema: 'stripe',
       stripeApiVersion: '2020-08-27',
       autoExpandLists: false,
@@ -81,7 +83,7 @@ export class StripeAutoSync {
       console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
       const baseUrl = this.options.baseUrl()
       const { webhook, uuid } = await this.stripeSync.createManagedWebhook(
-        baseUrl,
+        `${baseUrl}${this.options.webhookPath}`,
         {
           enabled_events: ['*'], // Subscribe to all events
           description: 'stripe-sync-cli development webhook',
@@ -98,7 +100,7 @@ export class StripeAutoSync {
       this.mountWebhook(app)
 
       return {
-        tunnelUrl: baseUrl,
+        baseUrl,
         webhookUrl: webhook.url,
         webhookUuid: uuid,
       }
@@ -139,11 +141,13 @@ export class StripeAutoSync {
    * IMPORTANT: Must be called BEFORE app.use(express.json()) to ensure raw body parsing.
    */
   private mountWebhook(app: Express): void {
+    const webhookRoute = `${this.options.webhookPath}/:uuid`
+
     // Apply raw body parser ONLY to this webhook route
-    app.use('/webhooks/:uuid', express.raw({ type: 'application/json' }))
+    app.use(webhookRoute, express.raw({ type: 'application/json' }))
 
     // Mount the webhook handler
-    app.post('/webhooks/:uuid', async (req, res) => {
+    app.post(webhookRoute, async (req, res) => {
       const sig = req.headers['stripe-signature']
       if (!sig || typeof sig !== 'string') {
         console.error('[Webhook] Missing stripe-signature header')
