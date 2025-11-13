@@ -93,6 +93,11 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // Apply body parsing middleware (skips webhook routes automatically)
     app.use(stripeSync.getBodyParserMiddleware())
 
+    // Apply default JSON parsing as fallback (webhook routes should already be skipped above)
+    // This tests that getBodyParserMiddleware() correctly protects webhook routes
+    app.use(express.json())
+    app.use(express.urlencoded({ extended: false }))
+
     // Health check endpoint
     app.get('/health', async (req, res) => {
       return res.status(200).json({ status: 'ok' })
