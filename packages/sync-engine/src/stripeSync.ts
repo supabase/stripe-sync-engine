@@ -1668,7 +1668,7 @@ export class StripeSync {
     const uuid = randomUUID()
 
     // Create webhook with UUID in the URL path
-    const webhookUrl = `${baseUrl}/webhooks/${uuid}`
+    const webhookUrl = `${baseUrl}/${uuid}`
     const webhook = await this.stripe.webhookEndpoints.create({
       ...params,
       url: webhookUrl,

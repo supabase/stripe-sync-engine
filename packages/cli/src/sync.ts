@@ -2,14 +2,13 @@ import { runMigrations, StripeSync } from '@supabase/stripe-sync-engine'
 import express, { Express } from 'express'
 import { type PoolConfig } from 'pg'
 import chalk from 'chalk'
-import { createTunnel, NgrokTunnel } from './ngrok'
 import http from 'node:http'
 
 export interface StripeAutoSyncOptions {
   databaseUrl: string
   stripeApiKey: string
-  ngrokAuthToken: string
-  port?: number
+  baseUrl: () => string
+  webhookPath?: string
   schema?: string
   stripeApiVersion?: string
   autoExpandLists?: boolean
@@ -17,29 +16,26 @@ export interface StripeAutoSyncOptions {
 }
 
 export interface StripeAutoSyncInfo {
-  tunnelUrl: string
+  baseUrl: string
   webhookUrl: string
   webhookUuid: string
 }
 
 /**
  * Manages Stripe webhook auto-sync infrastructure:
- * - Creates ngrok tunnel
  * - Runs database migrations
  * - Creates managed webhook in Stripe
  * - Mounts webhook handler on Express app
  */
 export class StripeAutoSync {
   private options: Required<StripeAutoSyncOptions>
-  private tunnel: NgrokTunnel | null = null
   private webhookId: string | null = null
   private webhookUuid: string | null = null
   private stripeSync: StripeSync | null = null
-  private server: http.Server | null = null
 
   constructor(options: StripeAutoSyncOptions) {
     this.options = {
-      port: 3000,
+      webhookPath: '/stripe-webhooks',
       schema: 'stripe',
       stripeApiVersion: '2020-08-27',
       autoExpandLists: false,
@@ -49,29 +45,24 @@ export class StripeAutoSync {
   }
 
   /**
-   * Starts the complete Stripe Sync infrastructure and mounts webhook handler:
-   * 1. Creates ngrok tunnel
-   * 2. Runs database migrations
-   * 3. Creates StripeSync instance
-   * 4. Creates managed webhook endpoint
-   * 5. Mounts webhook handler on provided Express app
-   * 6. Starts Express server
+   * Starts the Stripe Sync infrastructure and mounts webhook handler:
+   * 1. Runs database migrations
+   * 2. Creates StripeSync instance
+   * 3. Creates managed webhook endpoint
+   * 4. Mounts webhook handler on provided Express app
    *
    * @param app - Express app to mount webhook handler on
    * @returns Information about the running instance
    */
   async start(app: Express): Promise<StripeAutoSyncInfo> {
     try {
-      // 1. Create tunnel
-      this.tunnel = await createTunnel(this.options.port, this.options.ngrokAuthToken)
-
-      // 2. Run migrations
+      // 1. Run migrations
       await runMigrations({
         databaseUrl: this.options.databaseUrl,
         schema: this.options.schema,
       })
 
-      // 3. Create StripeSync instance (no webhook secret needed)
+      // 2. Create StripeSync instance (no webhook secret needed)
       const poolConfig: PoolConfig = {
         max: 10,
         connectionString: this.options.databaseUrl,
@@ -88,10 +79,11 @@ export class StripeAutoSync {
         poolConfig,
       })
 
-      // 4. Create managed webhook (generates UUID and stores in DB)
+      // 3. Create managed webhook (generates UUID and stores in DB)
       console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
+      const baseUrl = this.options.baseUrl()
       const { webhook, uuid } = await this.stripeSync.createManagedWebhook(
-        this.tunnel.url,
+        `${baseUrl}${this.options.webhookPath}`,
         {
           enabled_events: ['*'], // Subscribe to all events
           description: 'stripe-sync-cli development webhook',
@@ -104,22 +96,11 @@ export class StripeAutoSync {
       console.log(chalk.cyan(`  URL: ${webhook.url}`))
       console.log(chalk.cyan(`  Events: All events (*)`))
 
-      // 5. Mount webhook handler on the provided app
+      // 4. Mount webhook handler on the provided app
       this.mountWebhook(app)
 
-      // 6. Start Express server
-      console.log(chalk.blue(`\nStarting server on port ${this.options.port}...`))
-      await new Promise<void>((resolve, reject) => {
-        this.server = app.listen(this.options.port, '0.0.0.0', () => {
-          resolve()
-        })
-        this.server.on('error', reject)
-      })
-
-      console.log(chalk.green(`✓ Server started on port ${this.options.port}`))
-
       return {
-        tunnelUrl: this.tunnel.url,
+        baseUrl,
         webhookUrl: webhook.url,
         webhookUuid: uuid,
       }
@@ -139,9 +120,7 @@ export class StripeAutoSync {
 
   /**
    * Stops all services and cleans up resources:
-   * 1. Deletes Stripe webhook endpoint
-   * 2. Closes ngrok tunnel
-   * 3. Closes Express server
+   * 1. Deletes Stripe webhook endpoint from Stripe and database
    */
   async stop(): Promise<void> {
     // Delete webhook endpoint using StripeSync
@@ -153,31 +132,7 @@ export class StripeAutoSync {
       }
     }
 
-    // Close tunnel
-    if (this.tunnel) {
-      try {
-        await this.tunnel.close()
-      } catch (error) {
-        console.log(chalk.yellow('⚠ Could not close tunnel'))
-      }
-    }
-
-    // Close server
-    if (this.server) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          this.server!.close((err) => {
-            if (err) reject(err)
-            else resolve()
-          })
-        })
-        console.log(chalk.green('✓ Server stopped'))
-      } catch (error) {
-        console.log(chalk.yellow('⚠ Server already stopped'))
-      }
-    }
-
-    console.log(chalk.green('✓ Cleanup complete'))
+    console.log(chalk.green('✓ Webhook cleanup complete'))
   }
 
   /**
@@ -186,11 +141,13 @@ export class StripeAutoSync {
    * IMPORTANT: Must be called BEFORE app.use(express.json()) to ensure raw body parsing.
    */
   private mountWebhook(app: Express): void {
+    const webhookRoute = `${this.options.webhookPath}/:uuid`
+
     // Apply raw body parser ONLY to this webhook route
-    app.use('/webhooks/:uuid', express.raw({ type: 'application/json' }))
+    app.use(webhookRoute, express.raw({ type: 'application/json' }))
 
     // Mount the webhook handler
-    app.post('/webhooks/:uuid', async (req, res) => {
+    app.post(webhookRoute, async (req, res) => {
       const sig = req.headers['stripe-signature']
       if (!sig || typeof sig !== 'string') {
         console.error('[Webhook] Missing stripe-signature header')
