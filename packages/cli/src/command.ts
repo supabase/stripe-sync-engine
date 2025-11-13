@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import { loadConfig, CliOptions } from './config'
-import { StripeAutoSync } from '@supabase/stripe-sync-engine'
+import { StripeAutoSync } from 'stripe-experiment-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 
 /**

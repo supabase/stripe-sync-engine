@@ -142,10 +142,16 @@ export class StripeAutoSync {
       this.webhookId = webhook.id
       this.webhookUuid = uuid
 
-      // 4. Mount webhook handler on the provided app
+      // 4. Run initial backfill of all Stripe data
+      console.log('Starting initial backfill of all Stripe data...')
+      const backfillResult = await this.stripeSync.syncBackfill({ object: 'all' })
+      const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + (result?.synced || 0), 0)
+      console.log(`✓ Backfill complete: ${totalSynced} objects synced`)
+
+      // 5. Mount webhook handler on the provided app
       this.mountWebhook(app)
 
-      // 5. Apply body parsing middleware (automatically skips webhook routes)
+      // 6. Apply body parsing middleware (automatically skips webhook routes)
       app.use(this.getBodyParserMiddleware())
 
       return {
