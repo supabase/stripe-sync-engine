@@ -298,7 +298,7 @@ class StripeSync {
   async processWebhook(payload: Buffer | string, signature: string | undefined, uuid: string) {
     // Query the webhook secret from the database using the UUID
     const result = await this.postgresClient.query(
-      `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" WHERE uuid = $1`,
+      `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE uuid = $1`,
       [uuid]
     )
 
@@ -1927,7 +1927,7 @@ class StripeSync {
     id: string
   ): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" WHERE id = $1`,
+      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE id = $1`,
       [id]
     )
     return result.rows.length > 0
@@ -1937,7 +1937,7 @@ class StripeSync {
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."managed_webhooks" ORDER BY created DESC`
+      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" ORDER BY created DESC`
     )
     return result.rows as Array<Stripe.WebhookEndpoint & { uuid: string }>
   }
@@ -1956,7 +1956,7 @@ class StripeSync {
 
   async deleteManagedWebhook(id: string): Promise<boolean> {
     await this.stripe.webhookEndpoints.del(id)
-    return this.postgresClient.delete('managed_webhooks', id)
+    return this.postgresClient.delete('_managed_webhooks', id)
   }
 
   private async upsertManagedWebhooks(
@@ -1965,7 +1965,7 @@ class StripeSync {
   ): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
     return this.postgresClient.upsertManyWithTimestampProtection(
       webhooks,
-      'managed_webhooks',
+      '_managed_webhooks',
       managedWebhookSchema,
       syncTimestamp
     )
