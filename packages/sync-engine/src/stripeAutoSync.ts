@@ -128,6 +128,30 @@ export class StripeAutoSync {
   }
 
   /**
+   * Returns Express middleware for body parsing that automatically skips webhook routes.
+   * This middleware applies JSON and URL-encoded parsers to all routes EXCEPT the webhook path,
+   * which needs raw body for signature verification.
+   *
+   * @returns Express middleware function
+   */
+  getBodyParserMiddleware() {
+    const webhookPath = this.options.webhookPath
+
+    return (req: any, res: any, next: any) => {
+      // Skip if this is a webhook route (already has raw parser)
+      if (req.path.startsWith(webhookPath)) {
+        return next()
+      }
+
+      // Apply JSON and URL-encoded parsers for other routes
+      express.json()(req, res, (err: any) => {
+        if (err) return next(err)
+        express.urlencoded({ extended: false })(req, res, next)
+      })
+    }
+  }
+
+  /**
    * Mounts the Stripe webhook handler on the provided Express app.
    * Applies raw body parser middleware for signature verification.
    * IMPORTANT: Must be called BEFORE app.use(express.json()) to ensure raw body parsing.

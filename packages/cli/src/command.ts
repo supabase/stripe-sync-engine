@@ -73,11 +73,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // Create Express app
     const app = express()
 
-    // Health check endpoint
-    app.get('/health', async (req, res) => {
-      return res.status(200).json({ status: 'ok' })
-    })
-
     // Create and start sync (runs migrations, creates webhook, mounts handler)
     stripeSync = new StripeAutoSync({
       databaseUrl: config.databaseUrl,
@@ -94,6 +89,14 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     console.log(chalk.green(`✓ Webhook created: ${syncInfo.webhookUrl.split('/').pop()}`))
     console.log(chalk.cyan(`  URL: ${syncInfo.webhookUrl}`))
     console.log(chalk.cyan(`  Events: All events (*)`))
+
+    // Apply body parsing middleware (skips webhook routes automatically)
+    app.use(stripeSync.getBodyParserMiddleware())
+
+    // Health check endpoint
+    app.get('/health', async (req, res) => {
+      return res.status(200).json({ status: 'ok' })
+    })
 
     // Start Express server
     console.log(chalk.blue(`\nStarting server on port ${port}...`))
