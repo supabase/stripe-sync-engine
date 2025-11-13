@@ -82,6 +82,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       stripeApiVersion: process.env.STRIPE_API_VERSION,
       autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
       backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
+      keepWebhooksOnShutdown: process.env.KEEP_WEBHOOKS_ON_SHUTDOWN === 'true' ? true : false,
     })
 
     console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))

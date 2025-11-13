@@ -85,8 +85,8 @@ echo ""
 echo "🚀 Step 2: Starting CLI to test webhook creation..."
 echo ""
 
-# Start CLI in background (no timeout - we'll manage shutdown ourselves)
-npm run dev > /tmp/cli-test.log 2>&1 &
+# Start CLI in background with KEEP_WEBHOOKS_ON_SHUTDOWN=false for testing
+KEEP_WEBHOOKS_ON_SHUTDOWN=false npm run dev > /tmp/cli-test.log 2>&1 &
 CLI_PID=$!
 
 # Wait for startup (give it time to create webhook)
@@ -194,11 +194,9 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
     echo "🛑 Step 6: Shutting down CLI gracefully..."
     kill -TERM $CLI_PID 2>/dev/null
 
-    # Wait for the process to complete cleanup (important!)
+    # Wait for cleanup to complete
     echo "   Waiting for cleanup to complete..."
     wait $CLI_PID 2>/dev/null || true
-
-    # Give database a moment to reflect changes
     sleep 1
 
     # Step 7: Verify cleanup
