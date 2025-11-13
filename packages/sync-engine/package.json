@@ -1,6 +1,6 @@
 {
   "name": "stripe-experiment-sync",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data based on webhooks to Postgres",
   "type": "module",
