@@ -1734,6 +1734,10 @@ export class StripeSync {
           }
         } catch (error) {
           // Webhook doesn't exist in Stripe anymore, continue searching
+          this.config.logger?.warn(
+            { error, webhookId: existingWebhook.id },
+            'Failed to retrieve existing webhook'
+          )
           continue
         }
       }
