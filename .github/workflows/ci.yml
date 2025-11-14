@@ -72,3 +72,48 @@ jobs:
       - name: Tests
         run: |
           npm run test
+
+  integration-test:
+    name: CLI Integration Test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install Stripe CLI
+        run: |
+          wget -q https://github.com/stripe/stripe-cli/releases/download/v1.19.5/stripe_1.19.5_linux_x86_64.tar.gz
+          tar -xzf stripe_1.19.5_linux_x86_64.tar.gz
+          mkdir -p $HOME/.local/bin
+          mv stripe $HOME/.local/bin/
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          $HOME/.local/bin/stripe --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Set up .env file for CLI
+        run: |
+          cd packages/cli
+          touch .env
+          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> .env
+          echo STRIPE_API_KEY='${{ secrets.STRIPE_TEST_KEY }}' >> .env
+          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> .env
+
+      - name: Run CLI Integration Test
+        run: |
+          cd packages/cli
+          chmod +x ./scripts/test-integration.sh
+          ./scripts/test-integration.sh
