@@ -13,6 +13,7 @@ import {
 import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
 import { type PoolConfig } from 'pg'
+import { withRetry } from './utils/retry'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -592,7 +593,8 @@ export class StripeSync {
     if (entityInFinalState && entityInFinalState(entity)) return { entity, refetched: false }
 
     if (this.shouldRefetchEntity(entity)) {
-      const fetchedEntity = await fetchFn(entity.id)
+      // Wrap the fetch call with retry logic for 429 errors
+      const fetchedEntity = await withRetry(() => fetchFn(entity.id!), {}, this.config.logger)
       return { entity: fetchedEntity, refetched: true }
     }
 
@@ -1030,9 +1032,17 @@ export class StripeSync {
     const items: T[] = []
 
     this.config.logger?.info('Fetching items to sync from Stripe')
-    for await (const item of fetch()) {
-      items.push(item)
-    }
+
+    // Wrap the pagination loop with retry logic for 429 errors
+    await withRetry(
+      async () => {
+        for await (const item of fetch()) {
+          items.push(item)
+        }
+      },
+      {},
+      this.config.logger
+    )
 
     if (!items.length) return { synced: 0 }
 
@@ -1797,7 +1807,8 @@ export class StripeSync {
     const entities: T[] = []
 
     for (const id of ids) {
-      const entity = await fetch(id)
+      // Wrap each fetch call with retry logic for 429 errors
+      const entity = await withRetry(() => fetch(id), {}, this.config.logger)
       entities.push(entity)
     }
 

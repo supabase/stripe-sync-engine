@@ -63,6 +63,31 @@ export type StripeSyncConfig = {
   poolConfig: PoolConfig
 
   logger?: pino.Logger
+
+  /**
+   * Maximum number of retry attempts for 429 rate limit errors.
+   * Default: 5
+   */
+  maxRetries?: number
+
+  /**
+   * Initial delay in milliseconds before first retry attempt.
+   * Delay increases exponentially: 1s, 2s, 4s, 8s, 16s, etc.
+   * Default: 1000 (1 second)
+   */
+  initialRetryDelayMs?: number
+
+  /**
+   * Maximum delay in milliseconds between retry attempts.
+   * Default: 60000 (60 seconds)
+   */
+  maxRetryDelayMs?: number
+
+  /**
+   * Random jitter in milliseconds added to retry delays to prevent thundering herd.
+   * Default: 500
+   */
+  retryJitterMs?: number
 }
 
 export type SyncObject =
