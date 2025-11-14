@@ -112,8 +112,14 @@ jobs:
           echo STRIPE_API_KEY='${{ secrets.STRIPE_TEST_KEY }}' >> .env
           echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> .env
 
-      - name: Run CLI Integration Test
+      - name: Run CLI Webhook Integration Test
         run: |
           cd packages/cli
-          chmod +x ./scripts/test-integration.sh
-          ./scripts/test-integration.sh
+          chmod +x ./scripts/test-integration-webhooks.sh
+          ./scripts/test-integration-webhooks.sh
+
+      - name: Run CLI Backfill Integration Test
+        run: |
+          cd packages/cli
+          chmod +x ./scripts/test-integration-backfill.sh
+          ./scripts/test-integration-backfill.sh
