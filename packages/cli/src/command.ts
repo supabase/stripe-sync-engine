@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import { loadConfig, CliOptions } from './config'
-import { StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { StripeSync, runMigrations } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
 

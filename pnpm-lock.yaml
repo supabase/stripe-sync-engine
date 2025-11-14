@@ -54,11 +54,8 @@ importers:
       '@ngrok/ngrok':
         specifier: ^1.4.1
         version: 1.5.2
-      '@supabase/stripe-sync-engine':
-        specifier: https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz
-        version: https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz(stripe@17.7.0)
       '@supabase/stripe-sync-fastify':
-        specifier: 'workspace:'
+        specifier: workspace:*
         version: link:../fastify-app
       chalk:
         specifier: ^5.3.0
@@ -78,7 +75,7 @@ importers:
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
-      stripe-experiment-sync:
+      stripe-replit-sync:
         specifier: workspace:*
         version: link:../sync-engine
     devDependencies:
@@ -118,7 +115,7 @@ importers:
       stripe:
         specifier: ^19.0.0
         version: 19.3.0(@types/node@24.10.0)
-      stripe-experiment-sync:
+      stripe-replit-sync:
         specifier: workspace:*
         version: link:../sync-engine
     devDependencies:
@@ -1042,12 +1039,6 @@ packages:
     resolution: {integrity: sha512-rLarc1Ofcs3DHtgSzFO31pZsCh8g05R2azN1q3fF+H423Co87My0R+tazOEvYVKXSLh8C4LerMK41/K7wlklcg==}
     cpu: [x64]
     os: [win32]
-
-  '@supabase/stripe-sync-engine@https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz':
-    resolution: {tarball: https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz}
-    version: 0.0.0
-    peerDependencies:
-      stripe: '> 11'
 
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
@@ -3317,17 +3308,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.53.1':
     optional: true
-
-  '@supabase/stripe-sync-engine@https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz(stripe@17.7.0)':
-    dependencies:
-      express: 4.21.2
-      pg: 8.16.3
-      pg-node-migrations: 0.0.8
-      stripe: 17.7.0
-      yesql: 7.0.0
-    transitivePeerDependencies:
-      - pg-native
-      - supports-color
 
   '@types/body-parser@1.19.6':
     dependencies:

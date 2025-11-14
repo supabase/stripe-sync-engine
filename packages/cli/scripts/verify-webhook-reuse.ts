@@ -6,7 +6,7 @@
  * when the base URL matches, and creates new ones when it doesn't.
  */
 
-import { StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { StripeSync, runMigrations } from 'stripe-replit-sync'
 import dotenv from 'dotenv'
 import chalk from 'chalk'
 import type { PoolConfig } from 'pg'
