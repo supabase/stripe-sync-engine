@@ -26,7 +26,9 @@
     "format:fix": "prettier --write .",
     "stripe:trigger": "./scripts/stripe-trigger.sh",
     "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
-    "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts"
+    "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts",
+    "test:integration:webhooks": "./scripts/test-integration-webhooks.sh",
+    "test:integration:backfill": "./scripts/test-integration-backfill.sh"
   },
   "keywords": [
     "stripe",
