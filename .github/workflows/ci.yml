@@ -101,8 +101,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build CLI
-        run: pnpm --filter=@supabase/stripe-sync-cli build
+      - name: Build all packages
+        run: pnpm build
 
       - name: Set up .env file for CLI
         run: |
