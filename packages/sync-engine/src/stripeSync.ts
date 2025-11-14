@@ -1,23 +1,6 @@
 import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import { PostgresClient } from './database/postgres'
-import { chargeSchema } from './schemas/charge'
-import { checkoutSessionSchema } from './schemas/checkout_sessions'
-import { checkoutSessionLineItemSchema } from './schemas/checkout_session_line_items'
-import { creditNoteSchema } from './schemas/credit_note'
-import { customerDeletedSchema, customerSchema } from './schemas/customer'
-import { disputeSchema } from './schemas/dispute'
-import { invoiceSchema } from './schemas/invoice'
-import { planSchema } from './schemas/plan'
-import { priceSchema } from './schemas/price'
-import { productSchema } from './schemas/product'
-import { paymentIntentSchema } from './schemas/payment_intent'
-import { paymentMethodsSchema } from './schemas/payment_methods'
-import { setupIntentsSchema } from './schemas/setup_intents'
-import { taxIdSchema } from './schemas/tax_id'
-import { subscriptionItemSchema } from './schemas/subscription_item'
-import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
-import { subscriptionSchema } from './schemas/subscription'
 import {
   StripeSyncConfig,
   Sync,
@@ -27,12 +10,6 @@ import {
   SyncFeaturesParams,
   type RevalidateEntity,
 } from './types'
-import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
-import { reviewSchema } from './schemas/review'
-import { refundSchema } from './schemas/refund'
-import { activeEntitlementSchema } from './schemas/active_entitlement'
-import { featureSchema } from './schemas/feature'
-import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
 import { type PoolConfig } from 'pg'
 
@@ -47,7 +24,6 @@ function getUniqueIds<T>(entries: T[], key: string): string[] {
 }
 
 const DEFAULT_SCHEMA = 'stripe'
-
 
 export interface StripeSyncOptions {
   databaseUrl: string
@@ -124,11 +100,7 @@ export class StripeSync {
     const webhookSecret = result.rows[0].secret
 
     // Verify webhook signature using the secret from DB
-    const event = await this.stripe.webhooks.constructEventAsync(
-      payload,
-      signature!,
-      webhookSecret
-    )
+    const event = await this.stripe.webhooks.constructEventAsync(payload, signature!, webhookSecret)
 
     return this.processEvent(event)
   }
@@ -1077,12 +1049,7 @@ export class StripeSync {
       this.stripe.refunds.list({ charge: id, limit: 100 })
     )
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      charges,
-      'charges',
-      chargeSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(charges, 'charges', syncTimestamp)
   }
 
   private async backfillCharges(chargeIds: string[]) {
@@ -1123,7 +1090,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       creditNotes,
       'credit_notes',
-      creditNoteSchema,
       syncTimestamp
     )
   }
@@ -1146,7 +1112,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       checkoutSessions,
       'checkout_sessions',
-      checkoutSessionSchema,
       syncTimestamp
     )
 
@@ -1173,7 +1138,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       earlyFraudWarnings,
       'early_fraud_warnings',
-      earlyFraudWarningSchema,
       syncTimestamp
     )
   }
@@ -1190,12 +1154,7 @@ export class StripeSync {
       ])
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      refunds,
-      'refunds',
-      refundSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(refunds, 'refunds', syncTimestamp)
   }
 
   async upsertReviews(
@@ -1210,12 +1169,7 @@ export class StripeSync {
       ])
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      reviews,
-      'reviews',
-      reviewSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(reviews, 'reviews', syncTimestamp)
   }
 
   async upsertCustomers(
@@ -1228,13 +1182,11 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       nonDeletedCustomers,
       'customers',
-      customerSchema,
       syncTimestamp
     )
     await this.postgresClient.upsertManyWithTimestampProtection(
       deletedCustomers,
       'customers',
-      customerDeletedSchema,
       syncTimestamp
     )
 
@@ -1264,7 +1216,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       disputes,
       'disputes',
-      disputeSchema,
       syncTimestamp
     )
   }
@@ -1288,7 +1239,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       invoices,
       'invoices',
-      invoiceSchema,
       syncTimestamp
     )
   }
@@ -1316,12 +1266,7 @@ export class StripeSync {
       await this.backfillProducts(getUniqueIds(plans, 'product'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      plans,
-      'plans',
-      planSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(plans, 'plans', syncTimestamp)
   }
 
   async deletePlan(id: string): Promise<boolean> {
@@ -1337,12 +1282,7 @@ export class StripeSync {
       await this.backfillProducts(getUniqueIds(prices, 'product'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      prices,
-      'prices',
-      priceSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(prices, 'prices', syncTimestamp)
   }
 
   async deletePrice(id: string): Promise<boolean> {
@@ -1356,7 +1296,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       products,
       'products',
-      productSchema,
       syncTimestamp
     )
   }
@@ -1388,7 +1327,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       paymentIntents,
       'payment_intents',
-      paymentIntentSchema,
       syncTimestamp
     )
   }
@@ -1405,7 +1343,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       paymentMethods,
       'payment_methods',
-      paymentMethodsSchema,
       syncTimestamp
     )
   }
@@ -1422,7 +1359,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       setupIntents,
       'setup_intents',
-      setupIntentsSchema,
       syncTimestamp
     )
   }
@@ -1436,12 +1372,7 @@ export class StripeSync {
       await this.backfillCustomers(getUniqueIds(taxIds, 'customer'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      taxIds,
-      'tax_ids',
-      taxIdSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(taxIds, 'tax_ids', syncTimestamp)
   }
 
   async deleteTaxId(id: string): Promise<boolean> {
@@ -1470,7 +1401,6 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedSubscriptionItems,
       'subscription_items',
-      subscriptionItemSchema,
       syncTimestamp
     )
   }
@@ -1518,7 +1448,6 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedLineItems,
       'checkout_session_line_items',
-      checkoutSessionLineItemSchema,
       syncTimestamp
     )
   }
@@ -1564,7 +1493,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       subscriptionSchedules,
       'subscription_schedules',
-      subscriptionScheduleSchema,
       syncTimestamp
     )
 
@@ -1590,7 +1518,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       subscriptions,
       'subscriptions',
-      subscriptionSchema,
       syncTimestamp
     )
 
@@ -1630,7 +1557,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       features,
       'features',
-      featureSchema,
       syncTimestamp
     )
   }
@@ -1673,7 +1599,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       entitlements,
       'active_entitlements',
-      activeEntitlementSchema,
       syncTimestamp
     )
   }
@@ -1716,9 +1641,7 @@ export class StripeSync {
       if (existingBaseUrl === baseUrl) {
         try {
           // Verify webhook still exists in Stripe and is enabled
-          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(
-            existingWebhook.id
-          )
+          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(existingWebhook.id)
 
           if (stripeWebhook.status === 'enabled') {
             // Webhook is valid, reuse it
@@ -1727,7 +1650,7 @@ export class StripeSync {
               uuid: existingWebhook.uuid,
             }
           }
-        } catch (error) {
+        } catch {
           // Webhook doesn't exist in Stripe anymore, continue searching
           continue
         }
@@ -1738,9 +1661,7 @@ export class StripeSync {
     return this.createManagedWebhook(baseUrl, params)
   }
 
-  async getManagedWebhook(
-    id: string
-  ): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
+  async getManagedWebhook(id: string): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
       `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE id = $1`,
       [id]
@@ -1781,7 +1702,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       webhooks,
       '_managed_webhooks',
-      managedWebhookSchema,
       syncTimestamp
     )
   }
