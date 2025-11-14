@@ -91,8 +91,12 @@ jobs:
 
       - name: Install Stripe CLI
         run: |
-          npm install -g stripe
-          stripe --version
+          wget -q https://github.com/stripe/stripe-cli/releases/download/v1.19.5/stripe_1.19.5_linux_x86_64.tar.gz
+          tar -xzf stripe_1.19.5_linux_x86_64.tar.gz
+          mkdir -p $HOME/.local/bin
+          mv stripe $HOME/.local/bin/
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          $HOME/.local/bin/stripe --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
