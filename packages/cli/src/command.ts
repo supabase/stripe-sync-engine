@@ -2,10 +2,10 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
+import { Client, type PoolConfig } from 'pg'
 import { loadConfig, CliOptions } from './config'
 import { StripeSync, runMigrations, type SyncObject } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
-import type { PoolConfig } from 'pg'
 
 const VALID_SYNC_OBJECTS: SyncObject[] = [
   'all',
@@ -195,7 +195,6 @@ export async function migrateCommand(options: CliOptions): Promise<void> {
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
 
-      const { Client } = await import('pg')
       const client = new Client({ connectionString: databaseUrl })
 
       try {
@@ -305,7 +304,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
 
-      const { Client } = await import('pg')
       const client = new Client({ connectionString: config.databaseUrl })
 
       try {

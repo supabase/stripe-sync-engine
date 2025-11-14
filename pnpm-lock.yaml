@@ -72,6 +72,9 @@ importers:
       inquirer:
         specifier: ^12.3.0
         version: 12.11.0(@types/node@22.19.0)
+      pg:
+        specifier: ^8.13.1
+        version: 8.16.3
       stripe:
         specifier: ^17.7.0
         version: 17.7.0

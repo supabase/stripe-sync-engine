@@ -10,6 +10,7 @@ import {
   SyncFeaturesParams,
   type RevalidateEntity,
 } from './types'
+import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
 import { type PoolConfig } from 'pg'
 
@@ -1721,8 +1722,19 @@ export class StripeSync {
     webhooks: Array<Stripe.WebhookEndpoint & { uuid: string }>,
     syncTimestamp?: string
   ): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
+    // Filter webhooks to only include schema-defined properties
+    const filteredWebhooks = webhooks.map((webhook) => {
+      const filtered: any = {}
+      for (const prop of managedWebhookSchema.properties) {
+        if (prop in webhook) {
+          filtered[prop] = webhook[prop as keyof typeof webhook]
+        }
+      }
+      return filtered
+    })
+
     return this.postgresClient.upsertManyWithTimestampProtection(
-      webhooks,
+      filteredWebhooks,
       '_managed_webhooks',
       syncTimestamp
     )
