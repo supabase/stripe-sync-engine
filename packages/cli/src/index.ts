@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { syncCommand } from './command'
+import { syncCommand, migrateCommand } from './command'
 
 const program = new Command()
 
@@ -9,6 +9,22 @@ program
   .name('stripe-sync')
   .description('CLI tool for syncing Stripe data to PostgreSQL')
   .version('0.0.0')
+
+// Migrate command
+program
+  .command('migrate')
+  .description('Run database migrations only')
+  .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')
+  .action(async (options) => {
+    await migrateCommand({
+      databaseUrl: options.databaseUrl,
+    })
+  })
+
+// Start command (main sync command)
+program
+  .command('start')
+  .description('Start the Stripe sync server with webhook handling')
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .option('--ngrok-token <token>', 'ngrok auth token (or NGROK_AUTH_TOKEN env)')
   .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')
@@ -19,7 +35,5 @@ program
       databaseUrl: options.databaseUrl,
     })
   })
-
-  
 
 program.parse()

@@ -1,16 +1,96 @@
 import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
+import dotenv from 'dotenv'
 import { loadConfig, CliOptions } from './config'
 import { StripeSync, runMigrations } from 'stripe-experiment-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
 
 /**
+ * Migration command - runs database migrations only.
+ */
+export async function migrateCommand(options: CliOptions): Promise<void> {
+  try {
+    // For migrations, we only need the database URL
+    dotenv.config()
+
+    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
+
+    if (!databaseUrl) {
+      const inquirer = (await import('inquirer')).default
+      const answers = await inquirer.prompt([
+        {
+          type: 'password',
+          name: 'databaseUrl',
+          message: 'Enter your Postgres DATABASE_URL:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'DATABASE_URL is required'
+            }
+            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
+              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
+            }
+            return true
+          },
+        },
+      ])
+      databaseUrl = answers.databaseUrl
+    }
+
+    const schema = process.env.SCHEMA || 'stripe'
+
+    console.log(chalk.blue('Running database migrations...'))
+    console.log(chalk.gray(`Schema: ${schema}`))
+    console.log(chalk.gray(`Database: ${databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
+
+    try {
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully'))
+    } catch (migrationError) {
+      // Migration failed - drop schema and retry
+      console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
+
+      const { Client } = await import('pg')
+      const client = new Client({ connectionString: databaseUrl })
+
+      try {
+        await client.connect()
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+        console.log(chalk.green(`✓ Dropped schema: ${schema}`))
+      } finally {
+        await client.end()
+      }
+
+      // Retry migrations
+      console.log('Retrying migrations...')
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully after retry'))
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message))
+    }
+    process.exit(1)
+  }
+}
+
+/**
  * Main sync command - sets up webhook infrastructure for Stripe sync.
  * 1. Creates ngrok tunnel to expose server
  * 2. Creates Stripe webhook pointing to tunnel (all events)
- * 3. Runs database migrations
+ * 3. Runs database migrations (optional, can be skipped if already run)
  * 4. Starts Express server with stripe-sync-engine
  * 5. Waits for user to stop (Ctrl+C)
  * 6. Cleans up webhook, server, and tunnel
@@ -31,7 +111,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       try {
         await stripeSync.deleteManagedWebhook(webhookId)
         console.log(chalk.green('✓ Webhook cleanup complete'))
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Could not delete webhook'))
       }
     }
@@ -46,7 +126,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
           })
         })
         console.log(chalk.green('✓ Server stopped'))
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Server already stopped'))
       }
     }
@@ -55,7 +135,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     if (tunnel) {
       try {
         await tunnel.close()
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Could not close tunnel'))
       }
     }
@@ -72,7 +152,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     const config = await loadConfig(options)
 
     // Show command with database URL
-    console.log(chalk.gray(`$ stripe-sync ${config.databaseUrl}`))
+    console.log(chalk.gray(`$ stripe-sync start ${config.databaseUrl}`))
 
     // 1. Run migrations
     const schema = process.env.SCHEMA || 'stripe'
@@ -84,7 +164,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     } catch (migrationError) {
       // Migration failed - drop schema and retry
       console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
-      console.warn('Migration error:', migrationError instanceof Error ? migrationError.message : String(migrationError))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
 
       const { Client } = await import('pg')
       const client = new Client({ connectionString: config.databaseUrl })
@@ -167,9 +250,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       try {
         await stripeSync!.processWebhook(rawBody, sig, uuid)
         return res.status(200).send({ received: true })
-      } catch (error: any) {
-        console.error('[Webhook] Processing error:', error.message)
-        return res.status(400).send({ error: error.message })
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error('[Webhook] Processing error:', message)
+        return res.status(400).send({ error: message })
       }
     })
 
@@ -195,10 +279,15 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // 7. Run initial backfill of all Stripe data
     console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
     const backfillResult = await stripeSync.syncBackfill({ object: 'all' })
-    const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + ((result as any)?.synced || 0), 0)
+    const totalSynced = Object.values(backfillResult).reduce(
+      (sum, result) => sum + ((result as { synced?: number })?.synced || 0),
+      0
+    )
     console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
 
-    console.log(chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]'))
+    console.log(
+      chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
+    )
 
     // Keep the process alive
     await new Promise(() => {})
