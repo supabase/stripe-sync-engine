@@ -1724,7 +1724,7 @@ export class StripeSync {
   ): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
     // Filter webhooks to only include schema-defined properties
     const filteredWebhooks = webhooks.map((webhook) => {
-      const filtered: any = {}
+      const filtered: Record<string, unknown> = {}
       for (const prop of managedWebhookSchema.properties) {
         if (prop in webhook) {
           filtered[prop] = webhook[prop as keyof typeof webhook]
