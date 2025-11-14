@@ -1,16 +1,231 @@
 import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
+import dotenv from 'dotenv'
+import { Client, type PoolConfig } from 'pg'
 import { loadConfig, CliOptions } from './config'
-import { StripeSync, runMigrations } from 'stripe-replit-sync'
+import { StripeSync, runMigrations, type SyncObject } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
-import type { PoolConfig } from 'pg'
+
+const VALID_SYNC_OBJECTS: SyncObject[] = [
+  'all',
+  'customer',
+  'customer_with_entitlements',
+  'invoice',
+  'price',
+  'product',
+  'subscription',
+  'subscription_schedules',
+  'setup_intent',
+  'payment_method',
+  'dispute',
+  'charge',
+  'payment_intent',
+  'plan',
+  'tax_id',
+  'credit_note',
+  'early_fraud_warning',
+  'refund',
+  'checkout_sessions',
+]
+
+/**
+ * Backfill command - backfills a specific entity type from Stripe.
+ */
+export async function backfillCommand(options: CliOptions, entityName: string): Promise<void> {
+  try {
+    // Validate entity name
+    if (!VALID_SYNC_OBJECTS.includes(entityName as SyncObject)) {
+      console.error(
+        chalk.red(
+          `Error: Invalid entity name "${entityName}". Valid entities are: ${VALID_SYNC_OBJECTS.join(', ')}`
+        )
+      )
+      process.exit(1)
+    }
+
+    // For backfill, we only need stripe key and database URL (not ngrok token)
+    dotenv.config()
+
+    let stripeApiKey =
+      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
+
+    if (!stripeApiKey || !databaseUrl) {
+      const inquirer = (await import('inquirer')).default
+      const questions = []
+
+      if (!stripeApiKey) {
+        questions.push({
+          type: 'password',
+          name: 'stripeApiKey',
+          message: 'Enter your Stripe API key:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'Stripe API key is required'
+            }
+            if (!input.startsWith('sk_')) {
+              return 'Stripe API key should start with "sk_"'
+            }
+            return true
+          },
+        })
+      }
+
+      if (!databaseUrl) {
+        questions.push({
+          type: 'password',
+          name: 'databaseUrl',
+          message: 'Enter your Postgres DATABASE_URL:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'DATABASE_URL is required'
+            }
+            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
+              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
+            }
+            return true
+          },
+        })
+      }
+
+      if (questions.length > 0) {
+        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
+        const answers = await inquirer.prompt(questions)
+        if (answers.stripeApiKey) stripeApiKey = answers.stripeApiKey
+        if (answers.databaseUrl) databaseUrl = answers.databaseUrl
+      }
+    }
+
+    const config = {
+      stripeApiKey,
+      databaseUrl,
+      ngrokAuthToken: '', // Not needed for backfill
+    }
+    const schema = process.env.SCHEMA || 'stripe'
+
+    console.log(chalk.blue(`Backfilling ${entityName} from Stripe...`))
+    console.log(chalk.gray(`Schema: ${schema}`))
+    console.log(chalk.gray(`Database: ${config.databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
+
+    // Create StripeSync instance
+    const poolConfig: PoolConfig = {
+      max: 10,
+      connectionString: config.databaseUrl,
+      keepAlive: true,
+    }
+
+    const stripeSync = new StripeSync({
+      databaseUrl: config.databaseUrl,
+      schema,
+      stripeSecretKey: config.stripeApiKey,
+      stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
+      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
+      poolConfig,
+    })
+
+    // Run backfill for the specified entity
+    const result = await stripeSync.syncBackfill({ object: entityName as SyncObject })
+    const totalSynced = Object.values(result).reduce(
+      (sum, syncResult) => sum + (syncResult?.synced || 0),
+      0
+    )
+
+    console.log(chalk.green(`✓ Backfill complete: ${totalSynced} ${entityName} objects synced`))
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message))
+    }
+    process.exit(1)
+  }
+}
+
+/**
+ * Migration command - runs database migrations only.
+ */
+export async function migrateCommand(options: CliOptions): Promise<void> {
+  try {
+    // For migrations, we only need the database URL
+    dotenv.config()
+
+    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
+
+    if (!databaseUrl) {
+      const inquirer = (await import('inquirer')).default
+      const answers = await inquirer.prompt([
+        {
+          type: 'password',
+          name: 'databaseUrl',
+          message: 'Enter your Postgres DATABASE_URL:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'DATABASE_URL is required'
+            }
+            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
+              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
+            }
+            return true
+          },
+        },
+      ])
+      databaseUrl = answers.databaseUrl
+    }
+
+    const schema = process.env.SCHEMA || 'stripe'
+
+    console.log(chalk.blue('Running database migrations...'))
+    console.log(chalk.gray(`Schema: ${schema}`))
+    console.log(chalk.gray(`Database: ${databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
+
+    try {
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully'))
+    } catch (migrationError) {
+      // Migration failed - drop schema and retry
+      console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
+
+      const client = new Client({ connectionString: databaseUrl })
+
+      try {
+        await client.connect()
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+        console.log(chalk.green(`✓ Dropped schema: ${schema}`))
+      } finally {
+        await client.end()
+      }
+
+      // Retry migrations
+      console.log('Retrying migrations...')
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully after retry'))
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message))
+    }
+    process.exit(1)
+  }
+}
 
 /**
  * Main sync command - sets up webhook infrastructure for Stripe sync.
  * 1. Creates ngrok tunnel to expose server
  * 2. Creates Stripe webhook pointing to tunnel (all events)
- * 3. Runs database migrations
+ * 3. Runs database migrations (optional, can be skipped if already run)
  * 4. Starts Express server with stripe-sync-engine
  * 5. Waits for user to stop (Ctrl+C)
  * 6. Cleans up webhook, server, and tunnel
@@ -72,7 +287,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     const config = await loadConfig(options)
 
     // Show command with database URL
-    console.log(chalk.gray(`$ stripe-sync ${config.databaseUrl}`))
+    console.log(chalk.gray(`$ stripe-sync start ${config.databaseUrl}`))
 
     // 1. Run migrations
     const schema = process.env.SCHEMA || 'stripe'
@@ -89,7 +304,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
 
-      const { Client } = await import('pg')
       const client = new Client({ connectionString: config.databaseUrl })
 
       try {

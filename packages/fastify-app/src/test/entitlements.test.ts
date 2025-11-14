@@ -71,6 +71,10 @@ describe('entitlements', () => {
       {
         ...activeEntitlements[0],
         customer: customerId,
+        raw_data: expect.objectContaining({
+          id: activeEntitlements[0].id,
+          feature: activeEntitlements[0].feature,
+        }),
         updated_at: expect.any(Date),
         last_synced_at: expect.any(Date),
       },
@@ -110,6 +114,10 @@ describe('entitlements', () => {
       newActiveEntitlements.map((entitlement) => ({
         ...entitlement,
         customer: customerId,
+        raw_data: expect.objectContaining({
+          id: entitlement.id,
+          feature: entitlement.feature,
+        }),
         updated_at: expect.any(Date),
         last_synced_at: expect.any(Date),
       }))

@@ -86,7 +86,7 @@ echo "🚀 Step 2: Starting CLI to test webhook creation..."
 echo ""
 
 # Start CLI in background with KEEP_WEBHOOKS_ON_SHUTDOWN=false for testing
-KEEP_WEBHOOKS_ON_SHUTDOWN=false npm run dev > /tmp/cli-test.log 2>&1 &
+KEEP_WEBHOOKS_ON_SHUTDOWN=false npm run dev start > /tmp/cli-test.log 2>&1 &
 CLI_PID=$!
 
 # Wait for startup (give it time to create webhook and run migrations)

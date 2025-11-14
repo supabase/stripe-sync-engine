@@ -1,23 +1,6 @@
 import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import { PostgresClient } from './database/postgres'
-import { chargeSchema } from './schemas/charge'
-import { checkoutSessionSchema } from './schemas/checkout_sessions'
-import { checkoutSessionLineItemSchema } from './schemas/checkout_session_line_items'
-import { creditNoteSchema } from './schemas/credit_note'
-import { customerDeletedSchema, customerSchema } from './schemas/customer'
-import { disputeSchema } from './schemas/dispute'
-import { invoiceSchema } from './schemas/invoice'
-import { planSchema } from './schemas/plan'
-import { priceSchema } from './schemas/price'
-import { productSchema } from './schemas/product'
-import { paymentIntentSchema } from './schemas/payment_intent'
-import { paymentMethodsSchema } from './schemas/payment_methods'
-import { setupIntentsSchema } from './schemas/setup_intents'
-import { taxIdSchema } from './schemas/tax_id'
-import { subscriptionItemSchema } from './schemas/subscription_item'
-import { subscriptionScheduleSchema } from './schemas/subscription_schedules'
-import { subscriptionSchema } from './schemas/subscription'
 import {
   StripeSyncConfig,
   Sync,
@@ -27,11 +10,6 @@ import {
   SyncFeaturesParams,
   type RevalidateEntity,
 } from './types'
-import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
-import { reviewSchema } from './schemas/review'
-import { refundSchema } from './schemas/refund'
-import { activeEntitlementSchema } from './schemas/active_entitlement'
-import { featureSchema } from './schemas/feature'
 import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
 import { type PoolConfig } from 'pg'
@@ -927,8 +905,10 @@ export class StripeSync {
     // Thus, we need to loop through all customers
     this.config.logger?.info('Syncing payment method')
 
+    // deleted is a generated column that may be NULL for non-deleted customers
+    // Use COALESCE to treat NULL as false, or use IS NOT TRUE to include NULL and false
     const prepared = sql(
-      `select id from "${this.config.schema}"."customers" WHERE deleted <> true;`
+      `select id from "${this.config.schema}"."customers" WHERE COALESCE(deleted, false) <> true;`
     )([])
 
     const customerIds = await this.postgresClient
@@ -1084,12 +1064,7 @@ export class StripeSync {
       this.stripe.refunds.list({ charge: id, limit: 100 })
     )
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      charges,
-      'charges',
-      chargeSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(charges, 'charges', syncTimestamp)
   }
 
   private async backfillCharges(chargeIds: string[]) {
@@ -1130,7 +1105,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       creditNotes,
       'credit_notes',
-      creditNoteSchema,
       syncTimestamp
     )
   }
@@ -1153,7 +1127,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       checkoutSessions,
       'checkout_sessions',
-      checkoutSessionSchema,
       syncTimestamp
     )
 
@@ -1180,7 +1153,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       earlyFraudWarnings,
       'early_fraud_warnings',
-      earlyFraudWarningSchema,
       syncTimestamp
     )
   }
@@ -1197,12 +1169,7 @@ export class StripeSync {
       ])
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      refunds,
-      'refunds',
-      refundSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(refunds, 'refunds', syncTimestamp)
   }
 
   async upsertReviews(
@@ -1217,12 +1184,7 @@ export class StripeSync {
       ])
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      reviews,
-      'reviews',
-      reviewSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(reviews, 'reviews', syncTimestamp)
   }
 
   async upsertCustomers(
@@ -1235,13 +1197,11 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       nonDeletedCustomers,
       'customers',
-      customerSchema,
       syncTimestamp
     )
     await this.postgresClient.upsertManyWithTimestampProtection(
       deletedCustomers,
       'customers',
-      customerDeletedSchema,
       syncTimestamp
     )
 
@@ -1271,7 +1231,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       disputes,
       'disputes',
-      disputeSchema,
       syncTimestamp
     )
   }
@@ -1295,7 +1254,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       invoices,
       'invoices',
-      invoiceSchema,
       syncTimestamp
     )
   }
@@ -1323,12 +1281,7 @@ export class StripeSync {
       await this.backfillProducts(getUniqueIds(plans, 'product'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      plans,
-      'plans',
-      planSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(plans, 'plans', syncTimestamp)
   }
 
   async deletePlan(id: string): Promise<boolean> {
@@ -1344,12 +1297,7 @@ export class StripeSync {
       await this.backfillProducts(getUniqueIds(prices, 'product'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      prices,
-      'prices',
-      priceSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(prices, 'prices', syncTimestamp)
   }
 
   async deletePrice(id: string): Promise<boolean> {
@@ -1363,7 +1311,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       products,
       'products',
-      productSchema,
       syncTimestamp
     )
   }
@@ -1395,7 +1342,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       paymentIntents,
       'payment_intents',
-      paymentIntentSchema,
       syncTimestamp
     )
   }
@@ -1412,7 +1358,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       paymentMethods,
       'payment_methods',
-      paymentMethodsSchema,
       syncTimestamp
     )
   }
@@ -1429,7 +1374,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       setupIntents,
       'setup_intents',
-      setupIntentsSchema,
       syncTimestamp
     )
   }
@@ -1443,12 +1387,7 @@ export class StripeSync {
       await this.backfillCustomers(getUniqueIds(taxIds, 'customer'))
     }
 
-    return this.postgresClient.upsertManyWithTimestampProtection(
-      taxIds,
-      'tax_ids',
-      taxIdSchema,
-      syncTimestamp
-    )
+    return this.postgresClient.upsertManyWithTimestampProtection(taxIds, 'tax_ids', syncTimestamp)
   }
 
   async deleteTaxId(id: string): Promise<boolean> {
@@ -1477,7 +1416,6 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedSubscriptionItems,
       'subscription_items',
-      subscriptionItemSchema,
       syncTimestamp
     )
   }
@@ -1525,7 +1463,6 @@ export class StripeSync {
     await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedLineItems,
       'checkout_session_line_items',
-      checkoutSessionLineItemSchema,
       syncTimestamp
     )
   }
@@ -1534,9 +1471,10 @@ export class StripeSync {
     subscriptionId: string,
     currentSubItemIds: string[]
   ): Promise<{ rowCount: number }> {
+    // deleted is a generated column that may be NULL for non-deleted items
     let prepared = sql(`
     select id from "${this.config.schema}"."subscription_items"
-    where subscription = :subscriptionId and deleted = false;
+    where subscription = :subscriptionId and COALESCE(deleted, false) = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
     const deletedIds = rows.filter(
@@ -1545,11 +1483,14 @@ export class StripeSync {
 
     if (deletedIds.length > 0) {
       const ids = deletedIds.map(({ id }: { id: string }) => id)
+      // Since deleted is a generated column, we need to update raw_data instead
+      // Use jsonb_set to set the deleted field to true in the raw_data JSON
       prepared = sql(`
       update "${this.config.schema}"."subscription_items"
-      set deleted = true where id=any(:ids::text[]);
+      set raw_data = jsonb_set(raw_data, '{deleted}', 'true'::jsonb)
+      where id=any(:ids::text[]);
       `)({ ids })
-      const { rowCount } = await await this.postgresClient.query(prepared.text, prepared.values)
+      const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
       return { rowCount: rowCount || 0 }
     } else {
       return { rowCount: 0 }
@@ -1571,7 +1512,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       subscriptionSchedules,
       'subscription_schedules',
-      subscriptionScheduleSchema,
       syncTimestamp
     )
 
@@ -1597,7 +1537,6 @@ export class StripeSync {
     const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       subscriptions,
       'subscriptions',
-      subscriptionSchema,
       syncTimestamp
     )
 
@@ -1637,7 +1576,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       features,
       'features',
-      featureSchema,
       syncTimestamp
     )
   }
@@ -1680,7 +1618,6 @@ export class StripeSync {
     return this.postgresClient.upsertManyWithTimestampProtection(
       entitlements,
       'active_entitlements',
-      activeEntitlementSchema,
       syncTimestamp
     )
   }
@@ -1785,10 +1722,20 @@ export class StripeSync {
     webhooks: Array<Stripe.WebhookEndpoint & { uuid: string }>,
     syncTimestamp?: string
   ): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
+    // Filter webhooks to only include schema-defined properties
+    const filteredWebhooks = webhooks.map((webhook) => {
+      const filtered: Record<string, unknown> = {}
+      for (const prop of managedWebhookSchema.properties) {
+        if (prop in webhook) {
+          filtered[prop] = webhook[prop as keyof typeof webhook]
+        }
+      }
+      return filtered
+    })
+
     return this.postgresClient.upsertManyWithTimestampProtection(
-      webhooks,
+      filteredWebhooks as unknown as Array<Stripe.WebhookEndpoint & { uuid: string }>,
       '_managed_webhooks',
-      managedWebhookSchema,
       syncTimestamp
     )
   }

@@ -44,6 +44,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.18.2",
     "inquirer": "^12.3.0",
+    "pg": "^8.13.1",
     "stripe": "^17.7.0",
     "stripe-replit-sync": "workspace:*"
   },
