@@ -6,10 +6,10 @@
  * when the base URL matches, and creates new ones when it doesn't.
  */
 
-import { StripeAutoSync } from 'stripe-experiment-sync'
-import express from 'express'
+import { StripeSync, runMigrations } from 'stripe-experiment-sync'
 import dotenv from 'dotenv'
 import chalk from 'chalk'
+import type { PoolConfig } from 'pg'
 
 // Load environment variables
 dotenv.config()
@@ -27,56 +27,67 @@ async function main() {
   console.log(chalk.blue('\n🧪 Webhook Reuse Verification Script'))
   console.log(chalk.blue('=====================================\n'))
 
-  // Create Express app (required by StripeAutoSync.start())
-  const app = express()
-
   const createdWebhookIds: string[] = []
-  let stripeAutoSync: StripeAutoSync | null = null
+  const schema = 'stripe'
 
   try {
+    // Run migrations first
+    await runMigrations({
+      databaseUrl: DATABASE_URL!,
+      schema,
+    })
+
+    // Create StripeSync instance
+    const poolConfig: PoolConfig = {
+      max: 10,
+      connectionString: DATABASE_URL!,
+      keepAlive: true,
+    }
+
+    const stripeSync = new StripeSync({
+      databaseUrl: DATABASE_URL!,
+      schema,
+      stripeSecretKey: STRIPE_API_KEY!,
+      stripeApiVersion: '2020-08-27',
+      poolConfig,
+    })
+
     // Test 1: Create initial webhook with first base URL
     console.log(chalk.blue('📝 Test 1: Create initial webhook'))
     console.log(chalk.gray('   Base URL: https://test1.example.com/stripe-webhooks'))
 
-    stripeAutoSync = new StripeAutoSync({
-      databaseUrl: DATABASE_URL!,
-      stripeApiKey: STRIPE_API_KEY!,
-      baseUrl: () => 'https://test1.example.com',
-      schema: 'stripe',
-      keepWebhooksOnShutdown: true,
-    })
-
-    const result1 = await stripeAutoSync.start(app)
-    const webhookId1 = (stripeAutoSync as any).webhookId
-    const webhookUuid1 = result1.webhookUuid
+    const result1 = await stripeSync.findOrCreateManagedWebhook(
+      'https://test1.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+        description: 'stripe-sync-cli test webhook 1',
+      }
+    )
+    const webhookId1 = result1.webhook.id
+    const webhookUuid1 = result1.uuid
 
     createdWebhookIds.push(webhookId1)
 
     console.log(chalk.green('   ✓ Webhook created'))
     console.log(chalk.cyan(`   - Webhook ID: ${webhookId1}`))
     console.log(chalk.cyan(`   - UUID: ${webhookUuid1}`))
-    console.log(chalk.cyan(`   - URL: ${result1.webhookUrl}`))
+    console.log(chalk.cyan(`   - URL: ${result1.webhook.url}`))
     console.log()
 
-    // Stop the first instance (but keep webhook in DB)
-    await stripeAutoSync.stop()
-
-    // Test 2: Start again with same base URL (should reuse)
-    console.log(chalk.blue('📝 Test 2: Restart with same base URL'))
+    // Test 2: Call findOrCreateManagedWebhook again with same base URL (should reuse)
+    console.log(chalk.blue('📝 Test 2: Retry with same base URL'))
     console.log(chalk.gray('   Base URL: https://test1.example.com/stripe-webhooks'))
     console.log(chalk.gray('   Expected: Should reuse existing webhook'))
 
-    stripeAutoSync = new StripeAutoSync({
-      databaseUrl: DATABASE_URL!,
-      stripeApiKey: STRIPE_API_KEY!,
-      baseUrl: () => 'https://test1.example.com',
-      schema: 'stripe',
-      keepWebhooksOnShutdown: true,
-    })
-
-    const result2 = await stripeAutoSync.start(app)
-    const webhookId2 = (stripeAutoSync as any).webhookId
-    const webhookUuid2 = result2.webhookUuid
+    const result2 = await stripeSync.findOrCreateManagedWebhook(
+      'https://test1.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+        description: 'stripe-sync-cli test webhook 1',
+      }
+    )
+    const webhookId2 = result2.webhook.id
+    const webhookUuid2 = result2.uuid
 
     if (webhookId2 === webhookId1 && webhookUuid2 === webhookUuid1) {
       console.log(chalk.green('   ✓ SUCCESS: Webhook was reused!'))
@@ -92,25 +103,20 @@ async function main() {
     }
     console.log()
 
-    // Stop the second instance
-    await stripeAutoSync.stop()
-
-    // Test 3: Start with different base URL (should create new)
-    console.log(chalk.blue('📝 Test 3: Start with different base URL'))
+    // Test 3: Call with different base URL (should create new)
+    console.log(chalk.blue('📝 Test 3: Call with different base URL'))
     console.log(chalk.gray('   Base URL: https://test2.example.com/stripe-webhooks'))
     console.log(chalk.gray('   Expected: Should create new webhook'))
 
-    stripeAutoSync = new StripeAutoSync({
-      databaseUrl: DATABASE_URL!,
-      stripeApiKey: STRIPE_API_KEY!,
-      baseUrl: () => 'https://test2.example.com',
-      schema: 'stripe',
-      keepWebhooksOnShutdown: true,
-    })
-
-    const result3 = await stripeAutoSync.start(app)
-    const webhookId3 = (stripeAutoSync as any).webhookId
-    const webhookUuid3 = result3.webhookUuid
+    const result3 = await stripeSync.findOrCreateManagedWebhook(
+      'https://test2.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+        description: 'stripe-sync-cli test webhook 2',
+      }
+    )
+    const webhookId3 = result3.webhook.id
+    const webhookUuid3 = result3.uuid
 
     createdWebhookIds.push(webhookId3)
 
@@ -118,53 +124,35 @@ async function main() {
       console.log(chalk.green('   ✓ SUCCESS: New webhook was created!'))
       console.log(chalk.cyan(`   - New Webhook ID: ${webhookId3}`))
       console.log(chalk.cyan(`   - New UUID: ${webhookUuid3}`))
-      console.log(chalk.cyan(`   - URL: ${result3.webhookUrl}`))
+      console.log(chalk.cyan(`   - URL: ${result3.webhook.url}`))
     } else {
       console.log(chalk.red('   ❌ FAIL: Webhook was incorrectly reused'))
       console.log(chalk.yellow(`   - Should have created new webhook for different base URL`))
     }
     console.log()
 
-    await stripeAutoSync.stop()
-
     console.log(chalk.blue('====================================='))
     console.log(chalk.green('✅ Verification complete!'))
     console.log()
 
-  } catch (error) {
-    console.error(chalk.red('\n❌ Error during verification:'))
-    console.error(error)
-  } finally {
     // Cleanup: Delete all created webhooks
     console.log(chalk.blue('🧹 Cleaning up test webhooks...'))
 
-    // Create a temporary StripeAutoSync just to access the delete method
-    if (createdWebhookIds.length > 0 && STRIPE_API_KEY && DATABASE_URL) {
-      const cleanupSync = new StripeAutoSync({
-        databaseUrl: DATABASE_URL!,
-        stripeApiKey: STRIPE_API_KEY!,
-        baseUrl: () => 'https://cleanup.example.com',
-        schema: 'stripe',
-      })
-
-      // Initialize it with a fake app to get stripeSync instance
-      const cleanupApp = express()
-      await cleanupSync.start(cleanupApp)
-
-      const stripeSync = (cleanupSync as any).stripeSync
-
-      for (const webhookId of createdWebhookIds) {
-        try {
-          await stripeSync.deleteManagedWebhook(webhookId)
-          console.log(chalk.gray(`   - Deleted webhook: ${webhookId}`))
-        } catch (error) {
-          console.log(chalk.yellow(`   - Failed to delete webhook ${webhookId}: ${error}`))
-        }
+    for (const webhookId of createdWebhookIds) {
+      try {
+        await stripeSync.deleteManagedWebhook(webhookId)
+        console.log(chalk.gray(`   - Deleted webhook: ${webhookId}`))
+      } catch (error) {
+        console.log(chalk.yellow(`   - Failed to delete webhook ${webhookId}: ${error}`))
       }
     }
 
     console.log(chalk.green('✓ Cleanup complete\n'))
     process.exit(0)
+  } catch (error) {
+    console.error(chalk.red('\n❌ Error during verification:'))
+    console.error(error)
+    process.exit(1)
   }
 }
 

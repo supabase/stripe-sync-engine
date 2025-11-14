@@ -91,6 +91,9 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.0
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.15.6
       tsx:
         specifier: ^4.19.2
         version: 4.20.6
@@ -134,9 +137,6 @@ importers:
 
   packages/sync-engine:
     dependencies:
-      express:
-        specifier: ^4.18.2
-        version: 4.21.2
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -150,9 +150,6 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
     devDependencies:
-      '@types/express':
-        specifier: ^4.17.21
-        version: 4.17.25
       '@types/pg':
         specifier: ^8.15.5
         version: 8.15.6

@@ -39,19 +39,20 @@
   "dependencies": {
     "@ngrok/ngrok": "^1.4.1",
     "@supabase/stripe-sync-engine": "https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz",
-    "stripe-experiment-sync": "workspace:*",
     "@supabase/stripe-sync-fastify": "workspace:",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
-    "inquirer": "^12.3.0",
     "express": "^4.18.2",
-    "stripe": "^17.7.0"
+    "inquirer": "^12.3.0",
+    "stripe": "^17.7.0",
+    "stripe-experiment-sync": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.15.6",
     "tsx": "^4.19.2"
   },
   "engines": {
