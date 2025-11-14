@@ -25,7 +25,6 @@
     "dist"
   ],
   "dependencies": {
-    "express": "^4.18.2",
     "pg": "^8.16.3",
     "pg-node-migrations": "0.0.8",
     "yesql": "^7.0.0"
@@ -34,7 +33,6 @@
     "stripe": "> 11"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/pg": "^8.15.5",
     "@types/yesql": "^4.1.4"
   },

@@ -34,8 +34,6 @@ import { activeEntitlementSchema } from './schemas/active_entitlement'
 import { featureSchema } from './schemas/feature'
 import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
-import { runMigrations } from './database/migrate'
-import express, { Express } from 'express'
 import { type PoolConfig } from 'pg'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
@@ -51,7 +49,7 @@ function getUniqueIds<T>(entries: T[], key: string): string[] {
 const DEFAULT_SCHEMA = 'stripe'
 
 
-export interface StripeAutoSyncOptions {
+export interface StripeSyncOptions {
   databaseUrl: string
   stripeApiKey: string
   baseUrl: () => string
@@ -63,247 +61,13 @@ export interface StripeAutoSyncOptions {
   keepWebhooksOnShutdown?: boolean
 }
 
-export interface StripeAutoSyncInfo {
+export interface StripSyncInfo {
   baseUrl: string
   webhookUrl: string
   webhookUuid: string
 }
 
-/**
- * Manages Stripe webhook auto-sync infrastructure:
- * - Runs database migrations
- * - Creates managed webhook in Stripe
- * - Mounts webhook handler on Express app
- */
-export class StripeAutoSync {
-  private options: Required<StripeAutoSyncOptions>
-  private webhookId: string | null = null
-  private webhookUuid: string | null = null
-  private stripeSync: StripeSync | null = null
-
-  constructor(options: StripeAutoSyncOptions) {
-    this.options = {
-      ...options,
-      // Apply defaults for undefined values
-      schema: options.schema || 'stripe',
-      webhookPath: options.webhookPath || '/stripe-webhooks',
-      stripeApiVersion: options.stripeApiVersion || '2020-08-27',
-      autoExpandLists: options.autoExpandLists !== undefined ? options.autoExpandLists : false,
-      backfillRelatedEntities: options.backfillRelatedEntities !== undefined ? options.backfillRelatedEntities : true,
-      keepWebhooksOnShutdown: options.keepWebhooksOnShutdown !== undefined ? options.keepWebhooksOnShutdown : true,
-    }
-  }
-
-  /**
-   * Starts the Stripe Sync infrastructure and mounts webhook handler:
-   * 1. Runs database migrations
-   * 2. Creates StripeSync instance
-   * 3. Creates managed webhook endpoint
-   * 4. Mounts webhook handler on provided Express app
-   * 5. Applies body parsing middleware (automatically skips webhook routes)
-   *
-   * @param app - Express app to mount webhook handler on
-   * @returns Information about the running instance
-   */
-  async start(app: Express): Promise<StripeAutoSyncInfo> {
-    try {
-      // 1. Run migrations
-      try {
-        await runMigrations({
-          databaseUrl: this.options.databaseUrl,
-          schema: this.options.schema,
-        })
-      } catch (migrationError) {
-        // Migration failed - drop schema and retry
-        console.warn('Migration failed, dropping schema and retrying...')
-        console.warn('Migration error:', migrationError instanceof Error ? migrationError.message : String(migrationError))
-
-        const { Client } = await import('pg')
-        const client = new Client({ connectionString: this.options.databaseUrl })
-
-        try {
-          await client.connect()
-          await client.query(`DROP SCHEMA IF EXISTS "${this.options.schema}" CASCADE`)
-          console.log(`✓ Dropped schema: ${this.options.schema}`)
-        } finally {
-          await client.end()
-        }
-
-        // Retry migrations
-        console.log('Retrying migrations...')
-        await runMigrations({
-          databaseUrl: this.options.databaseUrl,
-          schema: this.options.schema,
-        })
-        console.log('✓ Migrations completed successfully after retry')
-      }
-
-      // 2. Create StripeSync instance (no webhook secret needed)
-      const poolConfig: PoolConfig = {
-        max: 10,
-        connectionString: this.options.databaseUrl,
-        keepAlive: true,
-      }
-
-      this.stripeSync = new StripeSync({
-        databaseUrl: this.options.databaseUrl,
-        schema: this.options.schema,
-        stripeSecretKey: this.options.stripeApiKey,
-        stripeApiVersion: this.options.stripeApiVersion,
-        autoExpandLists: this.options.autoExpandLists,
-        backfillRelatedEntities: this.options.backfillRelatedEntities,
-        poolConfig,
-      })
-
-      // 3. Find existing or create managed webhook (generates UUID and stores in DB)
-      const baseUrl = this.options.baseUrl()
-      const { webhook, uuid } = await this.stripeSync.findOrCreateManagedWebhook(
-        `${baseUrl}${this.options.webhookPath}`,
-        {
-          enabled_events: ['*'], // Subscribe to all events
-          description: 'stripe-sync-cli development webhook',
-        }
-      )
-      this.webhookId = webhook.id
-      this.webhookUuid = uuid
-
-      // 4. Mount webhook handler FIRST (before any body parsing)
-      // CRITICAL: This must be done before any app.use(express.json()) in user code
-      this.mountWebhook(app)
-
-      // 5. Apply body parsing middleware for other routes
-      // This will be skipped for webhook routes
-      app.use(this.getBodyParserMiddleware())
-
-      // 6. Run initial backfill of all Stripe data
-      console.log('Starting initial backfill of all Stripe data...')
-      const backfillResult = await this.stripeSync.syncBackfill({ object: 'all' })
-      const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + (result?.synced || 0), 0)
-      console.log(`✓ Backfill complete: ${totalSynced} objects synced`)
-
-      return {
-        baseUrl,
-        webhookUrl: webhook.url,
-        webhookUuid: uuid,
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Failed to start Stripe Sync:', error.message)
-        console.error(error.stack || '')
-      } else {
-        console.error('Failed to start Stripe Sync:', String(error))
-      }
-      // Clean up on error
-      await this.stop()
-      throw error
-    }
-  }
-
-  /**
-   * Stops all services and cleans up resources:
-   * 1. Optionally deletes Stripe webhook endpoint from Stripe and database (based on keepWebhooksOnShutdown)
-   */
-  async stop(): Promise<void> {
-    // Delete webhook endpoint using StripeSync (unless keepWebhooksOnShutdown is true)
-    if (this.webhookId && this.stripeSync && !this.options.keepWebhooksOnShutdown) {
-      try {
-        await this.stripeSync.deleteManagedWebhook(this.webhookId)
-      } catch (error) {
-        console.error('Could not delete webhook:', error)
-      }
-    }
-  }
-
-  /**
-   * Returns Express middleware for body parsing that automatically skips webhook routes.
-   * This middleware applies JSON and URL-encoded parsers to all routes EXCEPT the webhook path,
-   * which needs raw body for signature verification.
-   *
-   * @returns Express middleware function
-   */
-  private getBodyParserMiddleware() {
-    const webhookPath = this.options.webhookPath
-
-    return (req: any, res: any, next: any) => {
-      // Skip if this is a webhook route (needs raw body for Stripe signature verification)
-      // Check both req.path and req.url to handle different Express configurations
-      const path = req.path || req.url || ''
-
-      // Match webhook path with or without UUID parameter
-      // e.g., /stripe-webhooks or /stripe-webhooks/abc-123-uuid
-      if (path.startsWith(webhookPath)) {
-        console.log('[BodyParser] Skipping webhook route:', path)
-        return next()
-      }
-
-      // Apply JSON and URL-encoded parsers for other routes
-      express.json()(req, res, (err: any) => {
-        if (err) return next(err)
-        express.urlencoded({ extended: false })(req, res, next)
-      })
-    }
-  }
-
-  /**
-   * Mounts the Stripe webhook handler on the provided Express app.
-   * Applies raw body parser middleware for signature verification.
-   * IMPORTANT: Must be called BEFORE app.use(express.json()) to ensure raw body parsing.
-   */
-  private mountWebhook(app: Express): void {
-    const webhookRoute = `${this.options.webhookPath}/:uuid`
-
-    // Apply raw body parser ONLY to this webhook route
-    app.use(webhookRoute, express.raw({ type: 'application/json' }))
-
-    // Mount the webhook handler
-    app.post(webhookRoute, async (req, res) => {
-      console.log('[Webhook] Received request:', {
-        path: req.path,
-        url: req.url,
-        method: req.method,
-        contentType: req.headers['content-type'],
-      })
-
-      const sig = req.headers['stripe-signature']
-      if (!sig || typeof sig !== 'string') {
-        console.error('[Webhook] Missing stripe-signature header')
-        return res.status(400).send({ error: 'Missing stripe-signature header' })
-      }
-
-      const { uuid } = req.params
-
-      // express.raw puts the raw body in req.body as a Buffer
-      const rawBody = req.body
-
-      if (!rawBody || !Buffer.isBuffer(rawBody)) {
-        console.error('[Webhook] Body is not a Buffer!', {
-          hasBody: !!rawBody,
-          bodyType: typeof rawBody,
-          isBuffer: Buffer.isBuffer(rawBody),
-          bodyConstructor: rawBody?.constructor?.name,
-          path: req.path,
-          url: req.url,
-        })
-        console.error('[Webhook] COMMON CAUSE: app.use(express.json()) was called BEFORE stripeAutoSync.start(app)')
-        console.error('[Webhook] SOLUTION: Call stripeAutoSync.start(app) BEFORE any app.use(express.json())')
-        return res.status(400).send({ error: 'Missing raw body for signature verification' })
-      }
-
-      try {
-        // Process webhook with Stripe Sync Engine
-        await this.stripeSync!.processWebhook(rawBody, sig, uuid)
-
-        return res.status(200).send({ received: true })
-      } catch (error: any) {
-        console.error('[Webhook] Processing error:', error.message)
-        return res.status(400).send({ error: error.message })
-      }
-    })
-  }
-}
-
-
-class StripeSync {
+export class StripeSync {
   stripe: Stripe
   postgresClient: PostgresClient
 
