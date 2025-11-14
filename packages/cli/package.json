@@ -38,8 +38,7 @@
   ],
   "dependencies": {
     "@ngrok/ngrok": "^1.4.1",
-    "@supabase/stripe-sync-engine": "https://github.com/tx-stripe/stripe-sync-engine/releases/download/v0.0.0-bece947/supabase-stripe-sync-engine-0.0.0.tgz",
-    "@supabase/stripe-sync-fastify": "workspace:",
+    "@supabase/stripe-sync-fastify": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
