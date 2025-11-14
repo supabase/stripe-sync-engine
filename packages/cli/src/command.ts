@@ -1,16 +1,96 @@
 import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
+import dotenv from 'dotenv'
 import { loadConfig, CliOptions } from './config'
 import { StripeSync, runMigrations } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
 
 /**
+ * Migration command - runs database migrations only.
+ */
+export async function migrateCommand(options: CliOptions): Promise<void> {
+  try {
+    // For migrations, we only need the database URL
+    dotenv.config()
+
+    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
+
+    if (!databaseUrl) {
+      const inquirer = (await import('inquirer')).default
+      const answers = await inquirer.prompt([
+        {
+          type: 'password',
+          name: 'databaseUrl',
+          message: 'Enter your Postgres DATABASE_URL:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'DATABASE_URL is required'
+            }
+            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
+              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
+            }
+            return true
+          },
+        },
+      ])
+      databaseUrl = answers.databaseUrl
+    }
+
+    const schema = process.env.SCHEMA || 'stripe'
+
+    console.log(chalk.blue('Running database migrations...'))
+    console.log(chalk.gray(`Schema: ${schema}`))
+    console.log(chalk.gray(`Database: ${databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
+
+    try {
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully'))
+    } catch (migrationError) {
+      // Migration failed - drop schema and retry
+      console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
+
+      const { Client } = await import('pg')
+      const client = new Client({ connectionString: databaseUrl })
+
+      try {
+        await client.connect()
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+        console.log(chalk.green(`✓ Dropped schema: ${schema}`))
+      } finally {
+        await client.end()
+      }
+
+      // Retry migrations
+      console.log('Retrying migrations...')
+      await runMigrations({
+        databaseUrl,
+        schema,
+      })
+      console.log(chalk.green('✓ Migrations completed successfully after retry'))
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message))
+    }
+    process.exit(1)
+  }
+}
+
+/**
  * Main sync command - sets up webhook infrastructure for Stripe sync.
  * 1. Creates ngrok tunnel to expose server
  * 2. Creates Stripe webhook pointing to tunnel (all events)
- * 3. Runs database migrations
+ * 3. Runs database migrations (optional, can be skipped if already run)
  * 4. Starts Express server with stripe-sync-engine
  * 5. Waits for user to stop (Ctrl+C)
  * 6. Cleans up webhook, server, and tunnel
@@ -72,7 +152,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     const config = await loadConfig(options)
 
     // Show command with database URL
-    console.log(chalk.gray(`$ stripe-sync ${config.databaseUrl}`))
+    console.log(chalk.gray(`$ stripe-sync start ${config.databaseUrl}`))
 
     // 1. Run migrations
     const schema = process.env.SCHEMA || 'stripe'
