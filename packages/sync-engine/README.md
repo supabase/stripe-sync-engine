@@ -83,6 +83,56 @@ const sync = new StripeSync({
 await sync.processWebhook(payload, signature)
 ```
 
+### Processing Webhooks
+
+The `processWebhook` method supports both standard and managed webhook approaches:
+
+```typescript
+// For managed webhooks (with UUID-based routing):
+await sync.processWebhook(payload, signature, uuid)
+
+// For standard webhooks (requires stripeWebhookSecret in config):
+await sync.processWebhook(payload, signature)
+
+// Or process an event directly (no signature validation):
+await sync.processEvent(event)
+```
+
+### Managed Webhook Endpoints
+
+The library provides methods to create and manage webhook endpoints with UUID-based routing for security:
+
+```typescript
+// Create or reuse an existing webhook endpoint for a base URL
+const { webhook, uuid } = await sync.findOrCreateManagedWebhook(
+  'https://example.com/stripe-webhooks',
+  {
+    enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
+    description: 'My app webhook',
+  }
+)
+// webhook.url will be: https://example.com/stripe-webhooks/{uuid}
+
+// Create a new webhook endpoint (always creates new)
+const { webhook, uuid } = await sync.createManagedWebhook(
+  'https://example.com/stripe-webhooks',
+  {
+    enabled_events: ['customer.created', 'customer.updated'],
+  }
+)
+
+// Get a managed webhook by ID
+const webhook = await sync.getManagedWebhook('we_xxx')
+
+// Delete a managed webhook
+await sync.deleteManagedWebhook('we_xxx')
+```
+
+The UUID-based routing allows multiple webhook endpoints for the same base URL, making it ideal for:
+- Development environments with ngrok/tunnels that change URLs
+- Multi-tenant applications
+- Testing and staging environments
+
 ## Configuration
 
 | Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
