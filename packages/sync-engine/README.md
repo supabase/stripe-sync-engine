@@ -9,9 +9,7 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 
 - Automatically manages Stripe webhooks for real-time updates
 - Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database
-- Automatic database migrations
-- Express middleware integration with automatic body parsing
-- UUID-based webhook routing for security
+- UUID-based webhook routing for managed webhooks
 
 ## Installation
 
@@ -23,44 +21,24 @@ pnpm add stripe-replit-sync stripe
 yarn add stripe-replit-sync stripe
 ```
 
-## StripeAutoSync
+## Usage
 
-The easiest way to integrate Stripe sync into your Express application:
+```ts
+import { StripeSync } from 'stripe-replit-sync'
 
-```typescript
-import { StripeAutoSync } from 'stripe-experiment-sync'
-
-// baseUrl is a function for dynamic URL generation
-// (e.g., for ngrok tunnels, Replit domains, or environment-based URLs)
-const getPublicUrl = () => {
-  if (process.env.PUBLIC_URL) {
-    return process.env.PUBLIC_URL
-  }
-  // Or dynamically determine from request, ngrok, etc.
-  return `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
-}
-
-const stripeAutoSync = new StripeAutoSync({
-  databaseUrl: process.env.DATABASE_URL,
-  stripeApiKey: process.env.STRIPE_SECRET_KEY,
-  baseUrl: getPublicUrl,
+const sync = new StripeSync({
+  poolConfig: {
+    connectionString: 'postgres://user:pass@host:port/db',
+    max: 10, // Maximum number of connections
+  },
+  stripeSecretKey: 'sk_test_...',
+  stripeWebhookSecret: 'whsec_...',
+  // logger: <a pino logger>
 })
 
-await stripeAutoSync.start(app) // Express app
-// ... later
-await stripeAutoSync.stop() // Cleanup
+// Example: process a Stripe webhook
+await sync.processWebhook(payload, signature)
 ```
-
-### Configuration Options
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `databaseUrl` | Yes | - | PostgreSQL connection string |
-| `stripeApiKey` | Yes | - | Stripe secret key (sk_...) |
-| `baseUrl` | Yes | - | Function returning your public URL |
-| `webhookPath` | No | `/stripe-webhooks` | Path where webhook handler is mounted |
-| `schema` | No | `stripe` | Database schema name |
-| `stripeApiVersion` | No | `2020-08-27` | Stripe API version |
 
 ## Low-Level API (Advanced)
 
@@ -158,7 +136,7 @@ The library will create and manage a `stripe` schema in your PostgreSQL database
 Migrations are included in the `db/migrations` directory. You can run them using the provided `runMigrations` function:
 
 ```ts
-import { runMigrations } from '@supabase/stripe-sync-engine'
+import { runMigrations } from 'stripe-replit-sync'
 
 await runMigrations({ databaseUrl: 'postgres://...' })
 ```
