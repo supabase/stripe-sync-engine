@@ -1734,7 +1734,7 @@ export class StripeSync {
     })
 
     return this.postgresClient.upsertManyWithTimestampProtection(
-      filteredWebhooks,
+      filteredWebhooks as unknown as Array<Stripe.WebhookEndpoint & { uuid: string }>,
       '_managed_webhooks',
       syncTimestamp
     )
