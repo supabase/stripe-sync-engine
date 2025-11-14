@@ -7,11 +7,43 @@ import { StripeSync, runMigrations, type SyncObject } from 'stripe-experiment-sy
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
 
+const VALID_SYNC_OBJECTS: SyncObject[] = [
+  'all',
+  'customer',
+  'customer_with_entitlements',
+  'invoice',
+  'price',
+  'product',
+  'subscription',
+  'subscription_schedules',
+  'setup_intent',
+  'payment_method',
+  'dispute',
+  'charge',
+  'payment_intent',
+  'plan',
+  'tax_id',
+  'credit_note',
+  'early_fraud_warning',
+  'refund',
+  'checkout_sessions',
+]
+
 /**
  * Backfill command - backfills a specific entity type from Stripe.
  */
 export async function backfillCommand(options: CliOptions, entityName: string): Promise<void> {
   try {
+    // Validate entity name
+    if (!VALID_SYNC_OBJECTS.includes(entityName as SyncObject)) {
+      console.error(
+        chalk.red(
+          `Error: Invalid entity name "${entityName}". Valid entities are: ${VALID_SYNC_OBJECTS.join(', ')}`
+        )
+      )
+      process.exit(1)
+    }
+
     // For backfill, we only need stripe key and database URL (not ngrok token)
     dotenv.config()
 

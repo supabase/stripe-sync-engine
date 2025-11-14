@@ -892,8 +892,10 @@ export class StripeSync {
     // Thus, we need to loop through all customers
     this.config.logger?.info('Syncing payment method')
 
+    // deleted is a generated column that may be NULL for non-deleted customers
+    // Use COALESCE to treat NULL as false, or use IS NOT TRUE to include NULL and false
     const prepared = sql(
-      `select id from "${this.config.schema}"."customers" WHERE deleted <> true;`
+      `select id from "${this.config.schema}"."customers" WHERE COALESCE(deleted, false) <> true;`
     )([])
 
     const customerIds = await this.postgresClient
@@ -1456,9 +1458,10 @@ export class StripeSync {
     subscriptionId: string,
     currentSubItemIds: string[]
   ): Promise<{ rowCount: number }> {
+    // deleted is a generated column that may be NULL for non-deleted items
     let prepared = sql(`
     select id from "${this.config.schema}"."subscription_items"
-    where subscription = :subscriptionId and deleted = false;
+    where subscription = :subscriptionId and COALESCE(deleted, false) = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
     const deletedIds = rows.filter(
@@ -1467,11 +1470,14 @@ export class StripeSync {
 
     if (deletedIds.length > 0) {
       const ids = deletedIds.map(({ id }: { id: string }) => id)
+      // Since deleted is a generated column, we need to update raw_data instead
+      // Use jsonb_set to set the deleted field to true in the raw_data JSON
       prepared = sql(`
       update "${this.config.schema}"."subscription_items"
-      set deleted = true where id=any(:ids::text[]);
+      set raw_data = jsonb_set(raw_data, '{deleted}', 'true'::jsonb)
+      where id=any(:ids::text[]);
       `)({ ids })
-      const { rowCount } = await await this.postgresClient.query(prepared.text, prepared.values)
+      const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
       return { rowCount: rowCount || 0 }
     } else {
       return { rowCount: 0 }
