@@ -1,7 +1,7 @@
 # Stripe Sync Engine
 
 ![GitHub License](https://img.shields.io/github/license/tx-stripe/stripe-sync-engine)
-![NPM Version](https://img.shields.io/npm/v/stripe-experiment-sync)
+![NPM Version](https://img.shields.io/npm/v/stripe-replit-sync)
 
 A TypeScript library to synchronize Stripe data into a PostgreSQL database, designed for use in Node.js backends and serverless environments.
 
@@ -16,11 +16,11 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 ## Installation
 
 ```sh
-npm install stripe-experiment-sync stripe
+npm install stripe-replit-sync stripe
 # or
-pnpm add stripe-experiment-sync stripe
+pnpm add stripe-replit-sync stripe
 # or
-yarn add stripe-experiment-sync stripe
+yarn add stripe-replit-sync stripe
 ```
 
 ## StripeAutoSync
@@ -82,6 +82,56 @@ const sync = new StripeSync({
 // Example: process a Stripe webhook
 await sync.processWebhook(payload, signature)
 ```
+
+### Processing Webhooks
+
+The `processWebhook` method supports both standard and managed webhook approaches:
+
+```typescript
+// For managed webhooks (with UUID-based routing):
+await sync.processWebhook(payload, signature, uuid)
+
+// For standard webhooks (requires stripeWebhookSecret in config):
+await sync.processWebhook(payload, signature)
+
+// Or process an event directly (no signature validation):
+await sync.processEvent(event)
+```
+
+### Managed Webhook Endpoints
+
+The library provides methods to create and manage webhook endpoints with UUID-based routing for security:
+
+```typescript
+// Create or reuse an existing webhook endpoint for a base URL
+const { webhook, uuid } = await sync.findOrCreateManagedWebhook(
+  'https://example.com/stripe-webhooks',
+  {
+    enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
+    description: 'My app webhook',
+  }
+)
+// webhook.url will be: https://example.com/stripe-webhooks/{uuid}
+
+// Create a new webhook endpoint (always creates new)
+const { webhook, uuid } = await sync.createManagedWebhook(
+  'https://example.com/stripe-webhooks',
+  {
+    enabled_events: ['customer.created', 'customer.updated'],
+  }
+)
+
+// Get a managed webhook by ID
+const webhook = await sync.getManagedWebhook('we_xxx')
+
+// Delete a managed webhook
+await sync.deleteManagedWebhook('we_xxx')
+```
+
+The UUID-based routing allows multiple webhook endpoints for the same base URL, making it ideal for:
+- Development environments with ngrok/tunnels that change URLs
+- Multi-tenant applications
+- Testing and staging environments
 
 ## Configuration
 
