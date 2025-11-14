@@ -1668,7 +1668,7 @@ export class StripeSync {
               uuid: existingWebhook.uuid,
             }
           }
-        } catch {
+        } catch (error) {
           // Webhook doesn't exist in Stripe anymore, continue searching
           this.config.logger?.warn(
             { error, webhookId: existingWebhook.id },
