@@ -25,6 +25,7 @@ stripe-sync --database-url postgresql://user:password@localhost:5432/mydb
 ```
 
 You'll be prompted for:
+
 - Stripe API key (or set `STRIPE_API_KEY` env var)
 - ngrok auth token (or set `NGROK_AUTH_TOKEN` env var)
 - Postgres DATABASE_URL (or pass via `--database-url` flag)
@@ -81,6 +82,7 @@ pnpm stripe:trigger subscription.created
 This uses the [Stripe CLI](https://stripe.com/docs/stripe-cli) to send test webhook events to your running server.
 
 **Install Stripe CLI:**
+
 - macOS: `brew install stripe/stripe-cli/stripe`
 - npm: `npm install -g stripe`
 - Download: https://github.com/stripe/stripe-cli/releases/latest
@@ -93,6 +95,7 @@ This uses the [Stripe CLI](https://stripe.com/docs/stripe-cli) to send test webh
 4. **Streams Changes**: Real-time syncing of all Stripe events to PostgreSQL
 
 The CLI automatically:
+
 - Starts a Fastify server with the sync engine running natively
 - Creates an ngrok tunnel for webhook delivery
 - Registers a Stripe webhook with all events enabled
@@ -124,6 +127,7 @@ The CLI syncs all Stripe objects supported by `@supabase/stripe-sync-engine`:
 ### "Database configuration is required"
 
 Make sure you have set `DATABASE_URL` either via:
+
 - Command flag: `--database-url postgresql://...`
 - Environment variable: `DATABASE_URL=postgresql://...`
 - Interactive prompt will ask if not provided
@@ -137,16 +141,16 @@ docker run --name local-postgres \
   -p 5432:5432 \
   -d postgres:16
 ```
-Feel free to query it manually using `docker exec -it local-postgres psql -U postgres -d app_db`
 
+Feel free to query it manually using `docker exec -it local-postgres psql -U postgres -d app_db`
 
 ### "Failed to create ngrok tunnel"
 
 - Verify your ngrok auth token is valid
 - Check if ngrok is blocked by your firewall
-- Try running `ngrok config add-authtoken <token>` manually or go to the 
+- Try running `ngrok config add-authtoken <token>` manually or go to the
 
-### "Stripe API key should start with 'sk_'"
+### "Stripe API key should start with 'sk\_'"
 
 Make sure you're using a Secret Key (starts with `sk_`), not a Publishable Key (starts with `pk_`).
 

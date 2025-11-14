@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import { loadConfig, CliOptions } from './config'
-import { StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { StripeSync, runMigrations } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
 
@@ -31,7 +31,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       try {
         await stripeSync.deleteManagedWebhook(webhookId)
         console.log(chalk.green('✓ Webhook cleanup complete'))
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Could not delete webhook'))
       }
     }
@@ -46,7 +46,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
           })
         })
         console.log(chalk.green('✓ Server stopped'))
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Server already stopped'))
       }
     }
@@ -55,7 +55,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     if (tunnel) {
       try {
         await tunnel.close()
-      } catch (error) {
+      } catch {
         console.log(chalk.yellow('⚠ Could not close tunnel'))
       }
     }
@@ -84,7 +84,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     } catch (migrationError) {
       // Migration failed - drop schema and retry
       console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
-      console.warn('Migration error:', migrationError instanceof Error ? migrationError.message : String(migrationError))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
 
       const { Client } = await import('pg')
       const client = new Client({ connectionString: config.databaseUrl })
@@ -167,9 +170,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       try {
         await stripeSync!.processWebhook(rawBody, sig, uuid)
         return res.status(200).send({ received: true })
-      } catch (error: any) {
-        console.error('[Webhook] Processing error:', error.message)
-        return res.status(400).send({ error: error.message })
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        console.error('[Webhook] Processing error:', errorMessage)
+        return res.status(400).send({ error: errorMessage })
       }
     })
 
@@ -195,10 +199,15 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // 7. Run initial backfill of all Stripe data
     console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
     const backfillResult = await stripeSync.syncBackfill({ object: 'all' })
-    const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + ((result as any)?.synced || 0), 0)
+    const totalSynced = Object.values(backfillResult).reduce(
+      (sum, result) => sum + (result?.synced || 0),
+      0
+    )
     console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
 
-    console.log(chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]'))
+    console.log(
+      chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
+    )
 
     // Keep the process alive
     await new Promise(() => {})

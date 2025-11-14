@@ -52,14 +52,14 @@ await stripeAutoSync.stop() // Cleanup
 
 ### Configuration Options
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `databaseUrl` | Yes | - | PostgreSQL connection string |
-| `stripeApiKey` | Yes | - | Stripe secret key (sk_...) |
-| `baseUrl` | Yes | - | Function returning your public URL |
-| `webhookPath` | No | `/stripe-webhooks` | Path where webhook handler is mounted |
-| `schema` | No | `stripe` | Database schema name |
-| `stripeApiVersion` | No | `2020-08-27` | Stripe API version |
+| Option             | Required | Default            | Description                           |
+| ------------------ | -------- | ------------------ | ------------------------------------- |
+| `databaseUrl`      | Yes      | -                  | PostgreSQL connection string          |
+| `stripeApiKey`     | Yes      | -                  | Stripe secret key (sk\_...)           |
+| `baseUrl`          | Yes      | -                  | Function returning your public URL    |
+| `webhookPath`      | No       | `/stripe-webhooks` | Path where webhook handler is mounted |
+| `schema`           | No       | `stripe`           | Database schema name                  |
+| `stripeApiVersion` | No       | `2020-08-27`       | Stripe API version                    |
 
 ---
 

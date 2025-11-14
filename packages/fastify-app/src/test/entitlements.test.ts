@@ -1,6 +1,6 @@
-import { StripeSync } from 'stripe-experiment-sync'
+import { StripeSync } from 'stripe-replit-sync'
 import { vitest, beforeAll, describe, test, expect, afterAll } from 'vitest'
-import { runMigrations } from 'stripe-experiment-sync'
+import { runMigrations } from 'stripe-replit-sync'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'

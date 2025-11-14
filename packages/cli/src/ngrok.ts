@@ -12,10 +12,7 @@ export interface NgrokTunnel {
  * @param authToken - ngrok authentication token
  * @returns The tunnel URL and a close function
  */
-export async function createTunnel(
-  port: number,
-  authToken: string
-): Promise<NgrokTunnel> {
+export async function createTunnel(port: number, authToken: string): Promise<NgrokTunnel> {
   try {
     console.log(chalk.blue(`\nCreating ngrok tunnel for port ${port}...`))
 
