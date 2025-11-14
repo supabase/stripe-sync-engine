@@ -53,7 +53,6 @@ async function main() {
     console.log()
     console.log(chalk.green('✅ Cleanup complete!'))
     console.log()
-
   } catch (error) {
     console.error(chalk.red('\n❌ Error during cleanup:'))
     console.error(error)

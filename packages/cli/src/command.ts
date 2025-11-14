@@ -84,7 +84,10 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     } catch (migrationError) {
       // Migration failed - drop schema and retry
       console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
-      console.warn('Migration error:', migrationError instanceof Error ? migrationError.message : String(migrationError))
+      console.warn(
+        'Migration error:',
+        migrationError instanceof Error ? migrationError.message : String(migrationError)
+      )
 
       const { Client } = await import('pg')
       const client = new Client({ connectionString: config.databaseUrl })
@@ -195,10 +198,15 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // 7. Run initial backfill of all Stripe data
     console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
     const backfillResult = await stripeSync.syncBackfill({ object: 'all' })
-    const totalSynced = Object.values(backfillResult).reduce((sum, result) => sum + ((result as any)?.synced || 0), 0)
+    const totalSynced = Object.values(backfillResult).reduce(
+      (sum, result) => sum + ((result as any)?.synced || 0),
+      0
+    )
     console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
 
-    console.log(chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]'))
+    console.log(
+      chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
+    )
 
     // Keep the process alive
     await new Promise(() => {})

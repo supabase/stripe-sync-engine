@@ -92,12 +92,9 @@ const { webhook, uuid } = await sync.findOrCreateManagedWebhook(
 // webhook.url will be: https://example.com/stripe-webhooks/{uuid}
 
 // Create a new webhook endpoint (always creates new)
-const { webhook, uuid } = await sync.createManagedWebhook(
-  'https://example.com/stripe-webhooks',
-  {
-    enabled_events: ['customer.created', 'customer.updated'],
-  }
-)
+const { webhook, uuid } = await sync.createManagedWebhook('https://example.com/stripe-webhooks', {
+  enabled_events: ['customer.created', 'customer.updated'],
+})
 
 // Get a managed webhook by ID
 const webhook = await sync.getManagedWebhook('we_xxx')
@@ -107,6 +104,7 @@ await sync.deleteManagedWebhook('we_xxx')
 ```
 
 The UUID-based routing allows multiple webhook endpoints for the same base URL, making it ideal for:
+
 - Development environments with ngrok/tunnels that change URLs
 - Multi-tenant applications
 - Testing and staging environments

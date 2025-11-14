@@ -48,7 +48,6 @@ function getUniqueIds<T>(entries: T[], key: string): string[] {
 
 const DEFAULT_SCHEMA = 'stripe'
 
-
 export interface StripeSyncOptions {
   databaseUrl: string
   stripeApiKey: string
@@ -128,17 +127,15 @@ export class StripeSync {
     } else {
       // Use the webhook secret from config (non-managed webhook)
       if (!this.config.stripeWebhookSecret) {
-        throw new Error('No webhook secret provided. Either pass a uuid for managed webhooks or configure stripeWebhookSecret.')
+        throw new Error(
+          'No webhook secret provided. Either pass a uuid for managed webhooks or configure stripeWebhookSecret.'
+        )
       }
       webhookSecret = this.config.stripeWebhookSecret
     }
 
     // Verify webhook signature using the secret
-    const event = await this.stripe.webhooks.constructEventAsync(
-      payload,
-      signature!,
-      webhookSecret
-    )
+    const event = await this.stripe.webhooks.constructEventAsync(payload, signature!, webhookSecret)
 
     return this.processEvent(event)
   }
@@ -1726,9 +1723,7 @@ export class StripeSync {
       if (existingBaseUrl === baseUrl) {
         try {
           // Verify webhook still exists in Stripe and is enabled
-          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(
-            existingWebhook.id
-          )
+          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(existingWebhook.id)
 
           if (stripeWebhook.status === 'enabled') {
             // Webhook is valid, reuse it
@@ -1748,9 +1743,7 @@ export class StripeSync {
     return this.createManagedWebhook(baseUrl, params)
   }
 
-  async getManagedWebhook(
-    id: string
-  ): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
+  async getManagedWebhook(id: string): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
       `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE id = $1`,
       [id]
