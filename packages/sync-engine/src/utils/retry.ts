@@ -27,10 +27,7 @@ function isRateLimitError(error: any): boolean {
  */
 function calculateDelay(attempt: number, config: RetryConfig): number {
   // Exponential: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped at maxDelay)
-  const exponentialDelay = Math.min(
-    config.initialDelayMs * Math.pow(2, attempt),
-    config.maxDelayMs
-  )
+  const exponentialDelay = Math.min(config.initialDelayMs * Math.pow(2, attempt), config.maxDelayMs)
 
   // Add random jitter to prevent thundering herd problem
   const jitter = Math.random() * config.jitterMs
@@ -42,7 +39,7 @@ function calculateDelay(attempt: number, config: RetryConfig): number {
  * Sleeps for the specified number of milliseconds
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**

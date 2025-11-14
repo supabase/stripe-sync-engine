@@ -24,8 +24,12 @@ describe('withRetry', () => {
   it('should retry on 429 rate limit error and eventually succeed', async () => {
     const mockFn = vi
       .fn()
-      .mockRejectedValueOnce(new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' }))
-      .mockRejectedValueOnce(new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' }))
+      .mockRejectedValueOnce(
+        new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+      )
+      .mockRejectedValueOnce(
+        new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+      )
       .mockResolvedValueOnce('success')
 
     const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
@@ -47,7 +51,9 @@ describe('withRetry', () => {
   })
 
   it('should throw after exhausting max retries', async () => {
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn, { maxRetries: 2, initialDelayMs: 100, jitterMs: 0 })
@@ -72,7 +78,9 @@ describe('withRetry', () => {
   })
 
   it('should use exponential backoff timing', async () => {
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn, {
@@ -104,7 +112,9 @@ describe('withRetry', () => {
   })
 
   it('should respect maxDelayMs cap', async () => {
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn, {
@@ -137,10 +147,16 @@ describe('withRetry', () => {
       warn: vi.fn(),
       error: vi.fn(),
     }
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
-    const promise = withRetry(mockFn, { maxRetries: 1, initialDelayMs: 100, jitterMs: 0 }, mockLogger)
+    const promise = withRetry(
+      mockFn,
+      { maxRetries: 1, initialDelayMs: 100, jitterMs: 0 },
+      mockLogger
+    )
 
     await vi.advanceTimersByTimeAsync(0)
     await vi.advanceTimersByTimeAsync(100)
@@ -171,7 +187,9 @@ describe('withRetry', () => {
   })
 
   it('should add jitter to delay', async () => {
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     // Mock Math.random to return predictable value
@@ -206,7 +224,9 @@ describe('withRetry', () => {
   })
 
   it('should use default config values when not specified', async () => {
-    const rateLimitError = new Stripe.errors.StripeRateLimitError({ message: 'Rate limit exceeded' })
+    const rateLimitError = new Stripe.errors.StripeRateLimitError({
+      message: 'Rate limit exceeded',
+    })
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn) // No config provided
