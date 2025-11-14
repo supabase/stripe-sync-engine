@@ -1,7 +1,7 @@
 # Stripe Sync Engine
 
 ![GitHub License](https://img.shields.io/github/license/tx-stripe/stripe-sync-engine)
-![NPM Version](https://img.shields.io/npm/v/stripe-experiment-sync)
+![NPM Version](https://img.shields.io/npm/v/stripe-replit-sync)
 
 A TypeScript library to synchronize Stripe data into a PostgreSQL database, designed for use in Node.js backends and serverless environments.
 
@@ -16,11 +16,11 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 ## Installation
 
 ```sh
-npm install stripe-experiment-sync stripe
+npm install stripe-replit-sync stripe
 # or
-pnpm add stripe-experiment-sync stripe
+pnpm add stripe-replit-sync stripe
 # or
-yarn add stripe-experiment-sync stripe
+yarn add stripe-replit-sync stripe
 ```
 
 ## StripeAutoSync

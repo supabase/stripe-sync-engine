@@ -110,20 +110,30 @@ export class StripeSync {
     })
   }
 
-  async processWebhook(payload: Buffer | string, signature: string | undefined, uuid: string) {
-    // Query the webhook secret from the database using the UUID
-    const result = await this.postgresClient.query(
-      `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE uuid = $1`,
-      [uuid]
-    )
+  async processWebhook(payload: Buffer | string, signature: string | undefined, uuid?: string) {
+    let webhookSecret: string
 
-    if (result.rows.length === 0) {
-      throw new Error(`No managed webhook found with UUID: ${uuid}`)
+    if (uuid) {
+      // Query the webhook secret from the database using the UUID (managed webhook)
+      const result = await this.postgresClient.query(
+        `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE uuid = $1`,
+        [uuid]
+      )
+
+      if (result.rows.length === 0) {
+        throw new Error(`No managed webhook found with UUID: ${uuid}`)
+      }
+
+      webhookSecret = result.rows[0].secret
+    } else {
+      // Use the webhook secret from config (non-managed webhook)
+      if (!this.config.stripeWebhookSecret) {
+        throw new Error('No webhook secret provided. Either pass a uuid for managed webhooks or configure stripeWebhookSecret.')
+      }
+      webhookSecret = this.config.stripeWebhookSecret
     }
 
-    const webhookSecret = result.rows[0].secret
-
-    // Verify webhook signature using the secret from DB
+    // Verify webhook signature using the secret
     const event = await this.stripe.webhooks.constructEventAsync(
       payload,
       signature!,

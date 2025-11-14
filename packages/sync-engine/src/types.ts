@@ -32,6 +32,9 @@ export type StripeSyncConfig = {
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
 
+  /** Stripe webhook signing secret for validating webhook signatures. Required if not using managed webhooks (uuid-based routing). */
+  stripeWebhookSecret?: string
+
   /** Stripe API version for the webhooks, defaults to 2020-08-27 */
   stripeApiVersion?: string
 
