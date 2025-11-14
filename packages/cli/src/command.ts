@@ -3,9 +3,113 @@ import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
 import { loadConfig, CliOptions } from './config'
-import { StripeSync, runMigrations } from 'stripe-replit-sync'
+import { StripeSync, runMigrations, type SyncObject } from 'stripe-replit-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
 import type { PoolConfig } from 'pg'
+
+/**
+ * Backfill command - backfills a specific entity type from Stripe.
+ */
+export async function backfillCommand(options: CliOptions, entityName: string): Promise<void> {
+  try {
+    // For backfill, we only need stripe key and database URL (not ngrok token)
+    dotenv.config()
+
+    let stripeApiKey =
+      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
+
+    if (!stripeApiKey || !databaseUrl) {
+      const inquirer = (await import('inquirer')).default
+      const questions = []
+
+      if (!stripeApiKey) {
+        questions.push({
+          type: 'password',
+          name: 'stripeApiKey',
+          message: 'Enter your Stripe API key:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'Stripe API key is required'
+            }
+            if (!input.startsWith('sk_')) {
+              return 'Stripe API key should start with "sk_"'
+            }
+            return true
+          },
+        })
+      }
+
+      if (!databaseUrl) {
+        questions.push({
+          type: 'password',
+          name: 'databaseUrl',
+          message: 'Enter your Postgres DATABASE_URL:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input || input.trim() === '') {
+              return 'DATABASE_URL is required'
+            }
+            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
+              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
+            }
+            return true
+          },
+        })
+      }
+
+      if (questions.length > 0) {
+        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
+        const answers = await inquirer.prompt(questions)
+        if (answers.stripeApiKey) stripeApiKey = answers.stripeApiKey
+        if (answers.databaseUrl) databaseUrl = answers.databaseUrl
+      }
+    }
+
+    const config = {
+      stripeApiKey,
+      databaseUrl,
+      ngrokAuthToken: '', // Not needed for backfill
+    }
+    const schema = process.env.SCHEMA || 'stripe'
+
+    console.log(chalk.blue(`Backfilling ${entityName} from Stripe...`))
+    console.log(chalk.gray(`Schema: ${schema}`))
+    console.log(chalk.gray(`Database: ${config.databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
+
+    // Create StripeSync instance
+    const poolConfig: PoolConfig = {
+      max: 10,
+      connectionString: config.databaseUrl,
+      keepAlive: true,
+    }
+
+    const stripeSync = new StripeSync({
+      databaseUrl: config.databaseUrl,
+      schema,
+      stripeSecretKey: config.stripeApiKey,
+      stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
+      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
+      poolConfig,
+    })
+
+    // Run backfill for the specified entity
+    const result = await stripeSync.syncBackfill({ object: entityName as SyncObject })
+    const totalSynced = Object.values(result).reduce(
+      (sum, syncResult) => sum + (syncResult?.synced || 0),
+      0
+    )
+
+    console.log(chalk.green(`✓ Backfill complete: ${totalSynced} ${entityName} objects synced`))
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message))
+    }
+    process.exit(1)
+  }
+}
 
 /**
  * Migration command - runs database migrations only.
