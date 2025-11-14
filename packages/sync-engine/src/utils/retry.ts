@@ -25,7 +25,6 @@ function isRateLimitError(error: unknown): boolean {
 /**
  * Extracts the Retry-After header value from a Stripe rate limit error
  * Returns the value in milliseconds, or null if not present/invalid
- * Caps at 60 seconds to match Stripe SDK behavior
  *
  * @param error - The error to extract from
  * @returns Retry-After delay in milliseconds, or null
@@ -42,8 +41,8 @@ function getRetryAfterMs(error: unknown): number | null {
 
   const retryAfterSeconds = Number(retryAfterHeader)
 
-  // Validate: must be a positive number, capped at 60 seconds
-  if (isNaN(retryAfterSeconds) || retryAfterSeconds <= 0 || retryAfterSeconds > 60) {
+  // Validate: must be a positive number
+  if (isNaN(retryAfterSeconds) || retryAfterSeconds <= 0) {
     return null
   }
 

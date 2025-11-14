@@ -314,7 +314,6 @@ describe('withRetry', () => {
         { 'retry-after': 'invalid' }, // Non-numeric
         { 'retry-after': '-5' }, // Negative
         { 'retry-after': '0' }, // Zero
-        { 'retry-after': '100' }, // Over 60 second cap
       ]
 
       for (const headers of testCases) {
@@ -343,20 +342,21 @@ describe('withRetry', () => {
       }
     })
 
-    it('should cap Retry-After at 60 seconds', async () => {
+    it('should respect long Retry-After values', async () => {
       const rateLimitError = new Stripe.errors.StripeRateLimitError({
         message: 'Rate limit exceeded',
-        headers: { 'retry-after': '100' }, // Over the cap
+        headers: { 'retry-after': '120' }, // 2 minutes
       })
 
       const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
 
-      const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+      const promise = withRetry(mockFn, { jitterMs: 0 })
 
       await vi.advanceTimersByTimeAsync(0)
+      expect(mockFn).toHaveBeenCalledTimes(1)
 
-      // Should ignore the 100s value and fall back to exponential backoff
-      await vi.advanceTimersByTimeAsync(1000)
+      // Should wait the full 120 seconds
+      await vi.advanceTimersByTimeAsync(120000)
       expect(mockFn).toHaveBeenCalledTimes(2)
 
       await promise
