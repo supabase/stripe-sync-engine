@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import pino from 'pino'
 
 export interface RetryConfig {
   maxRetries: number
@@ -17,7 +18,7 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 /**
  * Determines if an error is a 429 rate limit error
  */
-function isRateLimitError(error: any): boolean {
+function isRateLimitError(error: unknown): boolean {
   return error instanceof Stripe.errors.StripeRateLimitError
 }
 
@@ -61,10 +62,10 @@ function sleep(ms: number): Promise<void> {
 export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Partial<RetryConfig> = {},
-  logger?: any
+  logger?: pino.Logger
 ): Promise<T> {
   const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config }
-  let lastError: any
+  let lastError: unknown
 
   for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
     try {
