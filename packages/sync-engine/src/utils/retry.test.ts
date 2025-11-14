@@ -242,4 +242,187 @@ describe('withRetry', () => {
     // We won't test all 5 retries, just verify defaults work
     await expect(promise).rejects.toThrow()
   })
+
+  describe('Retry-After header handling', () => {
+    it('should respect Retry-After header when provided', async () => {
+      const rateLimitError = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '5' }, // Stripe says wait 5 seconds
+      })
+
+      const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
+
+      const promise = withRetry(mockFn, { jitterMs: 0 })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFn).toHaveBeenCalledTimes(1)
+
+      // Should wait 5000ms as indicated by Retry-After header
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockFn).toHaveBeenCalledTimes(2)
+
+      const result = await promise
+      expect(result).toBe('success')
+    })
+
+    it('should add jitter to Retry-After delay', async () => {
+      const rateLimitError = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '5' },
+      })
+
+      const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
+
+      // Mock Math.random to return predictable value
+      const originalRandom = Math.random
+      Math.random = vi.fn().mockReturnValue(0.5)
+
+      const promise = withRetry(mockFn, { jitterMs: 500 })
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Expected delay: 5000 + (0.5 * 500) = 5250ms
+      await vi.advanceTimersByTimeAsync(5250)
+      expect(mockFn).toHaveBeenCalledTimes(2)
+
+      Math.random = originalRandom
+      await promise
+    })
+
+    it('should fall back to exponential backoff when Retry-After header is missing', async () => {
+      const rateLimitError = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        // No headers property
+      })
+
+      const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
+
+      const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFn).toHaveBeenCalledTimes(1)
+
+      // Should use exponential backoff: 1000ms
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockFn).toHaveBeenCalledTimes(2)
+
+      await promise
+    })
+
+    it('should ignore invalid Retry-After values and use exponential backoff', async () => {
+      const testCases = [
+        { 'retry-after': 'invalid' }, // Non-numeric
+        { 'retry-after': '-5' }, // Negative
+        { 'retry-after': '0' }, // Zero
+        { 'retry-after': '100' }, // Over 60 second cap
+      ]
+
+      for (const headers of testCases) {
+        const rateLimitError = new Stripe.errors.StripeRateLimitError({
+          message: 'Rate limit exceeded',
+          headers,
+        })
+
+        const mockFn = vi
+          .fn()
+          .mockRejectedValueOnce(rateLimitError)
+          .mockResolvedValueOnce('success')
+
+        const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Should fall back to exponential backoff
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(mockFn).toHaveBeenCalledTimes(2)
+
+        await promise
+
+        vi.clearAllMocks()
+        vi.clearAllTimers()
+      }
+    })
+
+    it('should cap Retry-After at 60 seconds', async () => {
+      const rateLimitError = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '100' }, // Over the cap
+      })
+
+      const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
+
+      const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Should ignore the 100s value and fall back to exponential backoff
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockFn).toHaveBeenCalledTimes(2)
+
+      await promise
+    })
+
+    it('should log retryAfterMs when Retry-After header is present', async () => {
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+      }
+
+      const rateLimitError = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '5' },
+      })
+
+      const mockFn = vi.fn().mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce('success')
+
+      const promise = withRetry(mockFn, { jitterMs: 0 }, mockLogger)
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(5000)
+
+      await promise
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Rate limit exceeded',
+          retryAfterMs: 5000,
+          delayMs: 5000,
+        }),
+        'Rate limit hit, retrying Stripe API call after delay'
+      )
+    })
+
+    it('should handle multiple retries with different Retry-After values', async () => {
+      const error1 = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '3' },
+      })
+      const error2 = new Stripe.errors.StripeRateLimitError({
+        message: 'Rate limit exceeded',
+        headers: { 'retry-after': '7' },
+      })
+
+      const mockFn = vi
+        .fn()
+        .mockRejectedValueOnce(error1)
+        .mockRejectedValueOnce(error2)
+        .mockResolvedValueOnce('success')
+
+      const promise = withRetry(mockFn, { jitterMs: 0 })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockFn).toHaveBeenCalledTimes(1)
+
+      // First retry: wait 3 seconds
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(mockFn).toHaveBeenCalledTimes(2)
+
+      // Second retry: wait 7 seconds
+      await vi.advanceTimersByTimeAsync(7000)
+      expect(mockFn).toHaveBeenCalledTimes(3)
+
+      const result = await promise
+      expect(result).toBe('success')
+    })
+  })
 })
