@@ -23,10 +23,57 @@ function isRateLimitError(error: unknown): boolean {
 }
 
 /**
- * Calculates exponential backoff delay with jitter
- * Formula: min(initialDelay * 2^attempt, maxDelay) + random(0, jitter)
+ * Extracts the Retry-After header value from a Stripe rate limit error
+ * Returns the value in milliseconds, or null if not present/invalid
+ *
+ * @param error - The error to extract from
+ * @returns Retry-After delay in milliseconds, or null
  */
-function calculateDelay(attempt: number, config: RetryConfig): number {
+function getRetryAfterMs(error: unknown): number | null {
+  if (!(error instanceof Stripe.errors.StripeRateLimitError)) {
+    return null
+  }
+
+  const retryAfterHeader = error.headers?.['retry-after']
+  if (!retryAfterHeader) {
+    return null
+  }
+
+  const retryAfterSeconds = Number(retryAfterHeader)
+
+  // Validate: must be a positive number
+  if (isNaN(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return null
+  }
+
+  return retryAfterSeconds * 1000 // Convert to milliseconds
+}
+
+/**
+ * Calculates retry delay, preferring Retry-After header if available
+ * Falls back to exponential backoff with jitter if Retry-After not present
+ *
+ * When Retry-After is present: use it (trusting Stripe's guidance)
+ * When not present: use exponential backoff with jitter
+ *
+ * @param attempt - Current retry attempt number (0-indexed)
+ * @param config - Retry configuration
+ * @param retryAfterMs - Optional Retry-After value from Stripe (in milliseconds)
+ * @returns Delay in milliseconds before next retry
+ */
+function calculateDelay(
+  attempt: number,
+  config: RetryConfig,
+  retryAfterMs?: number | null
+): number {
+  // If Stripe provided Retry-After header, trust it
+  if (retryAfterMs !== null && retryAfterMs !== undefined) {
+    // Still add jitter to prevent thundering herd
+    const jitter = Math.random() * config.jitterMs
+    return retryAfterMs + jitter
+  }
+
+  // Fall back to exponential backoff
   // Exponential: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped at maxDelay)
   const exponentialDelay = Math.min(config.initialDelayMs * Math.pow(2, attempt), config.maxDelayMs)
 
@@ -91,8 +138,11 @@ export async function withRetry<T>(
         throw error
       }
 
+      // Extract Retry-After header if present
+      const retryAfterMs = getRetryAfterMs(error)
+
       // Calculate delay and wait before next attempt
-      const delay = calculateDelay(attempt, retryConfig)
+      const delay = calculateDelay(attempt, retryConfig, retryAfterMs)
 
       logger?.warn(
         {
@@ -100,6 +150,7 @@ export async function withRetry<T>(
           attempt: attempt + 1,
           maxRetries: retryConfig.maxRetries,
           delayMs: Math.round(delay),
+          retryAfterMs: retryAfterMs ?? undefined,
           nextAttempt: attempt + 2,
         },
         'Rate limit hit, retrying Stripe API call after delay'
