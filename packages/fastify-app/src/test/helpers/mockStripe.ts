@@ -1,6 +1,14 @@
 import { vitest } from 'vitest'
 
 export const mockStripe = {
+  accounts: {
+    retrieve: vitest.fn(() =>
+      Promise.resolve({
+        id: 'acct_test123',
+        object: 'account',
+      })
+    ),
+  },
   checkout: {
     sessions: {
       retrieve: vitest.fn((id) =>

@@ -36,6 +36,7 @@ afterAll(async () => {
 
 describe('entitlements', () => {
   test('should sync active entitlements for a customer', async () => {
+    const accountId = await stripeSync.getAccountId()
     const customer = [
       {
         id: customerId,
@@ -44,7 +45,7 @@ describe('entitlements', () => {
         name: 'Test Customer 1',
       } as Stripe.Customer,
     ]
-    await stripeSync.upsertCustomers(customer)
+    await stripeSync.upsertCustomers(customer, accountId)
 
     const activeEntitlements = [
       {
@@ -61,7 +62,7 @@ describe('entitlements', () => {
       customerId,
       activeEntitlements.map((entitlement) => entitlement.id)
     )
-    await stripeSync.upsertActiveEntitlements(customerId, activeEntitlements, false)
+    await stripeSync.upsertActiveEntitlements(customerId, activeEntitlements, accountId, false)
 
     const entitlements = await stripeSync.postgresClient.query(
       `select * from stripe.active_entitlements where customer = '${customerId}'`
@@ -71,6 +72,7 @@ describe('entitlements', () => {
       {
         ...activeEntitlements[0],
         customer: customerId,
+        _account_id: accountId,
         raw_data: expect.objectContaining({
           id: activeEntitlements[0].id,
           feature: activeEntitlements[0].feature,
@@ -104,7 +106,7 @@ describe('entitlements', () => {
       newActiveEntitlements.map((entitlement) => entitlement.id)
     )
 
-    await stripeSync.upsertActiveEntitlements(customerId, newActiveEntitlements, false)
+    await stripeSync.upsertActiveEntitlements(customerId, newActiveEntitlements, accountId, false)
 
     const updatedEntitlements = await stripeSync.postgresClient.query(
       `select * from stripe.active_entitlements where customer = '${customerId}'`
@@ -114,6 +116,7 @@ describe('entitlements', () => {
       newActiveEntitlements.map((entitlement) => ({
         ...entitlement,
         customer: customerId,
+        _account_id: accountId,
         raw_data: expect.objectContaining({
           id: entitlement.id,
           feature: entitlement.feature,

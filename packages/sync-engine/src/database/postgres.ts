@@ -70,7 +70,7 @@ export class PostgresClient {
     T extends {
       [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
     },
-  >(entries: T[], table: string, syncTimestamp?: string): Promise<T[]> {
+  >(entries: T[], table: string, accountId: string, syncTimestamp?: string): Promise<T[]> {
     const timestamp = syncTimestamp || new Date().toISOString()
 
     if (!entries.length) return []
@@ -86,19 +86,22 @@ export class PostgresClient {
       chunk.forEach((entry) => {
         // Internal tables (starting with _) use old column-based format with yesql
         if (table.startsWith('_')) {
-          const columns = Object.keys(entry).filter((k) => k !== 'last_synced_at')
+          const columns = Object.keys(entry).filter(
+            (k) => k !== 'last_synced_at' && k !== '_account_id'
+          )
 
           const upsertSql = `
             INSERT INTO "${this.config.schema}"."${table}" (
-              ${columns.map((c) => `"${c}"`).join(', ')}, "last_synced_at"
+              ${columns.map((c) => `"${c}"`).join(', ')}, "last_synced_at", "_account_id"
             )
             VALUES (
-              ${columns.map((c) => `:${c}`).join(', ')}, :last_synced_at
+              ${columns.map((c) => `:${c}`).join(', ')}, :last_synced_at, :_account_id
             )
             ON CONFLICT ("id")
             DO UPDATE SET
               ${columns.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ')},
-              "last_synced_at" = :last_synced_at
+              "last_synced_at" = :last_synced_at,
+              "_account_id" = EXCLUDED."_account_id"
             WHERE "${table}"."last_synced_at" IS NULL
                OR "${table}"."last_synced_at" < :last_synced_at
             RETURNING *
@@ -106,6 +109,7 @@ export class PostgresClient {
 
           const cleansed = this.cleanseArrayField(entry)
           cleansed.last_synced_at = timestamp
+          cleansed._account_id = accountId
           const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
           queries.push(this.pool.query(prepared.text, prepared.values))
         } else {
@@ -115,18 +119,19 @@ export class PostgresClient {
 
           // Use explicit parameter placeholders to avoid yesql parsing issues with ::jsonb cast
           const upsertSql = `
-            INSERT INTO "${this.config.schema}"."${table}" ("id", "raw_data", "last_synced_at")
-            VALUES ($1, $2::jsonb, $3)
+            INSERT INTO "${this.config.schema}"."${table}" ("id", "raw_data", "last_synced_at", "_account_id")
+            VALUES ($1, $2::jsonb, $3, $4)
             ON CONFLICT ("id")
             DO UPDATE SET
               "raw_data" = EXCLUDED."raw_data",
-              "last_synced_at" = $3
+              "last_synced_at" = $3,
+              "_account_id" = EXCLUDED."_account_id"
             WHERE "${table}"."last_synced_at" IS NULL
                OR "${table}"."last_synced_at" < $3
             RETURNING *
           `
 
-          queries.push(this.pool.query(upsertSql, [id, rawData, timestamp]))
+          queries.push(this.pool.query(upsertSql, [id, rawData, timestamp, accountId]))
         }
       })
 
