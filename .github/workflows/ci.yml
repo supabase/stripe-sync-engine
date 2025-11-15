@@ -123,3 +123,9 @@ jobs:
           cd packages/cli
           chmod +x ./scripts/test-integration-backfill.sh
           ./scripts/test-integration-backfill.sh
+
+      - name: Run CLI Error Recovery Integration Test
+        run: |
+          cd packages/cli
+          chmod +x ./scripts/test-integration-recoverable-backfill.sh
+          ./scripts/test-integration-recoverable-backfill.sh

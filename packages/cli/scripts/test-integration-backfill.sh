@@ -273,6 +273,122 @@ else
 fi
 
 echo ""
+
+# Step 6: Test Incremental Sync
+echo "🔄 Step 6: Testing incremental sync..."
+echo ""
+echo "   This verifies that subsequent backfills only fetch new data"
+echo "   instead of re-fetching all data from Stripe."
+echo ""
+
+# Check cursor was saved from first backfill
+echo "   Checking sync cursor from first backfill..."
+CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ' || echo "0")
+CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ')
+if [ "$CURSOR" -gt 0 ]; then
+    echo "   ✓ Cursor saved: $CURSOR_DISPLAY (epoch: $CURSOR)"
+else
+    echo "   ❌ No cursor found in _sync_status table"
+    exit 1
+fi
+
+# Check sync status is 'complete'
+SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ' || echo "")
+if [ "$SYNC_STATUS" = "complete" ]; then
+    echo "   ✓ Sync status: $SYNC_STATUS"
+else
+    echo "   ❌ Expected status 'complete', got '$SYNC_STATUS'"
+    exit 1
+fi
+
+echo ""
+
+# Create a new product in Stripe AFTER the first backfill
+echo "   Creating new product in Stripe (post-backfill)..."
+PROD4_JSON=$(curl -s -X POST https://api.stripe.com/v1/products \
+    -u "${STRIPE_API_KEY}:" \
+    -d "name=Test Product 4 - Incremental" \
+    -d "description=Integration test product 4 - created after first backfill")
+PROD4_ID=$(echo "$PROD4_JSON" | jq -r '.id')
+PRODUCT_IDS+=("$PROD4_ID")
+echo "   ✓ Created product: $PROD4_ID"
+
+echo ""
+
+# Small delay to ensure different timestamps
+sleep 2
+
+echo ""
+
+# Run second backfill (should be incremental)
+echo "   Running incremental backfill for products..."
+npm run dev backfill product
+
+echo ""
+echo "   Verifying incremental sync results..."
+
+# Verify cursor was updated
+NEW_CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ' || echo "0")
+NEW_CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ')
+if [ "$NEW_CURSOR" -gt "$CURSOR" ]; then
+    echo "   ✓ Cursor advanced: $CURSOR → $NEW_CURSOR (incremental sync working)"
+else
+    echo "   ❌ Cursor did not advance (got: $NEW_CURSOR, expected > $CURSOR)"
+    exit 1
+fi
+
+# Verify sync status is still 'complete'
+NEW_SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ' || echo "")
+if [ "$NEW_SYNC_STATUS" = "complete" ]; then
+    echo "   ✓ Sync status after incremental sync: $NEW_SYNC_STATUS"
+else
+    echo "   ❌ Expected status 'complete', got '$NEW_SYNC_STATUS'"
+    exit 1
+fi
+
+# Verify last_synced_at was updated
+LAST_SYNCED=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_synced_at FROM stripe._sync_status WHERE resource = 'products';" 2>/dev/null | tr -d ' ')
+if [ -n "$LAST_SYNCED" ]; then
+    echo "   ✓ Last synced timestamp updated: $LAST_SYNCED"
+else
+    echo "   ❌ Last synced timestamp not found"
+    exit 1
+fi
+
+echo ""
+
+# Verify new product was synced
+PROD4_IN_DB=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE id = '$PROD4_ID';" 2>/dev/null | tr -d ' ' || echo "0")
+if [ "$PROD4_IN_DB" -eq 1 ]; then
+    echo "   ✓ New product synced incrementally"
+    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, name FROM stripe.products WHERE id = '$PROD4_ID';" 2>/dev/null | head -n 5
+else
+    echo "   ❌ New product not found in database"
+    exit 1
+fi
+
+echo ""
+
+# Note: Using created: { gte: cursor } means products with created == cursor
+# may be re-fetched to ensure no data is missed. This is expected behavior
+# and ensures data consistency even if multiple products share the same timestamp.
+
+echo ""
+
+# Verify all test products exist in DB
+TOTAL_TEST_PRODUCTS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE id IN ('$PROD1_ID', '$PROD2_ID', '$PROD3_ID', '$PROD4_ID');" 2>/dev/null | tr -d ' ' || echo "0")
+echo "   Test products in DB: $TOTAL_TEST_PRODUCTS (expected: 4)"
+if [ "$TOTAL_TEST_PRODUCTS" -eq 4 ]; then
+    echo "   ✓ All test products synced successfully"
+else
+    echo "   ❌ Expected 4 test products, found $TOTAL_TEST_PRODUCTS"
+    exit 1
+fi
+
+echo ""
+echo "✅ Step 6: Incremental sync test passed!"
+echo ""
+
 echo "=========================================="
 echo "✅ Backfill Integration Test Completed!"
 echo ""
@@ -284,5 +400,8 @@ echo "- ✓ Database migrations completed"
 echo "- ✓ Test data created in Stripe (3 customers, 3 products, 3 prices)"
 echo "- ✓ Backfill 'all' command executed"
 echo "- ✓ Data verified in database ($CUSTOMER_COUNT customers, $PRODUCT_COUNT products, $PRICE_COUNT prices)"
-echo "- ✓ Test data cleaned up from Stripe"
+echo "- ✓ Incremental sync cursor saved and updated correctly"
+echo "- ✓ New product created and synced incrementally"
+echo "- ✓ Cursor advanced from $CURSOR to $NEW_CURSOR"
+echo "- ✓ Test data cleaned up from Stripe (4 products)"
 echo ""

@@ -171,4 +171,64 @@ export class PostgresClient {
 
     return missingIds
   }
+
+  // Sync status tracking methods for incremental backfill
+
+  async getSyncCursor(resource: string): Promise<number | null> {
+    const result = await this.query(
+      `SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor
+       FROM "${this.config.schema}"."_sync_status"
+       WHERE resource = $1`,
+      [resource]
+    )
+    const cursor = result.rows[0]?.cursor ?? null
+    return cursor
+  }
+
+  async updateSyncCursor(resource: string, cursor: number): Promise<void> {
+    // Only update if the new cursor is greater than the existing one
+    // This handles Stripe returning results in descending order (newest first)
+    // Convert Unix timestamp to timestamptz for human-readable storage
+    await this.query(
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, last_incremental_cursor, status, last_synced_at)
+       VALUES ($1, to_timestamp($2), 'running', now())
+       ON CONFLICT (resource)
+       DO UPDATE SET
+         last_incremental_cursor = GREATEST(
+           COALESCE("${this.config.schema}"."_sync_status".last_incremental_cursor, to_timestamp(0)),
+           to_timestamp($2)
+         ),
+         last_synced_at = now(),
+         updated_at = now()`,
+      [resource, cursor.toString()]
+    )
+  }
+
+  async markSyncRunning(resource: string): Promise<void> {
+    await this.query(
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, status)
+       VALUES ($1, 'running')
+       ON CONFLICT (resource)
+       DO UPDATE SET status = 'running', updated_at = now()`,
+      [resource]
+    )
+  }
+
+  async markSyncComplete(resource: string): Promise<void> {
+    await this.query(
+      `UPDATE "${this.config.schema}"."_sync_status"
+       SET status = 'complete', error_message = NULL, updated_at = now()
+       WHERE resource = $1`,
+      [resource]
+    )
+  }
+
+  async markSyncError(resource: string, errorMessage: string): Promise<void> {
+    await this.query(
+      `UPDATE "${this.config.schema}"."_sync_status"
+       SET status = 'error', error_message = $2, updated_at = now()
+       WHERE resource = $1`,
+      [resource, errorMessage]
+    )
+  }
 }
