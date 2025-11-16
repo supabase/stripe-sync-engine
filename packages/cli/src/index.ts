@@ -24,7 +24,7 @@ program
 // Start command (main sync command)
 program
   .command('start')
-  .description('Start the Stripe sync server with webhook handling')
+  .description('Start Stripe sync')
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .option('--ngrok-token <token>', 'ngrok auth token (or NGROK_AUTH_TOKEN env)')
   .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')

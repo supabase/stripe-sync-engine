@@ -2167,7 +2167,7 @@ export class StripeSync {
     return this.postgresClient.delete('_managed_webhooks', id)
   }
 
-  private async upsertManagedWebhooks(
+  async upsertManagedWebhooks(
     webhooks: Array<Stripe.WebhookEndpoint & { uuid: string }>,
     accountId: string,
     syncTimestamp?: string

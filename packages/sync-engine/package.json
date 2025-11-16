@@ -1,8 +1,8 @@
 {
   "name": "stripe-replit-sync",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": false,
-  "description": "Stripe Sync Engine to sync Stripe data based on webhooks to Postgres",
+  "description": "Stripe Sync Engine to sync Stripe data to Postgres",
   "type": "module",
   "main": "./dist/index.cjs",
   "exports": {
@@ -27,6 +27,7 @@
   "dependencies": {
     "pg": "^8.16.3",
     "pg-node-migrations": "0.0.8",
+    "ws": "^8.18.0",
     "yesql": "^7.0.0"
   },
   "peerDependencies": {
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.15.5",
+    "@types/ws": "^8.5.13",
     "@types/yesql": "^4.1.4"
   },
   "repository": {

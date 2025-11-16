@@ -27,7 +27,7 @@
     "stripe:trigger": "./scripts/stripe-trigger.sh",
     "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
     "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts",
-    "test:integration:webhooks": "./scripts/test-integration-webhooks.sh",
+    "test:integration": "./scripts/test-integration.sh",
     "test:integration:backfill": "./scripts/test-integration-backfill.sh"
   },
   "keywords": [
@@ -35,7 +35,6 @@
     "webhook",
     "cli",
     "development",
-    "ngrok",
     "sync"
   ],
   "dependencies": {

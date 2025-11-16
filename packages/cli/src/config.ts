@@ -4,7 +4,7 @@ import chalk from 'chalk'
 
 export interface Config {
   stripeApiKey: string
-  ngrokAuthToken: string
+  ngrokAuthToken?: string
   databaseUrl: string
 }
 
@@ -55,20 +55,7 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
     })
   }
 
-  if (!config.ngrokAuthToken) {
-    questions.push({
-      type: 'password',
-      name: 'ngrokAuthToken',
-      message: 'Enter your ngrok auth token:',
-      mask: '*',
-      validate: (input: string) => {
-        if (!input || input.trim() === '') {
-          return 'ngrok auth token is required'
-        }
-        return true
-      },
-    })
-  }
+  // ngrok auth token is optional - if not provided, WebSocket mode will be used instead of webhook mode
 
   if (!config.databaseUrl) {
     questions.push({
