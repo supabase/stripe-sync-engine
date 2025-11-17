@@ -30,7 +30,7 @@ afterAll(async () => {
     stripeSync.postgresClient.query(
       `delete from stripe.active_entitlements where customer = '${customerId}'`
     ),
-    stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
+    stripeSync.postgresClient.query(`delete from stripe.customers where _id = '${customerId}'`),
   ])
 })
 
@@ -70,15 +70,19 @@ describe('entitlements', () => {
 
     expect(entitlements.rows).toEqual([
       {
-        ...activeEntitlements[0],
+        _id: activeEntitlements[0].id,
+        object: activeEntitlements[0].object,
+        feature: activeEntitlements[0].feature,
+        livemode: activeEntitlements[0].livemode,
+        lookup_key: activeEntitlements[0].lookup_key,
         customer: customerId,
         _account_id: accountId,
-        raw_data: expect.objectContaining({
+        _raw_data: expect.objectContaining({
           id: activeEntitlements[0].id,
           feature: activeEntitlements[0].feature,
         }),
-        updated_at: expect.any(Date),
-        last_synced_at: expect.any(Date),
+        _updated_at: expect.any(Date),
+        _last_synced_at: expect.any(Date),
       },
     ])
 
@@ -114,15 +118,19 @@ describe('entitlements', () => {
 
     expect(updatedEntitlements.rows).toEqual(
       newActiveEntitlements.map((entitlement) => ({
-        ...entitlement,
+        _id: entitlement.id,
+        object: entitlement.object,
+        feature: entitlement.feature,
+        livemode: entitlement.livemode,
+        lookup_key: entitlement.lookup_key,
         customer: customerId,
         _account_id: accountId,
-        raw_data: expect.objectContaining({
+        _raw_data: expect.objectContaining({
           id: entitlement.id,
           feature: entitlement.feature,
         }),
-        updated_at: expect.any(Date),
-        last_synced_at: expect.any(Date),
+        _updated_at: expect.any(Date),
+        _last_synced_at: expect.any(Date),
       }))
     )
   })

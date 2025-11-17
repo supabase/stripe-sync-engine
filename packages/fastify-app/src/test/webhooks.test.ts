@@ -58,7 +58,7 @@ describe('POST /webhooks', () => {
 
   async function deleteTestData(entityType: string, entityId: string) {
     const tableName = getTableName(entityType)
-    await postgresClient.query(`DELETE FROM stripe.${tableName}s WHERE id = $1`, [entityId])
+    await postgresClient.query(`DELETE FROM stripe.${tableName}s WHERE _id = $1`, [entityId])
   }
 
   test.each([
@@ -152,7 +152,7 @@ describe('POST /webhooks', () => {
     expect(response.statusCode).toBe(200)
 
     const tableName = getTableName(entityType)
-    const result = await postgresClient.query(`SELECT * FROM stripe.${tableName}s WHERE id = $1`, [
+    const result = await postgresClient.query(`SELECT * FROM stripe.${tableName}s WHERE _id = $1`, [
       entityId,
     ])
 
@@ -160,11 +160,11 @@ describe('POST /webhooks', () => {
     expect(rows.length).toBe(1)
 
     const dbEntity = rows[0]
-    expect(dbEntity.id).toBe(entityId)
+    expect(dbEntity._id).toBe(entityId)
 
     const syncTimestamp = new Date(eventBody.created * 1000).toISOString()
     // Allow small timing differences (within 1 second) due to processing delays
-    const dbTimestamp = dbEntity.last_synced_at.toISOString()
+    const dbTimestamp = dbEntity._last_synced_at.toISOString()
     const timeDiff = Math.abs(new Date(dbTimestamp).getTime() - new Date(syncTimestamp).getTime())
     expect(timeDiff).toBeLessThan(1000) // Less than 1 second difference
   })
@@ -233,13 +233,13 @@ describe('POST /webhooks', () => {
 
     // Verify the newer data was stored
     const newerResult = await postgresClient.query(
-      `SELECT * FROM stripe.${tableName}s WHERE id = $1`,
+      `SELECT * FROM stripe.${tableName}s WHERE _id = $1`,
       [entityId]
     )
     expect(newerResult.rows.length).toBe(1)
     const newerDbEntity = newerResult.rows[0]
     const newerSyncTimestamp = new Date(newerTimestamp * 1000).toISOString()
-    expect(newerDbEntity.last_synced_at.toISOString()).toBe(newerSyncTimestamp)
+    expect(newerDbEntity._last_synced_at.toISOString()).toBe(newerSyncTimestamp)
 
     // Now send a webhook with an older timestamp and different paid value (should not override)
     const olderTimestamp = newerTimestamp - 60 // 1 minute older
@@ -271,13 +271,13 @@ describe('POST /webhooks', () => {
 
     // Verify the data still has the newer timestamp and newer paid value (not overridden)
     const olderResult = await postgresClient.query(
-      `SELECT * FROM stripe.${tableName}s WHERE id = $1`,
+      `SELECT * FROM stripe.${tableName}s WHERE _id = $1`,
       [entityId]
     )
     expect(olderResult.rows.length).toBe(1)
     const olderDbEntity = olderResult.rows[0]
-    expect(olderDbEntity.last_synced_at.toISOString()).toBe(newerSyncTimestamp)
-    expect(olderDbEntity.last_synced_at.toISOString()).not.toBe(
+    expect(olderDbEntity._last_synced_at.toISOString()).toBe(newerSyncTimestamp)
+    expect(olderDbEntity._last_synced_at.toISOString()).not.toBe(
       new Date(olderTimestamp * 1000).toISOString()
     )
     // Verify the paid field still reflects the newer webhook's value

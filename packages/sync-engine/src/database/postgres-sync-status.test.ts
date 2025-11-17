@@ -87,11 +87,11 @@ describe('Postgres Sync Status Methods', () => {
       const afterTime = new Date()
 
       const result = await pool.query(
-        'SELECT last_synced_at FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT _last_synced_at FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
         [resource, testAccountId]
       )
 
-      const lastSyncedAt = new Date(result.rows[0].last_synced_at)
+      const lastSyncedAt = new Date(result.rows[0]._last_synced_at)
       expect(lastSyncedAt.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime())
       expect(lastSyncedAt.getTime()).toBeLessThanOrEqual(afterTime.getTime())
     })

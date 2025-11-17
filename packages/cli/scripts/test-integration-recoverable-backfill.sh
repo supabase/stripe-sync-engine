@@ -279,7 +279,7 @@ else
 fi
 
 # Verify no data was lost
-ACTUAL_TEST_PRODUCTS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE id = ANY(ARRAY[$(printf "'%s'," "${PRODUCT_IDS[@]}" | sed 's/,$//')]::text[]);" 2>/dev/null | tr -d ' ' || echo "0")
+ACTUAL_TEST_PRODUCTS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE _id = ANY(ARRAY[$(printf "'%s'," "${PRODUCT_IDS[@]}" | sed 's/,$//')]::text[]);" 2>/dev/null | tr -d ' ' || echo "0")
 if [ "$ACTUAL_TEST_PRODUCTS" -eq 200 ]; then
     echo "   ✓ No data lost - all 200 test products in database"
 else

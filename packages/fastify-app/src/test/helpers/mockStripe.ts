@@ -4,7 +4,7 @@ export const mockStripe = {
   accounts: {
     retrieve: vitest.fn(() =>
       Promise.resolve({
-        id: 'acct_test123',
+        id: 'acct_test_account',
         object: 'account',
       })
     ),

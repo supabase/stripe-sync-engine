@@ -45,9 +45,9 @@ export class PostgresClient {
 
   async delete(table: string, id: string): Promise<boolean> {
     const prepared = sql(`
-    delete from "${this.config.schema}"."${table}" 
-    where id = :id
-    returning id;
+    delete from "${this.config.schema}"."${table}"
+    where _id = :id
+    returning _id;
     `)({ id })
     const { rows } = await this.query(prepared.text, prepared.values)
     return rows.length > 0
@@ -74,17 +74,17 @@ export class PostgresClient {
 
       const queries: Promise<pg.QueryResult<T>>[] = []
       chunk.forEach((entry) => {
-        // Extract id and store entire entry as raw_data jsonb
+        // Extract id and store entire entry as _raw_data jsonb
         const id = entry.id
         const rawData = JSON.stringify(entry)
 
         // Use explicit parameter placeholders to avoid yesql parsing issues with ::jsonb cast
         const upsertSql = `
-          INSERT INTO "${this.config.schema}"."${table}" ("id", "raw_data")
+          INSERT INTO "${this.config.schema}"."${table}" ("_id", "_raw_data")
           VALUES ($1, $2::jsonb)
-          ON CONFLICT ("id")
+          ON CONFLICT ("_id")
           DO UPDATE SET
-            "raw_data" = EXCLUDED."raw_data"
+            "_raw_data" = EXCLUDED."_raw_data"
           RETURNING *
         `
 
@@ -118,47 +118,47 @@ export class PostgresClient {
         // Internal tables (starting with _) use old column-based format with yesql
         if (table.startsWith('_')) {
           const columns = Object.keys(entry).filter(
-            (k) => k !== 'last_synced_at' && k !== '_account_id'
+            (k) => k !== '_last_synced_at' && k !== '_account_id'
           )
 
           const upsertSql = `
             INSERT INTO "${this.config.schema}"."${table}" (
-              ${columns.map((c) => `"${c}"`).join(', ')}, "last_synced_at", "_account_id"
+              ${columns.map((c) => `"${c}"`).join(', ')}, "_last_synced_at", "_account_id"
             )
             VALUES (
-              ${columns.map((c) => `:${c}`).join(', ')}, :last_synced_at, :_account_id
+              ${columns.map((c) => `:${c}`).join(', ')}, :_last_synced_at, :_account_id
             )
-            ON CONFLICT ("id")
+            ON CONFLICT ("_id")
             DO UPDATE SET
               ${columns.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ')},
-              "last_synced_at" = :last_synced_at,
+              "_last_synced_at" = :_last_synced_at,
               "_account_id" = EXCLUDED."_account_id"
-            WHERE "${table}"."last_synced_at" IS NULL
-               OR "${table}"."last_synced_at" < :last_synced_at
+            WHERE "${table}"."_last_synced_at" IS NULL
+               OR "${table}"."_last_synced_at" < :_last_synced_at
             RETURNING *
           `
 
           const cleansed = this.cleanseArrayField(entry)
-          cleansed.last_synced_at = timestamp
+          cleansed._last_synced_at = timestamp
           cleansed._account_id = accountId
           const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
           queries.push(this.pool.query(prepared.text, prepared.values))
         } else {
-          // Extract id and store entire entry as raw_data jsonb
+          // Extract id and store entire entry as _raw_data jsonb
           const id = entry.id
           const rawData = JSON.stringify(entry)
 
           // Use explicit parameter placeholders to avoid yesql parsing issues with ::jsonb cast
           const upsertSql = `
-            INSERT INTO "${this.config.schema}"."${table}" ("id", "raw_data", "last_synced_at", "_account_id")
+            INSERT INTO "${this.config.schema}"."${table}" ("_id", "_raw_data", "_last_synced_at", "_account_id")
             VALUES ($1, $2::jsonb, $3, $4)
-            ON CONFLICT ("id")
+            ON CONFLICT ("_id")
             DO UPDATE SET
-              "raw_data" = EXCLUDED."raw_data",
-              "last_synced_at" = $3,
+              "_raw_data" = EXCLUDED."_raw_data",
+              "_last_synced_at" = $3,
               "_account_id" = EXCLUDED."_account_id"
-            WHERE "${table}"."last_synced_at" IS NULL
-               OR "${table}"."last_synced_at" < $3
+            WHERE "${table}"."_last_synced_at" IS NULL
+               OR "${table}"."_last_synced_at" < $3
             RETURNING *
           `
 
@@ -191,12 +191,12 @@ export class PostgresClient {
     if (!ids.length) return []
 
     const prepared = sql(`
-    select id from "${this.config.schema}"."${table}"
-    where id=any(:ids::text[]);
+    select _id from "${this.config.schema}"."${table}"
+    where _id=any(:ids::text[]);
     `)({ ids })
 
     const { rows } = await this.query(prepared.text, prepared.values)
-    const existingIds = rows.map((it) => it.id)
+    const existingIds = rows.map((it) => it._id)
 
     const missingIds = ids.filter((it) => !existingIds.includes(it))
 
@@ -221,7 +221,7 @@ export class PostgresClient {
     // This handles Stripe returning results in descending order (newest first)
     // Convert Unix timestamp to timestamptz for human-readable storage
     await this.query(
-      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", last_incremental_cursor, status, last_synced_at)
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", last_incremental_cursor, status, _last_synced_at)
        VALUES ($1, $2, to_timestamp($3), 'running', now())
        ON CONFLICT (resource, "_account_id")
        DO UPDATE SET
@@ -229,8 +229,8 @@ export class PostgresClient {
            COALESCE("${this.config.schema}"."_sync_status".last_incremental_cursor, to_timestamp(0)),
            to_timestamp($3)
          ),
-         last_synced_at = now(),
-         updated_at = now()`,
+         _last_synced_at = now(),
+         _updated_at = now()`,
       [resource, accountId, cursor.toString()]
     )
   }
@@ -240,7 +240,7 @@ export class PostgresClient {
       `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", status)
        VALUES ($1, $2, 'running')
        ON CONFLICT (resource, "_account_id")
-       DO UPDATE SET status = 'running', updated_at = now()`,
+       DO UPDATE SET status = 'running', _updated_at = now()`,
       [resource, accountId]
     )
   }
@@ -248,7 +248,7 @@ export class PostgresClient {
   async markSyncComplete(resource: string, accountId: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
-       SET status = 'complete', error_message = NULL, updated_at = now()
+       SET status = 'complete', error_message = NULL, _updated_at = now()
        WHERE resource = $1 AND "_account_id" = $2`,
       [resource, accountId]
     )
@@ -257,7 +257,7 @@ export class PostgresClient {
   async markSyncError(resource: string, accountId: string, errorMessage: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
-       SET status = 'error', error_message = $3, updated_at = now()
+       SET status = 'error', error_message = $3, _updated_at = now()
        WHERE resource = $1 AND "_account_id" = $2`,
       [resource, accountId, errorMessage]
     )
@@ -276,11 +276,11 @@ export class PostgresClient {
 
     // Upsert account and add API key hash to array if not already present
     await this.query(
-      `INSERT INTO "${this.config.schema}"."accounts" ("id", "raw_data", "api_key_hashes", "first_synced_at", "last_synced_at")
+      `INSERT INTO "${this.config.schema}"."accounts" ("_id", "_raw_data", "api_key_hashes", "first_synced_at", "_last_synced_at")
        VALUES ($1, $2::jsonb, ARRAY[$3], now(), now())
-       ON CONFLICT ("id")
+       ON CONFLICT ("_id")
        DO UPDATE SET
-         "raw_data" = EXCLUDED."raw_data",
+         "_raw_data" = EXCLUDED."_raw_data",
          "api_key_hashes" = (
            SELECT ARRAY(
              SELECT DISTINCT unnest(
@@ -288,8 +288,8 @@ export class PostgresClient {
              )
            )
          ),
-         "last_synced_at" = now(),
-         "updated_at" = now()`,
+         "_last_synced_at" = now(),
+         "_updated_at" = now()`,
       [accountData.id, rawData, apiKeyHash]
     )
   }
@@ -297,10 +297,10 @@ export class PostgresClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getAllAccounts(): Promise<any[]> {
     const result = await this.query(
-      `SELECT raw_data FROM "${this.config.schema}"."accounts"
-       ORDER BY last_synced_at DESC`
+      `SELECT _raw_data FROM "${this.config.schema}"."accounts"
+       ORDER BY _last_synced_at DESC`
     )
-    return result.rows.map((row) => row.raw_data)
+    return result.rows.map((row) => row._raw_data)
   }
 
   /**
@@ -311,12 +311,12 @@ export class PostgresClient {
    */
   async getAccountIdByApiKeyHash(apiKeyHash: string): Promise<string | null> {
     const result = await this.query(
-      `SELECT id FROM "${this.config.schema}"."accounts"
+      `SELECT _id FROM "${this.config.schema}"."accounts"
        WHERE $1 = ANY(api_key_hashes)
        LIMIT 1`,
       [apiKeyHash]
     )
-    return result.rows.length > 0 ? result.rows[0].id : null
+    return result.rows.length > 0 ? result.rows[0]._id : null
   }
 
   async getAccountRecordCounts(accountId: string): Promise<{ [tableName: string]: number }> {
@@ -358,7 +358,7 @@ export class PostgresClient {
       // Finally, delete the account itself
       const accountResult = await this.query(
         `DELETE FROM "${this.config.schema}"."accounts"
-         WHERE "id" = $1`,
+         WHERE "_id" = $1`,
         [accountId]
       )
       deletionCounts['accounts'] = accountResult.rowCount || 0

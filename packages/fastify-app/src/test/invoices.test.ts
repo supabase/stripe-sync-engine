@@ -62,7 +62,7 @@ describe('invoices', () => {
     await stripeSync.upsertInvoices(invoices, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
-      `select lines->'data' as lines from stripe.invoices where id = 'in_xyz' limit 1`
+      `select lines->'data' as lines from stripe.invoices where _id = 'in_xyz' limit 1`
     )
     expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }])
   })
@@ -83,7 +83,7 @@ describe('invoices', () => {
     await stripeSync.upsertInvoices(invoices, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
-      `select lines->'data' as lines from stripe.invoices where id = 'in_xyz2' limit 1`
+      `select lines->'data' as lines from stripe.invoices where _id = 'in_xyz2' limit 1`
     )
     expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }, { id: 'li_1234' }])
   })

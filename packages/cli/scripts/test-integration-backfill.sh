@@ -240,7 +240,7 @@ CUSTOMER_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -
 echo "   Customers table: $CUSTOMER_COUNT rows (expected: 3)"
 if [ "$CUSTOMER_COUNT" -ge 3 ]; then
     echo "   ✓ Customer data successfully backfilled"
-    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, email, name FROM stripe.customers WHERE email LIKE 'test-backfill-%' LIMIT 3;" 2>/dev/null | head -n 7
+    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT _id, email, name FROM stripe.customers WHERE email LIKE 'test-backfill-%' LIMIT 3;" 2>/dev/null | head -n 7
 else
     echo "   ❌ Expected at least 3 customers, found $CUSTOMER_COUNT"
     exit 1
@@ -253,7 +253,7 @@ PRODUCT_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c
 echo "   Products table: $PRODUCT_COUNT rows (expected: 3)"
 if [ "$PRODUCT_COUNT" -ge 3 ]; then
     echo "   ✓ Product data successfully backfilled"
-    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, name, active FROM stripe.products WHERE name LIKE '%Backfill%' LIMIT 3;" 2>/dev/null | head -n 7
+    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT _id, name, active FROM stripe.products WHERE name LIKE '%Backfill%' LIMIT 3;" 2>/dev/null | head -n 7
 else
     echo "   ❌ Expected at least 3 products, found $PRODUCT_COUNT"
     exit 1
@@ -266,7 +266,7 @@ PRICE_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "
 echo "   Prices table: $PRICE_COUNT rows (expected: 3)"
 if [ "$PRICE_COUNT" -ge 3 ]; then
     echo "   ✓ Price data successfully backfilled"
-    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, product, currency, unit_amount, nickname FROM stripe.prices WHERE nickname LIKE 'Test Price%' LIMIT 3;" 2>/dev/null | head -n 7
+    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT _id, product, currency, unit_amount, nickname FROM stripe.prices WHERE nickname LIKE 'Test Price%' LIMIT 3;" 2>/dev/null | head -n 7
 else
     echo "   ❌ Expected at least 3 prices, found $PRICE_COUNT"
     exit 1
@@ -356,7 +356,7 @@ else
 fi
 
 # Verify last_synced_at was updated
-LAST_SYNCED=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_synced_at FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+LAST_SYNCED=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT _last_synced_at FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ -n "$LAST_SYNCED" ]; then
     echo "   ✓ Last synced timestamp updated: $LAST_SYNCED"
 else
@@ -367,10 +367,10 @@ fi
 echo ""
 
 # Verify new product was synced
-PROD4_IN_DB=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE id = '$PROD4_ID';" 2>/dev/null | tr -d ' ' || echo "0")
+PROD4_IN_DB=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE _id = '$PROD4_ID';" 2>/dev/null | tr -d ' ' || echo "0")
 if [ "$PROD4_IN_DB" -eq 1 ]; then
     echo "   ✓ New product synced incrementally"
-    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, name FROM stripe.products WHERE id = '$PROD4_ID';" 2>/dev/null | head -n 5
+    docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT _id, name FROM stripe.products WHERE _id = '$PROD4_ID';" 2>/dev/null | head -n 5
 else
     echo "   ❌ New product not found in database"
     exit 1
@@ -385,7 +385,7 @@ echo ""
 echo ""
 
 # Verify all test products exist in DB
-TOTAL_TEST_PRODUCTS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE id IN ('$PROD1_ID', '$PROD2_ID', '$PROD3_ID', '$PROD4_ID');" 2>/dev/null | tr -d ' ' || echo "0")
+TOTAL_TEST_PRODUCTS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COUNT(*) FROM stripe.products WHERE _id IN ('$PROD1_ID', '$PROD2_ID', '$PROD3_ID', '$PROD4_ID');" 2>/dev/null | tr -d ' ' || echo "0")
 echo "   Test products in DB: $TOTAL_TEST_PRODUCTS (expected: 4)"
 if [ "$TOTAL_TEST_PRODUCTS" -eq 4 ]; then
     echo "   ✓ All test products synced successfully"

@@ -140,7 +140,7 @@ echo ""
 # Test 1.2: Database Persistence Check
 echo "TEST 1.2: Database Persistence"
 DB_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 if [ "$DB_COUNT" -eq 1 ]; then
     echo "✓ Account persisted to database"
@@ -151,7 +151,7 @@ fi
 
 # Verify raw_data column exists
 RAW_DATA=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT raw_data::text FROM stripe.accounts WHERE id = '$ACCOUNT_ID' LIMIT 1;" 2>/dev/null | tr -d ' ' | head -c 20)
+  "SELECT _raw_data::text FROM stripe.accounts WHERE _id = '$ACCOUNT_ID' LIMIT 1;" 2>/dev/null | tr -d ' ' | head -c 20)
 
 if [ -n "$RAW_DATA" ]; then
     echo "✓ raw_data column populated"
@@ -361,7 +361,7 @@ REMAINING_CUSTOMERS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db
   "SELECT COUNT(*) FROM stripe.customers WHERE _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 REMAINING_ACCOUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 if [ "$REMAINING_PRODUCTS" -eq 0 ]; then
     echo "✓ All products removed from database"
