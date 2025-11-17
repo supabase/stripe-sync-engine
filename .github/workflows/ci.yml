@@ -134,3 +134,9 @@ jobs:
           cd packages/cli
           chmod +x ./scripts/test-integration-recoverable-backfill.sh
           ./scripts/test-integration-recoverable-backfill.sh
+
+      - name: Run CLI Account Management Integration Test
+        run: |
+          cd packages/cli
+          chmod +x ./scripts/test-integration-account-management.sh
+          ./scripts/test-integration-account-management.sh

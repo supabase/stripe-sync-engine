@@ -6,6 +6,7 @@ import { getConfig } from '../utils/config'
 import { logger } from '../logger'
 
 let stripeSync: StripeSync
+const testAccountId = 'acct_test_account'
 
 beforeAll(async () => {
   const config = getConfig()
@@ -20,7 +21,19 @@ beforeAll(async () => {
     poolConfig: {
       connectionString: config.databaseUrl,
     },
-    stripeAccountId: 'acct_test_account',
+    stripeAccountId: testAccountId,
+  })
+
+  // Mock Stripe account retrieval to avoid API calls
+  vitest.spyOn(stripeSync.stripe.accounts, 'retrieve').mockResolvedValue({
+    id: testAccountId,
+    object: 'account',
+  } as Stripe.Account)
+
+  // Ensure test account exists in database
+  await stripeSync.postgresClient.upsertAccount({
+    id: testAccountId,
+    raw_data: { id: testAccountId, object: 'account' },
   })
 })
 
@@ -93,7 +106,7 @@ describe('Incremental Sync', () => {
     expect(parseInt(firstResult.rows[0].count)).toBe(3)
 
     // Verify cursor was saved
-    const cursor = await stripeSync.postgresClient.getSyncCursor('products')
+    const cursor = await stripeSync.postgresClient.getSyncCursor('products', testAccountId)
     expect(cursor).toBe(1705075200) // Max created from first sync
 
     // Mock Stripe API for second sync - only returns new products
@@ -123,7 +136,7 @@ describe('Incremental Sync', () => {
     expect(parseInt(secondResult.rows[0].count)).toBe(4)
 
     // Verify cursor was updated
-    const newCursor = await stripeSync.postgresClient.getSyncCursor('products')
+    const newCursor = await stripeSync.postgresClient.getSyncCursor('products', testAccountId)
     expect(newCursor).toBe(1705161600)
   })
 
@@ -150,9 +163,9 @@ describe('Incremental Sync', () => {
 
     // Should update cursor 3 times: after 100, after 200, after 250
     expect(updateSpy).toHaveBeenCalledTimes(3)
-    expect(updateSpy).toHaveBeenNthCalledWith(1, 'products', 1704902400 + 99)
-    expect(updateSpy).toHaveBeenNthCalledWith(2, 'products', 1704902400 + 199)
-    expect(updateSpy).toHaveBeenNthCalledWith(3, 'products', 1704902400 + 249)
+    expect(updateSpy).toHaveBeenNthCalledWith(1, 'products', testAccountId, 1704902400 + 99)
+    expect(updateSpy).toHaveBeenNthCalledWith(2, 'products', testAccountId, 1704902400 + 199)
+    expect(updateSpy).toHaveBeenNthCalledWith(3, 'products', testAccountId, 1704902400 + 249)
 
     updateSpy.mockRestore()
   })
@@ -178,7 +191,7 @@ describe('Incremental Sync', () => {
 
     await stripeSync.syncProducts()
 
-    const initialCursor = await stripeSync.postgresClient.getSyncCursor('products')
+    const initialCursor = await stripeSync.postgresClient.getSyncCursor('products', testAccountId)
     expect(initialCursor).toBe(1704902400)
 
     // Process webhook with newer product
@@ -200,13 +213,13 @@ describe('Incremental Sync', () => {
     await stripeSync.processEvent(webhookEvent)
 
     // Cursor should be unchanged
-    const afterCursor = await stripeSync.postgresClient.getSyncCursor('products')
+    const afterCursor = await stripeSync.postgresClient.getSyncCursor('products', testAccountId)
     expect(afterCursor).toBe(initialCursor)
   })
 
   test('should use explicit filter instead of cursor when provided', async () => {
     // Set up a cursor
-    await stripeSync.postgresClient.updateSyncCursor('products', 1704902400)
+    await stripeSync.postgresClient.updateSyncCursor('products', testAccountId, 1704902400)
 
     const products: Stripe.Product[] = [
       {
@@ -265,13 +278,13 @@ describe('Incremental Sync', () => {
     await expect(stripeSync.syncProducts()).rejects.toThrow('Simulated sync error')
 
     // Cursor should be saved up to checkpoint
-    const cursor = await stripeSync.postgresClient.getSyncCursor('products')
+    const cursor = await stripeSync.postgresClient.getSyncCursor('products', testAccountId)
     expect(cursor).toBe(1704902400)
 
     // Status should be error
     const status = await stripeSync.postgresClient.pool.query(
-      'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1',
-      ['products']
+      'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+      ['products', testAccountId]
     )
     expect(status.rows[0].status).toBe('error')
     expect(status.rows[0].error_message).toContain('Simulated sync error')
@@ -282,8 +295,8 @@ describe('Incremental Sync', () => {
 
     // Status should be complete
     const finalStatus = await stripeSync.postgresClient.pool.query(
-      'SELECT status FROM stripe._sync_status WHERE resource = $1',
-      ['products']
+      'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+      ['products', testAccountId]
     )
     expect(finalStatus.rows[0].status).toBe('complete')
   })

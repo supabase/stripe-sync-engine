@@ -7,6 +7,7 @@ import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 
 let stripeSync: StripeSync
+const TEST_ACCOUNT_ID = 'acct_test'
 
 beforeAll(async () => {
   process.env.AUTO_EXPAND_LISTS = 'true'
@@ -27,6 +28,18 @@ beforeAll(async () => {
   })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
+
+  // Mock getCurrentAccount to avoid API calls
+  vitest.spyOn(stripeSync, 'getCurrentAccount').mockResolvedValue({
+    id: TEST_ACCOUNT_ID,
+    object: 'account',
+  } as Stripe.Account)
+
+  // Ensure test account exists in database
+  await stripeSync.postgresClient.upsertAccount({
+    id: TEST_ACCOUNT_ID,
+    raw_data: { id: TEST_ACCOUNT_ID, object: 'account' },
+  })
 })
 
 describe('invoices', () => {
@@ -43,7 +56,7 @@ describe('invoices', () => {
       } as Stripe.Invoice,
     ]
 
-    await stripeSync.upsertInvoices(invoices, false)
+    await stripeSync.upsertInvoices(invoices, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
       `select lines->'data' as lines from stripe.invoices where id = 'in_xyz' limit 1`
@@ -64,7 +77,7 @@ describe('invoices', () => {
       } as Stripe.Invoice,
     ]
 
-    await stripeSync.upsertInvoices(invoices, false)
+    await stripeSync.upsertInvoices(invoices, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
       `select lines->'data' as lines from stripe.invoices where id = 'in_xyz2' limit 1`

@@ -5,6 +5,7 @@ import pg from 'pg'
 describe('Postgres Sync Status Methods', () => {
   let postgresClient: PostgresClient
   let pool: pg.Pool
+  const testAccountId = 'acct_test_123'
 
   beforeAll(async () => {
     const databaseUrl =
@@ -30,7 +31,7 @@ describe('Postgres Sync Status Methods', () => {
 
   describe('getSyncCursor', () => {
     it('should return null for new resource with no cursor', async () => {
-      const cursor = await postgresClient.getSyncCursor('test_products_new')
+      const cursor = await postgresClient.getSyncCursor('test_products_new', testAccountId)
       expect(cursor).toBeNull()
     })
 
@@ -38,8 +39,8 @@ describe('Postgres Sync Status Methods', () => {
       const resource = 'test_products_retrieve'
       const expectedCursor = 1704902400
 
-      await postgresClient.updateSyncCursor(resource, expectedCursor)
-      const cursor = await postgresClient.getSyncCursor(resource)
+      await postgresClient.updateSyncCursor(resource, testAccountId, expectedCursor)
+      const cursor = await postgresClient.getSyncCursor(resource, testAccountId)
 
       expect(cursor).toBe(expectedCursor)
     })
@@ -50,16 +51,17 @@ describe('Postgres Sync Status Methods', () => {
       const resource = 'test_products_create'
       const cursor = 1704902400
 
-      await postgresClient.updateSyncCursor(resource, cursor)
+      await postgresClient.updateSyncCursor(resource, testAccountId, cursor)
 
       const result = await pool.query(
         `SELECT *, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch
-         FROM stripe._sync_status WHERE resource = $1`,
-        [resource]
+         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+        [resource, testAccountId]
       )
 
       expect(result.rows).toHaveLength(1)
       expect(result.rows[0].resource).toBe(resource)
+      expect(result.rows[0]._account_id).toBe(testAccountId)
       expect(result.rows[0].cursor_epoch).toBe(cursor)
       expect(result.rows[0].status).toBe('running')
     })
@@ -69,10 +71,10 @@ describe('Postgres Sync Status Methods', () => {
       const initialCursor = 1704902400
       const updatedCursor = 1705000000
 
-      await postgresClient.updateSyncCursor(resource, initialCursor)
-      await postgresClient.updateSyncCursor(resource, updatedCursor)
+      await postgresClient.updateSyncCursor(resource, testAccountId, initialCursor)
+      await postgresClient.updateSyncCursor(resource, testAccountId, updatedCursor)
 
-      const cursor = await postgresClient.getSyncCursor(resource)
+      const cursor = await postgresClient.getSyncCursor(resource, testAccountId)
       expect(cursor).toBe(updatedCursor)
     })
 
@@ -81,12 +83,12 @@ describe('Postgres Sync Status Methods', () => {
       const cursor = 1704902400
 
       const beforeTime = new Date()
-      await postgresClient.updateSyncCursor(resource, cursor)
+      await postgresClient.updateSyncCursor(resource, testAccountId, cursor)
       const afterTime = new Date()
 
       const result = await pool.query(
-        'SELECT last_synced_at FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT last_synced_at FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       const lastSyncedAt = new Date(result.rows[0].last_synced_at)
@@ -99,11 +101,11 @@ describe('Postgres Sync Status Methods', () => {
     it('should set status to running for new resource', async () => {
       const resource = 'test_products_running_new'
 
-      await postgresClient.markSyncRunning(resource)
+      await postgresClient.markSyncRunning(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('running')
@@ -112,12 +114,12 @@ describe('Postgres Sync Status Methods', () => {
     it('should update status to running for existing resource', async () => {
       const resource = 'test_products_running_existing'
 
-      await postgresClient.markSyncComplete(resource)
-      await postgresClient.markSyncRunning(resource)
+      await postgresClient.markSyncComplete(resource, testAccountId)
+      await postgresClient.markSyncRunning(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('running')
@@ -128,12 +130,12 @@ describe('Postgres Sync Status Methods', () => {
     it('should set status to complete', async () => {
       const resource = 'test_products_complete'
 
-      await postgresClient.markSyncRunning(resource)
-      await postgresClient.markSyncComplete(resource)
+      await postgresClient.markSyncRunning(resource, testAccountId)
+      await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('complete')
@@ -143,12 +145,12 @@ describe('Postgres Sync Status Methods', () => {
     it('should clear error_message when marking complete', async () => {
       const resource = 'test_products_clear_error'
 
-      await postgresClient.markSyncError(resource, 'Test error')
-      await postgresClient.markSyncComplete(resource)
+      await postgresClient.markSyncError(resource, testAccountId, 'Test error')
+      await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT error_message FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].error_message).toBeNull()
@@ -160,12 +162,12 @@ describe('Postgres Sync Status Methods', () => {
       const resource = 'test_products_error'
       const errorMessage = 'Test error message'
 
-      await postgresClient.markSyncRunning(resource)
-      await postgresClient.markSyncError(resource, errorMessage)
+      await postgresClient.markSyncRunning(resource, testAccountId)
+      await postgresClient.markSyncError(resource, testAccountId, errorMessage)
 
       const result = await pool.query(
-        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1',
-        [resource]
+        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('error')
@@ -177,10 +179,10 @@ describe('Postgres Sync Status Methods', () => {
       const cursor = 1704902400
       const errorMessage = 'Test error'
 
-      await postgresClient.updateSyncCursor(resource, cursor)
-      await postgresClient.markSyncError(resource, errorMessage)
+      await postgresClient.updateSyncCursor(resource, testAccountId, cursor)
+      await postgresClient.markSyncError(resource, testAccountId, errorMessage)
 
-      const retrievedCursor = await postgresClient.getSyncCursor(resource)
+      const retrievedCursor = await postgresClient.getSyncCursor(resource, testAccountId)
       expect(retrievedCursor).toBe(cursor)
     })
   })
@@ -190,14 +192,14 @@ describe('Postgres Sync Status Methods', () => {
       const resource = 'test_workflow_success'
       const cursor = 1704902400
 
-      await postgresClient.markSyncRunning(resource)
-      await postgresClient.updateSyncCursor(resource, cursor)
-      await postgresClient.markSyncComplete(resource)
+      await postgresClient.markSyncRunning(resource, testAccountId)
+      await postgresClient.updateSyncCursor(resource, testAccountId, cursor)
+      await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
         `SELECT status, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch
-         FROM stripe._sync_status WHERE resource = $1`,
-        [resource]
+         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('complete')
@@ -210,24 +212,43 @@ describe('Postgres Sync Status Methods', () => {
       const finalCursor = 1705000000
 
       // First attempt fails
-      await postgresClient.markSyncRunning(resource)
-      await postgresClient.updateSyncCursor(resource, initialCursor)
-      await postgresClient.markSyncError(resource, 'First attempt failed')
+      await postgresClient.markSyncRunning(resource, testAccountId)
+      await postgresClient.updateSyncCursor(resource, testAccountId, initialCursor)
+      await postgresClient.markSyncError(resource, testAccountId, 'First attempt failed')
 
       // Second attempt succeeds
-      await postgresClient.markSyncRunning(resource)
-      await postgresClient.updateSyncCursor(resource, finalCursor)
-      await postgresClient.markSyncComplete(resource)
+      await postgresClient.markSyncRunning(resource, testAccountId)
+      await postgresClient.updateSyncCursor(resource, testAccountId, finalCursor)
+      await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
         `SELECT status, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch, error_message
-         FROM stripe._sync_status WHERE resource = $1`,
-        [resource]
+         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+        [resource, testAccountId]
       )
 
       expect(result.rows[0].status).toBe('complete')
       expect(result.rows[0].cursor_epoch).toBe(finalCursor)
       expect(result.rows[0].error_message).toBeNull()
+    })
+
+    it('should isolate cursors between different accounts', async () => {
+      const resource = 'test_multi_account'
+      const account1 = 'acct_test_1'
+      const account2 = 'acct_test_2'
+      const cursor1 = 1704902400
+      const cursor2 = 1705000000
+
+      // Set different cursors for same resource but different accounts
+      await postgresClient.updateSyncCursor(resource, account1, cursor1)
+      await postgresClient.updateSyncCursor(resource, account2, cursor2)
+
+      // Verify each account has its own cursor
+      const retrievedCursor1 = await postgresClient.getSyncCursor(resource, account1)
+      const retrievedCursor2 = await postgresClient.getSyncCursor(resource, account2)
+
+      expect(retrievedCursor1).toBe(cursor1)
+      expect(retrievedCursor2).toBe(cursor2)
     })
   })
 })

@@ -48,7 +48,7 @@ export interface StripSyncInfo {
 export class StripeSync {
   stripe: Stripe
   postgresClient: PostgresClient
-  private cachedAccountId: string | null = null
+  private cachedAccount: Stripe.Account | null = null
 
   constructor(private config: StripeSyncConfig) {
     this.stripe = new Stripe(config.stripeSecretKey, {
@@ -93,33 +93,164 @@ export class StripeSync {
    * Get the Stripe account ID. Retrieves from API if not cached, with fallback to config or object's account field.
    */
   async getAccountId(objectAccountId?: string): Promise<string> {
-    // If we have a cached account ID, use it
-    if (this.cachedAccountId) {
-      return this.cachedAccountId
+    // If we have a cached account, use it
+    if (this.cachedAccount?.id) {
+      return this.cachedAccount.id
     }
 
-    // Try to get from object's account field first (for Connect scenarios)
-    if (objectAccountId) {
-      this.cachedAccountId = objectAccountId
-      return objectAccountId
-    }
-
-    // Try config fallback
-    if (this.config.stripeAccountId) {
-      this.cachedAccountId = this.config.stripeAccountId
-      return this.config.stripeAccountId
-    }
-
-    // Retrieve from Stripe API as source of truth
+    // Retrieve from Stripe API to get full account details
+    let account: Stripe.Account
     try {
-      const account = await this.stripe.accounts.retrieve()
-      this.cachedAccountId = account.id
-      return account.id
+      const accountIdParam = objectAccountId || this.config.stripeAccountId
+      account = accountIdParam
+        ? await this.stripe.accounts.retrieve(accountIdParam)
+        : await this.stripe.accounts.retrieve()
     } catch (error) {
-      this.config.logger?.error(error, 'Failed to retrieve account ID from Stripe API')
-      throw new Error(
-        'Failed to retrieve Stripe account ID. Please provide stripeAccountId in config or ensure API key is valid.'
+      this.config.logger?.error(error, 'Failed to retrieve account from Stripe API')
+      throw new Error('Failed to retrieve Stripe account. Please ensure API key is valid.')
+    }
+
+    this.cachedAccount = account
+
+    // Upsert account info to database
+    await this.upsertAccount(account)
+
+    return account.id
+  }
+
+  /**
+   * Upsert Stripe account information to the database
+   */
+  private async upsertAccount(account: Stripe.Account): Promise<void> {
+    try {
+      await this.postgresClient.upsertAccount({
+        id: account.id,
+        raw_data: account,
+      })
+    } catch (error) {
+      this.config.logger?.error(error, 'Failed to upsert account to database')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to upsert account to database: ${errorMessage}`)
+    }
+  }
+
+  /**
+   * Get the current account being synced
+   */
+  async getCurrentAccount(): Promise<Stripe.Account | null> {
+    if (this.cachedAccount) {
+      return this.cachedAccount
+    }
+
+    // Populate cache by calling getAccountId
+    await this.getAccountId()
+
+    return this.cachedAccount
+  }
+
+  /**
+   * Get all accounts that have been synced to the database
+   */
+  async getAllSyncedAccounts(): Promise<Stripe.Account[]> {
+    try {
+      const accountsData = await this.postgresClient.getAllAccounts()
+      return accountsData as Stripe.Account[]
+    } catch (error) {
+      this.config.logger?.error(error, 'Failed to retrieve accounts from database')
+      throw new Error('Failed to retrieve synced accounts from database')
+    }
+  }
+
+  /**
+   * DANGEROUS: Delete an account and all associated data from the database
+   * This operation cannot be undone!
+   *
+   * @param accountId - The Stripe account ID to delete
+   * @param options - Options for deletion behavior
+   * @param options.dryRun - If true, only count records without deleting (default: false)
+   * @param options.useTransaction - If true, use transaction for atomic deletion (default: true)
+   * @returns Deletion summary with counts and warnings
+   */
+  async dangerouslyDeleteSyncedAccountData(
+    accountId: string,
+    options?: {
+      dryRun?: boolean
+      useTransaction?: boolean
+    }
+  ): Promise<{
+    deletedAccountId: string
+    deletedRecordCounts: { [tableName: string]: number }
+    warnings: string[]
+  }> {
+    const dryRun = options?.dryRun ?? false
+    const useTransaction = options?.useTransaction ?? true
+
+    this.config.logger?.info(
+      `${dryRun ? 'Preview' : 'Deleting'} account ${accountId} (transaction: ${useTransaction})`
+    )
+
+    try {
+      // Get record counts
+      const counts = await this.postgresClient.getAccountRecordCounts(accountId)
+
+      // Generate warnings
+      const warnings: string[] = []
+      let totalRecords = 0
+
+      for (const [table, count] of Object.entries(counts)) {
+        if (count > 0) {
+          totalRecords += count
+          warnings.push(`Will delete ${count} ${table} record${count !== 1 ? 's' : ''}`)
+        }
+      }
+
+      if (totalRecords > 100000) {
+        warnings.push(
+          `Large dataset detected (${totalRecords} total records). Consider using useTransaction: false for better performance.`
+        )
+      }
+
+      // If deleting current account, warn about cache invalidation
+      if (this.cachedAccount?.id === accountId) {
+        warnings.push(
+          'Warning: Deleting the current account. Cache will be cleared after deletion.'
+        )
+      }
+
+      // Dry-run mode: just return counts
+      if (dryRun) {
+        this.config.logger?.info(`Dry-run complete: ${totalRecords} total records would be deleted`)
+        return {
+          deletedAccountId: accountId,
+          deletedRecordCounts: counts,
+          warnings,
+        }
+      }
+
+      // Actual deletion
+      const deletionCounts = await this.postgresClient.deleteAccountWithCascade(
+        accountId,
+        useTransaction
       )
+
+      // Clear cache if we deleted the current account
+      if (this.cachedAccount?.id === accountId) {
+        this.cachedAccount = null
+      }
+
+      this.config.logger?.info(
+        `Successfully deleted account ${accountId} with ${totalRecords} total records`
+      )
+
+      return {
+        deletedAccountId: accountId,
+        deletedRecordCounts: deletionCounts,
+        warnings,
+      }
+    } catch (error) {
+      this.config.logger?.error(error, `Failed to delete account ${accountId}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Failed to delete account ${accountId}: ${errorMessage}`)
     }
   }
 
@@ -162,6 +293,9 @@ export class StripeSync {
         ? (event.data.object as { account?: string }).account
         : undefined
     const accountId = await this.getAccountId(objectAccountId)
+
+    // Ensure account exists before processing event (required for foreign key constraints)
+    await this.getCurrentAccount()
 
     switch (event.type) {
       case 'charge.captured':
@@ -782,6 +916,9 @@ export class StripeSync {
       earlyFraudWarnings,
       refunds
 
+    // Ensure account exists before syncing (required for _sync_status foreign key)
+    await this.getCurrentAccount()
+
     switch (object) {
       case 'all':
         products = await this.syncProducts(params)
@@ -885,7 +1022,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('products')
+      const cursor = await this.postgresClient.getSyncCursor('products', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -908,7 +1045,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('prices')
+      const cursor = await this.postgresClient.getSyncCursor('prices', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -931,7 +1068,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('plans')
+      const cursor = await this.postgresClient.getSyncCursor('plans', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -954,7 +1091,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('customers')
+      const cursor = await this.postgresClient.getSyncCursor('customers', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -978,7 +1115,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('subscriptions')
+      const cursor = await this.postgresClient.getSyncCursor('subscriptions', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1001,7 +1138,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('subscription_schedules')
+      const cursor = await this.postgresClient.getSyncCursor('subscription_schedules', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1025,7 +1162,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('invoices')
+      const cursor = await this.postgresClient.getSyncCursor('invoices', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1048,7 +1185,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('charges')
+      const cursor = await this.postgresClient.getSyncCursor('charges', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1071,7 +1208,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('setup_intents')
+      const cursor = await this.postgresClient.getSyncCursor('setup_intents', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1094,7 +1231,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('payment_intents')
+      const cursor = await this.postgresClient.getSyncCursor('payment_intents', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1174,7 +1311,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('disputes')
+      const cursor = await this.postgresClient.getSyncCursor('disputes', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1197,7 +1334,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('early_fraud_warnings')
+      const cursor = await this.postgresClient.getSyncCursor('early_fraud_warnings', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1221,7 +1358,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('refunds')
+      const cursor = await this.postgresClient.getSyncCursor('refunds', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1244,7 +1381,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('credit_notes')
+      const cursor = await this.postgresClient.getSyncCursor('credit_notes', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1295,7 +1432,7 @@ export class StripeSync {
     if (syncParams?.created) {
       params.created = syncParams.created
     } else {
-      const cursor = await this.postgresClient.getSyncCursor('checkout_sessions')
+      const cursor = await this.postgresClient.getSyncCursor('checkout_sessions', accountId)
       if (cursor) {
         params.created = { gte: cursor }
         this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
@@ -1321,7 +1458,7 @@ export class StripeSync {
     let currentBatch: T[] = []
 
     if (resourceName) {
-      await this.postgresClient.markSyncRunning(resourceName)
+      await this.postgresClient.markSyncRunning(resourceName, accountId)
     }
 
     try {
@@ -1346,7 +1483,7 @@ export class StripeSync {
                     ...currentBatch.map((i) => (i as { created?: number }).created || 0)
                   )
                   if (maxCreated > 0) {
-                    await this.postgresClient.updateSyncCursor(resourceName, maxCreated)
+                    await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
                     this.config.logger?.info(`Checkpoint: cursor updated to ${maxCreated}`)
                   }
                 }
@@ -1366,7 +1503,7 @@ export class StripeSync {
                   ...currentBatch.map((i) => (i as { created?: number }).created || 0)
                 )
                 if (maxCreated > 0) {
-                  await this.postgresClient.updateSyncCursor(resourceName, maxCreated)
+                  await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
                 }
               }
             }
@@ -1384,7 +1521,7 @@ export class StripeSync {
                   ...currentBatch.map((i) => (i as { created?: number }).created || 0)
                 )
                 if (maxCreated > 0) {
-                  await this.postgresClient.updateSyncCursor(resourceName, maxCreated)
+                  await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
                 }
               }
             }
@@ -1396,7 +1533,7 @@ export class StripeSync {
       )
 
       if (resourceName) {
-        await this.postgresClient.markSyncComplete(resourceName)
+        await this.postgresClient.markSyncComplete(resourceName, accountId)
       }
 
       this.config.logger?.info(`Sync complete: ${totalSynced} items synced`)
@@ -1405,6 +1542,7 @@ export class StripeSync {
       if (resourceName) {
         await this.postgresClient.markSyncError(
           resourceName,
+          accountId,
           error instanceof Error ? error.message : 'Unknown error'
         )
       }

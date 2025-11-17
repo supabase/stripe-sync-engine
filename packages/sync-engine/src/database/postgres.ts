@@ -6,6 +6,36 @@ type PostgresConfig = {
   poolConfig: PoolConfig
 }
 
+// All Stripe tables that store account-related data.
+// Ordered for safe cascade deletion: dependencies first, then accounts last.
+// Note: 'customers' is near the end because other tables reference it.
+const ORDERED_STRIPE_TABLES = [
+  'subscription_items',
+  'subscriptions',
+  'subscription_schedules',
+  'checkout_session_line_items',
+  'checkout_sessions',
+  'tax_ids',
+  'charges',
+  'refunds',
+  'credit_notes',
+  'disputes',
+  'early_fraud_warnings',
+  'invoices',
+  'payment_intents',
+  'payment_methods',
+  'setup_intents',
+  'prices',
+  'plans',
+  'products',
+  'features',
+  'active_entitlements',
+  'reviews',
+  '_managed_webhooks',
+  'customers',
+  '_sync_status',
+] as const
+
 export class PostgresClient {
   pool: pg.Pool
 
@@ -23,7 +53,8 @@ export class PostgresClient {
     return rows.length > 0
   }
 
-  async query(text: string, params?: string[]): Promise<QueryResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async query(text: string, params?: any[]): Promise<QueryResult> {
     return this.pool.query(text, params)
   }
 
@@ -174,61 +205,147 @@ export class PostgresClient {
 
   // Sync status tracking methods for incremental backfill
 
-  async getSyncCursor(resource: string): Promise<number | null> {
+  async getSyncCursor(resource: string, accountId: string): Promise<number | null> {
     const result = await this.query(
       `SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor
        FROM "${this.config.schema}"."_sync_status"
-       WHERE resource = $1`,
-      [resource]
+       WHERE resource = $1 AND "_account_id" = $2`,
+      [resource, accountId]
     )
     const cursor = result.rows[0]?.cursor ?? null
     return cursor
   }
 
-  async updateSyncCursor(resource: string, cursor: number): Promise<void> {
+  async updateSyncCursor(resource: string, accountId: string, cursor: number): Promise<void> {
     // Only update if the new cursor is greater than the existing one
     // This handles Stripe returning results in descending order (newest first)
     // Convert Unix timestamp to timestamptz for human-readable storage
     await this.query(
-      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, last_incremental_cursor, status, last_synced_at)
-       VALUES ($1, to_timestamp($2), 'running', now())
-       ON CONFLICT (resource)
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", last_incremental_cursor, status, last_synced_at)
+       VALUES ($1, $2, to_timestamp($3), 'running', now())
+       ON CONFLICT (resource, "_account_id")
        DO UPDATE SET
          last_incremental_cursor = GREATEST(
            COALESCE("${this.config.schema}"."_sync_status".last_incremental_cursor, to_timestamp(0)),
-           to_timestamp($2)
+           to_timestamp($3)
          ),
          last_synced_at = now(),
          updated_at = now()`,
-      [resource, cursor.toString()]
+      [resource, accountId, cursor.toString()]
     )
   }
 
-  async markSyncRunning(resource: string): Promise<void> {
+  async markSyncRunning(resource: string, accountId: string): Promise<void> {
     await this.query(
-      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, status)
-       VALUES ($1, 'running')
-       ON CONFLICT (resource)
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", status)
+       VALUES ($1, $2, 'running')
+       ON CONFLICT (resource, "_account_id")
        DO UPDATE SET status = 'running', updated_at = now()`,
-      [resource]
+      [resource, accountId]
     )
   }
 
-  async markSyncComplete(resource: string): Promise<void> {
+  async markSyncComplete(resource: string, accountId: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
        SET status = 'complete', error_message = NULL, updated_at = now()
-       WHERE resource = $1`,
-      [resource]
+       WHERE resource = $1 AND "_account_id" = $2`,
+      [resource, accountId]
     )
   }
 
-  async markSyncError(resource: string, errorMessage: string): Promise<void> {
+  async markSyncError(resource: string, accountId: string, errorMessage: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
-       SET status = 'error', error_message = $2, updated_at = now()
-       WHERE resource = $1`,
-      [resource, errorMessage]
+       SET status = 'error', error_message = $3, updated_at = now()
+       WHERE resource = $1 AND "_account_id" = $2`,
+      [resource, accountId, errorMessage]
     )
+  }
+
+  // Account management methods
+
+  async upsertAccount(accountData: {
+    id: string
+    raw_data: any // eslint-disable-line @typescript-eslint/no-explicit-any
+  }): Promise<void> {
+    const rawData = JSON.stringify(accountData.raw_data)
+
+    await this.query(
+      `INSERT INTO "${this.config.schema}"."accounts" ("id", "raw_data", "first_synced_at", "last_synced_at")
+       VALUES ($1, $2::jsonb, now(), now())
+       ON CONFLICT ("id")
+       DO UPDATE SET
+         "raw_data" = EXCLUDED."raw_data",
+         "last_synced_at" = now(),
+         "updated_at" = now()`,
+      [accountData.id, rawData]
+    )
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getAllAccounts(): Promise<any[]> {
+    const result = await this.query(
+      `SELECT raw_data FROM "${this.config.schema}"."accounts"
+       ORDER BY last_synced_at DESC`
+    )
+    return result.rows.map((row) => row.raw_data)
+  }
+
+  async getAccountRecordCounts(accountId: string): Promise<{ [tableName: string]: number }> {
+    const counts: { [tableName: string]: number } = {}
+
+    for (const table of ORDERED_STRIPE_TABLES) {
+      const result = await this.query(
+        `SELECT COUNT(*) as count FROM "${this.config.schema}"."${table}"
+         WHERE "_account_id" = $1`,
+        [accountId]
+      )
+      counts[table] = parseInt(result.rows[0].count)
+    }
+
+    return counts
+  }
+
+  async deleteAccountWithCascade(
+    accountId: string,
+    useTransaction: boolean
+  ): Promise<{ [tableName: string]: number }> {
+    const deletionCounts: { [tableName: string]: number } = {}
+
+    try {
+      if (useTransaction) {
+        await this.query('BEGIN')
+      }
+
+      // Delete from all dependent tables
+      for (const table of ORDERED_STRIPE_TABLES) {
+        const result = await this.query(
+          `DELETE FROM "${this.config.schema}"."${table}"
+           WHERE "_account_id" = $1`,
+          [accountId]
+        )
+        deletionCounts[table] = result.rowCount || 0
+      }
+
+      // Finally, delete the account itself
+      const accountResult = await this.query(
+        `DELETE FROM "${this.config.schema}"."accounts"
+         WHERE "id" = $1`,
+        [accountId]
+      )
+      deletionCounts['accounts'] = accountResult.rowCount || 0
+
+      if (useTransaction) {
+        await this.query('COMMIT')
+      }
+    } catch (error) {
+      if (useTransaction) {
+        await this.query('ROLLBACK')
+      }
+      throw error
+    }
+
+    return deletionCounts
   }
 }

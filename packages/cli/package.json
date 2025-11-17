@@ -28,7 +28,8 @@
     "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
     "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts",
     "test:integration": "./scripts/test-integration.sh",
-    "test:integration:backfill": "./scripts/test-integration-backfill.sh"
+    "test:integration:backfill": "./scripts/test-integration-backfill.sh",
+    "test:integration:accounts": "./scripts/test-integration-account-management.sh"
   },
   "keywords": [
     "stripe",

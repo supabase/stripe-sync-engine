@@ -7,6 +7,7 @@ import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 
 let stripeSync: StripeSync
+const TEST_ACCOUNT_ID = 'acct_test'
 
 beforeAll(async () => {
   process.env.AUTO_EXPAND_LISTS = 'true'
@@ -27,6 +28,18 @@ beforeAll(async () => {
   })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
+
+  // Mock getCurrentAccount to avoid API calls
+  vitest.spyOn(stripeSync, 'getCurrentAccount').mockResolvedValue({
+    id: TEST_ACCOUNT_ID,
+    object: 'account',
+  } as Stripe.Account)
+
+  // Ensure test account exists in database
+  await stripeSync.postgresClient.upsertAccount({
+    id: TEST_ACCOUNT_ID,
+    raw_data: { id: TEST_ACCOUNT_ID, object: 'account' },
+  })
 })
 
 describe('checkout sessions', () => {
@@ -156,7 +169,7 @@ describe('checkout sessions', () => {
       } as Stripe.Checkout.Session,
     ]
 
-    await stripeSync.upsertCheckoutSessions(checkoutSessions, false)
+    await stripeSync.upsertCheckoutSessions(checkoutSessions, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
       `select id, object, amount_discount, amount_subtotal, amount_tax, amount_total, currency, description, price, quantity from stripe.checkout_session_line_items where checkout_session = 'cs_live_9RBjcHiy2i5p99Tf1MYM90c3SHK1grU0E6Ae6pKWR2KPA4ZiuKiB2X1Y3X'`
