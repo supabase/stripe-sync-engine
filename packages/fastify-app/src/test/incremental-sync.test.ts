@@ -1,7 +1,6 @@
 import type Stripe from 'stripe'
-import { StripeSync } from 'stripe-replit-sync'
+import { StripeSync, runMigrations, hashApiKey } from 'stripe-replit-sync'
 import { vitest, beforeAll, afterAll, describe, test, expect, beforeEach } from 'vitest'
-import { runMigrations } from 'stripe-replit-sync'
 import { getConfig } from '../utils/config'
 import { logger } from '../logger'
 
@@ -30,11 +29,15 @@ beforeAll(async () => {
     object: 'account',
   } as Stripe.Account)
 
-  // Ensure test account exists in database
-  await stripeSync.postgresClient.upsertAccount({
-    id: testAccountId,
-    raw_data: { id: testAccountId, object: 'account' },
-  })
+  // Ensure test account exists in database with API key hash
+  const apiKeyHash = hashApiKey(config.stripeSecretKey)
+  await stripeSync.postgresClient.upsertAccount(
+    {
+      id: testAccountId,
+      raw_data: { id: testAccountId, object: 'account' },
+    },
+    apiKeyHash
+  )
 })
 
 afterAll(async () => {

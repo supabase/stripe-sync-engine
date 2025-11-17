@@ -14,6 +14,7 @@ import { managedWebhookSchema } from './schemas/managed_webhook'
 import { randomUUID } from 'node:crypto'
 import { type PoolConfig } from 'pg'
 import { withRetry } from './utils/retry'
+import { hashApiKey } from './utils/hashApiKey'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
   const set = new Set(
@@ -90,7 +91,8 @@ export class StripeSync {
   }
 
   /**
-   * Get the Stripe account ID. Retrieves from API if not cached, with fallback to config or object's account field.
+   * Get the Stripe account ID. Uses database lookup by API key hash for fast lookups,
+   * with fallback to Stripe API if not found (first-time setup or new API key).
    */
   async getAccountId(objectAccountId?: string): Promise<string> {
     // If we have a cached account, use it
@@ -98,7 +100,22 @@ export class StripeSync {
       return this.cachedAccount.id
     }
 
-    // Retrieve from Stripe API to get full account details
+    // Try to lookup account ID from database using API key hash (fast path)
+    const apiKeyHash = hashApiKey(this.config.stripeSecretKey)
+    try {
+      const accountId = await this.postgresClient.getAccountIdByApiKeyHash(apiKeyHash)
+      if (accountId) {
+        // Found in database - no API call needed!
+        return accountId
+      }
+    } catch (error) {
+      this.config.logger?.warn(
+        error,
+        'Failed to lookup account by API key hash, falling back to API'
+      )
+    }
+
+    // Not found in database - retrieve from Stripe API (first-time setup or new API key)
     let account: Stripe.Account
     try {
       const accountIdParam = objectAccountId || this.config.stripeAccountId
@@ -112,21 +129,26 @@ export class StripeSync {
 
     this.cachedAccount = account
 
-    // Upsert account info to database
-    await this.upsertAccount(account)
+    // Upsert account info to database with API key hash for future lookups
+    await this.upsertAccount(account, apiKeyHash)
 
     return account.id
   }
 
   /**
    * Upsert Stripe account information to the database
+   * @param account - Stripe account object
+   * @param apiKeyHash - SHA-256 hash of API key to store for fast lookups
    */
-  private async upsertAccount(account: Stripe.Account): Promise<void> {
+  private async upsertAccount(account: Stripe.Account, apiKeyHash: string): Promise<void> {
     try {
-      await this.postgresClient.upsertAccount({
-        id: account.id,
-        raw_data: account,
-      })
+      await this.postgresClient.upsertAccount(
+        {
+          id: account.id,
+          raw_data: account,
+        },
+        apiKeyHash
+      )
     } catch (error) {
       this.config.logger?.error(error, 'Failed to upsert account to database')
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'

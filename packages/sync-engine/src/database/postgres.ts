@@ -265,21 +265,32 @@ export class PostgresClient {
 
   // Account management methods
 
-  async upsertAccount(accountData: {
-    id: string
-    raw_data: any // eslint-disable-line @typescript-eslint/no-explicit-any
-  }): Promise<void> {
+  async upsertAccount(
+    accountData: {
+      id: string
+      raw_data: any // eslint-disable-line @typescript-eslint/no-explicit-any
+    },
+    apiKeyHash: string
+  ): Promise<void> {
     const rawData = JSON.stringify(accountData.raw_data)
 
+    // Upsert account and add API key hash to array if not already present
     await this.query(
-      `INSERT INTO "${this.config.schema}"."accounts" ("id", "raw_data", "first_synced_at", "last_synced_at")
-       VALUES ($1, $2::jsonb, now(), now())
+      `INSERT INTO "${this.config.schema}"."accounts" ("id", "raw_data", "api_key_hashes", "first_synced_at", "last_synced_at")
+       VALUES ($1, $2::jsonb, ARRAY[$3], now(), now())
        ON CONFLICT ("id")
        DO UPDATE SET
          "raw_data" = EXCLUDED."raw_data",
+         "api_key_hashes" = (
+           SELECT ARRAY(
+             SELECT DISTINCT unnest(
+               COALESCE("${this.config.schema}"."accounts"."api_key_hashes", '{}') || ARRAY[$3]
+             )
+           )
+         ),
          "last_synced_at" = now(),
          "updated_at" = now()`,
-      [accountData.id, rawData]
+      [accountData.id, rawData, apiKeyHash]
     )
   }
 
@@ -290,6 +301,22 @@ export class PostgresClient {
        ORDER BY last_synced_at DESC`
     )
     return result.rows.map((row) => row.raw_data)
+  }
+
+  /**
+   * Looks up an account ID by API key hash
+   * Uses the GIN index on api_key_hashes for fast lookups
+   * @param apiKeyHash - SHA-256 hash of the Stripe API key
+   * @returns Account ID if found, null otherwise
+   */
+  async getAccountIdByApiKeyHash(apiKeyHash: string): Promise<string | null> {
+    const result = await this.query(
+      `SELECT id FROM "${this.config.schema}"."accounts"
+       WHERE $1 = ANY(api_key_hashes)
+       LIMIT 1`,
+      [apiKeyHash]
+    )
+    return result.rows.length > 0 ? result.rows[0].id : null
   }
 
   async getAccountRecordCounts(accountId: string): Promise<{ [tableName: string]: number }> {
