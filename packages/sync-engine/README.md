@@ -139,6 +139,56 @@ import { runMigrations } from 'stripe-replit-sync'
 await runMigrations({ databaseUrl: 'postgres://...' })
 ```
 
+## Account Management
+
+### Getting Current Account
+
+Retrieve the currently authenticated Stripe account:
+
+```ts
+const account = await sync.getCurrentAccount()
+console.log(account.id) // e.g., "acct_xxx"
+```
+
+### Listing Synced Accounts
+
+Get all Stripe accounts that have been synced to the database:
+
+```ts
+const accounts = await sync.getAllSyncedAccounts()
+// Returns array of Stripe account objects from database
+```
+
+### Deleting Synced Account Data
+
+**⚠️ DANGEROUS:** Delete all synced data for a specific Stripe account from the database. This operation cannot be undone!
+
+```ts
+// Preview what will be deleted (dry-run mode)
+const preview = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx', {
+  dryRun: true,
+  useTransaction: true,
+})
+console.log(preview.deletedRecordCounts) // Shows count per table
+
+// Actually delete the data
+const result = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx', {
+  dryRun: false, // default
+  useTransaction: true, // default - wraps deletion in transaction
+})
+```
+
+Options:
+
+- `dryRun` (default: `false`): If true, only counts records without deleting
+- `useTransaction` (default: `true`): If true, wraps all deletions in a database transaction for atomicity
+
+The method returns:
+
+- `deletedAccountId`: The account ID that was deleted
+- `deletedRecordCounts`: Object mapping table names to number of records deleted
+- `warnings`: Array of warning messages (e.g., if you're deleting your cached account)
+
 ## Backfilling and Syncing Data
 
 ### Syncing a Single Entity
