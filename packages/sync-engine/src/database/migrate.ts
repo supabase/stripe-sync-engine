@@ -17,6 +17,34 @@ type MigrationConfig = {
   logger?: pino.Logger
 }
 
+async function doesTableExist(client: Client, schema: string, tableName: string): Promise<boolean> {
+  const result = await client.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = $1
+      AND table_name = $2
+    )`,
+    [schema, tableName]
+  )
+  return result.rows[0]?.exists || false
+}
+
+async function renameMigrationsTableIfNeeded(
+  client: Client,
+  schema: string,
+  logger?: pino.Logger
+): Promise<void> {
+  const oldTableExists = await doesTableExist(client, schema, 'migrations')
+  const newTableExists = await doesTableExist(client, schema, '_migrations')
+
+  if (oldTableExists && !newTableExists) {
+    logger?.info('Renaming migrations table to _migrations')
+    await client.query(`ALTER TABLE "${schema}"."migrations" RENAME TO "_migrations"`)
+    logger?.info('Successfully renamed migrations table')
+  }
+}
+
 async function connectAndMigrate(
   client: Client,
   migrationsDirectory: string,
@@ -30,7 +58,7 @@ async function connectAndMigrate(
 
   const optionalConfig = {
     schemaName: config.schema,
-    tableName: 'migrations',
+    tableName: '_migrations',
   }
 
   try {
@@ -58,6 +86,9 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
 
     // Ensure schema exists, not doing it via migration to not break current migration checksums
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${config.schema};`)
+
+    // Rename old migrations table if it exists (one-time upgrade to internal table naming convention)
+    await renameMigrationsTableIfNeeded(client, config.schema, config.logger)
 
     config.logger?.info('Running migrations')
 
