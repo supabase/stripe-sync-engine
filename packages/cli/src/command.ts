@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
-import { Client, type PoolConfig } from 'pg'
+import { type PoolConfig } from 'pg'
 import { loadConfig, CliOptions } from './config'
 import {
   StripeSync,
@@ -195,29 +195,12 @@ export async function migrateCommand(options: CliOptions): Promise<void> {
       console.log(chalk.green('✓ Migrations completed successfully'))
     } catch (migrationError) {
       // Migration failed - drop schema and retry
-      console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
+      console.warn(chalk.yellow('Migrations failed.'))
       console.warn(
         'Migration error:',
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
-
-      const client = new Client({ connectionString: databaseUrl })
-
-      try {
-        await client.connect()
-        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-        console.log(chalk.green(`✓ Dropped schema: ${schema}`))
-      } finally {
-        await client.end()
-      }
-
-      // Retry migrations
-      console.log('Retrying migrations...')
-      await runMigrations({
-        databaseUrl,
-        schema,
-      })
-      console.log(chalk.green('✓ Migrations completed successfully after retry'))
+      throw migrationError
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -314,29 +297,12 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       })
     } catch (migrationError) {
       // Migration failed - drop schema and retry
-      console.warn(chalk.yellow('Migration failed, dropping schema and retrying...'))
+      console.warn(chalk.yellow('Migrations failed.'))
       console.warn(
         'Migration error:',
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
-
-      const client = new Client({ connectionString: config.databaseUrl })
-
-      try {
-        await client.connect()
-        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-        console.log(chalk.green(`✓ Dropped schema: ${schema}`))
-      } finally {
-        await client.end()
-      }
-
-      // Retry migrations
-      console.log('Retrying migrations...')
-      await runMigrations({
-        databaseUrl: config.databaseUrl,
-        schema,
-      })
-      console.log(chalk.green('✓ Migrations completed successfully after retry'))
+      throw migrationError
     }
 
     // 2. Create StripeSync instance
