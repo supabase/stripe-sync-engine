@@ -7,9 +7,8 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 
 ## Features
 
-- Automatically manages Stripe webhooks for real-time updates
+- Programmatic management of Stripe webhooks for real-time updates
 - Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database
-- UUID-based webhook routing for managed webhooks
 
 ## Installation
 
@@ -129,6 +128,8 @@ The UUID-based routing allows multiple webhook endpoints for the same base URL, 
 
 The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
 
+> **Note:** Fields and tables prefixed with an underscore (`_`) are reserved for internal metadata managed by the sync engine and should not be modified directly. These include fields like `_account`, `_cursor`, `_synced_at`, and tables like `_migrations`, `_accounts`, and `_sync_status`.
+
 ### Migrations
 
 Migrations are included in the `db/migrations` directory. You can run them using the provided `runMigrations` function:
@@ -214,6 +215,8 @@ await sync.syncBackfill({
 
 - `object` can be one of: `all`, `charge`, `customer`, `dispute`, `invoice`, `payment_method`, `payment_intent`, `plan`, `price`, `product`, `setup_intent`, `subscription`.
 - `created` is a Stripe RangeQueryParam and supports `gt`, `gte`, `lt`, `lte`.
+
+The sync engine automatically tracks per-account cursors in the `_sync_status` table. When you call sync methods without an explicit `created` filter, they will automatically resume from the last synced position for that account and resource. This enables incremental syncing that can resume after interruptions.
 
 > **Note:**
 > For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.
