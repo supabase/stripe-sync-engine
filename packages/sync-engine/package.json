@@ -1,6 +1,6 @@
 {
   "name": "stripe-replit-sync",
-  "version": "0.0.6",
+  "version": "0.0.8",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data to Postgres",
   "type": "module",
