@@ -60,7 +60,8 @@ export class StripeSync {
         name: 'Stripe Postgres Sync',
       },
     })
-
+    this.config.schema = config.schema ?? DEFAULT_SCHEMA
+    this.config.logger = config.logger ?? console
     this.config.logger?.info(
       { autoExpandLists: config.autoExpandLists, stripeApiVersion: config.stripeApiVersion },
       'StripeSync initialized'
@@ -85,7 +86,7 @@ export class StripeSync {
     }
 
     this.postgresClient = new PostgresClient({
-      schema: config.schema || DEFAULT_SCHEMA,
+      schema: this.config.schema,
       poolConfig,
     })
   }
@@ -282,7 +283,7 @@ export class StripeSync {
     if (uuid) {
       // Query the webhook secret from the database using the UUID (managed webhook)
       const result = await this.postgresClient.query(
-        `SELECT secret FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE uuid = $1`,
+        `SELECT secret FROM "${this.config.schema}"."_managed_webhooks" WHERE uuid = $1`,
         [uuid]
       )
 
@@ -919,7 +920,7 @@ export class StripeSync {
   }
 
   async syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
-    const { object } = params ?? {}
+    const { object } = params ?? { object: 'all' }
     let products,
       prices,
       customers,
@@ -2294,7 +2295,7 @@ export class StripeSync {
 
   async getManagedWebhook(id: string): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" WHERE _id = $1`,
+      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" WHERE _id = $1`,
       [id]
     )
     return result.rows.length > 0
@@ -2304,7 +2305,7 @@ export class StripeSync {
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema || DEFAULT_SCHEMA}"."_managed_webhooks" ORDER BY created DESC`
+      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" ORDER BY created DESC`
     )
     return result.rows as Array<Stripe.WebhookEndpoint & { uuid: string }>
   }

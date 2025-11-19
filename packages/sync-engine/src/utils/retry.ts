@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import pino from 'pino'
+import type { Logger } from '../types'
 
 export interface RetryConfig {
   maxRetries: number
@@ -109,7 +109,7 @@ function sleep(ms: number): Promise<void> {
 export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Partial<RetryConfig> = {},
-  logger?: pino.Logger
+  logger?: Logger
 ): Promise<T> {
   const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config }
   let lastError: unknown

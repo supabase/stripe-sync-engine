@@ -49,6 +49,13 @@ async function main() {
     keepAlive: true,
   }
 
+  // Silent logger for tests (logs to stderr to not interfere with JSON output)
+  const logger = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  }
+
   try {
     if (method === 'get-account') {
       // Get current account
@@ -63,6 +70,7 @@ async function main() {
         stripeSecretKey: stripeApiKey,
         stripeApiVersion: '2020-08-27',
         poolConfig,
+        logger,
       })
 
       const account = await stripeSync.getCurrentAccount()
@@ -75,6 +83,7 @@ async function main() {
         stripeSecretKey: 'sk_test_placeholder', // Not needed for listing
         stripeApiVersion: '2020-08-27',
         poolConfig,
+        logger,
       })
 
       const accounts = await stripeSync.getAllSyncedAccounts()
@@ -99,6 +108,7 @@ async function main() {
         stripeSecretKey: 'sk_test_placeholder', // Not needed for deletion
         stripeApiVersion: '2020-08-27',
         poolConfig,
+        logger,
       })
 
       const result = await stripeSync.dangerouslyDeleteSyncedAccountData(accountId, {
