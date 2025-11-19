@@ -2295,7 +2295,7 @@ export class StripeSync {
 
   async getManagedWebhook(id: string): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" WHERE _id = $1`,
+      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" WHERE id = $1`,
       [id]
     )
     return result.rows.length > 0
@@ -2338,9 +2338,8 @@ export class StripeSync {
       const filtered: Record<string, unknown> = {}
       for (const prop of managedWebhookSchema.properties) {
         if (prop in webhook) {
-          // Map 'id' to '_id' for database storage
-          const dbProp = prop === 'id' ? '_id' : prop
-          filtered[dbProp] = webhook[prop as keyof typeof webhook]
+          // No mapping needed for metadata tables - columns don't have underscore prefixes
+          filtered[prop] = webhook[prop as keyof typeof webhook]
         }
       }
       return filtered

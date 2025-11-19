@@ -118,29 +118,29 @@ export class PostgresClient {
         // Internal tables (starting with _) use old column-based format with yesql
         if (table.startsWith('_')) {
           const columns = Object.keys(entry).filter(
-            (k) => k !== '_last_synced_at' && k !== '_account_id'
+            (k) => k !== 'last_synced_at' && k !== 'account_id'
           )
 
           const upsertSql = `
             INSERT INTO "${this.config.schema}"."${table}" (
-              ${columns.map((c) => `"${c}"`).join(', ')}, "_last_synced_at", "_account_id"
+              ${columns.map((c) => `"${c}"`).join(', ')}, "last_synced_at", "account_id"
             )
             VALUES (
-              ${columns.map((c) => `:${c}`).join(', ')}, :_last_synced_at, :_account_id
+              ${columns.map((c) => `:${c}`).join(', ')}, :last_synced_at, :account_id
             )
-            ON CONFLICT ("_id")
+            ON CONFLICT ("id")
             DO UPDATE SET
               ${columns.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ')},
-              "_last_synced_at" = :_last_synced_at,
-              "_account_id" = EXCLUDED."_account_id"
-            WHERE "${table}"."_last_synced_at" IS NULL
-               OR "${table}"."_last_synced_at" < :_last_synced_at
+              "last_synced_at" = :last_synced_at,
+              "account_id" = EXCLUDED."account_id"
+            WHERE "${table}"."last_synced_at" IS NULL
+               OR "${table}"."last_synced_at" < :last_synced_at
             RETURNING *
           `
 
           const cleansed = this.cleanseArrayField(entry)
-          cleansed._last_synced_at = timestamp
-          cleansed._account_id = accountId
+          cleansed.last_synced_at = timestamp
+          cleansed.account_id = accountId
           const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
           queries.push(this.pool.query(prepared.text, prepared.values))
         } else {
@@ -209,7 +209,7 @@ export class PostgresClient {
     const result = await this.query(
       `SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor
        FROM "${this.config.schema}"."_sync_status"
-       WHERE resource = $1 AND "_account_id" = $2`,
+       WHERE resource = $1 AND "account_id" = $2`,
       [resource, accountId]
     )
     const cursor = result.rows[0]?.cursor ?? null
@@ -221,26 +221,26 @@ export class PostgresClient {
     // This handles Stripe returning results in descending order (newest first)
     // Convert Unix timestamp to timestamptz for human-readable storage
     await this.query(
-      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", last_incremental_cursor, status, _last_synced_at)
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "account_id", last_incremental_cursor, status, last_synced_at)
        VALUES ($1, $2, to_timestamp($3), 'running', now())
-       ON CONFLICT (resource, "_account_id")
+       ON CONFLICT (resource, "account_id")
        DO UPDATE SET
          last_incremental_cursor = GREATEST(
            COALESCE("${this.config.schema}"."_sync_status".last_incremental_cursor, to_timestamp(0)),
            to_timestamp($3)
          ),
-         _last_synced_at = now(),
-         _updated_at = now()`,
+         last_synced_at = now(),
+         updated_at = now()`,
       [resource, accountId, cursor.toString()]
     )
   }
 
   async markSyncRunning(resource: string, accountId: string): Promise<void> {
     await this.query(
-      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "_account_id", status)
+      `INSERT INTO "${this.config.schema}"."_sync_status" (resource, "account_id", status)
        VALUES ($1, $2, 'running')
-       ON CONFLICT (resource, "_account_id")
-       DO UPDATE SET status = 'running', _updated_at = now()`,
+       ON CONFLICT (resource, "account_id")
+       DO UPDATE SET status = 'running', updated_at = now()`,
       [resource, accountId]
     )
   }
@@ -248,8 +248,8 @@ export class PostgresClient {
   async markSyncComplete(resource: string, accountId: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
-       SET status = 'complete', error_message = NULL, _updated_at = now()
-       WHERE resource = $1 AND "_account_id" = $2`,
+       SET status = 'complete', error_message = NULL, updated_at = now()
+       WHERE resource = $1 AND "account_id" = $2`,
       [resource, accountId]
     )
   }
@@ -257,8 +257,8 @@ export class PostgresClient {
   async markSyncError(resource: string, accountId: string, errorMessage: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_status"
-       SET status = 'error', error_message = $3, _updated_at = now()
-       WHERE resource = $1 AND "_account_id" = $2`,
+       SET status = 'error', error_message = $3, updated_at = now()
+       WHERE resource = $1 AND "account_id" = $2`,
       [resource, accountId, errorMessage]
     )
   }
@@ -323,9 +323,11 @@ export class PostgresClient {
     const counts: { [tableName: string]: number } = {}
 
     for (const table of ORDERED_STRIPE_TABLES) {
+      // Metadata tables (starting with _) use account_id, regular tables use _account_id
+      const accountIdColumn = table.startsWith('_') ? 'account_id' : '_account_id'
       const result = await this.query(
         `SELECT COUNT(*) as count FROM "${this.config.schema}"."${table}"
-         WHERE "_account_id" = $1`,
+         WHERE "${accountIdColumn}" = $1`,
         [accountId]
       )
       counts[table] = parseInt(result.rows[0].count)
@@ -347,9 +349,11 @@ export class PostgresClient {
 
       // Delete from all dependent tables
       for (const table of ORDERED_STRIPE_TABLES) {
+        // Metadata tables (starting with _) use account_id, regular tables use _account_id
+        const accountIdColumn = table.startsWith('_') ? 'account_id' : '_account_id'
         const result = await this.query(
           `DELETE FROM "${this.config.schema}"."${table}"
-           WHERE "_account_id" = $1`,
+           WHERE "${accountIdColumn}" = $1`,
           [accountId]
         )
         deletionCounts[table] = result.rowCount || 0

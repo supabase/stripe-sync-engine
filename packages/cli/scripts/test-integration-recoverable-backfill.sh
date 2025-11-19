@@ -186,7 +186,7 @@ echo "   ✓ Account ID: $ACCOUNT_ID"
 echo ""
 
 # Check sync status is 'error' or 'running'
-SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$SYNC_STATUS" = "error" ] || [ "$SYNC_STATUS" = "running" ]; then
     echo "   ✓ Sync status is '$SYNC_STATUS' (process was interrupted)"
 else
@@ -196,7 +196,7 @@ else
 fi
 
 # Check error message exists
-ERROR_MSG=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT error_message FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+ERROR_MSG=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT error_message FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
 if [ -n "$ERROR_MSG" ]; then
     echo "   ✓ Error message recorded: $(echo $ERROR_MSG | head -c 50)..."
 else
@@ -204,8 +204,8 @@ else
 fi
 
 # Check cursor was saved (partial progress preserved)
-CURSOR_AFTER_ERROR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(EXTRACT(EPOCH FROM last_incremental_cursor)::integer, 0) FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
-CURSOR_AFTER_ERROR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+CURSOR_AFTER_ERROR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(EXTRACT(EPOCH FROM last_incremental_cursor)::integer, 0) FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
+CURSOR_AFTER_ERROR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ "$CURSOR_AFTER_ERROR" -gt 0 ]; then
     echo "   ✓ Cursor saved: $CURSOR_AFTER_ERROR_DISPLAY (epoch: $CURSOR_AFTER_ERROR, partial progress preserved)"
 else
@@ -232,7 +232,7 @@ echo "🔍 Step 7: Verifying successful recovery..."
 echo ""
 
 # Check sync status is now 'complete'
-FINAL_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+FINAL_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$FINAL_STATUS" = "complete" ]; then
     echo "   ✓ Sync status recovered to 'complete'"
 else
@@ -241,7 +241,7 @@ else
 fi
 
 # Check error message is cleared
-FINAL_ERROR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(error_message, '') FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+FINAL_ERROR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(error_message, '') FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ -z "$FINAL_ERROR" ]; then
     echo "   ✓ Error message cleared"
 else
@@ -250,7 +250,7 @@ else
 fi
 
 # Check cursor advanced or maintained (never decreased)
-FINAL_CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(EXTRACT(EPOCH FROM last_incremental_cursor)::integer, 0) FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+FINAL_CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT COALESCE(EXTRACT(EPOCH FROM last_incremental_cursor)::integer, 0) FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ -z "$FINAL_CURSOR" ]; then
     FINAL_CURSOR="0"
 fi

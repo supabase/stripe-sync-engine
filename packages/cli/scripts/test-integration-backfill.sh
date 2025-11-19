@@ -292,8 +292,8 @@ echo "   ✓ Account ID: $ACCOUNT_ID"
 
 # Check cursor was saved from first backfill
 echo "   Checking sync cursor from first backfill..."
-CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
-CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
+CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ "$CURSOR" -gt 0 ]; then
     echo "   ✓ Cursor saved: $CURSOR_DISPLAY (epoch: $CURSOR)"
 else
@@ -302,7 +302,7 @@ else
 fi
 
 # Check sync status is 'complete'
-SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$SYNC_STATUS" = "complete" ]; then
     echo "   ✓ Sync status: $SYNC_STATUS"
 else
@@ -337,8 +337,8 @@ echo ""
 echo "   Verifying incremental sync results..."
 
 # Verify cursor was updated
-NEW_CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
-NEW_CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+NEW_CURSOR=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
+NEW_CURSOR_DISPLAY=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ "$NEW_CURSOR" -gt "$CURSOR" ]; then
     echo "   ✓ Cursor advanced: $CURSOR → $NEW_CURSOR (incremental sync working)"
 else
@@ -347,7 +347,7 @@ else
 fi
 
 # Verify sync status is still 'complete'
-NEW_SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+NEW_SYNC_STATUS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$NEW_SYNC_STATUS" = "complete" ]; then
     echo "   ✓ Sync status after incremental sync: $NEW_SYNC_STATUS"
 else
@@ -356,7 +356,7 @@ else
 fi
 
 # Verify last_synced_at was updated
-LAST_SYNCED=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT _last_synced_at FROM stripe._sync_status WHERE resource = 'products' AND _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+LAST_SYNCED=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT last_synced_at FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ -n "$LAST_SYNCED" ]; then
     echo "   ✓ Last synced timestamp updated: $LAST_SYNCED"
 else

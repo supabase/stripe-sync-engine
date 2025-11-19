@@ -81,8 +81,14 @@ npm run build > /dev/null 2>&1
 echo "✓ CLI built successfully"
 echo ""
 
-# Step 2: Start CLI in background and test
-echo "🚀 Step 2: Starting CLI with WebSocket listener..."
+# Step 2: Run migrations
+echo "🗄️  Step 2: Running database migrations..."
+npm run dev migrate > /dev/null 2>&1
+echo "✓ Migrations completed"
+echo ""
+
+# Step 3: Start CLI in background and test
+echo "🚀 Step 3: Starting CLI with WebSocket listener..."
 echo ""
 
 # Start CLI in background

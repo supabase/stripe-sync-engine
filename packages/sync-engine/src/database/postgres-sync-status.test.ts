@@ -55,13 +55,13 @@ describe('Postgres Sync Status Methods', () => {
 
       const result = await pool.query(
         `SELECT *, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch
-         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+         FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2`,
         [resource, testAccountId]
       )
 
       expect(result.rows).toHaveLength(1)
       expect(result.rows[0].resource).toBe(resource)
-      expect(result.rows[0]._account_id).toBe(testAccountId)
+      expect(result.rows[0].account_id).toBe(testAccountId)
       expect(result.rows[0].cursor_epoch).toBe(cursor)
       expect(result.rows[0].status).toBe('running')
     })
@@ -87,11 +87,11 @@ describe('Postgres Sync Status Methods', () => {
       const afterTime = new Date()
 
       const result = await pool.query(
-        'SELECT _last_synced_at FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT last_synced_at FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
-      const lastSyncedAt = new Date(result.rows[0]._last_synced_at)
+      const lastSyncedAt = new Date(result.rows[0].last_synced_at)
       expect(lastSyncedAt.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime())
       expect(lastSyncedAt.getTime()).toBeLessThanOrEqual(afterTime.getTime())
     })
@@ -104,7 +104,7 @@ describe('Postgres Sync Status Methods', () => {
       await postgresClient.markSyncRunning(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
@@ -118,7 +118,7 @@ describe('Postgres Sync Status Methods', () => {
       await postgresClient.markSyncRunning(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
@@ -134,7 +134,7 @@ describe('Postgres Sync Status Methods', () => {
       await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
@@ -149,7 +149,7 @@ describe('Postgres Sync Status Methods', () => {
       await postgresClient.markSyncComplete(resource, testAccountId)
 
       const result = await pool.query(
-        'SELECT error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT error_message FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
@@ -166,7 +166,7 @@ describe('Postgres Sync Status Methods', () => {
       await postgresClient.markSyncError(resource, testAccountId, errorMessage)
 
       const result = await pool.query(
-        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+        'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
         [resource, testAccountId]
       )
 
@@ -198,7 +198,7 @@ describe('Postgres Sync Status Methods', () => {
 
       const result = await pool.query(
         `SELECT status, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch
-         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+         FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2`,
         [resource, testAccountId]
       )
 
@@ -223,7 +223,7 @@ describe('Postgres Sync Status Methods', () => {
 
       const result = await pool.query(
         `SELECT status, EXTRACT(EPOCH FROM last_incremental_cursor)::integer as cursor_epoch, error_message
-         FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2`,
+         FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2`,
         [resource, testAccountId]
       )
 

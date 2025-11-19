@@ -288,7 +288,7 @@ describe('Incremental Sync', () => {
 
     // Status should be error
     const status = await stripeSync.postgresClient.pool.query(
-      'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+      'SELECT status, error_message FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
       ['products', testAccountId]
     )
     expect(status.rows[0].status).toBe('error')
@@ -300,7 +300,7 @@ describe('Incremental Sync', () => {
 
     // Status should be complete
     const finalStatus = await stripeSync.postgresClient.pool.query(
-      'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "_account_id" = $2',
+      'SELECT status FROM stripe._sync_status WHERE resource = $1 AND "account_id" = $2',
       ['products', testAccountId]
     )
     expect(finalStatus.rows[0].status).toBe('complete')
