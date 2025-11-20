@@ -47,7 +47,7 @@ afterAll(async () => {
 describe('Incremental Sync', () => {
   beforeEach(async () => {
     // Clean up test data before each test
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE _id LIKE $1', [
+    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE id LIKE $1', [
       'test_prod_%',
     ])
     await stripeSync.postgresClient.pool.query(
@@ -105,7 +105,7 @@ describe('Incremental Sync', () => {
 
     // Verify products were inserted
     const firstResult = await stripeSync.postgresClient.pool.query(
-      'SELECT COUNT(*) FROM stripe.products WHERE _id LIKE $1',
+      'SELECT COUNT(*) FROM stripe.products WHERE id LIKE $1',
       ['test_prod_%']
     )
     expect(parseInt(firstResult.rows[0].count)).toBe(3)
@@ -135,7 +135,7 @@ describe('Incremental Sync', () => {
 
     // Verify new product was inserted
     const secondResult = await stripeSync.postgresClient.pool.query(
-      'SELECT COUNT(*) FROM stripe.products WHERE _id LIKE $1',
+      'SELECT COUNT(*) FROM stripe.products WHERE id LIKE $1',
       ['test_prod_%']
     )
     expect(parseInt(secondResult.rows[0].count)).toBe(4)

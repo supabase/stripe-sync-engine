@@ -1291,12 +1291,12 @@ export class StripeSync {
     // deleted is a generated column that may be NULL for non-deleted customers
     // Use COALESCE to treat NULL as false, or use IS NOT TRUE to include NULL and false
     const prepared = sql(
-      `select _id from "${this.config.schema}"."customers" WHERE COALESCE(deleted, false) <> true;`
+      `select id from "${this.config.schema}"."customers" WHERE COALESCE(deleted, false) <> true;`
     )([])
 
     const customerIds = await this.postgresClient
       .query(prepared.text, prepared.values)
-      .then(({ rows }) => rows.map((it) => it._id))
+      .then(({ rows }) => rows.map((it) => it.id))
 
     this.config.logger?.info(`Getting payment methods for ${customerIds.length} customers`)
 
@@ -2070,22 +2070,22 @@ export class StripeSync {
   ): Promise<{ rowCount: number }> {
     // deleted is a generated column that may be NULL for non-deleted items
     let prepared = sql(`
-    select _id from "${this.config.schema}"."subscription_items"
+    select id from "${this.config.schema}"."subscription_items"
     where subscription = :subscriptionId and COALESCE(deleted, false) = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
     const deletedIds = rows.filter(
-      ({ _id }: { _id: string }) => currentSubItemIds.includes(_id) === false
+      ({ id }: { id: string }) => currentSubItemIds.includes(id) === false
     )
 
     if (deletedIds.length > 0) {
-      const ids = deletedIds.map(({ _id }: { _id: string }) => _id)
+      const ids = deletedIds.map(({ id }: { id: string }) => id)
       // Since deleted is a generated column, we need to update raw_data instead
       // Use jsonb_set to set the deleted field to true in the raw_data JSON
       prepared = sql(`
       update "${this.config.schema}"."subscription_items"
       set _raw_data = jsonb_set(_raw_data, '{deleted}', 'true'::jsonb)
-      where _id=any(:ids::text[]);
+      where id=any(:ids::text[]);
       `)({ ids })
       const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
       return { rowCount: rowCount || 0 }
@@ -2167,7 +2167,7 @@ export class StripeSync {
   ): Promise<{ rowCount: number }> {
     const prepared = sql(`
       delete from "${this.config.schema}"."active_entitlements"
-      where customer = :customerId and _id <> ALL(:currentActiveEntitlementIds::text[]);
+      where customer = :customerId and id <> ALL(:currentActiveEntitlementIds::text[]);
       `)({ customerId, currentActiveEntitlementIds })
     const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
     return { rowCount: rowCount || 0 }

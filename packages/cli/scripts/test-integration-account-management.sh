@@ -116,7 +116,7 @@ npx tsx scripts/test-account-methods.ts get-account > /dev/null 2>&1 || true
 
 # Get account from database (most recently synced)
 ACCOUNT_ID=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT _id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+  "SELECT id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 
 if [[ "$ACCOUNT_ID" == acct_* ]]; then
     echo "✓ Account fetched: $ACCOUNT_ID"
@@ -126,14 +126,14 @@ else
 fi
 
 ACCOUNT_EMAIL=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT (_raw_data)->>'email' FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT (_raw_data)->>'email' FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 echo "  Email: $ACCOUNT_EMAIL"
 echo ""
 
 # Test 1.2: Database Persistence Check
 echo "TEST 1.2: Database Persistence"
 DB_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 if [ "$DB_COUNT" -eq 1 ]; then
     echo "✓ Account persisted to database"
@@ -144,7 +144,7 @@ fi
 
 # Verify raw_data column exists
 RAW_DATA=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT _raw_data::text FROM stripe.accounts WHERE _id = '$ACCOUNT_ID' LIMIT 1;" 2>/dev/null | tr -d ' ' | head -c 20)
+  "SELECT _raw_data::text FROM stripe.accounts WHERE id = '$ACCOUNT_ID' LIMIT 1;" 2>/dev/null | tr -d ' ' | head -c 20)
 
 if [ -n "$RAW_DATA" ]; then
     echo "✓ raw_data column populated"
@@ -179,7 +179,7 @@ else
 fi
 
 FIRST_ID=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT _id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+  "SELECT id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 if [ "$FIRST_ID" = "$ACCOUNT_ID" ]; then
     echo "✓ Account ID matches: $FIRST_ID"
 else
@@ -190,7 +190,7 @@ echo ""
 # Test 2.2: Database Data Validation
 echo "TEST 2.2: Database Data Validation"
 RAW_DATA_CHECK=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT CASE WHEN _raw_data IS NOT NULL THEN 1 ELSE 0 END FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT CASE WHEN _raw_data IS NOT NULL THEN 1 ELSE 0 END FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 if [ "$RAW_DATA_CHECK" -eq 1 ]; then
     echo "✓ Valid account data in database"
 else
@@ -202,7 +202,7 @@ echo ""
 # Test 2.3: Ordering Check (via database)
 echo "TEST 2.3: Ordering by Last Synced"
 FIRST_ACCOUNT_ID=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT _id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
+  "SELECT id FROM stripe.accounts ORDER BY _last_synced_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 if [ -n "$FIRST_ACCOUNT_ID" ]; then
     echo "✓ First account: $FIRST_ACCOUNT_ID"
 else
@@ -311,7 +311,7 @@ PRODUCTS_TO_DELETE=$(docker exec stripe-sync-test-db psql -U postgres -d app_db 
 CUSTOMERS_TO_DELETE=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
   "SELECT COUNT(*) FROM stripe.customers WHERE _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 ACCOUNTS_TO_DELETE=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 # Perform actual deletion
 npx tsx scripts/test-account-methods.ts delete-account "$ACCOUNT_ID" > /dev/null 2>&1 || true
@@ -322,7 +322,7 @@ PRODUCTS_AFTER=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -
 CUSTOMERS_AFTER=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
   "SELECT COUNT(*) FROM stripe.customers WHERE _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 ACCOUNTS_AFTER=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 FINAL_DELETED_PRODUCTS=$((PRODUCTS_TO_DELETE - PRODUCTS_AFTER))
 FINAL_DELETED_CUSTOMERS=$((CUSTOMERS_TO_DELETE - CUSTOMERS_AFTER))
@@ -365,7 +365,7 @@ REMAINING_CUSTOMERS=$(docker exec stripe-sync-test-db psql -U postgres -d app_db
   "SELECT COUNT(*) FROM stripe.customers WHERE _account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 REMAINING_ACCOUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
 
 if [ "$REMAINING_PRODUCTS" -eq 0 ]; then
     echo "✓ All products removed from database"
@@ -393,14 +393,14 @@ echo ""
 echo "TEST 3.4: Delete Non-Existent Account Error Handling"
 # Count accounts with this fake ID before deletion attempt
 BEFORE_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = 'acct_nonexistent';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = 'acct_nonexistent';" 2>/dev/null | tr -d ' ')
 
 # Attempt deletion (should handle gracefully)
 npx tsx scripts/test-account-methods.ts delete-account "acct_nonexistent" > /dev/null 2>&1 || true
 
 # Count after (should still be 0)
 AFTER_COUNT=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c \
-  "SELECT COUNT(*) FROM stripe.accounts WHERE _id = 'acct_nonexistent';" 2>/dev/null | tr -d ' ')
+  "SELECT COUNT(*) FROM stripe.accounts WHERE id = 'acct_nonexistent';" 2>/dev/null | tr -d ' ')
 
 DELETED_ACCOUNT_COUNT=$((BEFORE_COUNT - AFTER_COUNT))
 

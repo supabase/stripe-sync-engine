@@ -30,7 +30,7 @@ afterAll(async () => {
     stripeSync.postgresClient.query(
       `delete from stripe.active_entitlements where customer = '${customerId}'`
     ),
-    stripeSync.postgresClient.query(`delete from stripe.customers where _id = '${customerId}'`),
+    stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
   ])
 })
 
@@ -70,7 +70,7 @@ describe('entitlements', () => {
 
     expect(entitlements.rows).toEqual([
       {
-        _id: activeEntitlements[0].id,
+        id: activeEntitlements[0].id,
         object: activeEntitlements[0].object,
         feature: activeEntitlements[0].feature,
         livemode: activeEntitlements[0].livemode,
@@ -118,7 +118,7 @@ describe('entitlements', () => {
 
     expect(updatedEntitlements.rows).toEqual(
       newActiveEntitlements.map((entitlement) => ({
-        _id: entitlement.id,
+        id: entitlement.id,
         object: entitlement.object,
         feature: entitlement.feature,
         livemode: entitlement.livemode,

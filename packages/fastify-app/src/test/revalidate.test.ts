@@ -41,7 +41,7 @@ describe('invoices', () => {
     await stripeSync.processEvent(eventBody as unknown as Stripe.Event)
 
     const result = await stripeSync.postgresClient.query(
-      `select customer from stripe.invoices where _id = 'in_1KJdKkJDPojXS6LNSwSWkZSN' limit 1`
+      `select customer from stripe.invoices where id = 'in_1KJdKkJDPojXS6LNSwSWkZSN' limit 1`
     )
     expect(mockStripe.invoices.retrieve).toHaveBeenCalled()
     expect(result.rows[0].customer).toEqual('cus_J7Mkgr8mvbl1eK') // from stripe mock
@@ -55,7 +55,7 @@ describe('invoices', () => {
     await stripeSync.processEvent(eventBody as unknown as Stripe.Event)
 
     const result = await stripeSync.postgresClient.query(
-      `select customer from stripe.invoices where _id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
+      `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
     )
     expect(mockStripe.invoices.retrieve).not.toHaveBeenCalled()
     expect(result.rows[0].customer).toEqual('cus_JsuO3bmrj0QlAw') // from webhook, no refetch

@@ -175,11 +175,11 @@ describe('checkout sessions', () => {
     await stripeSync.upsertCheckoutSessions(checkoutSessions, TEST_ACCOUNT_ID, false)
 
     const lineItems = await stripeSync.postgresClient.query(
-      `select _id, object, amount_discount, amount_subtotal, amount_tax, amount_total, currency, description, price, quantity from stripe.checkout_session_line_items where checkout_session = 'cs_live_9RBjcHiy2i5p99Tf1MYM90c3SHK1grU0E6Ae6pKWR2KPA4ZiuKiB2X1Y3X'`
+      `select id, object, amount_discount, amount_subtotal, amount_tax, amount_total, currency, description, price, quantity from stripe.checkout_session_line_items where checkout_session = 'cs_live_9RBjcHiy2i5p99Tf1MYM90c3SHK1grU0E6Ae6pKWR2KPA4ZiuKiB2X1Y3X'`
     )
 
     expect(lineItems.rows).toContainEqual({
-      _id: 'li_123',
+      id: 'li_123',
       object: 'item',
       amount_discount: 0,
       amount_subtotal: 2198,
@@ -192,7 +192,7 @@ describe('checkout sessions', () => {
     })
 
     expect(lineItems.rows).toContainEqual({
-      _id: 'li_456',
+      id: 'li_456',
       object: 'item',
       amount_discount: 0,
       amount_subtotal: 2198,
