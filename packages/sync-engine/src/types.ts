@@ -34,9 +34,6 @@ export type StripeSyncConfig = {
   /** @deprecated Use `poolConfig` with a connection string instead. */
   databaseUrl?: string
 
-  /** Database schema name. */
-  schema?: string
-
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
 

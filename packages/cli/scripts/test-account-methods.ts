@@ -36,7 +36,6 @@ async function main() {
   const method = args[0]
   const databaseUrl = process.env.DATABASE_URL || ''
   const stripeApiKey = process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
-  const schema = process.env.SCHEMA || 'stripe'
 
   if (!databaseUrl) {
     console.error('Error: DATABASE_URL environment variable is required')
@@ -66,7 +65,6 @@ async function main() {
 
       const stripeSync = new StripeSync({
         databaseUrl,
-        schema,
         stripeSecretKey: stripeApiKey,
         stripeApiVersion: '2020-08-27',
         poolConfig,
@@ -79,7 +77,6 @@ async function main() {
       // List all synced accounts
       const stripeSync = new StripeSync({
         databaseUrl,
-        schema,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for listing
         stripeApiVersion: '2020-08-27',
         poolConfig,
@@ -104,7 +101,6 @@ async function main() {
 
       const stripeSync = new StripeSync({
         databaseUrl,
-        schema,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for deletion
         stripeApiVersion: '2020-08-27',
         poolConfig,

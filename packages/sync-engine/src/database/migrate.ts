@@ -11,7 +11,6 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 type MigrationConfig = {
-  schema?: string
   databaseUrl: string
   ssl?: ConnectionOptions
   logger?: Logger
@@ -64,7 +63,7 @@ async function connectAndMigrate(
   }
 
   const optionalConfig = {
-    schemaName: config.schema,
+    schemaName: 'stripe',
     tableName: '_migrations',
   }
 
@@ -87,7 +86,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
     connectionTimeoutMillis: 10_000,
   })
 
-  const schema = config.schema ?? 'stripe'
+  const schema = 'stripe'
 
   try {
     // Run migrations
@@ -113,10 +112,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
 
     config.logger?.info('Running migrations')
 
-    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), {
-      ...config,
-      schema,
-    })
+    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
     throw err

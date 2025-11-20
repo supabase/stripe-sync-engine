@@ -26,14 +26,11 @@ function getUniqueIds<T>(entries: T[], key: string): string[] {
   return Array.from(set)
 }
 
-const DEFAULT_SCHEMA = 'stripe'
-
 export interface StripeSyncOptions {
   databaseUrl: string
   stripeApiKey: string
   baseUrl: () => string
   webhookPath?: string
-  schema?: string
   stripeApiVersion?: string
   autoExpandLists?: boolean
   backfillRelatedEntities?: boolean
@@ -60,7 +57,6 @@ export class StripeSync {
         name: 'Stripe Postgres Sync',
       },
     })
-    this.config.schema = config.schema ?? DEFAULT_SCHEMA
     this.config.logger = config.logger ?? console
     this.config.logger?.info(
       { autoExpandLists: config.autoExpandLists, stripeApiVersion: config.stripeApiVersion },
@@ -86,7 +82,7 @@ export class StripeSync {
     }
 
     this.postgresClient = new PostgresClient({
-      schema: this.config.schema,
+      schema: 'stripe',
       poolConfig,
     })
   }
@@ -283,7 +279,7 @@ export class StripeSync {
     if (uuid) {
       // Query the webhook secret from the database using the UUID (managed webhook)
       const result = await this.postgresClient.query(
-        `SELECT secret FROM "${this.config.schema}"."_managed_webhooks" WHERE uuid = $1`,
+        `SELECT secret FROM "stripe"."_managed_webhooks" WHERE uuid = $1`,
         [uuid]
       )
 
@@ -1291,7 +1287,7 @@ export class StripeSync {
     // deleted is a generated column that may be NULL for non-deleted customers
     // Use COALESCE to treat NULL as false, or use IS NOT TRUE to include NULL and false
     const prepared = sql(
-      `select id from "${this.config.schema}"."customers" WHERE COALESCE(deleted, false) <> true;`
+      `select id from "stripe"."customers" WHERE COALESCE(deleted, false) <> true;`
     )([])
 
     const customerIds = await this.postgresClient
@@ -2070,7 +2066,7 @@ export class StripeSync {
   ): Promise<{ rowCount: number }> {
     // deleted is a generated column that may be NULL for non-deleted items
     let prepared = sql(`
-    select id from "${this.config.schema}"."subscription_items"
+    select id from "stripe"."subscription_items"
     where subscription = :subscriptionId and COALESCE(deleted, false) = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
@@ -2083,7 +2079,7 @@ export class StripeSync {
       // Since deleted is a generated column, we need to update raw_data instead
       // Use jsonb_set to set the deleted field to true in the raw_data JSON
       prepared = sql(`
-      update "${this.config.schema}"."subscription_items"
+      update "stripe"."subscription_items"
       set _raw_data = jsonb_set(_raw_data, '{deleted}', 'true'::jsonb)
       where id=any(:ids::text[]);
       `)({ ids })
@@ -2166,7 +2162,7 @@ export class StripeSync {
     currentActiveEntitlementIds: string[]
   ): Promise<{ rowCount: number }> {
     const prepared = sql(`
-      delete from "${this.config.schema}"."active_entitlements"
+      delete from "stripe"."active_entitlements"
       where customer = :customerId and id <> ALL(:currentActiveEntitlementIds::text[]);
       `)({ customerId, currentActiveEntitlementIds })
     const { rowCount } = await this.postgresClient.query(prepared.text, prepared.values)
@@ -2295,7 +2291,7 @@ export class StripeSync {
 
   async getManagedWebhook(id: string): Promise<(Stripe.WebhookEndpoint & { uuid: string }) | null> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" WHERE id = $1`,
+      `SELECT * FROM "stripe"."_managed_webhooks" WHERE id = $1`,
       [id]
     )
     return result.rows.length > 0
@@ -2305,7 +2301,7 @@ export class StripeSync {
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint & { uuid: string }>> {
     const result = await this.postgresClient.query(
-      `SELECT * FROM "${this.config.schema}"."_managed_webhooks" ORDER BY created DESC`
+      `SELECT * FROM "stripe"."_managed_webhooks" ORDER BY created DESC`
     )
     return result.rows as Array<Stripe.WebhookEndpoint & { uuid: string }>
   }

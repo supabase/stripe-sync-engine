@@ -16,7 +16,7 @@ const postgresClient = new PostgresClient({
   poolConfig: {
     connectionString: getConfig().databaseUrl,
   },
-  schema: getConfig().schema,
+  schema: 'stripe',
 })
 
 describe('POST /webhooks', () => {
@@ -26,7 +26,6 @@ describe('POST /webhooks', () => {
     const config = getConfig()
     await runMigrations({
       databaseUrl: config.databaseUrl,
-      schema: config.schema,
       logger,
     })
 

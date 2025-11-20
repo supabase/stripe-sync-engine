@@ -57,7 +57,7 @@ describe('runMigrations', () => {
     // Execute: Run migrations with empty table
     await runMigrations({
       databaseUrl,
-      schema: testSchema,
+
       logger: {
         info: () => {},
         warn: () => {},
@@ -88,7 +88,7 @@ describe('runMigrations', () => {
     // Setup: Run migrations once to populate the table
     await runMigrations({
       databaseUrl,
-      schema: testSchema,
+
       logger: {
         info: () => {},
         warn: () => {},
@@ -106,7 +106,7 @@ describe('runMigrations', () => {
     // Execute: Run migrations again
     await runMigrations({
       databaseUrl,
-      schema: testSchema,
+
       logger: {
         info: () => {},
         warn: () => {},
@@ -140,7 +140,7 @@ describe('runMigrations', () => {
     // Execute: Run migrations
     await runMigrations({
       databaseUrl,
-      schema: testSchema,
+
       logger: {
         info: () => {},
         warn: () => {},
@@ -183,7 +183,7 @@ describe('runMigrations', () => {
     await expect(async () => {
       await runMigrations({
         databaseUrl,
-        schema: testSchema,
+
         logger: {
           info: () => {},
           warn: () => {},

@@ -14,9 +14,6 @@ export type StripeSyncServerConfig = {
   /** Postgres database URL including authentication */
   databaseUrl: string
 
-  /** Database schema name. */
-  schema: string
-
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
 
@@ -55,7 +52,6 @@ export function getConfig(): StripeSyncServerConfig {
 
   return {
     databaseUrl: getConfigFromEnv('DATABASE_URL'),
-    schema: getConfigFromEnv('SCHEMA', 'stripe'),
     stripeSecretKey: getConfigFromEnv('STRIPE_SECRET_KEY', ''),
     stripeWebhookSecret: getConfigFromEnv('STRIPE_WEBHOOK_SECRET'),
     apiKey: getConfigFromEnv('API_KEY', 'false'),

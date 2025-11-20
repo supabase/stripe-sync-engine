@@ -11,7 +11,7 @@ beforeAll(async () => {
   const config = getConfig()
   await runMigrations({
     databaseUrl: config.databaseUrl,
-    schema: config.schema,
+
     logger,
   })
 

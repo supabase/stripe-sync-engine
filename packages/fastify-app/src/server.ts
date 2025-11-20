@@ -18,7 +18,6 @@ const main = async () => {
   if (!config.disableMigrations) {
     await runMigrations({
       databaseUrl: config.databaseUrl,
-      schema: config.schema,
       logger: logger,
       ssl: config.sslConnectionOptions,
     })

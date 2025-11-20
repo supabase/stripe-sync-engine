@@ -113,7 +113,6 @@ The UUID-based routing allows multiple webhook endpoints for the same base URL, 
 | Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
 | ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `databaseUrl`                   | string  | **Deprecated:** Use `poolConfig` with a connection string instead.                                                                                                                                                                                                                                       |
-| `schema`                        | string  | Database schema name (default: `stripe`)                                                                                                                                                                                                                                                                 |
 | `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
 | `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
 | `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               |
@@ -127,6 +126,8 @@ The UUID-based routing allows multiple webhook endpoints for the same base URL, 
 ## Database Schema
 
 The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
+
+> **Important:** The library uses a fixed schema name of `stripe`. This cannot be configured as the SQL migrations hardcode this schema name.
 
 > **Note:** Fields and tables prefixed with an underscore (`_`) are reserved for internal metadata managed by the sync engine and should not be modified directly. These include fields like `_account`, `_cursor`, `_synced_at`, and tables like `_migrations`, `_accounts`, and `_sync_status`.
 

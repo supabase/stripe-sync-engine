@@ -58,7 +58,6 @@ await stripeAutoSync.stop() // Cleanup
 | `stripeApiKey`     | Yes      | -                  | Stripe secret key (sk\_...)           |
 | `baseUrl`          | Yes      | -                  | Function returning your public URL    |
 | `webhookPath`      | No       | `/stripe-webhooks` | Path where webhook handler is mounted |
-| `schema`           | No       | `stripe`           | Database schema name                  |
 | `stripeApiVersion` | No       | `2020-08-27`       | Stripe API version                    |
 
 ---

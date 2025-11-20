@@ -28,13 +28,11 @@ async function main() {
   console.log(chalk.blue('=====================================\n'))
 
   const createdWebhookIds: string[] = []
-  const schema = 'stripe'
 
   try {
     // Run migrations first
     await runMigrations({
       databaseUrl: DATABASE_URL!,
-      schema,
     })
 
     // Create StripeSync instance
@@ -46,7 +44,6 @@ async function main() {
 
     const stripeSync = new StripeSync({
       databaseUrl: DATABASE_URL!,
-      schema,
       stripeSecretKey: STRIPE_API_KEY!,
       stripeApiVersion: '2020-08-27',
       poolConfig,
