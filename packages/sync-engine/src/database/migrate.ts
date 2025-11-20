@@ -45,6 +45,13 @@ async function renameMigrationsTableIfNeeded(
   }
 }
 
+async function cleanupSchema(client: Client, schema: string, logger?: Logger): Promise<void> {
+  logger?.warn(`Migrations table is empty - dropping and recreating schema "${schema}"`)
+  await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+  await client.query(`CREATE SCHEMA "${schema}"`)
+  logger?.info(`Schema "${schema}" has been reset`)
+}
+
 async function connectAndMigrate(
   client: Client,
   migrationsDirectory: string,
@@ -92,6 +99,18 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
     // Rename old migrations table if it exists (one-time upgrade to internal table naming convention)
     await renameMigrationsTableIfNeeded(client, schema, config.logger)
 
+    // Check if migrations table is empty and cleanup if needed
+    const tableExists = await doesTableExist(client, schema, '_migrations')
+    if (tableExists) {
+      const migrationCount = await client.query(
+        `SELECT COUNT(*) as count FROM "${schema}"."_migrations"`
+      )
+      const isEmpty = migrationCount.rows[0]?.count === '0'
+      if (isEmpty) {
+        await cleanupSchema(client, schema, config.logger)
+      }
+    }
+
     config.logger?.info('Running migrations')
 
     await connectAndMigrate(client, path.resolve(__dirname, './migrations'), {
@@ -100,6 +119,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
     })
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
+    throw err
   } finally {
     await client.end()
     config.logger?.info('Finished migrations')
