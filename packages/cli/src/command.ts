@@ -294,11 +294,9 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     console.log(chalk.gray(`$ stripe-sync start ${config.databaseUrl}`))
 
     // 1. Run migrations
-    const schema = process.env.SCHEMA || 'stripe'
     try {
       await runMigrations({
         databaseUrl: config.databaseUrl,
-        schema,
       })
     } catch (migrationError) {
       // Migration failed - drop schema and retry
@@ -319,7 +317,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
 
     stripeSync = new StripeSync({
       databaseUrl: config.databaseUrl,
-      schema,
       stripeSecretKey: config.stripeApiKey,
       stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
       autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
@@ -340,7 +337,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
         `${tunnel.url}${webhookPath}`,
         {
           enabled_events: ['*'], // Subscribe to all events
-          description: 'stripe-sync-cli development webhook',
         }
       )
       webhookId = webhook.id

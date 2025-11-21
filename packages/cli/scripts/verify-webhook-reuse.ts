@@ -28,6 +28,7 @@ async function main() {
   console.log(chalk.blue('=====================================\n'))
 
   const createdWebhookIds: string[] = []
+  let hasFailures = false
 
   try {
     // Run migrations first
@@ -57,7 +58,6 @@ async function main() {
       'https://test1.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
-        description: 'stripe-sync-cli test webhook 1',
       }
     )
     const webhookId1 = result1.webhook.id
@@ -80,7 +80,6 @@ async function main() {
       'https://test1.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
-        description: 'stripe-sync-cli test webhook 1',
       }
     )
     const webhookId2 = result2.webhook.id
@@ -91,6 +90,7 @@ async function main() {
       console.log(chalk.cyan(`   - Same Webhook ID: ${webhookId2}`))
       console.log(chalk.cyan(`   - Same UUID: ${webhookUuid2}`))
     } else {
+      hasFailures = true
       console.log(chalk.red('   ❌ FAIL: New webhook was created instead of reusing'))
       console.log(chalk.yellow(`   - Original ID: ${webhookId1}, UUID: ${webhookUuid1}`))
       console.log(chalk.yellow(`   - New ID: ${webhookId2}, UUID: ${webhookUuid2}`))
@@ -109,7 +109,6 @@ async function main() {
       'https://test2.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
-        description: 'stripe-sync-cli test webhook 2',
       }
     )
     const webhookId3 = result3.webhook.id
@@ -123,13 +122,137 @@ async function main() {
       console.log(chalk.cyan(`   - New UUID: ${webhookUuid3}`))
       console.log(chalk.cyan(`   - URL: ${result3.webhook.url}`))
     } else {
+      hasFailures = true
       console.log(chalk.red('   ❌ FAIL: Webhook was incorrectly reused'))
       console.log(chalk.yellow(`   - Should have created new webhook for different base URL`))
     }
     console.log()
 
+    // Test 4: Simulate orphaned webhook scenario (webhook in Stripe but not in DB)
+    console.log(chalk.blue('📝 Test 4: Orphaned webhook cleanup'))
+    console.log(chalk.gray('   Simulating scenario: webhook exists in Stripe but not in database'))
+    console.log(chalk.gray('   Expected: Should delete orphaned webhook and create new one'))
+
+    // First, create a webhook and remember its ID
+    const result4a = await stripeSync.findOrCreateManagedWebhook(
+      'https://test3.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+      }
+    )
+    const orphanedWebhookId = result4a.webhook.id
+    createdWebhookIds.push(orphanedWebhookId)
+
+    console.log(chalk.gray(`   - Created webhook: ${orphanedWebhookId}`))
+
+    // Now delete it from the database only (simulating orphaned state)
+    await stripeSync['postgresClient'].query(
+      `DELETE FROM "stripe"."_managed_webhooks" WHERE id = $1`,
+      [orphanedWebhookId]
+    )
+    console.log(chalk.gray(`   - Deleted from database (webhook still exists in Stripe)`))
+
+    // Now call findOrCreateManagedWebhook again - it should clean up the orphan and create new one
+    const result4b = await stripeSync.findOrCreateManagedWebhook(
+      'https://test3.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+      }
+    )
+    const newWebhookId = result4b.webhook.id
+
+    if (newWebhookId !== orphanedWebhookId) {
+      console.log(
+        chalk.green('   ✓ SUCCESS: Orphaned webhook was cleaned up and new webhook created!')
+      )
+      console.log(chalk.cyan(`   - Old (orphaned) Webhook ID: ${orphanedWebhookId}`))
+      console.log(chalk.cyan(`   - New Webhook ID: ${newWebhookId}`))
+      createdWebhookIds.push(newWebhookId)
+
+      // Verify the orphaned webhook was actually deleted from Stripe
+      try {
+        await stripeSync['stripe'].webhookEndpoints.retrieve(orphanedWebhookId)
+        hasFailures = true
+        console.log(chalk.red('   ❌ FAIL: Orphaned webhook still exists in Stripe'))
+      } catch (error) {
+        console.log(chalk.green('   ✓ Confirmed: Orphaned webhook was deleted from Stripe'))
+      }
+    } else {
+      hasFailures = true
+      console.log(
+        chalk.red('   ❌ FAIL: Same webhook was reused (orphaned webhook not cleaned up)')
+      )
+    }
+    console.log()
+
+    // Test 5: Backwards compatibility - orphaned webhook with old description format
+    console.log(chalk.blue('📝 Test 5: Backwards compatibility with old description formats'))
+    console.log(chalk.gray('   Testing cleanup of webhooks with old description formats'))
+    console.log(
+      chalk.gray('   Expected: Should delete orphaned webhooks with various description formats')
+    )
+
+    // Create webhooks with different old description formats directly via Stripe API
+    const oldDescriptions = [
+      'stripe-sync-cli development webhook',
+      'Stripe Sync Development',
+      'stripe  sync', // extra spaces
+    ]
+
+    const oldWebhookIds: string[] = []
+    for (let i = 0; i < oldDescriptions.length; i++) {
+      const desc = oldDescriptions[i]
+      const oldWebhook = await stripeSync['stripe'].webhookEndpoints.create({
+        url: `https://test4.example.com/stripe-webhooks/old-webhook-${i}`,
+        enabled_events: ['*'],
+        description: desc,
+      })
+      oldWebhookIds.push(oldWebhook.id)
+      createdWebhookIds.push(oldWebhook.id)
+      console.log(
+        chalk.gray(`   - Created old-format webhook: ${oldWebhook.id} (description: "${desc}")`)
+      )
+    }
+
+    // Now call findOrCreateManagedWebhook - it should clean up all old webhooks
+    const result5 = await stripeSync.findOrCreateManagedWebhook(
+      'https://test4.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+      }
+    )
+    const newWebhookId5 = result5.webhook.id
+    createdWebhookIds.push(newWebhookId5)
+
+    // Verify all old webhooks were deleted
+    let allDeleted = true
+    for (const oldId of oldWebhookIds) {
+      try {
+        await stripeSync['stripe'].webhookEndpoints.retrieve(oldId)
+        allDeleted = false
+        console.log(chalk.red(`   ❌ Old webhook ${oldId} still exists`))
+      } catch (error) {
+        // Expected - webhook was deleted
+      }
+    }
+
+    if (allDeleted) {
+      console.log(chalk.green('   ✓ SUCCESS: All old-format webhooks were cleaned up!'))
+      console.log(chalk.cyan(`   - New Webhook ID: ${newWebhookId5}`))
+      console.log(chalk.cyan(`   - New Webhook Description: "${result5.webhook.description}"`))
+    } else {
+      hasFailures = true
+      console.log(chalk.red('   ❌ FAIL: Some old-format webhooks were not cleaned up'))
+    }
+    console.log()
+
     console.log(chalk.blue('====================================='))
-    console.log(chalk.green('✅ Verification complete!'))
+
+    if (hasFailures) {
+      console.log(chalk.red('❌ Verification failed - some tests did not pass'))
+    } else {
+      console.log(chalk.green('✅ Verification complete - all tests passed!'))
+    }
     console.log()
 
     // Cleanup: Delete all created webhooks
@@ -145,7 +268,12 @@ async function main() {
     }
 
     console.log(chalk.green('✓ Cleanup complete\n'))
-    process.exit(0)
+
+    if (hasFailures) {
+      process.exit(1)
+    } else {
+      process.exit(0)
+    }
   } catch (error) {
     console.error(chalk.red('\n❌ Error during verification:'))
     console.error(error)

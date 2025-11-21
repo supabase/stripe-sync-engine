@@ -2235,10 +2235,15 @@ export class StripeSync {
     const uuid = randomUUID()
 
     // Create webhook with UUID in the URL path
+    // Always set description to 'stripe sync' and metadata to identify managed webhooks
     const webhookUrl = `${baseUrl}/${uuid}`
     const webhook = await this.stripe.webhookEndpoints.create({
       ...params,
       url: webhookUrl,
+      metadata: {
+        ...params.metadata,
+        managed_by: 'stripe-sync',
+      },
     })
 
     // Store webhook with UUID in database
@@ -2275,14 +2280,58 @@ export class StripeSync {
             }
           }
         } catch (error) {
-          // Webhook doesn't exist in Stripe anymore, continue searching
+          // Webhook doesn't exist in Stripe anymore, delete from database
           this.config.logger?.warn(
             { error, webhookId: existingWebhook.id },
-            'Failed to retrieve existing webhook'
+            'Webhook not found in Stripe, removing from database'
           )
+          await this.postgresClient.delete('_managed_webhooks', existingWebhook.id)
           continue
         }
       }
+    }
+
+    // Before creating a new webhook, check Stripe for orphaned managed webhooks
+    // (webhooks that exist in Stripe but not in our database)
+    // We identify managed webhooks by checking metadata (preferred) or description (backwards compatible)
+    try {
+      const stripeWebhooks = await this.stripe.webhookEndpoints.list({ limit: 100 })
+
+      for (const stripeWebhook of stripeWebhooks.data) {
+        // Check if this webhook was created by us
+        // Method 1 (preferred): Check metadata for managed_by field
+        const isManagedByMetadata =
+          stripeWebhook.metadata?.managed_by?.toLowerCase().replace(/[\s\-]+/g, '') === 'stripesync'
+
+        // Method 2 (backwards compatible): Check if description includes 'stripesync' (spaces/hyphens removed)
+        const normalizedDescription =
+          stripeWebhook.description?.toLowerCase().replace(/[\s\-]+/g, '') || ''
+        const isManagedByDescription = normalizedDescription.includes('stripesync')
+
+        if (isManagedByMetadata || isManagedByDescription) {
+          // Extract base URL from webhook URL
+          const stripeBaseUrl = stripeWebhook.url.replace(/\/[^/]+$/, '')
+
+          // Check if this webhook matches our base URL but isn't in our database
+          if (stripeBaseUrl === baseUrl) {
+            const existsInDb = existingWebhooks.some(
+              (dbWebhook) => dbWebhook.id === stripeWebhook.id
+            )
+
+            if (!existsInDb) {
+              // This is an orphaned managed webhook - delete it from Stripe
+              this.config.logger?.warn(
+                { webhookId: stripeWebhook.id, url: stripeWebhook.url },
+                'Found orphaned managed webhook in Stripe, deleting'
+              )
+              await this.stripe.webhookEndpoints.del(stripeWebhook.id)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Log error but continue - don't let cleanup failure prevent webhook creation
+      this.config.logger?.warn({ error }, 'Failed to check for orphaned webhooks')
     }
 
     // No valid matching webhook found, create a new one

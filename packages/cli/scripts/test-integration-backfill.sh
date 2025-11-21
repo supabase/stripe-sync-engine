@@ -5,63 +5,25 @@
 
 set -e  # Exit on error
 
+# Source common functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
 echo "🧪 Stripe Sync Engine Backfill Integration Test"
 echo "================================================="
 echo ""
 
 # Check for required tools
-echo "🔧 Checking prerequisites..."
-if ! command -v jq &> /dev/null; then
-    echo "❌ jq not found - required for parsing JSON"
-    echo "   Install: brew install jq"
-    exit 1
-fi
-echo "✓ jq found"
+check_required_tools jq
 
 # Load environment variables
-if [ -f .env ]; then
-    echo "✓ Loading environment variables from .env"
-    export $(cat .env | grep -v '^#' | xargs)
-else
-    echo "❌ .env file not found"
-    exit 1
-fi
+load_env_file
 
 # Check required environment variables
-if [ -z "$DATABASE_URL" ] || [ -z "$STRIPE_API_KEY" ]; then
-    echo "❌ Missing required environment variables"
-    echo "   Required: DATABASE_URL, STRIPE_API_KEY"
-    exit 1
-fi
-
-echo "✓ Environment variables loaded"
-echo ""
+check_env_vars DATABASE_URL STRIPE_API_KEY
 
 # Step 0: Start PostgreSQL if not running
-echo "🐘 Step 0: Checking PostgreSQL..."
-if ! docker ps | grep -q postgres; then
-    echo "   Starting PostgreSQL Docker container..."
-    docker run --name stripe-sync-test-db \
-        -e POSTGRES_PASSWORD=postgres \
-        -e POSTGRES_DB=app_db \
-        -p 5432:5432 \
-        -d postgres:16-alpine > /dev/null 2>&1
-
-    echo "   Waiting for PostgreSQL to be ready..."
-    sleep 3
-
-    # Wait for PostgreSQL to be ready
-    for i in {1..10}; do
-        if docker exec stripe-sync-test-db pg_isready -U postgres > /dev/null 2>&1; then
-            echo "✓ PostgreSQL is ready"
-            break
-        fi
-        sleep 1
-    done
-else
-    echo "✓ PostgreSQL is already running"
-fi
-echo ""
+start_postgres "stripe-sync-test-db" "app_db"
 
 # Array to store created resource IDs for cleanup
 declare -a CUSTOMER_IDS=()
@@ -99,9 +61,7 @@ cleanup() {
         done
     fi
 
-    echo "   Stopping PostgreSQL..."
-    docker stop stripe-sync-test-db > /dev/null 2>&1 || true
-    docker rm stripe-sync-test-db > /dev/null 2>&1 || true
+    stop_postgres "stripe-sync-test-db"
     echo "✓ Cleanup complete"
 }
 
