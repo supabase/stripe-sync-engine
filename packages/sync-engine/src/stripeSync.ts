@@ -2331,16 +2331,19 @@ export class StripeSync {
   }
 
   async getManagedWebhook(id: string): Promise<Stripe.WebhookEndpoint | null> {
+    const accountId = await this.getAccountId()
     const result = await this.postgresClient.query(
-      `SELECT * FROM "stripe"."_managed_webhooks" WHERE id = $1`,
-      [id]
+      `SELECT * FROM "stripe"."_managed_webhooks" WHERE id = $1 AND "account_id" = $2`,
+      [id, accountId]
     )
     return result.rows.length > 0 ? (result.rows[0] as Stripe.WebhookEndpoint) : null
   }
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint>> {
+    const accountId = await this.getAccountId()
     const result = await this.postgresClient.query(
-      `SELECT * FROM "stripe"."_managed_webhooks" ORDER BY created DESC`
+      `SELECT * FROM "stripe"."_managed_webhooks" WHERE "account_id" = $1 ORDER BY created DESC`,
+      [accountId]
     )
     return result.rows as Array<Stripe.WebhookEndpoint>
   }

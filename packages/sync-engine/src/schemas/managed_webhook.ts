@@ -14,5 +14,6 @@ export const managedWebhookSchema: EntitySchema = {
     'status',
     'api_version',
     'created',
+    'account_id',
   ],
 } as const
