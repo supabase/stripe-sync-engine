@@ -91,7 +91,7 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
         echo "✓ Found $WEBHOOK_COUNT webhook(s) in database"
         echo ""
         echo "Webhook details:"
-        docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, uuid, url, enabled, status FROM stripe._managed_webhooks;" 2>/dev/null
+        docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, url, enabled, status FROM stripe._managed_webhooks;" 2>/dev/null
 
         # Get webhook URL for testing
         WEBHOOK_URL=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT url FROM stripe._managed_webhooks LIMIT 1;" 2>/dev/null | tr -d ' ')
@@ -190,7 +190,7 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
         echo "   Cleanup may not have completed properly"
         echo ""
         echo "Remaining webhooks:"
-        docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, uuid FROM stripe._managed_webhooks;" 2>/dev/null
+        docker exec stripe-sync-test-db psql -U postgres -d app_db -c "SELECT id, url FROM stripe._managed_webhooks;" 2>/dev/null
     fi
 else
     echo "❌ CLI failed to start"
@@ -210,7 +210,7 @@ echo "- ✓ PostgreSQL started in Docker"
 echo "- ✓ CLI built successfully"
 echo "- ✓ CLI started and created webhook in Stripe"
 echo "- ✓ Migrations run automatically via StripeSync"
-echo "- ✓ Webhook persisted to database with UUID-based URL"
+echo "- ✓ Webhook persisted to database"
 echo "- ✓ Test webhook events triggered (customer, product, price)"
 echo "- ✓ Webhook processing verified ($CUSTOMER_COUNT customers, $PRODUCT_COUNT products, $PRICE_COUNT prices)"
 echo "- ✓ Graceful shutdown completed"

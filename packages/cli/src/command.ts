@@ -333,14 +333,11 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       // Create managed webhook endpoint
       const webhookPath = process.env.WEBHOOK_PATH || '/stripe-webhooks'
       console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
-      const { webhook, uuid } = await stripeSync.findOrCreateManagedWebhook(
-        `${tunnel.url}${webhookPath}`,
-        {
-          enabled_events: ['*'], // Subscribe to all events
-        }
-      )
+      const webhook = await stripeSync.findOrCreateManagedWebhook(`${tunnel.url}${webhookPath}`, {
+        enabled_events: ['*'], // Subscribe to all events
+      })
       webhookId = webhook.id
-      console.log(chalk.green(`✓ Webhook created: ${uuid}`))
+      console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
       console.log(chalk.cyan(`  URL: ${webhook.url}`))
       console.log(chalk.cyan(`  Events: All events (*)`))
 
@@ -348,7 +345,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       const app = express()
 
       // Mount webhook handler with raw body parser (BEFORE any other body parsing)
-      const webhookRoute = `${webhookPath}/:uuid`
+      const webhookRoute = webhookPath
       app.use(webhookRoute, express.raw({ type: 'application/json' }))
 
       app.post(webhookRoute, async (req, res) => {
@@ -358,7 +355,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
           return res.status(400).send({ error: 'Missing stripe-signature header' })
         }
 
-        const { uuid } = req.params
         const rawBody = req.body
 
         if (!rawBody || !Buffer.isBuffer(rawBody)) {
@@ -367,7 +363,7 @@ export async function syncCommand(options: CliOptions): Promise<void> {
         }
 
         try {
-          await stripeSync!.processWebhook(rawBody, sig, uuid)
+          await stripeSync!.processWebhook(rawBody, sig)
           return res.status(200).send({ received: true })
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error'

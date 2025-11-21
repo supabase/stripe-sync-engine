@@ -40,7 +40,7 @@ export type StripeSyncConfig = {
   /** Stripe account ID. If not provided, will be retrieved from Stripe API. Used as fallback option. */
   stripeAccountId?: string
 
-  /** Stripe webhook signing secret for validating webhook signatures. Required if not using managed webhooks (uuid-based routing). */
+  /** Stripe webhook signing secret for validating webhook signatures. Required if not using managed webhooks. */
   stripeWebhookSecret?: string
 
   /** Stripe API version for the webhooks, defaults to 2020-08-27 */

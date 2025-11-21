@@ -54,21 +54,19 @@ async function main() {
     console.log(chalk.blue('📝 Test 1: Create initial webhook'))
     console.log(chalk.gray('   Base URL: https://test1.example.com/stripe-webhooks'))
 
-    const result1 = await stripeSync.findOrCreateManagedWebhook(
+    const webhook1 = await stripeSync.findOrCreateManagedWebhook(
       'https://test1.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const webhookId1 = result1.webhook.id
-    const webhookUuid1 = result1.uuid
+    const webhookId1 = webhook1.id
 
     createdWebhookIds.push(webhookId1)
 
     console.log(chalk.green('   ✓ Webhook created'))
     console.log(chalk.cyan(`   - Webhook ID: ${webhookId1}`))
-    console.log(chalk.cyan(`   - UUID: ${webhookUuid1}`))
-    console.log(chalk.cyan(`   - URL: ${result1.webhook.url}`))
+    console.log(chalk.cyan(`   - URL: ${webhook1.url}`))
     console.log()
 
     // Test 2: Call findOrCreateManagedWebhook again with same base URL (should reuse)
@@ -76,24 +74,22 @@ async function main() {
     console.log(chalk.gray('   Base URL: https://test1.example.com/stripe-webhooks'))
     console.log(chalk.gray('   Expected: Should reuse existing webhook'))
 
-    const result2 = await stripeSync.findOrCreateManagedWebhook(
+    const webhook2 = await stripeSync.findOrCreateManagedWebhook(
       'https://test1.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const webhookId2 = result2.webhook.id
-    const webhookUuid2 = result2.uuid
+    const webhookId2 = webhook2.id
 
-    if (webhookId2 === webhookId1 && webhookUuid2 === webhookUuid1) {
+    if (webhookId2 === webhookId1) {
       console.log(chalk.green('   ✓ SUCCESS: Webhook was reused!'))
       console.log(chalk.cyan(`   - Same Webhook ID: ${webhookId2}`))
-      console.log(chalk.cyan(`   - Same UUID: ${webhookUuid2}`))
     } else {
       hasFailures = true
       console.log(chalk.red('   ❌ FAIL: New webhook was created instead of reusing'))
-      console.log(chalk.yellow(`   - Original ID: ${webhookId1}, UUID: ${webhookUuid1}`))
-      console.log(chalk.yellow(`   - New ID: ${webhookId2}, UUID: ${webhookUuid2}`))
+      console.log(chalk.yellow(`   - Original ID: ${webhookId1}`))
+      console.log(chalk.yellow(`   - New ID: ${webhookId2}`))
       if (webhookId2 !== webhookId1) {
         createdWebhookIds.push(webhookId2)
       }
@@ -105,22 +101,20 @@ async function main() {
     console.log(chalk.gray('   Base URL: https://test2.example.com/stripe-webhooks'))
     console.log(chalk.gray('   Expected: Should create new webhook'))
 
-    const result3 = await stripeSync.findOrCreateManagedWebhook(
+    const webhook3 = await stripeSync.findOrCreateManagedWebhook(
       'https://test2.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const webhookId3 = result3.webhook.id
-    const webhookUuid3 = result3.uuid
+    const webhookId3 = webhook3.id
 
     createdWebhookIds.push(webhookId3)
 
-    if (webhookId3 !== webhookId1 && webhookUuid3 !== webhookUuid1) {
+    if (webhookId3 !== webhookId1) {
       console.log(chalk.green('   ✓ SUCCESS: New webhook was created!'))
       console.log(chalk.cyan(`   - New Webhook ID: ${webhookId3}`))
-      console.log(chalk.cyan(`   - New UUID: ${webhookUuid3}`))
-      console.log(chalk.cyan(`   - URL: ${result3.webhook.url}`))
+      console.log(chalk.cyan(`   - URL: ${webhook3.url}`))
     } else {
       hasFailures = true
       console.log(chalk.red('   ❌ FAIL: Webhook was incorrectly reused'))
@@ -134,13 +128,13 @@ async function main() {
     console.log(chalk.gray('   Expected: Should delete orphaned webhook and create new one'))
 
     // First, create a webhook and remember its ID
-    const result4a = await stripeSync.findOrCreateManagedWebhook(
+    const webhook4a = await stripeSync.findOrCreateManagedWebhook(
       'https://test3.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const orphanedWebhookId = result4a.webhook.id
+    const orphanedWebhookId = webhook4a.id
     createdWebhookIds.push(orphanedWebhookId)
 
     console.log(chalk.gray(`   - Created webhook: ${orphanedWebhookId}`))
@@ -153,13 +147,13 @@ async function main() {
     console.log(chalk.gray(`   - Deleted from database (webhook still exists in Stripe)`))
 
     // Now call findOrCreateManagedWebhook again - it should clean up the orphan and create new one
-    const result4b = await stripeSync.findOrCreateManagedWebhook(
+    const webhook4b = await stripeSync.findOrCreateManagedWebhook(
       'https://test3.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const newWebhookId = result4b.webhook.id
+    const newWebhookId = webhook4b.id
 
     if (newWebhookId !== orphanedWebhookId) {
       console.log(
@@ -215,13 +209,13 @@ async function main() {
     }
 
     // Now call findOrCreateManagedWebhook - it should clean up all old webhooks
-    const result5 = await stripeSync.findOrCreateManagedWebhook(
+    const webhook5 = await stripeSync.findOrCreateManagedWebhook(
       'https://test4.example.com/stripe-webhooks',
       {
         enabled_events: ['*'],
       }
     )
-    const newWebhookId5 = result5.webhook.id
+    const newWebhookId5 = webhook5.id
     createdWebhookIds.push(newWebhookId5)
 
     // Verify all old webhooks were deleted
@@ -239,10 +233,77 @@ async function main() {
     if (allDeleted) {
       console.log(chalk.green('   ✓ SUCCESS: All old-format webhooks were cleaned up!'))
       console.log(chalk.cyan(`   - New Webhook ID: ${newWebhookId5}`))
-      console.log(chalk.cyan(`   - New Webhook Description: "${result5.webhook.description}"`))
+      console.log(chalk.cyan(`   - New Webhook Description: "${webhook5.description}"`))
     } else {
       hasFailures = true
       console.log(chalk.red('   ❌ FAIL: Some old-format webhooks were not cleaned up'))
+    }
+    console.log()
+
+    // Test 6: URL mismatch cleanup - Webhook with different URL should be deleted
+    console.log(chalk.blue('📝 Test 6: URL Mismatch Cleanup (UUID Migration)'))
+    console.log(chalk.gray('   Testing automatic cleanup of webhooks with mismatched URLs'))
+    console.log(chalk.gray('   Expected: Should delete mismatched webhook and create new one'))
+
+    // Manually create a webhook with UUID in URL (simulating legacy webhook)
+    const legacyUuid = 'legacy-uuid-12345'
+    const legacyWebhook = await stripeSync['stripe'].webhookEndpoints.create({
+      url: `https://test5.example.com/stripe-webhooks/${legacyUuid}`,
+      enabled_events: ['*'],
+      metadata: {
+        managed_by: 'stripe-sync',
+      },
+    })
+    const legacyWebhookId = legacyWebhook.id
+    createdWebhookIds.push(legacyWebhookId)
+
+    console.log(chalk.gray(`   - Created legacy webhook: ${legacyWebhookId}`))
+    console.log(chalk.gray(`   - Legacy URL with UUID: ${legacyWebhook.url}`))
+
+    // Insert into database using upsertManagedWebhooks to simulate legacy state
+    const accountId = await stripeSync['getAccountId']()
+    await stripeSync['upsertManagedWebhooks']([legacyWebhook], accountId)
+    console.log(chalk.gray(`   - Inserted into database`))
+
+    // Now call findOrCreateManagedWebhook with base URL - should detect URL mismatch, delete, and recreate
+    const newWebhook6 = await stripeSync.findOrCreateManagedWebhook(
+      'https://test5.example.com/stripe-webhooks',
+      {
+        enabled_events: ['*'],
+      }
+    )
+    const newWebhookId6 = newWebhook6.id
+
+    if (newWebhookId6 !== legacyWebhookId) {
+      console.log(chalk.green('   ✓ SUCCESS: Legacy webhook with UUID was cleaned up!'))
+      console.log(chalk.cyan(`   - Old Webhook ID: ${legacyWebhookId}`))
+      console.log(chalk.cyan(`   - New Webhook ID: ${newWebhookId6}`))
+      console.log(chalk.cyan(`   - Old URL: ${legacyWebhook.url}`))
+      console.log(chalk.cyan(`   - New URL: ${newWebhook6.url}`))
+      createdWebhookIds.push(newWebhookId6)
+
+      // Verify old webhook was deleted from Stripe
+      try {
+        await stripeSync['stripe'].webhookEndpoints.retrieve(legacyWebhookId)
+        hasFailures = true
+        console.log(chalk.red('   ❌ FAIL: Legacy webhook still exists in Stripe'))
+      } catch (error) {
+        console.log(chalk.green('   ✓ Confirmed: Legacy webhook was deleted from Stripe'))
+      }
+
+      // Verify new webhook URL does not contain UUID
+      if (
+        !newWebhook6.url.includes(legacyUuid) &&
+        newWebhook6.url === 'https://test5.example.com/stripe-webhooks'
+      ) {
+        console.log(chalk.green('   ✓ Confirmed: New webhook URL has no UUID'))
+      } else {
+        hasFailures = true
+        console.log(chalk.red('   ❌ FAIL: New webhook URL still contains UUID or is incorrect'))
+      }
+    } else {
+      hasFailures = true
+      console.log(chalk.red('   ❌ FAIL: Legacy webhook was reused instead of being cleaned up'))
     }
     console.log()
 

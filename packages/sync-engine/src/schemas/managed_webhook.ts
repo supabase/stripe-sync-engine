@@ -4,7 +4,6 @@ export const managedWebhookSchema: EntitySchema = {
   properties: [
     'id',
     'object',
-    'uuid',
     'url',
     'enabled_events',
     'description',

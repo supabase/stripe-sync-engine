@@ -62,13 +62,10 @@ await sync.processWebhook(payload, signature)
 
 ### Processing Webhooks
 
-The `processWebhook` method supports both standard and managed webhook approaches:
+The `processWebhook` method validates and processes Stripe webhook events:
 
 ```typescript
-// For managed webhooks (with UUID-based routing):
-await sync.processWebhook(payload, signature, uuid)
-
-// For standard webhooks (requires stripeWebhookSecret in config):
+// Process a webhook event with signature validation
 await sync.processWebhook(payload, signature)
 
 // Or process an event directly (no signature validation):
@@ -77,21 +74,17 @@ await sync.processEvent(event)
 
 ### Managed Webhook Endpoints
 
-The library provides methods to create and manage webhook endpoints with UUID-based routing for security:
+The library provides methods to create and manage webhook endpoints:
 
 ```typescript
 // Create or reuse an existing webhook endpoint for a base URL
-const { webhook, uuid } = await sync.findOrCreateManagedWebhook(
-  'https://example.com/stripe-webhooks',
-  {
-    enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
-    description: 'My app webhook',
-  }
-)
-// webhook.url will be: https://example.com/stripe-webhooks/{uuid}
+const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks', {
+  enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
+  description: 'My app webhook',
+})
 
 // Create a new webhook endpoint (always creates new)
-const { webhook, uuid } = await sync.createManagedWebhook('https://example.com/stripe-webhooks', {
+const webhook = await sync.createManagedWebhook('https://example.com/stripe-webhooks', {
   enabled_events: ['customer.created', 'customer.updated'],
 })
 
@@ -102,11 +95,7 @@ const webhook = await sync.getManagedWebhook('we_xxx')
 await sync.deleteManagedWebhook('we_xxx')
 ```
 
-The UUID-based routing allows multiple webhook endpoints for the same base URL, making it ideal for:
-
-- Development environments with ngrok/tunnels that change URLs
-- Multi-tenant applications
-- Testing and staging environments
+**Note:** The library automatically manages webhook endpoints for you. When you call `findOrCreateManagedWebhook()` with a base URL, it will reuse an existing webhook if one is found in the database, or create a new one if needed. Old or orphaned webhooks from this package are automatically cleaned up.
 
 ## Configuration
 

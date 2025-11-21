@@ -67,7 +67,7 @@ await stripeAutoSync.stop() // Cleanup
 ![How it works](./docs/sync-engine-how.png)
 
 - Automatically runs database migrations to create the `stripe` schema with tables matching Stripe objects.
-- Creates managed webhooks in Stripe with UUID-based routing for security.
+- Creates managed webhooks in Stripe for automatic event synchronization.
 - Exposes a webhook endpoint that listens to Stripe events.
 - Automatically applies body parsing middleware (protecting webhook routes from JSON parsing).
 - Inserts, updates, or deletes records in the database whenever there is a change to Stripe.
