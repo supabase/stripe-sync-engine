@@ -2222,112 +2222,155 @@ export class StripeSync {
 
   // Managed Webhook CRUD methods
   async createManagedWebhook(
-    baseUrl: string,
+    url: string,
     params: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
   ): Promise<Stripe.WebhookEndpoint> {
-    // Create webhook at the base URL (no UUID)
+    // Create webhook at the exact URL (no UUID appended)
     // Always set metadata to identify managed webhooks
     const webhook = await this.stripe.webhookEndpoints.create({
       ...params,
-      url: baseUrl,
+      url,
       metadata: {
         ...params.metadata,
         managed_by: 'stripe-sync',
       },
     })
 
-    // Store webhook in database (without uuid)
+    // Store webhook in database
     const accountId = await this.getAccountId()
-    await this.upsertManagedWebhooks([webhook], accountId)
+    try {
+      await this.upsertManagedWebhooks([webhook], accountId)
+    } catch (error) {
+      // If unique constraint violation on (URL, account_id), another instance created it concurrently
+      // Delete the webhook we just created in Stripe and return the existing one
+      const pgError = error as { code?: string; constraint?: string }
+      if (
+        pgError.code === '23505' &&
+        pgError.constraint === 'managed_webhooks_url_account_unique'
+      ) {
+        this.config.logger?.warn(
+          { webhookId: webhook.id, url, accountId, error },
+          'Unique constraint violation on webhook URL+account - another instance created it. Cleaning up duplicate.'
+        )
+
+        // Delete the duplicate webhook from Stripe
+        try {
+          await this.stripe.webhookEndpoints.del(webhook.id)
+        } catch (deleteError) {
+          this.config.logger?.warn(
+            { webhookId: webhook.id, deleteError },
+            'Failed to delete duplicate webhook from Stripe'
+          )
+        }
+
+        // Return the existing webhook from database
+        const existingWebhook = await this.getManagedWebhookByUrl(url)
+        if (existingWebhook) {
+          return existingWebhook
+        }
+      }
+      // Re-throw if not a unique constraint error or if we couldn't find existing webhook
+      throw error
+    }
 
     return webhook
   }
 
   async findOrCreateManagedWebhook(
-    baseUrl: string,
+    url: string,
     params: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
   ): Promise<Stripe.WebhookEndpoint> {
-    // Query database for existing webhooks
-    const existingWebhooks = await this.listManagedWebhooks()
+    // Use advisory lock to prevent race conditions when multiple instances
+    // try to create webhooks for the same URL simultaneously
+    const accountId = await this.getAccountId()
+    const lockKey = `webhook:${accountId}:${url}`
 
-    // Try to find a webhook that matches the URL exactly
-    for (const existingWebhook of existingWebhooks) {
-      // If URL doesn't match exactly, delete it (handles UUID webhooks, old tunnels, etc.)
-      if (existingWebhook.url !== baseUrl) {
-        this.config.logger?.info(
-          { webhookId: existingWebhook.id, oldUrl: existingWebhook.url, newUrl: baseUrl },
-          'Webhook URL mismatch, deleting and will recreate'
-        )
+    return this.postgresClient.withAdvisoryLock(lockKey, async () => {
+      // Query database for existing webhooks
+      const existingWebhooks = await this.listManagedWebhooks()
+
+      // Try to find a webhook that matches the URL exactly
+      for (const existingWebhook of existingWebhooks) {
+        // If URL doesn't match exactly, delete it (handles old webhooks with different URLs)
+        if (existingWebhook.url !== url) {
+          this.config.logger?.info(
+            { webhookId: existingWebhook.id, oldUrl: existingWebhook.url, newUrl: url },
+            'Webhook URL mismatch, deleting and will recreate'
+          )
+          try {
+            await this.stripe.webhookEndpoints.del(existingWebhook.id)
+          } catch (error) {
+            this.config.logger?.warn(
+              { error, webhookId: existingWebhook.id },
+              'Failed to delete webhook from Stripe'
+            )
+          }
+          await this.postgresClient.delete('_managed_webhooks', existingWebhook.id)
+          continue
+        }
+
+        // URL matches exactly, check if webhook is still valid in Stripe
         try {
-          await this.stripe.webhookEndpoints.del(existingWebhook.id)
+          const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(existingWebhook.id)
+
+          if (stripeWebhook.status === 'enabled') {
+            // Webhook is valid, reuse it
+            return stripeWebhook
+          }
         } catch (error) {
+          // Webhook doesn't exist in Stripe anymore, delete from database
           this.config.logger?.warn(
             { error, webhookId: existingWebhook.id },
-            'Failed to delete webhook from Stripe'
+            'Webhook not found in Stripe, removing from database'
           )
+          await this.postgresClient.delete('_managed_webhooks', existingWebhook.id)
+          continue
         }
-        await this.postgresClient.delete('_managed_webhooks', existingWebhook.id)
-        continue
       }
 
-      // URL matches exactly, check if webhook is still valid in Stripe
+      // Before creating a new webhook, check Stripe for orphaned managed webhooks
+      // (webhooks that exist in Stripe but not in our database)
+      // We identify managed webhooks by checking metadata (preferred) or description (backwards compatible)
       try {
-        const stripeWebhook = await this.stripe.webhookEndpoints.retrieve(existingWebhook.id)
+        const stripeWebhooks = await this.stripe.webhookEndpoints.list({ limit: 100 })
 
-        if (stripeWebhook.status === 'enabled') {
-          // Webhook is valid, reuse it
-          return stripeWebhook
-        }
-      } catch (error) {
-        // Webhook doesn't exist in Stripe anymore, delete from database
-        this.config.logger?.warn(
-          { error, webhookId: existingWebhook.id },
-          'Webhook not found in Stripe, removing from database'
-        )
-        await this.postgresClient.delete('_managed_webhooks', existingWebhook.id)
-        continue
-      }
-    }
+        for (const stripeWebhook of stripeWebhooks.data) {
+          // Check if this webhook was created by us
+          // Method 1 (preferred): Check metadata for managed_by field
+          const isManagedByMetadata =
+            stripeWebhook.metadata?.managed_by?.toLowerCase().replace(/[\s\-]+/g, '') ===
+            'stripesync'
 
-    // Before creating a new webhook, check Stripe for orphaned managed webhooks
-    // (webhooks that exist in Stripe but not in our database)
-    // We identify managed webhooks by checking metadata (preferred) or description (backwards compatible)
-    try {
-      const stripeWebhooks = await this.stripe.webhookEndpoints.list({ limit: 100 })
+          // Method 2 (backwards compatible): Check if description includes 'stripesync' (spaces/hyphens removed)
+          const normalizedDescription =
+            stripeWebhook.description?.toLowerCase().replace(/[\s\-]+/g, '') || ''
+          const isManagedByDescription = normalizedDescription.includes('stripesync')
 
-      for (const stripeWebhook of stripeWebhooks.data) {
-        // Check if this webhook was created by us
-        // Method 1 (preferred): Check metadata for managed_by field
-        const isManagedByMetadata =
-          stripeWebhook.metadata?.managed_by?.toLowerCase().replace(/[\s\-]+/g, '') === 'stripesync'
-
-        // Method 2 (backwards compatible): Check if description includes 'stripesync' (spaces/hyphens removed)
-        const normalizedDescription =
-          stripeWebhook.description?.toLowerCase().replace(/[\s\-]+/g, '') || ''
-        const isManagedByDescription = normalizedDescription.includes('stripesync')
-
-        if (isManagedByMetadata || isManagedByDescription) {
-          // Check if this webhook is in our database
-          const existsInDb = existingWebhooks.some((dbWebhook) => dbWebhook.id === stripeWebhook.id)
-
-          if (!existsInDb) {
-            // This is an orphaned managed webhook - delete it from Stripe
-            // This includes old UUID-based webhooks, old tunnel URLs, and any other orphaned managed webhooks
-            this.config.logger?.warn(
-              { webhookId: stripeWebhook.id, url: stripeWebhook.url },
-              'Found orphaned managed webhook in Stripe, deleting'
+          if (isManagedByMetadata || isManagedByDescription) {
+            // Check if this webhook is in our database
+            const existsInDb = existingWebhooks.some(
+              (dbWebhook) => dbWebhook.id === stripeWebhook.id
             )
-            await this.stripe.webhookEndpoints.del(stripeWebhook.id)
+
+            if (!existsInDb) {
+              // This is an orphaned managed webhook - delete it from Stripe
+              // This includes old webhooks with different URLs and any other orphaned managed webhooks
+              this.config.logger?.warn(
+                { webhookId: stripeWebhook.id, url: stripeWebhook.url },
+                'Found orphaned managed webhook in Stripe, deleting'
+              )
+              await this.stripe.webhookEndpoints.del(stripeWebhook.id)
+            }
           }
         }
+      } catch (error) {
+        // Log error but continue - don't let cleanup failure prevent webhook creation
+        this.config.logger?.warn({ error }, 'Failed to check for orphaned webhooks')
       }
-    } catch (error) {
-      // Log error but continue - don't let cleanup failure prevent webhook creation
-      this.config.logger?.warn({ error }, 'Failed to check for orphaned webhooks')
-    }
 
-    // No valid matching webhook found, create a new one
-    return this.createManagedWebhook(baseUrl, params)
+      // No valid matching webhook found, create a new one
+      return this.createManagedWebhook(url, params)
+    })
   }
 
   async getManagedWebhook(id: string): Promise<Stripe.WebhookEndpoint | null> {
@@ -2335,6 +2378,21 @@ export class StripeSync {
     const result = await this.postgresClient.query(
       `SELECT * FROM "stripe"."_managed_webhooks" WHERE id = $1 AND "account_id" = $2`,
       [id, accountId]
+    )
+    return result.rows.length > 0 ? (result.rows[0] as Stripe.WebhookEndpoint) : null
+  }
+
+  /**
+   * Get a managed webhook by URL and account ID.
+   * Used for race condition recovery: when createManagedWebhook hits a unique constraint
+   * violation (another instance created the webhook), we need to fetch the existing webhook
+   * by URL since we only know the URL, not the ID of the webhook that won the race.
+   */
+  async getManagedWebhookByUrl(url: string): Promise<Stripe.WebhookEndpoint | null> {
+    const accountId = await this.getAccountId()
+    const result = await this.postgresClient.query(
+      `SELECT * FROM "stripe"."_managed_webhooks" WHERE url = $1 AND "account_id" = $2`,
+      [url, accountId]
     )
     return result.rows.length > 0 ? (result.rows[0] as Stripe.WebhookEndpoint) : null
   }

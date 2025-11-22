@@ -424,6 +424,78 @@ async function main() {
     console.log(chalk.gray(`   - Cleaned up fake webhook and fake account`))
     console.log()
 
+    // Test 8: Concurrent Execution (Race Condition Test)
+    console.log(chalk.blue('📝 Test 8: Concurrent Execution (Race Condition)'))
+    console.log(chalk.gray('   Testing that concurrent calls do not create duplicate webhooks'))
+    console.log(chalk.gray('   Expected: All concurrent calls return the same webhook'))
+
+    const concurrentUrl = 'https://test8-concurrent.example.com/stripe-webhooks'
+
+    // Create 5 promises that will execute truly in parallel
+    const concurrentPromises = Array(5)
+      .fill(null)
+      .map(() =>
+        stripeSync.findOrCreateManagedWebhook(concurrentUrl, {
+          enabled_events: ['*'],
+        })
+      )
+
+    // Wait for all to complete
+    const webhookResults = await Promise.all(concurrentPromises)
+
+    // All should have the same ID
+    const uniqueIds = new Set(webhookResults.map((w) => w.id))
+
+    if (uniqueIds.size === 1) {
+      console.log(chalk.green('   ✓ SUCCESS: All 5 concurrent calls returned same webhook!'))
+      console.log(chalk.cyan(`   - Webhook ID: ${webhookResults[0].id}`))
+
+      // Verify only one webhook exists in database
+      const allWebhooks = await stripeSync['listManagedWebhooks']()
+      const matchingWebhooks = allWebhooks.filter((w: any) => w.url === concurrentUrl)
+
+      if (matchingWebhooks.length === 1) {
+        console.log(chalk.green('   ✓ Confirmed: Only 1 webhook in database'))
+      } else {
+        hasFailures = true
+        console.log(
+          chalk.red(
+            `   ❌ FAIL: Found ${matchingWebhooks.length} webhooks in database (expected 1)`
+          )
+        )
+      }
+
+      // Verify only one webhook exists in Stripe
+      const stripeWebhooks = await stripeSync['stripe'].webhookEndpoints.list({ limit: 100 })
+      const matchingStripeWebhooks = stripeWebhooks.data.filter(
+        (w: any) => w.url === concurrentUrl && w.metadata?.managed_by === 'stripe-sync'
+      )
+
+      if (matchingStripeWebhooks.length === 1) {
+        console.log(chalk.green('   ✓ Confirmed: Only 1 webhook in Stripe'))
+      } else {
+        hasFailures = true
+        console.log(
+          chalk.red(
+            `   ❌ FAIL: Found ${matchingStripeWebhooks.length} webhooks in Stripe (expected 1)`
+          )
+        )
+      }
+
+      createdWebhookIds.push(webhookResults[0].id)
+    } else {
+      hasFailures = true
+      console.log(
+        chalk.red(
+          `   ❌ FAIL: Concurrent calls created ${uniqueIds.size} different webhooks (expected 1)`
+        )
+      )
+      console.log(chalk.yellow(`   - Unique webhook IDs: ${Array.from(uniqueIds).join(', ')}`))
+      // Add all unique IDs for cleanup
+      uniqueIds.forEach((id) => createdWebhookIds.push(id))
+    }
+    console.log()
+
     console.log(chalk.blue('====================================='))
 
     if (hasFailures) {

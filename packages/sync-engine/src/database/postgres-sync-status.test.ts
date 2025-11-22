@@ -251,4 +251,57 @@ describe('Postgres Sync Status Methods', () => {
       expect(retrievedCursor2).toBe(cursor2)
     })
   })
+
+  describe('Advisory Lock Methods', () => {
+    it('should acquire and release advisory locks correctly', async () => {
+      const testKey = 'test-lock-key'
+
+      // Acquire lock
+      await postgresClient.acquireAdvisoryLock(testKey)
+
+      // Release lock
+      await postgresClient.releaseAdvisoryLock(testKey)
+
+      // Should be able to acquire again after release
+      await postgresClient.acquireAdvisoryLock(testKey)
+      await postgresClient.releaseAdvisoryLock(testKey)
+    })
+
+    it('should execute function with advisory lock using withAdvisoryLock', async () => {
+      const testKey = 'test-with-lock-key'
+      let executed = false
+
+      const result = await postgresClient.withAdvisoryLock(testKey, async () => {
+        executed = true
+        return 'success'
+      })
+
+      expect(executed).toBe(true)
+      expect(result).toBe('success')
+    })
+
+    it('should release lock even if function throws error', async () => {
+      const testKey = 'test-error-lock-key'
+
+      // Try to execute function that throws
+      await expect(
+        postgresClient.withAdvisoryLock(testKey, async () => {
+          throw new Error('Test error')
+        })
+      ).rejects.toThrow('Test error')
+
+      // Lock should be released, so we can acquire it again
+      await postgresClient.acquireAdvisoryLock(testKey)
+      await postgresClient.releaseAdvisoryLock(testKey)
+    })
+
+    it('should hash different keys to different lock IDs', () => {
+      const hash1 = postgresClient['hashToInt32']('key1')
+      const hash2 = postgresClient['hashToInt32']('key2')
+      const hash3 = postgresClient['hashToInt32']('key1') // Same as hash1
+
+      expect(hash1).not.toBe(hash2)
+      expect(hash1).toBe(hash3)
+    })
+  })
 })

@@ -77,7 +77,7 @@ await sync.processEvent(event)
 The library provides methods to create and manage webhook endpoints:
 
 ```typescript
-// Create or reuse an existing webhook endpoint for a base URL
+// Create or reuse an existing webhook endpoint for a URL
 const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks', {
   enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
   description: 'My app webhook',
@@ -95,7 +95,9 @@ const webhook = await sync.getManagedWebhook('we_xxx')
 await sync.deleteManagedWebhook('we_xxx')
 ```
 
-**Note:** The library automatically manages webhook endpoints for you. When you call `findOrCreateManagedWebhook()` with a base URL, it will reuse an existing webhook if one is found in the database, or create a new one if needed. Old or orphaned webhooks from this package are automatically cleaned up.
+**Note:** The library automatically manages webhook endpoints for you. When you call `findOrCreateManagedWebhook()` with a URL, it will reuse an existing webhook if one is found in the database, or create a new one if needed. Old or orphaned webhooks from this package are automatically cleaned up.
+
+**Race Condition Protection:** The library uses PostgreSQL advisory locks to prevent race conditions when multiple instances call `findOrCreateManagedWebhook()` concurrently for the same URL. A unique constraint on `(url, account_id)` provides an additional safety net at the database level.
 
 ## Configuration
 
