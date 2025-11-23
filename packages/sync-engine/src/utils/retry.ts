@@ -16,10 +16,41 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 }
 
 /**
- * Determines if an error is a 429 rate limit error
+ * Determines if an error is retryable (rate limits, server errors, or connection errors)
+ *
+ * Retryable errors include:
+ * - StripeRateLimitError (429): Rate limiting - temporary throttling
+ * - StripeAPIError (5xx): Server errors on Stripe's side (500, 502, 503, 504, 424)
+ * - StripeConnectionError: Network connectivity issues
+ *
+ * Non-retryable errors (will fail immediately):
+ * - StripeInvalidRequestError (400, 404): Invalid parameters
+ * - StripeAuthenticationError (401): Invalid API key
+ * - StripePermissionError (403): Insufficient permissions
+ * - StripeCardError (402): Card declined
+ * - StripeIdempotencyError (409): Idempotency key mismatch
  */
-function isRateLimitError(error: unknown): boolean {
-  return error instanceof Stripe.errors.StripeRateLimitError
+function isRetryableError(error: unknown): boolean {
+  // Rate limiting (429)
+  if (error instanceof Stripe.errors.StripeRateLimitError) {
+    return true
+  }
+
+  // Server errors (5xx)
+  if (error instanceof Stripe.errors.StripeAPIError) {
+    const statusCode = error.statusCode
+    // Retry on 500, 502, 503, 504, and 424 (external dependency failed)
+    if (statusCode && [500, 502, 503, 504, 424].includes(statusCode)) {
+      return true
+    }
+  }
+
+  // Connection errors (network issues)
+  if (error instanceof Stripe.errors.StripeConnectionError) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -91,13 +122,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Executes a function with exponential backoff retry on 429 rate limit errors
+ * Gets a human-readable description of the error type for logging
+ */
+function getErrorType(error: unknown): string {
+  if (error instanceof Stripe.errors.StripeRateLimitError) {
+    return 'rate_limit'
+  }
+  if (error instanceof Stripe.errors.StripeAPIError) {
+    return `api_error_${error.statusCode}`
+  }
+  if (error instanceof Stripe.errors.StripeConnectionError) {
+    return 'connection_error'
+  }
+  return 'unknown'
+}
+
+/**
+ * Executes a function with exponential backoff retry on transient Stripe errors
+ *
+ * Retries on:
+ * - Rate limit errors (429) - respects Retry-After header
+ * - Server errors (500, 502, 503, 504, 424)
+ * - Connection errors (network failures)
+ *
+ * Fails immediately on:
+ * - Client errors (400, 401, 403, 404) - invalid requests
+ * - Authentication/permission errors
+ * - Card errors
  *
  * @param fn - The async function to execute
  * @param config - Retry configuration (optional)
  * @param logger - Logger for tracking retry attempts (optional)
  * @returns Promise that resolves to the function result
- * @throws The last error if all retries are exhausted, or immediately for non-429 errors
+ * @throws The last error if all retries are exhausted, or immediately for non-retryable errors
  *
  * @example
  * const customer = await withRetry(
@@ -120,8 +177,8 @@ export async function withRetry<T>(
     } catch (error) {
       lastError = error
 
-      // Only retry rate limit errors (429)
-      if (!isRateLimitError(error)) {
+      // Only retry transient errors (rate limits, server errors, connection errors)
+      if (!isRetryableError(error)) {
         throw error
       }
 
@@ -130,15 +187,16 @@ export async function withRetry<T>(
         logger?.error(
           {
             error: error instanceof Error ? error.message : String(error),
+            errorType: getErrorType(error),
             attempt: attempt + 1,
             maxRetries: retryConfig.maxRetries,
           },
-          'Max retries exhausted for rate limit error'
+          'Max retries exhausted for Stripe error'
         )
         throw error
       }
 
-      // Extract Retry-After header if present
+      // Extract Retry-After header if present (only for rate limit errors)
       const retryAfterMs = getRetryAfterMs(error)
 
       // Calculate delay and wait before next attempt
@@ -147,13 +205,14 @@ export async function withRetry<T>(
       logger?.warn(
         {
           error: error instanceof Error ? error.message : String(error),
+          errorType: getErrorType(error),
           attempt: attempt + 1,
           maxRetries: retryConfig.maxRetries,
           delayMs: Math.round(delay),
           retryAfterMs: retryAfterMs ?? undefined,
           nextAttempt: attempt + 2,
         },
-        'Rate limit hit, retrying Stripe API call after delay'
+        'Transient Stripe error, retrying after delay'
       )
 
       await sleep(delay)

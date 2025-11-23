@@ -67,7 +67,7 @@ describe('withRetry', () => {
     expect(mockFn).toHaveBeenCalledTimes(3) // Initial + 2 retries
   })
 
-  it('should NOT retry on non-429 errors', async () => {
+  it('should NOT retry on non-retryable errors (4xx client errors)', async () => {
     const badRequestError = new Stripe.errors.StripeInvalidRequestError({
       message: 'Invalid request',
     })
@@ -75,6 +75,53 @@ describe('withRetry', () => {
 
     await expect(withRetry(mockFn)).rejects.toThrow(badRequestError)
     expect(mockFn).toHaveBeenCalledTimes(1) // No retries
+  })
+
+  it('should retry on server errors (5xx)', async () => {
+    const serverError = new Stripe.errors.StripeAPIError({
+      message: 'Internal server error',
+    })
+    // @ts-expect-error - setting statusCode for test
+    serverError.statusCode = 500
+
+    const mockFn = vi
+      .fn()
+      .mockRejectedValueOnce(serverError)
+      .mockRejectedValueOnce(serverError)
+      .mockResolvedValueOnce('success')
+
+    const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockFn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFn).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(mockFn).toHaveBeenCalledTimes(3)
+
+    const result = await promise
+    expect(result).toBe('success')
+  })
+
+  it('should retry on connection errors', async () => {
+    const connectionError = new Stripe.errors.StripeConnectionError({
+      message: 'Network error',
+    })
+
+    const mockFn = vi.fn().mockRejectedValueOnce(connectionError).mockResolvedValueOnce('success')
+
+    const promise = withRetry(mockFn, { initialDelayMs: 1000, jitterMs: 0 })
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockFn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockFn).toHaveBeenCalledTimes(2)
+
+    const result = await promise
+    expect(result).toBe('success')
   })
 
   it('should use exponential backoff timing', async () => {
@@ -167,22 +214,24 @@ describe('withRetry', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         error: 'Rate limit exceeded',
+        errorType: 'rate_limit',
         attempt: 1,
         maxRetries: 1,
         delayMs: 100,
         nextAttempt: 2,
       }),
-      'Rate limit hit, retrying Stripe API call after delay'
+      'Transient Stripe error, retrying after delay'
     )
 
     // Should log error when retries exhausted
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         error: 'Rate limit exceeded',
+        errorType: 'rate_limit',
         attempt: 2,
         maxRetries: 1,
       }),
-      'Max retries exhausted for rate limit error'
+      'Max retries exhausted for Stripe error'
     )
   })
 
@@ -234,13 +283,16 @@ describe('withRetry', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(mockFn).toHaveBeenCalledTimes(1)
 
-    // Default: initialDelayMs = 1000, with up to 500ms jitter
-    // Advance by max possible delay for first retry
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(mockFn).toHaveBeenCalledTimes(2)
+    // Default: initialDelayMs = 1000, maxRetries = 5, jitterMs = 500
+    // Advance through all retries: 1s, 2s, 4s, 8s, 16s (with max jitter)
+    await vi.advanceTimersByTimeAsync(1500) // 1s + 500ms jitter
+    await vi.advanceTimersByTimeAsync(2500) // 2s + 500ms jitter
+    await vi.advanceTimersByTimeAsync(4500) // 4s + 500ms jitter
+    await vi.advanceTimersByTimeAsync(8500) // 8s + 500ms jitter
+    await vi.advanceTimersByTimeAsync(16500) // 16s + 500ms jitter
 
-    // We won't test all 5 retries, just verify defaults work
     await expect(promise).rejects.toThrow()
+    expect(mockFn).toHaveBeenCalledTimes(6) // Initial + 5 retries
   })
 
   describe('Retry-After header handling', () => {
@@ -385,10 +437,11 @@ describe('withRetry', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           error: 'Rate limit exceeded',
+          errorType: 'rate_limit',
           retryAfterMs: 5000,
           delayMs: 5000,
         }),
-        'Rate limit hit, retrying Stripe API call after delay'
+        'Transient Stripe error, retrying after delay'
       )
     })
 

@@ -12,7 +12,7 @@ import {
 } from './types'
 import { managedWebhookSchema } from './schemas/managed_webhook'
 import { type PoolConfig } from 'pg'
-import { withRetry } from './utils/retry'
+import { createRetryableStripeClient } from './utils/stripeClientWrapper'
 import { hashApiKey } from './utils/hashApiKey'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
@@ -47,7 +47,8 @@ export class StripeSync {
   private cachedAccount: Stripe.Account | null = null
 
   constructor(private config: StripeSyncConfig) {
-    this.stripe = new Stripe(config.stripeSecretKey, {
+    // Create base Stripe client
+    const baseStripe = new Stripe(config.stripeSecretKey, {
       // https://github.com/stripe/stripe-node#configuration
       // @ts-ignore
       apiVersion: config.stripeApiVersion,
@@ -55,6 +56,14 @@ export class StripeSync {
         name: 'Stripe Postgres Sync',
       },
     })
+
+    // Wrap with automatic retry logic for all API calls
+    // This ensures ALL Stripe operations are protected against:
+    // - Rate limits (429)
+    // - Server errors (500, 502, 503, 504, 424)
+    // - Connection errors (network failures)
+    this.stripe = createRetryableStripeClient(baseStripe, {}, config.logger)
+
     this.config.logger = config.logger ?? console
     this.config.logger?.info(
       { autoExpandLists: config.autoExpandLists, stripeApiVersion: config.stripeApiVersion },
@@ -836,8 +845,7 @@ export class StripeSync {
     if (entityInFinalState && entityInFinalState(entity)) return { entity, refetched: false }
 
     if (this.shouldRefetchEntity(entity)) {
-      // Wrap the fetch call with retry logic for 429 errors
-      const fetchedEntity = await withRetry(() => fetchFn(entity.id!), {}, this.config.logger)
+      const fetchedEntity = await fetchFn(entity.id!)
       return { entity: fetchedEntity, refetched: true }
     }
 
@@ -1483,73 +1491,66 @@ export class StripeSync {
     try {
       this.config.logger?.info('Fetching items to sync from Stripe')
 
-      // Wrap the pagination loop with retry logic for 429 errors
-      await withRetry(
-        async () => {
-          try {
-            for await (const item of fetch()) {
-              currentBatch.push(item)
+      try {
+        for await (const item of fetch()) {
+          currentBatch.push(item)
 
-              // Checkpoint every 100 items (1 Stripe page)
-              if (currentBatch.length >= CHECKPOINT_SIZE) {
-                this.config.logger?.info(`Upserting batch of ${currentBatch.length} items`)
-                await upsert(currentBatch, accountId)
-                totalSynced += currentBatch.length
+          // Checkpoint every 100 items (1 Stripe page)
+          if (currentBatch.length >= CHECKPOINT_SIZE) {
+            this.config.logger?.info(`Upserting batch of ${currentBatch.length} items`)
+            await upsert(currentBatch, accountId)
+            totalSynced += currentBatch.length
 
-                // Update cursor with max created from this batch
-                if (resourceName) {
-                  const maxCreated = Math.max(
-                    ...currentBatch.map((i) => (i as { created?: number }).created || 0)
-                  )
-                  if (maxCreated > 0) {
-                    await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
-                    this.config.logger?.info(`Checkpoint: cursor updated to ${maxCreated}`)
-                  }
-                }
-
-                currentBatch = []
-              }
-            }
-
-            // Process remaining items
-            if (currentBatch.length > 0) {
-              this.config.logger?.info(`Upserting final batch of ${currentBatch.length} items`)
-              await upsert(currentBatch, accountId)
-              totalSynced += currentBatch.length
-
-              if (resourceName) {
-                const maxCreated = Math.max(
-                  ...currentBatch.map((i) => (i as { created?: number }).created || 0)
-                )
-                if (maxCreated > 0) {
-                  await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
-                }
-              }
-            }
-          } catch (error) {
-            // Save partial progress before re-throwing
-            if (currentBatch.length > 0) {
-              this.config.logger?.info(
-                `Error occurred, saving partial progress: ${currentBatch.length} items`
+            // Update cursor with max created from this batch
+            if (resourceName) {
+              const maxCreated = Math.max(
+                ...currentBatch.map((i) => (i as { created?: number }).created || 0)
               )
-              await upsert(currentBatch, accountId)
-              totalSynced += currentBatch.length
-
-              if (resourceName) {
-                const maxCreated = Math.max(
-                  ...currentBatch.map((i) => (i as { created?: number }).created || 0)
-                )
-                if (maxCreated > 0) {
-                  await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
-                }
+              if (maxCreated > 0) {
+                await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
+                this.config.logger?.info(`Checkpoint: cursor updated to ${maxCreated}`)
               }
             }
-            throw error
+
+            currentBatch = []
           }
-        },
-        {},
-        this.config.logger
-      )
+        }
+
+        // Process remaining items
+        if (currentBatch.length > 0) {
+          this.config.logger?.info(`Upserting final batch of ${currentBatch.length} items`)
+          await upsert(currentBatch, accountId)
+          totalSynced += currentBatch.length
+
+          if (resourceName) {
+            const maxCreated = Math.max(
+              ...currentBatch.map((i) => (i as { created?: number }).created || 0)
+            )
+            if (maxCreated > 0) {
+              await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
+            }
+          }
+        }
+      } catch (error) {
+        // Save partial progress before re-throwing
+        if (currentBatch.length > 0) {
+          this.config.logger?.info(
+            `Error occurred, saving partial progress: ${currentBatch.length} items`
+          )
+          await upsert(currentBatch, accountId)
+          totalSynced += currentBatch.length
+
+          if (resourceName) {
+            const maxCreated = Math.max(
+              ...currentBatch.map((i) => (i as { created?: number }).created || 0)
+            )
+            if (maxCreated > 0) {
+              await this.postgresClient.updateSyncCursor(resourceName, accountId, maxCreated)
+            }
+          }
+        }
+        throw error
+      }
 
       if (resourceName) {
         await this.postgresClient.markSyncComplete(resourceName, accountId)
@@ -2489,8 +2490,7 @@ export class StripeSync {
     const entities: T[] = []
 
     for (const id of ids) {
-      // Wrap each fetch call with retry logic for 429 errors
-      const entity = await withRetry(() => fetch(id), {}, this.config.logger)
+      const entity = await fetch(id)
       entities.push(entity)
     }
 
