@@ -25,8 +25,7 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
   const config: Partial<Config> = {}
 
   // Get Stripe API key
-  config.stripeApiKey =
-    options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+  config.stripeApiKey = options.stripeKey || process.env.STRIPE_API_KEY || ''
 
   // Get ngrok auth token
   config.ngrokAuthToken = options.ngrokToken || process.env.NGROK_AUTH_TOKEN || ''

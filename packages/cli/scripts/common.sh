@@ -2,43 +2,45 @@
 
 # Common functions for integration tests
 
-# Start PostgreSQL if not already running
+# Start PostgreSQL - always creates a fresh test container
 # Usage: start_postgres [container_name] [database_name]
 start_postgres() {
     local container_name="${1:-stripe-sync-test-db}"
     local database_name="${2:-app_db}"
 
-    echo "🐘 Checking PostgreSQL..."
+    echo "🐘 Setting up PostgreSQL test container..."
 
-    # Check if PostgreSQL is accessible on port 5432
-    if pg_isready -h localhost -p 5432 -U postgres > /dev/null 2>&1 || \
-       docker ps --format '{{.Ports}}' | grep -q '0.0.0.0:5432->5432'; then
-        echo "✓ PostgreSQL is already running and accessible"
-        echo ""
-        return 0
-    fi
-
-    # Check if our container exists but is stopped
+    # Stop and remove any existing container with this name
     if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-        echo "   Starting existing PostgreSQL container..."
-        docker start "$container_name" > /dev/null 2>&1
-    else
-        echo "   Creating PostgreSQL Docker container..."
-        docker run --name "$container_name" \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB="$database_name" \
-            -p 5432:5432 \
-            -d postgres:16-alpine > /dev/null 2>&1
+        echo "   Removing existing test container..."
+        docker stop "$container_name" > /dev/null 2>&1 || true
+        docker rm "$container_name" > /dev/null 2>&1 || true
     fi
+
+    # Check if port 5432 is in use by another container
+    local existing_container=$(docker ps --format '{{.Names}}\t{{.Ports}}' | grep '0.0.0.0:5432->5432' | awk '{print $1}')
+    if [ -n "$existing_container" ]; then
+        echo "   Stopping container using port 5432: $existing_container..."
+        docker stop "$existing_container" > /dev/null 2>&1 || true
+        docker rm "$existing_container" > /dev/null 2>&1 || true
+    fi
+
+    # Create new container
+    echo "   Creating fresh PostgreSQL container..."
+    docker run --name "$container_name" \
+        -e POSTGRES_PASSWORD=postgres \
+        -e POSTGRES_DB="$database_name" \
+        -p 5432:5432 \
+        -d postgres:16-alpine > /dev/null 2>&1
 
     echo "   Waiting for PostgreSQL to be ready..."
     sleep 3
 
     # Wait for PostgreSQL to be ready
     for i in {1..10}; do
-        if pg_isready -h localhost -p 5432 -U postgres > /dev/null 2>&1 || \
-           docker exec "$container_name" pg_isready -U postgres > /dev/null 2>&1; then
+        if docker exec "$container_name" pg_isready -U postgres > /dev/null 2>&1; then
             echo "✓ PostgreSQL is ready"
+            export POSTGRES_CONTAINER="$container_name"
             echo ""
             return 0
         fi

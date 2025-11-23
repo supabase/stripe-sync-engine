@@ -372,14 +372,18 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     })
     console.log(chalk.green(`✓ Server started on port ${port}`))
 
-    // Run initial backfill of all Stripe data
-    console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
-    const backfillResult = await stripeSync.syncBackfill()
-    const totalSynced = Object.values(backfillResult).reduce(
-      (sum, result) => sum + (result?.synced || 0),
-      0
-    )
-    console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
+    // Run initial backfill of all Stripe data (unless disabled)
+    if (process.env.SKIP_BACKFILL !== 'true') {
+      console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
+      const backfillResult = await stripeSync.syncBackfill()
+      const totalSynced = Object.values(backfillResult).reduce(
+        (sum, result) => sum + (result?.synced || 0),
+        0
+      )
+      console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
+    } else {
+      console.log(chalk.yellow('\n⏭️  Skipping initial backfill (SKIP_BACKFILL=true)'))
+    }
 
     console.log(
       chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')

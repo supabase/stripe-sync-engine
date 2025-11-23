@@ -35,7 +35,7 @@ async function main() {
 
   const method = args[0]
   const databaseUrl = process.env.DATABASE_URL || ''
-  const stripeApiKey = process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+  const stripeApiKey = process.env.STRIPE_API_KEY || ''
 
   if (!databaseUrl) {
     console.error('Error: DATABASE_URL environment variable is required')

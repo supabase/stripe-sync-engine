@@ -24,7 +24,6 @@
     "lint": "eslint src",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "stripe:trigger": "./scripts/stripe-trigger.sh",
     "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
     "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts",
     "test:integration": "./scripts/test-integration.sh",
