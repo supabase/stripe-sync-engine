@@ -21,6 +21,11 @@ jobs:
           POSTGRES_DB: postgres
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v5
@@ -72,6 +77,8 @@ jobs:
       - name: Tests
         run: |
           npm run test
+        env:
+          DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
 
   integration-test:
     name: CLI Integration Test
@@ -88,15 +95,6 @@ jobs:
         with:
           node-version-file: ./.nvmrc
           cache: pnpm
-
-      - name: Install Stripe CLI
-        run: |
-          wget -q https://github.com/stripe/stripe-cli/releases/download/v1.19.5/stripe_1.19.5_linux_x86_64.tar.gz
-          tar -xzf stripe_1.19.5_linux_x86_64.tar.gz
-          mkdir -p $HOME/.local/bin
-          mv stripe $HOME/.local/bin/
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          $HOME/.local/bin/stripe --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

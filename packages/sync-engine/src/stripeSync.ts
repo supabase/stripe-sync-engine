@@ -313,6 +313,105 @@ export class StripeSync {
     return this.processEvent(event)
   }
 
+  // Event handler registry - maps event types to handler functions
+  // Note: Uses 'any' for event parameter to allow handlers with specific Stripe event types
+  // (e.g., CustomerDeletedEvent, ProductDeletedEvent) which TypeScript won't accept
+  // as contravariant parameters when using the base Stripe.Event type
+  private readonly eventHandlers: Record<
+    string,
+    (event: any, accountId: string) => Promise<void> // eslint-disable-line @typescript-eslint/no-explicit-any
+  > = {
+    'charge.captured': this.handleChargeEvent.bind(this),
+    'charge.expired': this.handleChargeEvent.bind(this),
+    'charge.failed': this.handleChargeEvent.bind(this),
+    'charge.pending': this.handleChargeEvent.bind(this),
+    'charge.refunded': this.handleChargeEvent.bind(this),
+    'charge.succeeded': this.handleChargeEvent.bind(this),
+    'charge.updated': this.handleChargeEvent.bind(this),
+    'customer.deleted': this.handleCustomerDeletedEvent.bind(this),
+    'customer.created': this.handleCustomerEvent.bind(this),
+    'customer.updated': this.handleCustomerEvent.bind(this),
+    'checkout.session.async_payment_failed': this.handleCheckoutSessionEvent.bind(this),
+    'checkout.session.async_payment_succeeded': this.handleCheckoutSessionEvent.bind(this),
+    'checkout.session.completed': this.handleCheckoutSessionEvent.bind(this),
+    'checkout.session.expired': this.handleCheckoutSessionEvent.bind(this),
+    'customer.subscription.created': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.deleted': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.paused': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.pending_update_applied': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.pending_update_expired': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.trial_will_end': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.resumed': this.handleSubscriptionEvent.bind(this),
+    'customer.subscription.updated': this.handleSubscriptionEvent.bind(this),
+    'customer.tax_id.updated': this.handleTaxIdEvent.bind(this),
+    'customer.tax_id.created': this.handleTaxIdEvent.bind(this),
+    'customer.tax_id.deleted': this.handleTaxIdDeletedEvent.bind(this),
+    'invoice.created': this.handleInvoiceEvent.bind(this),
+    'invoice.deleted': this.handleInvoiceEvent.bind(this),
+    'invoice.finalized': this.handleInvoiceEvent.bind(this),
+    'invoice.finalization_failed': this.handleInvoiceEvent.bind(this),
+    'invoice.paid': this.handleInvoiceEvent.bind(this),
+    'invoice.payment_action_required': this.handleInvoiceEvent.bind(this),
+    'invoice.payment_failed': this.handleInvoiceEvent.bind(this),
+    'invoice.payment_succeeded': this.handleInvoiceEvent.bind(this),
+    'invoice.upcoming': this.handleInvoiceEvent.bind(this),
+    'invoice.sent': this.handleInvoiceEvent.bind(this),
+    'invoice.voided': this.handleInvoiceEvent.bind(this),
+    'invoice.marked_uncollectible': this.handleInvoiceEvent.bind(this),
+    'invoice.updated': this.handleInvoiceEvent.bind(this),
+    'product.created': this.handleProductEvent.bind(this),
+    'product.updated': this.handleProductEvent.bind(this),
+    'product.deleted': this.handleProductDeletedEvent.bind(this),
+    'price.created': this.handlePriceEvent.bind(this),
+    'price.updated': this.handlePriceEvent.bind(this),
+    'price.deleted': this.handlePriceDeletedEvent.bind(this),
+    'plan.created': this.handlePlanEvent.bind(this),
+    'plan.updated': this.handlePlanEvent.bind(this),
+    'plan.deleted': this.handlePlanDeletedEvent.bind(this),
+    'setup_intent.canceled': this.handleSetupIntentEvent.bind(this),
+    'setup_intent.created': this.handleSetupIntentEvent.bind(this),
+    'setup_intent.requires_action': this.handleSetupIntentEvent.bind(this),
+    'setup_intent.setup_failed': this.handleSetupIntentEvent.bind(this),
+    'setup_intent.succeeded': this.handleSetupIntentEvent.bind(this),
+    'subscription_schedule.aborted': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.canceled': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.completed': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.created': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.expiring': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.released': this.handleSubscriptionScheduleEvent.bind(this),
+    'subscription_schedule.updated': this.handleSubscriptionScheduleEvent.bind(this),
+    'payment_method.attached': this.handlePaymentMethodEvent.bind(this),
+    'payment_method.automatically_updated': this.handlePaymentMethodEvent.bind(this),
+    'payment_method.detached': this.handlePaymentMethodEvent.bind(this),
+    'payment_method.updated': this.handlePaymentMethodEvent.bind(this),
+    'charge.dispute.created': this.handleDisputeEvent.bind(this),
+    'charge.dispute.funds_reinstated': this.handleDisputeEvent.bind(this),
+    'charge.dispute.funds_withdrawn': this.handleDisputeEvent.bind(this),
+    'charge.dispute.updated': this.handleDisputeEvent.bind(this),
+    'charge.dispute.closed': this.handleDisputeEvent.bind(this),
+    'payment_intent.amount_capturable_updated': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.canceled': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.created': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.partially_funded': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.payment_failed': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.processing': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.requires_action': this.handlePaymentIntentEvent.bind(this),
+    'payment_intent.succeeded': this.handlePaymentIntentEvent.bind(this),
+    'credit_note.created': this.handleCreditNoteEvent.bind(this),
+    'credit_note.updated': this.handleCreditNoteEvent.bind(this),
+    'credit_note.voided': this.handleCreditNoteEvent.bind(this),
+    'radar.early_fraud_warning.created': this.handleEarlyFraudWarningEvent.bind(this),
+    'radar.early_fraud_warning.updated': this.handleEarlyFraudWarningEvent.bind(this),
+    'refund.created': this.handleRefundEvent.bind(this),
+    'refund.failed': this.handleRefundEvent.bind(this),
+    'refund.updated': this.handleRefundEvent.bind(this),
+    'charge.refund.updated': this.handleRefundEvent.bind(this),
+    'review.closed': this.handleReviewEvent.bind(this),
+    'review.opened': this.handleReviewEvent.bind(this),
+    'entitlements.active_entitlement_summary.updated':
+      this.handleEntitlementSummaryEvent.bind(this),
+  }
+
   async processEvent(event: Stripe.Event) {
     // Get account ID at start of event processing
     // Try to extract from event data object if present (Connect scenarios)
@@ -325,505 +424,354 @@ export class StripeSync {
     // Ensure account exists before processing event (required for foreign key constraints)
     await this.getCurrentAccount()
 
-    switch (event.type) {
-      case 'charge.captured':
-      case 'charge.expired':
-      case 'charge.failed':
-      case 'charge.pending':
-      case 'charge.refunded':
-      case 'charge.succeeded':
-      case 'charge.updated': {
-        const { entity: charge, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Charge,
-          (id) => this.stripe.charges.retrieve(id),
-          (charge) => charge.status === 'failed' || charge.status === 'succeeded'
-        )
+    const handler = this.eventHandlers[event.type]
+    if (handler) {
+      // Extract entity ID from event data for logging
+      const entityId =
+        event.data?.object && typeof event.data.object === 'object' && 'id' in event.data.object
+          ? (event.data.object as { id: string }).id
+          : 'unknown'
+      this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for ${entityId}`)
 
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for charge ${charge.id}`
-        )
-
-        await this.upsertCharges(
-          [charge],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'customer.deleted': {
-        const customer: Stripe.DeletedCustomer = {
-          id: event.data.object.id,
-          object: 'customer',
-          deleted: true,
-        }
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
-        )
-
-        await this.upsertCustomers([customer], accountId, this.getSyncTimestamp(event, false))
-        break
-      }
-      case 'checkout.session.async_payment_failed':
-      case 'checkout.session.async_payment_succeeded':
-      case 'checkout.session.completed':
-      case 'checkout.session.expired': {
-        const { entity: checkoutSession, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Checkout.Session,
-          (id) => this.stripe.checkout.sessions.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for checkout session ${checkoutSession.id}`
-        )
-
-        await this.upsertCheckoutSessions(
-          [checkoutSession],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'customer.created':
-      case 'customer.updated': {
-        const { entity: customer, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Customer | Stripe.DeletedCustomer,
-          (id) => this.stripe.customers.retrieve(id),
-          (customer) => customer.deleted === true
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for customer ${customer.id}`
-        )
-
-        await this.upsertCustomers([customer], accountId, this.getSyncTimestamp(event, refetched))
-        break
-      }
-      case 'customer.subscription.created':
-      case 'customer.subscription.deleted': // Soft delete using `status = canceled`
-      case 'customer.subscription.paused':
-      case 'customer.subscription.pending_update_applied':
-      case 'customer.subscription.pending_update_expired':
-      case 'customer.subscription.trial_will_end':
-      case 'customer.subscription.resumed':
-      case 'customer.subscription.updated': {
-        const { entity: subscription, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Subscription,
-          (id) => this.stripe.subscriptions.retrieve(id),
-          (subscription) =>
-            subscription.status === 'canceled' || subscription.status === 'incomplete_expired'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for subscription ${subscription.id}`
-        )
-
-        await this.upsertSubscriptions(
-          [subscription],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'customer.tax_id.updated':
-      case 'customer.tax_id.created': {
-        const { entity: taxId, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.TaxId,
-          (id) => this.stripe.taxIds.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for taxId ${taxId.id}`
-        )
-
-        await this.upsertTaxIds([taxId], accountId, false, this.getSyncTimestamp(event, refetched))
-        break
-      }
-      case 'customer.tax_id.deleted': {
-        const taxId = event.data.object as Stripe.TaxId
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for taxId ${taxId.id}`
-        )
-
-        await this.deleteTaxId(taxId.id)
-        break
-      }
-      case 'invoice.created':
-      case 'invoice.deleted':
-      case 'invoice.finalized':
-      case 'invoice.finalization_failed':
-      case 'invoice.paid':
-      case 'invoice.payment_action_required':
-      case 'invoice.payment_failed':
-      case 'invoice.payment_succeeded':
-      case 'invoice.upcoming':
-      case 'invoice.sent':
-      case 'invoice.voided':
-      case 'invoice.marked_uncollectible':
-      case 'invoice.updated': {
-        const { entity: invoice, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Invoice,
-          (id) => this.stripe.invoices.retrieve(id),
-          (invoice) => invoice.status === 'void'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for invoice ${invoice.id}`
-        )
-
-        await this.upsertInvoices(
-          [invoice],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'product.created':
-      case 'product.updated': {
-        try {
-          const { entity: product, refetched } = await this.fetchOrUseWebhookData(
-            event.data.object as Stripe.Product,
-            (id) => this.stripe.products.retrieve(id)
-          )
-
-          this.config.logger?.info(
-            `Received webhook ${event.id}: ${event.type} for product ${product.id}`
-          )
-
-          await this.upsertProducts([product], accountId, this.getSyncTimestamp(event, refetched))
-        } catch (err) {
-          if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
-            await this.deleteProduct(event.data.object.id)
-          } else {
-            throw err
-          }
-        }
-
-        break
-      }
-      case 'product.deleted': {
-        const product = event.data.object as Stripe.Product
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for product ${product.id}`
-        )
-
-        await this.deleteProduct(product.id)
-        break
-      }
-      case 'price.created':
-      case 'price.updated': {
-        try {
-          const { entity: price, refetched } = await this.fetchOrUseWebhookData(
-            event.data.object as Stripe.Price,
-            (id) => this.stripe.prices.retrieve(id)
-          )
-
-          this.config.logger?.info(
-            `Received webhook ${event.id}: ${event.type} for price ${price.id}`
-          )
-
-          await this.upsertPrices(
-            [price],
-            accountId,
-            false,
-            this.getSyncTimestamp(event, refetched)
-          )
-        } catch (err) {
-          if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
-            await this.deletePrice(event.data.object.id)
-          } else {
-            throw err
-          }
-        }
-
-        break
-      }
-      case 'price.deleted': {
-        const price = event.data.object as Stripe.Price
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for price ${price.id}`
-        )
-
-        await this.deletePrice(price.id)
-        break
-      }
-      case 'plan.created':
-      case 'plan.updated': {
-        try {
-          const { entity: plan, refetched } = await this.fetchOrUseWebhookData(
-            event.data.object as Stripe.Plan,
-            (id) => this.stripe.plans.retrieve(id)
-          )
-
-          this.config.logger?.info(
-            `Received webhook ${event.id}: ${event.type} for plan ${plan.id}`
-          )
-
-          await this.upsertPlans([plan], accountId, false, this.getSyncTimestamp(event, refetched))
-        } catch (err) {
-          if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
-            await this.deletePlan(event.data.object.id)
-          } else {
-            throw err
-          }
-        }
-
-        break
-      }
-      case 'plan.deleted': {
-        const plan = event.data.object as Stripe.Plan
-
-        this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for plan ${plan.id}`)
-
-        await this.deletePlan(plan.id)
-        break
-      }
-      case 'setup_intent.canceled':
-      case 'setup_intent.created':
-      case 'setup_intent.requires_action':
-      case 'setup_intent.setup_failed':
-      case 'setup_intent.succeeded': {
-        const { entity: setupIntent, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.SetupIntent,
-          (id) => this.stripe.setupIntents.retrieve(id),
-          (setupIntent) => setupIntent.status === 'canceled' || setupIntent.status === 'succeeded'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for setupIntent ${setupIntent.id}`
-        )
-
-        await this.upsertSetupIntents(
-          [setupIntent],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'subscription_schedule.aborted':
-      case 'subscription_schedule.canceled':
-      case 'subscription_schedule.completed':
-      case 'subscription_schedule.created':
-      case 'subscription_schedule.expiring':
-      case 'subscription_schedule.released':
-      case 'subscription_schedule.updated': {
-        const { entity: subscriptionSchedule, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.SubscriptionSchedule,
-          (id) => this.stripe.subscriptionSchedules.retrieve(id),
-          (schedule) => schedule.status === 'canceled' || schedule.status === 'completed'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for subscriptionSchedule ${subscriptionSchedule.id}`
-        )
-
-        await this.upsertSubscriptionSchedules(
-          [subscriptionSchedule],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'payment_method.attached':
-      case 'payment_method.automatically_updated':
-      case 'payment_method.detached':
-      case 'payment_method.updated': {
-        const { entity: paymentMethod, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.PaymentMethod,
-          (id) => this.stripe.paymentMethods.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for paymentMethod ${paymentMethod.id}`
-        )
-
-        await this.upsertPaymentMethods(
-          [paymentMethod],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'charge.dispute.created':
-      case 'charge.dispute.funds_reinstated':
-      case 'charge.dispute.funds_withdrawn':
-      case 'charge.dispute.updated':
-      case 'charge.dispute.closed': {
-        const { entity: dispute, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Dispute,
-          (id) => this.stripe.disputes.retrieve(id),
-          (dispute) => dispute.status === 'won' || dispute.status === 'lost'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for dispute ${dispute.id}`
-        )
-
-        await this.upsertDisputes(
-          [dispute],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      case 'payment_intent.amount_capturable_updated':
-      case 'payment_intent.canceled':
-      case 'payment_intent.created':
-      case 'payment_intent.partially_funded':
-      case 'payment_intent.payment_failed':
-      case 'payment_intent.processing':
-      case 'payment_intent.requires_action':
-      case 'payment_intent.succeeded': {
-        const { entity: paymentIntent, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.PaymentIntent,
-          (id) => this.stripe.paymentIntents.retrieve(id),
-          // Final states - do not re-fetch from API
-          (entity) => entity.status === 'canceled' || entity.status === 'succeeded'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for paymentIntent ${paymentIntent.id}`
-        )
-
-        await this.upsertPaymentIntents(
-          [paymentIntent],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-
-      case 'credit_note.created':
-      case 'credit_note.updated':
-      case 'credit_note.voided': {
-        const { entity: creditNote, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.CreditNote,
-          (id) => this.stripe.creditNotes.retrieve(id),
-          (creditNote) => creditNote.status === 'void'
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for creditNote ${creditNote.id}`
-        )
-
-        await this.upsertCreditNotes(
-          [creditNote],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-
-      case 'radar.early_fraud_warning.created':
-      case 'radar.early_fraud_warning.updated': {
-        const { entity: earlyFraudWarning, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Radar.EarlyFraudWarning,
-          (id) => this.stripe.radar.earlyFraudWarnings.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for earlyFraudWarning ${earlyFraudWarning.id}`
-        )
-
-        await this.upsertEarlyFraudWarning(
-          [earlyFraudWarning],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-
-        break
-      }
-
-      case 'refund.created':
-      case 'refund.failed':
-      case 'refund.updated':
-      case 'charge.refund.updated': {
-        const { entity: refund, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Refund,
-          (id) => this.stripe.refunds.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for refund ${refund.id}`
-        )
-
-        await this.upsertRefunds(
-          [refund],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-
-      case 'review.closed':
-      case 'review.opened': {
-        const { entity: review, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Review,
-          (id) => this.stripe.reviews.retrieve(id)
-        )
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for review ${review.id}`
-        )
-
-        await this.upsertReviews(
-          [review],
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-
-        break
-      }
-      case 'entitlements.active_entitlement_summary.updated': {
-        const activeEntitlementSummary = event.data
-          .object as Stripe.Entitlements.ActiveEntitlementSummary
-        let entitlements = activeEntitlementSummary.entitlements
-        let refetched = false
-        if (this.config.revalidateObjectsViaStripeApi?.includes('entitlements')) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { lastResponse, ...rest } = await this.stripe.entitlements.activeEntitlements.list({
-            customer: activeEntitlementSummary.customer,
-          })
-          entitlements = rest
-          refetched = true
-        }
-
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for activeEntitlementSummary for customer ${activeEntitlementSummary.customer}`
-        )
-
-        await this.deleteRemovedActiveEntitlements(
-          activeEntitlementSummary.customer,
-          entitlements.data.map((entitlement) => entitlement.id)
-        )
-        await this.upsertActiveEntitlements(
-          activeEntitlementSummary.customer,
-          entitlements.data,
-          accountId,
-          false,
-          this.getSyncTimestamp(event, refetched)
-        )
-        break
-      }
-      default:
-        throw new Error('Unhandled webhook event')
+      await handler(event, accountId)
+    } else {
+      this.config.logger?.warn(
+        `Received unhandled webhook event: ${event.type} (${event.id}). Ignoring.`
+      )
     }
+  }
+
+  /**
+   * Returns an array of all webhook event types that this sync engine can handle.
+   * Useful for configuring webhook endpoints with specific event subscriptions.
+   */
+  public getSupportedEventTypes(): Stripe.WebhookEndpointCreateParams.EnabledEvent[] {
+    return Object.keys(
+      this.eventHandlers
+    ).sort() as Stripe.WebhookEndpointCreateParams.EnabledEvent[]
+  }
+
+  // Event handler methods
+  private async handleChargeEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: charge, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Charge,
+      (id) => this.stripe.charges.retrieve(id),
+      (charge) => charge.status === 'failed' || charge.status === 'succeeded'
+    )
+
+    await this.upsertCharges([charge], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleCustomerDeletedEvent(
+    event: Stripe.CustomerDeletedEvent,
+    accountId: string
+  ): Promise<void> {
+    const customer: Stripe.DeletedCustomer = {
+      id: event.data.object.id,
+      object: 'customer',
+      deleted: true,
+    }
+
+    await this.upsertCustomers([customer], accountId, this.getSyncTimestamp(event, false))
+  }
+
+  private async handleCustomerEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: customer, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Customer | Stripe.DeletedCustomer,
+      (id) => this.stripe.customers.retrieve(id),
+      (customer) => customer.deleted === true
+    )
+
+    await this.upsertCustomers([customer], accountId, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleCheckoutSessionEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: checkoutSession, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Checkout.Session,
+      (id) => this.stripe.checkout.sessions.retrieve(id)
+    )
+
+    await this.upsertCheckoutSessions(
+      [checkoutSession],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleSubscriptionEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: subscription, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Subscription,
+      (id) => this.stripe.subscriptions.retrieve(id),
+      (subscription) =>
+        subscription.status === 'canceled' || subscription.status === 'incomplete_expired'
+    )
+
+    await this.upsertSubscriptions(
+      [subscription],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleTaxIdEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: taxId, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.TaxId,
+      (id) => this.stripe.taxIds.retrieve(id)
+    )
+
+    await this.upsertTaxIds([taxId], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleTaxIdDeletedEvent(event: Stripe.Event, _accountId: string): Promise<void> {
+    const taxId = event.data.object as Stripe.TaxId
+
+    await this.deleteTaxId(taxId.id)
+  }
+
+  private async handleInvoiceEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: invoice, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Invoice,
+      (id) => this.stripe.invoices.retrieve(id),
+      (invoice) => invoice.status === 'void'
+    )
+
+    await this.upsertInvoices([invoice], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleProductEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    try {
+      const { entity: product, refetched } = await this.fetchOrUseWebhookData(
+        event.data.object as Stripe.Product,
+        (id) => this.stripe.products.retrieve(id)
+      )
+
+      await this.upsertProducts([product], accountId, this.getSyncTimestamp(event, refetched))
+    } catch (err) {
+      if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
+        const product = event.data.object as Stripe.Product
+        await this.deleteProduct(product.id)
+      } else {
+        throw err
+      }
+    }
+  }
+
+  private async handleProductDeletedEvent(
+    event: Stripe.ProductDeletedEvent,
+    _accountId: string
+  ): Promise<void> {
+    const product = event.data.object
+
+    await this.deleteProduct(product.id)
+  }
+
+  private async handlePriceEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    try {
+      const { entity: price, refetched } = await this.fetchOrUseWebhookData(
+        event.data.object as Stripe.Price,
+        (id) => this.stripe.prices.retrieve(id)
+      )
+
+      await this.upsertPrices([price], accountId, false, this.getSyncTimestamp(event, refetched))
+    } catch (err) {
+      if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
+        const price = event.data.object as Stripe.Price
+        await this.deletePrice(price.id)
+      } else {
+        throw err
+      }
+    }
+  }
+
+  private async handlePriceDeletedEvent(
+    event: Stripe.PriceDeletedEvent,
+    _accountId: string
+  ): Promise<void> {
+    const price = event.data.object
+
+    await this.deletePrice(price.id)
+  }
+
+  private async handlePlanEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    try {
+      const { entity: plan, refetched } = await this.fetchOrUseWebhookData(
+        event.data.object as Stripe.Plan,
+        (id) => this.stripe.plans.retrieve(id)
+      )
+
+      await this.upsertPlans([plan], accountId, false, this.getSyncTimestamp(event, refetched))
+    } catch (err) {
+      if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
+        const plan = event.data.object as Stripe.Plan
+        await this.deletePlan(plan.id)
+      } else {
+        throw err
+      }
+    }
+  }
+
+  private async handlePlanDeletedEvent(
+    event: Stripe.PlanDeletedEvent,
+    _accountId: string
+  ): Promise<void> {
+    const plan = event.data.object
+
+    await this.deletePlan(plan.id)
+  }
+
+  private async handleSetupIntentEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: setupIntent, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.SetupIntent,
+      (id) => this.stripe.setupIntents.retrieve(id),
+      (setupIntent) => setupIntent.status === 'canceled' || setupIntent.status === 'succeeded'
+    )
+
+    await this.upsertSetupIntents(
+      [setupIntent],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleSubscriptionScheduleEvent(
+    event: Stripe.Event,
+    accountId: string
+  ): Promise<void> {
+    const { entity: subscriptionSchedule, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.SubscriptionSchedule,
+      (id) => this.stripe.subscriptionSchedules.retrieve(id),
+      (schedule) => schedule.status === 'canceled' || schedule.status === 'completed'
+    )
+
+    await this.upsertSubscriptionSchedules(
+      [subscriptionSchedule],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handlePaymentMethodEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: paymentMethod, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.PaymentMethod,
+      (id) => this.stripe.paymentMethods.retrieve(id)
+    )
+
+    await this.upsertPaymentMethods(
+      [paymentMethod],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleDisputeEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: dispute, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Dispute,
+      (id) => this.stripe.disputes.retrieve(id),
+      (dispute) => dispute.status === 'won' || dispute.status === 'lost'
+    )
+
+    await this.upsertDisputes([dispute], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handlePaymentIntentEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: paymentIntent, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.PaymentIntent,
+      (id) => this.stripe.paymentIntents.retrieve(id),
+      // Final states - do not re-fetch from API
+      (entity) => entity.status === 'canceled' || entity.status === 'succeeded'
+    )
+
+    await this.upsertPaymentIntents(
+      [paymentIntent],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleCreditNoteEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: creditNote, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.CreditNote,
+      (id) => this.stripe.creditNotes.retrieve(id),
+      (creditNote) => creditNote.status === 'void'
+    )
+
+    await this.upsertCreditNotes(
+      [creditNote],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleEarlyFraudWarningEvent(
+    event: Stripe.Event,
+    accountId: string
+  ): Promise<void> {
+    const { entity: earlyFraudWarning, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Radar.EarlyFraudWarning,
+      (id) => this.stripe.radar.earlyFraudWarnings.retrieve(id)
+    )
+
+    await this.upsertEarlyFraudWarning(
+      [earlyFraudWarning],
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
+  }
+
+  private async handleRefundEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: refund, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Refund,
+      (id) => this.stripe.refunds.retrieve(id)
+    )
+
+    await this.upsertRefunds([refund], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleReviewEvent(event: Stripe.Event, accountId: string): Promise<void> {
+    const { entity: review, refetched } = await this.fetchOrUseWebhookData(
+      event.data.object as Stripe.Review,
+      (id) => this.stripe.reviews.retrieve(id)
+    )
+
+    await this.upsertReviews([review], accountId, false, this.getSyncTimestamp(event, refetched))
+  }
+
+  private async handleEntitlementSummaryEvent(
+    event: Stripe.Event,
+    accountId: string
+  ): Promise<void> {
+    const activeEntitlementSummary = event.data
+      .object as Stripe.Entitlements.ActiveEntitlementSummary
+    let entitlements = activeEntitlementSummary.entitlements
+    let refetched = false
+    if (this.config.revalidateObjectsViaStripeApi?.includes('entitlements')) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { lastResponse, ...rest } = await this.stripe.entitlements.activeEntitlements.list({
+        customer: activeEntitlementSummary.customer,
+      })
+      entitlements = rest
+      refetched = true
+    }
+
+    await this.deleteRemovedActiveEntitlements(
+      activeEntitlementSummary.customer,
+      entitlements.data.map((entitlement) => entitlement.id)
+    )
+    await this.upsertActiveEntitlements(
+      activeEntitlementSummary.customer,
+      entitlements.data,
+      accountId,
+      false,
+      this.getSyncTimestamp(event, refetched)
+    )
   }
 
   private getSyncTimestamp(event: Stripe.Event, refetched: boolean) {
@@ -924,7 +872,7 @@ export class StripeSync {
   }
 
   async syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
-    const { object } = params ?? { object: 'all' }
+    const { object } = params ?? { object: this.getSupportedEventTypes }
     let products,
       prices,
       customers,
@@ -2229,8 +2177,13 @@ export class StripeSync {
 
   async findOrCreateManagedWebhook(
     url: string,
-    params: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
+    params?: Omit<Stripe.WebhookEndpointCreateParams, 'url'>
   ): Promise<Stripe.WebhookEndpoint> {
+    // Default to supported event types if not specified
+    const webhookParams = {
+      enabled_events: this.getSupportedEventTypes(),
+      ...params,
+    }
     // Use advisory lock to prevent race conditions when multiple instances
     // try to create webhooks for the same URL simultaneously
     // Lock is acquired at beginning and released at end via withAdvisoryLock wrapper
@@ -2341,11 +2294,11 @@ export class StripeSync {
       // Advisory lock ensures only one instance reaches here for this URL
       // Create webhook at the exact URL
       const webhook = await this.stripe.webhookEndpoints.create({
-        ...params,
+        ...webhookParams,
         url,
         // Always set metadata to identify managed webhooks
         metadata: {
-          ...params.metadata,
+          ...webhookParams.metadata,
           managed_by: 'stripe-sync',
         },
       })

@@ -314,13 +314,12 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // Create managed webhook endpoint
     const webhookPath = process.env.WEBHOOK_PATH || '/stripe-webhooks'
     console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
-    const webhook = await stripeSync.findOrCreateManagedWebhook(`${tunnel.url}${webhookPath}`, {
-      enabled_events: ['*'], // Subscribe to all events
-    })
+    const webhook = await stripeSync.findOrCreateManagedWebhook(`${tunnel.url}${webhookPath}`)
     webhookId = webhook.id
+    const eventCount = webhook.enabled_events?.length || 0
     console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
     console.log(chalk.cyan(`  URL: ${webhook.url}`))
-    console.log(chalk.cyan(`  Events: All events (*)`))
+    console.log(chalk.cyan(`  Events: ${eventCount} supported events`))
 
     // Create Express app and mount webhook handler
     const app = express()

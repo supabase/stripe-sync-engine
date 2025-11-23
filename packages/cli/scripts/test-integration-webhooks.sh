@@ -13,14 +13,19 @@ echo "🧪 Stripe Sync Engine Integration Test"
 echo "======================================="
 echo ""
 
-# Check for Stripe CLI
+# Check for required tools
 echo "🔧 Checking prerequisites..."
-if ! command -v stripe &> /dev/null; then
-    echo "❌ Stripe CLI not found - required for integration tests"
-    echo "   Install: https://stripe.com/docs/stripe-cli"
+if ! command -v curl &> /dev/null; then
+    echo "❌ curl not found - required for integration tests"
     exit 1
 fi
-echo "✓ Stripe CLI found"
+echo "✓ curl found"
+
+if ! command -v jq &> /dev/null; then
+    echo "❌ jq not found - required for JSON parsing"
+    exit 1
+fi
+echo "✓ jq found"
 
 # Load environment variables
 load_env_file
@@ -108,27 +113,100 @@ if ps -p $CLI_PID > /dev/null 2>&1; then
     echo "   This tests end-to-end webhook processing and database writes"
     echo ""
 
-    # Trigger customer.created event
-    echo "   Triggering customer.created event..."
-    stripe trigger customer.created --api-key $STRIPE_API_KEY > /dev/null 2>&1
+    # Create customer via Stripe API (triggers customer.created webhook)
+    echo "   Creating customer via Stripe API..."
+    CUSTOMER_RESPONSE=$(curl -s https://api.stripe.com/v1/customers \
+        -u "$STRIPE_API_KEY:" \
+        -d "email=integration-test@example.com" \
+        -d "name=Integration Test Customer")
+    CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | jq -r '.id // empty')
     sleep 2
-    echo "   ✓ customer.created event triggered"
+    echo "   ✓ customer.created event triggered (ID: $CUSTOMER_ID)"
 
-    # Trigger product.created event
-    echo "   Triggering product.created event..."
-    stripe trigger product.created --api-key $STRIPE_API_KEY > /dev/null 2>&1
+    # Create product via Stripe API (triggers product.created webhook)
+    echo "   Creating product via Stripe API..."
+    PRODUCT_RESPONSE=$(curl -s https://api.stripe.com/v1/products \
+        -u "$STRIPE_API_KEY:" \
+        -d "name=Integration Test Product")
+    PRODUCT_ID=$(echo "$PRODUCT_RESPONSE" | jq -r '.id // empty')
     sleep 2
-    echo "   ✓ product.created event triggered"
+    echo "   ✓ product.created event triggered (ID: $PRODUCT_ID)"
 
-    # Trigger price.created event
-    echo "   Triggering price.created event..."
-    stripe trigger price.created --api-key $STRIPE_API_KEY > /dev/null 2>&1
+    # Create price via Stripe API (triggers price.created webhook)
+    echo "   Creating price via Stripe API..."
+    PRICE_RESPONSE=$(curl -s https://api.stripe.com/v1/prices \
+        -u "$STRIPE_API_KEY:" \
+        -d "product=$PRODUCT_ID" \
+        -d "unit_amount=1000" \
+        -d "currency=usd")
+    PRICE_ID=$(echo "$PRICE_RESPONSE" | jq -r '.id // empty')
     sleep 2
-    echo "   ✓ price.created event triggered"
+    echo "   ✓ price.created event triggered (ID: $PRICE_ID)"
+
+    # Send unsupported event directly to webhook endpoint (should be handled gracefully)
+    echo "   Sending unsupported event (balance.available) directly to webhook..."
+    TIMESTAMP=$(date +%s)
+    WEBHOOK_SECRET=$(docker exec stripe-sync-test-db psql -U postgres -d app_db -t -c "SELECT secret FROM stripe._managed_webhooks LIMIT 1;" 2>/dev/null | tr -d ' ')
+
+    UNSUPPORTED_PAYLOAD=$(cat <<EOF
+{
+  "id": "evt_test_unsupported_${TIMESTAMP}",
+  "object": "event",
+  "api_version": "2020-08-27",
+  "created": ${TIMESTAMP},
+  "type": "balance.available",
+  "data": {
+    "object": {
+      "object": "balance",
+      "available": [{"amount": 1000, "currency": "usd"}],
+      "livemode": false
+    }
+  }
+}
+EOF
+)
+
+    SIGNATURE_PAYLOAD="${TIMESTAMP}.${UNSUPPORTED_PAYLOAD}"
+    SIGNATURE=$(echo -n "$SIGNATURE_PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | sed 's/^.* //')
+
+    UNSUPPORTED_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST "$WEBHOOK_URL" \
+        -H "Content-Type: application/json" \
+        -H "Stripe-Signature: t=${TIMESTAMP},v1=${SIGNATURE}" \
+        -d "$UNSUPPORTED_PAYLOAD")
+
+    if [ "$UNSUPPORTED_STATUS" = "200" ]; then
+        echo "   ✓ Unsupported event sent (HTTP $UNSUPPORTED_STATUS - handled gracefully)"
+    else
+        echo "   ❌ Unsupported event returned HTTP $UNSUPPORTED_STATUS (expected 200)"
+        exit 1
+    fi
 
     echo ""
     echo "   Waiting for webhook processing..."
     sleep 3
+
+    # Verify CLI is still running after unsupported event
+    if ps -p $CLI_PID > /dev/null 2>&1; then
+        echo "   ✓ CLI still running after unsupported event (no crash)"
+
+        # Check for warning in logs
+        if grep -q "unhandled webhook event" /tmp/cli-test.log; then
+            echo "   ✓ Unsupported event logged as warning (gracefully handled)"
+        else
+            echo "   ⚠ Warning message not found in logs (may have different format)"
+        fi
+
+        # Verify webhook returned 200 status (check for received: true in logs)
+        if grep -q '"received":true' /tmp/cli-test.log || grep -q "received: true" /tmp/cli-test.log; then
+            echo "   ✓ Webhook endpoint returned 2xx (success) for unsupported event"
+        else
+            echo "   ⚠ Could not verify 2xx response in logs"
+        fi
+    else
+        echo "   ❌ CLI crashed after unsupported event"
+        exit 1
+    fi
 
     # Step 5: Verify webhook data in database tables
     echo ""
