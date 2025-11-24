@@ -67,6 +67,8 @@ export class StripeSync {
 
     const poolConfig = config.poolConfig ?? ({} as PoolConfig)
 
+    poolConfig.application_name = 'stripe-sync-engine'
+
     if (config.databaseUrl) {
       poolConfig.connectionString = config.databaseUrl
     }
