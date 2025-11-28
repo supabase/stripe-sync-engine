@@ -19,7 +19,8 @@
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
     "build": "tsup src/index.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "test": "vitest"
   },
   "files": [
     "dist"

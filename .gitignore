@@ -6,7 +6,7 @@ node_modules/
 !.env.sample
 .idea
 *.tgz
-
+.mcp*
 private/
 .envrc
 

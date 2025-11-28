@@ -57,13 +57,15 @@ describe('withRetry', () => {
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn, { maxRetries: 2, initialDelayMs: 100, jitterMs: 0 })
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow(rateLimitError)
 
     // Advance through all retries
     await vi.advanceTimersByTimeAsync(0) // First call
     await vi.advanceTimersByTimeAsync(100) // First retry (100ms)
     await vi.advanceTimersByTimeAsync(200) // Second retry (200ms)
 
-    await expect(promise).rejects.toThrow(rateLimitError)
+    await assertion
     expect(mockFn).toHaveBeenCalledTimes(3) // Initial + 2 retries
   })
 
@@ -135,6 +137,8 @@ describe('withRetry', () => {
       initialDelayMs: 1000,
       jitterMs: 0,
     })
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow(rateLimitError)
 
     await vi.advanceTimersByTimeAsync(0)
     expect(mockFn).toHaveBeenCalledTimes(1)
@@ -155,7 +159,7 @@ describe('withRetry', () => {
     await vi.advanceTimersByTimeAsync(8000)
     expect(mockFn).toHaveBeenCalledTimes(5)
 
-    await expect(promise).rejects.toThrow(rateLimitError)
+    await assertion
   })
 
   it('should respect maxDelayMs cap', async () => {
@@ -170,6 +174,8 @@ describe('withRetry', () => {
       maxDelayMs: 15000, // Cap at 15s
       jitterMs: 0,
     })
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow(rateLimitError)
 
     await vi.advanceTimersByTimeAsync(0)
     expect(mockFn).toHaveBeenCalledTimes(1)
@@ -186,7 +192,7 @@ describe('withRetry', () => {
     await vi.advanceTimersByTimeAsync(15000)
     expect(mockFn).toHaveBeenCalledTimes(4)
 
-    await expect(promise).rejects.toThrow(rateLimitError)
+    await assertion
   })
 
   it('should log retry attempts when logger is provided', async () => {
@@ -204,11 +210,13 @@ describe('withRetry', () => {
       { maxRetries: 1, initialDelayMs: 100, jitterMs: 0 },
       mockLogger
     )
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow()
 
     await vi.advanceTimersByTimeAsync(0)
     await vi.advanceTimersByTimeAsync(100)
 
-    await expect(promise).rejects.toThrow()
+    await assertion
 
     // Should log warning for retry attempt
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -250,6 +258,8 @@ describe('withRetry', () => {
       initialDelayMs: 1000,
       jitterMs: 500,
     })
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow()
 
     await vi.advanceTimersByTimeAsync(0)
     expect(mockFn).toHaveBeenCalledTimes(1)
@@ -259,7 +269,7 @@ describe('withRetry', () => {
     expect(mockFn).toHaveBeenCalledTimes(2)
 
     Math.random = originalRandom
-    await expect(promise).rejects.toThrow()
+    await assertion
   })
 
   it('should handle async function that throws synchronously', async () => {
@@ -279,6 +289,8 @@ describe('withRetry', () => {
     const mockFn = vi.fn().mockRejectedValue(rateLimitError)
 
     const promise = withRetry(mockFn) // No config provided
+    // Start assertion before advancing timers to attach rejection handler
+    const assertion = expect(promise).rejects.toThrow()
 
     await vi.advanceTimersByTimeAsync(0)
     expect(mockFn).toHaveBeenCalledTimes(1)
@@ -291,7 +303,7 @@ describe('withRetry', () => {
     await vi.advanceTimersByTimeAsync(8500) // 8s + 500ms jitter
     await vi.advanceTimersByTimeAsync(16500) // 16s + 500ms jitter
 
-    await expect(promise).rejects.toThrow()
+    await assertion
     expect(mockFn).toHaveBeenCalledTimes(6) // Initial + 5 retries
   })
 

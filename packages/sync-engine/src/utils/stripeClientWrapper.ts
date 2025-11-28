@@ -32,16 +32,6 @@ export function createRetryableStripeClient(
   retryConfig: Partial<RetryConfig> = {},
   logger?: Logger
 ): Stripe {
-  // Skip wrapping in test environments to preserve spy/mock functionality
-  const isTest =
-    process.env.NODE_ENV === 'test' ||
-    process.env.VITEST === 'true' ||
-    process.env.JEST_WORKER_ID !== undefined
-
-  if (isTest) {
-    return stripe
-  }
-
   return new Proxy(stripe, {
     get(target, prop, receiver) {
       const original = Reflect.get(target, prop, receiver)

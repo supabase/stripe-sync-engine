@@ -318,6 +318,22 @@ export class PostgresClient {
     return result.rows.length > 0 ? result.rows[0].id : null
   }
 
+  /**
+   * Looks up full account data by API key hash
+   * @param apiKeyHash - SHA-256 hash of the Stripe API key
+   * @returns Account raw data if found, null otherwise
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getAccountByApiKeyHash(apiKeyHash: string): Promise<any | null> {
+    const result = await this.query(
+      `SELECT _raw_data FROM "${this.config.schema}"."accounts"
+       WHERE $1 = ANY(api_key_hashes)
+       LIMIT 1`,
+      [apiKeyHash]
+    )
+    return result.rows.length > 0 ? result.rows[0]._raw_data : null
+  }
+
   async getAccountRecordCounts(accountId: string): Promise<{ [tableName: string]: number }> {
     const counts: { [tableName: string]: number } = {}
 

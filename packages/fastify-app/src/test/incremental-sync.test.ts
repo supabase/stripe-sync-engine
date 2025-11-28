@@ -54,8 +54,6 @@ describe('Incremental Sync', () => {
       'DELETE FROM stripe._sync_status WHERE resource LIKE $1 OR resource = $2',
       ['test_%', 'products']
     )
-    // Clear cached account so it re-fetches using the mock
-    stripeSync.cachedAccount = null
   })
 
   test('should only fetch new products on second sync', async () => {
@@ -96,12 +94,14 @@ describe('Incremental Sync', () => {
       }
     })
 
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
+    const listSpy = vitest
+      .spyOn(stripeSync.stripe.products, 'list')
+      .mockReturnValue(mockList() as unknown)
 
     // First sync - no cursor, should fetch all
     await stripeSync.syncProducts()
 
-    expect(stripeSync.stripe.products.list).toHaveBeenCalledWith({ limit: 100 })
+    expect(listSpy).toHaveBeenCalledWith({ limit: 100 })
 
     // Verify products were inserted
     const firstResult = await stripeSync.postgresClient.pool.query(
@@ -121,14 +121,14 @@ describe('Incremental Sync', () => {
       }
     })
 
-    vitest
+    const listSpyIncremental = vitest
       .spyOn(stripeSync.stripe.products, 'list')
       .mockReturnValue(mockListIncremental() as unknown)
 
     // Second sync - should use cursor
     await stripeSync.syncProducts()
 
-    expect(stripeSync.stripe.products.list).toHaveBeenLastCalledWith({
+    expect(listSpyIncremental).toHaveBeenCalledWith({
       limit: 100,
       created: { gte: 1705075200 },
     })
@@ -241,7 +241,9 @@ describe('Incremental Sync', () => {
       }
     })
 
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
+    const listSpy = vitest
+      .spyOn(stripeSync.stripe.products, 'list')
+      .mockReturnValue(mockList() as unknown)
 
     // Call with explicit filter (earlier than cursor)
     await stripeSync.syncProducts({
@@ -249,7 +251,7 @@ describe('Incremental Sync', () => {
     })
 
     // Should use explicit filter, not cursor
-    expect(stripeSync.stripe.products.list).toHaveBeenCalledWith({
+    expect(listSpy).toHaveBeenCalledWith({
       limit: 100,
       created: { gte: 1672531200 },
     })
@@ -328,12 +330,14 @@ describe('Incremental Sync', () => {
       }
     })
 
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
+    const listSpy = vitest
+      .spyOn(stripeSync.stripe.products, 'list')
+      .mockReturnValue(mockList() as unknown)
 
     // First backfill
     await stripeSync.syncBackfill({ object: 'product' })
 
-    expect(stripeSync.stripe.products.list).toHaveBeenCalledWith({ limit: 100 })
+    expect(listSpy).toHaveBeenCalledWith({ limit: 100 })
 
     // Second backfill should be incremental
     const newProducts: Stripe.Product[] = [
@@ -351,11 +355,13 @@ describe('Incremental Sync', () => {
       }
     })
 
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockListNew() as unknown)
+    const listSpyNew = vitest
+      .spyOn(stripeSync.stripe.products, 'list')
+      .mockReturnValue(mockListNew() as unknown)
 
     await stripeSync.syncBackfill({ object: 'product' })
 
-    expect(stripeSync.stripe.products.list).toHaveBeenLastCalledWith({
+    expect(listSpyNew).toHaveBeenCalledWith({
       limit: 100,
       created: { gte: 1704988800 },
     })
