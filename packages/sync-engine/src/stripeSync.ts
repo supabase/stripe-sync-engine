@@ -708,6 +708,7 @@ export class StripeSync {
         break
       case 'payment_intent':
         paymentIntents = await this.syncPaymentIntents(params)
+        break
       case 'plan':
         plans = await this.syncPlans(params)
         break
