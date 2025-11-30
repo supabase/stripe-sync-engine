@@ -3,9 +3,9 @@ import Stripe from 'stripe'
 import { createRetryableStripeClient } from './stripeClientWrapper'
 import { withRetry } from './retry'
 
-// Mock the retry module
+// Mock the retry module - must return a Promise since withRetry is async
 vi.mock('./retry', () => ({
-  withRetry: vi.fn((fn) => fn()),
+  withRetry: vi.fn(async (fn) => fn()),
 }))
 
 describe('createRetryableStripeClient', () => {

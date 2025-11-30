@@ -142,7 +142,7 @@ export interface SyncBackfill {
   checkoutSessions?: Sync
 }
 
-export interface SyncBackfillParams {
+export interface SyncParams {
   created?: {
     /**
      * Minimum value to filter by (exclusive)
@@ -176,4 +176,26 @@ export interface SyncEntitlementsParams {
 export interface SyncFeaturesParams {
   object: 'features'
   pagination?: Pick<Stripe.PaginationParams, 'starting_after' | 'ending_before'>
+}
+
+/**
+ * Result of processing a single page of items via processNext()
+ */
+export interface ProcessNextResult {
+  /** Number of items processed in this page */
+  processed: number
+  /** Whether there are more items to process */
+  hasMore: boolean
+  /** The sync run this processing belongs to */
+  runStartedAt: Date
+}
+
+/**
+ * Parameters for processNext() including optional run context
+ */
+export interface ProcessNextParams extends SyncParams {
+  /** Join an existing sync run instead of creating a new one */
+  runStartedAt?: Date
+  /** Who/what triggered this sync (for observability) */
+  triggeredBy?: string
 }

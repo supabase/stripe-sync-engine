@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../../utils/verifyApiKey'
-import { SyncBackfillParams } from 'stripe-replit-sync'
+import { SyncParams } from 'stripe-replit-sync'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/daily', {
@@ -14,9 +14,9 @@ export default async function routes(fastify: FastifyInstance) {
         created: { gte: dayAgoTimeInSeconds },
         object: object ?? 'all',
         backfillRelatedEntities,
-      } as SyncBackfillParams
+      } as SyncParams
 
-      await fastify.stripeSync.syncBackfill(params)
+      await fastify.stripeSync.processUntilDone(params)
 
       return reply.send({
         statusCode: 200,

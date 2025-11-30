@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../utils/verifyApiKey'
-import { SyncBackfillParams } from 'stripe-replit-sync'
+import { SyncParams } from 'stripe-replit-sync'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/sync', {
@@ -8,12 +8,12 @@ export default async function routes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { created, object, backfillRelatedEntities } =
         (request.body as {
-          created?: SyncBackfillParams['created']
+          created?: SyncParams['created']
           object?: string
           backfillRelatedEntities?: boolean
         }) ?? {}
-      const params = { created, object, backfillRelatedEntities } as SyncBackfillParams
-      const result = await fastify.stripeSync.syncBackfill(params)
+      const params = { created, object, backfillRelatedEntities } as SyncParams
+      const result = await fastify.stripeSync.processUntilDone(params)
       return reply.send({
         statusCode: 200,
         ts: Date.now(),

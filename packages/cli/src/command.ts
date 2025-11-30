@@ -136,8 +136,8 @@ export async function backfillCommand(options: CliOptions, entityName: string): 
       poolConfig,
     })
 
-    // Run backfill for the specified entity
-    const result = await stripeSync.syncBackfill({ object: entityName as SyncObject })
+    // Run sync for the specified entity
+    const result = await stripeSync.processUntilDone({ object: entityName as SyncObject })
     const totalSynced = Object.values(result).reduce(
       (sum, syncResult) => sum + (syncResult?.synced || 0),
       0
@@ -371,17 +371,17 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     })
     console.log(chalk.green(`✓ Server started on port ${port}`))
 
-    // Run initial backfill of all Stripe data (unless disabled)
+    // Run initial sync of all Stripe data (unless disabled)
     if (process.env.SKIP_BACKFILL !== 'true') {
-      console.log(chalk.blue('\nStarting initial backfill of all Stripe data...'))
-      const backfillResult = await stripeSync.syncBackfill()
-      const totalSynced = Object.values(backfillResult).reduce(
+      console.log(chalk.blue('\nStarting initial sync of all Stripe data...'))
+      const syncResult = await stripeSync.processUntilDone()
+      const totalSynced = Object.values(syncResult).reduce(
         (sum, result) => sum + (result?.synced || 0),
         0
       )
-      console.log(chalk.green(`✓ Backfill complete: ${totalSynced} objects synced`))
+      console.log(chalk.green(`✓ Sync complete: ${totalSynced} objects synced`))
     } else {
-      console.log(chalk.yellow('\n⏭️  Skipping initial backfill (SKIP_BACKFILL=true)'))
+      console.log(chalk.yellow('\n⏭️  Skipping initial sync (SKIP_BACKFILL=true)'))
     }
 
     console.log(

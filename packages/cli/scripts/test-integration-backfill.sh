@@ -250,19 +250,18 @@ if [ -z "$ACCOUNT_ID" ]; then
 fi
 echo "   ✓ Account ID: $ACCOUNT_ID"
 
-# Check cursor was saved from first backfill
+# Check cursor was saved from first backfill (using new observability tables)
 echo "   Checking sync cursor from first backfill..."
-CURSOR=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
-CURSOR_DISPLAY=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
-if [ "$CURSOR" -gt 0 ]; then
-    echo "   ✓ Cursor saved: $CURSOR_DISPLAY (epoch: $CURSOR)"
+CURSOR=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT cursor::integer FROM stripe._sync_obj_run o JOIN stripe._sync_run r ON o.\"_account_id\" = r.\"_account_id\" AND o.run_started_at = r.started_at WHERE o.\"_account_id\" = '$ACCOUNT_ID' AND o.object = 'products' AND o.status = 'complete' ORDER BY o.completed_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ' || echo "0")
+if [ -n "$CURSOR" ] && [ "$CURSOR" != "" ] && [ "$CURSOR" -gt 0 ] 2>/dev/null; then
+    echo "   ✓ Cursor saved: $CURSOR"
 else
-    echo "   ❌ No cursor found in _sync_status table"
+    echo "   ❌ No cursor found in _sync_obj_run table"
     exit 1
 fi
 
-# Check sync status is 'complete'
-SYNC_STATUS=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+# Check sync status is 'complete' (using new observability tables)
+SYNC_STATUS=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT o.status FROM stripe._sync_obj_run o JOIN stripe._sync_run r ON o.\"_account_id\" = r.\"_account_id\" AND o.run_started_at = r.started_at WHERE o.\"_account_id\" = '$ACCOUNT_ID' AND o.object = 'products' ORDER BY r.started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$SYNC_STATUS" = "complete" ]; then
     echo "   ✓ Sync status: $SYNC_STATUS"
 else
@@ -296,18 +295,17 @@ npm run dev backfill product
 echo ""
 echo "   Verifying incremental sync results..."
 
-# Verify cursor was updated
-NEW_CURSOR=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT EXTRACT(EPOCH FROM last_incremental_cursor)::integer FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "0")
-NEW_CURSOR_DISPLAY=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT last_incremental_cursor FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
-if [ "$NEW_CURSOR" -gt "$CURSOR" ]; then
+# Verify cursor was updated (using new observability tables)
+NEW_CURSOR=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT cursor::integer FROM stripe._sync_obj_run o JOIN stripe._sync_run r ON o.\"_account_id\" = r.\"_account_id\" AND o.run_started_at = r.started_at WHERE o.\"_account_id\" = '$ACCOUNT_ID' AND o.object = 'products' AND o.status = 'complete' ORDER BY o.completed_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ' || echo "0")
+if [ -n "$NEW_CURSOR" ] && [ "$NEW_CURSOR" != "" ] && [ "$NEW_CURSOR" -gt "$CURSOR" ] 2>/dev/null; then
     echo "   ✓ Cursor advanced: $CURSOR → $NEW_CURSOR (incremental sync working)"
 else
     echo "   ❌ Cursor did not advance (got: $NEW_CURSOR, expected > $CURSOR)"
     exit 1
 fi
 
-# Verify sync status is still 'complete'
-NEW_SYNC_STATUS=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT status FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ' || echo "")
+# Verify sync status is still 'complete' (using new observability tables)
+NEW_SYNC_STATUS=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT o.status FROM stripe._sync_obj_run o JOIN stripe._sync_run r ON o.\"_account_id\" = r.\"_account_id\" AND o.run_started_at = r.started_at WHERE o.\"_account_id\" = '$ACCOUNT_ID' AND o.object = 'products' ORDER BY r.started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ' || echo "")
 if [ "$NEW_SYNC_STATUS" = "complete" ]; then
     echo "   ✓ Sync status after incremental sync: $NEW_SYNC_STATUS"
 else
@@ -315,8 +313,8 @@ else
     exit 1
 fi
 
-# Verify last_synced_at was updated
-LAST_SYNCED=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT last_synced_at FROM stripe._sync_status WHERE resource = 'products' AND account_id = '$ACCOUNT_ID';" 2>/dev/null | tr -d ' ')
+# Verify completed_at was updated (using new observability tables)
+LAST_SYNCED=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c "SELECT o.completed_at FROM stripe._sync_obj_run o JOIN stripe._sync_run r ON o.\"_account_id\" = r.\"_account_id\" AND o.run_started_at = r.started_at WHERE o.\"_account_id\" = '$ACCOUNT_ID' AND o.object = 'products' ORDER BY r.started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 if [ -n "$LAST_SYNCED" ]; then
     echo "   ✓ Last synced timestamp updated: $LAST_SYNCED"
 else

@@ -6,7 +6,7 @@ import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 
 let stripeSync: StripeSync
-const TEST_ACCOUNT_ID = 'acct_test'
+const TEST_ACCOUNT_ID = 'acct_test_account'
 
 beforeAll(async () => {
   process.env.AUTO_EXPAND_LISTS = 'true'
