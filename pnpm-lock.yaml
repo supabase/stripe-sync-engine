@@ -70,8 +70,8 @@ importers:
         specifier: ^5.6.0
         version: 5.6.2
       stripe:
-        specifier: ^19.0.0
-        version: 19.3.1(@types/node@24.10.1)
+        specifier: ^20.0.0
+        version: 20.0.0(@types/node@24.10.1)
     devDependencies:
       '@types/node':
         specifier: ^24.5.0
@@ -96,7 +96,7 @@ importers:
         version: 0.0.8
       stripe:
         specifier: '> 11'
-        version: 18.2.0(@types/node@24.8.1)
+        version: 18.2.0(@types/node@24.10.1)
       yesql:
         specifier: ^7.0.0
         version: 7.0.0
@@ -891,9 +891,6 @@ packages:
 
   '@types/node@24.10.1':
     resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
-
-  '@types/node@24.8.1':
-    resolution: {integrity: sha512-alv65KGRadQVfVcG69MuB4IzdYVpRwMG/mq8KWOaoOdyY617P5ivaDiMCGOFDWD2sAn5Q0mR3mRtUOgm99hL9Q==}
 
   '@types/pg@8.15.6':
     resolution: {integrity: sha512-NoaMtzhxOrubeL/7UZuNTrejB4MPAJ0RpxZqXQf2qXuVlTPuG6Y8p4u9dKRaue4yjmC7ZhzVO2/Yyyn25znrPQ==}
@@ -1982,8 +1979,8 @@ packages:
       '@types/node':
         optional: true
 
-  stripe@19.3.1:
-    resolution: {integrity: sha512-5NXhLxTZ+4uO1wnsmNysILVuyeZ1Xia7niz/8ykBkGJkCcrY2WyQZwcfYuWZmZEJtWr2+0j49JXwNC6y9CHL7Q==}
+  stripe@20.0.0:
+    resolution: {integrity: sha512-EaZeWpbJOCcDytdjKSwdrL5BxzbDGNueiCfHjHXlPdBQvLqoxl6AAivC35SPzTmVXJb5duXQlXFGS45H0+e6Gg==}
     engines: {node: '>=16'}
     peerDependencies:
       '@types/node': '>=16'
@@ -2092,9 +2089,6 @@ packages:
 
   ufo@1.6.1:
     resolution: {integrity: sha512-9a4/uxlTWJ4+a5i0ooc1rU7C7YOw3wT+UGqdeNNHWnOF9qcMBgLRS+4IYUqbczewFx4mLEig6gawh7X6mFlEkA==}
-
-  undici-types@7.14.0:
-    resolution: {integrity: sha512-QQiYxHuyZ9gQUIrmPo3IA+hUl4KYk8uSA7cHrcKd/l3p1OTpZcM0Tbp9x7FAtXdAYhlasd60ncPpgu6ihG6TOA==}
 
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
@@ -2781,11 +2775,6 @@ snapshots:
   '@types/node@24.10.1':
     dependencies:
       undici-types: 7.16.0
-
-  '@types/node@24.8.1':
-    dependencies:
-      undici-types: 7.14.0
-    optional: true
 
   '@types/pg@8.15.6':
     dependencies:
@@ -3982,13 +3971,13 @@ snapshots:
     dependencies:
       js-tokens: 9.0.1
 
-  stripe@18.2.0(@types/node@24.8.1):
+  stripe@18.2.0(@types/node@24.10.1):
     dependencies:
       qs: 6.13.0
     optionalDependencies:
-      '@types/node': 24.8.1
+      '@types/node': 24.10.1
 
-  stripe@19.3.1(@types/node@24.10.1):
+  stripe@20.0.0(@types/node@24.10.1):
     dependencies:
       qs: 6.14.0
     optionalDependencies:
@@ -4093,9 +4082,6 @@ snapshots:
   typescript@5.9.3: {}
 
   ufo@1.6.1: {}
-
-  undici-types@7.14.0:
-    optional: true
 
   undici-types@7.16.0: {}
 
