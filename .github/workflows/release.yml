@@ -102,14 +102,10 @@ jobs:
           cd packages/sync-engine
           pnpm version ${{ needs.release.outputs.new-release-version }} --no-git-tag-version
 
-      # Ensure npm 11.5.1 or later is installed for trusted publishing support
-      - name: Update npm
-        run: npm install -g npm@latest
-
       - name: Publish sync-engine to npm
         run: |
           cd packages/sync-engine
           pnpm install --frozen-lockfile
           pnpm run build
           pnpm pack
-          npm publish --access public
+          pnpm publish --access public
