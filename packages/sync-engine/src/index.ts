@@ -5,7 +5,8 @@ export type * from './types'
 export { PostgresClient } from './database/postgres'
 export { hashApiKey } from './utils/hashApiKey'
 
-// Database adapter interface (no implementation - use stripe-replit-sync/pg or stripe-replit-sync/postgres-js)
-export type { DatabaseAdapter } from './database/adapter'
+// Database adapter interface (use stripe-replit-sync/pg or stripe-replit-sync/postgres-js for implementations)
+export type { DatabaseAdapter, PgCompatibleClient } from './database/adapter'
 
-// Note: runMigrations is exported from 'stripe-replit-sync/pg' since it uses pg directly
+// Migrations - works with any adapter (PgAdapter or PostgresJsAdapter)
+export { runMigrations } from './database/migrate'

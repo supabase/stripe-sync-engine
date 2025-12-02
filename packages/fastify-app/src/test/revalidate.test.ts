@@ -1,5 +1,5 @@
-import { StripeSync } from 'stripe-replit-sync'
-import { PgAdapter, runMigrations } from 'stripe-replit-sync/pg'
+import { StripeSync, runMigrations } from 'stripe-replit-sync'
+import { PgAdapter } from 'stripe-replit-sync/pg'
 import { vitest, beforeAll, describe, test, expect, afterEach } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
@@ -12,15 +12,11 @@ beforeAll(async () => {
   process.env.REVALIDATE_OBJECTS_VIA_STRIPE_API = 'invoice'
 
   const config = getConfig()
-  await runMigrations({
-    databaseUrl: config.databaseUrl,
-
-    logger,
-  })
-
   const adapter = new PgAdapter({
     connectionString: config.databaseUrl,
   })
+
+  await runMigrations(adapter, logger)
 
   stripeSync = new StripeSync({
     ...config,

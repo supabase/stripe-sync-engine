@@ -1,5 +1,5 @@
 import postgres from 'postgres'
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter, PgCompatibleClient } from './adapter'
 
 export interface PostgresJsConfig {
   connectionString: string
@@ -52,5 +52,20 @@ export class PostgresJsAdapter implements DatabaseAdapter {
       return await fn()
     })
     return result as T
+  }
+
+  /**
+   * Returns a pg-compatible client for use with libraries that expect pg.Client.
+   * Used by pg-node-migrations to run database migrations.
+   */
+  toPgClient(): PgCompatibleClient {
+    return {
+      query: async (sql: string | { text: string; values?: unknown[] }) => {
+        const text = typeof sql === 'string' ? sql : sql.text
+        const values = typeof sql === 'string' ? undefined : sql.values
+        const rows = await this.sql.unsafe(text, values as postgres.ParameterOrJSON<never>[])
+        return { rows: [...rows], rowCount: rows.length }
+      },
+    }
   }
 }

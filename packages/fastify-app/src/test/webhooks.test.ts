@@ -1,8 +1,8 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
-import { PostgresClient, StripeSync } from 'stripe-replit-sync'
-import { PgAdapter, runMigrations } from 'stripe-replit-sync/pg'
+import { PostgresClient, StripeSync, runMigrations } from 'stripe-replit-sync'
+import { PgAdapter } from 'stripe-replit-sync/pg'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
@@ -25,11 +25,7 @@ describe('POST /webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
-    const config = getConfig()
-    await runMigrations({
-      databaseUrl: config.databaseUrl,
-      logger,
-    })
+    await runMigrations(adapter, logger)
 
     process.env.AUTO_EXPAND_LISTS = 'false'
     server = await createServer()

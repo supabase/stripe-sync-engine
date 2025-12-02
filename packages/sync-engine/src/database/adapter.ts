@@ -1,4 +1,14 @@
 /**
+ * pg-compatible client interface for use with pg-node-migrations.
+ * This is the minimal interface required by the migration library.
+ */
+export interface PgCompatibleClient {
+  query(
+    sql: string | { text: string; values?: unknown[] }
+  ): Promise<{ rows: unknown[]; rowCount: number }>
+}
+
+/**
  * Database adapter interface for abstracting database operations.
  * This allows sync-engine to work with different database clients:
  * - pg (Node.js) - for CLI, tests, existing deployments
@@ -30,4 +40,10 @@ export interface DatabaseAdapter {
    * @returns Result of the function
    */
   withAdvisoryLock<T>(lockId: number, fn: () => Promise<T>): Promise<T>
+
+  /**
+   * Returns a pg-compatible client for use with libraries that expect a pg.Client interface.
+   * Used by pg-node-migrations to run database migrations.
+   */
+  toPgClient(): PgCompatibleClient
 }

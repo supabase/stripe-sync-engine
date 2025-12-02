@@ -18,14 +18,14 @@ describe('Webhook Race Condition Tests', () => {
   beforeAll(async () => {
     if (!stripeApiKey) return
 
-    // Run migrations to ensure unique constraint exists
-    await runMigrations({ databaseUrl })
-
     adapter = new PgAdapter({
       max: 20, // Need more connections for concurrent tests
       connectionString: databaseUrl,
       keepAlive: true,
     })
+
+    // Run migrations to ensure unique constraint exists
+    await runMigrations(adapter)
 
     stripeSync = new StripeSync({
       stripeSecretKey: stripeApiKey,

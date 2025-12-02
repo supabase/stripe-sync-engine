@@ -12,12 +12,12 @@ describe('Observable Sync System Methods', () => {
     const databaseUrl =
       process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:54322/postgres'
 
-    // Run migrations to ensure schema and tables exist
-    await runMigrations({ databaseUrl })
-
     adapter = new PgAdapter({
       connectionString: databaseUrl,
     })
+
+    // Run migrations to ensure schema and tables exist
+    await runMigrations(adapter)
 
     postgresClient = new PostgresClient({
       schema: 'stripe',

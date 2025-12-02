@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'node:http'
-import { runMigrations } from 'stripe-replit-sync/pg'
+import { runMigrations } from 'stripe-replit-sync'
+import { PgAdapter } from 'stripe-replit-sync/pg'
 import { createServer } from './app'
 import { getConfig } from './utils/config'
 import { logger } from './logger'
@@ -16,11 +17,12 @@ const main = async () => {
   const config = getConfig()
 
   if (!config.disableMigrations) {
-    await runMigrations({
-      databaseUrl: config.databaseUrl,
-      logger: logger,
+    const adapter = new PgAdapter({
+      connectionString: config.databaseUrl,
       ssl: config.sslConnectionOptions,
     })
+    await runMigrations(adapter, logger)
+    await adapter.end()
   }
 
   // Start the server

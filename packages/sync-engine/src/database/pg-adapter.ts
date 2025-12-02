@@ -1,5 +1,5 @@
 import pg, { PoolConfig } from 'pg'
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter, PgCompatibleClient } from './adapter'
 
 /**
  * Database adapter implementation using node-postgres (pg).
@@ -48,6 +48,22 @@ export class PgAdapter implements DatabaseAdapter {
         // Always release connection back to pool
         client.release()
       }
+    }
+  }
+
+  /**
+   * Returns a pg-compatible client for use with libraries that expect pg.Client.
+   * Used by pg-node-migrations to run database migrations.
+   */
+  toPgClient(): PgCompatibleClient {
+    return {
+      query: async (sql: string | { text: string; values?: unknown[] }) => {
+        const result =
+          typeof sql === 'string'
+            ? await this.pool.query(sql)
+            : await this.pool.query(sql.text, sql.values)
+        return { rows: result.rows, rowCount: result.rowCount ?? 0 }
+      },
     }
   }
 }
