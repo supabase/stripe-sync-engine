@@ -51,6 +51,8 @@ export class StripeSync {
   postgresClient: PostgresClient
 
   constructor(private config: StripeSyncConfig) {
+    this.config.schema = config.schema || DEFAULT_SCHEMA
+
     this.stripe = new Stripe(config.stripeSecretKey, {
       // https://github.com/stripe/stripe-node#configuration
       // @ts-ignore
@@ -86,7 +88,7 @@ export class StripeSync {
     }
 
     this.postgresClient = new PostgresClient({
-      schema: config.schema || DEFAULT_SCHEMA,
+      schema: this.config.schema,
       poolConfig,
     })
   }
