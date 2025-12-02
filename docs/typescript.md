@@ -139,3 +139,11 @@ await sync.syncBackfill({
 
 > **Note:**
 > For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.
+
+## Cleanup
+
+Call `close()` to release database connections when shutting down:
+
+```ts
+await sync.close()
+```

@@ -229,4 +229,8 @@ export class PostgresClient {
     })
     return cleansed
   }
+
+  async close(): Promise<void> {
+    await this.pool.end()
+  }
 }
