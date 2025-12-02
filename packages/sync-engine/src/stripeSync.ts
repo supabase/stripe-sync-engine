@@ -1017,6 +1017,7 @@ export class StripeSync {
     for await (const item of fetch()) {
       chunk.push(item)
       synced++
+      if (synced % 1000 === 0) this.config.logger?.info(`Synced ${synced} items`)
 
       if (chunk.length >= chunkSize) {
         await upsert(chunk)
