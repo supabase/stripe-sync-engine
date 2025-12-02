@@ -87,6 +87,7 @@ export type SyncObject =
   | 'checkout_sessions'
 export interface Sync {
   synced: number
+  object?: SyncObject
 }
 
 export interface SyncBackfill {
@@ -133,14 +134,18 @@ export interface SyncBackfillParams {
   }
   object?: SyncObject
   backfillRelatedEntities?: boolean
+  onProgress?: (progress: Sync) => void
 }
 
 export interface SyncEntitlementsParams {
   object: 'entitlements'
   customerId: string
   pagination?: Pick<Stripe.PaginationParams, 'starting_after' | 'ending_before'>
+  onProgress?: (progress: Sync) => void
 }
+
 export interface SyncFeaturesParams {
   object: 'features'
   pagination?: Pick<Stripe.PaginationParams, 'starting_after' | 'ending_before'>
+  onProgress?: (progress: Sync) => void
 }

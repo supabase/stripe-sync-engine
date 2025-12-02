@@ -25,6 +25,7 @@ import {
   SyncBackfillParams,
   SyncEntitlementsParams,
   SyncFeaturesParams,
+  SyncObject,
   type RevalidateEntity,
 } from './types'
 import { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
@@ -637,7 +638,8 @@ export class StripeSync {
   }
 
   async syncBackfill(params?: SyncBackfillParams): Promise<SyncBackfill> {
-    const { object } = params ?? {}
+    const { object, onProgress, ...restParams } = params ?? {}
+
     let products,
       prices,
       customers,
@@ -657,25 +659,32 @@ export class StripeSync {
       refunds
 
     switch (object) {
-      case 'all':
-        products = await this.syncProducts(params)
-        prices = await this.syncPrices(params)
-        plans = await this.syncPlans(params)
-        customers = await this.syncCustomers(params)
-        subscriptions = await this.syncSubscriptions(params)
-        subscriptionSchedules = await this.syncSubscriptionSchedules(params)
-        invoices = await this.syncInvoices(params)
-        charges = await this.syncCharges(params)
-        setupIntents = await this.syncSetupIntents(params)
-        paymentMethods = await this.syncPaymentMethods(params)
-        paymentIntents = await this.syncPaymentIntents(params)
-        taxIds = await this.syncTaxIds(params)
-        creditNotes = await this.syncCreditNotes(params)
-        disputes = await this.syncDisputes(params)
-        earlyFraudWarnings = await this.syncEarlyFraudWarnings(params)
-        refunds = await this.syncRefunds(params)
-        checkoutSessions = await this.syncCheckoutSessions(params)
+      case 'all': {
+        const paramsFor = (object: SyncObject): SyncBackfillParams => ({
+          ...restParams,
+          onProgress: onProgress ? (p) => onProgress({ ...p, object }) : undefined,
+        })
+        products = await this.syncProducts(paramsFor('product'))
+        prices = await this.syncPrices(paramsFor('price'))
+        plans = await this.syncPlans(paramsFor('plan'))
+        customers = await this.syncCustomers(paramsFor('customer'))
+        subscriptions = await this.syncSubscriptions(paramsFor('subscription'))
+        subscriptionSchedules = await this.syncSubscriptionSchedules(
+          paramsFor('subscription_schedules')
+        )
+        invoices = await this.syncInvoices(paramsFor('invoice'))
+        charges = await this.syncCharges(paramsFor('charge'))
+        setupIntents = await this.syncSetupIntents(paramsFor('setup_intent'))
+        paymentMethods = await this.syncPaymentMethods(paramsFor('payment_method'))
+        paymentIntents = await this.syncPaymentIntents(paramsFor('payment_intent'))
+        taxIds = await this.syncTaxIds(paramsFor('tax_id'))
+        creditNotes = await this.syncCreditNotes(paramsFor('credit_note'))
+        disputes = await this.syncDisputes(paramsFor('dispute'))
+        earlyFraudWarnings = await this.syncEarlyFraudWarnings(paramsFor('early_fraud_warning'))
+        refunds = await this.syncRefunds(paramsFor('refund'))
+        checkoutSessions = await this.syncCheckoutSessions(paramsFor('checkout_sessions'))
         break
+      }
       case 'customer':
         customers = await this.syncCustomers(params)
         break
@@ -760,7 +769,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.products.list(params),
-      (products) => this.upsertProducts(products)
+      (products) => this.upsertProducts(products),
+      syncParams?.onProgress
     )
   }
 
@@ -772,7 +782,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.prices.list(params),
-      (prices) => this.upsertPrices(prices, syncParams?.backfillRelatedEntities)
+      (prices) => this.upsertPrices(prices, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -784,7 +795,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.plans.list(params),
-      (plans) => this.upsertPlans(plans, syncParams?.backfillRelatedEntities)
+      (plans) => this.upsertPlans(plans, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -797,7 +809,8 @@ export class StripeSync {
     return this.fetchAndUpsert(
       () => this.stripe.customers.list(params),
       // @ts-expect-error
-      (items) => this.upsertCustomers(items)
+      (items) => this.upsertCustomers(items),
+      syncParams?.onProgress
     )
   }
 
@@ -809,7 +822,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.subscriptions.list(params),
-      (items) => this.upsertSubscriptions(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertSubscriptions(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -821,7 +835,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.subscriptionSchedules.list(params),
-      (items) => this.upsertSubscriptionSchedules(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertSubscriptionSchedules(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -833,7 +848,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.invoices.list(params),
-      (items) => this.upsertInvoices(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertInvoices(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -845,7 +861,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.charges.list(params),
-      (items) => this.upsertCharges(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertCharges(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -857,7 +874,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.setupIntents.list(params),
-      (items) => this.upsertSetupIntents(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertSetupIntents(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -869,7 +887,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.paymentIntents.list(params),
-      (items) => this.upsertPaymentIntents(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertPaymentIntents(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -880,7 +899,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.taxIds.list(params),
-      (items) => this.upsertTaxIds(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertTaxIds(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -918,6 +938,7 @@ export class StripeSync {
           synced += syncResult.synced
         })
       )
+      syncParams?.onProgress?.({ synced })
     }
 
     return { synced }
@@ -929,7 +950,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.disputes.list(params),
-      (items) => this.upsertDisputes(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertDisputes(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -941,7 +963,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.radar.earlyFraudWarnings.list(params),
-      (items) => this.upsertEarlyFraudWarning(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertEarlyFraudWarning(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -953,7 +976,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.refunds.list(params),
-      (items) => this.upsertRefunds(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertRefunds(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
@@ -965,7 +989,8 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.creditNotes.list(params),
-      (creditNotes) => this.upsertCreditNotes(creditNotes)
+      (creditNotes) => this.upsertCreditNotes(creditNotes),
+      syncParams?.onProgress
     )
   }
 
@@ -974,7 +999,8 @@ export class StripeSync {
     const params: Stripe.Entitlements.FeatureListParams = { limit: 100, ...syncParams?.pagination }
     return this.fetchAndUpsert(
       () => this.stripe.entitlements.features.list(params),
-      (features) => this.upsertFeatures(features)
+      (features) => this.upsertFeatures(features),
+      syncParams?.onProgress
     )
   }
 
@@ -987,7 +1013,8 @@ export class StripeSync {
     }
     return this.fetchAndUpsert(
       () => this.stripe.entitlements.activeEntitlements.list(params),
-      (entitlements) => this.upsertActiveEntitlements(customerId, entitlements)
+      (entitlements) => this.upsertActiveEntitlements(customerId, entitlements),
+      syncParams?.onProgress
     )
   }
 
@@ -1001,13 +1028,15 @@ export class StripeSync {
 
     return this.fetchAndUpsert(
       () => this.stripe.checkout.sessions.list(params),
-      (items) => this.upsertCheckoutSessions(items, syncParams?.backfillRelatedEntities)
+      (items) => this.upsertCheckoutSessions(items, syncParams?.backfillRelatedEntities),
+      syncParams?.onProgress
     )
   }
 
   private async fetchAndUpsert<T>(
     fetch: () => Stripe.ApiListPromise<T>,
-    upsert: (items: T[]) => Promise<T[]>
+    upsert: (items: T[]) => Promise<T[]>,
+    onProgress?: (progress: Sync) => void
   ): Promise<Sync> {
     const chunkSize = 250
     let chunk: T[] = []
@@ -1021,11 +1050,15 @@ export class StripeSync {
 
       if (chunk.length >= chunkSize) {
         await upsert(chunk)
+        onProgress?.({ synced })
         chunk = []
       }
     }
 
-    if (chunk.length > 0) await upsert(chunk)
+    if (chunk.length > 0) {
+      await upsert(chunk)
+      onProgress?.({ synced })
+    }
 
     this.config.logger?.info(`Upserted ${synced} items`)
 

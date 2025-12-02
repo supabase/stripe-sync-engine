@@ -90,11 +90,15 @@ To backfill Stripe data (e.g., all products created after a certain date), use t
 await sync.syncBackfill({
   object: 'product',
   created: { gte: 1643872333 }, // Unix timestamp
+  onProgress: (progress) => {
+    console.log(`Synced ${progress.synced} products`)
+  },
 })
 ```
 
 - `object` can be one of: `all`, `charge`, `customer`, `dispute`, `invoice`, `payment_method`, `payment_intent`, `plan`, `price`, `product`, `setup_intent`, `subscription`.
 - `created` is a Stripe RangeQueryParam and supports `gt`, `gte`, `lt`, `lte`.
+- `onProgress` (optional) is a callback that fires after each batch of 250 items with cumulative progress: `{ synced: number, object?: string }`.
 
 > **Note:**
 > For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.
