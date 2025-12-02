@@ -1009,25 +1009,26 @@ export class StripeSync {
     fetch: () => Stripe.ApiListPromise<T>,
     upsert: (items: T[]) => Promise<T[]>
   ): Promise<Sync> {
-    const items: T[] = []
+    const chunkSize = 250
+    let chunk: T[] = []
+    let synced = 0
 
     this.config.logger?.info('Fetching items to sync from Stripe')
     for await (const item of fetch()) {
-      items.push(item)
+      chunk.push(item)
+      synced++
+
+      if (chunk.length >= chunkSize) {
+        await upsert(chunk)
+        chunk = []
+      }
     }
 
-    if (!items.length) return { synced: 0 }
+    if (chunk.length > 0) await upsert(chunk)
 
-    this.config.logger?.info(`Upserting ${items.length} items`)
-    const chunkSize = 250
-    for (let i = 0; i < items.length; i += chunkSize) {
-      const chunk = items.slice(i, i + chunkSize)
+    this.config.logger?.info(`Upserted ${synced} items`)
 
-      await upsert(chunk)
-    }
-    this.config.logger?.info('Upserted items')
-
-    return { synced: items.length }
+    return { synced }
   }
 
   private async upsertCharges(
