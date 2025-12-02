@@ -5,9 +5,9 @@ import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
 import { getConfig } from './utils/config'
 import { StripeSync } from 'stripe-replit-sync'
+import { PgAdapter } from 'stripe-replit-sync/pg'
 import { errorSchema } from './error'
 import { logger } from './logger'
-import { type PoolConfig } from 'pg'
 
 interface buildOpts extends FastifyServerOptions {
   exposeDocs?: boolean
@@ -18,14 +18,14 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
 
   const config = getConfig()
 
-  const poolConfig: PoolConfig = {
+  const adapter = new PgAdapter({
     max: config.maxPostgresConnections ?? 10,
     connectionString: config.databaseUrl,
     keepAlive: true,
     ssl: config.sslConnectionOptions,
-  }
+  })
 
-  const stripeSync = new StripeSync({ ...config, logger, poolConfig })
+  const stripeSync = new StripeSync({ ...config, logger, adapter })
 
   app.decorate('stripeSync', stripeSync)
 

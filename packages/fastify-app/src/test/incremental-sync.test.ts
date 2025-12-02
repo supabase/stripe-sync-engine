@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
-import { StripeSync, runMigrations, hashApiKey } from 'stripe-replit-sync'
+import { StripeSync, hashApiKey } from 'stripe-replit-sync'
+import { PgAdapter, runMigrations } from 'stripe-replit-sync/pg'
 import { vitest, beforeAll, afterAll, describe, test, expect, beforeEach } from 'vitest'
 import { getConfig } from '../utils/config'
 import { logger } from '../logger'
@@ -9,7 +10,7 @@ const testAccountId = 'acct_test_account'
 
 // Helper to get cursor from most recent sync run (for test verification - any status)
 async function getCursor(resourceName: string): Promise<number | null> {
-  const result = await stripeSync.postgresClient.pool.query(
+  const result = await stripeSync.postgresClient.query(
     `SELECT o.cursor FROM stripe._sync_obj_run o
      JOIN stripe._sync_run r ON o."_account_id" = r."_account_id" AND o.run_started_at = r.started_at
      WHERE o."_account_id" = $1 AND o.object = $2
@@ -28,11 +29,13 @@ beforeAll(async () => {
     logger,
   })
 
+  const adapter = new PgAdapter({
+    connectionString: config.databaseUrl,
+  })
+
   stripeSync = new StripeSync({
     ...config,
-    poolConfig: {
-      connectionString: config.databaseUrl,
-    },
+    adapter,
     stripeAccountId: testAccountId,
   })
 
@@ -54,13 +57,13 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await stripeSync.postgresClient.pool.end()
+  await stripeSync.postgresClient.end()
 })
 
 describe('Incremental Sync', () => {
   beforeEach(async () => {
     // Clean up test data before each test
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.products WHERE id LIKE $1', [
       'test_prod_%',
     ])
     await stripeSync.postgresClient.deleteSyncRuns(testAccountId)
@@ -116,7 +119,7 @@ describe('Incremental Sync', () => {
     expect(listSpy).toHaveBeenCalledWith({ limit: 100 })
 
     // Verify products were inserted
-    const firstResult = await stripeSync.postgresClient.pool.query(
+    const firstResult = await stripeSync.postgresClient.query(
       'SELECT COUNT(*) FROM stripe.products WHERE id LIKE $1',
       ['test_prod_%']
     )
@@ -146,7 +149,7 @@ describe('Incremental Sync', () => {
     })
 
     // Verify new product was inserted
-    const secondResult = await stripeSync.postgresClient.pool.query(
+    const secondResult = await stripeSync.postgresClient.query(
       'SELECT COUNT(*) FROM stripe.products WHERE id LIKE $1',
       ['test_prod_%']
     )
@@ -344,7 +347,7 @@ describe('Incremental Sync', () => {
     expect(cursor).toBe(1704902400)
 
     // Status should be error in the new observability tables
-    const status = await stripeSync.postgresClient.pool.query(
+    const status = await stripeSync.postgresClient.query(
       `SELECT r.status as run_status, r.error_message as run_error,
               o.status as obj_status, o.error_message as obj_error
        FROM stripe._sync_run r
@@ -362,7 +365,7 @@ describe('Incremental Sync', () => {
     await stripeSync.syncProducts()
 
     // Status should be complete
-    const finalStatus = await stripeSync.postgresClient.pool.query(
+    const finalStatus = await stripeSync.postgresClient.query(
       `SELECT r.status FROM stripe._sync_run r
        JOIN stripe._sync_obj_run o ON o."_account_id" = r."_account_id" AND o.run_started_at = r.started_at
        WHERE r."_account_id" = $1 AND o.object = $2
@@ -431,7 +434,7 @@ describe('Incremental Sync', () => {
 describe('processNext', () => {
   beforeEach(async () => {
     // Clean up test data before each test
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.products WHERE id LIKE $1', [
       'test_prod_%',
     ])
     await stripeSync.postgresClient.deleteSyncRuns(testAccountId)
@@ -561,7 +564,7 @@ describe('processNext', () => {
 describe('processUntilDone', () => {
   beforeEach(async () => {
     // Clean up test data before each test
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.products WHERE id LIKE $1', [
       'test_prod_%',
     ])
     await stripeSync.postgresClient.deleteSyncRuns(testAccountId)
@@ -596,17 +599,16 @@ describe('processUntilDone', () => {
 describe('Bug regression tests', () => {
   beforeEach(async () => {
     // Clean up test data before each test
-    await stripeSync.postgresClient.pool.query(
-      'DELETE FROM stripe.payment_intents WHERE id LIKE $1',
-      ['test_pi_%']
-    )
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.plans WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.payment_intents WHERE id LIKE $1', [
+      'test_pi_%',
+    ])
+    await stripeSync.postgresClient.query('DELETE FROM stripe.plans WHERE id LIKE $1', [
       'test_plan_%',
     ])
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.products WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.products WHERE id LIKE $1', [
       'test_prod_%',
     ])
-    await stripeSync.postgresClient.pool.query('DELETE FROM stripe.prices WHERE id LIKE $1', [
+    await stripeSync.postgresClient.query('DELETE FROM stripe.prices WHERE id LIKE $1', [
       'test_price_%',
     ])
     await stripeSync.postgresClient.deleteSyncRuns(testAccountId)
@@ -660,21 +662,21 @@ describe('Bug regression tests', () => {
     await stripeSync.processUntilDone({ object: 'payment_intent' })
 
     // Verify payment_intent was synced
-    const piResult = await stripeSync.postgresClient.pool.query(
+    const piResult = await stripeSync.postgresClient.query(
       'SELECT COUNT(*) FROM stripe.payment_intents WHERE id = $1',
       ['test_pi_1']
     )
     expect(parseInt(piResult.rows[0].count)).toBe(1)
 
     // Verify plan was NOT synced (bug fix verified)
-    const planResult = await stripeSync.postgresClient.pool.query(
+    const planResult = await stripeSync.postgresClient.query(
       'SELECT COUNT(*) FROM stripe.plans WHERE id = $1',
       ['test_plan_1']
     )
     expect(parseInt(planResult.rows[0].count)).toBe(0)
 
     // Also verify via observability: only payment_intents object run should exist
-    const objRuns = await stripeSync.postgresClient.pool.query(
+    const objRuns = await stripeSync.postgresClient.query(
       `SELECT object FROM stripe._sync_obj_run WHERE "_account_id" = $1`,
       [testAccountId]
     )
@@ -724,7 +726,7 @@ describe('Bug regression tests', () => {
     await stripeSync.processUntilDone({ object: 'price' })
 
     // Count how many sync runs were created
-    const runResult = await stripeSync.postgresClient.pool.query(
+    const runResult = await stripeSync.postgresClient.query(
       `SELECT COUNT(*) FROM stripe._sync_run WHERE "_account_id" = $1`,
       [testAccountId]
     )
@@ -780,14 +782,14 @@ describe('Bug regression tests', () => {
     // all objects share one run.
 
     // Count runs after first processUntilDone
-    const runResultAfterFirst = await stripeSync.postgresClient.pool.query(
+    const runResultAfterFirst = await stripeSync.postgresClient.query(
       `SELECT COUNT(*) FROM stripe._sync_run WHERE "_account_id" = $1`,
       [testAccountId]
     )
     expect(parseInt(runResultAfterFirst.rows[0].count)).toBe(1)
 
     // Count object runs - should have 'products' object run
-    const objRunResult = await stripeSync.postgresClient.pool.query(
+    const objRunResult = await stripeSync.postgresClient.query(
       `SELECT object FROM stripe._sync_obj_run WHERE "_account_id" = $1`,
       [testAccountId]
     )

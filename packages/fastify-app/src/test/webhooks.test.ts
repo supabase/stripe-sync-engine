@@ -1,21 +1,23 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
-import { PostgresClient, runMigrations } from 'stripe-replit-sync'
+import { PostgresClient, StripeSync } from 'stripe-replit-sync'
+import { PgAdapter, runMigrations } from 'stripe-replit-sync/pg'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
 import { logger } from '../logger'
 import { mockStripe } from './helpers/mockStripe'
-import { StripeSync } from 'stripe-replit-sync'
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
+const adapter = new PgAdapter({
+  connectionString: getConfig().databaseUrl,
+})
+
 const postgresClient = new PostgresClient({
-  poolConfig: {
-    connectionString: getConfig().databaseUrl,
-  },
+  adapter,
   schema: 'stripe',
 })
 

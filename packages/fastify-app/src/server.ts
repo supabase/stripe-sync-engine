@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'node:http'
-import { runMigrations } from 'stripe-replit-sync'
+import { runMigrations } from 'stripe-replit-sync/pg'
 import { createServer } from './app'
 import { getConfig } from './utils/config'
 import { logger } from './logger'

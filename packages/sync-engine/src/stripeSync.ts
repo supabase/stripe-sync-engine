@@ -14,7 +14,6 @@ import {
   type RevalidateEntity,
 } from './types'
 import { managedWebhookSchema } from './schemas/managed_webhook'
-import { type PoolConfig } from 'pg'
 import { createRetryableStripeClient } from './utils/stripeClientWrapper'
 import { hashApiKey } from './utils/hashApiKey'
 
@@ -94,27 +93,9 @@ export class StripeSync {
       'StripeSync initialized'
     )
 
-    const poolConfig = config.poolConfig ?? ({} as PoolConfig)
-
-    if (config.databaseUrl) {
-      poolConfig.connectionString = config.databaseUrl
-    }
-
-    if (config.maxPostgresConnections) {
-      poolConfig.max = config.maxPostgresConnections
-    }
-
-    if (poolConfig.max === undefined) {
-      poolConfig.max = 10
-    }
-
-    if (poolConfig.keepAlive === undefined) {
-      poolConfig.keepAlive = true
-    }
-
     this.postgresClient = new PostgresClient({
       schema: 'stripe',
-      poolConfig,
+      adapter: config.adapter,
     })
   }
 
@@ -1244,7 +1225,6 @@ export class StripeSync {
   ): Promise<Sync> {
     let totalSynced = 0
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const result = await this.processNext(object, {
         ...params,
