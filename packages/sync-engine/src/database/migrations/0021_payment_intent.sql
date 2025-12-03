@@ -1,4 +1,4 @@
-create table if not exists "stripe"."payment_intents" (
+create table if not exists "{{schema}}"."payment_intents" (
   id text primary key,
   object text,
   amount integer,
@@ -38,5 +38,5 @@ create table if not exists "stripe"."payment_intents" (
   transfer_group text
 );
 
-CREATE INDEX stripe_payment_intents_customer_idx ON "stripe"."payment_intents" USING btree (customer);
-CREATE INDEX stripe_payment_intents_invoice_idx ON "stripe"."payment_intents" USING btree (invoice);
+CREATE INDEX stripe_payment_intents_customer_idx ON "{{schema}}"."payment_intents" USING btree (customer);
+CREATE INDEX stripe_payment_intents_invoice_idx ON "{{schema}}"."payment_intents" USING btree (invoice);

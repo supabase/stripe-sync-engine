@@ -1,4 +1,4 @@
-create table if not exists "stripe"."products" (
+create table if not exists "{{schema}}"."products" (
   "id" text primary key,
   "object" text,
   "active" boolean,

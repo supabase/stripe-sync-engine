@@ -1,7 +1,7 @@
 WITH subscriptions AS (
-  select jsonb_array_elements(items->'data') as obj from "stripe"."subscriptions"
+  select jsonb_array_elements(items->'data') as obj from "{{schema}}"."subscriptions"
 )
-insert into "stripe"."subscription_items"
+insert into "{{schema}}"."subscription_items"
 select obj->>'id' as "id",
   obj->>'object' as "object", 
   obj->'billing_thresholds' as "billing_thresholds", 

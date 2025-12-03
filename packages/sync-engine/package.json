@@ -26,7 +26,6 @@
   ],
   "dependencies": {
     "pg": "^8.16.3",
-    "pg-node-migrations": "0.0.8",
     "yesql": "^7.0.0"
   },
   "peerDependencies": {

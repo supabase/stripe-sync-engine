@@ -1,5 +1,5 @@
 create table
-    if not exists "stripe"."refunds" (
+    if not exists "{{schema}}"."refunds" (
         "id" text primary key,
         object text,
         amount integer,
@@ -18,12 +18,12 @@ create table
         updated_at timestamptz default timezone('utc'::text, now()) not null
     );
 
-create index stripe_refunds_charge_idx on "stripe"."refunds" using btree (charge);
+create index stripe_refunds_charge_idx on "{{schema}}"."refunds" using btree (charge);
 
-create index stripe_refunds_payment_intent_idx on "stripe"."refunds" using btree (payment_intent);
+create index stripe_refunds_payment_intent_idx on "{{schema}}"."refunds" using btree (payment_intent);
 
 create trigger handle_updated_at
     before update
-    on stripe.refunds
+    on "{{schema}}"."refunds"
     for each row
     execute procedure set_updated_at();

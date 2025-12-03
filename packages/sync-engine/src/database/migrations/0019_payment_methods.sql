@@ -1,4 +1,4 @@
-create table if not exists "stripe"."payment_methods" (
+create table if not exists "{{schema}}"."payment_methods" (
     id text primary key,
     object text,
     created integer,
@@ -9,4 +9,4 @@ create table if not exists "stripe"."payment_methods" (
     card jsonb
 );
 
-CREATE INDEX stripe_payment_methods_customer_idx ON "stripe"."payment_methods" USING btree (customer);
+CREATE INDEX stripe_payment_methods_customer_idx ON "{{schema}}"."payment_methods" USING btree (customer);

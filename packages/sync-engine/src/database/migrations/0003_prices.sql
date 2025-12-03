@@ -1,17 +1,24 @@
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_type') THEN
-        create type "stripe"."pricing_type" as enum ('one_time', 'recurring');
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE t.typname = 'pricing_type' AND n.nspname = '{{schema}}'
+    ) THEN
+        create type "{{schema}}"."pricing_type" as enum ('one_time', 'recurring');
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_tiers') THEN
-      create type "stripe"."pricing_tiers" as enum ('graduated', 'volume');
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE t.typname = 'pricing_tiers' AND n.nspname = '{{schema}}'
+    ) THEN
+        create type "{{schema}}"."pricing_tiers" as enum ('graduated', 'volume');
     END IF;
-    --more types here...
 END
 $$;
 
 
-create table if not exists "stripe"."prices" (
+create table if not exists "{{schema}}"."prices" (
   "id" text primary key,
   "object" text,
   "active" boolean,
@@ -19,16 +26,16 @@ create table if not exists "stripe"."prices" (
   "metadata" jsonb,
   "nickname" text,
   "recurring" jsonb,
-  "type" stripe.pricing_type,
+  "type" "{{schema}}"."pricing_type",
   "unit_amount" integer,
   "billing_scheme" text,
   "created" integer,
   "livemode" boolean,
   "lookup_key" text,
-  "tiers_mode" stripe.pricing_tiers,
+  "tiers_mode" "{{schema}}"."pricing_tiers",
   "transform_quantity" jsonb,
   "unit_amount_decimal" text,
 
-  "product" text references stripe.products
+  "product" text references "{{schema}}"."products"
 );
 
