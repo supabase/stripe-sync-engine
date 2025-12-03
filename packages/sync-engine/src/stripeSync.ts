@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
+import pkg from '../package.json' with { type: 'json' }
 import { PostgresClient } from './database/postgres'
 import {
   StripeSyncConfig,
@@ -2926,6 +2927,7 @@ export class StripeSync {
         metadata: {
           ...webhookParams.metadata,
           managed_by: 'stripe-sync',
+          version: pkg.version,
         },
       })
 

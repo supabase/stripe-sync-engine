@@ -1,3 +1,7 @@
+import pkg from '../package.json' with { type: 'json' }
+
+export const VERSION = pkg.version
+
 export { StripeSync } from './stripeSync'
 
 export type * from './types'
