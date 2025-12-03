@@ -6,8 +6,8 @@
  * when the base URL matches, and creates new ones when it doesn't.
  */
 
-import { StripeSync, runMigrations } from 'stripe-replit-sync'
-import { PgAdapter } from 'stripe-replit-sync/pg'
+import { StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { PgAdapter } from 'stripe-experiment-sync/pg'
 import dotenv from 'dotenv'
 import chalk from 'chalk'
 

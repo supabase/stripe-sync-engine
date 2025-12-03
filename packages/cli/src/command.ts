@@ -3,8 +3,8 @@ import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
 import { loadConfig, CliOptions } from './config'
-import { StripeSync, type SyncObject, runMigrations } from 'stripe-replit-sync'
-import { PgAdapter } from 'stripe-replit-sync/pg'
+import { StripeSync, type SyncObject, runMigrations } from 'stripe-experiment-sync'
+import { PgAdapter } from 'stripe-experiment-sync/pg'
 import { createTunnel, NgrokTunnel } from './ngrok'
 
 const VALID_SYNC_OBJECTS: SyncObject[] = [

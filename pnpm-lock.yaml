@@ -78,7 +78,7 @@ importers:
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
-      stripe-replit-sync:
+      stripe-experiment-sync:
         specifier: workspace:*
         version: link:../sync-engine
     devDependencies:
@@ -118,7 +118,7 @@ importers:
       stripe:
         specifier: ^19.0.0
         version: 19.3.0(@types/node@24.10.0)
-      stripe-replit-sync:
+      stripe-experiment-sync:
         specifier: workspace:*
         version: link:../sync-engine
     devDependencies:

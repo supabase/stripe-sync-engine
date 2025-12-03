@@ -1,5 +1,5 @@
-import { StripeSync, runMigrations } from 'stripe-replit-sync'
-import { PgAdapter } from 'stripe-replit-sync/pg'
+import { StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { PgAdapter } from 'stripe-experiment-sync/pg'
 import { vitest, beforeAll, describe, test, expect, afterAll } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'

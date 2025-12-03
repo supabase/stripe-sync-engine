@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../utils/verifyApiKey'
-import { SyncParams } from 'stripe-replit-sync'
+import { SyncParams } from 'stripe-experiment-sync'
 
 export default async function routes(fastify: FastifyInstance) {
   fastify.post('/sync', {

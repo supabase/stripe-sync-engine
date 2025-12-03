@@ -11,8 +11,8 @@
  */
 
 import dotenv from 'dotenv'
-import { StripeSync } from 'stripe-replit-sync'
-import { PgAdapter } from 'stripe-replit-sync/pg'
+import { StripeSync } from 'stripe-experiment-sync'
+import { PgAdapter } from 'stripe-experiment-sync/pg'
 
 dotenv.config()
 

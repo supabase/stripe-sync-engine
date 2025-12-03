@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
-import { StripeSync, hashApiKey, runMigrations } from 'stripe-replit-sync'
-import { PgAdapter } from 'stripe-replit-sync/pg'
+import { StripeSync, hashApiKey, runMigrations } from 'stripe-experiment-sync'
+import { PgAdapter } from 'stripe-experiment-sync/pg'
 import { vitest, beforeAll, afterAll, describe, test, expect, beforeEach } from 'vitest'
 import { getConfig } from '../utils/config'
 import { logger } from '../logger'

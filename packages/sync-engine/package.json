@@ -1,5 +1,5 @@
 {
-  "name": "stripe-replit-sync",
+  "name": "stripe-experiment-sync",
   "version": "1.0.0",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data to Postgres",

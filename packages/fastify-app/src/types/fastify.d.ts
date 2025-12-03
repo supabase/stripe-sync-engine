@@ -1,4 +1,4 @@
-import { StripeSync } from 'stripe-replit-sync'
+import { StripeSync } from 'stripe-experiment-sync'
 
 declare module 'fastify' {
   interface FastifyInstance {

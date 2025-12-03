@@ -47,7 +47,7 @@
     "inquirer": "^12.3.0",
     "pg": "^8.13.1",
     "stripe": "^17.7.0",
-    "stripe-replit-sync": "workspace:*"
+    "stripe-experiment-sync": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
