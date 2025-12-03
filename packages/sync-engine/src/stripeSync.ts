@@ -1718,6 +1718,10 @@ export class StripeSync {
   async close(): Promise<void> {
     await this.postgresClient.close()
   }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.close()
+  }
 }
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
