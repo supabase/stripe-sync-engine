@@ -29,6 +29,13 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 - Exposes a `/webhooks` endpoint that listens to any Stripe webhooks (via the Fastify app).
 - Inserts, updates, or deletes changes into the tables whenever there is a change to Stripe.
 
+> **Note:** If other PostgreSQL users need access to the `stripe` schema, grant them privileges:
+>
+> ```sql
+> GRANT USAGE ON SCHEMA stripe TO your_user;
+> GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA stripe TO your_user;
+> ```
+
 ---
 
 ## Packages
