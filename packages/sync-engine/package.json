@@ -6,41 +6,19 @@
   "type": "module",
   "main": "./dist/index.cjs",
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+    "import": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
-    "./pg": {
-      "import": {
-        "types": "./dist/pg.d.ts",
-        "default": "./dist/pg.js"
-      },
-      "require": {
-        "types": "./dist/pg.d.cts",
-        "default": "./dist/pg.cjs"
-      }
-    },
-    "./postgres-js": {
-      "import": {
-        "types": "./dist/postgres-js.d.ts",
-        "default": "./dist/postgres-js.js"
-      },
-      "require": {
-        "types": "./dist/postgres-js.d.cts",
-        "default": "./dist/postgres-js.cjs"
-      }
+    "require": {
+      "types": "./dist/index.d.cts",
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "build": "tsup src/index.ts src/pg.ts src/postgres-js.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
+    "build": "tsup src/index.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
     "lint": "eslint src --ext .ts",
     "test": "vitest"
   },
@@ -50,7 +28,6 @@
   "dependencies": {
     "pg": "^8.16.3",
     "pg-node-migrations": "0.0.8",
-    "postgres": "^3.4.7",
     "ws": "^8.18.0",
     "yesql": "^7.0.0"
   },
@@ -63,7 +40,6 @@
     "@types/ws": "^8.5.13",
     "@types/yesql": "^4.1.4",
     "@vitest/ui": "^4.0.9",
-    "stripe": "^20.0.0",
     "vitest": "^3.2.4"
   },
   "repository": {

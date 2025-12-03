@@ -1,9 +1,9 @@
+import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
-import { DatabaseAdapter } from './adapter'
 
 type PostgresConfig = {
   schema: string
-  adapter: DatabaseAdapter
+  poolConfig: PoolConfig
 }
 
 /**
@@ -45,25 +45,10 @@ const ORDERED_STRIPE_TABLES = [
 const TABLES_WITH_ACCOUNT_ID: ReadonlySet<string> = new Set(['_managed_webhooks'])
 
 export class PostgresClient {
-  private adapter: DatabaseAdapter
+  pool: pg.Pool
 
   constructor(private config: PostgresConfig) {
-    this.adapter = config.adapter
-  }
-
-  /**
-   * Get the underlying adapter.
-   * Useful for accessing adapter-specific features.
-   */
-  getAdapter(): DatabaseAdapter {
-    return this.adapter
-  }
-
-  /**
-   * Close all database connections.
-   */
-  async end(): Promise<void> {
-    await this.adapter.end()
+    this.pool = new pg.Pool(config.poolConfig)
   }
 
   async delete(table: string, id: string): Promise<boolean> {
@@ -77,8 +62,8 @@ export class PostgresClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async query<T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }> {
-    return this.adapter.query<T>(text, params)
+  async query(text: string, params?: any[]): Promise<QueryResult> {
+    return this.pool.query(text, params)
   }
 
   async upsertMany<
@@ -90,12 +75,12 @@ export class PostgresClient {
 
     // Max 5 in parallel to avoid exhausting connection pool
     const chunkSize = 5
-    const results: { rows: T[] }[] = []
+    const results: pg.QueryResult<T>[] = []
 
     for (let i = 0; i < entries.length; i += chunkSize) {
       const chunk = entries.slice(i, i + chunkSize)
 
-      const queries: Promise<{ rows: T[] }>[] = []
+      const queries: Promise<pg.QueryResult<T>>[] = []
       chunk.forEach((entry) => {
         // Store entire entry as _raw_data jsonb (id will be auto-generated from _raw_data->>'id')
         const rawData = JSON.stringify(entry)
@@ -110,7 +95,7 @@ export class PostgresClient {
           RETURNING *
         `
 
-        queries.push(this.adapter.query<T>(upsertSql, [rawData]))
+        queries.push(this.pool.query(upsertSql, [rawData]))
       })
 
       results.push(...(await Promise.all(queries)))
@@ -130,12 +115,12 @@ export class PostgresClient {
 
     // Max 5 in parallel to avoid exhausting connection pool
     const chunkSize = 5
-    const results: { rows: T[] }[] = []
+    const results: pg.QueryResult<T>[] = []
 
     for (let i = 0; i < entries.length; i += chunkSize) {
       const chunk = entries.slice(i, i + chunkSize)
 
-      const queries: Promise<{ rows: T[] }>[] = []
+      const queries: Promise<pg.QueryResult<T>>[] = []
       chunk.forEach((entry) => {
         // Internal tables (starting with _) use old column-based format with yesql
         if (table.startsWith('_')) {
@@ -164,7 +149,7 @@ export class PostgresClient {
           cleansed.last_synced_at = timestamp
           cleansed.account_id = accountId
           const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
-          queries.push(this.adapter.query<T>(prepared.text, prepared.values))
+          queries.push(this.pool.query(prepared.text, prepared.values))
         } else {
           // Store entire entry as _raw_data jsonb (id will be auto-generated from _raw_data->>'id')
           const rawData = JSON.stringify(entry)
@@ -183,7 +168,7 @@ export class PostgresClient {
             RETURNING *
           `
 
-          queries.push(this.adapter.query<T>(upsertSql, [rawData, timestamp, accountId]))
+          queries.push(this.pool.query(upsertSql, [rawData, timestamp, accountId]))
         }
       })
 
@@ -400,13 +385,35 @@ export class PostgresClient {
    * Execute a function while holding an advisory lock.
    * The lock is automatically released after the function completes (success or error).
    *
+   * IMPORTANT: This acquires a dedicated connection from the pool and holds it for the
+   * duration of the function execution. PostgreSQL advisory locks are session-level,
+   * so we must use the same connection for lock acquisition, operations, and release.
+   *
    * @param key - A string key to lock on (will be hashed to an integer)
    * @param fn - The function to execute while holding the lock
    * @returns The result of the function
    */
   async withAdvisoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const lockId = this.hashToInt32(key)
-    return this.adapter.withAdvisoryLock(lockId, fn)
+    const client = await this.pool.connect()
+
+    try {
+      // Acquire lock on this specific connection
+      await client.query('SELECT pg_advisory_lock($1)', [lockId])
+
+      // Execute function with this locked connection
+      // The function will still use the pool for its queries, but the lock
+      // ensures only one instance can execute at a time
+      return await fn()
+    } finally {
+      // Release lock on this specific connection
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [lockId])
+      } finally {
+        // Always release connection back to pool
+        client.release()
+      }
+    }
   }
 
   // =============================================================================

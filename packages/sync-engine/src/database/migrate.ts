@@ -1,33 +1,36 @@
+import { Client } from 'pg'
 import { migrate } from 'pg-node-migrations'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ConnectionOptions } from 'node:tls'
 import type { Logger } from '../types'
-import type { DatabaseAdapter, PgCompatibleClient } from './adapter'
 
 // Get __dirname equivalent for ESM
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-async function doesTableExist(
-  client: PgCompatibleClient,
-  schema: string,
-  tableName: string
-): Promise<boolean> {
-  const result = await client.query({
-    text: `SELECT EXISTS (
+type MigrationConfig = {
+  databaseUrl: string
+  ssl?: ConnectionOptions
+  logger?: Logger
+}
+
+async function doesTableExist(client: Client, schema: string, tableName: string): Promise<boolean> {
+  const result = await client.query(
+    `SELECT EXISTS (
       SELECT 1
       FROM information_schema.tables
       WHERE table_schema = $1
       AND table_name = $2
     )`,
-    values: [schema, tableName],
-  })
-  return (result.rows[0] as { exists?: boolean })?.exists || false
+    [schema, tableName]
+  )
+  return result.rows[0]?.exists || false
 }
 
 async function renameMigrationsTableIfNeeded(
-  client: PgCompatibleClient,
+  client: Client,
   schema = 'stripe',
   logger?: Logger
 ): Promise<void> {
@@ -41,11 +44,7 @@ async function renameMigrationsTableIfNeeded(
   }
 }
 
-async function cleanupSchema(
-  client: PgCompatibleClient,
-  schema: string,
-  logger?: Logger
-): Promise<void> {
+async function cleanupSchema(client: Client, schema: string, logger?: Logger): Promise<void> {
   logger?.warn(`Migrations table is empty - dropping and recreating schema "${schema}"`)
   await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
   await client.query(`CREATE SCHEMA "${schema}"`)
@@ -53,13 +52,13 @@ async function cleanupSchema(
 }
 
 async function connectAndMigrate(
-  client: PgCompatibleClient,
+  client: Client,
   migrationsDirectory: string,
-  logger?: Logger,
+  config: MigrationConfig,
   logOnError = false
 ) {
   if (!fs.existsSync(migrationsDirectory)) {
-    logger?.info(`Migrations directory ${migrationsDirectory} not found, skipping`)
+    config.logger?.info(`Migrations directory ${migrationsDirectory} not found, skipping`)
     return
   }
 
@@ -69,37 +68,35 @@ async function connectAndMigrate(
   }
 
   try {
-    // pg-node-migrations types require pg.Client | pg.PoolClient | pg.Pool, but the library
-    // only actually uses the .query() method internally. Our PgCompatibleClient interface
-    // provides this method, enabling migrations to work with both pg and postgres.js adapters.
-    // See: https://github.com/salsita/pg-node-migrations/blob/master/src/types.ts#L49
-    // @ts-expect-error pg-node-migrations only uses .query() but types require full pg.Client
     await migrate({ client }, migrationsDirectory, optionalConfig)
   } catch (error) {
     if (logOnError && error instanceof Error) {
-      logger?.error(error, 'Migration error:')
+      config.logger?.error(error, 'Migration error:')
     } else {
       throw error
     }
   }
 }
 
-/**
- * Run database migrations using the provided adapter.
- *
- * @param adapter - Database adapter (PgAdapter or PostgresJsAdapter)
- * @param logger - Optional logger for migration progress
- */
-export async function runMigrations(adapter: DatabaseAdapter, logger?: Logger): Promise<void> {
-  const client = adapter.toPgClient()
+export async function runMigrations(config: MigrationConfig): Promise<void> {
+  // Init DB
+  const client = new Client({
+    connectionString: config.databaseUrl,
+    ssl: config.ssl,
+    connectionTimeoutMillis: 10_000,
+  })
+
   const schema = 'stripe'
 
   try {
+    // Run migrations
+    await client.connect()
+
     // Ensure schema exists, not doing it via migration to not break current migration checksums
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema};`)
 
     // Rename old migrations table if it exists (one-time upgrade to internal table naming convention)
-    await renameMigrationsTableIfNeeded(client, schema, logger)
+    await renameMigrationsTableIfNeeded(client, schema, config.logger)
 
     // Check if migrations table is empty and cleanup if needed
     const tableExists = await doesTableExist(client, schema, '_migrations')
@@ -107,19 +104,20 @@ export async function runMigrations(adapter: DatabaseAdapter, logger?: Logger): 
       const migrationCount = await client.query(
         `SELECT COUNT(*) as count FROM "${schema}"."_migrations"`
       )
-      const isEmpty = (migrationCount.rows[0] as { count?: string })?.count === '0'
+      const isEmpty = migrationCount.rows[0]?.count === '0'
       if (isEmpty) {
-        await cleanupSchema(client, schema, logger)
+        await cleanupSchema(client, schema, config.logger)
       }
     }
 
-    logger?.info('Running migrations')
+    config.logger?.info('Running migrations')
 
-    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), logger)
+    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config)
   } catch (err) {
-    logger?.error(err as Error, 'Error running migrations')
+    config.logger?.error(err, 'Error running migrations')
     throw err
   } finally {
-    logger?.info('Finished migrations')
+    await client.end()
+    config.logger?.info('Finished migrations')
   }
 }

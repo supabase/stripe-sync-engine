@@ -1,5 +1,5 @@
+import { type PoolConfig } from 'pg'
 import Stripe from 'stripe'
-import { DatabaseAdapter } from './database/adapter'
 
 /**
  * Simple logger interface compatible with both pino and console
@@ -65,11 +65,10 @@ export type StripeSyncConfig = {
    */
   revalidateObjectsViaStripeApi?: Array<RevalidateEntity>
 
-  /**
-   * Database adapter for database operations.
-   * Use PgAdapter for Node.js or a custom adapter for other environments (e.g., Deno).
-   */
-  adapter: DatabaseAdapter
+  /** @deprecated Use `poolConfig` instead. */
+  maxPostgresConnections?: number
+
+  poolConfig: PoolConfig
 
   logger?: Logger
 

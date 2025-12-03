@@ -143,9 +143,9 @@ importers:
       pg-node-migrations:
         specifier: 0.0.8
         version: 0.0.8
-      postgres:
-        specifier: ^3.4.7
-        version: 3.4.7
+      stripe:
+        specifier: '> 11'
+        version: 18.2.0(@types/node@24.10.0)
       ws:
         specifier: ^8.18.0
         version: 8.18.3
@@ -168,9 +168,6 @@ importers:
       '@vitest/ui':
         specifier: ^4.0.9
         version: 4.0.9(vitest@3.2.4)
-      stripe:
-        specifier: ^20.0.0
-        version: 20.0.0(@types/node@24.10.1)
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.20.6)(yaml@2.8.1)
@@ -2165,10 +2162,6 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
-  postgres@3.4.7:
-    resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
-    engines: {node: '>=12'}
-
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
@@ -2404,17 +2397,17 @@ packages:
     resolution: {integrity: sha512-aT2BU9KkizY9SATf14WhhYVv2uOapBWX0OFWF4xvcj1mPaNotlSc2CsxpS4DS46ZueSppmCF5BX1sNYBtwBvfw==}
     engines: {node: '>=12.*'}
 
-  stripe@19.3.0:
-    resolution: {integrity: sha512-3MbqRkw5LXb4LWP1LgIEYxUAYhYDDU5pcHZj4Xha6VWPnN1wrUmQ7Htsgm8wR584s0hn1aQg1lYD0Hi+F37E5g==}
-    engines: {node: '>=16'}
+  stripe@18.2.0:
+    resolution: {integrity: sha512-RpOaGh5CLs3SYeVXw1CIQZNwPVADBJtgNyUgu+ZkIvu3u4pkZvNrlKr+WaLoNjSPQWef0dikxDS2AKHBl/l3bg==}
+    engines: {node: '>=12.*'}
     peerDependencies:
-      '@types/node': '>=16'
+      '@types/node': '>=12.x.x'
     peerDependenciesMeta:
       '@types/node':
         optional: true
 
-  stripe@20.0.0:
-    resolution: {integrity: sha512-EaZeWpbJOCcDytdjKSwdrL5BxzbDGNueiCfHjHXlPdBQvLqoxl6AAivC35SPzTmVXJb5duXQlXFGS45H0+e6Gg==}
+  stripe@19.3.0:
+    resolution: {integrity: sha512-3MbqRkw5LXb4LWP1LgIEYxUAYhYDDU5pcHZj4Xha6VWPnN1wrUmQ7Htsgm8wR584s0hn1aQg1lYD0Hi+F37E5g==}
     engines: {node: '>=16'}
     peerDependencies:
       '@types/node': '>=16'
@@ -3537,14 +3530,6 @@ snapshots:
       chai: 5.2.0
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@24.10.0)(tsx@4.20.6)(yaml@2.8.1))':
-    dependencies:
-      '@vitest/spy': 3.2.4
-      estree-walker: 3.0.3
-      magic-string: 0.30.19
-    optionalDependencies:
-      vite: 7.2.2(@types/node@24.10.0)(tsx@4.20.6)(yaml@2.8.1)
-
   '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 3.2.4
@@ -4548,8 +4533,6 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  postgres@3.4.7: {}
-
   prelude-ls@1.2.1: {}
 
   prettier-linter-helpers@1.0.0:
@@ -4818,17 +4801,17 @@ snapshots:
       '@types/node': 24.10.0
       qs: 6.14.0
 
+  stripe@18.2.0(@types/node@24.10.0):
+    dependencies:
+      qs: 6.13.0
+    optionalDependencies:
+      '@types/node': 24.10.0
+
   stripe@19.3.0(@types/node@24.10.0):
     dependencies:
       qs: 6.14.0
     optionalDependencies:
       '@types/node': 24.10.0
-
-  stripe@20.0.0(@types/node@24.10.1):
-    dependencies:
-      qs: 6.14.0
-    optionalDependencies:
-      '@types/node': 24.10.1
 
   sucrase@3.35.0:
     dependencies:
@@ -5037,7 +5020,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.0)(tsx@4.20.6)(yaml@2.8.1))
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4

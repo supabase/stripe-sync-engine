@@ -11,8 +11,8 @@
  */
 
 import dotenv from 'dotenv'
+import { type PoolConfig } from 'pg'
 import { StripeSync } from 'stripe-experiment-sync'
-import { PgAdapter } from 'stripe-experiment-sync/pg'
 
 dotenv.config()
 
@@ -42,11 +42,11 @@ async function main() {
     process.exit(1)
   }
 
-  const adapter = new PgAdapter({
+  const poolConfig: PoolConfig = {
     max: 10,
     connectionString: databaseUrl,
     keepAlive: true,
-  })
+  }
 
   // Silent logger for tests (logs to stderr to not interfere with JSON output)
   const logger = {
@@ -64,9 +64,10 @@ async function main() {
       }
 
       const stripeSync = new StripeSync({
+        databaseUrl,
         stripeSecretKey: stripeApiKey,
         stripeApiVersion: '2020-08-27',
-        adapter,
+        poolConfig,
         logger,
       })
 
@@ -75,9 +76,10 @@ async function main() {
     } else if (method === 'list-accounts') {
       // List all synced accounts
       const stripeSync = new StripeSync({
+        databaseUrl,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for listing
         stripeApiVersion: '2020-08-27',
-        adapter,
+        poolConfig,
         logger,
       })
 
@@ -98,9 +100,10 @@ async function main() {
       const useTransaction = !args.includes('--no-transaction')
 
       const stripeSync = new StripeSync({
+        databaseUrl,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for deletion
         stripeApiVersion: '2020-08-27',
-        adapter,
+        poolConfig,
         logger,
       })
 

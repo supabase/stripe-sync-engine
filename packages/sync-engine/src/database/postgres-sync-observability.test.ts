@@ -1,28 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { PostgresClient } from './postgres'
 import { runMigrations } from './migrate'
-import { PgAdapter } from './pg-adapter'
+import pg from 'pg'
 
 describe('Observable Sync System Methods', () => {
   let postgresClient: PostgresClient
-  let adapter: PgAdapter
+  let pool: pg.Pool
   const testAccountId = 'acct_test_obs_123'
 
   beforeAll(async () => {
     const databaseUrl =
       process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:54322/postgres'
 
-    adapter = new PgAdapter({
-      connectionString: databaseUrl,
-    })
-
     // Run migrations to ensure schema and tables exist
-    await runMigrations(adapter)
+    await runMigrations({ databaseUrl })
 
     postgresClient = new PostgresClient({
       schema: 'stripe',
-      adapter,
+      poolConfig: {
+        connectionString: databaseUrl,
+      },
     })
+    pool = postgresClient.pool
 
     // Ensure test account exists using the proper method
     await postgresClient.upsertAccount(
@@ -33,19 +32,15 @@ describe('Observable Sync System Methods', () => {
 
   afterAll(async () => {
     // Clean up test data
-    await adapter.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [
-      testAccountId,
-    ])
-    await adapter.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
-    await adapter.end()
+    await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
+    await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+    await pool.end()
   })
 
   beforeEach(async () => {
     // Clean up between tests
-    await adapter.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [
-      testAccountId,
-    ])
-    await adapter.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+    await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
+    await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
   })
 
   describe('getOrCreateSyncRun', () => {
@@ -73,7 +68,7 @@ describe('Observable Sync System Methods', () => {
 
       // Try to insert directly (bypassing the check)
       await expect(
-        adapter.query(
+        pool.query(
           `INSERT INTO stripe._sync_run ("_account_id", triggered_by) VALUES ($1, 'test')`,
           [testAccountId]
         )
@@ -109,7 +104,7 @@ describe('Observable Sync System Methods', () => {
       const run = await postgresClient.getOrCreateSyncRun(testAccountId)
       await postgresClient.completeSyncRun(run!.accountId, run!.runStartedAt)
 
-      const result = await adapter.query<{ status: string; completed_at: Date }>(
+      const result = await pool.query(
         `SELECT status, completed_at FROM stripe._sync_run
          WHERE "_account_id" = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
@@ -125,11 +120,7 @@ describe('Observable Sync System Methods', () => {
       const run = await postgresClient.getOrCreateSyncRun(testAccountId)
       await postgresClient.failSyncRun(run!.accountId, run!.runStartedAt, 'Test error')
 
-      const result = await adapter.query<{
-        status: string
-        error_message: string
-        completed_at: Date
-      }>(
+      const result = await pool.query(
         `SELECT status, error_message, completed_at FROM stripe._sync_run
          WHERE "_account_id" = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
@@ -148,7 +139,7 @@ describe('Observable Sync System Methods', () => {
 
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, objects)
 
-      const result = await adapter.query<{ object: string; status: string }>(
+      const result = await pool.query(
         `SELECT object, status FROM stripe._sync_obj_run
          WHERE "_account_id" = $1 AND run_started_at = $2
          ORDER BY object`,
@@ -168,7 +159,7 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, ['customer'])
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, ['customer'])
 
-      const result = await adapter.query<{ count: string }>(
+      const result = await pool.query(
         `SELECT COUNT(*) as count FROM stripe._sync_obj_run
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = 'customer'`,
         [run!.accountId, run!.runStartedAt]
@@ -212,7 +203,7 @@ describe('Observable Sync System Methods', () => {
     it('should respect max_concurrent limit', async () => {
       // Create run with max_concurrent = 2
       // Use date_trunc for JS Date compatibility
-      await adapter.query(
+      await pool.query(
         `INSERT INTO stripe._sync_run ("_account_id", max_concurrent, started_at)
          VALUES ($1, 2, date_trunc('milliseconds', now()))`,
         [testAccountId]
@@ -316,7 +307,7 @@ describe('Observable Sync System Methods', () => {
         'API error'
       )
 
-      const result = await adapter.query<{ status: string; error_message: string }>(
+      const result = await pool.query(
         `SELECT status, error_message FROM stripe._sync_obj_run
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = 'customer'`,
         [run!.accountId, run!.runStartedAt]
@@ -374,7 +365,7 @@ describe('Observable Sync System Methods', () => {
     it('should return null when at concurrency limit', async () => {
       // Create run with max_concurrent = 1
       // Use date_trunc for JS Date compatibility
-      await adapter.query(
+      await pool.query(
         `INSERT INTO stripe._sync_run ("_account_id", max_concurrent, started_at)
          VALUES ($1, 1, date_trunc('milliseconds', now()))`,
         [testAccountId]
@@ -444,20 +435,20 @@ describe('Observable Sync System Methods', () => {
 
       // Manually set updated_at to 10 minutes ago (stale)
       // Must disable trigger first as it overwrites updated_at with now()
-      await adapter.query(`ALTER TABLE stripe._sync_obj_run DISABLE TRIGGER handle_updated_at`)
-      await adapter.query(
+      await pool.query(`ALTER TABLE stripe._sync_obj_run DISABLE TRIGGER handle_updated_at`)
+      await pool.query(
         `UPDATE stripe._sync_obj_run
          SET updated_at = now() - interval '10 minutes'
          WHERE "_account_id" = $1`,
         [run!.accountId]
       )
-      await adapter.query(`ALTER TABLE stripe._sync_obj_run ENABLE TRIGGER handle_updated_at`)
+      await pool.query(`ALTER TABLE stripe._sync_obj_run ENABLE TRIGGER handle_updated_at`)
 
       // Call cancelStaleRuns
       await postgresClient.cancelStaleRuns(testAccountId)
 
       // Check run is now error
-      const result = await adapter.query<{ status: string; error_message: string }>(
+      const result = await pool.query(
         `SELECT status, error_message FROM stripe._sync_run
          WHERE "_account_id" = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
@@ -476,7 +467,7 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.cancelStaleRuns(testAccountId)
 
       // Check run is still running
-      const result = await adapter.query<{ status: string }>(
+      const result = await pool.query(
         `SELECT status FROM stripe._sync_run
          WHERE "_account_id" = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
@@ -537,7 +528,7 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.completeSyncRun(run!.accountId, run!.runStartedAt)
 
       // 7. Verify final state
-      const finalRun = await adapter.query<{ status: string }>(
+      const finalRun = await pool.query(
         `SELECT status FROM stripe._sync_run
          WHERE "_account_id" = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]

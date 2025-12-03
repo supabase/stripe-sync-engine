@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
     "rootDir": ".",
-    "module": "Node16",
-    "moduleResolution": "Node16",
+    "module": "commonjs",
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,

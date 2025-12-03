@@ -2,7 +2,6 @@
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
 import { PostgresClient, StripeSync, runMigrations } from 'stripe-experiment-sync'
-import { PgAdapter } from 'stripe-experiment-sync/pg'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
@@ -12,12 +11,10 @@ import { mockStripe } from './helpers/mockStripe'
 const unixtime = Math.floor(new Date().getTime() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
-const adapter = new PgAdapter({
-  connectionString: getConfig().databaseUrl,
-})
-
 const postgresClient = new PostgresClient({
-  adapter,
+  poolConfig: {
+    connectionString: getConfig().databaseUrl,
+  },
   schema: 'stripe',
 })
 
@@ -25,7 +22,11 @@ describe('POST /webhooks', () => {
   let server: FastifyInstance
 
   beforeAll(async () => {
-    await runMigrations(adapter, logger)
+    const config = getConfig()
+    await runMigrations({
+      databaseUrl: config.databaseUrl,
+      logger,
+    })
 
     process.env.AUTO_EXPAND_LISTS = 'false'
     server = await createServer()
