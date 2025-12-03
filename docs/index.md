@@ -35,6 +35,7 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 - [x] `checkout.session.async_payment_failed` 🟢
 - [x] `checkout.session.async_payment_succeeded` 🟢
 - [x] `checkout.session.completed` 🟢
+- [x] `checkout.session.expired` 🟢
 - [x] `credit_note.created` 🟢
 - [x] `credit_note.updated` 🟢
 - [x] `credit_note.voided` 🟢
