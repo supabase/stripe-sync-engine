@@ -1,1 +1,1 @@
-ALTER TYPE "stripe"."invoice_status" ADD VALUE 'deleted';
+ALTER TYPE "{{schema}}"."invoice_status" ADD VALUE 'deleted';

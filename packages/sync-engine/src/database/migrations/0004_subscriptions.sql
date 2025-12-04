@@ -1,8 +1,12 @@
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_status') THEN
-        create type "stripe"."subscription_status" as enum (
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE t.typname = 'subscription_status' AND n.nspname = '{{schema}}'
+    ) THEN
+        create type "{{schema}}"."subscription_status" as enum (
           'trialing',
           'active',
           'canceled',
@@ -15,7 +19,7 @@ BEGIN
 END
 $$;
 
-create table if not exists "stripe"."subscriptions" (
+create table if not exists "{{schema}}"."subscriptions" (
   "id" text primary key,
   "object" text,
   "cancel_at_period_end" boolean,
@@ -26,7 +30,7 @@ create table if not exists "stripe"."subscriptions" (
   "metadata" jsonb,
   "pending_setup_intent" text,
   "pending_update" jsonb,
-  "status" "stripe"."subscription_status", 
+  "status" "{{schema}}"."subscription_status", 
   "application_fee_percent" double precision,
   "billing_cycle_anchor" integer,
   "billing_thresholds" jsonb,
@@ -49,7 +53,7 @@ create table if not exists "stripe"."subscriptions" (
   "trial_start" jsonb,
 
   "schedule" text,
-  "customer" text references "stripe"."customers",
+  "customer" text references "{{schema}}"."customers",
   "latest_invoice" text, -- not yet joined
   "plan" text -- not yet joined
 );

@@ -1,5 +1,5 @@
 create table
-    if not exists "stripe"."reviews" (
+    if not exists "{{schema}}"."reviews" (
         "id" text primary key,
         object text,
         billing_zip text,
@@ -17,12 +17,12 @@ create table
         updated_at timestamptz default timezone('utc'::text, now()) not null
     );
 
-create index stripe_reviews_charge_idx on "stripe"."reviews" using btree (charge);
+create index stripe_reviews_charge_idx on "{{schema}}"."reviews" using btree (charge);
 
-create index stripe_reviews_payment_intent_idx on "stripe"."reviews" using btree (payment_intent);
+create index stripe_reviews_payment_intent_idx on "{{schema}}"."reviews" using btree (payment_intent);
 
 create trigger handle_updated_at
     before update
-    on stripe.reviews
+    on "{{schema}}"."reviews"
     for each row
     execute procedure set_updated_at();

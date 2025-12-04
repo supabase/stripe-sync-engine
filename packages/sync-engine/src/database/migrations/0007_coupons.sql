@@ -1,4 +1,4 @@
-create table if not exists "stripe".coupons (
+create table if not exists "{{schema}}"."coupons" (
     id text primary key,
     object text,
     name text,

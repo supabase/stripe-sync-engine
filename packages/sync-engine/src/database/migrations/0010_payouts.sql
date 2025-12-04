@@ -1,4 +1,4 @@
-create table if not exists "stripe".payouts (
+create table if not exists "{{schema}}"."payouts" (
     id text primary key,
     object text,
     date text,

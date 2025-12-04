@@ -1,4 +1,4 @@
-create table if not exists "stripe"."subscription_items" (
+create table if not exists "{{schema}}"."subscription_items" (
   "id" text primary key,
   "object" text,
   "billing_thresholds" jsonb,
@@ -6,7 +6,7 @@ create table if not exists "stripe"."subscription_items" (
   "deleted" boolean,
   "metadata" jsonb,
   "quantity" integer,
-  "price" text references "stripe"."prices",
-  "subscription" text references "stripe"."subscriptions",
+  "price" text references "{{schema}}"."prices",
+  "subscription" text references "{{schema}}"."subscriptions",
   "tax_rates" jsonb
 );

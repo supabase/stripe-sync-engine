@@ -1,5 +1,5 @@
 create table if not exists
-  "stripe"."tax_ids" (
+  "{{schema}}"."tax_ids" (
     "id" text primary key,
     "object" text,
     "country" text,
@@ -11,4 +11,4 @@ create table if not exists
     "owner" jsonb
   );
 
-create index stripe_tax_ids_customer_idx on "stripe"."tax_ids" using btree (customer);
+create index stripe_tax_ids_customer_idx on "{{schema}}"."tax_ids" using btree (customer);

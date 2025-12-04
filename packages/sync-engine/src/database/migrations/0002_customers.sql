@@ -1,4 +1,4 @@
-create table if not exists "stripe"."customers" (
+create table if not exists "{{schema}}"."customers" (
   "id" text primary key,
   "object" text,
   "address" jsonb,
