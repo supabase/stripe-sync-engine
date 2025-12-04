@@ -6,6 +6,19 @@ import { type PoolConfig } from 'pg'
 import { loadConfig, CliOptions } from './config'
 import { StripeSync, runMigrations, type SyncObject } from 'stripe-experiment-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
+import {
+  SupabaseDeployClient,
+  getSetupFunctionCode,
+  getWebhookFunctionCode,
+  getWorkerFunctionCode,
+  getSchedulerFunctionCode,
+} from './supabase'
+
+export interface DeployOptions {
+  supabaseAccessToken?: string
+  supabaseProjectRef?: string
+  stripeKey?: string
+}
 
 const VALID_SYNC_OBJECTS: SyncObject[] = [
   'all',
@@ -395,6 +408,147 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       console.error(chalk.red(error.message))
     }
     await cleanup()
+    process.exit(1)
+  }
+}
+
+/**
+ * Deploy command - deploys Stripe sync Edge Functions to Supabase.
+ * 1. Validates Supabase project access
+ * 2. Deploys stripe-setup, stripe-webhook, and stripe-worker Edge Functions
+ * 3. Sets required secrets (STRIPE_SECRET_KEY)
+ * 4. Runs the setup function to create webhook and run migrations
+ */
+export async function deployCommand(options: DeployOptions): Promise<void> {
+  try {
+    dotenv.config()
+
+    let accessToken = options.supabaseAccessToken || process.env.SUPABASE_ACCESS_TOKEN || ''
+    let projectRef = options.supabaseProjectRef || process.env.SUPABASE_PROJECT_REF || ''
+    let stripeKey =
+      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+
+    // Prompt for missing values
+    if (!accessToken || !projectRef || !stripeKey) {
+      const inquirer = (await import('inquirer')).default
+      const questions = []
+
+      if (!accessToken) {
+        questions.push({
+          type: 'password',
+          name: 'accessToken',
+          message: 'Enter your Supabase access token (from supabase.com/dashboard/account/tokens):',
+          mask: '*',
+          validate: (input: string) => input.trim() !== '' || 'Access token is required',
+        })
+      }
+
+      if (!projectRef) {
+        questions.push({
+          type: 'input',
+          name: 'projectRef',
+          message: 'Enter your Supabase project ref (e.g., abcdefghijklmnop):',
+          validate: (input: string) => input.trim() !== '' || 'Project ref is required',
+        })
+      }
+
+      if (!stripeKey) {
+        questions.push({
+          type: 'password',
+          name: 'stripeKey',
+          message: 'Enter your Stripe secret key:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input.trim()) return 'Stripe key is required'
+            if (!input.startsWith('sk_')) return 'Stripe key should start with "sk_"'
+            return true
+          },
+        })
+      }
+
+      if (questions.length > 0) {
+        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
+        const answers = await inquirer.prompt(questions)
+        if (answers.accessToken) accessToken = answers.accessToken
+        if (answers.projectRef) projectRef = answers.projectRef
+        if (answers.stripeKey) stripeKey = answers.stripeKey
+      }
+    }
+
+    console.log(chalk.blue('\n🚀 Deploying Stripe Sync to Supabase Edge Functions...\n'))
+
+    // Create deploy client
+    const client = new SupabaseDeployClient({
+      accessToken,
+      projectRef,
+    })
+
+    // Validate project access
+    console.log(chalk.gray('Validating project access...'))
+    const projectInfo = await client.validateProject()
+    console.log(chalk.green(`✓ Project: ${projectInfo.name} (${projectInfo.region})`))
+
+    // Deploy Edge Functions
+    console.log(chalk.gray('\nDeploying Edge Functions...'))
+
+    console.log(chalk.gray('  → stripe-setup'))
+    await client.deployFunction('stripe-setup', getSetupFunctionCode(projectRef))
+    console.log(chalk.green('  ✓ stripe-setup deployed'))
+
+    console.log(chalk.gray('  → stripe-webhook'))
+    await client.deployFunction('stripe-webhook', getWebhookFunctionCode())
+    console.log(chalk.green('  ✓ stripe-webhook deployed'))
+
+    console.log(chalk.gray('  → stripe-scheduler'))
+    await client.deployFunction('stripe-scheduler', getSchedulerFunctionCode(projectRef))
+    console.log(chalk.green('  ✓ stripe-scheduler deployed'))
+
+    console.log(chalk.gray('  → stripe-worker'))
+    await client.deployFunction('stripe-worker', getWorkerFunctionCode(projectRef))
+    console.log(chalk.green('  ✓ stripe-worker deployed'))
+
+    // Set secrets (SUPABASE_DB_URL is provided automatically by Supabase)
+    console.log(chalk.gray('\nConfiguring secrets...'))
+    await client.setSecrets({
+      STRIPE_SECRET_KEY: stripeKey,
+    })
+    console.log(chalk.green('✓ Secrets configured'))
+
+    // Run setup function
+    console.log(chalk.gray('\nRunning setup (migrations + webhook creation)...'))
+    const serviceRoleKey = await client.getServiceRoleKey()
+    const setupResult = await client.invokeFunction('stripe-setup', serviceRoleKey)
+
+    if (setupResult.success) {
+      console.log(chalk.green('✓ Setup complete'))
+    } else {
+      console.log(chalk.yellow(`⚠ Setup returned: ${setupResult.error}`))
+    }
+
+    // Setup pg_cron job
+    console.log(chalk.gray('\nConfiguring pg_cron scheduler...'))
+    try {
+      await client.setupPgCronJob()
+      console.log(chalk.green('✓ pg_cron scheduler configured'))
+    } catch (error) {
+      // pg_cron may not be available on all projects
+      const message = error instanceof Error ? error.message : String(error)
+      console.log(chalk.yellow(`⚠ Could not configure pg_cron scheduler: ${message}`))
+    }
+
+    // Print summary
+    console.log(chalk.cyan('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
+    console.log(chalk.cyan.bold('  Deployment Complete!'))
+    console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'))
+    console.log(chalk.white(`  Webhook URL: ${client.getWebhookUrl()}`))
+    console.log(chalk.gray('\n  Your Stripe data will now sync to your Supabase database.'))
+    console.log(
+      chalk.gray('  View your data in the Supabase dashboard under the "stripe" schema.\n')
+    )
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(`\n✗ Deployment failed: ${error.message}`))
+    }
     process.exit(1)
   }
 }

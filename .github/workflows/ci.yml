@@ -140,3 +140,13 @@ jobs:
           cd packages/cli
           chmod +x ./scripts/test-integration-webhook-reuse.sh
           ./scripts/test-integration-webhook-reuse.sh
+
+      - name: Run Deploy Integration Test
+        run: |
+          cd packages/cli
+          chmod +x ./scripts/test-integration-deploy.sh
+          ./scripts/test-integration-deploy.sh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}

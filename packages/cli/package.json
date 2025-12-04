@@ -26,9 +26,11 @@
     "format:fix": "prettier --write .",
     "verify-webhook-reuse": "tsx scripts/verify-webhook-reuse.ts",
     "cleanup-webhooks": "tsx scripts/cleanup-webhooks.ts",
+    "test": "vitest run",
     "test:integration": "./scripts/test-integration.sh",
     "test:integration:backfill": "./scripts/test-integration-backfill.sh",
-    "test:integration:accounts": "./scripts/test-integration-account-management.sh"
+    "test:integration:accounts": "./scripts/test-integration-account-management.sh",
+    "test:integration:deploy": "./scripts/test-integration-deploy.sh"
   },
   "keywords": [
     "stripe",
@@ -47,14 +49,16 @@
     "inquirer": "^12.3.0",
     "pg": "^8.13.1",
     "stripe": "^17.7.0",
-    "stripe-experiment-sync": "workspace:*"
+    "stripe-experiment-sync": "workspace:*",
+    "supabase-management-js": "^0.1.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.15.6",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=22.0.0"
