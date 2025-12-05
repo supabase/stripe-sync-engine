@@ -19,7 +19,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean && cp -r src/edge-functions dist/",
     "dev": "tsx src/index.ts",
     "lint": "eslint src",
     "format": "prettier --check .",

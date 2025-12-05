@@ -540,4 +540,66 @@ describe('Observable Sync System Methods', () => {
       expect(newRun!.isNew).toBe(true)
     })
   })
+
+  describe('Sync Run Auto-Completion', () => {
+    it('should auto-complete sync run when all objects are complete', async () => {
+      // 1. Create run with 2 objects
+      const run = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
+      await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, [
+        'customer',
+        'invoice',
+      ])
+
+      // 2. Complete first object
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+      await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+
+      // 3. Verify run still running (one object pending)
+      let syncRunResult = await pool.query(
+        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        [run!.accountId, run!.runStartedAt]
+      )
+      expect(syncRunResult.rows[0].status).toBe('running')
+
+      // 4. Complete second object
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
+      await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
+
+      // 5. Verify run is now complete (auto-completed when all objects finished)
+      syncRunResult = await pool.query(
+        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        [run!.accountId, run!.runStartedAt]
+      )
+      expect(syncRunResult.rows[0].status).toBe('complete')
+    })
+
+    it('should auto-fail sync run when all objects are done but some errored', async () => {
+      // 1. Create run with 2 objects
+      const run = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
+      await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, [
+        'customer',
+        'invoice',
+      ])
+
+      // 2. Complete first object
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+      await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+
+      // 3. Fail second object
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
+      await postgresClient.failObjectSync(
+        run!.accountId,
+        run!.runStartedAt,
+        'invoice',
+        'Test error'
+      )
+
+      // 4. Verify run is marked as error (not complete, since one object failed)
+      const syncRunResult = await pool.query(
+        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        [run!.accountId, run!.runStartedAt]
+      )
+      expect(syncRunResult.rows[0].status).toBe('error')
+    })
+  })
 })

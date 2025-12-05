@@ -2034,14 +2034,15 @@ export class StripeSync {
       const result = await fn(cursor, runStartedAt)
 
       // Complete the sync run
-      await this.postgresClient.completeSyncRun(accountId, runStartedAt)
+      await this.postgresClient.completeObjectSync(accountId, runStartedAt, resourceName)
 
       return result
     } catch (error) {
       // Fail the sync run
-      await this.postgresClient.failSyncRun(
+      await this.postgresClient.failObjectSync(
         accountId,
         runStartedAt,
+        resourceName,
         error instanceof Error ? error.message : 'Unknown error'
       )
       throw error

@@ -1,105 +1,105 @@
 import { describe, test, expect } from 'vitest'
-import { getWebhookFunctionCode, getWorkerFunctionCode } from '../supabase'
+import { webhookFunctionCode, workerFunctionCode } from '../supabase'
 
-describe('Edge Function Templates', () => {
-  describe('getWebhookFunctionCode', () => {
-    const code = getWebhookFunctionCode()
-
+describe('Edge Function Files', () => {
+  describe('webhookFunctionCode', () => {
     test('imports StripeSync from npm package', () => {
-      expect(code).toMatch(/import \{ StripeSync \} from 'npm:stripe-experiment-sync(@[\d.]+)?'/)
+      expect(webhookFunctionCode).toMatch(
+        /import \{ StripeSync \} from 'npm:stripe-experiment-sync(@[\d.]+)?'/
+      )
     })
 
     test('uses poolConfig for database connection', () => {
-      expect(code).toContain('poolConfig:')
-      expect(code).toContain('connectionString: dbUrl')
+      expect(webhookFunctionCode).toContain('poolConfig:')
+      expect(webhookFunctionCode).toContain('connectionString: dbUrl')
     })
 
     test('uses SUPABASE_DB_URL environment variable', () => {
-      expect(code).toContain("Deno.env.get('SUPABASE_DB_URL')")
+      expect(webhookFunctionCode).toContain("Deno.env.get('SUPABASE_DB_URL')")
     })
 
     test('uses STRIPE_SECRET_KEY environment variable', () => {
-      expect(code).toContain("Deno.env.get('STRIPE_SECRET_KEY')")
+      expect(webhookFunctionCode).toContain("Deno.env.get('STRIPE_SECRET_KEY')")
     })
 
     test('validates stripe-signature header', () => {
-      expect(code).toContain("req.headers.get('stripe-signature')")
-      expect(code).toContain('Missing stripe-signature header')
+      expect(webhookFunctionCode).toContain("req.headers.get('stripe-signature')")
+      expect(webhookFunctionCode).toContain('Missing stripe-signature header')
     })
 
     test('calls processWebhook with raw body and signature', () => {
-      expect(code).toContain('stripeSync.processWebhook(rawBody, sig)')
+      expect(webhookFunctionCode).toContain('stripeSync.processWebhook(rawBody, sig)')
     })
 
     test('returns 200 on success', () => {
-      expect(code).toContain('status: 200')
-      expect(code).toContain('received: true')
+      expect(webhookFunctionCode).toContain('status: 200')
+      expect(webhookFunctionCode).toContain('received: true')
     })
 
     test('returns 400 on error', () => {
-      expect(code).toContain('status: 400')
+      expect(webhookFunctionCode).toContain('status: 400')
     })
 
     test('rejects non-POST requests', () => {
-      expect(code).toContain("req.method !== 'POST'")
-      expect(code).toContain('status: 405')
+      expect(webhookFunctionCode).toContain("req.method !== 'POST'")
+      expect(webhookFunctionCode).toContain('status: 405')
     })
   })
 
-  describe('getWorkerFunctionCode', () => {
-    const code = getWorkerFunctionCode('test-project-ref')
-
+  describe('workerFunctionCode', () => {
     test('imports StripeSync from npm package', () => {
-      expect(code).toMatch(/import \{ StripeSync \} from 'npm:stripe-experiment-sync(@[\d.]+)?'/)
+      expect(workerFunctionCode).toMatch(
+        /import \{ StripeSync \} from 'npm:stripe-experiment-sync(@[\d.]+)?'/
+      )
     })
 
     test('uses poolConfig for database connection', () => {
-      expect(code).toContain('poolConfig:')
-      expect(code).toContain('connectionString: dbUrl')
+      expect(workerFunctionCode).toContain('poolConfig:')
+      expect(workerFunctionCode).toContain('connectionString: dbUrl')
     })
 
     test('uses SUPABASE_DB_URL environment variable', () => {
-      expect(code).toContain("Deno.env.get('SUPABASE_DB_URL')")
+      expect(workerFunctionCode).toContain("Deno.env.get('SUPABASE_DB_URL')")
     })
 
     test('uses STRIPE_SECRET_KEY environment variable', () => {
-      expect(code).toContain("Deno.env.get('STRIPE_SECRET_KEY')")
+      expect(workerFunctionCode).toContain("Deno.env.get('STRIPE_SECRET_KEY')")
     })
 
     test('verifies authorization header', () => {
-      expect(code).toContain("req.headers.get('Authorization')")
-      expect(code).toContain("startsWith('Bearer ')")
+      expect(workerFunctionCode).toContain("req.headers.get('Authorization')")
+      expect(workerFunctionCode).toContain("startsWith('Bearer ')")
     })
 
     test('returns 401 for unauthorized requests', () => {
-      expect(code).toContain('Unauthorized')
-      expect(code).toContain('status: 401')
+      expect(workerFunctionCode).toContain('Unauthorized')
+      expect(workerFunctionCode).toContain('status: 401')
     })
 
     test('calls processNext with object to process pending work', () => {
-      expect(code).toContain('stripeSync.processNext(object)')
+      expect(workerFunctionCode).toContain('stripeSync.processNext(object)')
     })
 
     test('reads object from request body', () => {
-      expect(code).toContain('const { object } = body')
+      expect(workerFunctionCode).toContain('const { object } = body')
     })
 
     test('returns 400 if object is missing', () => {
-      expect(code).toContain('Missing object in request body')
-      expect(code).toContain('status: 400')
+      expect(workerFunctionCode).toContain('Missing object in request body')
+      expect(workerFunctionCode).toContain('status: 400')
     })
 
     test('re-invokes self if hasMore is true', () => {
-      expect(code).toContain('if (result.hasMore)')
-      expect(code).toContain('SELF_URL')
+      expect(workerFunctionCode).toContain('if (result.hasMore)')
+      expect(workerFunctionCode).toContain('stripe-worker')
     })
 
     test('returns 200 on success', () => {
-      expect(code).toContain('status: 200')
+      expect(workerFunctionCode).toContain('status: 200')
     })
 
     test('returns 500 on error', () => {
-      expect(code).toContain('status: 500')
+      expect(workerFunctionCode).toContain('status: 500')
     })
   })
 })

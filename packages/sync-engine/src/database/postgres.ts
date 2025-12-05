@@ -741,6 +741,15 @@ export class PostgresClient {
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object]
     )
+
+    // Auto-complete sync run if all objects finished successfully
+    const allDone = await this.areAllObjectsComplete(accountId, runStartedAt)
+    if (allDone) {
+      const hasErrors = await this.hasAnyObjectErrors(accountId, runStartedAt)
+      if (!hasErrors) {
+        await this.completeSyncRun(accountId, runStartedAt)
+      }
+    }
   }
 
   /**
@@ -758,6 +767,24 @@ export class PostgresClient {
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object, errorMessage]
     )
+
+    // Auto-fail sync run if all objects are done (at least one errored)
+    const allDone = await this.areAllObjectsComplete(accountId, runStartedAt)
+    if (allDone) {
+      await this.failSyncRun(accountId, runStartedAt, 'One or more objects failed to sync')
+    }
+  }
+
+  /**
+   * Check if any object in a run has errored.
+   */
+  async hasAnyObjectErrors(accountId: string, runStartedAt: Date): Promise<boolean> {
+    const result = await this.query(
+      `SELECT COUNT(*) as count FROM "${this.config.schema}"."_sync_obj_run"
+       WHERE "_account_id" = $1 AND run_started_at = $2 AND status = 'error'`,
+      [accountId, runStartedAt]
+    )
+    return parseInt(result.rows[0].count) > 0
   }
 
   /**

@@ -355,7 +355,7 @@ describe('Incremental Sync', () => {
       [testAccountId, 'products']
     )
     expect(status.rows[0].run_status).toBe('error')
-    expect(status.rows[0].run_error).toContain('Simulated sync error')
+    expect(status.rows[0].obj_error).toContain('Simulated sync error')
 
     // Second attempt should succeed
     callCount = 0

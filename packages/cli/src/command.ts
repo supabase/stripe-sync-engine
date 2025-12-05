@@ -8,10 +8,10 @@ import { StripeSync, runMigrations, type SyncObject } from 'stripe-experiment-sy
 import { createTunnel, NgrokTunnel } from './ngrok'
 import {
   SupabaseDeployClient,
-  getSetupFunctionCode,
-  getWebhookFunctionCode,
-  getWorkerFunctionCode,
-  getSchedulerFunctionCode,
+  setupFunctionCode,
+  webhookFunctionCode,
+  workerFunctionCode,
+  schedulerFunctionCode,
 } from './supabase'
 
 export interface DeployOptions {
@@ -492,26 +492,24 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     console.log(chalk.gray('\nDeploying Edge Functions...'))
 
     console.log(chalk.gray('  → stripe-setup'))
-    await client.deployFunction('stripe-setup', getSetupFunctionCode(projectRef))
+    await client.deployFunction('stripe-setup', setupFunctionCode)
     console.log(chalk.green('  ✓ stripe-setup deployed'))
 
     console.log(chalk.gray('  → stripe-webhook'))
-    await client.deployFunction('stripe-webhook', getWebhookFunctionCode())
+    await client.deployFunction('stripe-webhook', webhookFunctionCode)
     console.log(chalk.green('  ✓ stripe-webhook deployed'))
 
     console.log(chalk.gray('  → stripe-scheduler'))
-    await client.deployFunction('stripe-scheduler', getSchedulerFunctionCode(projectRef))
+    await client.deployFunction('stripe-scheduler', schedulerFunctionCode)
     console.log(chalk.green('  ✓ stripe-scheduler deployed'))
 
     console.log(chalk.gray('  → stripe-worker'))
-    await client.deployFunction('stripe-worker', getWorkerFunctionCode(projectRef))
+    await client.deployFunction('stripe-worker', workerFunctionCode)
     console.log(chalk.green('  ✓ stripe-worker deployed'))
 
     // Set secrets (SUPABASE_DB_URL is provided automatically by Supabase)
     console.log(chalk.gray('\nConfiguring secrets...'))
-    await client.setSecrets({
-      STRIPE_SECRET_KEY: stripeKey,
-    })
+    await client.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: stripeKey }])
     console.log(chalk.green('✓ Secrets configured'))
 
     // Run setup function
@@ -540,8 +538,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     console.log(chalk.cyan('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
     console.log(chalk.cyan.bold('  Deployment Complete!'))
     console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'))
-    console.log(chalk.white(`  Webhook URL: ${client.getWebhookUrl()}`))
-    console.log(chalk.gray('\n  Your Stripe data will now sync to your Supabase database.'))
+    console.log(chalk.gray('\n  Your Stripe data will stay in sync to your Supabase database.'))
     console.log(
       chalk.gray('  View your data in the Supabase dashboard under the "stripe" schema.\n')
     )
