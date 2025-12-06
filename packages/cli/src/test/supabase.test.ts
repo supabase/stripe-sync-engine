@@ -53,6 +53,10 @@ describe('Edge Function Files', () => {
       )
     })
 
+    test('imports postgres for pgmq operations', () => {
+      expect(workerFunctionCode).toContain("import postgres from 'npm:postgres'")
+    })
+
     test('uses poolConfig for database connection', () => {
       expect(workerFunctionCode).toContain('poolConfig:')
       expect(workerFunctionCode).toContain('connectionString: dbUrl')
@@ -76,22 +80,28 @@ describe('Edge Function Files', () => {
       expect(workerFunctionCode).toContain('status: 401')
     })
 
+    test('reads batch from pgmq queue', () => {
+      expect(workerFunctionCode).toContain('pgmq.read')
+      expect(workerFunctionCode).toContain('VISIBILITY_TIMEOUT')
+      expect(workerFunctionCode).toContain('BATCH_SIZE')
+    })
+
+    test('enqueues all objects when queue is empty', () => {
+      expect(workerFunctionCode).toContain('getSupportedSyncObjects()')
+      expect(workerFunctionCode).toContain('pgmq.send_batch')
+    })
+
     test('calls processNext with object to process pending work', () => {
       expect(workerFunctionCode).toContain('stripeSync.processNext(object)')
     })
 
-    test('reads object from request body', () => {
-      expect(workerFunctionCode).toContain('const { object } = body')
+    test('deletes message after successful processing', () => {
+      expect(workerFunctionCode).toContain('pgmq.delete')
     })
 
-    test('returns 400 if object is missing', () => {
-      expect(workerFunctionCode).toContain('Missing object in request body')
-      expect(workerFunctionCode).toContain('status: 400')
-    })
-
-    test('re-invokes self if hasMore is true', () => {
+    test('re-enqueues object if hasMore pages', () => {
       expect(workerFunctionCode).toContain('if (result.hasMore)')
-      expect(workerFunctionCode).toContain('stripe-worker')
+      expect(workerFunctionCode).toContain('pgmq.send')
     })
 
     test('returns 200 on success', () => {

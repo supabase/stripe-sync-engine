@@ -11,7 +11,6 @@ import {
   setupFunctionCode,
   webhookFunctionCode,
   workerFunctionCode,
-  schedulerFunctionCode,
 } from './supabase'
 
 export interface DeployOptions {
@@ -498,10 +497,6 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     console.log(chalk.gray('  → stripe-webhook'))
     await client.deployFunction('stripe-webhook', webhookFunctionCode)
     console.log(chalk.green('  ✓ stripe-webhook deployed'))
-
-    console.log(chalk.gray('  → stripe-scheduler'))
-    await client.deployFunction('stripe-scheduler', schedulerFunctionCode)
-    console.log(chalk.green('  ✓ stripe-scheduler deployed'))
 
     console.log(chalk.gray('  → stripe-worker'))
     await client.deployFunction('stripe-worker', workerFunctionCode)

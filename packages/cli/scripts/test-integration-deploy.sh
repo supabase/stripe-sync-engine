@@ -60,7 +60,7 @@ cleanup() {
     fi
 
     # Delete Edge Functions
-    for func in stripe-setup stripe-webhook stripe-scheduler stripe-worker; do
+    for func in stripe-setup stripe-webhook stripe-worker; do
         echo "   Deleting Edge Function: $func"
         curl -s -X DELETE "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/functions/$func" \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" > /dev/null 2>&1 || true
@@ -118,7 +118,6 @@ FUNCTIONS=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
 
 SETUP_FUNC=$(echo "$FUNCTIONS" | jq -r '.[] | select(.slug == "stripe-setup") | .slug')
 WEBHOOK_FUNC=$(echo "$FUNCTIONS" | jq -r '.[] | select(.slug == "stripe-webhook") | .slug')
-SCHEDULER_FUNC=$(echo "$FUNCTIONS" | jq -r '.[] | select(.slug == "stripe-scheduler") | .slug')
 WORKER_FUNC=$(echo "$FUNCTIONS" | jq -r '.[] | select(.slug == "stripe-worker") | .slug')
 
 if [ "$SETUP_FUNC" = "stripe-setup" ]; then
@@ -132,13 +131,6 @@ if [ "$WEBHOOK_FUNC" = "stripe-webhook" ]; then
     echo "✓ stripe-webhook function deployed"
 else
     echo "❌ stripe-webhook function NOT found"
-    exit 1
-fi
-
-if [ "$SCHEDULER_FUNC" = "stripe-scheduler" ]; then
-    echo "✓ stripe-scheduler function deployed"
-else
-    echo "❌ stripe-scheduler function NOT found"
     exit 1
 fi
 
@@ -193,13 +185,13 @@ echo ""
 
 # Verify pg_cron job (may not exist if pg_cron extension not available)
 echo "🔍 Verifying pg_cron job..."
-CRON_QUERY="SELECT jobname FROM cron.job WHERE jobname = 'stripe-sync-scheduler'"
+CRON_QUERY="SELECT jobname FROM cron.job WHERE jobname = 'stripe-sync-worker'"
 CRON_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
     -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"query\": \"$CRON_QUERY\"}" 2>/dev/null || echo "[]")
 
-if echo "$CRON_RESULT" | jq -e '.[] | select(.jobname == "stripe-sync-scheduler")' > /dev/null 2>&1; then
+if echo "$CRON_RESULT" | jq -e '.[] | select(.jobname == "stripe-sync-worker")' > /dev/null 2>&1; then
     echo "✓ pg_cron job configured"
 else
     echo "⚠️  pg_cron job NOT found (pg_cron extension may not be enabled)"
@@ -303,7 +295,7 @@ echo "✅ Deploy integration test PASSED!"
 echo "================================================"
 echo ""
 echo "Deployed resources:"
-echo "  - Edge Functions: stripe-setup, stripe-webhook, stripe-scheduler, stripe-worker"
+echo "  - Edge Functions: stripe-setup, stripe-webhook, stripe-worker"
 echo "  - Stripe webhook: $WEBHOOK_ID"
 echo "  - Database schema: stripe.*"
 echo ""

@@ -21,7 +21,6 @@ function readEdgeFunction(name: string): string {
 // Read edge function source files
 export const setupFunctionCode = readEdgeFunction('stripe-setup')
 export const webhookFunctionCode = readEdgeFunction('stripe-webhook')
-export const schedulerFunctionCode = readEdgeFunction('stripe-scheduler')
 export const workerFunctionCode = readEdgeFunction('stripe-worker')
 
 export interface DeployClientOptions {
@@ -100,7 +99,7 @@ export class SupabaseDeployClient {
   }
 
   /**
-   * Setup pg_cron job to invoke scheduler function
+   * Setup pg_cron job to invoke worker function
    */
   async setupPgCronJob(): Promise<void> {
     // Get service role key to store in vault
@@ -112,9 +111,16 @@ export class SupabaseDeployClient {
     const escapedServiceRoleKey = serviceRoleKey.replace(/'/g, "''")
 
     const sql = `
-      -- Enable pg_cron and pg_net extensions if not already enabled
+      -- Enable extensions
       CREATE EXTENSION IF NOT EXISTS pg_cron;
       CREATE EXTENSION IF NOT EXISTS pg_net;
+      CREATE EXTENSION IF NOT EXISTS pgmq;
+
+      -- Create pgmq queue for sync work (idempotent)
+      SELECT pgmq.create('stripe_sync_work')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pgmq.list_queues() WHERE queue_name = 'stripe_sync_work'
+      );
 
       -- Store service role key in vault for pg_cron to use
       -- Delete existing secret if it exists, then create new one
@@ -129,14 +135,14 @@ export class SupabaseDeployClient {
         SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-scheduler'
       );
 
-      -- Create job to invoke scheduler every 30 seconds
-      -- This balances responsiveness with cost/resource efficiency
+      -- Create job to invoke worker every 10 seconds
+      -- Worker reads from pgmq, enqueues objects if empty, and processes sync work
       SELECT cron.schedule(
-        'stripe-sync-scheduler',
-        '30 seconds',
+        'stripe-sync-worker',
+        '10 seconds',
         $$
         SELECT net.http_post(
-          url := 'https://${this.projectRef}.supabase.co/functions/v1/stripe-scheduler',
+          url := 'https://${this.projectRef}.supabase.co/functions/v1/stripe-worker',
           headers := jsonb_build_object(
             'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_service_role_key')
           )
