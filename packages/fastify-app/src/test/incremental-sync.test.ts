@@ -344,13 +344,14 @@ describe('Incremental Sync', () => {
     expect(cursor).toBe(1704902400)
 
     // Status should be error in the new observability tables
+    // Use sync_dashboard view which derives status from object states
     const status = await stripeSync.postgresClient.pool.query(
-      `SELECT r.status as run_status, r.error_message as run_error,
+      `SELECT d.status as run_status, d.error_message as run_error,
               o.status as obj_status, o.error_message as obj_error
-       FROM stripe._sync_run r
-       LEFT JOIN stripe._sync_obj_run o ON o."_account_id" = r."_account_id" AND o.run_started_at = r.started_at
-       WHERE r."_account_id" = $1 AND o.object = $2
-       ORDER BY r.started_at DESC
+       FROM stripe.sync_dashboard d
+       LEFT JOIN stripe._sync_obj_run o ON o."_account_id" = d.account_id AND o.run_started_at = d.started_at
+       WHERE d.account_id = $1 AND o.object = $2
+       ORDER BY d.started_at DESC
        LIMIT 1`,
       [testAccountId, 'products']
     )
@@ -363,10 +364,10 @@ describe('Incremental Sync', () => {
 
     // Status should be complete
     const finalStatus = await stripeSync.postgresClient.pool.query(
-      `SELECT r.status FROM stripe._sync_run r
-       JOIN stripe._sync_obj_run o ON o."_account_id" = r."_account_id" AND o.run_started_at = r.started_at
-       WHERE r."_account_id" = $1 AND o.object = $2
-       ORDER BY r.started_at DESC
+      `SELECT d.status FROM stripe.sync_dashboard d
+       JOIN stripe._sync_obj_run o ON o."_account_id" = d.account_id AND o.run_started_at = d.started_at
+       WHERE d.account_id = $1 AND o.object = $2
+       ORDER BY d.started_at DESC
        LIMIT 1`,
       [testAccountId, 'products']
     )

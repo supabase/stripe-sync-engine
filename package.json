@@ -11,7 +11,8 @@
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dashboard": "pnpm --filter @supabase/stripe-sync-dashboard dev"
   },
   "dependencies": {
     "pino": "^10.0.0"

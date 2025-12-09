@@ -430,16 +430,24 @@ export class PostgresClient {
    * Runs without objects yet (just created) are not considered stale.
    */
   async cancelStaleRuns(accountId: string): Promise<void> {
-    // Find runs where:
-    // 1. Run has at least one object
-    // 2. None of those objects have been updated in the last 5 minutes
+    // Step 1: Mark all running objects in stale runs as failed
     await this.query(
-      `UPDATE "${this.config.schema}"."_sync_run" r
+      `UPDATE "${this.config.schema}"."_sync_obj_run" o
        SET status = 'error',
            error_message = 'Auto-cancelled: stale (no update in 5 min)',
            completed_at = now()
+       WHERE o."_account_id" = $1
+         AND o.status = 'running'
+         AND o.updated_at < now() - interval '5 minutes'`,
+      [accountId]
+    )
+
+    // Step 2: Close runs where all objects are in terminal state (complete or error)
+    await this.query(
+      `UPDATE "${this.config.schema}"."_sync_run" r
+       SET closed_at = now()
        WHERE r."_account_id" = $1
-         AND r.status = 'running'
+         AND r.closed_at IS NULL
          AND EXISTS (
            SELECT 1 FROM "${this.config.schema}"."_sync_obj_run" o
            WHERE o."_account_id" = r."_account_id"
@@ -449,7 +457,7 @@ export class PostgresClient {
            SELECT 1 FROM "${this.config.schema}"."_sync_obj_run" o
            WHERE o."_account_id" = r."_account_id"
              AND o.run_started_at = r.started_at
-             AND o.updated_at >= now() - interval '5 minutes'
+             AND o.status IN ('pending', 'running')
          )`,
       [accountId]
     )
@@ -469,10 +477,10 @@ export class PostgresClient {
     // 1. Auto-cancel stale runs
     await this.cancelStaleRuns(accountId)
 
-    // 2. Check for existing active run
+    // 2. Check for existing active run (closed_at IS NULL = still running)
     const existing = await this.query(
       `SELECT "_account_id", started_at FROM "${this.config.schema}"."_sync_run"
-       WHERE "_account_id" = $1 AND status = 'running'`,
+       WHERE "_account_id" = $1 AND closed_at IS NULL`,
       [accountId]
     )
 
@@ -509,7 +517,7 @@ export class PostgresClient {
   ): Promise<{ accountId: string; runStartedAt: Date } | null> {
     const result = await this.query(
       `SELECT "_account_id", started_at FROM "${this.config.schema}"."_sync_run"
-       WHERE "_account_id" = $1 AND status = 'running'`,
+       WHERE "_account_id" = $1 AND closed_at IS NULL`,
       [accountId]
     )
 
@@ -519,7 +527,8 @@ export class PostgresClient {
   }
 
   /**
-   * Get full sync run details.
+   * Get sync run config (for concurrency control).
+   * Status is derived from sync_dashboard view.
    */
   async getSyncRun(
     accountId: string,
@@ -527,11 +536,11 @@ export class PostgresClient {
   ): Promise<{
     accountId: string
     runStartedAt: Date
-    status: string
     maxConcurrent: number
+    closedAt: Date | null
   } | null> {
     const result = await this.query(
-      `SELECT "_account_id", started_at, status, max_concurrent
+      `SELECT "_account_id", started_at, max_concurrent, closed_at
        FROM "${this.config.schema}"."_sync_run"
        WHERE "_account_id" = $1 AND started_at = $2`,
       [accountId, runStartedAt]
@@ -542,32 +551,21 @@ export class PostgresClient {
     return {
       accountId: row._account_id,
       runStartedAt: row.started_at,
-      status: row.status,
       maxConcurrent: row.max_concurrent,
+      closedAt: row.closed_at,
     }
   }
 
   /**
-   * Mark a sync run as complete.
+   * Close a sync run (mark as done).
+   * Status (complete/error) is derived from object run states.
    */
-  async completeSyncRun(accountId: string, runStartedAt: Date): Promise<void> {
+  async closeSyncRun(accountId: string, runStartedAt: Date): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_run"
-       SET status = 'complete', completed_at = now()
-       WHERE "_account_id" = $1 AND started_at = $2`,
+       SET closed_at = now()
+       WHERE "_account_id" = $1 AND started_at = $2 AND closed_at IS NULL`,
       [accountId, runStartedAt]
-    )
-  }
-
-  /**
-   * Mark a sync run as failed.
-   */
-  async failSyncRun(accountId: string, runStartedAt: Date, errorMessage: string): Promise<void> {
-    await this.query(
-      `UPDATE "${this.config.schema}"."_sync_run"
-       SET status = 'error', error_message = $3, completed_at = now()
-       WHERE "_account_id" = $1 AND started_at = $2`,
-      [accountId, runStartedAt, errorMessage]
     )
   }
 
@@ -733,6 +731,7 @@ export class PostgresClient {
 
   /**
    * Mark an object sync as complete.
+   * Auto-closes the run when all objects are done.
    */
   async completeObjectSync(accountId: string, runStartedAt: Date, object: string): Promise<void> {
     await this.query(
@@ -742,18 +741,16 @@ export class PostgresClient {
       [accountId, runStartedAt, object]
     )
 
-    // Auto-complete sync run if all objects finished successfully
+    // Auto-close sync run if all objects finished (status derived from objects)
     const allDone = await this.areAllObjectsComplete(accountId, runStartedAt)
     if (allDone) {
-      const hasErrors = await this.hasAnyObjectErrors(accountId, runStartedAt)
-      if (!hasErrors) {
-        await this.completeSyncRun(accountId, runStartedAt)
-      }
+      await this.closeSyncRun(accountId, runStartedAt)
     }
   }
 
   /**
    * Mark an object sync as failed.
+   * Auto-closes the run when all objects are done.
    */
   async failObjectSync(
     accountId: string,
@@ -768,10 +765,10 @@ export class PostgresClient {
       [accountId, runStartedAt, object, errorMessage]
     )
 
-    // Auto-fail sync run if all objects are done (at least one errored)
+    // Auto-close sync run if all objects finished (status derived from objects)
     const allDone = await this.areAllObjectsComplete(accountId, runStartedAt)
     if (allDone) {
-      await this.failSyncRun(accountId, runStartedAt, 'One or more objects failed to sync')
+      await this.closeSyncRun(accountId, runStartedAt)
     }
   }
 

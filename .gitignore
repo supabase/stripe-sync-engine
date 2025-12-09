@@ -11,3 +11,5 @@ private/
 .envrc
 
 .mcp.*
+.vercel
+.env*.local

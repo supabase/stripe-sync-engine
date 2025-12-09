@@ -1,27 +1,5 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
-import { readFileSync } from 'fs'
-import { join } from 'path'
-
-function getEdgeFunctionsDir(): string {
-  // Works in both ESM and CJS
-  // In ESM: import.meta.url is available
-  // In CJS: __dirname is available
-  if (typeof __dirname !== 'undefined') {
-    return join(__dirname, 'edge-functions')
-  }
-  // ESM fallback
-  const url = new URL('.', import.meta.url)
-  return join(url.pathname, 'edge-functions')
-}
-
-function readEdgeFunction(name: string): string {
-  return readFileSync(join(getEdgeFunctionsDir(), `${name}.ts`), 'utf-8')
-}
-
-// Read edge function source files
-export const setupFunctionCode = readEdgeFunction('stripe-setup')
-export const webhookFunctionCode = readEdgeFunction('stripe-webhook')
-export const workerFunctionCode = readEdgeFunction('stripe-worker')
+export { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
 
 export interface DeployClientOptions {
   accessToken: string
@@ -173,6 +151,25 @@ export class SupabaseDeployClient {
   }
 
   /**
+   * Get the anon key for this project (needed for Realtime subscriptions)
+   */
+  async getAnonKey(): Promise<string> {
+    const apiKeys = await this.api.getProjectApiKeys(this.projectRef)
+    const anonKey = apiKeys?.find((k) => k.name === 'anon')
+    if (!anonKey) {
+      throw new Error('Could not find anon API key')
+    }
+    return anonKey.api_key
+  }
+
+  /**
+   * Get the project URL
+   */
+  getProjectUrl(): string {
+    return `https://${this.projectRef}.supabase.co`
+  }
+
+  /**
    * Invoke an Edge Function
    */
   async invokeFunction(
@@ -193,7 +190,7 @@ export class SupabaseDeployClient {
       return { success: false, error: `${response.status}: ${text}` }
     }
 
-    const result = await response.json()
+    const result = (await response.json()) as { success?: boolean; error?: string }
     if (result.success === false) {
       return { success: false, error: result.error }
     }

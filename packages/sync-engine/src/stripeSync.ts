@@ -497,7 +497,7 @@ export class StripeSync {
       order: 13, // Depends on invoice
       listFn: (p) => this.stripe.creditNotes.list(p),
       upsertFn: (items, id, bf) => this.upsertCreditNotes(items as Stripe.CreditNote[], id, bf),
-      supportsCreatedFilter: false, // credit_notes don't support created filter
+      supportsCreatedFilter: true, // credit_notes support created filter
     },
     dispute: {
       order: 14, // Depends on charge
@@ -1245,7 +1245,6 @@ export class StripeSync {
   ): Promise<Sync> {
     let totalSynced = 0
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const result = await this.processNext(object, {
         ...params,
@@ -1367,17 +1366,13 @@ export class StripeSync {
         }
       }
 
-      // Complete the sync run after all objects are done
-      await this.postgresClient.completeSyncRun(accountId, runStartedAt)
+      // Close the sync run after all objects are done (status derived from object states)
+      await this.postgresClient.closeSyncRun(accountId, runStartedAt)
 
       return results
     } catch (error) {
-      // Fail the sync run on error
-      await this.postgresClient.failSyncRun(
-        accountId,
-        runStartedAt,
-        error instanceof Error ? error.message : 'Unknown error'
-      )
+      // Close the sync run on error (status will be 'error' based on failed object states)
+      await this.postgresClient.closeSyncRun(accountId, runStartedAt)
       throw error
     }
   }

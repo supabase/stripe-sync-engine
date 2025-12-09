@@ -90,45 +90,56 @@ describe('Observable Sync System Methods', () => {
       expect(result!.runStartedAt.getTime()).toBe(created!.runStartedAt.getTime())
     })
 
-    it('should not return completed runs', async () => {
+    it('should not return closed runs', async () => {
       const created = await postgresClient.getOrCreateSyncRun(testAccountId)
-      await postgresClient.completeSyncRun(created!.accountId, created!.runStartedAt)
+      // Create and complete an object to close the run
+      await postgresClient.createObjectRuns(created!.accountId, created!.runStartedAt, ['customer'])
+      await postgresClient.tryStartObjectSync(created!.accountId, created!.runStartedAt, 'customer')
+      await postgresClient.completeObjectSync(created!.accountId, created!.runStartedAt, 'customer')
 
       const result = await postgresClient.getActiveSyncRun(testAccountId)
       expect(result).toBeNull()
     })
   })
 
-  describe('completeSyncRun', () => {
-    it('should mark run as complete', async () => {
+  describe('closeSyncRun', () => {
+    it('should close run and derive status from objects', async () => {
       const run = await postgresClient.getOrCreateSyncRun(testAccountId)
-      await postgresClient.completeSyncRun(run!.accountId, run!.runStartedAt)
+      await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, ['customer'])
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+      await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'customer')
 
+      // Check derived status via view
       const result = await pool.query(
-        `SELECT status, completed_at FROM stripe._sync_run
-         WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status, closed_at FROM stripe.sync_dashboard
+         WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
 
       expect(result.rows[0].status).toBe('complete')
-      expect(result.rows[0].completed_at).not.toBeNull()
+      expect(result.rows[0].closed_at).not.toBeNull()
     })
-  })
 
-  describe('failSyncRun', () => {
-    it('should mark run as error with message', async () => {
+    it('should derive error status when objects have errors', async () => {
       const run = await postgresClient.getOrCreateSyncRun(testAccountId)
-      await postgresClient.failSyncRun(run!.accountId, run!.runStartedAt, 'Test error')
+      await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, ['customer'])
+      await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'customer')
+      await postgresClient.failObjectSync(
+        run!.accountId,
+        run!.runStartedAt,
+        'customer',
+        'Test error'
+      )
 
+      // Check derived status via view
       const result = await pool.query(
-        `SELECT status, error_message, completed_at FROM stripe._sync_run
-         WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status, error_message FROM stripe.sync_dashboard
+         WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
 
       expect(result.rows[0].status).toBe('error')
       expect(result.rows[0].error_message).toBe('Test error')
-      expect(result.rows[0].completed_at).not.toBeNull()
     })
   })
 
@@ -447,10 +458,10 @@ describe('Observable Sync System Methods', () => {
       // Call cancelStaleRuns
       await postgresClient.cancelStaleRuns(testAccountId)
 
-      // Check run is now error
+      // Check run is now closed and status derived as error
       const result = await pool.query(
-        `SELECT status, error_message FROM stripe._sync_run
-         WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status, error_message FROM stripe.sync_dashboard
+         WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
 
@@ -466,10 +477,10 @@ describe('Observable Sync System Methods', () => {
       // Call cancelStaleRuns (should not cancel because updated_at is recent)
       await postgresClient.cancelStaleRuns(testAccountId)
 
-      // Check run is still running
+      // Check run is still running (not closed)
       const result = await pool.query(
-        `SELECT status FROM stripe._sync_run
-         WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_dashboard
+         WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
 
@@ -520,29 +531,27 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.incrementObjectProgress(run!.accountId, run!.runStartedAt, 'invoice', 50)
       await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
 
-      // 5. Check all complete
+      // 5. Check all complete (run auto-closed by completeObjectSync)
       const allDone = await postgresClient.areAllObjectsComplete(run!.accountId, run!.runStartedAt)
       expect(allDone).toBe(true)
 
-      // 6. Complete run
-      await postgresClient.completeSyncRun(run!.accountId, run!.runStartedAt)
-
-      // 7. Verify final state
+      // 6. Verify final state via derived view
       const finalRun = await pool.query(
-        `SELECT status FROM stripe._sync_run
-         WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status, processed_count FROM stripe.sync_dashboard
+         WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(finalRun.rows[0].status).toBe('complete')
+      expect(Number(finalRun.rows[0].processed_count)).toBe(150) // 100 + 50
 
-      // 8. Can start a new run now
+      // 7. Can start a new run now
       const newRun = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
       expect(newRun!.isNew).toBe(true)
     })
   })
 
-  describe('Sync Run Auto-Completion', () => {
-    it('should auto-complete sync run when all objects are complete', async () => {
+  describe('Sync Run Auto-Close', () => {
+    it('should auto-close sync run when all objects are complete', async () => {
       // 1. Create run with 2 objects
       const run = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, [
@@ -554,9 +563,9 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'customer')
       await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'customer')
 
-      // 3. Verify run still running (one object pending)
+      // 3. Verify run still running (one object pending, not closed yet)
       let syncRunResult = await pool.query(
-        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('running')
@@ -565,15 +574,15 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.tryStartObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
       await postgresClient.completeObjectSync(run!.accountId, run!.runStartedAt, 'invoice')
 
-      // 5. Verify run is now complete (auto-completed when all objects finished)
+      // 5. Verify run is now complete (auto-closed, status derived from objects)
       syncRunResult = await pool.query(
-        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('complete')
     })
 
-    it('should auto-fail sync run when all objects are done but some errored', async () => {
+    it('should derive error status when all objects are done but some errored', async () => {
       // 1. Create run with 2 objects
       const run = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, [
@@ -594,9 +603,9 @@ describe('Observable Sync System Methods', () => {
         'Test error'
       )
 
-      // 4. Verify run is marked as error (not complete, since one object failed)
+      // 4. Verify status is derived as error (run auto-closed, status from objects)
       const syncRunResult = await pool.query(
-        `SELECT status FROM stripe._sync_run WHERE "_account_id" = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('error')
