@@ -6,16 +6,18 @@
  * Flow:
  * 1. Read batch of messages from pgmq (qty=10, vt=60s)
  * 2. If queue empty: enqueue all objects (continuous sync)
- * 3. Process messages sequentially:
+ * 3. Process messages in parallel (Promise.all):
  *    - processNext(object)
  *    - Delete message on success
  *    - Re-enqueue if hasMore
  * 4. Return results summary
  *
- * Concurrency: Multiple workers can run concurrently via overlapping pg_cron triggers.
- * pgmq visibility timeout prevents duplicate message reads across workers.
- * processNext() is idempotent (uses internal cursor tracking), so duplicate
- * processing on timeout/crash is safe.
+ * Concurrency:
+ * - Multiple workers can run concurrently via overlapping pg_cron triggers.
+ * - Each worker processes its batch of messages in parallel (Promise.all).
+ * - pgmq visibility timeout prevents duplicate message reads across workers.
+ * - processNext() is idempotent (uses internal cursor tracking), so duplicate
+ *   processing on timeout/crash is safe.
  */
 
 import { StripeSync } from 'npm:stripe-experiment-sync'
@@ -94,43 +96,37 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Process messages sequentially
-    const results: Array<{
-      object: string
-      processed: number
-      hasMore: boolean
-      error?: string
-      stack?: string
-    }> = []
+    // Process messages in parallel
+    const results = await Promise.all(
+      messages.map(async (msg) => {
+        const { object } = msg.message as { object: string }
 
-    for (const msg of messages) {
-      const { object } = msg.message as { object: string }
+        try {
+          const result = await stripeSync.processNext(object)
 
-      try {
-        const result = await stripeSync.processNext(object)
+          // Delete message on success (cast to bigint to disambiguate overloaded function)
+          await sql`SELECT pgmq.delete(${QUEUE_NAME}::text, ${msg.msg_id}::bigint)`
 
-        // Delete message on success (cast to bigint to disambiguate overloaded function)
-        await sql`SELECT pgmq.delete(${QUEUE_NAME}::text, ${msg.msg_id}::bigint)`
+          // Re-enqueue if more pages
+          if (result.hasMore) {
+            await sql`SELECT pgmq.send(${QUEUE_NAME}::text, ${sql.json({ object })}::jsonb)`
+          }
 
-        // Re-enqueue if more pages
-        if (result.hasMore) {
-          await sql`SELECT pgmq.send(${QUEUE_NAME}::text, ${sql.json({ object })}::jsonb)`
+          return { object, ...result }
+        } catch (error) {
+          // Log error but continue to next message
+          // Message will become visible again after visibility timeout
+          console.error(`Error processing ${object}:`, error)
+          return {
+            object,
+            processed: 0,
+            hasMore: false,
+            error: error.message,
+            stack: error.stack,
+          }
         }
-
-        results.push({ object, ...result })
-      } catch (error) {
-        // Log error but continue to next message
-        // Message will become visible again after visibility timeout
-        console.error(`Error processing ${object}:`, error)
-        results.push({
-          object,
-          processed: 0,
-          hasMore: false,
-          error: error.message,
-          stack: error.stack,
-        })
-      }
-    }
+      })
+    )
 
     return new Response(JSON.stringify({ results }), {
       status: 200,

@@ -213,30 +213,61 @@ echo ""
 
 # Test 1: Verify backfill syncs the pre-existing customer (created before webhook existed)
 echo "🧪 Testing backfill sync..."
-echo "   Waiting for backfill to sync pre-existing customer (up to 30s)..."
-BACKFILL_SUCCESS=false
-for i in {1..15}; do
-    sleep 2
+echo "   Waiting for initial backfill to complete (up to 10 minutes)..."
 
-    # Check if backfill customer exists in database
-    BACKFILL_QUERY="SELECT id FROM stripe.customers WHERE id = '$BACKFILL_CUSTOMER_ID'"
-    BACKFILL_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+# Wait for sync run to complete (closed_at IS NOT NULL)
+SYNC_COMPLETE=false
+for i in {1..60}; do
+    sleep 10
+
+    # Check if sync run is complete
+    SYNC_STATUS_QUERY="SELECT closed_at, status FROM stripe.sync_dashboard ORDER BY started_at DESC LIMIT 1"
+    SYNC_STATUS_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
         -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{\"query\": \"$BACKFILL_QUERY\"}")
+        -d "{\"query\": \"$SYNC_STATUS_QUERY\"}")
 
-    if echo "$BACKFILL_RESULT" | jq -e ".[0].id == \"$BACKFILL_CUSTOMER_ID\"" > /dev/null 2>&1; then
-        BACKFILL_SUCCESS=true
+    # Check if result is an array (successful query) or error object
+    if echo "$SYNC_STATUS_RESULT" | jq -e 'type == "array"' > /dev/null 2>&1; then
+        CLOSED_AT=$(echo "$SYNC_STATUS_RESULT" | jq -r '.[0].closed_at // empty')
+        STATUS=$(echo "$SYNC_STATUS_RESULT" | jq -r '.[0].status // "unknown"')
+    else
+        # Query failed (table doesn't exist yet or other error)
+        CLOSED_AT=""
+        STATUS="pending"
+    fi
+
+    if [ -n "$CLOSED_AT" ] && [ "$CLOSED_AT" != "null" ]; then
+        SYNC_COMPLETE=true
+        echo "   ✓ Initial backfill completed with status: $STATUS"
         break
+    fi
+
+    # Show progress every 30 seconds
+    if [ $((i % 3)) -eq 0 ]; then
+        echo "   Still running... (${i}0s elapsed, status: $STATUS)"
     fi
 done
 
-if [ "$BACKFILL_SUCCESS" = true ]; then
+if [ "$SYNC_COMPLETE" != true ]; then
+    echo "   ❌ Backfill did not complete within 10 minutes"
+    exit 1
+fi
+
+# Now check if customer was synced
+echo "   Verifying customer was synced..."
+BACKFILL_QUERY="SELECT id FROM stripe.customers WHERE id = '$BACKFILL_CUSTOMER_ID'"
+BACKFILL_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$BACKFILL_QUERY\"}")
+
+if echo "$BACKFILL_RESULT" | jq -e ".[0].id == \"$BACKFILL_CUSTOMER_ID\"" > /dev/null 2>&1; then
     echo "   ✓ Pre-existing customer synced via backfill"
 else
-    echo "   ❌ Pre-existing customer NOT synced via backfill after 30s"
+    echo "   ❌ Pre-existing customer NOT found in database after backfill"
     echo "   This could mean:"
-    echo "   - Worker function failed to process"
+    echo "   - Customer was created in different Stripe account"
     echo "   - Database write failed"
     exit 1
 fi
