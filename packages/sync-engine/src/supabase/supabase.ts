@@ -1,6 +1,5 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
 import { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
-export { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
 
 export interface DeployClientOptions {
   accessToken: string
@@ -222,7 +221,6 @@ export async function install(params: {
 
   // Deploy Edge Functions
   await client.deployFunction('stripe-setup', setupFunctionCode)
-  // await runMigrations()
   await client.deployFunction('stripe-webhook', webhookFunctionCode)
   await client.deployFunction('stripe-worker', workerFunctionCode)
 
