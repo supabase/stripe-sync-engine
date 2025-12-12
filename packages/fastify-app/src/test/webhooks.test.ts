@@ -19,7 +19,7 @@ const postgresClient = new PostgresClient({
 })
 
 describe('POST /webhooks', () => {
-  let server: FastifyInstance
+  let server: FastifyInstance | undefined
 
   beforeAll(async () => {
     const config = getConfig()
@@ -37,7 +37,9 @@ describe('POST /webhooks', () => {
   })
 
   afterAll(async () => {
-    await server.close()
+    if (server) {
+      await server.close()
+    }
   })
 
   function getTableName(entityType: string): string {

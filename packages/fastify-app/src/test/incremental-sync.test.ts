@@ -4,12 +4,12 @@ import { vitest, beforeAll, afterAll, describe, test, expect, beforeEach } from 
 import { getConfig } from '../utils/config'
 import { logger } from '../logger'
 
-let stripeSync: StripeSync
+let stripeSync: StripeSync | undefined
 const testAccountId = 'acct_test_account'
 
 // Helper to get cursor from most recent sync run (for test verification - any status)
 async function getCursor(resourceName: string): Promise<number | null> {
-  const result = await stripeSync.postgresClient.pool.query(
+  const result = await stripeSync!.postgresClient.pool.query(
     `SELECT o.cursor FROM stripe._sync_obj_run o
      JOIN stripe._sync_run r ON o."_account_id" = r."_account_id" AND o.run_started_at = r.started_at
      WHERE o."_account_id" = $1 AND o.object = $2
@@ -54,7 +54,9 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await stripeSync.postgresClient.pool.end()
+  if (stripeSync) {
+    await stripeSync.postgresClient.pool.end()
+  }
 })
 
 describe('Incremental Sync', () => {

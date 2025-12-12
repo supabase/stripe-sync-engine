@@ -5,7 +5,7 @@ import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 import type Stripe from 'stripe'
 
-let stripeSync: StripeSync
+let stripeSync: StripeSync | undefined
 
 beforeAll(async () => {
   process.env.REVALIDATE_OBJECTS_VIA_STRIPE_API = 'invoice'

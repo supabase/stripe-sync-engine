@@ -24,7 +24,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "node scripts/build-edge-functions.js && tsup src/index.ts src/lib.ts --format esm,cjs --dts --clean",
+    "build": "tsup src/index.ts src/lib.ts --format esm,cjs --dts --clean",
     "dev": "tsx src/index.ts",
     "lint": "eslint src",
     "format": "prettier --check .",

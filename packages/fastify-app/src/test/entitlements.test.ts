@@ -5,7 +5,7 @@ import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 import Stripe from 'stripe'
 
-let stripeSync: StripeSync
+let stripeSync: StripeSync | undefined
 const customerId = 'cus_111'
 
 beforeAll(async () => {
@@ -25,12 +25,14 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await Promise.all([
-    stripeSync.postgresClient.query(
-      `delete from stripe.active_entitlements where customer = '${customerId}'`
-    ),
-    stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
-  ])
+  if (stripeSync) {
+    await Promise.all([
+      stripeSync.postgresClient.query(
+        `delete from stripe.active_entitlements where customer = '${customerId}'`
+      ),
+      stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
+    ])
+  }
 })
 
 describe('entitlements', () => {

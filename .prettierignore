@@ -5,3 +5,5 @@ pnpm-lock.yaml
 docker*
 Pulumi.*.yaml
 LICENSE.md
+dist/
+.claude/

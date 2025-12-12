@@ -5,7 +5,7 @@ import pg from 'pg'
 
 describe('Observable Sync System Methods', () => {
   let postgresClient: PostgresClient
-  let pool: pg.Pool
+  let pool: pg.Pool | undefined
   const testAccountId = 'acct_test_obs_123'
 
   beforeAll(async () => {
@@ -32,15 +32,19 @@ describe('Observable Sync System Methods', () => {
 
   afterAll(async () => {
     // Clean up test data
-    await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
-    await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
-    await pool.end()
+    if (pool) {
+      await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
+      await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+      await pool.end()
+    }
   })
 
   beforeEach(async () => {
     // Clean up between tests
-    await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
-    await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+    if (pool) {
+      await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
+      await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+    }
   })
 
   describe('getOrCreateSyncRun', () => {

@@ -6,4 +6,4 @@ export {
   install,
   type DeployClientOptions,
   type ProjectInfo,
-} from './supabase'
+} from 'stripe-experiment-sync/supabase'

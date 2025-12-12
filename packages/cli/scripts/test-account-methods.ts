@@ -55,6 +55,8 @@ async function main() {
     error: () => {},
   }
 
+  let stripeSync: StripeSync | null = null
+
   try {
     if (method === 'get-account') {
       // Get current account
@@ -63,7 +65,7 @@ async function main() {
         process.exit(1)
       }
 
-      const stripeSync = new StripeSync({
+      stripeSync = new StripeSync({
         databaseUrl,
         stripeSecretKey: stripeApiKey,
         stripeApiVersion: '2020-08-27',
@@ -75,7 +77,7 @@ async function main() {
       console.log(JSON.stringify(account, null, 2))
     } else if (method === 'list-accounts') {
       // List all synced accounts
-      const stripeSync = new StripeSync({
+      stripeSync = new StripeSync({
         databaseUrl,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for listing
         stripeApiVersion: '2020-08-27',
@@ -99,7 +101,7 @@ async function main() {
       const dryRun = args.includes('--dry-run')
       const useTransaction = !args.includes('--no-transaction')
 
-      const stripeSync = new StripeSync({
+      stripeSync = new StripeSync({
         databaseUrl,
         stripeSecretKey: 'sk_test_placeholder', // Not needed for deletion
         stripeApiVersion: '2020-08-27',
@@ -118,8 +120,23 @@ async function main() {
       console.error('Valid methods: get-account, list-accounts, delete-account')
       process.exit(1)
     }
+
+    // Close database pool
+    if (stripeSync) {
+      await stripeSync.close()
+    }
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : 'Unknown error')
+
+    // Close database pool on error
+    if (stripeSync) {
+      try {
+        await stripeSync.close()
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+
     process.exit(1)
   }
 }

@@ -5,7 +5,7 @@ import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 
-let stripeSync: StripeSync
+let stripeSync: StripeSync | undefined
 const TEST_ACCOUNT_ID = 'acct_test_account'
 
 beforeAll(async () => {

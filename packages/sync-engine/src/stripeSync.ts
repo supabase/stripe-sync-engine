@@ -3093,6 +3093,14 @@ export class StripeSync {
 
     return entities
   }
+
+  /**
+   * Closes the database connection pool and cleans up resources.
+   * Call this when you're done using the StripeSync instance.
+   */
+  async close(): Promise<void> {
+    await this.postgresClient.pool.end()
+  }
 }
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {

@@ -974,6 +974,9 @@ async function main() {
 
     console.log(chalk.green('✓ Cleanup complete\n'))
 
+    // Close database pool
+    await stripeSync.close()
+
     if (hasFailures) {
       process.exit(1)
     } else {
