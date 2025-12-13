@@ -6,7 +6,8 @@ import Stripe from 'stripe'
 export interface DeployClientOptions {
   accessToken: string
   projectRef: string
-  baseUrl?: string
+  projectBaseUrl?: string
+  managementApiBaseUrl?: string
 }
 
 export interface ProjectInfo {
@@ -18,12 +19,15 @@ export interface ProjectInfo {
 export class SupabaseDeployClient {
   private api: SupabaseManagementAPI
   private projectRef: string
-  private baseUrl: string
+  private projectBaseUrl: string
 
   constructor(options: DeployClientOptions) {
-    this.api = new SupabaseManagementAPI({ accessToken: options.accessToken })
+    this.api = new SupabaseManagementAPI({
+      accessToken: options.accessToken,
+      baseUrl: options.managementApiBaseUrl,
+    })
     this.projectRef = options.projectRef
-    this.baseUrl = options.baseUrl || process.env.SUPABASE_BASE_URL || 'supabase.co'
+    this.projectBaseUrl = options.projectBaseUrl || process.env.SUPABASE_BASE_URL || 'supabase.co'
   }
 
   /**
@@ -125,7 +129,7 @@ export class SupabaseDeployClient {
         '10 seconds',
         $$
         SELECT net.http_post(
-          url := 'https://${this.projectRef}.${this.baseUrl}/functions/v1/stripe-worker',
+          url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-worker',
           headers := jsonb_build_object(
             'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_service_role_key')
           )
@@ -140,7 +144,7 @@ export class SupabaseDeployClient {
    * Get the webhook URL for this project
    */
   getWebhookUrl(): string {
-    return `https://${this.projectRef}.${this.baseUrl}/functions/v1/stripe-webhook`
+    return `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-webhook`
   }
 
   /**
@@ -171,7 +175,7 @@ export class SupabaseDeployClient {
    * Get the project URL
    */
   getProjectUrl(): string {
-    return `https://${this.projectRef}.${this.baseUrl}`
+    return `https://${this.projectRef}.${this.projectBaseUrl}`
   }
 
   /**
@@ -181,7 +185,7 @@ export class SupabaseDeployClient {
     name: string,
     serviceRoleKey: string
   ): Promise<{ success: boolean; error?: string }> {
-    const url = `https://${this.projectRef}.${this.baseUrl}/functions/v1/${name}`
+    const url = `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/${name}`
     const response = await fetch(url, {
       method: 'POST',
       headers: {
