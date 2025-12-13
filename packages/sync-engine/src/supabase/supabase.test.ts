@@ -56,7 +56,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'option-domain.com',
+        projectBaseUrl: 'option-domain.com',
       })
 
       expect(client.getProjectUrl()).toBe(`https://${mockProjectRef}.option-domain.com`)
@@ -69,7 +69,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'my-custom.supabase.co',
+        projectBaseUrl: 'my-custom.supabase.co',
       })
 
       expect(client.getProjectUrl()).toBe(`https://${mockProjectRef}.my-custom.supabase.co`)
@@ -84,7 +84,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'test-domain.com',
+        projectBaseUrl: 'test-domain.com',
       })
 
       expect(client.getProjectUrl()).toBe(`https://${mockProjectRef}.test-domain.com`)
@@ -94,7 +94,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'test-domain.com',
+        projectBaseUrl: 'test-domain.com',
       })
 
       expect(client.getWebhookUrl()).toBe(
@@ -106,7 +106,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'test-domain.com',
+        projectBaseUrl: 'test-domain.com',
       })
 
       // Mock fetch to intercept the URL being called
@@ -137,7 +137,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'test-domain.com',
+        projectBaseUrl: 'test-domain.com',
       })
 
       // Mock the API methods
@@ -201,7 +201,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: '',
+        projectBaseUrl: '',
       })
 
       // Empty string is falsy, so it should fall back to env var
@@ -214,7 +214,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: '',
+        projectBaseUrl: '',
       })
 
       // Both are empty/falsy, should use default
@@ -226,7 +226,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'my-domain.com',
+        projectBaseUrl: 'my-domain.com',
       })
 
       // The URL construction adds https://, so base URL should not include it
@@ -238,7 +238,7 @@ describe('SupabaseDeployClient', () => {
       const client = new SupabaseDeployClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
-        baseUrl: 'api.custom-domain.com',
+        projectBaseUrl: 'api.custom-domain.com',
       })
 
       expect(client.getProjectUrl()).toBe(`https://${mockProjectRef}.api.custom-domain.com`)
