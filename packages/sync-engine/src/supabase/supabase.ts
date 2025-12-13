@@ -3,6 +3,11 @@ import { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './ed
 import pkg from '../../package.json' with { type: 'json' }
 import Stripe from 'stripe'
 
+export const STRIPE_SCHEMA_COMMENT_PREFIX = 'stripe-sync'
+export const INSTALLATION_STARTED_SUFFIX = 'installation:started'
+export const INSTALLATION_ERROR_SUFFIX = 'installation:error'
+export const INSTALLATION_INSTALLED_SUFFIX = 'installed'
+
 export interface DeployClientOptions {
   accessToken: string
   projectRef: string
@@ -260,7 +265,7 @@ export class SupabaseSetupClient {
       const comment = commentCheck[0]?.rows?.[0]?.comment
 
       // If schema + migrations table exist but no comment, throw error (legacy installation)
-      if (!comment || !comment.includes('stripe-sync')) {
+      if (!comment || !comment.includes(STRIPE_SCHEMA_COMMENT_PREFIX)) {
         throw new Error(
           `Legacy installation detected: Schema '${schema}' and migrations table exist, but missing stripe-sync comment marker. ` +
             `This may be a legacy installation or manually created schema. ` +
@@ -269,12 +274,12 @@ export class SupabaseSetupClient {
       }
 
       // Check for incomplete installation (can retry)
-      if (comment.includes('installation:started')) {
+      if (comment.includes(INSTALLATION_STARTED_SUFFIX)) {
         return false
       }
 
       // Check for failed installation (requires manual intervention)
-      if (comment.includes('installation:error')) {
+      if (comment.includes(INSTALLATION_ERROR_SUFFIX)) {
         throw new Error(
           `Installation failed: Schema '${schema}' exists but installation encountered an error. ` +
             `Comment: ${comment}. Please uninstall and install again.`
@@ -408,7 +413,9 @@ export class SupabaseSetupClient {
       await this.runSQL(`CREATE SCHEMA IF NOT EXISTS stripe`)
 
       // Signal installation started
-      await this.updateInstallationComment(`stripe-sync v${pkg.version} installation:started`)
+      await this.updateInstallationComment(
+        `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_STARTED_SUFFIX}`
+      )
 
       // Deploy Edge Functions
       await this.deployFunction('stripe-setup', setupFunctionCode)
@@ -434,10 +441,12 @@ export class SupabaseSetupClient {
       }
 
       // Set final version comment
-      await this.updateInstallationComment(`stripe-sync v${pkg.version} installed`)
+      await this.updateInstallationComment(
+        `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_INSTALLED_SUFFIX}`
+      )
     } catch (error) {
       await this.updateInstallationComment(
-        `stripe-sync v${pkg.version} installation:error - ${
+        `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_ERROR_SUFFIX} - ${
           error instanceof Error ? error.message : String(error)
         }`
       )
