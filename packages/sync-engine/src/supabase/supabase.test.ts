@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { SupabaseDeployClient } from './supabase'
+import { SupabaseSetupClient } from './supabase'
 
 describe('SupabaseDeployClient', () => {
   const mockAccessToken = 'test-access-token'
@@ -25,7 +25,7 @@ describe('SupabaseDeployClient', () => {
 
   describe('Base URL Configuration', () => {
     it('should use default base URL when no option or env var is provided', () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -39,7 +39,7 @@ describe('SupabaseDeployClient', () => {
     it('should use environment variable when provided', () => {
       process.env.SUPABASE_BASE_URL = 'custom-domain.com'
 
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -53,7 +53,7 @@ describe('SupabaseDeployClient', () => {
     it('should prioritize option over environment variable', () => {
       process.env.SUPABASE_BASE_URL = 'env-domain.com'
 
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'option-domain.com',
@@ -66,7 +66,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should use custom base URL from options', () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'my-custom.supabase.co',
@@ -81,7 +81,7 @@ describe('SupabaseDeployClient', () => {
 
   describe('URL Generation Methods', () => {
     it('should generate correct project URL with custom base URL', () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'test-domain.com',
@@ -91,7 +91,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should generate correct webhook URL with custom base URL', () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'test-domain.com',
@@ -103,7 +103,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should generate correct function invocation URL with custom base URL', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'test-domain.com',
@@ -134,7 +134,7 @@ describe('SupabaseDeployClient', () => {
 
   describe('setupPgCronJob with custom base URL', () => {
     it('should include custom base URL in pg_cron SQL', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'test-domain.com',
@@ -166,7 +166,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should use default base URL in pg_cron SQL when not customized', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -198,7 +198,7 @@ describe('SupabaseDeployClient', () => {
     it('should handle empty string base URL option by using env var', () => {
       process.env.SUPABASE_BASE_URL = 'env-fallback.com'
 
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: '',
@@ -211,7 +211,7 @@ describe('SupabaseDeployClient', () => {
     it('should handle empty string base URL option and env var by using default', () => {
       process.env.SUPABASE_BASE_URL = ''
 
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: '',
@@ -223,7 +223,7 @@ describe('SupabaseDeployClient', () => {
 
     it('should work with base URLs containing protocols (should strip them in construction)', () => {
       // Note: This test documents current behavior - base URL should NOT include protocol
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'my-domain.com',
@@ -235,7 +235,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should work with base URLs containing subdomains', () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
         projectBaseUrl: 'api.custom-domain.com',
@@ -247,7 +247,7 @@ describe('SupabaseDeployClient', () => {
 
   describe('isInstalled()', () => {
     it('should return false when schema does not exist', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -263,7 +263,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should return false when schema exists but no migrations table', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -282,7 +282,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should throw error when schema and migrations table exist but no comment', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -300,7 +300,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should throw error when schema and migrations table exist but comment missing stripe-sync', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -318,7 +318,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should return false when installation is in progress (installation:started)', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -338,7 +338,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should throw error when installation has failed (installation:error)', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -367,7 +367,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should return true when installation is complete', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })
@@ -387,7 +387,7 @@ describe('SupabaseDeployClient', () => {
     })
 
     it('should work with custom schema name', async () => {
-      const client = new SupabaseDeployClient({
+      const client = new SupabaseSetupClient({
         accessToken: mockAccessToken,
         projectRef: mockProjectRef,
       })

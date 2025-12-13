@@ -16,7 +16,7 @@ export interface ProjectInfo {
   region: string
 }
 
-export class SupabaseDeployClient {
+export class SupabaseSetupClient {
   private api: SupabaseManagementAPI
   private projectRef: string
   private projectBaseUrl: string
@@ -393,66 +393,76 @@ export class SupabaseDeployClient {
       throw new Error(`Uninstall failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+
+  async install(stripeKey: string): Promise<void> {
+    const trimmedStripeKey = stripeKey.trim()
+    if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
+      throw new Error('Stripe key should start with "sk_" or "rk_"')
+    }
+
+    try {
+      // Validate project
+      await this.validateProject()
+
+      // Create schema if it doesn't exist (before we can comment on it)
+      await this.runSQL(`CREATE SCHEMA IF NOT EXISTS stripe`)
+
+      // Signal installation started
+      await this.updateInstallationComment(`stripe-sync v${pkg.version} installation:started`)
+
+      // Deploy Edge Functions
+      await this.deployFunction('stripe-setup', setupFunctionCode)
+      await this.deployFunction('stripe-webhook', webhookFunctionCode)
+      await this.deployFunction('stripe-worker', workerFunctionCode)
+
+      // Set secrets
+      await this.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }])
+
+      // Run setup (migrations + webhook creation)
+      const serviceRoleKey = await this.getServiceRoleKey()
+      const setupResult = await this.invokeFunction('stripe-setup', serviceRoleKey)
+
+      if (!setupResult.success) {
+        throw new Error(`Setup failed: ${setupResult.error}`)
+      }
+
+      // Setup pg_cron
+      try {
+        await this.setupPgCronJob()
+      } catch {
+        // pg_cron may not be available
+      }
+
+      // Set final version comment
+      await this.updateInstallationComment(`stripe-sync v${pkg.version} installed`)
+    } catch (error) {
+      await this.updateInstallationComment(
+        `stripe-sync v${pkg.version} installation:error - ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+      throw error
+    }
+  }
 }
 
 export async function install(params: {
   supabaseAccessToken: string
   supabaseProjectRef: string
   stripeKey: string
+  baseProjectUrl?: string
+  baseManagementApiUrl?: string
 }): Promise<void> {
   const { supabaseAccessToken, supabaseProjectRef, stripeKey } = params
 
-  const trimmedStripeKey = stripeKey.trim()
-  if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
-    throw new Error('Stripe key should start with "sk_" or "rk_"')
-  }
-
-  const client = new SupabaseDeployClient({
+  const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
     projectRef: supabaseProjectRef,
+    projectBaseUrl: params.baseProjectUrl,
+    managementApiBaseUrl: params.baseManagementApiUrl,
   })
 
-  try {
-    // Validate project
-    await client.validateProject()
-
-    // Create schema if it doesn't exist (before we can comment on it)
-    await client.runSQL(`CREATE SCHEMA IF NOT EXISTS stripe`)
-
-    // Signal installation started
-    await client.updateInstallationComment(`stripe-sync v${pkg.version} installation:started`)
-
-    // Deploy Edge Functions
-    await client.deployFunction('stripe-setup', setupFunctionCode)
-    await client.deployFunction('stripe-webhook', webhookFunctionCode)
-    await client.deployFunction('stripe-worker', workerFunctionCode)
-
-    // Set secrets
-    await client.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }])
-
-    // Run setup (migrations + webhook creation)
-    const serviceRoleKey = await client.getServiceRoleKey()
-    const setupResult = await client.invokeFunction('stripe-setup', serviceRoleKey)
-
-    if (!setupResult.success) {
-      throw new Error(`Setup failed: ${setupResult.error}`)
-    }
-
-    // Setup pg_cron
-    try {
-      await client.setupPgCronJob()
-    } catch {
-      // pg_cron may not be available
-    }
-
-    // Set final version comment
-    await client.updateInstallationComment(`stripe-sync v${pkg.version} installed`)
-  } catch (error) {
-    await client.updateInstallationComment(
-      `stripe-sync v${pkg.version} installation:error - ${error instanceof Error ? error.message : String(error)}`
-    )
-    throw error
-  }
+  await client.install(stripeKey)
 }
 
 export async function uninstall(params: {
@@ -467,7 +477,7 @@ export async function uninstall(params: {
     throw new Error('Stripe key should start with "sk_" or "rk_"')
   }
 
-  const client = new SupabaseDeployClient({
+  const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
     projectRef: supabaseProjectRef,
   })

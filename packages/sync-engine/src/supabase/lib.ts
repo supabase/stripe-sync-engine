@@ -1,5 +1,5 @@
 export {
-  SupabaseDeployClient,
+  SupabaseSetupClient as SupabaseDeployClient,
   install,
   uninstall,
   type DeployClientOptions,
