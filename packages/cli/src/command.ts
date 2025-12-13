@@ -6,12 +6,7 @@ import { type PoolConfig } from 'pg'
 import { loadConfig, CliOptions } from './config'
 import { StripeSync, runMigrations, type SyncObject } from 'stripe-experiment-sync'
 import { createTunnel, NgrokTunnel } from './ngrok'
-import {
-  SupabaseDeployClient,
-  setupFunctionCode,
-  webhookFunctionCode,
-  workerFunctionCode,
-} from 'stripe-experiment-sync/supabase'
+import { install, uninstall } from 'stripe-experiment-sync/supabase'
 
 export interface DeployOptions {
   supabaseAccessToken?: string
@@ -132,35 +127,6 @@ export async function backfillCommand(options: CliOptions, entityName: string): 
         migrationError instanceof Error ? migrationError.message : String(migrationError)
       )
       throw migrationError
-    }
-
-    // Verify installation completed successfully
-    const { PostgresClient } = await import('stripe-experiment-sync')
-    const checkPoolConfig: PoolConfig = {
-      max: 1,
-      connectionString: config.databaseUrl,
-    }
-    const checkClient = new PostgresClient({
-      schema: 'stripe',
-      poolConfig: checkPoolConfig,
-    })
-
-    try {
-      const installed = await checkClient.isInstalled()
-      if (!installed) {
-        console.error(
-          chalk.red('Installation verification failed. Please try running migrations again.')
-        )
-        process.exit(1)
-      }
-    } catch (error) {
-      // This should not happen after successful migration, but handle it
-      if (error instanceof Error) {
-        console.error(chalk.red(error.message))
-      }
-      process.exit(1)
-    } finally {
-      await checkClient.close()
     }
 
     // Create StripeSync instance
@@ -360,35 +326,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       throw migrationError
     }
 
-    // Verify installation completed successfully
-    const { PostgresClient } = await import('stripe-experiment-sync')
-    const checkPoolConfig: PoolConfig = {
-      max: 1,
-      connectionString: config.databaseUrl,
-    }
-    const checkClient = new PostgresClient({
-      schema: 'stripe',
-      poolConfig: checkPoolConfig,
-    })
-
-    try {
-      const installed = await checkClient.isInstalled()
-      if (!installed) {
-        console.error(
-          chalk.red('Installation verification failed. Please try running migrations again.')
-        )
-        process.exit(1)
-      }
-    } catch (error) {
-      // This should not happen after successful migration, but handle it
-      if (error instanceof Error) {
-        console.error(chalk.red(error.message))
-      }
-      process.exit(1)
-    } finally {
-      await checkClient.close()
-    }
-
     // 2. Create StripeSync instance
     const poolConfig: PoolConfig = {
       max: 10,
@@ -562,58 +499,13 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     console.log(chalk.blue('\n🚀 Deploying Stripe Sync to Supabase Edge Functions...\n'))
 
-    // Create deploy client
-    const client = new SupabaseDeployClient({
-      accessToken,
-      projectRef,
-    })
-
-    // Validate project access
+    // Run installation via the install() function
     console.log(chalk.gray('Validating project access...'))
-    const projectInfo = await client.validateProject()
-    console.log(chalk.green(`✓ Project: ${projectInfo.name} (${projectInfo.region})`))
-
-    // Deploy Edge Functions
-    console.log(chalk.gray('\nDeploying Edge Functions...'))
-
-    console.log(chalk.gray('  → stripe-setup'))
-    await client.deployFunction('stripe-setup', setupFunctionCode)
-    console.log(chalk.green('  ✓ stripe-setup deployed'))
-
-    console.log(chalk.gray('  → stripe-webhook'))
-    await client.deployFunction('stripe-webhook', webhookFunctionCode)
-    console.log(chalk.green('  ✓ stripe-webhook deployed'))
-
-    console.log(chalk.gray('  → stripe-worker'))
-    await client.deployFunction('stripe-worker', workerFunctionCode)
-    console.log(chalk.green('  ✓ stripe-worker deployed'))
-
-    // Set secrets (SUPABASE_DB_URL is provided automatically by Supabase)
-    console.log(chalk.gray('\nConfiguring secrets...'))
-    await client.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: stripeKey }])
-    console.log(chalk.green('✓ Secrets configured'))
-
-    // Run setup function
-    console.log(chalk.gray('\nRunning setup (migrations + webhook creation)...'))
-    const serviceRoleKey = await client.getServiceRoleKey()
-    const setupResult = await client.invokeFunction('stripe-setup', serviceRoleKey)
-
-    if (setupResult.success) {
-      console.log(chalk.green('✓ Setup complete'))
-    } else {
-      console.log(chalk.yellow(`⚠ Setup returned: ${setupResult.error}`))
-    }
-
-    // Setup pg_cron job
-    console.log(chalk.gray('\nConfiguring pg_cron scheduler...'))
-    try {
-      await client.setupPgCronJob()
-      console.log(chalk.green('✓ pg_cron scheduler configured'))
-    } catch (error) {
-      // pg_cron may not be available on all projects
-      const message = error instanceof Error ? error.message : String(error)
-      console.log(chalk.yellow(`⚠ Could not configure pg_cron scheduler: ${message}`))
-    }
+    await install({
+      supabaseAccessToken: accessToken,
+      supabaseProjectRef: projectRef,
+      stripeKey,
+    })
 
     // Print summary
     console.log(chalk.cyan('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
@@ -626,6 +518,99 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   } catch (error) {
     if (error instanceof Error) {
       console.error(chalk.red(`\n✗ Deployment failed: ${error.message}`))
+    }
+    process.exit(1)
+  }
+}
+
+/**
+ * Uninstall command - removes Stripe sync Edge Functions and resources from Supabase.
+ * 1. Validates Supabase project access
+ * 2. Deletes Stripe webhooks
+ * 3. Deletes Edge Functions (stripe-setup, stripe-webhook, stripe-worker)
+ * 4. Deletes secrets and pg_cron jobs
+ * 5. Drops the stripe schema
+ */
+export async function uninstallCommand(options: DeployOptions): Promise<void> {
+  try {
+    dotenv.config()
+
+    let accessToken = options.supabaseAccessToken || process.env.SUPABASE_ACCESS_TOKEN || ''
+    let projectRef = options.supabaseProjectRef || process.env.SUPABASE_PROJECT_REF || ''
+    let stripeKey =
+      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
+
+    // Prompt for missing values
+    if (!accessToken || !projectRef || !stripeKey) {
+      const inquirer = (await import('inquirer')).default
+      const questions = []
+
+      if (!accessToken) {
+        questions.push({
+          type: 'password',
+          name: 'accessToken',
+          message: 'Enter your Supabase access token (from supabase.com/dashboard/account/tokens):',
+          mask: '*',
+          validate: (input: string) => input.trim() !== '' || 'Access token is required',
+        })
+      }
+
+      if (!projectRef) {
+        questions.push({
+          type: 'input',
+          name: 'projectRef',
+          message: 'Enter your Supabase project ref (e.g., abcdefghijklmnop):',
+          validate: (input: string) => input.trim() !== '' || 'Project ref is required',
+        })
+      }
+
+      if (!stripeKey) {
+        questions.push({
+          type: 'password',
+          name: 'stripeKey',
+          message: 'Enter your Stripe secret key:',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input.trim()) return 'Stripe key is required'
+            if (!input.startsWith('sk_')) return 'Stripe key should start with "sk_"'
+            return true
+          },
+        })
+      }
+
+      if (questions.length > 0) {
+        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
+        const answers = await inquirer.prompt(questions)
+        if (answers.accessToken) accessToken = answers.accessToken
+        if (answers.projectRef) projectRef = answers.projectRef
+        if (answers.stripeKey) stripeKey = answers.stripeKey
+      }
+    }
+
+    console.log(chalk.blue('\n🗑️  Uninstalling Stripe Sync from Supabase...\n'))
+    console.log(chalk.yellow('⚠️  Warning: This will delete all Stripe data from your database!\n'))
+
+    // Run uninstall via the uninstall() function
+    console.log(chalk.gray('Removing all resources...'))
+    await uninstall({
+      supabaseAccessToken: accessToken,
+      supabaseProjectRef: projectRef,
+      stripeKey,
+    })
+
+    // Print summary
+    console.log(chalk.cyan('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
+    console.log(chalk.cyan.bold('  Uninstall Complete!'))
+    console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'))
+    console.log(
+      chalk.gray('\n  All Stripe sync resources have been removed from your Supabase project.')
+    )
+    console.log(chalk.gray('  - Edge Functions deleted'))
+    console.log(chalk.gray('  - Stripe webhooks removed'))
+    console.log(chalk.gray('  - Database schema dropped\n'))
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(chalk.red(`\n✗ Uninstall failed: ${error.message}`))
     }
     process.exit(1)
   }

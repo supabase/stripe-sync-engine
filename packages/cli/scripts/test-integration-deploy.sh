@@ -52,26 +52,43 @@ cleanup() {
             -u "$STRIPE_API_KEY:" > /dev/null 2>&1 || echo "   Warning: Failed to delete backfill customer"
     fi
 
-    # Delete Stripe webhook if we created one
-    if [ -n "$WEBHOOK_ID" ]; then
-        echo "   Deleting Stripe webhook: $WEBHOOK_ID"
-        curl -s -X DELETE "https://api.stripe.com/v1/webhook_endpoints/$WEBHOOK_ID" \
-            -u "$STRIPE_API_KEY:" > /dev/null 2>&1 || echo "   Warning: Failed to delete webhook"
-    fi
+    # Use programmatic uninstall command to clean up all deployed resources
+    echo "   Running uninstall command..."
+    node dist/index.js uninstall \
+        --token "$SUPABASE_ACCESS_TOKEN" \
+        --project "$SUPABASE_PROJECT_REF" \
+        --stripe-key "$STRIPE_API_KEY" > /dev/null 2>&1 || echo "   Warning: Failed to run uninstall"
 
-    # Delete Edge Functions
-    for func in stripe-setup stripe-webhook stripe-worker; do
-        echo "   Deleting Edge Function: $func"
-        curl -s -X DELETE "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/functions/$func" \
-            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" > /dev/null 2>&1 || true
-    done
+    # Verify uninstall completed successfully
+    echo "   Verifying uninstall..."
 
-    # Drop stripe schema
-    echo "   Dropping stripe schema..."
-    curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    # Check 1: Verify schema is dropped
+    SCHEMA_CHECK=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
         -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"query": "DROP SCHEMA IF EXISTS stripe CASCADE"}' > /dev/null 2>&1 || true
+        -d '{"query": "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = '"'"'stripe'"'"') as schema_exists"}' 2>/dev/null || echo '[]')
+
+    SCHEMA_EXISTS=$(echo "$SCHEMA_CHECK" | jq -r '.[0].schema_exists // true')
+
+    if [ "$SCHEMA_EXISTS" = "false" ]; then
+        echo "   ✓ Schema dropped successfully"
+    else
+        echo "   ⚠ Schema still exists (uninstall may have failed)"
+    fi
+
+    # Check 2: Verify Edge Functions are deleted
+    FUNCTIONS_CHECK=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+        "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/functions" 2>/dev/null || echo '[]')
+
+    SETUP_EXISTS=$(echo "$FUNCTIONS_CHECK" | jq -r '.[] | select(.slug == "stripe-setup") | .slug' 2>/dev/null || echo "")
+    WEBHOOK_EXISTS=$(echo "$FUNCTIONS_CHECK" | jq -r '.[] | select(.slug == "stripe-webhook") | .slug' 2>/dev/null || echo "")
+    WORKER_EXISTS=$(echo "$FUNCTIONS_CHECK" | jq -r '.[] | select(.slug == "stripe-worker") | .slug' 2>/dev/null || echo "")
+
+    if [ -z "$SETUP_EXISTS" ] && [ -z "$WEBHOOK_EXISTS" ] && [ -z "$WORKER_EXISTS" ]; then
+        echo "   ✓ Edge Functions deleted successfully"
+    else
+        echo "   ⚠ Some Edge Functions still exist (uninstall may have failed)"
+    fi
 
     echo "   Done"
 }
@@ -181,6 +198,47 @@ else
     echo "❌ stripe._managed_webhooks table NOT found"
     exit 1
 fi
+echo ""
+
+# Verify installation status (tests SupabaseDeployClient.isInstalled() logic)
+echo "🔍 Verifying installation status..."
+
+# Check 1: Verify migrations table exists
+MIGRATIONS_TABLE_QUERY="SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'stripe' AND table_name IN ('migrations', '_migrations')) as table_exists"
+MIGRATIONS_TABLE_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$MIGRATIONS_TABLE_QUERY\"}")
+
+MIGRATIONS_TABLE_EXISTS=$(echo "$MIGRATIONS_TABLE_RESULT" | jq -r '.[0].table_exists // false')
+
+if [ "$MIGRATIONS_TABLE_EXISTS" = "true" ]; then
+    echo "✓ Migrations table exists"
+else
+    echo "❌ Migrations table NOT found"
+    exit 1
+fi
+
+# Check 2: Verify schema comment (installation marker)
+COMMENT_QUERY="SELECT obj_description(oid, 'pg_namespace') as comment FROM pg_namespace WHERE nspname = 'stripe'"
+COMMENT_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$COMMENT_QUERY\"}")
+
+SCHEMA_COMMENT=$(echo "$COMMENT_RESULT" | jq -r '.[0].comment // empty')
+
+if [ -n "$SCHEMA_COMMENT" ] && echo "$SCHEMA_COMMENT" | grep -q "stripe-sync.*installed"; then
+    echo "✓ Schema comment set: $SCHEMA_COMMENT"
+else
+    echo "❌ Schema comment NOT set correctly"
+    echo "   Expected: 'stripe-sync v{version} installed'"
+    echo "   Got: '$SCHEMA_COMMENT'"
+    exit 1
+fi
+
+# All isInstalled() checks passed
+echo "✓ Installation verification complete (isInstalled() would return true)"
 echo ""
 
 # Verify pg_cron job (may not exist if pg_cron extension not available)
@@ -331,6 +389,7 @@ echo "  - Stripe webhook: $WEBHOOK_ID"
 echo "  - Database schema: stripe.*"
 echo ""
 echo "Verified functionality:"
+echo "  ✓ Installation status (migrations table + schema comment)"
 echo "  ✓ Backfill syncs pre-existing Stripe data to database"
 echo "  ✓ Webhook syncs new Stripe events to database in real-time"
 echo ""
