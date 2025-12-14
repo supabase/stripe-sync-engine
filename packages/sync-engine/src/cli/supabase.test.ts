@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { webhookFunctionCode, workerFunctionCode } from 'stripe-experiment-sync/supabase'
+import { webhookFunctionCode, workerFunctionCode } from '../supabase'
 
 describe('Edge Function Files', () => {
   describe('webhookFunctionCode', () => {

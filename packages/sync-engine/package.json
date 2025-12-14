@@ -1,11 +1,11 @@
 {
   "name": "stripe-experiment-sync",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data to Postgres",
   "type": "module",
   "main": "./dist/index.cjs",
-  "bin": "./dist/cli/index.cjs",
+  "bin": "./dist/cli/index.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,12 +16,17 @@
       "types": "./dist/supabase/index.d.ts",
       "import": "./dist/supabase/index.js",
       "require": "./dist/supabase/index.cjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/lib.d.ts",
+      "import": "./dist/cli/lib.js",
+      "require": "./dist/cli/lib.cjs"
     }
   },
   "scripts": {
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "build": "tsup src/index.ts src/supabase/index.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
+    "build": "tsup src/index.ts src/supabase/index.ts src/cli/index.ts src/cli/lib.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
     "lint": "eslint src --ext .ts",
     "test": "vitest"
   },
@@ -29,21 +34,28 @@
     "dist"
   ],
   "dependencies": {
+    "@ngrok/ngrok": "^1.4.1",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "inquirer": "^12.3.0",
     "pg": "^8.16.3",
     "pg-node-migrations": "0.0.8",
+    "stripe": "^17.7.0",
     "supabase-management-js": "^0.1.6",
     "ws": "^8.18.0",
     "yesql": "^7.0.0"
   },
-  "peerDependencies": {
-    "stripe": "> 11"
-  },
   "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/inquirer": "^9.0.7",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.5",
     "@types/ws": "^8.5.13",
     "@types/yesql": "^4.1.4",
     "@vitest/ui": "^4.0.9",
+    "tsx": "^4.19.2",
     "vitest": "^3.2.4"
   },
   "repository": {

@@ -7,10 +7,12 @@ interface SyncStatusProps {
 }
 
 interface SyncRun {
-  _account_id: string
+  account_id: string
   started_at: string
+  closed_at: string | null
   status: 'running' | 'complete' | 'error'
-  completed_at: string | null
+  error_message: string | null
+  total_processed: number
 }
 
 function relativeTime(date: Date): string {
@@ -106,19 +108,22 @@ export function SyncStatus({ sessionId }: SyncStatusProps) {
     return (
       <div style={containerStyle}>
         <span style={{ fontSize: 20 }}>🔄</span>
-        <span>Syncing since {startedAt}</span>
+        <span>
+          Syncing since {startedAt} ({syncRun.total_processed.toLocaleString()} items)
+        </span>
       </div>
     )
   }
 
   // Completed sync
-  if (syncRun.status === 'complete' && syncRun.completed_at) {
-    const duration = formatDuration(new Date(syncRun.started_at), new Date(syncRun.completed_at))
+  if (syncRun.status === 'complete' && syncRun.closed_at) {
+    const duration = formatDuration(new Date(syncRun.started_at), new Date(syncRun.closed_at))
     return (
       <div style={containerStyle}>
         <span style={{ fontSize: 20 }}>✅</span>
         <span>
-          Completed {relativeTime(new Date(syncRun.completed_at))} (took {duration})
+          Completed {relativeTime(new Date(syncRun.closed_at))} (
+          {syncRun.total_processed.toLocaleString()} items, took {duration})
         </span>
       </div>
     )
@@ -128,7 +133,7 @@ export function SyncStatus({ sessionId }: SyncStatusProps) {
   return (
     <div style={{ ...containerStyle, background: '#f8d7da' }}>
       <span style={{ fontSize: 20 }}>❌</span>
-      <span>Sync error</span>
+      <span>Sync error{syncRun.error_message ? `: ${syncRun.error_message}` : ''}</span>
     </div>
   )
 }

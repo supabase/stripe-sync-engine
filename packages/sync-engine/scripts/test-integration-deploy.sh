@@ -54,7 +54,7 @@ cleanup() {
 
     # Use programmatic uninstall command to clean up all deployed resources
     echo "   Running uninstall command..."
-    node dist/index.js uninstall \
+    node dist/cli/index.js supabase uninstall \
         --token "$SUPABASE_ACCESS_TOKEN" \
         --project "$SUPABASE_PROJECT_REF" \
         --stripe-key "$STRIPE_API_KEY" > /dev/null 2>&1 || echo "   Warning: Failed to run uninstall"
@@ -122,7 +122,7 @@ echo ""
 
 # Run deploy command (no DB password needed - migrations run via Edge Function)
 echo "🚀 Running deploy command..."
-node dist/index.js deploy \
+node dist/cli/index.js supabase install \
     --token "$SUPABASE_ACCESS_TOKEN" \
     --project "$SUPABASE_PROJECT_REF" \
     --stripe-key "$STRIPE_API_KEY"
@@ -279,7 +279,7 @@ for i in {1..60}; do
     sleep 10
 
     # Check if sync run is complete
-    SYNC_STATUS_QUERY="SELECT closed_at, status FROM stripe.sync_dashboard ORDER BY started_at DESC LIMIT 1"
+    SYNC_STATUS_QUERY="SELECT closed_at, status FROM stripe.sync_runs ORDER BY started_at DESC LIMIT 1"
     SYNC_STATUS_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
         -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
         -H "Content-Type: application/json" \

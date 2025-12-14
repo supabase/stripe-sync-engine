@@ -596,7 +596,7 @@ async function main() {
       try {
         // Import Express and ngrok
         const express = (await import('express')).default
-        const { createTunnel } = await import('../src/ngrok')
+        const { createTunnel } = await import('../src/cli/ngrok')
 
         // Create single ngrok tunnel
         const port = 3000

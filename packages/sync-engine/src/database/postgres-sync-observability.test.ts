@@ -33,8 +33,10 @@ describe('Observable Sync System Methods', () => {
   afterAll(async () => {
     // Clean up test data
     if (pool) {
-      await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
-      await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+      await pool.query('DELETE FROM stripe._sync_obj_runs WHERE "_account_id" = $1', [
+        testAccountId,
+      ])
+      await pool.query('DELETE FROM stripe._sync_runs WHERE "_account_id" = $1', [testAccountId])
       await pool.end()
     }
   })
@@ -42,8 +44,10 @@ describe('Observable Sync System Methods', () => {
   beforeEach(async () => {
     // Clean up between tests
     if (pool) {
-      await pool.query('DELETE FROM stripe._sync_obj_run WHERE "_account_id" = $1', [testAccountId])
-      await pool.query('DELETE FROM stripe._sync_run WHERE "_account_id" = $1', [testAccountId])
+      await pool.query('DELETE FROM stripe._sync_obj_runs WHERE "_account_id" = $1', [
+        testAccountId,
+      ])
+      await pool.query('DELETE FROM stripe._sync_runs WHERE "_account_id" = $1', [testAccountId])
     }
   })
 
@@ -73,7 +77,7 @@ describe('Observable Sync System Methods', () => {
       // Try to insert directly (bypassing the check)
       await expect(
         pool.query(
-          `INSERT INTO stripe._sync_run ("_account_id", triggered_by) VALUES ($1, 'test')`,
+          `INSERT INTO stripe._sync_runs ("_account_id", triggered_by) VALUES ($1, 'test')`,
           [testAccountId]
         )
       ).rejects.toThrow(/one_active_run_per_account/)
@@ -115,7 +119,7 @@ describe('Observable Sync System Methods', () => {
 
       // Check derived status via view
       const result = await pool.query(
-        `SELECT status, closed_at FROM stripe.sync_dashboard
+        `SELECT status, closed_at FROM stripe.sync_runs
          WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -137,7 +141,7 @@ describe('Observable Sync System Methods', () => {
 
       // Check derived status via view
       const result = await pool.query(
-        `SELECT status, error_message FROM stripe.sync_dashboard
+        `SELECT status, error_message FROM stripe.sync_runs
          WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -155,7 +159,7 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, objects)
 
       const result = await pool.query(
-        `SELECT object, status FROM stripe._sync_obj_run
+        `SELECT object, status FROM stripe._sync_obj_runs
          WHERE "_account_id" = $1 AND run_started_at = $2
          ORDER BY object`,
         [run!.accountId, run!.runStartedAt]
@@ -175,7 +179,7 @@ describe('Observable Sync System Methods', () => {
       await postgresClient.createObjectRuns(run!.accountId, run!.runStartedAt, ['customer'])
 
       const result = await pool.query(
-        `SELECT COUNT(*) as count FROM stripe._sync_obj_run
+        `SELECT COUNT(*) as count FROM stripe._sync_obj_runs
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = 'customer'`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -219,7 +223,7 @@ describe('Observable Sync System Methods', () => {
       // Create run with max_concurrent = 2
       // Use date_trunc for JS Date compatibility
       await pool.query(
-        `INSERT INTO stripe._sync_run ("_account_id", max_concurrent, started_at)
+        `INSERT INTO stripe._sync_runs ("_account_id", max_concurrent, started_at)
          VALUES ($1, 2, date_trunc('milliseconds', now()))`,
         [testAccountId]
       )
@@ -323,7 +327,7 @@ describe('Observable Sync System Methods', () => {
       )
 
       const result = await pool.query(
-        `SELECT status, error_message FROM stripe._sync_obj_run
+        `SELECT status, error_message FROM stripe._sync_obj_runs
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = 'customer'`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -381,7 +385,7 @@ describe('Observable Sync System Methods', () => {
       // Create run with max_concurrent = 1
       // Use date_trunc for JS Date compatibility
       await pool.query(
-        `INSERT INTO stripe._sync_run ("_account_id", max_concurrent, started_at)
+        `INSERT INTO stripe._sync_runs ("_account_id", max_concurrent, started_at)
          VALUES ($1, 1, date_trunc('milliseconds', now()))`,
         [testAccountId]
       )
@@ -450,21 +454,21 @@ describe('Observable Sync System Methods', () => {
 
       // Manually set updated_at to 10 minutes ago (stale)
       // Must disable trigger first as it overwrites updated_at with now()
-      await pool.query(`ALTER TABLE stripe._sync_obj_run DISABLE TRIGGER handle_updated_at`)
+      await pool.query(`ALTER TABLE stripe._sync_obj_runs DISABLE TRIGGER handle_updated_at`)
       await pool.query(
-        `UPDATE stripe._sync_obj_run
+        `UPDATE stripe._sync_obj_runs
          SET updated_at = now() - interval '10 minutes'
          WHERE "_account_id" = $1`,
         [run!.accountId]
       )
-      await pool.query(`ALTER TABLE stripe._sync_obj_run ENABLE TRIGGER handle_updated_at`)
+      await pool.query(`ALTER TABLE stripe._sync_obj_runs ENABLE TRIGGER handle_updated_at`)
 
       // Call cancelStaleRuns
       await postgresClient.cancelStaleRuns(testAccountId)
 
       // Check run is now closed and status derived as error
       const result = await pool.query(
-        `SELECT status, error_message FROM stripe.sync_dashboard
+        `SELECT status, error_message FROM stripe.sync_runs
          WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -483,7 +487,7 @@ describe('Observable Sync System Methods', () => {
 
       // Check run is still running (not closed)
       const result = await pool.query(
-        `SELECT status FROM stripe.sync_dashboard
+        `SELECT status FROM stripe.sync_runs
          WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
@@ -541,12 +545,12 @@ describe('Observable Sync System Methods', () => {
 
       // 6. Verify final state via derived view
       const finalRun = await pool.query(
-        `SELECT status, processed_count FROM stripe.sync_dashboard
+        `SELECT status, total_processed FROM stripe.sync_runs
          WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(finalRun.rows[0].status).toBe('complete')
-      expect(Number(finalRun.rows[0].processed_count)).toBe(150) // 100 + 50
+      expect(Number(finalRun.rows[0].total_processed)).toBe(150) // 100 + 50
 
       // 7. Can start a new run now
       const newRun = await postgresClient.getOrCreateSyncRun(testAccountId, 'test')
@@ -569,7 +573,7 @@ describe('Observable Sync System Methods', () => {
 
       // 3. Verify run still running (one object pending, not closed yet)
       let syncRunResult = await pool.query(
-        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_runs WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('running')
@@ -580,7 +584,7 @@ describe('Observable Sync System Methods', () => {
 
       // 5. Verify run is now complete (auto-closed, status derived from objects)
       syncRunResult = await pool.query(
-        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_runs WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('complete')
@@ -609,7 +613,7 @@ describe('Observable Sync System Methods', () => {
 
       // 4. Verify status is derived as error (run auto-closed, status from objects)
       const syncRunResult = await pool.query(
-        `SELECT status FROM stripe.sync_dashboard WHERE account_id = $1 AND started_at = $2`,
+        `SELECT status FROM stripe.sync_runs WHERE account_id = $1 AND started_at = $2`,
         [run!.accountId, run!.runStartedAt]
       )
       expect(syncRunResult.rows[0].status).toBe('error')

@@ -339,7 +339,7 @@ export class SupabaseSetupClient {
    * Removes all Edge Functions, secrets, database resources, and Stripe webhooks
    */
   async uninstall(stripeSecretKey: string): Promise<void> {
-    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-05-28.basil' })
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' })
 
     try {
       // Step 1: Get webhook IDs from database before dropping schema
@@ -434,10 +434,22 @@ export class SupabaseSetupClient {
       }
 
       // Setup pg_cron
+      let pgCronEnabled = false
       try {
         await this.setupPgCronJob()
+        pgCronEnabled = true
       } catch {
-        // pg_cron may not be available
+        // pg_cron may not be available (requires special permissions)
+        console.warn('pg_cron setup failed - falling back to manual worker invocation')
+      }
+
+      // If pg_cron is not available, manually trigger the worker to start initial backfill
+      if (!pgCronEnabled) {
+        try {
+          await this.invokeFunction('stripe-worker', serviceRoleKey)
+        } catch (err) {
+          console.warn('Failed to trigger initial worker invocation:', err)
+        }
       }
 
       // Set final version comment

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
+import pkg from '../../package.json' with { type: 'json' }
 import {
   syncCommand,
   migrateCommand,
   backfillCommand,
-  deployCommand,
+  installCommand,
   uninstallCommand,
-} from './command'
+} from './commands'
 
 const program = new Command()
 
 program
-  .name('stripe-sync')
+  .name('stripe-experiment-sync')
   .description('CLI tool for syncing Stripe data to PostgreSQL')
-  .version('0.0.0')
+  .version(pkg.version)
 
 // Migrate command
 program
@@ -58,23 +59,24 @@ program
     )
   })
 
-// Deploy command (Supabase Edge Functions)
-program
-  .command('deploy')
-  .description('Deploy Stripe sync to Supabase Edge Functions')
+// Supabase commands
+const supabase = program.command('supabase').description('Supabase Edge Functions commands')
+
+supabase
+  .command('install')
+  .description('Install Stripe sync to Supabase Edge Functions')
   .option('--token <token>', 'Supabase access token (or SUPABASE_ACCESS_TOKEN env)')
   .option('--project <ref>', 'Supabase project ref (or SUPABASE_PROJECT_REF env)')
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .action(async (options) => {
-    await deployCommand({
+    await installCommand({
       supabaseAccessToken: options.token,
       supabaseProjectRef: options.project,
       stripeKey: options.stripeKey,
     })
   })
 
-// Uninstall command (Supabase Edge Functions)
-program
+supabase
   .command('uninstall')
   .description('Uninstall Stripe sync from Supabase Edge Functions')
   .option('--token <token>', 'Supabase access token (or SUPABASE_ACCESS_TOKEN env)')

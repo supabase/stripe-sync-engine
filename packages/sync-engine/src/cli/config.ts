@@ -34,7 +34,7 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
   config.databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
 
   // Prompt for missing required values
-  const questions: inquirer.QuestionCollection = []
+  const questions = []
 
   if (!config.stripeApiKey) {
     questions.push({

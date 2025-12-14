@@ -38,12 +38,12 @@ npm run build > /dev/null 2>&1
 echo "✓ CLI built"
 
 echo "🗄️  Running migrations..."
-npm run dev migrate > /dev/null 2>&1
+node dist/cli/index.js migrate > /dev/null 2>&1
 echo "✓ Migrations complete"
 
 # Start CLI
 echo "🚀 Starting CLI..."
-npm run dev start > /tmp/unsupported-test.log 2>&1 &
+node dist/cli/index.js start > /tmp/unsupported-test.log 2>&1 &
 CLI_PID=$!
 
 sleep 10

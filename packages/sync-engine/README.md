@@ -120,11 +120,32 @@ The library will create and manage a `stripe` schema in your PostgreSQL database
 
 > **Important:** The library uses a fixed schema name of `stripe`. This cannot be configured as the SQL migrations hardcode this schema name.
 
-> **Note:** Fields and tables prefixed with an underscore (`_`) are reserved for internal metadata managed by the sync engine and should not be modified directly. These include fields like `_account`, `_cursor`, `_synced_at`, and tables like `_migrations`, `_accounts`, `_sync_run`, and `_sync_obj_run`.
+> **Note:** Fields and tables prefixed with an underscore (`_`) are reserved for internal metadata managed by the sync engine and should not be modified directly. These include fields like `_account_id`, `_last_synced_at`, `_updated_at`, and tables like `_migrations`, `_managed_webhooks`, `_sync_runs`, and `_sync_obj_runs`.
+
+### Observability
+
+The sync engine tracks sync operations in the `sync_runs` view, which provides aggregated metrics for each sync session:
+
+```sql
+SELECT
+  account_id,
+  started_at,
+  closed_at,
+  status,              -- 'running', 'complete', or 'error'
+  total_processed,     -- Total records synced across all objects
+  complete_count,      -- Number of object types completed
+  error_count,         -- Number of object types with errors
+  running_count,       -- Number of object types currently syncing
+  pending_count        -- Number of object types not yet started
+FROM stripe.sync_runs
+ORDER BY started_at DESC;
+```
+
+For detailed per-object status, you can query the internal `_sync_obj_runs` table (though this is not recommended for production use).
 
 ### Migrations
 
-Migrations are included in the `db/migrations` directory. You can run them using the provided `runMigrations` function:
+Migrations are automatically included with the package and bundled in the `dist/migrations` directory when built. You can run them using the provided `runMigrations` function:
 
 ```ts
 import { runMigrations } from 'stripe-experiment-sync'
@@ -205,10 +226,10 @@ await sync.processUntilDone({
 })
 ```
 
-- `object` can be one of: `all`, `charge`, `customer`, `dispute`, `invoice`, `payment_method`, `payment_intent`, `plan`, `price`, `product`, `setup_intent`, `subscription`.
+- `object` can be one of: `all`, `charge`, `checkout_sessions`, `credit_note`, `customer`, `customer_with_entitlements`, `dispute`, `early_fraud_warning`, `invoice`, `payment_intent`, `payment_method`, `plan`, `price`, `product`, `refund`, `setup_intent`, `subscription`, `subscription_schedules`, `tax_id`.
 - `created` is a Stripe RangeQueryParam and supports `gt`, `gte`, `lt`, `lte`.
 
-The sync engine automatically tracks per-account cursors in the `_sync_run` and `_sync_obj_run` tables. When you call sync methods without an explicit `created` filter, they will automatically resume from the last synced position for that account and resource. This enables incremental syncing that can resume after interruptions.
+The sync engine automatically tracks per-account cursors in the `_sync_runs` and `_sync_obj_runs` tables. When you call sync methods without an explicit `created` filter, they will automatically resume from the last synced position for that account and resource. This enables incremental syncing that can resume after interruptions.
 
 > **Note:**
 > For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.

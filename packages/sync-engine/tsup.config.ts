@@ -30,8 +30,8 @@ const rawTsPlugin = {
 export default defineConfig({
   esbuildPlugins: [rawTsPlugin],
   esbuildOptions(options) {
-    // Prevent esbuild from trying to bundle 'pg' (native module)
+    // Prevent esbuild from trying to bundle 'pg' (native module) and ESM-only modules
     options.external = options.external || []
-    options.external.push('npm:*')
+    options.external.push('npm:*', 'chalk', 'inquirer')
   },
 })

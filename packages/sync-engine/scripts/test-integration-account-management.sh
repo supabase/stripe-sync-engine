@@ -64,7 +64,7 @@ echo ""
 
 # Step 2: Run migrations
 echo "🗄️  Step 2: Running database migrations..."
-npm run dev migrate > /dev/null 2>&1
+node dist/cli/index.js migrate > /dev/null 2>&1
 echo "✓ Migrations completed"
 echo ""
 
@@ -79,7 +79,7 @@ echo ""
 # Test 1.1: First API Fetch (verify via database)
 echo "TEST 1.1: First API Fetch"
 # Trigger account fetch (output doesn't matter, we verify via DB)
-npx tsx scripts/test-account-methods.ts get-account > /dev/null 2>&1 || true
+npx tsx scripts/test-account-methods.ts get-account > /dev/null || true
 
 # Get account from database (most recently synced)
 ACCOUNT_ID=$(docker exec $POSTGRES_CONTAINER psql -U postgres -d app_db -t -c \
@@ -216,8 +216,8 @@ echo "✓ Created 5 test customers"
 
 # Sync the test data to database
 echo "Setup: Syncing test data to database..."
-npm run dev -- backfill product > /dev/null 2>&1
-npm run dev -- backfill customer > /dev/null 2>&1
+node dist/cli/index.js backfill product > /dev/null 2>&1
+node dist/cli/index.js backfill customer > /dev/null 2>&1
 echo "✓ Test data synced"
 echo ""
 

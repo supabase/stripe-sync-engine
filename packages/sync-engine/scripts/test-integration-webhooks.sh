@@ -58,7 +58,7 @@ echo ""
 
 # Step 2: Run migrations
 echo "🗄️  Step 2: Running database migrations..."
-npm run dev migrate > /dev/null 2>&1
+node dist/cli/index.js migrate > /dev/null 2>&1
 echo "✓ Migrations completed"
 echo ""
 
@@ -67,7 +67,7 @@ echo "🚀 Step 3: Starting CLI to test webhook creation..."
 echo ""
 
 # Start CLI in background with KEEP_WEBHOOKS_ON_SHUTDOWN=false for testing
-KEEP_WEBHOOKS_ON_SHUTDOWN=false npm run dev start > /tmp/cli-test.log 2>&1 &
+KEEP_WEBHOOKS_ON_SHUTDOWN=false node dist/cli/index.js start > /tmp/cli-test.log 2>&1 &
 CLI_PID=$!
 
 # Wait for startup (give it time to create webhook and run migrations)

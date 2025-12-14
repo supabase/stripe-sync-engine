@@ -104,7 +104,7 @@ jobs:
 
       - name: Set up .env file for CLI
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           touch .env
           echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> .env
           echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> .env
@@ -113,37 +113,37 @@ jobs:
 
       - name: Run CLI Webhook Integration Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-webhooks.sh
           ./scripts/test-integration-webhooks.sh
 
       - name: Run CLI Backfill Integration Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-backfill.sh
           ./scripts/test-integration-backfill.sh
 
       - name: Run CLI Error Recovery Integration Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-recoverable-backfill.sh
           ./scripts/test-integration-recoverable-backfill.sh
 
       - name: Run CLI Account Management Integration Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-account-management.sh
           ./scripts/test-integration-account-management.sh
 
       - name: Run Webhook Reuse Verification Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-webhook-reuse.sh
           ./scripts/test-integration-webhook-reuse.sh
 
       - name: Run Deploy Integration Test
         run: |
-          cd packages/cli
+          cd packages/sync-engine
           chmod +x ./scripts/test-integration-deploy.sh
           ./scripts/test-integration-deploy.sh
         env:

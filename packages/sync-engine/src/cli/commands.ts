@@ -3,16 +3,18 @@ import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
 import { type PoolConfig } from 'pg'
-import { loadConfig, CliOptions } from './config'
-import { StripeSync, runMigrations, type SyncObject } from 'stripe-experiment-sync'
-import { createTunnel, NgrokTunnel } from './ngrok'
-import { install, uninstall } from 'stripe-experiment-sync/supabase'
+import { loadConfig, type CliOptions } from './config'
+import { StripeSync, runMigrations, type SyncObject } from '../index'
+import { createTunnel, type NgrokTunnel } from './ngrok'
+import { install, uninstall } from '../supabase'
 
 export interface DeployOptions {
   supabaseAccessToken?: string
   supabaseProjectRef?: string
   stripeKey?: string
 }
+
+export type { CliOptions }
 
 const VALID_SYNC_OBJECTS: SyncObject[] = [
   'all',
@@ -435,13 +437,13 @@ export async function syncCommand(options: CliOptions): Promise<void> {
 }
 
 /**
- * Deploy command - deploys Stripe sync Edge Functions to Supabase.
+ * Install command - installs Stripe sync Edge Functions to Supabase.
  * 1. Validates Supabase project access
  * 2. Deploys stripe-setup, stripe-webhook, and stripe-worker Edge Functions
  * 3. Sets required secrets (STRIPE_SECRET_KEY)
  * 4. Runs the setup function to create webhook and run migrations
  */
-export async function deployCommand(options: DeployOptions): Promise<void> {
+export async function installCommand(options: DeployOptions): Promise<void> {
   try {
     dotenv.config()
 
@@ -497,7 +499,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       }
     }
 
-    console.log(chalk.blue('\n🚀 Deploying Stripe Sync to Supabase Edge Functions...\n'))
+    console.log(chalk.blue('\n🚀 Installing Stripe Sync to Supabase Edge Functions...\n'))
 
     // Run installation via the install() function
     console.log(chalk.gray('Validating project access...'))
@@ -509,7 +511,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     // Print summary
     console.log(chalk.cyan('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))
-    console.log(chalk.cyan.bold('  Deployment Complete!'))
+    console.log(chalk.cyan.bold('  Installation Complete!'))
     console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'))
     console.log(chalk.gray('\n  Your Stripe data will stay in sync to your Supabase database.'))
     console.log(
@@ -517,7 +519,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     )
   } catch (error) {
     if (error instanceof Error) {
-      console.error(chalk.red(`\n✗ Deployment failed: ${error.message}`))
+      console.error(chalk.red(`\n✗ Installation failed: ${error.message}`))
     }
     process.exit(1)
   }
