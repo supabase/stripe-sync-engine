@@ -26,7 +26,9 @@ export type Migration = { id: number; name: string; sql: string }
  * Returns all migrations with schema placeholders replaced.
  * Useful for inspecting migrations or running them manually with psql.
  */
-export function getMigrations(schema: string = 'stripe'): Migration[] {
+export function getMigrations(config: { schema?: string } = {}): Migration[] {
+  const schema = config.schema ?? 'stripe'
+
   if (!fs.existsSync(MIGRATIONS_DIR)) return []
 
   return fs
@@ -86,7 +88,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
   })
 
   const tableName = `"${config.schema}"."migrations"`
-  const migrations = getMigrations(config.schema)
+  const migrations = getMigrations({ schema: config.schema })
 
   try {
     await client.connect()
