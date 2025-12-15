@@ -87,7 +87,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
     connectionTimeoutMillis: 10_000,
   })
 
-  const tableName = `"${config.schema}"."migrations"`
+  const migrationsTableName = `"${config.schema}"."migrations"`
   const migrations = getMigrations({ schema: config.schema })
 
   try {
@@ -106,7 +106,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
       await client.query(`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
 
       await client.query(`
-        CREATE TABLE IF NOT EXISTS ${tableName} (
+        CREATE TABLE IF NOT EXISTS ${migrationsTableName} (
           id integer PRIMARY KEY,
           name varchar(100) UNIQUE NOT NULL,
           executed_at timestamp DEFAULT current_timestamp
@@ -114,16 +114,18 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
       `)
 
       // Remove legacy hash column from pg-node-migrations (checksums no longer validated)
-      await client.query(`ALTER TABLE ${tableName} DROP COLUMN IF EXISTS hash`)
+      await client.query(`ALTER TABLE ${migrationsTableName} DROP COLUMN IF EXISTS hash`)
 
-      const { rows: applied } = await client.query<{ id: number }>(`SELECT id FROM ${tableName}`)
+      const { rows: applied } = await client.query<{ id: number }>(
+        `SELECT id FROM ${migrationsTableName}`
+      )
       const appliedIds = new Set(applied.map((r) => r.id))
 
       for (const migration of migrations) {
         if (appliedIds.has(migration.id)) continue
 
         config.logger?.info(`Applying migration ${migration.id}: ${migration.name}`)
-        await applyMigration(client, tableName, migration)
+        await applyMigration(client, migrationsTableName, migration)
       }
     } finally {
       await client.query(`SELECT pg_advisory_unlock(${MIGRATION_LOCK_ID})`)
