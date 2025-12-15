@@ -113,9 +113,6 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
         )
       `)
 
-      // Remove legacy hash column from pg-node-migrations (checksums no longer validated)
-      await client.query(`ALTER TABLE ${migrationsTableName} DROP COLUMN IF EXISTS hash`)
-
       const { rows: applied } = await client.query<{ id: number }>(
         `SELECT id FROM ${migrationsTableName}`
       )
