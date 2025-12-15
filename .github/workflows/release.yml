@@ -102,10 +102,15 @@ jobs:
           cd packages/sync-engine
           pnpm version ${{ needs.release.outputs.new-release-version }} --no-git-tag-version
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
       - name: Publish sync-engine to npm
         run: |
           cd packages/sync-engine
           pnpm install --frozen-lockfile
           pnpm run build
           pnpm pack
-          pnpm publish --access public
+          npm publish --access public
