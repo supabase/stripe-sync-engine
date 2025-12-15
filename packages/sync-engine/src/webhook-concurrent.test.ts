@@ -210,7 +210,7 @@ describe('Webhook Race Condition Tests', () => {
 
         // Manually try to create another webhook with same URL directly
         // This should trigger the unique constraint fallback logic
-        const webhook2Promise = stripeSync['createManagedWebhook'](uniqueUrl, {
+        const webhook2Promise = await stripeSync.findOrCreateManagedWebhook(uniqueUrl, {
           enabled_events: ['*'],
           description: 'Test webhook 2',
         })
