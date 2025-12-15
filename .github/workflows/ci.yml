@@ -141,6 +141,12 @@ jobs:
           chmod +x ./scripts/test-integration-webhook-reuse.sh
           ./scripts/test-integration-webhook-reuse.sh
 
+      - name: Run Managed WebSocket for Webhooks Integration Test
+        run: |
+          cd packages/sync-engine
+          chmod +x ./scripts/test-integration-wss.sh
+          ./scripts/test-integration-wss.sh
+
       - name: Run Deploy Integration Test
         run: |
           cd packages/sync-engine

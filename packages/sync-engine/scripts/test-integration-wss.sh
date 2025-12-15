@@ -2,7 +2,7 @@
 
 # End-to-end integration test for Stripe Sync Engine using WebSocket mode
 # Tests WebSocket connection, event processing, webhook_response messages, and database writes
-# This test does NOT require ngrok - uses Stripe's WebSocket API directly
+# This test does NOT require ngrok or Stripe CLI - uses Stripe's WebSocket API directly
 
 set -e  # Exit on error
 
@@ -16,12 +16,11 @@ echo ""
 
 # Check for required tools
 echo "🔧 Checking prerequisites..."
-if ! command -v stripe &> /dev/null; then
-    echo "❌ Stripe CLI not found - required for triggering test events"
-    echo "   Install: brew install stripe/stripe-cli/stripe"
+if ! command -v curl &> /dev/null; then
+    echo "❌ curl not found - required for API calls"
     exit 1
 fi
-echo "✓ Stripe CLI found"
+echo "✓ curl found"
 
 if ! command -v jq &> /dev/null; then
     echo "❌ jq not found - required for JSON parsing"
@@ -107,27 +106,61 @@ else
 fi
 echo ""
 
-# Step 3: Trigger test events using Stripe CLI
-echo "🎯 Step 3: Triggering Stripe test events..."
+# Step 3: Trigger test events using Stripe API directly (no Stripe CLI needed)
+echo "🎯 Step 3: Creating Stripe test objects via API..."
 echo "   Events will be delivered via WebSocket and webhook_response sent back"
 echo ""
 
-# Trigger customer.created event
-echo "   Triggering customer.created..."
-stripe trigger customer.created > /dev/null 2>&1 || echo "   (stripe trigger may have failed)"
+# Create a customer via API (triggers customer.created event)
+echo "   Creating customer..."
+CUSTOMER_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/customers \
+    -u "$STRIPE_API_KEY:" \
+    -d "name=Test Customer $(date +%s)" \
+    -d "email=test-$(date +%s)@example.com" \
+    -d "metadata[test]=wss-integration")
+CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | jq -r '.id // empty')
+if [ -n "$CUSTOMER_ID" ]; then
+    echo "   ✓ Customer created: $CUSTOMER_ID"
+else
+    echo "   ⚠️ Customer creation may have failed"
+fi
 sleep 2
 
-# Trigger product.created event
-echo "   Triggering product.created..."
-stripe trigger product.created > /dev/null 2>&1 || echo "   (stripe trigger may have failed)"
+# Create a product via API (triggers product.created event)
+echo "   Creating product..."
+PRODUCT_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/products \
+    -u "$STRIPE_API_KEY:" \
+    -d "name=Test Product $(date +%s)" \
+    -d "metadata[test]=wss-integration")
+PRODUCT_ID=$(echo "$PRODUCT_RESPONSE" | jq -r '.id // empty')
+if [ -n "$PRODUCT_ID" ]; then
+    echo "   ✓ Product created: $PRODUCT_ID"
+else
+    echo "   ⚠️ Product creation may have failed"
+fi
 sleep 2
 
-# Trigger price.created event
-echo "   Triggering price.created..."
-stripe trigger price.created > /dev/null 2>&1 || echo "   (stripe trigger may have failed)"
+# Create a price via API (triggers price.created event)
+echo "   Creating price..."
+if [ -n "$PRODUCT_ID" ]; then
+    PRICE_RESPONSE=$(curl -s -X POST https://api.stripe.com/v1/prices \
+        -u "$STRIPE_API_KEY:" \
+        -d "product=$PRODUCT_ID" \
+        -d "unit_amount=1000" \
+        -d "currency=usd" \
+        -d "metadata[test]=wss-integration")
+    PRICE_ID=$(echo "$PRICE_RESPONSE" | jq -r '.id // empty')
+    if [ -n "$PRICE_ID" ]; then
+        echo "   ✓ Price created: $PRICE_ID"
+    else
+        echo "   ⚠️ Price creation may have failed"
+    fi
+else
+    echo "   ⚠️ Skipping price creation (no product)"
+fi
 sleep 5  # Wait for events to be processed
 
-echo "✓ Test events triggered"
+echo "✓ Test objects created"
 echo ""
 
 # Step 4: Verify events in logs (look for "← event.type" pattern from websocket-client)
