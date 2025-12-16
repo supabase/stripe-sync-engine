@@ -277,6 +277,30 @@ export const mockStripe = {
       },
     })),
   },
+  invoicePayments: {
+    retrieve: vitest.fn((id) =>
+      Promise.resolve({
+        id: id,
+        object: 'invoice_payment',
+        amount_paid: 2000,
+        amount_requested: 2000,
+        created: 1391288554,
+        currency: 'usd',
+        invoice: 'in_103Q0w2eZvKYlo2C5PYwf6Wf',
+        is_default: true,
+        livemode: false,
+        payment: {
+          type: 'payment_intent',
+          payment_intent: 'pi_103Q0w2eZvKYlo2C364X582Z',
+        },
+        status: 'paid',
+        status_transitions: {
+          canceled_at: null,
+          paid_at: 1391288554,
+        },
+      })
+    ),
+  },
   subscriptions: {
     retrieve: vitest.fn((id) =>
       Promise.resolve({

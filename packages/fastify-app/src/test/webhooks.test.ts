@@ -125,6 +125,7 @@ describe('POST /webhooks', () => {
     'refund_failed.json',
     'refund_updated.json',
     'checkout_session_completed.json',
+    'invoice_payment_paid.json',
   ])('event %s is upserted', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     // Update the event body created timestamp to be the current time
@@ -147,7 +148,7 @@ describe('POST /webhooks', () => {
     })
 
     if (response.statusCode != 200) {
-      logger.error('error: ', response.body)
+      logger.error({ responseBody: response.body }, 'error')
     }
     expect(response.statusCode).toBe(200)
 
@@ -192,7 +193,7 @@ describe('POST /webhooks', () => {
     })
 
     if (response.statusCode != 200) {
-      logger.error('error: ', response.body)
+      logger.error({ responseBody: response.body }, 'error')
     }
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({ received: true })
