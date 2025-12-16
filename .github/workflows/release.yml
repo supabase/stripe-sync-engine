@@ -8,7 +8,6 @@ jobs:
     name: Build and Publish to NPM
     permissions:
       contents: read
-      id-token: write # OIDC for releasing on npm
 
     runs-on: ubuntu-24.04
 
@@ -37,4 +36,7 @@ jobs:
       - name: Publish to npm
         run: |
           cd packages/sync-engine
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           npm publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

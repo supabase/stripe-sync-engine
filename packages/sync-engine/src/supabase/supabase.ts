@@ -92,8 +92,39 @@ export class SupabaseSetupClient {
 
   /**
    * Setup pg_cron job to invoke worker function
+   * @param intervalSeconds - How often to run the worker (default: 60 seconds)
    */
-  async setupPgCronJob(): Promise<void> {
+  async setupPgCronJob(intervalSeconds: number = 60): Promise<void> {
+    // Validate interval
+    if (!Number.isInteger(intervalSeconds) || intervalSeconds < 1) {
+      throw new Error(`Invalid interval: ${intervalSeconds}. Must be a positive integer.`)
+    }
+
+    // Convert interval to pg_cron schedule format
+    // pg_cron supports two formats:
+    // 1. Interval format: '[1-59] seconds' (only for 1-59 seconds)
+    // 2. Cron format: '*/N * * * *' (for minutes and longer)
+    let schedule: string
+    if (intervalSeconds < 60) {
+      // Use interval format for sub-minute intervals
+      schedule = `${intervalSeconds} seconds`
+    } else if (intervalSeconds % 60 === 0) {
+      // Convert to minutes for intervals divisible by 60
+      const minutes = intervalSeconds / 60
+      if (minutes < 60) {
+        // Use cron format for minute-based intervals
+        schedule = `*/${minutes} * * * *`
+      } else {
+        throw new Error(
+          `Invalid interval: ${intervalSeconds}. Intervals >= 3600 seconds (1 hour) are not supported. Use a value between 1-3599 seconds.`
+        )
+      }
+    } else {
+      throw new Error(
+        `Invalid interval: ${intervalSeconds}. Must be either 1-59 seconds or a multiple of 60 (e.g., 60, 120, 180).`
+      )
+    }
+
     // Get service role key to store in vault
     const serviceRoleKey = await this.getServiceRoleKey()
 
@@ -127,11 +158,11 @@ export class SupabaseSetupClient {
         SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-scheduler'
       );
 
-      -- Create job to invoke worker every 10 seconds
+      -- Create job to invoke worker at configured interval
       -- Worker reads from pgmq, enqueues objects if empty, and processes sync work
       SELECT cron.schedule(
         'stripe-sync-worker',
-        '10 seconds',
+        '${schedule}',
         $$
         SELECT net.http_post(
           url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-worker',
@@ -427,7 +458,11 @@ export class SupabaseSetupClient {
     )
   }
 
-  async install(stripeKey: string, packageVersion?: string): Promise<void> {
+  async install(
+    stripeKey: string,
+    packageVersion?: string,
+    workerIntervalSeconds?: number
+  ): Promise<void> {
     const trimmedStripeKey = stripeKey.trim()
     if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
       throw new Error('Stripe key should start with "sk_" or "rk_"')
@@ -470,7 +505,7 @@ export class SupabaseSetupClient {
       }
 
       // Setup pg_cron - this is required for automatic syncing
-      await this.setupPgCronJob()
+      await this.setupPgCronJob(workerIntervalSeconds)
 
       // Set final version comment
       await this.updateInstallationComment(
@@ -492,10 +527,17 @@ export async function install(params: {
   supabaseProjectRef: string
   stripeKey: string
   packageVersion?: string
+  workerIntervalSeconds?: number
   baseProjectUrl?: string
   baseManagementApiUrl?: string
 }): Promise<void> {
-  const { supabaseAccessToken, supabaseProjectRef, stripeKey, packageVersion } = params
+  const {
+    supabaseAccessToken,
+    supabaseProjectRef,
+    stripeKey,
+    packageVersion,
+    workerIntervalSeconds,
+  } = params
 
   const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
@@ -504,7 +546,7 @@ export async function install(params: {
     managementApiBaseUrl: params.baseManagementApiUrl,
   })
 
-  await client.install(stripeKey, packageVersion)
+  await client.install(stripeKey, packageVersion, workerIntervalSeconds)
 }
 
 export async function uninstall(params: {

@@ -203,9 +203,42 @@ if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
     exit 1
 fi
 
-# Wait additional time for npm CDN propagation to all edge locations
-echo "   Waiting 30s for npm CDN propagation..."
-sleep 30
+# Wait for package to be available in Deno's npm resolver with correct code
+if command -v deno >/dev/null 2>&1; then
+    echo "   Verifying package is available in Deno's npm resolver..."
+    MAX_ATTEMPTS=30
+    ATTEMPT=0
+    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+        # Try to import the package in Deno to verify it's available
+        DENO_CHECK=$(deno eval --quiet "
+            try {
+                const { StripeSync } = await import('npm:stripe-experiment-sync@${BETA_VERSION}');
+                console.log('SUCCESS');
+                Deno.exit(0);
+            } catch (e) {
+                console.log('NOT_AVAILABLE');
+                Deno.exit(1);
+            }
+        " 2>/dev/null || echo "ERROR")
+
+        if [ "$DENO_CHECK" = "SUCCESS" ]; then
+            echo "   ✓ Package verified in Deno's npm resolver"
+            break
+        fi
+
+        ATTEMPT=$((ATTEMPT + 1))
+        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            sleep 3
+        fi
+    done
+
+    if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+        echo "   ⚠️  Package verification timed out after 90s, proceeding anyway..."
+    fi
+else
+    echo "   ⚠️  Deno not installed, skipping verification. Waiting 60s for npm CDN propagation..."
+    sleep 60
+fi
 echo ""
 
 # Create a customer BEFORE deploying (for backfill test - no webhook exists yet)

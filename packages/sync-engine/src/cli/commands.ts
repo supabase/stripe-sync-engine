@@ -20,6 +20,7 @@ export interface DeployOptions {
   supabaseProjectRef?: string
   stripeKey?: string
   packageVersion?: string
+  workerInterval?: number
 }
 
 export type { CliOptions }
@@ -567,6 +568,7 @@ export async function installCommand(options: DeployOptions): Promise<void> {
       supabaseProjectRef: projectRef,
       stripeKey,
       packageVersion: options.packageVersion,
+      workerIntervalSeconds: options.workerInterval,
     })
 
     // Print summary

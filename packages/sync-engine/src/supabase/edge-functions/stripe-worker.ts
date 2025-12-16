@@ -1,7 +1,7 @@
 /**
  * Stripe Sync Worker
  *
- * Triggered by pg_cron every 10 seconds. Uses pgmq for durable work queue.
+ * Triggered by pg_cron at a configurable interval (default: 60 seconds). Uses pgmq for durable work queue.
  *
  * Flow:
  * 1. Read batch of messages from pgmq (qty=10, vt=60s)

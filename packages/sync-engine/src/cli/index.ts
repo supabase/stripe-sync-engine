@@ -72,12 +72,16 @@ supabase
     '--package-version <version>',
     'Package version to install (e.g., 1.0.8-beta.1, defaults to latest)'
   )
+  .option('--worker-interval <seconds>', 'Worker interval in seconds (defaults to 60)', (val) =>
+    parseInt(val, 10)
+  )
   .action(async (options) => {
     await installCommand({
       supabaseAccessToken: options.token,
       supabaseProjectRef: options.project,
       stripeKey: options.stripeKey,
       packageVersion: options.packageVersion,
+      workerInterval: options.workerInterval,
     })
   })
 
