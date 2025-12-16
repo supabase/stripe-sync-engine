@@ -68,11 +68,16 @@ supabase
   .option('--token <token>', 'Supabase access token (or SUPABASE_ACCESS_TOKEN env)')
   .option('--project <ref>', 'Supabase project ref (or SUPABASE_PROJECT_REF env)')
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
+  .option(
+    '--package-version <version>',
+    'Package version to install (e.g., 1.0.8-beta.1, defaults to latest)'
+  )
   .action(async (options) => {
     await installCommand({
       supabaseAccessToken: options.token,
       supabaseProjectRef: options.project,
       stripeKey: options.stripeKey,
+      packageVersion: options.packageVersion,
     })
   })
 

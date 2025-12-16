@@ -156,3 +156,4 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

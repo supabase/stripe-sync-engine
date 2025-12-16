@@ -392,18 +392,49 @@ export class SupabaseSetupClient {
         console.warn('Could not delete vault secret:', err)
       }
 
-      // Step 7: Drop schema (cascades to all tables, views, indexes, etc.)
+      // Step 7: Terminate active connections to stripe schema tables
+      // This ensures any running pg_cron jobs or other queries release their locks
+      try {
+        await this.runSQL(`
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid != pg_backend_pid()
+            AND query ILIKE '%stripe.%'
+        `)
+      } catch (err) {
+        console.warn('Could not terminate connections:', err)
+      }
+
+      // Step 8: Drop schema (cascades to all tables, views, indexes, etc.)
       await this.runSQL(`DROP SCHEMA IF EXISTS stripe CASCADE`)
     } catch (error) {
       throw new Error(`Uninstall failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  async install(stripeKey: string): Promise<void> {
+  /**
+   * Inject package version into Edge Function code
+   */
+  private injectPackageVersion(code: string, version: string): string {
+    if (version === 'latest') {
+      return code
+    }
+    // Replace unversioned npm imports with versioned ones
+    return code.replace(
+      /from ['"]npm:stripe-experiment-sync['"]/g,
+      `from 'npm:stripe-experiment-sync@${version}'`
+    )
+  }
+
+  async install(stripeKey: string, packageVersion?: string): Promise<void> {
     const trimmedStripeKey = stripeKey.trim()
     if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
       throw new Error('Stripe key should start with "sk_" or "rk_"')
     }
+
+    // Default to 'latest' if no version specified
+    const version = packageVersion || 'latest'
 
     try {
       // Validate project
@@ -417,10 +448,15 @@ export class SupabaseSetupClient {
         `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_STARTED_SUFFIX}`
       )
 
-      // Deploy Edge Functions
-      await this.deployFunction('stripe-setup', setupFunctionCode)
-      await this.deployFunction('stripe-webhook', webhookFunctionCode)
-      await this.deployFunction('stripe-worker', workerFunctionCode)
+      // Deploy Edge Functions with specified package version
+      // Replace the package import with the specific version
+      const versionedSetup = this.injectPackageVersion(setupFunctionCode, version)
+      const versionedWebhook = this.injectPackageVersion(webhookFunctionCode, version)
+      const versionedWorker = this.injectPackageVersion(workerFunctionCode, version)
+
+      await this.deployFunction('stripe-setup', versionedSetup)
+      await this.deployFunction('stripe-webhook', versionedWebhook)
+      await this.deployFunction('stripe-worker', versionedWorker)
 
       // Set secrets
       await this.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }])
@@ -433,24 +469,8 @@ export class SupabaseSetupClient {
         throw new Error(`Setup failed: ${setupResult.error}`)
       }
 
-      // Setup pg_cron
-      let pgCronEnabled = false
-      try {
-        await this.setupPgCronJob()
-        pgCronEnabled = true
-      } catch {
-        // pg_cron may not be available (requires special permissions)
-        console.warn('pg_cron setup failed - falling back to manual worker invocation')
-      }
-
-      // If pg_cron is not available, manually trigger the worker to start initial backfill
-      if (!pgCronEnabled) {
-        try {
-          await this.invokeFunction('stripe-worker', serviceRoleKey)
-        } catch (err) {
-          console.warn('Failed to trigger initial worker invocation:', err)
-        }
-      }
+      // Setup pg_cron - this is required for automatic syncing
+      await this.setupPgCronJob()
 
       // Set final version comment
       await this.updateInstallationComment(
@@ -471,10 +491,11 @@ export async function install(params: {
   supabaseAccessToken: string
   supabaseProjectRef: string
   stripeKey: string
+  packageVersion?: string
   baseProjectUrl?: string
   baseManagementApiUrl?: string
 }): Promise<void> {
-  const { supabaseAccessToken, supabaseProjectRef, stripeKey } = params
+  const { supabaseAccessToken, supabaseProjectRef, stripeKey, packageVersion } = params
 
   const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
@@ -483,7 +504,7 @@ export async function install(params: {
     managementApiBaseUrl: params.baseManagementApiUrl,
   })
 
-  await client.install(stripeKey)
+  await client.install(stripeKey, packageVersion)
 }
 
 export async function uninstall(params: {

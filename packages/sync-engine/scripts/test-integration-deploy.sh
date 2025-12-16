@@ -27,12 +27,19 @@ fi
 check_required_tools curl jq node
 
 # Check required environment variables (no DB password needed!)
-check_env_vars SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF STRIPE_API_KEY
+check_env_vars SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF STRIPE_API_KEY NPM_TOKEN
+
+# Configure npm with NPM_TOKEN
+echo "🔑 Configuring npm with NPM_TOKEN..."
+echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+echo "✓ npm configured"
+echo ""
 
 # Track IDs for cleanup
 WEBHOOK_ID=""
 TEST_CUSTOMER_ID=""
 BACKFILL_CUSTOMER_ID=""
+BETA_VERSION=""
 
 # Cleanup function
 cleanup() {
@@ -54,26 +61,42 @@ cleanup() {
 
     # Use programmatic uninstall command to clean up all deployed resources
     echo "   Running uninstall command..."
-    node dist/cli/index.js supabase uninstall \
+    if ! node dist/cli/index.js supabase uninstall \
         --token "$SUPABASE_ACCESS_TOKEN" \
         --project "$SUPABASE_PROJECT_REF" \
-        --stripe-key "$STRIPE_API_KEY" > /dev/null 2>&1 || echo "   Warning: Failed to run uninstall"
+        --stripe-key "$STRIPE_API_KEY" 2>&1 | tee /tmp/uninstall.log | grep -v "^$" > /dev/null; then
+        echo "   Warning: Uninstall command failed"
+        cat /tmp/uninstall.log
+    fi
+
+    # Unpublish beta version if it was created
+    if [ -n "$BETA_VERSION" ]; then
+        echo "   Unpublishing beta version: $BETA_VERSION"
+        npm unpublish "stripe-experiment-sync@$BETA_VERSION" --force > /dev/null 2>&1 || echo "   Warning: Failed to unpublish beta version"
+    fi
+
+    # Remove .npmrc if we created it
+    if [ -n "$NPM_TOKEN" ] && [ -f ~/.npmrc ]; then
+        rm -f ~/.npmrc 2>/dev/null || true
+    fi
 
     # Verify uninstall completed successfully
     echo "   Verifying uninstall..."
 
     # Check 1: Verify schema is dropped
+    # Note: Supabase has async delays, just check once and warn if needed
+    sleep 5
     SCHEMA_CHECK=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
         -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"query": "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = '"'"'stripe'"'"') as schema_exists"}' 2>/dev/null || echo '[]')
 
-    SCHEMA_EXISTS=$(echo "$SCHEMA_CHECK" | jq -r '.[0].schema_exists // true')
+    SCHEMA_EXISTS=$(echo "$SCHEMA_CHECK" | jq -r '.[0].schema_exists // "unknown"' 2>/dev/null || echo "unknown")
 
     if [ "$SCHEMA_EXISTS" = "false" ]; then
         echo "   ✓ Schema dropped successfully"
     else
-        echo "   ⚠ Schema still exists (uninstall may have failed)"
+        echo "   ⚠️  Schema status unclear (got: '$SCHEMA_EXISTS'), but uninstall command completed"
     fi
 
     # Check 2: Verify Edge Functions are deleted
@@ -96,11 +119,93 @@ cleanup() {
 # Register cleanup on exit
 trap cleanup EXIT
 
-# Build CLI first
-echo "📦 Building CLI..."
+# Build and publish beta version
+echo "📦 Building and publishing beta version..."
 cd "$CLI_DIR"
-pnpm build > /dev/null 2>&1
-echo "✓ CLI built"
+
+# First restore package.json to original state in case of previous failed runs
+git checkout package.json 2>/dev/null || true
+
+# Get current version from package.json
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+BETA_VERSION="${CURRENT_VERSION}-beta.$(date +%s)"
+
+echo "   Current version: $CURRENT_VERSION"
+echo "   Beta version: $BETA_VERSION"
+
+# Update package.json version temporarily
+node -e "const pkg=require('./package.json'); pkg.version='$BETA_VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')"
+
+# Build the package
+if ! pnpm build > /tmp/beta-build.log 2>&1; then
+    echo "❌ Build failed"
+    cat /tmp/beta-build.log
+    # Restore package.json before exiting
+    node -e "const pkg=require('./package.json'); pkg.version='$CURRENT_VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')"
+    exit 1
+fi
+echo "✓ Package built"
+
+# Publish to npm (BEFORE restoring package.json so it publishes correct version)
+echo "📤 Publishing $BETA_VERSION to npm..."
+if ! npm publish --tag beta --access public 2>&1 | tee /tmp/npm-publish.log; then
+    echo "❌ Failed to publish to npm"
+    cat /tmp/npm-publish.log
+    # Restore package.json before exiting
+    node -e "const pkg=require('./package.json'); pkg.version='$CURRENT_VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')"
+    exit 1
+fi
+echo "✓ Published to npm"
+
+# Restore original package.json version AFTER publishing
+node -e "const pkg=require('./package.json'); pkg.version='$CURRENT_VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')"
+
+# Wait for package to be available on npm
+echo "⏳ Waiting for package to be available on npm..."
+MAX_WAIT=60
+WAIT_COUNT=0
+RATE_LIMITED=false
+
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Query npm registry API directly
+    NPM_API_RESPONSE=$(curl -s "https://registry.npmjs.org/stripe-experiment-sync/$BETA_VERSION" || true)
+
+    # Check if we got the version back (not a 404)
+    if echo "$NPM_API_RESPONSE" | jq -e '.version' > /dev/null 2>&1; then
+        FOUND_VERSION=$(echo "$NPM_API_RESPONSE" | jq -r '.version')
+        if [ "$FOUND_VERSION" = "$BETA_VERSION" ]; then
+            echo "✓ Package available on npm"
+            break
+        fi
+    fi
+
+    # Check for rate limiting (429 status)
+    if echo "$NPM_API_RESPONSE" | jq -e '.error' | grep -q "429" 2>/dev/null; then
+        if [ "$RATE_LIMITED" = false ]; then
+            echo "   ⚠️  npm rate limiting detected, waiting 60s..."
+            RATE_LIMITED=true
+            sleep 60
+        fi
+    fi
+
+    # Show progress every 30 seconds
+    if [ $((WAIT_COUNT % 15)) -eq 0 ] && [ $WAIT_COUNT -gt 0 ]; then
+        echo "   Still waiting... (${WAIT_COUNT}0s elapsed)"
+    fi
+
+    sleep 2
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "❌ Package did not become available on npm within $((MAX_WAIT * 2)) seconds"
+    echo "   Last API response: $(echo "$NPM_API_RESPONSE" | jq -c '.' || echo "$NPM_API_RESPONSE")"
+    exit 1
+fi
+
+# Wait additional time for npm CDN propagation to all edge locations
+echo "   Waiting 30s for npm CDN propagation..."
+sleep 30
 echo ""
 
 # Create a customer BEFORE deploying (for backfill test - no webhook exists yet)
@@ -120,12 +225,13 @@ fi
 echo "✓ Created customer for backfill test: $BACKFILL_CUSTOMER_ID"
 echo ""
 
-# Run deploy command (no DB password needed - migrations run via Edge Function)
-echo "🚀 Running deploy command..."
+# Run deploy command with beta version (no DB password needed - migrations run via Edge Function)
+echo "🚀 Running deploy command with version $BETA_VERSION..."
 node dist/cli/index.js supabase install \
     --token "$SUPABASE_ACCESS_TOKEN" \
     --project "$SUPABASE_PROJECT_REF" \
-    --stripe-key "$STRIPE_API_KEY"
+    --stripe-key "$STRIPE_API_KEY" \
+    --package-version "$BETA_VERSION"
 echo ""
 
 # Verify Edge Functions deployed
@@ -162,7 +268,9 @@ echo ""
 # Verify Stripe webhook created
 echo "🔍 Verifying Stripe webhook..."
 WEBHOOKS=$(curl -s -u "$STRIPE_API_KEY:" "https://api.stripe.com/v1/webhook_endpoints")
-WEBHOOK_URL="https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/stripe-webhook"
+# Use same base URL as the install command (defaults to supabase.co)
+SUPABASE_BASE_URL="${SUPABASE_BASE_URL:-supabase.co}"
+WEBHOOK_URL="https://$SUPABASE_PROJECT_REF.$SUPABASE_BASE_URL/functions/v1/stripe-webhook"
 
 WEBHOOK_DATA=$(echo "$WEBHOOKS" | jq -r --arg url "$WEBHOOK_URL" '.data[] | select(.url == $url)')
 
@@ -241,18 +349,75 @@ fi
 echo "✓ Installation verification complete (isInstalled() would return true)"
 echo ""
 
-# Verify pg_cron job (may not exist if pg_cron extension not available)
-echo "🔍 Verifying pg_cron job..."
-CRON_QUERY="SELECT jobname FROM cron.job WHERE jobname = 'stripe-sync-worker'"
-CRON_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+# Verify pg_cron extension and job
+echo "🔍 Verifying pg_cron setup..."
+
+# Check if pg_cron extension is installed
+CRON_EXT_QUERY="SELECT extname FROM pg_extension WHERE extname = 'pg_cron'"
+CRON_EXT_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
     -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"query\": \"$CRON_QUERY\"}" 2>/dev/null || echo "[]")
+    -d "{\"query\": \"$CRON_EXT_QUERY\"}" 2>/dev/null || echo "[]")
 
-if echo "$CRON_RESULT" | jq -e '.[] | select(.jobname == "stripe-sync-worker")' > /dev/null 2>&1; then
-    echo "✓ pg_cron job configured"
+if echo "$CRON_EXT_RESULT" | jq -e '.[] | select(.extname == "pg_cron")' > /dev/null 2>&1; then
+    echo "✓ pg_cron extension installed"
 else
-    echo "⚠️  pg_cron job NOT found (pg_cron extension may not be enabled)"
+    echo "❌ pg_cron extension NOT installed - worker will not run automatically"
+    echo "   pg_cron requires special permissions and may not be available on all Supabase plans"
+fi
+
+# Check if pg_cron job exists
+CRON_JOB_QUERY="SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'stripe-sync-worker'"
+CRON_JOB_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$CRON_JOB_QUERY\"}" 2>/dev/null || echo "[]")
+
+if echo "$CRON_JOB_RESULT" | jq -e '.[] | select(.jobname == "stripe-sync-worker")' > /dev/null 2>&1; then
+    CRON_SCHEDULE=$(echo "$CRON_JOB_RESULT" | jq -r '.[0].schedule')
+    CRON_ACTIVE=$(echo "$CRON_JOB_RESULT" | jq -r '.[0].active')
+    echo "✓ pg_cron job configured (schedule: $CRON_SCHEDULE, active: $CRON_ACTIVE)"
+else
+    echo "⚠️  pg_cron job NOT found"
+fi
+
+# Wait a bit for pg_cron to start executing
+sleep 15
+
+# Check for recent job runs with detailed status
+CRON_RUNS_QUERY="SELECT status, return_message, start_time FROM cron.job_run_details WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'stripe-sync-worker' LIMIT 1) ORDER BY start_time DESC LIMIT 5"
+CRON_RUNS_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": \"$CRON_RUNS_QUERY\"}" 2>/dev/null || echo "[]")
+
+if echo "$CRON_RUNS_RESULT" | jq -e '.[0]' > /dev/null 2>&1; then
+    RUN_COUNT=$(echo "$CRON_RUNS_RESULT" | jq '. | length')
+    echo "✓ pg_cron job has run $RUN_COUNT times"
+
+    # Show details of most recent run
+    RECENT_STATUS=$(echo "$CRON_RUNS_RESULT" | jq -r '.[0].status // "unknown"')
+    RECENT_MSG=$(echo "$CRON_RUNS_RESULT" | jq -r '.[0].return_message // "no message"')
+    echo "  Most recent run: status=$RECENT_STATUS"
+    if [ "$RECENT_STATUS" = "failed" ] || [ "$RECENT_STATUS" = "error" ]; then
+        echo "  Error: $RECENT_MSG"
+    fi
+else
+    echo "⚠️  pg_cron job has not executed yet"
+    echo "  This may indicate pg_cron or pg_net is not functioning"
+
+    # Check if pg_net extension exists (required for net.http_post)
+    NET_EXT_QUERY="SELECT extname FROM pg_extension WHERE extname = 'pg_net'"
+    NET_EXT_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+        -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"query\": \"$NET_EXT_QUERY\"}" 2>/dev/null || echo "[]")
+
+    if echo "$NET_EXT_RESULT" | jq -e '.[] | select(.extname == "pg_net")' > /dev/null 2>&1; then
+        echo "  ✓ pg_net extension is installed"
+    else
+        echo "  ❌ pg_net extension NOT found - required for pg_cron to invoke Edge Functions"
+    fi
 fi
 echo ""
 
@@ -290,9 +455,10 @@ for i in {1..60}; do
         CLOSED_AT=$(echo "$SYNC_STATUS_RESULT" | jq -r '.[0].closed_at // empty')
         STATUS=$(echo "$SYNC_STATUS_RESULT" | jq -r '.[0].status // "unknown"')
     else
-        # Query failed (table doesn't exist yet or other error)
-        CLOSED_AT=""
-        STATUS="pending"
+        # Query failed - this shouldn't happen since schema was already verified
+        echo "   ❌ Failed to query sync_runs view"
+        echo "   Response: $SYNC_STATUS_RESULT"
+        exit 1
     fi
 
     if [ -n "$CLOSED_AT" ] && [ "$CLOSED_AT" != "null" ]; then
@@ -303,7 +469,14 @@ for i in {1..60}; do
 
     # Show progress every 30 seconds
     if [ $((i % 3)) -eq 0 ]; then
-        echo "   Still running... (${i}0s elapsed, status: $STATUS)"
+        # Check pg_cron execution count
+        CRON_COUNT_QUERY="SELECT COUNT(*) as count FROM cron.job_run_details WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'stripe-sync-worker' LIMIT 1)"
+        CRON_COUNT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\": \"$CRON_COUNT_QUERY\"}" 2>/dev/null | jq -r '.[0].count // 0')
+
+        echo "   Still running... (${i}0s elapsed, status: $STATUS, pg_cron executions: $CRON_COUNT)"
     fi
 done
 

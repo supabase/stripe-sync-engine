@@ -87,7 +87,7 @@ describe('Edge Function Files', () => {
     })
 
     test('enqueues all objects when queue is empty', () => {
-      expect(workerFunctionCode).toContain('getSupportedSyncObjects()')
+      expect(workerFunctionCode).toContain('joinOrCreateSyncRun')
       expect(workerFunctionCode).toContain('pgmq.send_batch')
     })
 

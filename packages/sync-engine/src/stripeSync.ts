@@ -20,6 +20,14 @@ import { createRetryableStripeClient } from './utils/stripeClientWrapper'
 import { hashApiKey } from './utils/hashApiKey'
 
 /**
+ * Identifies a specific sync run.
+ */
+export type RunKey = {
+  accountId: string
+  runStartedAt: Date
+}
+
+/**
  * Configuration for a syncable resource type.
  * Used by resourceRegistry to map SyncObject → list/upsert operations.
  */
@@ -1032,20 +1040,8 @@ export class StripeSync {
     if (params?.runStartedAt) {
       runStartedAt = params.runStartedAt
     } else {
-      const runKey = await this.postgresClient.getOrCreateSyncRun(
-        accountId,
-        params?.triggeredBy ?? 'processNext'
-      )
-      if (!runKey) {
-        // Race condition - another process created a run, retry
-        const activeRun = await this.postgresClient.getActiveSyncRun(accountId)
-        if (!activeRun) {
-          throw new Error('Failed to get or create sync run')
-        }
-        runStartedAt = activeRun.runStartedAt
-      } else {
-        runStartedAt = runKey.runStartedAt
-      }
+      const { runKey } = await this.joinOrCreateSyncRun(params?.triggeredBy ?? 'processNext')
+      runStartedAt = runKey.runStartedAt
     }
 
     // Ensure object run exists
@@ -1261,23 +1257,47 @@ export class StripeSync {
     return { synced: totalSynced }
   }
 
-  async processUntilDone(params?: SyncParams): Promise<SyncBackfill> {
-    const { object } = params ?? { object: 'all' }
-
-    // Ensure account exists before syncing
+  /**
+   * Join existing sync run or create a new one.
+   * Returns sync run key and list of supported objects to sync.
+   *
+   * Cooperative behavior: If a sync run already exists, joins it instead of failing.
+   * This is used by workers and background processes that should cooperate.
+   *
+   * @param triggeredBy - What triggered this sync (for observability)
+   * @returns Run key and list of objects to sync
+   */
+  async joinOrCreateSyncRun(triggeredBy: string = 'worker'): Promise<{
+    runKey: RunKey
+    objects: Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[]
+  }> {
     await this.getCurrentAccount()
     const accountId = await this.getAccountId()
 
-    // Get or create a single sync run for all objects
-    const runKey = await this.postgresClient.getOrCreateSyncRun(accountId, 'processUntilDone')
-    if (!runKey) {
+    const result = await this.postgresClient.getOrCreateSyncRun(accountId, triggeredBy)
+    if (!result) {
       const activeRun = await this.postgresClient.getActiveSyncRun(accountId)
       if (!activeRun) {
         throw new Error('Failed to get or create sync run')
       }
-      // Join existing run
-      return this.processUntilDoneWithRun(activeRun.runStartedAt, object, params)
+      return {
+        runKey: { accountId: activeRun.accountId, runStartedAt: activeRun.runStartedAt },
+        objects: this.getSupportedSyncObjects(),
+      }
     }
+
+    const { accountId: runAccountId, runStartedAt } = result
+    return {
+      runKey: { accountId: runAccountId, runStartedAt },
+      objects: this.getSupportedSyncObjects(),
+    }
+  }
+
+  async processUntilDone(params?: SyncParams): Promise<SyncBackfill> {
+    const { object } = params ?? { object: 'all' }
+
+    // Join or create sync run
+    const { runKey } = await this.joinOrCreateSyncRun('processUntilDone')
 
     return this.processUntilDoneWithRun(runKey.runStartedAt, object, params)
   }

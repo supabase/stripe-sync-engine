@@ -19,6 +19,7 @@ export interface DeployOptions {
   supabaseAccessToken?: string
   supabaseProjectRef?: string
   stripeKey?: string
+  packageVersion?: string
 }
 
 export type { CliOptions }
@@ -565,6 +566,7 @@ export async function installCommand(options: DeployOptions): Promise<void> {
       supabaseAccessToken: accessToken,
       supabaseProjectRef: projectRef,
       stripeKey,
+      packageVersion: options.packageVersion,
     })
 
     // Print summary

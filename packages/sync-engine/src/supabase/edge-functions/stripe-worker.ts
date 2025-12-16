@@ -80,7 +80,8 @@ Deno.serve(async (req) => {
 
     // If queue empty, enqueue all objects for continuous sync
     if (messages.length === 0) {
-      const objects = stripeSync.getSupportedSyncObjects()
+      // Create sync run to make enqueued work visible (status='pending')
+      const { objects } = await stripeSync.joinOrCreateSyncRun('worker')
       const msgs = objects.map((object) => JSON.stringify({ object }))
 
       await sql`
