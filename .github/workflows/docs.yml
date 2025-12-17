@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.repository == 'supabase/stripe-sync-engine'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
