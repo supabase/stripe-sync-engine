@@ -369,8 +369,10 @@ export class SupabaseSetupClient {
    * Uninstall stripe-sync from a Supabase project
    * Removes all Edge Functions, secrets, database resources, and Stripe webhooks
    */
-  async uninstall(stripeSecretKey: string): Promise<void> {
-    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' })
+  async uninstall(stripeSecretKey?: string): Promise<void> {
+    const stripe = stripeSecretKey
+      ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' })
+      : null
 
     try {
       // Step 1: Get webhook IDs from database before dropping schema
@@ -384,7 +386,7 @@ export class SupabaseSetupClient {
         // Step 2: Delete Stripe webhooks via Stripe API
         for (const webhookId of webhookIds) {
           try {
-            await stripe.webhookEndpoints.del(webhookId)
+            await stripe?.webhookEndpoints.del(webhookId)
           } catch (err) {
             console.warn(`Could not delete Stripe webhook ${webhookId}:`, err)
           }
@@ -573,18 +575,26 @@ export async function install(params: {
 export async function uninstall(params: {
   supabaseAccessToken: string
   supabaseProjectRef: string
-  stripeKey: string
+  stripeKey?: string
+  baseProjectUrl?: string
+  baseManagementApiUrl?: string
 }): Promise<void> {
   const { supabaseAccessToken, supabaseProjectRef, stripeKey } = params
 
-  const trimmedStripeKey = stripeKey.trim()
-  if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
+  const trimmedStripeKey = stripeKey && stripeKey.trim()
+  if (
+    trimmedStripeKey &&
+    !trimmedStripeKey.startsWith('sk_') &&
+    !trimmedStripeKey.startsWith('rk_')
+  ) {
     throw new Error('Stripe key should start with "sk_" or "rk_"')
   }
 
   const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
     projectRef: supabaseProjectRef,
+    projectBaseUrl: params.baseProjectUrl,
+    managementApiBaseUrl: params.baseManagementApiUrl,
   })
 
   await client.uninstall(trimmedStripeKey)
