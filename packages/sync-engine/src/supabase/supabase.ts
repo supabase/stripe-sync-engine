@@ -404,10 +404,12 @@ export class SupabaseSetupClient {
       // Step 5: Unschedule pg_cron job
       try {
         await this.runSQL(`
-          SELECT cron.unschedule('stripe-sync-worker')
-          WHERE EXISTS (
-            SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-worker'
-          )
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-worker') THEN
+              PERFORM cron.unschedule('stripe-sync-worker');
+            END IF;
+          END $$;
         `)
       } catch (err) {
         console.warn('Could not unschedule pg_cron job:', err)
@@ -423,22 +425,41 @@ export class SupabaseSetupClient {
         console.warn('Could not delete vault secret:', err)
       }
 
-      // Step 7: Terminate active connections to stripe schema tables
+      // Step 7: Terminate connections holding locks on stripe schema
       // This ensures any running pg_cron jobs or other queries release their locks
       try {
         await this.runSQL(`
           SELECT pg_terminate_backend(pid)
-          FROM pg_stat_activity
-          WHERE datname = current_database()
-            AND pid != pg_backend_pid()
-            AND query ILIKE '%stripe.%'
+          FROM pg_locks l
+          JOIN pg_class c ON l.relation = c.oid
+          JOIN pg_namespace n ON c.relnamespace = n.oid
+          WHERE n.nspname = 'stripe'
+            AND l.pid != pg_backend_pid()
         `)
       } catch (err) {
         console.warn('Could not terminate connections:', err)
       }
 
-      // Step 8: Drop schema (cascades to all tables, views, indexes, etc.)
-      await this.runSQL(`DROP SCHEMA IF EXISTS stripe CASCADE`)
+      // Step 8: Drop schema with retry (in case locks are still held)
+      let dropAttempts = 0
+      const maxAttempts = 3
+      while (dropAttempts < maxAttempts) {
+        try {
+          await this.runSQL(`DROP SCHEMA IF EXISTS stripe CASCADE`)
+          break // Success, exit loop
+        } catch (err) {
+          dropAttempts++
+          if (dropAttempts >= maxAttempts) {
+            throw new Error(
+              `Failed to drop schema after ${maxAttempts} attempts. ` +
+                `There may be active connections or locks on the stripe schema. ` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`
+            )
+          }
+          // Wait 1 second before retrying
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+      }
     } catch (error) {
       throw new Error(`Uninstall failed: ${error instanceof Error ? error.message : String(error)}`)
     }

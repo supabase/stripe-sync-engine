@@ -199,3 +199,36 @@ export interface ProcessNextParams extends SyncParams {
   /** Who/what triggered this sync (for observability) */
   triggeredBy?: string
 }
+
+/**
+ * Installation status of the stripe-sync package
+ */
+export type InstallationStatus = 'not_installed' | 'installing' | 'installed' | 'error'
+
+/**
+ * Sync status for a single account (from sync_runs view)
+ */
+export interface StripeSyncAccountState {
+  account_id: string
+  started_at: string
+  closed_at: string | null
+  status: 'pending' | 'running' | 'complete' | 'error'
+  error_message: string | null
+  total_processed: number
+  total_objects: number
+  complete_count: number
+  error_count: number
+  running_count: number
+  pending_count: number
+  triggered_by: string
+  max_concurrent: number
+}
+
+/**
+ * Response schema for the sync status endpoint
+ */
+export interface StripeSyncState {
+  package_version: string
+  installation_status: InstallationStatus
+  sync_status: StripeSyncAccountState[]
+}

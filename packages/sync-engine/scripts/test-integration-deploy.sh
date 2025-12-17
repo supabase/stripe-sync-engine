@@ -41,6 +41,24 @@ TEST_CUSTOMER_ID=""
 BACKFILL_CUSTOMER_ID=""
 BETA_VERSION=""
 
+# Function to check if stripe schema exists
+# Returns: "true" if exists, "false" if not exists, or error message
+check_schema_exists() {
+    local query="SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'stripe') as schema_exists"
+    local response=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+        -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"query\": \"$query\"}")
+
+    local exists=$(echo "$response" | jq -r '.[0].schema_exists' 2>/dev/null || echo "")
+
+    if [ "$exists" = "true" ] || [ "$exists" = "false" ]; then
+        echo "$exists"
+    else
+        echo "error:$response"
+    fi
+}
+
 # Cleanup function
 cleanup() {
     echo ""
@@ -84,19 +102,39 @@ cleanup() {
     echo "   Verifying uninstall..."
 
     # Check 1: Verify schema is dropped
-    # Note: Supabase has async delays, just check once and warn if needed
-    sleep 5
-    SCHEMA_CHECK=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
-        -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"query": "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = '"'"'stripe'"'"') as schema_exists"}' 2>/dev/null || echo '[]')
+    # Note: Supabase has async delays, retry a few times before failing
+    echo "   Verifying schema is dropped..."
+    SCHEMA_DROPPED=false
+    for attempt in {1..5}; do
+        sleep 5
+        SCHEMA_EXISTS=$(check_schema_exists)
 
-    SCHEMA_EXISTS=$(echo "$SCHEMA_CHECK" | jq -r '.[0].schema_exists // "unknown"' 2>/dev/null || echo "unknown")
+        if [[ "$SCHEMA_EXISTS" == error:* ]]; then
+            if [ $attempt -lt 5 ]; then
+                echo "   Query error, retrying (attempt $attempt/5)..."
+            else
+                echo "   ⚠️  Query failed after 5 attempts"
+                echo "   Response: ${SCHEMA_EXISTS#error:}"
+            fi
+        elif [ "$SCHEMA_EXISTS" = "false" ]; then
+            echo "   ✓ Schema dropped successfully"
+            SCHEMA_DROPPED=true
+            break
+        elif [ "$SCHEMA_EXISTS" = "true" ]; then
+            if [ $attempt -lt 5 ]; then
+                echo "   Schema still exists, retrying (attempt $attempt/5)..."
+            fi
+        fi
+    done
 
-    if [ "$SCHEMA_EXISTS" = "false" ]; then
-        echo "   ✓ Schema dropped successfully"
-    else
-        echo "   ⚠️  Schema status unclear (got: '$SCHEMA_EXISTS'), but uninstall command completed"
+    if [ "$SCHEMA_DROPPED" != "true" ]; then
+        echo "   ❌ UNINSTALL FAILED: Schema still exists after uninstall"
+        echo "   This is a critical failure - uninstall did not properly clean up the database"
+        echo ""
+        echo "================================================"
+        echo "❌ INTEGRATION TEST FAILED"
+        echo "================================================"
+        exit 1
     fi
 
     # Check 2: Verify Edge Functions are deleted
@@ -110,7 +148,15 @@ cleanup() {
     if [ -z "$SETUP_EXISTS" ] && [ -z "$WEBHOOK_EXISTS" ] && [ -z "$WORKER_EXISTS" ]; then
         echo "   ✓ Edge Functions deleted successfully"
     else
-        echo "   ⚠ Some Edge Functions still exist (uninstall may have failed)"
+        echo "   ❌ UNINSTALL FAILED: Some Edge Functions still exist"
+        [ -n "$SETUP_EXISTS" ] && echo "      - stripe-setup still exists"
+        [ -n "$WEBHOOK_EXISTS" ] && echo "      - stripe-webhook still exists"
+        [ -n "$WORKER_EXISTS" ] && echo "      - stripe-worker still exists"
+        echo ""
+        echo "================================================"
+        echo "❌ INTEGRATION TEST FAILED"
+        echo "================================================"
+        exit 1
     fi
 
     echo "   Done"
@@ -256,6 +302,24 @@ if [ -z "$BACKFILL_CUSTOMER_ID" ] || [ "$BACKFILL_CUSTOMER_ID" = "null" ]; then
     exit 1
 fi
 echo "✓ Created customer for backfill test: $BACKFILL_CUSTOMER_ID"
+echo ""
+
+# Verify schema doesn't exist before deployment (ensure clean state)
+echo "🔍 Verifying clean state before deployment..."
+INITIAL_SCHEMA_EXISTS=$(check_schema_exists)
+
+if [[ "$INITIAL_SCHEMA_EXISTS" == error:* ]]; then
+    echo "⚠️  Could not verify schema state"
+    echo "   Response: ${INITIAL_SCHEMA_EXISTS#error:}"
+    echo "   Proceeding anyway, but deployment may fail if schema exists..."
+elif [ "$INITIAL_SCHEMA_EXISTS" = "true" ]; then
+    echo "❌ FATAL: Schema 'stripe' already exists before deployment!"
+    echo "   The test requires a clean database state to run."
+    echo "   Please run uninstall or manually drop the schema before running this test."
+    exit 1
+elif [ "$INITIAL_SCHEMA_EXISTS" = "false" ]; then
+    echo "✓ Schema does not exist (clean state confirmed)"
+fi
 echo ""
 
 # Run deploy command with beta version (no DB password needed - migrations run via Edge Function)
@@ -465,6 +529,60 @@ if [ -z "$SERVICE_ROLE_KEY" ] || [ "$SERVICE_ROLE_KEY" = "null" ]; then
     exit 1
 fi
 echo "✓ Got service role key"
+echo ""
+
+# Test GET endpoint for sync status
+echo "🧪 Testing stripe-setup GET endpoint (status)..."
+
+# Test 1: GET without auth should return 401
+echo "   Testing GET without auth (should return 401)..."
+STATUS_RESPONSE_NO_AUTH=$(curl -s -w "\n%{http_code}" \
+    "https://$SUPABASE_PROJECT_REF.$SUPABASE_BASE_URL/functions/v1/stripe-setup")
+STATUS_HTTP_CODE=$(echo "$STATUS_RESPONSE_NO_AUTH" | tail -n1)
+
+if [ "$STATUS_HTTP_CODE" = "401" ]; then
+    echo "   ✓ GET without auth returned 401 Unauthorized"
+else
+    echo "   ❌ GET without auth should return 401, got: $STATUS_HTTP_CODE"
+    echo "   Response: $(echo "$STATUS_RESPONSE_NO_AUTH" | head -n -1)"
+    exit 1
+fi
+
+# Test 2: GET with auth should return status
+echo "   Testing GET with auth (should return 200)..."
+STATUS_RESPONSE=$(curl -s -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+    "https://$SUPABASE_PROJECT_REF.$SUPABASE_BASE_URL/functions/v1/stripe-setup")
+
+# Verify response has package_version field
+PACKAGE_VERSION=$(echo "$STATUS_RESPONSE" | jq -r '.package_version // empty')
+if [ -n "$PACKAGE_VERSION" ] && [ "$PACKAGE_VERSION" != "null" ]; then
+    echo "   ✓ GET endpoint returned package version: $PACKAGE_VERSION"
+else
+    echo "   ❌ GET endpoint did not return package_version"
+    echo "   Response: $STATUS_RESPONSE"
+    exit 1
+fi
+
+# Verify response has installation_status field
+INSTALLATION_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.installation_status // empty')
+if [ -n "$INSTALLATION_STATUS" ] && [ "$INSTALLATION_STATUS" != "null" ]; then
+    echo "   ✓ GET endpoint returned installation status: $INSTALLATION_STATUS"
+else
+    echo "   ❌ GET endpoint did not return installation_status"
+    echo "   Response: $STATUS_RESPONSE"
+    exit 1
+fi
+
+# Verify response has sync_status array
+SYNC_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.sync_status // empty')
+if [ -n "$SYNC_STATUS" ] && [ "$SYNC_STATUS" != "null" ]; then
+    SYNC_COUNT=$(echo "$SYNC_STATUS" | jq '. | length')
+    echo "   ✓ GET endpoint returned sync_status array with $SYNC_COUNT account(s)"
+else
+    echo "   ❌ GET endpoint did not return sync_status array"
+    echo "   Response: $STATUS_RESPONSE"
+    exit 1
+fi
 echo ""
 
 # Test 1: Verify backfill syncs the pre-existing customer (created before webhook existed)
