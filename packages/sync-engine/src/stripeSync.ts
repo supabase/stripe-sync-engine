@@ -13,11 +13,20 @@ import {
   ProcessNextParams,
   SyncObject,
   type RevalidateEntity,
+  type ResourceConfig,
 } from './types'
 import { managedWebhookSchema } from './schemas/managed_webhook'
 import { type PoolConfig } from 'pg'
 import { createRetryableStripeClient } from './utils/stripeClientWrapper'
 import { hashApiKey } from './utils/hashApiKey'
+import { parseCsvObjects, runSigmaQueryAndDownloadCsv } from './sigma/sigmaApi'
+import { SIGMA_INGESTION_CONFIGS } from './sigma/sigmaIngestionConfigs'
+import {
+  buildSigmaQuery,
+  defaultSigmaRowToEntry,
+  sigmaCursorFromEntry,
+  type SigmaIngestionConfig,
+} from './sigma/sigmaIngestion'
 
 /**
  * Identifies a specific sync run.
@@ -25,28 +34,6 @@ import { hashApiKey } from './utils/hashApiKey'
 export type RunKey = {
   accountId: string
   runStartedAt: Date
-}
-
-/**
- * Configuration for a syncable resource type.
- * Used by resourceRegistry to map SyncObject → list/upsert operations.
- */
-type ResourceConfig = {
-  /** Backfill order - lower numbers sync first. Parents before children for FK dependencies. */
-  order: number
-  /** Function to list items from Stripe API */
-  listFn: (params: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam }) => Promise<{
-    data: unknown[]
-    has_more: boolean
-  }>
-  /** Function to upsert items to database */
-  upsertFn: (
-    items: unknown[],
-    accountId: string,
-    backfillRelated?: boolean
-  ) => Promise<unknown[] | void>
-  /** Whether this resource's list API supports the 'created' filter */
-  supportsCreatedFilter: boolean
 }
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
@@ -532,6 +519,17 @@ export class StripeSync {
       upsertFn: (items, id) => this.upsertCheckoutSessions(items as Stripe.Checkout.Session[], id),
       supportsCreatedFilter: true,
     },
+    // Sigma-backed resources
+    subscription_item_change_events_v2_beta: {
+      order: 18,
+      supportsCreatedFilter: false,
+      sigma: SIGMA_INGESTION_CONFIGS.subscription_item_change_events_v2_beta,
+    },
+    exchange_rates_from_usd: {
+      order: 19,
+      supportsCreatedFilter: false,
+      sigma: SIGMA_INGESTION_CONFIGS.exchange_rates_from_usd,
+    },
   }
 
   async processEvent(event: Stripe.Event) {
@@ -579,9 +577,18 @@ export class StripeSync {
    * Order is determined by the `order` field in resourceRegistry.
    */
   public getSupportedSyncObjects(): Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[] {
-    return Object.entries(this.resourceRegistry)
+    const all = Object.entries(this.resourceRegistry)
       .sort(([, a], [, b]) => a.order - b.order)
       .map(([key]) => key) as Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[]
+
+    // Only advertise Sigma-backed objects when explicitly enabled (opt-in).
+    if (!this.config.enableSigma) {
+      return all.filter(
+        (o) => o !== 'subscription_item_change_events_v2_beta' && o !== 'exchange_rates_from_usd'
+      ) as Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[]
+    }
+
+    return all
   }
 
   // Event handler methods
@@ -1079,15 +1086,15 @@ export class StripeSync {
     // Get cursor for incremental sync
     // If user provided explicit created filter, use null cursor
     // Otherwise, check current run's cursor, then fall back to last completed sync's cursor
-    let cursor: number | null = null
+    let cursor: string | null = null
     if (!params?.created) {
       if (objRun?.cursor) {
         // Continue from where we left off in current run
-        cursor = parseInt(objRun.cursor)
+        cursor = objRun.cursor
       } else {
         // New run - start from last completed sync's cursor
         const lastCursor = await this.postgresClient.getLastCompletedCursor(accountId, resourceName)
-        cursor = lastCursor ? parseInt(lastCursor) : null
+        cursor = lastCursor ?? null
       }
     }
 
@@ -1140,7 +1147,7 @@ export class StripeSync {
     accountId: string,
     resourceName: string,
     runStartedAt: Date,
-    cursor: number | null,
+    cursor: string | null,
     params?: ProcessNextParams
   ): Promise<ProcessNextResult> {
     const limit = 100 // Stripe page size
@@ -1159,10 +1166,24 @@ export class StripeSync {
     }
 
     try {
+      if (config.sigma) {
+        return await this.fetchOneSigmaPage(
+          accountId,
+          resourceName,
+          runStartedAt,
+          cursor,
+          config.sigma
+        )
+      }
+
       // Build list parameters
       const listParams: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam } = { limit }
       if (config.supportsCreatedFilter) {
-        const created = params?.created ?? (cursor ? { gte: cursor } : undefined)
+        const created =
+          params?.created ??
+          (cursor && /^\d+$/.test(cursor)
+            ? ({ gte: Number.parseInt(cursor, 10) } as const)
+            : undefined)
         if (created) {
           listParams.created = created
         }
@@ -1217,6 +1238,125 @@ export class StripeSync {
       )
       throw error
     }
+  }
+
+  private async getSigmaFallbackCursorFromDestination(
+    accountId: string,
+    sigmaConfig: SigmaIngestionConfig
+  ): Promise<string | null> {
+    const cursorCols = sigmaConfig.cursor.columns
+    const selectCols = cursorCols.map((c) => `"${c.column}"`).join(', ')
+    const orderBy = cursorCols.map((c) => `"${c.column}" DESC`).join(', ')
+
+    const result = await this.postgresClient.query(
+      `SELECT ${selectCols}
+       FROM "stripe"."${sigmaConfig.destinationTable}"
+       WHERE "_account_id" = $1
+       ORDER BY ${orderBy}
+       LIMIT 1`,
+      [accountId]
+    )
+
+    if (result.rows.length === 0) return null
+
+    const row = result.rows[0] as Record<string, unknown>
+    const entryForCursor: Record<string, unknown> = {}
+    for (const c of cursorCols) {
+      const v = row[c.column]
+      if (v == null) {
+        throw new Error(
+          `Sigma fallback cursor query returned null for ${sigmaConfig.destinationTable}.${c.column}`
+        )
+      }
+      if (c.type === 'timestamp') {
+        const d = v instanceof Date ? v : new Date(String(v))
+        if (Number.isNaN(d.getTime())) {
+          throw new Error(
+            `Sigma fallback cursor query returned invalid timestamp for ${sigmaConfig.destinationTable}.${c.column}: ${String(
+              v
+            )}`
+          )
+        }
+        entryForCursor[c.column] = d.toISOString()
+      } else {
+        entryForCursor[c.column] = String(v)
+      }
+    }
+
+    return sigmaCursorFromEntry(sigmaConfig, entryForCursor)
+  }
+
+  private async fetchOneSigmaPage(
+    accountId: string,
+    resourceName: string,
+    runStartedAt: Date,
+    cursor: string | null,
+    sigmaConfig: SigmaIngestionConfig
+  ): Promise<ProcessNextResult> {
+    if (!this.config.stripeSecretKey) {
+      throw new Error('Sigma sync requested but stripeSecretKey is not configured.')
+    }
+    if (resourceName !== sigmaConfig.destinationTable) {
+      throw new Error(
+        `Sigma sync config mismatch: resourceName=${resourceName} destinationTable=${sigmaConfig.destinationTable}`
+      )
+    }
+
+    const effectiveCursor =
+      cursor ?? (await this.getSigmaFallbackCursorFromDestination(accountId, sigmaConfig))
+    const sigmaSql = buildSigmaQuery(sigmaConfig, effectiveCursor)
+
+    this.config.logger?.info(
+      { object: resourceName, pageSize: sigmaConfig.pageSize, hasCursor: Boolean(effectiveCursor) },
+      'Sigma sync: running query'
+    )
+
+    const { queryRunId, fileId, csv } = await runSigmaQueryAndDownloadCsv({
+      apiKey: this.config.stripeSecretKey,
+      sql: sigmaSql,
+      logger: this.config.logger,
+    })
+
+    const rows = parseCsvObjects(csv)
+    if (rows.length === 0) {
+      await this.postgresClient.completeObjectSync(accountId, runStartedAt, resourceName)
+      return { processed: 0, hasMore: false, runStartedAt }
+    }
+
+    const entries: Array<Record<string, unknown>> = rows.map((row) =>
+      defaultSigmaRowToEntry(sigmaConfig, row)
+    )
+
+    this.config.logger?.info(
+      { object: resourceName, rows: entries.length, queryRunId, fileId },
+      'Sigma sync: upserting rows'
+    )
+
+    await this.postgresClient.upsertManyWithTimestampProtection(
+      entries,
+      resourceName,
+      accountId,
+      undefined,
+      sigmaConfig.upsert
+    )
+
+    await this.postgresClient.incrementObjectProgress(
+      accountId,
+      runStartedAt,
+      resourceName,
+      entries.length
+    )
+
+    // Cursor: advance to the last row in the page (matches the ORDER BY in buildSigmaQuery()).
+    const newCursor = sigmaCursorFromEntry(sigmaConfig, entries[entries.length - 1]!)
+    await this.postgresClient.updateObjectCursor(accountId, runStartedAt, resourceName, newCursor)
+
+    const hasMore = rows.length === sigmaConfig.pageSize
+    if (!hasMore) {
+      await this.postgresClient.completeObjectSync(accountId, runStartedAt, resourceName)
+    }
+
+    return { processed: entries.length, hasMore, runStartedAt }
   }
 
   /**
@@ -1381,6 +1521,12 @@ export class StripeSync {
               break
             case 'checkout_sessions':
               results.checkoutSessions = result
+              break
+            case 'subscription_item_change_events_v2_beta':
+              results.subscriptionItemChangeEventsV2Beta = result
+              break
+            case 'exchange_rates_from_usd':
+              results.exchangeRatesFromUsd = result
               break
           }
         }

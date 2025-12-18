@@ -78,8 +78,10 @@ echo "🚀 Step 2: Starting CLI in WebSocket mode..."
 echo ""
 
 # Start CLI in background with SKIP_BACKFILL for faster startup
+
 # USE_WEBSOCKET=true forces WebSocket mode even if NGROK_AUTH_TOKEN is present in .env
-cd "$SYNC_ENGINE_DIR" && USE_WEBSOCKET=true SKIP_BACKFILL=true node dist/cli/index.js start --database-url "$DATABASE_URL" > /tmp/cli-wss-test.log 2>&1 &
+cd "$SYNC_ENGINE_DIR" && ENABLE_SIGMA=false USE_WEBSOCKET=true SKIP_BACKFILL=true node dist/cli/index.js start --database-url "$DATABASE_URL" > /tmp/cli-wss-test.log 2>&1 &
+
 CLI_PID=$!
 
 # Wait for startup (migrations + WebSocket connection)

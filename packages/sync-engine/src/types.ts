@@ -1,5 +1,6 @@
 import { type PoolConfig } from 'pg'
 import Stripe from 'stripe'
+import type { SigmaIngestionConfig } from './sigma/sigmaIngestion'
 
 /**
  * Simple logger interface compatible with both pino and console
@@ -36,6 +37,13 @@ export type StripeSyncConfig = {
 
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
+
+  /**
+   * Enables syncing Stripe Sigma (reporting) tables via the Sigma API.
+   *
+   * Default: false (opt-in, so workers don't enqueue Sigma jobs unexpectedly).
+   */
+  enableSigma?: boolean
 
   /** Stripe account ID. If not provided, will be retrieved from Stripe API. Used as fallback option. */
   stripeAccountId?: string
@@ -125,6 +133,8 @@ export type SyncObject =
   | 'early_fraud_warning'
   | 'refund'
   | 'checkout_sessions'
+  | 'subscription_item_change_events_v2_beta'
+  | 'exchange_rates_from_usd'
 export interface Sync {
   synced: number
 }
@@ -147,6 +157,8 @@ export interface SyncBackfill {
   earlyFraudWarnings?: Sync
   refunds?: Sync
   checkoutSessions?: Sync
+  subscriptionItemChangeEventsV2Beta?: Sync
+  exchangeRatesFromUsd?: Sync
 }
 
 export interface SyncParams {
@@ -206,6 +218,50 @@ export interface ProcessNextParams extends SyncParams {
   /** Who/what triggered this sync (for observability) */
   triggeredBy?: string
 }
+
+/**
+ * Syncable resource configuration
+ */
+export type BaseResourceConfig = {
+  /** Backfill order: lower numbers sync first; parents before children for FK dependencies */
+  order: number
+  /** Whether this resource supports incremental sync via 'created' filter or cursor */
+  supportsCreatedFilter: boolean
+}
+
+export type StripeListResourceConfig = BaseResourceConfig & {
+  /** Function to list items from Stripe API */
+  listFn: (params: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam }) => Promise<{
+    data: unknown[]
+    has_more: boolean
+  }>
+  /** Function to upsert items to database */
+  upsertFn: (
+    items: unknown[],
+    accountId: string,
+    backfillRelated?: boolean
+  ) => Promise<unknown[] | void>
+  /** discriminator */
+  sigma?: undefined
+}
+
+/**
+ * Configuration for Sigma query-backed resources.
+ * Uses Stripe Sigma SQL queries with composite cursor pagination.
+ */
+export type SigmaResourceConfig = BaseResourceConfig & {
+  /** Sigma uses composite cursors, not created filter */
+  supportsCreatedFilter: false
+  /** Sigma ingestion configuration (query, cursor spec, upsert options) */
+  sigma: SigmaIngestionConfig
+  /** discriminator */
+  listFn?: undefined
+  /** discriminator */
+  upsertFn?: undefined
+}
+
+/** Union of all resource configuration types */
+export type ResourceConfig = StripeListResourceConfig | SigmaResourceConfig
 
 /**
  * Installation status of the stripe-sync package

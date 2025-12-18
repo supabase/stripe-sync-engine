@@ -35,11 +35,13 @@ program
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .option('--ngrok-token <token>', 'ngrok auth token (or NGROK_AUTH_TOKEN env)')
   .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')
+  .option('--sigma', 'Sync Sigma data (requires Sigma access in Stripe API key)')
   .action(async (options) => {
     await syncCommand({
       stripeKey: options.stripeKey,
       ngrokToken: options.ngrokToken,
       databaseUrl: options.databaseUrl,
+      enableSigma: options.sigma,
     })
   })
 

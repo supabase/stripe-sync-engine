@@ -1,5 +1,6 @@
 import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
+import { QueryUtils, type InsertColumn } from './QueryUtils'
 
 type PostgresConfig = {
   schema: string
@@ -14,7 +15,9 @@ type PostgresConfig = {
  * using the `order` field, since deletion order != creation order.
  */
 const ORDERED_STRIPE_TABLES = [
+  'exchange_rates_from_usd',
   'subscription_items',
+  'subscription_item_change_events_v2_beta',
   'subscriptions',
   'subscription_schedules',
   'checkout_session_line_items',
@@ -43,6 +46,20 @@ const ORDERED_STRIPE_TABLES = [
 
 // Tables that use `account_id` instead of `_account_id` (migration 0049)
 const TABLES_WITH_ACCOUNT_ID: ReadonlySet<string> = new Set(['_managed_webhooks'])
+
+export type RawJsonUpsertOptions = {
+  /**
+   * Columns to use as the ON CONFLICT target.
+   * Example: ['id'] for standard Stripe objects, or a composite key for Sigma tables.
+   */
+  conflictTarget: string[]
+
+  /**
+   * Additional typed columns to insert alongside `_raw_data` (for tables that don't have `id` keys).
+   * Values are read from `entry[entryKey]` and cast to `pgType` in SQL.
+   */
+  extraColumns?: Array<{ column: string; pgType: string; entryKey: string }>
+}
 
 export class PostgresClient {
   pool: pg.Pool
@@ -108,7 +125,13 @@ export class PostgresClient {
     T extends {
       [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
     },
-  >(entries: T[], table: string, accountId: string, syncTimestamp?: string): Promise<T[]> {
+  >(
+    entries: T[],
+    table: string,
+    accountId: string,
+    syncTimestamp?: string,
+    upsertOptions?: RawJsonUpsertOptions
+  ): Promise<T[]> {
     const timestamp = syncTimestamp || new Date().toISOString()
 
     if (!entries.length) return []
@@ -151,24 +174,39 @@ export class PostgresClient {
           const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
           queries.push(this.pool.query(prepared.text, prepared.values))
         } else {
-          // Store entire entry as _raw_data jsonb (id will be auto-generated from _raw_data->>'id')
-          const rawData = JSON.stringify(entry)
+          // Raw JSON upsert path: store entry as _raw_data jsonb
+          const conflictTarget = upsertOptions?.conflictTarget ?? ['id']
+          const extraColumns = upsertOptions?.extraColumns ?? []
+          if (!conflictTarget.length) {
+            throw new Error(`Invalid upsert config for ${table}: conflictTarget must be non-empty`)
+          }
 
-          // Use explicit parameter placeholders to avoid yesql parsing issues with ::jsonb cast
-          const upsertSql = `
-            INSERT INTO "${this.config.schema}"."${table}" ("_raw_data", "_last_synced_at", "_account_id")
-            VALUES ($1::jsonb, $2, $3)
-            ON CONFLICT (id)
-            DO UPDATE SET
-              "_raw_data" = EXCLUDED."_raw_data",
-              "_last_synced_at" = $2,
-              "_account_id" = EXCLUDED."_account_id"
-            WHERE "${table}"."_last_synced_at" IS NULL
-               OR "${table}"."_last_synced_at" < $2
-            RETURNING *
-          `
+          // Build column list: _raw_data + any extra typed columns + metadata
+          const columns: InsertColumn[] = [
+            { column: '_raw_data', pgType: 'jsonb', value: JSON.stringify(entry) },
+            ...extraColumns.map((c) => ({
+              column: c.column,
+              pgType: c.pgType,
+              value: entry[c.entryKey],
+            })),
+            { column: '_last_synced_at', pgType: 'timestamptz', value: timestamp },
+            { column: '_account_id', pgType: 'text', value: accountId },
+          ]
 
-          queries.push(this.pool.query(upsertSql, [rawData, timestamp, accountId]))
+          // Validate all values are present
+          for (const c of columns) {
+            if (c.value === undefined) {
+              throw new Error(`Missing required value for ${table}.${c.column}`)
+            }
+          }
+
+          const { sql: upsertSql, params } = QueryUtils.buildRawJsonUpsertQuery(
+            this.config.schema,
+            table,
+            columns,
+            conflictTarget
+          )
+          queries.push(this.pool.query(upsertSql, params))
         }
       })
 
@@ -689,7 +727,12 @@ export class PostgresClient {
     } else {
       await this.query(
         `UPDATE "${this.config.schema}"."_sync_obj_runs"
-         SET cursor = $4, updated_at = now()
+         SET cursor = CASE
+           WHEN cursor IS NULL THEN $4
+           WHEN (cursor COLLATE "C") < ($4::text COLLATE "C") THEN $4
+           ELSE cursor
+         END,
+         updated_at = now()
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
         [accountId, runStartedAt, object, cursor]
       )
@@ -701,10 +744,19 @@ export class PostgresClient {
    * This considers completed, error, AND running runs to ensure recovery syncs
    * don't re-process data that was already synced before a crash.
    * A 'running' status with a cursor means the process was killed mid-sync.
+   *
+   * Handles two cursor formats:
+   * - Numeric: compared as bigint for correct ordering
+   * - Composite cursors: compared as strings with COLLATE "C"
    */
   async getLastCompletedCursor(accountId: string, object: string): Promise<string | null> {
+    // Use conditional aggregation to avoid casting non-numeric cursors to bigint.
+    // PostgreSQL evaluates all aggregate expressions before CASE, so we must guard the cast.
     const result = await this.query(
-      `SELECT MAX(o.cursor::bigint)::text as cursor
+      `SELECT CASE
+         WHEN BOOL_OR(o.cursor !~ '^\\d+$') THEN MAX(o.cursor COLLATE "C")
+         ELSE MAX(CASE WHEN o.cursor ~ '^\\d+$' THEN o.cursor::bigint END)::text
+       END as cursor
        FROM "${this.config.schema}"."_sync_obj_runs" o
        WHERE o."_account_id" = $1
          AND o.object = $2

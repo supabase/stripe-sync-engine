@@ -18,6 +18,7 @@ describe('joinOrCreateSyncRun', () => {
     sync = new StripeSync({
       stripeSecretKey: 'sk_test_fake',
       databaseUrl: 'postgresql://fake',
+      poolConfig: {},
     })
 
     // Mock methods

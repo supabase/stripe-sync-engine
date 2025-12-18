@@ -17,6 +17,11 @@ export type StripeSyncServerConfig = {
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
 
+  /**
+   * Opt-in sync for Sigma tables. Requires stripeSecretKey to have Sigma write permissions
+   */
+  enableSigma?: boolean
+
   /** Webhook secret from Stripe to verify the signature of webhook events. */
   stripeWebhookSecret: string
 
@@ -53,6 +58,7 @@ export function getConfig(): StripeSyncServerConfig {
   return {
     databaseUrl: getConfigFromEnv('DATABASE_URL'),
     stripeSecretKey: getConfigFromEnv('STRIPE_SECRET_KEY', ''),
+    enableSigma: process.env.ENABLE_SIGMA === 'true',
     stripeWebhookSecret: getConfigFromEnv('STRIPE_WEBHOOK_SECRET'),
     apiKey: getConfigFromEnv('API_KEY', 'false'),
     stripeApiVersion: getConfigFromEnv('STRIPE_API_VERSION', '2020-08-27'),

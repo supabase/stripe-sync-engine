@@ -59,6 +59,7 @@ Deno.serve(async (req) => {
     stripeSync = new StripeSync({
       poolConfig: { connectionString: dbUrl, max: 1 },
       stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
+      enableSigma: (Deno.env.get('ENABLE_SIGMA') ?? 'false') === 'true',
     })
   } catch (error) {
     await sql.end()

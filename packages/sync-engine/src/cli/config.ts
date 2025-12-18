@@ -6,12 +6,14 @@ export interface Config {
   stripeApiKey: string
   ngrokAuthToken?: string // Optional - if not provided, use WebSocket mode
   databaseUrl: string
+  enableSigma?: boolean
 }
 
 export interface CliOptions {
   stripeKey?: string
   ngrokToken?: string
   databaseUrl?: string
+  enableSigma?: boolean
 }
 
 /**
@@ -33,6 +35,11 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
   // Get database URL
   config.databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
 
+  // Get Sigma sync option
+  config.enableSigma =
+    options.enableSigma ??
+    (process.env.ENABLE_SIGMA !== undefined ? process.env.ENABLE_SIGMA === 'true' : undefined)
+
   // Prompt for missing required values
   const questions = []
 
@@ -46,8 +53,8 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
         if (!input || input.trim() === '') {
           return 'Stripe API key is required'
         }
-        if (!input.startsWith('sk_')) {
-          return 'Stripe API key should start with "sk_"'
+        if (!input.startsWith('sk_') && !input.startsWith('rk_')) {
+          return 'Stripe API key should start with "sk_" or "rk_"'
         }
         return true
       },
@@ -75,10 +82,24 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
     })
   }
 
+  if (config.enableSigma === undefined) {
+    questions.push({
+      type: 'confirm',
+      name: 'enableSigma',
+      message: 'Enable Sigma sync? (Requires Sigma access in Stripe API key)',
+      default: false,
+    })
+  }
+
   if (questions.length > 0) {
-    console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
+    console.log(chalk.yellow('\nMissing configuration. Please provide:'))
     const answers = await inquirer.prompt(questions)
     Object.assign(config, answers)
+  }
+
+  // Default to false if not set
+  if (config.enableSigma === undefined) {
+    config.enableSigma = false
   }
 
   return config as Config

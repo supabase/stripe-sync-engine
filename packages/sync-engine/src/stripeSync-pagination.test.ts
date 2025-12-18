@@ -19,6 +19,7 @@ describe('Pagination regression tests', () => {
       const sync = new StripeSync({
         stripeSecretKey: 'sk_test_fake',
         databaseUrl: 'postgresql://fake',
+        poolConfig: {},
       })
 
       // Access private resourceRegistry for testing
@@ -34,14 +35,20 @@ describe('Pagination regression tests', () => {
       const sync = new StripeSync({
         stripeSecretKey: 'sk_test_fake',
         databaseUrl: 'postgresql://fake',
+        poolConfig: {},
       })
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const registry = (sync as any).resourceRegistry
 
       // Objects that legitimately don't support created filter
-      // (they require customer context and are handled specially)
-      const expectedFalse = ['payment_method', 'tax_id']
+      // (either require customer context, or are Sigma-backed tables)
+      const expectedFalse = [
+        'payment_method',
+        'tax_id',
+        'subscription_item_change_events_v2_beta', // Sigma-backed table
+        'exchange_rates_from_usd', // Sigma-backed table
+      ]
 
       for (const [objectName, config] of Object.entries(registry)) {
         const resourceConfig = config as { supportsCreatedFilter: boolean }
@@ -68,6 +75,7 @@ describe('Pagination regression tests', () => {
       sync = new StripeSync({
         stripeSecretKey: 'sk_test_fake',
         databaseUrl: 'postgresql://fake',
+        poolConfig: {},
       })
 
       // Mock the Stripe creditNotes.list method

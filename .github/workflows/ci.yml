@@ -109,6 +109,7 @@ jobs:
           echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> .env
           echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> .env
           echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> .env
+          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> .env
           echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> .env
 
       - name: Run CLI Webhook Integration Test
@@ -122,6 +123,12 @@ jobs:
           cd packages/sync-engine
           chmod +x ./scripts/test-integration-backfill.sh
           ./scripts/test-integration-backfill.sh
+
+      - name: Run Sigma Sync Integration Test
+        run: |
+          cd packages/sync-engine
+          chmod +x ./scripts/test-integration-sigma.sh
+          ./scripts/test-integration-sigma.sh
 
       - name: Run CLI Error Recovery Integration Test
         run: |

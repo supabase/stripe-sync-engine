@@ -43,7 +43,7 @@ echo "✓ Migrations complete"
 
 # Start CLI
 echo "🚀 Starting CLI..."
-node dist/cli/index.js start > /tmp/unsupported-test.log 2>&1 &
+ENABLE_SIGMA=false node dist/cli/index.js start > /tmp/unsupported-test.log 2>&1 &
 CLI_PID=$!
 
 sleep 10
