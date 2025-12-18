@@ -330,8 +330,9 @@ export async function syncCommand(options: CliOptions): Promise<void> {
     // Load configuration
     const config = await loadConfig(options)
 
-    // Determine mode based on ngrok token availability
-    const useWebSocketMode = !config.ngrokAuthToken
+    // Determine mode based on USE_WEBSOCKET env var or ngrok token availability
+    // USE_WEBSOCKET=true explicitly forces WebSocket mode (useful for tests)
+    const useWebSocketMode = process.env.USE_WEBSOCKET === 'true' || !config.ngrokAuthToken
     const modeLabel = useWebSocketMode ? 'WebSocket' : 'Webhook (ngrok)'
     console.log(chalk.blue(`\nMode: ${modeLabel}`))
 

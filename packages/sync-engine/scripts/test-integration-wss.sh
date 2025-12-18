@@ -77,11 +77,9 @@ echo ""
 echo "🚀 Step 2: Starting CLI in WebSocket mode..."
 echo ""
 
-# Unset NGROK_AUTH_TOKEN to ensure WebSocket mode
-unset NGROK_AUTH_TOKEN
-
 # Start CLI in background with SKIP_BACKFILL for faster startup
-cd "$SYNC_ENGINE_DIR" && SKIP_BACKFILL=true node dist/cli/index.js start --database-url "$DATABASE_URL" > /tmp/cli-wss-test.log 2>&1 &
+# USE_WEBSOCKET=true forces WebSocket mode even if NGROK_AUTH_TOKEN is present in .env
+cd "$SYNC_ENGINE_DIR" && USE_WEBSOCKET=true SKIP_BACKFILL=true node dist/cli/index.js start --database-url "$DATABASE_URL" > /tmp/cli-wss-test.log 2>&1 &
 CLI_PID=$!
 
 # Wait for startup (migrations + WebSocket connection)
@@ -96,13 +94,22 @@ if ! ps -p $CLI_PID > /dev/null 2>&1; then
     exit 1
 fi
 
+# Verify WebSocket mode (must NOT use ngrok)
+if grep -q "ngrok tunnel" /tmp/cli-wss-test.log; then
+    echo "❌ ERROR: Test is using ngrok when it should use WebSocket mode"
+    echo "   Log output:"
+    tail -20 /tmp/cli-wss-test.log
+    exit 1
+fi
+
 # Check for WebSocket connection in logs
 if grep -q "Connected to Stripe WebSocket" /tmp/cli-wss-test.log; then
     echo "✓ WebSocket connected successfully"
 else
-    echo "⚠️  WebSocket connection status unknown"
+    echo "❌ ERROR: WebSocket connection not found in logs"
     echo "   Log output:"
     tail -20 /tmp/cli-wss-test.log
+    exit 1
 fi
 echo ""
 
