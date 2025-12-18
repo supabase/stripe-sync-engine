@@ -32,6 +32,7 @@ import { reviewSchema } from './schemas/review'
 import { refundSchema } from './schemas/refund'
 import { activeEntitlementSchema } from './schemas/active_entitlement'
 import { featureSchema } from './schemas/feature'
+import { invoicePaymentSchema } from './schemas/invoice_payment'
 import type { PoolConfig } from 'pg'
 
 function getUniqueIds<T>(entries: T[], key: string): string[] {
@@ -553,6 +554,24 @@ export class StripeSync {
         )
         break
       }
+      case 'invoice_payment.paid': {
+        const { entity: invoicePayment, refetched } = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.InvoicePayment,
+          (id) => this.stripe.invoicePayments.retrieve(id)
+        )
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for invoicePayment ${invoicePayment.id}`
+        )
+
+        await this.upsertInvoicePayments(
+          [invoicePayment],
+          false,
+          this.getSyncTimestamp(event, refetched)
+        )
+
+        break
+      }
       default:
         throw new Error('Unhandled webhook event')
     }
@@ -627,6 +646,10 @@ export class StripeSync {
       return this.stripe.reviews.retrieve(stripeId).then((it) => this.upsertReviews([it]))
     } else if (stripeId.startsWith('re_')) {
       return this.stripe.refunds.retrieve(stripeId).then((it) => this.upsertRefunds([it]))
+    } else if (stripeId.startsWith('inpay_')) {
+      return this.stripe.invoicePayments
+        .retrieve(stripeId)
+        .then((it) => this.upsertInvoicePayments([it]))
     } else if (stripeId.startsWith('feat_')) {
       return this.stripe.entitlements.features
         .retrieve(stripeId)
@@ -1277,6 +1300,43 @@ export class StripeSync {
     const missingIds = await this.postgresClient.findMissingEntries('prices', priceIds)
     await this.fetchMissingEntities(missingIds, (id) => this.stripe.prices.retrieve(id)).then(
       (entries) => this.upsertPrices(entries)
+    )
+  }
+
+  async upsertInvoicePayments(
+    invoicePayments: Stripe.InvoicePayment[],
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
+  ): Promise<Stripe.InvoicePayment[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      const invoiceIds = getUniqueIds(invoicePayments, 'invoice')
+      const paymentIntentIds: string[] = []
+      const chargeIds: string[] = []
+
+      for (const invoicePayment of invoicePayments) {
+        const payment = invoicePayment.payment as
+          | { type?: string; payment_intent?: string; charge?: string }
+          | undefined
+
+        if (payment?.type === 'payment_intent' && payment.payment_intent) {
+          paymentIntentIds.push(payment.payment_intent.toString())
+        } else if (payment?.type === 'charge' && payment.charge) {
+          chargeIds.push(payment.charge.toString())
+        }
+      }
+
+      await Promise.all([
+        this.backfillInvoices(invoiceIds),
+        this.backfillPaymentIntents([...new Set(paymentIntentIds)]),
+        this.backfillCharges([...new Set(chargeIds)]),
+      ])
+    }
+
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      invoicePayments,
+      'invoice_payments',
+      invoicePaymentSchema,
+      syncTimestamp
     )
   }
 

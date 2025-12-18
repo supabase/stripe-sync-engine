@@ -71,6 +71,7 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 - [x] `invoice.overpaid` 🟢
 - [x] `invoice.will_be_due` 🟢
 - [x] `invoice.voided` 🟢
+- [x] `invoice_payment.paid` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`
