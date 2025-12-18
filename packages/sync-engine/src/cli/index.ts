@@ -90,12 +90,10 @@ supabase
   .description('Uninstall Stripe sync from Supabase Edge Functions')
   .option('--token <token>', 'Supabase access token (or SUPABASE_ACCESS_TOKEN env)')
   .option('--project <ref>', 'Supabase project ref (or SUPABASE_PROJECT_REF env)')
-  .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .action(async (options) => {
     await uninstallCommand({
       supabaseAccessToken: options.token,
       supabaseProjectRef: options.project,
-      stripeKey: options.stripeKey,
     })
   })
 

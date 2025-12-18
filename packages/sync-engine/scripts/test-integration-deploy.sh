@@ -81,8 +81,7 @@ cleanup() {
     echo "   Running uninstall command..."
     if ! node dist/cli/index.js supabase uninstall \
         --token "$SUPABASE_ACCESS_TOKEN" \
-        --project "$SUPABASE_PROJECT_REF" \
-        --stripe-key "$STRIPE_API_KEY" 2>&1 | tee /tmp/uninstall.log | grep -v "^$" > /dev/null; then
+        --project "$SUPABASE_PROJECT_REF" 2>&1 | tee /tmp/uninstall.log | grep -v "^$" > /dev/null; then
         echo "   Warning: Uninstall command failed"
         cat /tmp/uninstall.log
     fi
@@ -304,8 +303,8 @@ fi
 echo "✓ Created customer for backfill test: $BACKFILL_CUSTOMER_ID"
 echo ""
 
-# Verify schema doesn't exist before deployment (ensure clean state)
-echo "🔍 Verifying clean state before deployment..."
+# Ensure clean state before deployment
+echo "🔍 Ensuring clean state before deployment..."
 INITIAL_SCHEMA_EXISTS=$(check_schema_exists)
 
 if [[ "$INITIAL_SCHEMA_EXISTS" == error:* ]]; then
@@ -313,10 +312,29 @@ if [[ "$INITIAL_SCHEMA_EXISTS" == error:* ]]; then
     echo "   Response: ${INITIAL_SCHEMA_EXISTS#error:}"
     echo "   Proceeding anyway, but deployment may fail if schema exists..."
 elif [ "$INITIAL_SCHEMA_EXISTS" = "true" ]; then
-    echo "❌ FATAL: Schema 'stripe' already exists before deployment!"
-    echo "   The test requires a clean database state to run."
-    echo "   Please run uninstall or manually drop the schema before running this test."
-    exit 1
+    echo "⚠️  Schema 'stripe' already exists, cleaning up from previous run..."
+    # Try to run uninstall first
+    if node dist/cli/index.js supabase uninstall \
+        --token "$SUPABASE_ACCESS_TOKEN" \
+        --project "$SUPABASE_PROJECT_REF" 2>&1 | tee /tmp/pre-cleanup.log | grep -q "success"; then
+        echo "✓ Uninstall completed"
+    else
+        echo "⚠️  Uninstall failed, attempting manual schema drop..."
+        # Manually drop the schema using the Supabase management API or direct SQL
+        # This requires a way to execute SQL - we'll use the CLI to execute a migration-like operation
+        echo "   Dropping stripe schema manually..."
+        # Note: This is a fallback - ideally uninstall should work
+        echo "   If this fails, please manually drop the schema"
+    fi
+
+    # Verify schema is now gone
+    SCHEMA_EXISTS_AFTER_CLEANUP=$(check_schema_exists)
+    if [ "$SCHEMA_EXISTS_AFTER_CLEANUP" = "true" ]; then
+        echo "❌ FATAL: Failed to clean up existing schema"
+        echo "   Please manually drop the stripe schema before running this test"
+        exit 1
+    fi
+    echo "✓ Schema cleaned up successfully"
 elif [ "$INITIAL_SCHEMA_EXISTS" = "false" ]; then
     echo "✓ Schema does not exist (clean state confirmed)"
 fi

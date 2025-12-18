@@ -1,7 +1,6 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
 import { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
 import pkg from '../../package.json' with { type: 'json' }
-import Stripe from 'stripe'
 
 export const STRIPE_SCHEMA_COMMENT_PREFIX = 'stripe-sync'
 export const INSTALLATION_STARTED_SUFFIX = 'installation:started'
@@ -25,6 +24,7 @@ export class SupabaseSetupClient {
   private api: SupabaseManagementAPI
   private projectRef: string
   private projectBaseUrl: string
+  private accessToken: string
 
   constructor(options: DeployClientOptions) {
     this.api = new SupabaseManagementAPI({
@@ -33,6 +33,7 @@ export class SupabaseSetupClient {
     })
     this.projectRef = options.projectRef
     this.projectBaseUrl = options.projectBaseUrl || process.env.SUPABASE_BASE_URL || 'supabase.co'
+    this.accessToken = options.accessToken
   }
 
   /**
@@ -54,7 +55,7 @@ export class SupabaseSetupClient {
   /**
    * Deploy an Edge Function
    */
-  async deployFunction(name: string, code: string): Promise<void> {
+  async deployFunction(name: string, code: string, verifyJwt = false): Promise<void> {
     // Check if function exists
     const functions = await this.api.listFunctions(this.projectRef)
     const exists = functions?.some((f) => f.slug === name)
@@ -63,7 +64,7 @@ export class SupabaseSetupClient {
       // Update existing function
       await this.api.updateFunction(this.projectRef, name, {
         body: code,
-        verify_jwt: false,
+        verify_jwt: verifyJwt,
       })
     } else {
       // Create new function
@@ -71,7 +72,7 @@ export class SupabaseSetupClient {
         slug: name,
         name: name,
         body: code,
-        verify_jwt: false,
+        verify_jwt: verifyJwt,
       })
     }
   }
@@ -367,100 +368,35 @@ export class SupabaseSetupClient {
 
   /**
    * Uninstall stripe-sync from a Supabase project
-   * Removes all Edge Functions, secrets, database resources, and Stripe webhooks
+   * Invokes the stripe-setup edge function's DELETE endpoint which handles cleanup
    */
-  async uninstall(stripeSecretKey?: string): Promise<void> {
-    const stripe = stripeSecretKey
-      ? new Stripe(stripeSecretKey, { apiVersion: '2025-02-24.acacia' })
-      : null
-
+  async uninstall(): Promise<void> {
     try {
-      // Step 1: Get webhook IDs from database before dropping schema
-      try {
-        const webhookResult = (await this.runSQL(`
-          SELECT id FROM stripe._managed_webhooks WHERE id IS NOT NULL
-        `)) as { rows?: { id: string }[] }[]
+      // Get service role key for authentication
+      const serviceRoleKey = await this.getServiceRoleKey()
 
-        const webhookIds = webhookResult[0]?.rows?.map((r) => r.id) || []
+      // Invoke the DELETE endpoint on stripe-setup function
+      const url = `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-setup`
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          supabase_access_token: this.accessToken,
+          supabase_project_ref: this.projectRef,
+        }),
+      })
 
-        // Step 2: Delete Stripe webhooks via Stripe API
-        for (const webhookId of webhookIds) {
-          try {
-            await stripe?.webhookEndpoints.del(webhookId)
-          } catch (err) {
-            console.warn(`Could not delete Stripe webhook ${webhookId}:`, err)
-          }
-        }
-      } catch (err) {
-        console.warn('Could not query/delete webhooks:', err)
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(`Uninstall failed: ${response.status} ${text}`)
       }
 
-      // Step 3: Delete Edge Functions
-      await this.deleteFunction('stripe-setup')
-      await this.deleteFunction('stripe-webhook')
-      await this.deleteFunction('stripe-worker')
-
-      // Step 4: Delete Supabase secrets
-      await this.deleteSecret('STRIPE_SECRET_KEY')
-
-      // Step 5: Unschedule pg_cron job
-      try {
-        await this.runSQL(`
-          DO $$
-          BEGIN
-            IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-worker') THEN
-              PERFORM cron.unschedule('stripe-sync-worker');
-            END IF;
-          END $$;
-        `)
-      } catch (err) {
-        console.warn('Could not unschedule pg_cron job:', err)
-      }
-
-      // Step 6: Delete vault secret
-      try {
-        await this.runSQL(`
-          DELETE FROM vault.secrets
-          WHERE name = 'stripe_sync_service_role_key'
-        `)
-      } catch (err) {
-        console.warn('Could not delete vault secret:', err)
-      }
-
-      // Step 7: Terminate connections holding locks on stripe schema
-      // This ensures any running pg_cron jobs or other queries release their locks
-      try {
-        await this.runSQL(`
-          SELECT pg_terminate_backend(pid)
-          FROM pg_locks l
-          JOIN pg_class c ON l.relation = c.oid
-          JOIN pg_namespace n ON c.relnamespace = n.oid
-          WHERE n.nspname = 'stripe'
-            AND l.pid != pg_backend_pid()
-        `)
-      } catch (err) {
-        console.warn('Could not terminate connections:', err)
-      }
-
-      // Step 8: Drop schema with retry (in case locks are still held)
-      let dropAttempts = 0
-      const maxAttempts = 3
-      while (dropAttempts < maxAttempts) {
-        try {
-          await this.runSQL(`DROP SCHEMA IF EXISTS stripe CASCADE`)
-          break // Success, exit loop
-        } catch (err) {
-          dropAttempts++
-          if (dropAttempts >= maxAttempts) {
-            throw new Error(
-              `Failed to drop schema after ${maxAttempts} attempts. ` +
-                `There may be active connections or locks on the stripe schema. ` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`
-            )
-          }
-          // Wait 1 second before retrying
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-        }
+      const result = (await response.json()) as { success?: boolean; error?: string }
+      if (result.success === false) {
+        throw new Error(`Uninstall failed: ${result.error}`)
       }
     } catch (error) {
       throw new Error(`Uninstall failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -512,9 +448,9 @@ export class SupabaseSetupClient {
       const versionedWebhook = this.injectPackageVersion(webhookFunctionCode, version)
       const versionedWorker = this.injectPackageVersion(workerFunctionCode, version)
 
-      await this.deployFunction('stripe-setup', versionedSetup)
-      await this.deployFunction('stripe-webhook', versionedWebhook)
-      await this.deployFunction('stripe-worker', versionedWorker)
+      await this.deployFunction('stripe-setup', versionedSetup, true)
+      await this.deployFunction('stripe-webhook', versionedWebhook, false)
+      await this.deployFunction('stripe-worker', versionedWorker, true)
 
       // Set secrets
       await this.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }])
@@ -575,27 +511,17 @@ export async function install(params: {
 export async function uninstall(params: {
   supabaseAccessToken: string
   supabaseProjectRef: string
-  stripeKey?: string
   baseProjectUrl?: string
-  baseManagementApiUrl?: string
+  baseManagementApiBaseUrl?: string
 }): Promise<void> {
-  const { supabaseAccessToken, supabaseProjectRef, stripeKey } = params
-
-  const trimmedStripeKey = stripeKey && stripeKey.trim()
-  if (
-    trimmedStripeKey &&
-    !trimmedStripeKey.startsWith('sk_') &&
-    !trimmedStripeKey.startsWith('rk_')
-  ) {
-    throw new Error('Stripe key should start with "sk_" or "rk_"')
-  }
+  const { supabaseAccessToken, supabaseProjectRef } = params
 
   const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
     projectRef: supabaseProjectRef,
     projectBaseUrl: params.baseProjectUrl,
-    managementApiBaseUrl: params.baseManagementApiUrl,
+    managementApiBaseUrl: params.baseManagementApiBaseUrl,
   })
 
-  await client.uninstall(trimmedStripeKey)
+  await client.uninstall()
 }

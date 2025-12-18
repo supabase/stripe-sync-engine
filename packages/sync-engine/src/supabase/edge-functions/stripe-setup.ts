@@ -1,13 +1,50 @@
 import { StripeSync, runMigrations, VERSION } from 'npm:stripe-experiment-sync'
 import postgres from 'npm:postgres'
 
-Deno.serve(async (req) => {
-  // Require authentication for both GET and POST
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response('Unauthorized', { status: 401 })
-  }
+// Helper to delete edge function via Management API
+async function deleteEdgeFunction(
+  projectRef: string,
+  functionSlug: string,
+  accessToken: string
+): Promise<void> {
+  const url = `https://api.supabase.com/v1/projects/${projectRef}/functions/${functionSlug}`
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
 
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text()
+    throw new Error(`Failed to delete function ${functionSlug}: ${response.status} ${text}`)
+  }
+}
+
+// Helper to delete secrets via Management API
+async function deleteSecret(
+  projectRef: string,
+  secretName: string,
+  accessToken: string
+): Promise<void> {
+  const url = `https://api.supabase.com/v1/projects/${projectRef}/secrets`
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify([secretName]),
+  })
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text()
+    console.warn(`Failed to delete secret ${secretName}: ${response.status} ${text}`)
+  }
+}
+
+Deno.serve(async (req) => {
   // Handle GET requests for status
   if (req.method === 'GET') {
     const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
@@ -95,7 +132,166 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Handle POST requests for setup (existing logic)
+  // Handle DELETE requests for uninstall
+  if (req.method === 'DELETE') {
+    let stripeSync = null
+    try {
+      // Parse request body
+      const body = await req.json()
+      const { supabase_access_token, supabase_project_ref } = body
+
+      if (!supabase_access_token || !supabase_project_ref) {
+        throw new Error(
+          'supabase_access_token and supabase_project_ref are required in request body'
+        )
+      }
+
+      // Get and validate database URL
+      const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
+      if (!rawDbUrl) {
+        throw new Error('SUPABASE_DB_URL environment variable is not set')
+      }
+      // Remove sslmode from connection string (not supported by pg in Deno)
+      const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
+
+      // Stripe key is required for uninstall to delete webhooks
+      const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+      if (!stripeKey) {
+        throw new Error('STRIPE_SECRET_KEY environment variable is required for uninstall')
+      }
+
+      // Step 1: Delete Stripe webhooks and clean up database
+      stripeSync = new StripeSync({
+        poolConfig: { connectionString: dbUrl, max: 2 },
+        stripeSecretKey: stripeKey,
+      })
+
+      // Delete all managed webhooks
+      const webhooks = await stripeSync.listManagedWebhooks()
+      for (const webhook of webhooks) {
+        try {
+          await stripeSync.deleteManagedWebhook(webhook.id)
+          console.log(`Deleted webhook: ${webhook.id}`)
+        } catch (err) {
+          console.warn(`Could not delete webhook ${webhook.id}:`, err)
+        }
+      }
+
+      // Unschedule pg_cron job
+      try {
+        await stripeSync.postgresClient.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-worker') THEN
+              PERFORM cron.unschedule('stripe-sync-worker');
+            END IF;
+          END $$;
+        `)
+      } catch (err) {
+        console.warn('Could not unschedule pg_cron job:', err)
+      }
+
+      // Delete vault secret
+      try {
+        await stripeSync.postgresClient.query(`
+          DELETE FROM vault.secrets
+          WHERE name = 'stripe_sync_service_role_key'
+        `)
+      } catch (err) {
+        console.warn('Could not delete vault secret:', err)
+      }
+
+      // Terminate connections holding locks on stripe schema
+      try {
+        await stripeSync.postgresClient.query(`
+          SELECT pg_terminate_backend(pid)
+          FROM pg_locks l
+          JOIN pg_class c ON l.relation = c.oid
+          JOIN pg_namespace n ON c.relnamespace = n.oid
+          WHERE n.nspname = 'stripe'
+            AND l.pid != pg_backend_pid()
+        `)
+      } catch (err) {
+        console.warn('Could not terminate connections:', err)
+      }
+
+      // Drop schema with retry
+      let dropAttempts = 0
+      const maxAttempts = 3
+      while (dropAttempts < maxAttempts) {
+        try {
+          await stripeSync.postgresClient.query('DROP SCHEMA IF EXISTS stripe CASCADE')
+          break // Success, exit loop
+        } catch (err) {
+          dropAttempts++
+          if (dropAttempts >= maxAttempts) {
+            throw new Error(
+              `Failed to drop schema after ${maxAttempts} attempts. ` +
+                `There may be active connections or locks on the stripe schema. ` +
+                `Error: ${err.message}`
+            )
+          }
+          // Wait 1 second before retrying
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+      }
+
+      await stripeSync.postgresClient.pool.end()
+
+      // Step 2: Delete Supabase secrets
+      try {
+        await deleteSecret(supabase_project_ref, 'STRIPE_SECRET_KEY', supabase_access_token)
+      } catch (err) {
+        console.warn('Could not delete STRIPE_SECRET_KEY secret:', err)
+      }
+
+      // Step 3: Delete Edge Functions
+      try {
+        await deleteEdgeFunction(supabase_project_ref, 'stripe-setup', supabase_access_token)
+      } catch (err) {
+        console.warn('Could not delete stripe-setup function:', err)
+      }
+
+      try {
+        await deleteEdgeFunction(supabase_project_ref, 'stripe-webhook', supabase_access_token)
+      } catch (err) {
+        console.warn('Could not delete stripe-webhook function:', err)
+      }
+
+      try {
+        await deleteEdgeFunction(supabase_project_ref, 'stripe-worker', supabase_access_token)
+      } catch (err) {
+        console.warn('Could not delete stripe-worker function:', err)
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Uninstall complete',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    } catch (error) {
+      console.error('Uninstall error:', error)
+      // Cleanup on error
+      if (stripeSync) {
+        try {
+          await stripeSync.postgresClient.pool.end()
+        } catch (cleanupErr) {
+          console.warn('Cleanup failed:', cleanupErr)
+        }
+      }
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  // Handle POST requests for install
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
   }

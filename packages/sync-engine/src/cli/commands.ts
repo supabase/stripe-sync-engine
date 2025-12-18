@@ -601,11 +601,9 @@ export async function uninstallCommand(options: DeployOptions): Promise<void> {
 
     let accessToken = options.supabaseAccessToken || process.env.SUPABASE_ACCESS_TOKEN || ''
     let projectRef = options.supabaseProjectRef || process.env.SUPABASE_PROJECT_REF || ''
-    let stripeKey =
-      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
 
     // Prompt for missing values
-    if (!accessToken || !projectRef || !stripeKey) {
+    if (!accessToken || !projectRef) {
       const inquirer = (await import('inquirer')).default
       const questions = []
 
@@ -628,26 +626,11 @@ export async function uninstallCommand(options: DeployOptions): Promise<void> {
         })
       }
 
-      if (!stripeKey) {
-        questions.push({
-          type: 'password',
-          name: 'stripeKey',
-          message: 'Enter your Stripe secret key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input.trim()) return 'Stripe key is required'
-            if (!input.startsWith('sk_')) return 'Stripe key should start with "sk_"'
-            return true
-          },
-        })
-      }
-
       if (questions.length > 0) {
         console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
         const answers = await inquirer.prompt(questions)
         if (answers.accessToken) accessToken = answers.accessToken
         if (answers.projectRef) projectRef = answers.projectRef
-        if (answers.stripeKey) stripeKey = answers.stripeKey
       }
     }
 
@@ -659,7 +642,6 @@ export async function uninstallCommand(options: DeployOptions): Promise<void> {
     await uninstall({
       supabaseAccessToken: accessToken,
       supabaseProjectRef: projectRef,
-      stripeKey,
     })
 
     // Print summary
