@@ -106,6 +106,7 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `invoice.overpaid` 🟢
 - [x] `invoice.will_be_due` 🟢
 - [x] `invoice.voided` 🟢
+- [x] `invoice_payment.paid` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`
