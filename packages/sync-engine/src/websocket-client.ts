@@ -1,8 +1,12 @@
 import WebSocket from 'ws'
 
 const CLI_VERSION = '1.33.0'
-const PONG_WAIT = 10 * 1000 // 10 seconds
-const PING_PERIOD = (PONG_WAIT * 2) / 10 // 2 seconds
+
+// Timing constants (matching Stripe CLI)
+const PONG_WAIT = 10 * 1000 // 10 seconds - max time to wait for pong
+const PING_PERIOD = (PONG_WAIT * 9) / 10 // 9 seconds - send ping before pong timeout
+const CONNECT_ATTEMPT_WAIT = 10 * 1000 // 10 seconds - retry interval on connection failure
+const DEFAULT_RECONNECT_INTERVAL = 60 * 1000 // 60 seconds - proactive reconnect interval
 
 export interface WebhookProcessingResult {
   status: number
@@ -101,6 +105,10 @@ async function createCliSession(stripeApiKey: string): Promise<CliSession> {
   return (await response.json()) as CliSession
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function createStripeWebSocketClient(
   options: StripeWebSocketOptions
 ): Promise<StripeWebSocketClient> {
@@ -109,151 +117,264 @@ export async function createStripeWebSocketClient(
   // Create session
   const session = await createCliSession(stripeApiKey)
 
+  // Server-controlled reconnect interval (default 60s)
+  const reconnectInterval = session.reconnect_delay
+    ? session.reconnect_delay * 1000
+    : DEFAULT_RECONNECT_INTERVAL
+
   let ws: WebSocket | null = null
   let pingInterval: NodeJS.Timeout | null = null
+  let reconnectTimer: NodeJS.Timeout | null = null
   let connected = false
-  let shouldReconnect = true
+  let shouldRun = true
+  let lastPongReceived: number = Date.now()
 
-  function connect() {
-    const wsUrl = `${session.websocket_url}?websocket_feature=${encodeURIComponent(session.websocket_authorized_feature)}`
+  // Signals for the run loop
+  let notifyCloseResolve: (() => void) | null = null
+  let stopResolve: (() => void) | null = null
 
-    ws = new WebSocket(wsUrl, {
-      headers: {
-        'Accept-Encoding': 'identity',
-        'User-Agent': `Stripe/v1 stripe-cli/${CLI_VERSION}`,
-        'X-Stripe-Client-User-Agent': getClientUserAgent(),
-        'Websocket-Id': session.websocket_id,
-      },
-    })
-
-    ws.on('pong', () => {
-      // Server responded to our ping
-    })
-
-    ws.on('open', () => {
-      connected = true
-
-      // Start sending pings to keep connection alive
-      pingInterval = setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.ping()
-        }
-      }, PING_PERIOD)
-
-      if (onReady) {
-        onReady(session.secret)
+  function cleanupConnection() {
+    if (pingInterval) {
+      clearInterval(pingInterval)
+      pingInterval = null
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    if (ws) {
+      ws.removeAllListeners()
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(1000, 'Resetting connection')
       }
-    })
+      ws = null
+    }
+    connected = false
+  }
 
-    ws.on('message', async (data: WebSocket.Data) => {
-      try {
-        const message = JSON.parse(data.toString()) as StripeWebhookEvent
+  function setupWebSocket(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      lastPongReceived = Date.now()
+      const wsUrl = `${session.websocket_url}?websocket_feature=${encodeURIComponent(session.websocket_authorized_feature)}`
 
-        // Send acknowledgment IMMEDIATELY (before processing)
-        // This prevents Stripe from retrying and sending duplicates
-        const ack: EventAck = {
-          type: 'event_ack',
-          event_id: message.webhook_id,
-          webhook_conversation_id: message.webhook_conversation_id,
-          webhook_id: message.webhook_id,
+      ws = new WebSocket(wsUrl, {
+        headers: {
+          'Accept-Encoding': 'identity',
+          'User-Agent': `Stripe/v1 stripe-cli/${CLI_VERSION}`,
+          'X-Stripe-Client-User-Agent': getClientUserAgent(),
+          'Websocket-Id': session.websocket_id,
+        },
+      })
+
+      const connectionTimeout = setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.CONNECTING) {
+          ws.terminate()
+          reject(new Error('WebSocket connection timeout'))
+        }
+      }, CONNECT_ATTEMPT_WAIT)
+
+      ws.on('pong', () => {
+        lastPongReceived = Date.now()
+      })
+
+      ws.on('open', () => {
+        clearTimeout(connectionTimeout)
+        connected = true
+
+        // Start ping/pong heartbeat
+        pingInterval = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            const timeSinceLastPong = Date.now() - lastPongReceived
+            if (timeSinceLastPong > PONG_WAIT) {
+              // Connection stale - trigger reconnect
+              if (onError) {
+                onError(new Error(`WebSocket stale: no pong in ${timeSinceLastPong}ms`))
+              }
+              if (notifyCloseResolve) {
+                notifyCloseResolve()
+                notifyCloseResolve = null
+              }
+              ws.terminate()
+              return
+            }
+            ws.ping()
+          }
+        }, PING_PERIOD)
+
+        if (onReady) {
+          onReady(session.secret)
         }
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(ack))
-        }
+        resolve()
+      })
 
-        // Process the event after ack is sent
-        let response: WebhookResponse
+      ws.on('message', async (data: WebSocket.Data) => {
         try {
-          const result = await onEvent(message)
-          response = {
-            type: 'webhook_response',
-            webhook_id: message.webhook_id,
+          const message = JSON.parse(data.toString()) as StripeWebhookEvent
+
+          // Send acknowledgment IMMEDIATELY (before processing)
+          const ack: EventAck = {
+            type: 'event_ack',
+            event_id: message.webhook_id,
             webhook_conversation_id: message.webhook_conversation_id,
-            forward_url: 'stripe-sync-engine',
-            status: result?.status ?? 200,
-            http_headers: {},
-            body: JSON.stringify({
-              event_type: result?.event_type,
-              event_id: result?.event_id,
-              database_url: result?.databaseUrl,
-              error: result?.error,
-            }),
-            request_headers: message.http_headers,
-            request_body: message.event_payload,
-            notification_id: message.webhook_id,
+            webhook_id: message.webhook_id,
+          }
+
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(ack))
+          }
+
+          // Process the event after ack is sent
+          let response: WebhookResponse
+          try {
+            const result = await onEvent(message)
+            response = {
+              type: 'webhook_response',
+              webhook_id: message.webhook_id,
+              webhook_conversation_id: message.webhook_conversation_id,
+              forward_url: 'stripe-sync-engine',
+              status: result?.status ?? 200,
+              http_headers: {},
+              body: JSON.stringify({
+                event_type: result?.event_type,
+                event_id: result?.event_id,
+                database_url: result?.databaseUrl,
+                error: result?.error,
+              }),
+              request_headers: message.http_headers,
+              request_body: message.event_payload,
+              notification_id: message.webhook_id,
+            }
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err)
+            response = {
+              type: 'webhook_response',
+              webhook_id: message.webhook_id,
+              webhook_conversation_id: message.webhook_conversation_id,
+              forward_url: 'stripe-sync-engine',
+              status: 500,
+              http_headers: {},
+              body: JSON.stringify({ error: errorMessage }),
+              request_headers: message.http_headers,
+              request_body: message.event_payload,
+              notification_id: message.webhook_id,
+            }
+            if (onError) {
+              onError(err instanceof Error ? err : new Error(errorMessage))
+            }
+          }
+
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(response))
           }
         } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err)
-          response = {
-            type: 'webhook_response',
-            webhook_id: message.webhook_id,
-            webhook_conversation_id: message.webhook_conversation_id,
-            forward_url: 'stripe-sync-engine',
-            status: 500,
-            http_headers: {},
-            body: JSON.stringify({ error: errorMessage }),
-            request_headers: message.http_headers,
-            request_body: message.event_payload,
-            notification_id: message.webhook_id,
-          }
           if (onError) {
-            onError(err instanceof Error ? err : new Error(errorMessage))
+            onError(err instanceof Error ? err : new Error(String(err)))
           }
         }
+      })
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(response))
-        }
-      } catch (err) {
+      ws.on('error', (error: Error) => {
+        clearTimeout(connectionTimeout)
         if (onError) {
-          onError(err instanceof Error ? err : new Error(String(err)))
+          onError(error)
         }
-      }
-    })
+        if (!connected) {
+          reject(error)
+        }
+      })
 
-    ws.on('error', (error: Error) => {
-      if (onError) {
-        onError(error)
-      }
-    })
+      ws.on('close', (code: number, reason: Buffer) => {
+        clearTimeout(connectionTimeout)
+        connected = false
 
-    ws.on('close', (code: number, reason: Buffer) => {
-      connected = false
+        if (pingInterval) {
+          clearInterval(pingInterval)
+          pingInterval = null
+        }
 
-      if (pingInterval) {
-        clearInterval(pingInterval)
-        pingInterval = null
-      }
+        if (onClose) {
+          onClose(code, reason.toString())
+        }
 
-      if (onClose) {
-        onClose(code, reason.toString())
-      }
-
-      // Reconnect if not intentionally closed
-      if (shouldReconnect) {
-        const delay = (session.reconnect_delay || 5) * 1000
-        setTimeout(() => {
-          connect()
-        }, delay)
-      }
+        // Signal unexpected close to the run loop
+        if (notifyCloseResolve) {
+          notifyCloseResolve()
+          notifyCloseResolve = null
+        }
+      })
     })
   }
 
-  // Start connection
-  connect()
+  // Main run loop (following Stripe CLI pattern)
+  async function runLoop() {
+    while (shouldRun) {
+      connected = false
+
+      // 1. Try to connect with retry on failure
+      let connectError: Error | null = null
+      do {
+        try {
+          await setupWebSocket()
+          connectError = null
+        } catch (err) {
+          connectError = err instanceof Error ? err : new Error(String(err))
+          if (onError) {
+            onError(connectError)
+          }
+          if (shouldRun) {
+            // Wait before retrying
+            await sleep(CONNECT_ATTEMPT_WAIT)
+          }
+        }
+      } while (connectError && shouldRun)
+
+      if (!shouldRun) break
+
+      // 2. Connection established - wait for one of these events:
+      //    - stop() called
+      //    - unexpected disconnect (notifyClose)
+      //    - proactive reconnect timer fires
+      await new Promise<void>((resolve) => {
+        // Set up notifyClose signal
+        notifyCloseResolve = resolve
+
+        // Set up stop signal
+        stopResolve = resolve
+
+        // Set up proactive reconnect timer
+        reconnectTimer = setTimeout(() => {
+          // Proactive reconnection to prevent stale connections
+          cleanupConnection()
+          resolve()
+        }, reconnectInterval)
+      })
+
+      // Clean up before next iteration or exit
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      notifyCloseResolve = null
+      stopResolve = null
+    }
+
+    // Final cleanup
+    cleanupConnection()
+  }
+
+  // Start the run loop (non-blocking)
+  runLoop()
 
   return {
     close: () => {
-      shouldReconnect = false
-      if (pingInterval) {
-        clearInterval(pingInterval)
-        pingInterval = null
+      shouldRun = false
+      // Signal the run loop to exit
+      if (stopResolve) {
+        stopResolve()
+        stopResolve = null
       }
-      if (ws) {
-        ws.close(1000, 'Connection Done')
-        ws = null
-      }
+      cleanupConnection()
     },
     isConnected: () => connected,
   }
