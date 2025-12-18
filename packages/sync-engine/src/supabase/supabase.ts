@@ -126,13 +126,12 @@ export class SupabaseSetupClient {
       )
     }
 
-    // Get service role key to store in vault
-    const serviceRoleKey = await this.getServiceRoleKey()
+    // Generate a unique secret for stripe-worker authentication
+    // This works even if service_role tokens are disabled
+    const workerSecret = crypto.randomUUID()
 
     // Escape single quotes to prevent SQL injection
-    // While the service role key comes from a trusted source (Supabase API),
-    // it's best practice to escape any values interpolated into SQL
-    const escapedServiceRoleKey = serviceRoleKey.replace(/'/g, "''")
+    const escapedWorkerSecret = workerSecret.replace(/'/g, "''")
 
     const sql = `
       -- Enable extensions
@@ -146,10 +145,10 @@ export class SupabaseSetupClient {
         SELECT 1 FROM pgmq.list_queues() WHERE queue_name = 'stripe_sync_work'
       );
 
-      -- Store service role key in vault for pg_cron to use
+      -- Store unique worker secret in vault for pg_cron to use
       -- Delete existing secret if it exists, then create new one
-      DELETE FROM vault.secrets WHERE name = 'stripe_sync_service_role_key';
-      SELECT vault.create_secret('${escapedServiceRoleKey}', 'stripe_sync_service_role_key');
+      DELETE FROM vault.secrets WHERE name = 'stripe_sync_worker_secret';
+      SELECT vault.create_secret('${escapedWorkerSecret}', 'stripe_sync_worker_secret');
 
       -- Delete existing jobs if they exist
       SELECT cron.unschedule('stripe-sync-worker') WHERE EXISTS (
@@ -168,7 +167,7 @@ export class SupabaseSetupClient {
         SELECT net.http_post(
           url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-worker',
           headers := jsonb_build_object(
-            'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_service_role_key')
+            'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_worker_secret')
           )
         )
         $$
@@ -182,18 +181,6 @@ export class SupabaseSetupClient {
    */
   getWebhookUrl(): string {
     return `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-webhook`
-  }
-
-  /**
-   * Get the service role key for this project (needed to invoke Edge Functions)
-   */
-  async getServiceRoleKey(): Promise<string> {
-    const apiKeys = await this.api.getProjectApiKeys(this.projectRef)
-    const serviceRoleKey = apiKeys?.find((k) => k.name === 'service_role')
-    if (!serviceRoleKey) {
-      throw new Error('Could not find service_role API key')
-    }
-    return serviceRoleKey.api_key
   }
 
   /**
@@ -220,13 +207,13 @@ export class SupabaseSetupClient {
    */
   async invokeFunction(
     name: string,
-    serviceRoleKey: string
+    bearerToken: string
   ): Promise<{ success: boolean; error?: string }> {
     const url = `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/${name}`
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
+        Authorization: `Bearer ${bearerToken}`,
         'Content-Type': 'application/json',
       },
     })
@@ -372,21 +359,15 @@ export class SupabaseSetupClient {
    */
   async uninstall(): Promise<void> {
     try {
-      // Get service role key for authentication
-      const serviceRoleKey = await this.getServiceRoleKey()
-
       // Invoke the DELETE endpoint on stripe-setup function
+      // Use accessToken in Authorization header for Management API validation
       const url = `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-setup`
       const response = await fetch(url, {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
+          Authorization: `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          supabase_access_token: this.accessToken,
-          supabase_project_ref: this.projectRef,
-        }),
       })
 
       if (!response.ok) {
@@ -448,16 +429,16 @@ export class SupabaseSetupClient {
       const versionedWebhook = this.injectPackageVersion(webhookFunctionCode, version)
       const versionedWorker = this.injectPackageVersion(workerFunctionCode, version)
 
-      await this.deployFunction('stripe-setup', versionedSetup, true)
+      await this.deployFunction('stripe-setup', versionedSetup, false)
       await this.deployFunction('stripe-webhook', versionedWebhook, false)
-      await this.deployFunction('stripe-worker', versionedWorker, true)
+      await this.deployFunction('stripe-worker', versionedWorker, false)
 
       // Set secrets
       await this.setSecrets([{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }])
 
       // Run setup (migrations + webhook creation)
-      const serviceRoleKey = await this.getServiceRoleKey()
-      const setupResult = await this.invokeFunction('stripe-setup', serviceRoleKey)
+      // Use accessToken for Management API validation
+      const setupResult = await this.invokeFunction('stripe-setup', this.accessToken)
 
       if (!setupResult.success) {
         throw new Error(`Setup failed: ${setupResult.error}`)

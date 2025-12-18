@@ -149,7 +149,7 @@ echo "   Deleting vault secret..."
 curl -s --max-time 10 -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
     -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{"query": "DELETE FROM vault.secrets WHERE name = '"'"'stripe_sync_service_role_key'"'"'"}' > /dev/null 2>&1 || true
+    -d '{"query": "DELETE FROM vault.secrets WHERE name = '"'"'stripe_sync_worker_secret'"'"'"}' > /dev/null 2>&1 || true
 
 # Drop stripe schema
 echo "   Dropping stripe schema..."

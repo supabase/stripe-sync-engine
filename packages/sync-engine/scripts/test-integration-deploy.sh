@@ -568,7 +568,7 @@ fi
 
 # Test 2: GET with auth should return status
 echo "   Testing GET with auth (should return 200)..."
-STATUS_RESPONSE=$(curl -s -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+STATUS_RESPONSE=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
     "https://$SUPABASE_PROJECT_REF.$SUPABASE_BASE_URL/functions/v1/stripe-setup")
 
 # Verify response has package_version field

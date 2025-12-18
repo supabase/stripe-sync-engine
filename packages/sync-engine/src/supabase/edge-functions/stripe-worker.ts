@@ -33,6 +33,8 @@ Deno.serve(async (req) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  const token = authHeader.substring(7) // Remove 'Bearer '
+
   const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
   if (!rawDbUrl) {
     return new Response(JSON.stringify({ error: 'SUPABASE_DB_URL not set' }), { status: 500 })
@@ -56,6 +58,24 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Validate that the token matches the unique worker secret stored in vault
+    const vaultResult = await sql`
+      SELECT decrypted_secret
+      FROM vault.decrypted_secrets
+      WHERE name = 'stripe_sync_worker_secret'
+    `
+
+    if (vaultResult.length === 0) {
+      await sql.end()
+      return new Response('Worker secret not configured in vault', { status: 500 })
+    }
+
+    const storedSecret = vaultResult[0].decrypted_secret
+    if (token !== storedSecret) {
+      await sql.end()
+      return new Response('Forbidden: Invalid worker secret', { status: 403 })
+    }
+
     stripeSync = new StripeSync({
       poolConfig: { connectionString: dbUrl, max: 1 },
       stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,

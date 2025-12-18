@@ -1,6 +1,23 @@
 import { StripeSync, runMigrations, VERSION } from 'npm:stripe-experiment-sync'
 import postgres from 'npm:postgres'
 
+// Helper to validate accessToken against Management API
+async function validateAccessToken(projectRef: string, accessToken: string): Promise<boolean> {
+  // Try to fetch project details using the access token
+  // This validates that the token is valid for the management API
+  const url = `https://api.supabase.com/v1/projects/${projectRef}`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  // If we can successfully get the project, the token is valid
+  return response.ok
+}
+
 // Helper to delete edge function via Management API
 async function deleteEdgeFunction(
   projectRef: string,
@@ -45,6 +62,28 @@ async function deleteSecret(
 }
 
 Deno.serve(async (req) => {
+  // Extract project ref from SUPABASE_URL (format: https://{projectRef}.{base})
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  if (!supabaseUrl) {
+    return new Response(JSON.stringify({ error: 'SUPABASE_URL not set' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  const projectRef = new URL(supabaseUrl).hostname.split('.')[0]
+
+  // Validate access token for all requests
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  const accessToken = authHeader.substring(7) // Remove 'Bearer '
+  const isValid = await validateAccessToken(projectRef, accessToken)
+  if (!isValid) {
+    return new Response('Forbidden: Invalid access token for this project', { status: 403 })
+  }
+
   // Handle GET requests for status
   if (req.method === 'GET') {
     const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
@@ -136,16 +175,6 @@ Deno.serve(async (req) => {
   if (req.method === 'DELETE') {
     let stripeSync = null
     try {
-      // Parse request body
-      const body = await req.json()
-      const { supabase_access_token, supabase_project_ref } = body
-
-      if (!supabase_access_token || !supabase_project_ref) {
-        throw new Error(
-          'supabase_access_token and supabase_project_ref are required in request body'
-        )
-      }
-
       // Get and validate database URL
       const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
       if (!rawDbUrl) {
@@ -195,7 +224,7 @@ Deno.serve(async (req) => {
       try {
         await stripeSync.postgresClient.query(`
           DELETE FROM vault.secrets
-          WHERE name = 'stripe_sync_service_role_key'
+          WHERE name = 'stripe_sync_worker_secret'
         `)
       } catch (err) {
         console.warn('Could not delete vault secret:', err)
@@ -240,26 +269,26 @@ Deno.serve(async (req) => {
 
       // Step 2: Delete Supabase secrets
       try {
-        await deleteSecret(supabase_project_ref, 'STRIPE_SECRET_KEY', supabase_access_token)
+        await deleteSecret(projectRef, 'STRIPE_SECRET_KEY', accessToken)
       } catch (err) {
         console.warn('Could not delete STRIPE_SECRET_KEY secret:', err)
       }
 
       // Step 3: Delete Edge Functions
       try {
-        await deleteEdgeFunction(supabase_project_ref, 'stripe-setup', supabase_access_token)
+        await deleteEdgeFunction(projectRef, 'stripe-setup', accessToken)
       } catch (err) {
         console.warn('Could not delete stripe-setup function:', err)
       }
 
       try {
-        await deleteEdgeFunction(supabase_project_ref, 'stripe-webhook', supabase_access_token)
+        await deleteEdgeFunction(projectRef, 'stripe-webhook', accessToken)
       } catch (err) {
         console.warn('Could not delete stripe-webhook function:', err)
       }
 
       try {
-        await deleteEdgeFunction(supabase_project_ref, 'stripe-worker', supabase_access_token)
+        await deleteEdgeFunction(projectRef, 'stripe-worker', accessToken)
       } catch (err) {
         console.warn('Could not delete stripe-worker function:', err)
       }
