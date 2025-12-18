@@ -1425,35 +1425,52 @@ export class StripeSync {
 
       let synced = 0
 
-      // 10 in parallel as chunks
-      for (const customerIdChunk of chunkArray(customerIds, 10)) {
+      // Process customers in parallel chunks (configurable concurrency)
+      const chunkSize = this.config.maxConcurrentCustomers ?? 10
+      for (const customerIdChunk of chunkArray(customerIds, chunkSize)) {
         await Promise.all(
           customerIdChunk.map(async (customerId) => {
             const CHECKPOINT_SIZE = 100
             let currentBatch: Stripe.PaymentMethod[] = []
 
-            for await (const item of this.stripe.paymentMethods.list({
-              limit: 100,
-              customer: customerId,
-            })) {
-              currentBatch.push(item)
-              if (currentBatch.length >= CHECKPOINT_SIZE) {
-                await this.upsertPaymentMethods(
-                  currentBatch,
-                  accountId,
-                  syncParams?.backfillRelatedEntities
-                )
-                synced += currentBatch.length
-                await this.postgresClient.incrementObjectProgress(
-                  accountId,
-                  runStartedAt,
-                  resourceName,
-                  currentBatch.length
-                )
-                currentBatch = []
+            // Manual pagination - each fetch() gets automatic retry protection
+            let hasMore = true
+            let startingAfter: string | undefined = undefined
+
+            while (hasMore) {
+              const response: Stripe.ApiList<Stripe.PaymentMethod> =
+                await this.stripe.paymentMethods.list({
+                  limit: 100,
+                  customer: customerId,
+                  ...(startingAfter ? { starting_after: startingAfter } : {}),
+                })
+
+              for (const item of response.data) {
+                currentBatch.push(item)
+                if (currentBatch.length >= CHECKPOINT_SIZE) {
+                  await this.upsertPaymentMethods(
+                    currentBatch,
+                    accountId,
+                    syncParams?.backfillRelatedEntities
+                  )
+                  synced += currentBatch.length
+                  await this.postgresClient.incrementObjectProgress(
+                    accountId,
+                    runStartedAt,
+                    resourceName,
+                    currentBatch.length
+                  )
+                  currentBatch = []
+                }
+              }
+
+              hasMore = response.has_more
+              if (response.data.length > 0) {
+                startingAfter = response.data[response.data.length - 1].id
               }
             }
 
+            // Process remaining items
             if (currentBatch.length > 0) {
               await this.upsertPaymentMethods(
                 currentBatch,
@@ -1502,7 +1519,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.products.list(params),
+        (pagination) => this.stripe.products.list({ ...params, ...pagination }),
         (products) => this.upsertProducts(products, accountId),
         accountId,
         'products',
@@ -1526,7 +1543,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.prices.list(params),
+        (pagination) => this.stripe.prices.list({ ...params, ...pagination }),
         (prices) => this.upsertPrices(prices, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'prices',
@@ -1550,7 +1567,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.plans.list(params),
+        (pagination) => this.stripe.plans.list({ ...params, ...pagination }),
         (plans) => this.upsertPlans(plans, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'plans',
@@ -1574,7 +1591,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.customers.list(params),
+        (pagination) => this.stripe.customers.list({ ...params, ...pagination }),
         // @ts-expect-error
         (items) => this.upsertCustomers(items, accountId),
         accountId,
@@ -1599,7 +1616,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.subscriptions.list(params),
+        (pagination) => this.stripe.subscriptions.list({ ...params, ...pagination }),
         (items) => this.upsertSubscriptions(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'subscriptions',
@@ -1626,7 +1643,7 @@ export class StripeSync {
         }
 
         return this.fetchAndUpsert(
-          () => this.stripe.subscriptionSchedules.list(params),
+          (pagination) => this.stripe.subscriptionSchedules.list({ ...params, ...pagination }),
           (items) =>
             this.upsertSubscriptionSchedules(items, accountId, syncParams?.backfillRelatedEntities),
           accountId,
@@ -1652,7 +1669,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.invoices.list(params),
+        (pagination) => this.stripe.invoices.list({ ...params, ...pagination }),
         (items) => this.upsertInvoices(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'invoices',
@@ -1676,7 +1693,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.charges.list(params),
+        (pagination) => this.stripe.charges.list({ ...params, ...pagination }),
         (items) => this.upsertCharges(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'charges',
@@ -1700,7 +1717,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.setupIntents.list(params),
+        (pagination) => this.stripe.setupIntents.list({ ...params, ...pagination }),
         (items) => this.upsertSetupIntents(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'setup_intents',
@@ -1727,7 +1744,7 @@ export class StripeSync {
         }
 
         return this.fetchAndUpsert(
-          () => this.stripe.paymentIntents.list(params),
+          (pagination) => this.stripe.paymentIntents.list({ ...params, ...pagination }),
           (items) =>
             this.upsertPaymentIntents(items, accountId, syncParams?.backfillRelatedEntities),
           accountId,
@@ -1746,7 +1763,7 @@ export class StripeSync {
       const params: Stripe.TaxIdListParams = { limit: 100 }
 
       return this.fetchAndUpsert(
-        () => this.stripe.taxIds.list(params),
+        (pagination) => this.stripe.taxIds.list({ ...params, ...pagination }),
         (items) => this.upsertTaxIds(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'tax_ids',
@@ -1780,35 +1797,52 @@ export class StripeSync {
 
         let synced = 0
 
-        // 10 in parallel as chunks
-        for (const customerIdChunk of chunkArray(customerIds, 10)) {
+        // Process customers in parallel chunks (configurable concurrency)
+        const chunkSize = this.config.maxConcurrentCustomers ?? 10
+        for (const customerIdChunk of chunkArray(customerIds, chunkSize)) {
           await Promise.all(
             customerIdChunk.map(async (customerId) => {
               const CHECKPOINT_SIZE = 100
               let currentBatch: Stripe.PaymentMethod[] = []
 
-              for await (const item of this.stripe.paymentMethods.list({
-                limit: 100,
-                customer: customerId,
-              })) {
-                currentBatch.push(item)
-                if (currentBatch.length >= CHECKPOINT_SIZE) {
-                  await this.upsertPaymentMethods(
-                    currentBatch,
-                    accountId,
-                    syncParams?.backfillRelatedEntities
-                  )
-                  synced += currentBatch.length
-                  await this.postgresClient.incrementObjectProgress(
-                    accountId,
-                    runStartedAt,
-                    'payment_methods',
-                    currentBatch.length
-                  )
-                  currentBatch = []
+              // Manual pagination - each fetch() gets automatic retry protection
+              let hasMore = true
+              let startingAfter: string | undefined = undefined
+
+              while (hasMore) {
+                const response: Stripe.ApiList<Stripe.PaymentMethod> =
+                  await this.stripe.paymentMethods.list({
+                    limit: 100,
+                    customer: customerId,
+                    ...(startingAfter ? { starting_after: startingAfter } : {}),
+                  })
+
+                for (const item of response.data) {
+                  currentBatch.push(item)
+                  if (currentBatch.length >= CHECKPOINT_SIZE) {
+                    await this.upsertPaymentMethods(
+                      currentBatch,
+                      accountId,
+                      syncParams?.backfillRelatedEntities
+                    )
+                    synced += currentBatch.length
+                    await this.postgresClient.incrementObjectProgress(
+                      accountId,
+                      runStartedAt,
+                      'payment_methods',
+                      currentBatch.length
+                    )
+                    currentBatch = []
+                  }
+                }
+
+                hasMore = response.has_more
+                if (response.data.length > 0) {
+                  startingAfter = response.data[response.data.length - 1].id
                 }
               }
 
+              // Process remaining items
               if (currentBatch.length > 0) {
                 await this.upsertPaymentMethods(
                   currentBatch,
@@ -1850,7 +1884,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.disputes.list(params),
+        (pagination) => this.stripe.disputes.list({ ...params, ...pagination }),
         (items) => this.upsertDisputes(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'disputes',
@@ -1877,7 +1911,7 @@ export class StripeSync {
         }
 
         return this.fetchAndUpsert(
-          () => this.stripe.radar.earlyFraudWarnings.list(params),
+          (pagination) => this.stripe.radar.earlyFraudWarnings.list({ ...params, ...pagination }),
           (items) =>
             this.upsertEarlyFraudWarning(items, accountId, syncParams?.backfillRelatedEntities),
           accountId,
@@ -1903,7 +1937,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.refunds.list(params),
+        (pagination) => this.stripe.refunds.list({ ...params, ...pagination }),
         (items) => this.upsertRefunds(items, accountId, syncParams?.backfillRelatedEntities),
         accountId,
         'refunds',
@@ -1927,7 +1961,7 @@ export class StripeSync {
       }
 
       return this.fetchAndUpsert(
-        () => this.stripe.creditNotes.list(params),
+        (pagination) => this.stripe.creditNotes.list({ ...params, ...pagination }),
         (creditNotes) => this.upsertCreditNotes(creditNotes, accountId),
         accountId,
         'credit_notes',
@@ -1997,7 +2031,7 @@ export class StripeSync {
         }
 
         return this.fetchAndUpsert(
-          () => this.stripe.checkout.sessions.list(params),
+          (pagination) => this.stripe.checkout.sessions.list({ ...params, ...pagination }),
           (items) =>
             this.upsertCheckoutSessions(items, accountId, syncParams?.backfillRelatedEntities),
           accountId,
@@ -2064,8 +2098,8 @@ export class StripeSync {
     }
   }
 
-  private async fetchAndUpsert<T>(
-    fetch: () => Stripe.ApiListPromise<T>,
+  private async fetchAndUpsert<T extends { id?: string }>(
+    fetch: (params?: { starting_after?: string }) => Promise<Stripe.ApiList<T>>,
     upsert: (items: T[], accountId: string) => Promise<T[]>,
     accountId: string,
     resourceName: string,
@@ -2079,36 +2113,51 @@ export class StripeSync {
       this.config.logger?.info('Fetching items to sync from Stripe')
 
       try {
-        for await (const item of fetch()) {
-          currentBatch.push(item)
+        let hasMore = true
+        let startingAfter: string | undefined = undefined
 
-          // Checkpoint every 100 items (1 Stripe page)
-          if (currentBatch.length >= CHECKPOINT_SIZE) {
-            this.config.logger?.info(`Upserting batch of ${currentBatch.length} items`)
-            await upsert(currentBatch, accountId)
-            totalSynced += currentBatch.length
+        // Manual pagination loop - each fetch() call gets automatic retry protection
+        while (hasMore) {
+          const response = await fetch(
+            startingAfter ? { starting_after: startingAfter } : undefined
+          )
 
-            // Update progress and cursor with max created from this batch
-            await this.postgresClient.incrementObjectProgress(
-              accountId,
-              runStartedAt,
-              resourceName,
-              currentBatch.length
-            )
-            const maxCreated = Math.max(
-              ...currentBatch.map((i) => (i as { created?: number }).created || 0)
-            )
-            if (maxCreated > 0) {
-              await this.postgresClient.updateObjectCursor(
+          for (const item of response.data) {
+            currentBatch.push(item)
+
+            // Checkpoint every 100 items (1 Stripe page)
+            if (currentBatch.length >= CHECKPOINT_SIZE) {
+              this.config.logger?.info(`Upserting batch of ${currentBatch.length} items`)
+              await upsert(currentBatch, accountId)
+              totalSynced += currentBatch.length
+
+              // Update progress and cursor with max created from this batch
+              await this.postgresClient.incrementObjectProgress(
                 accountId,
                 runStartedAt,
                 resourceName,
-                String(maxCreated)
+                currentBatch.length
               )
-              this.config.logger?.info(`Checkpoint: cursor updated to ${maxCreated}`)
-            }
+              const maxCreated = Math.max(
+                ...currentBatch.map((i) => (i as { created?: number }).created || 0)
+              )
+              if (maxCreated > 0) {
+                await this.postgresClient.updateObjectCursor(
+                  accountId,
+                  runStartedAt,
+                  resourceName,
+                  String(maxCreated)
+                )
+                this.config.logger?.info(`Checkpoint: cursor updated to ${maxCreated}`)
+              }
 
-            currentBatch = []
+              currentBatch = []
+            }
+          }
+
+          hasMore = response.has_more
+          if (response.data.length > 0) {
+            startingAfter = response.data[response.data.length - 1].id
           }
         }
 
@@ -2621,10 +2670,23 @@ export class StripeSync {
     for (const checkoutSessionId of checkoutSessionIds) {
       const lineItemResponses: Stripe.LineItem[] = []
 
-      for await (const lineItem of this.stripe.checkout.sessions.listLineItems(checkoutSessionId, {
-        limit: 100,
-      })) {
-        lineItemResponses.push(lineItem)
+      // Manual pagination - each fetch() gets automatic retry protection
+      let hasMore = true
+      let startingAfter: string | undefined = undefined
+
+      while (hasMore) {
+        const response: Stripe.ApiList<Stripe.LineItem> =
+          await this.stripe.checkout.sessions.listLineItems(checkoutSessionId, {
+            limit: 100,
+            ...(startingAfter ? { starting_after: startingAfter } : {}),
+          })
+
+        lineItemResponses.push(...response.data)
+
+        hasMore = response.has_more
+        if (response.data.length > 0) {
+          startingAfter = response.data[response.data.length - 1].id
+        }
       }
 
       await this.upsertCheckoutSessionLineItems(
@@ -3074,19 +3136,39 @@ export class StripeSync {
 
   /**
    * Stripe only sends the first 10 entries by default, the option will actively fetch all entries.
+   * Uses manual pagination - each fetch() gets automatic retry protection.
    */
   private async expandEntity<
-    K,
+    K extends { id?: string },
     P extends keyof T,
     T extends { id?: string } & { [key in P]?: Stripe.ApiList<K> | null },
-  >(entities: T[], property: P, listFn: (id: string) => Stripe.ApiListPromise<K>) {
+  >(
+    entities: T[],
+    property: P,
+    listFn: (id: string, params?: { starting_after?: string }) => Promise<Stripe.ApiList<K>>
+  ) {
     if (!this.config.autoExpandLists) return
 
     for (const entity of entities) {
       if (entity[property]?.has_more) {
         const allData: K[] = []
-        for await (const fetchedEntity of listFn(entity.id!)) {
-          allData.push(fetchedEntity)
+
+        // Manual pagination - each fetch() gets automatic retry protection
+        let hasMore = true
+        let startingAfter: string | undefined = undefined
+
+        while (hasMore) {
+          const response = await listFn(
+            entity.id!,
+            startingAfter ? { starting_after: startingAfter } : undefined
+          )
+
+          allData.push(...response.data)
+
+          hasMore = response.has_more
+          if (response.data.length > 0) {
+            startingAfter = response.data[response.data.length - 1].id
+          }
         }
 
         entity[property] = {

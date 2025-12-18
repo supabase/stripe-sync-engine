@@ -96,6 +96,13 @@ export type StripeSyncConfig = {
    * Default: 500
    */
   retryJitterMs?: number
+
+  /**
+   * Maximum number of customers to process concurrently when syncing payment methods.
+   * Lower values reduce API load but increase sync time.
+   * Default: 10
+   */
+  maxConcurrentCustomers?: number
 }
 
 export type SyncObject =

@@ -102,15 +102,12 @@ describe('Incremental Sync', () => {
     ]
 
     // Mock Stripe API for first sync - returns all products
-    const mockList = vitest.fn(async function* () {
-      for (const product of allProducts) {
-        yield product
-      }
+    const listSpy = vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: allProducts,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    const listSpy = vitest
-      .spyOn(stripeSync.stripe.products, 'list')
-      .mockReturnValue(mockList() as unknown)
 
     // First sync - no cursor, should fetch all
     await stripeSync.syncProducts()
@@ -129,15 +126,12 @@ describe('Incremental Sync', () => {
     expect(cursor).toBe(1705075200) // Max created from first sync
 
     // Mock Stripe API for second sync - only returns new products
-    const mockListIncremental = vitest.fn(async function* () {
-      for (const product of newProducts) {
-        yield product
-      }
+    const listSpyIncremental = vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: newProducts,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    const listSpyIncremental = vitest
-      .spyOn(stripeSync.stripe.products, 'list')
-      .mockReturnValue(mockListIncremental() as unknown)
 
     // Second sync - should use cursor
     await stripeSync.syncProducts()
@@ -167,13 +161,12 @@ describe('Incremental Sync', () => {
       name: `Product ${i}`,
     })) as Stripe.Product[]
 
-    const mockList = vitest.fn(async function* () {
-      for (const product of products) {
-        yield product
-      }
+    vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: products,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
 
     // Spy on updateObjectCursor (new observability method)
     const updateSpy = vitest.spyOn(stripeSync.postgresClient, 'updateObjectCursor')
@@ -220,13 +213,12 @@ describe('Incremental Sync', () => {
       } as Stripe.Product,
     ]
 
-    const mockList = vitest.fn(async function* () {
-      for (const product of products) {
-        yield product
-      }
+    vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: products,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
 
     await stripeSync.syncProducts()
 
@@ -267,13 +259,12 @@ describe('Incremental Sync', () => {
       } as Stripe.Product,
     ]
 
-    const mockSetupList = vitest.fn(async function* () {
-      for (const product of setupProducts) {
-        yield product
-      }
+    vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: setupProducts,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockSetupList() as unknown)
     await stripeSync.syncProducts()
 
     // Verify cursor was set
@@ -292,15 +283,12 @@ describe('Incremental Sync', () => {
       } as Stripe.Product,
     ]
 
-    const mockList = vitest.fn(async function* () {
-      for (const product of products) {
-        yield product
-      }
+    const listSpy = vitest.spyOn(stripeSync.stripe.products, 'list').mockResolvedValue({
+      object: 'list',
+      data: products,
+      has_more: false,
+      url: '/v1/products',
     })
-
-    const listSpy = vitest
-      .spyOn(stripeSync.stripe.products, 'list')
-      .mockReturnValue(mockList() as unknown)
 
     // Call with explicit filter (earlier than cursor)
     await stripeSync.syncProducts({
@@ -325,23 +313,36 @@ describe('Incremental Sync', () => {
     ]
 
     let callCount = 0
-    const mockList = vitest.fn(async function* () {
-      for (const product of products) {
-        yield product
-      }
-      // Simulate error after yielding products
+    let hasThrown = false
+    vitest.spyOn(stripeSync.stripe.products, 'list').mockImplementation(async () => {
       callCount++
-      if (callCount === 1) {
+      if (callCount === 1 && !hasThrown) {
+        // First page succeeds with products
+        return {
+          object: 'list',
+          data: products,
+          has_more: true, // Indicate there's more (but second fetch will fail)
+          url: '/v1/products',
+        }
+      } else if (callCount === 2 && !hasThrown) {
+        // Second fetch fails (only on first sync)
+        hasThrown = true
         throw new Error('Simulated sync error')
+      } else {
+        // After first sync, just return products without more pages
+        return {
+          object: 'list',
+          data: callCount === 1 ? products : [],
+          has_more: false,
+          url: '/v1/products',
+        }
       }
     })
-
-    vitest.spyOn(stripeSync.stripe.products, 'list').mockReturnValue(mockList() as unknown)
 
     // First attempt should fail but save checkpoint
     await expect(stripeSync.syncProducts()).rejects.toThrow('Simulated sync error')
 
-    // Cursor should be saved up to checkpoint
+    // Cursor should be saved up to checkpoint (first product was processed successfully)
     const cursor = await getCursor('products')
     expect(cursor).toBe(1704902400)
 
@@ -368,7 +369,7 @@ describe('Incremental Sync', () => {
     expect(objStatus.rows[0].status).toBe('error')
     expect(objStatus.rows[0].error_message).toContain('Simulated sync error')
 
-    // Second attempt should succeed
+    // Second attempt should succeed - reset callCount
     callCount = 0
     await stripeSync.syncProducts()
 
