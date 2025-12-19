@@ -3,7 +3,7 @@ import postgres from 'npm:postgres'
 
 // Get management API base URL from environment variable (for testing against localhost/staging)
 // Caller should provide full URL with protocol (e.g., http://localhost:54323 or https://api.supabase.com)
-const MGMT_API_BASE_RAW = Deno.env.get('SUPABASE_MANAGEMENT_URL') || 'https://api.supabase.com'
+const MGMT_API_BASE_RAW = Deno.env.get('MANAGEMENT_API_URL') || 'https://api.supabase.com'
 const MGMT_API_BASE = MGMT_API_BASE_RAW.match(/^https?:\/\//)
   ? MGMT_API_BASE_RAW
   : `https://${MGMT_API_BASE_RAW}`

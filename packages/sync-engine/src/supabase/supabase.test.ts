@@ -559,10 +559,10 @@ describe('SupabaseDeployClient', () => {
 
       await client.install('sk_test_key')
 
-      // Should set both STRIPE_SECRET_KEY and SUPABASE_MANAGEMENT_URL
+      // Should set both STRIPE_SECRET_KEY and MANAGEMENT_API_URL
       expect(mockSetSecrets).toHaveBeenCalledWith([
         { name: 'STRIPE_SECRET_KEY', value: 'sk_test_key' },
-        { name: 'SUPABASE_MANAGEMENT_URL', value: 'http://localhost:54323' },
+        { name: 'MANAGEMENT_API_URL', value: 'http://localhost:54323' },
       ])
     })
 

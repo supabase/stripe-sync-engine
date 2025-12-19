@@ -437,9 +437,9 @@ export class SupabaseSetupClient {
 
       // Set secrets (Note: "secrets" is Supabase's mechanism for passing environment variables to edge functions)
       const secrets = [{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }]
-      // Add SUPABASE_MANAGEMENT_URL if custom URL provided (for localhost/staging testing)
+      // Add MANAGEMENT_API_URL if custom URL provided (for localhost/staging testing)
       if (this.supabaseManagementUrl) {
-        secrets.push({ name: 'SUPABASE_MANAGEMENT_URL', value: this.supabaseManagementUrl })
+        secrets.push({ name: 'MANAGEMENT_API_URL', value: this.supabaseManagementUrl })
       }
       await this.setSecrets(secrets)
 
