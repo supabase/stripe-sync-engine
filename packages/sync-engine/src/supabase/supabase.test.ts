@@ -516,4 +516,88 @@ describe('SupabaseDeployClient', () => {
       expect(mockRunSQL).toHaveBeenCalledWith(expect.stringContaining('custom_schema'))
     })
   })
+
+  describe('Management API URL Configuration', () => {
+    it('should store custom management URL', () => {
+      const customUrl = 'http://localhost:54323'
+      const client = new SupabaseSetupClient({
+        accessToken: mockAccessToken,
+        projectRef: mockProjectRef,
+        supabaseManagementUrl: customUrl,
+      })
+
+      // @ts-expect-error - accessing private property for testing
+      expect(client.supabaseManagementUrl).toBe(customUrl)
+    })
+
+    it('should set management URL as secret during install when provided', async () => {
+      const mockSetSecrets = vi.fn().mockResolvedValue(null)
+
+      const client = new SupabaseSetupClient({
+        accessToken: mockAccessToken,
+        projectRef: mockProjectRef,
+        supabaseManagementUrl: 'http://localhost:54323',
+      })
+
+      // Mock only what we need to test
+      // @ts-expect-error - mocking for test
+      client.validateProject = vi
+        .fn()
+        .mockResolvedValue({ id: mockProjectRef, name: 'test', region: 'us-east-1' })
+      // @ts-expect-error - mocking for test
+      client.runSQL = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.deployFunction = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.setSecrets = mockSetSecrets
+      // @ts-expect-error - mocking for test
+      client.invokeFunction = vi.fn().mockResolvedValue({ success: true })
+      // @ts-expect-error - mocking for test
+      client.setupPgCronJob = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.updateInstallationComment = vi.fn().mockResolvedValue(null)
+
+      await client.install('sk_test_key')
+
+      // Should set both STRIPE_SECRET_KEY and SUPABASE_MANAGEMENT_URL
+      expect(mockSetSecrets).toHaveBeenCalledWith([
+        { name: 'STRIPE_SECRET_KEY', value: 'sk_test_key' },
+        { name: 'SUPABASE_MANAGEMENT_URL', value: 'http://localhost:54323' },
+      ])
+    })
+
+    it('should only set STRIPE_SECRET_KEY when no custom management URL', async () => {
+      const mockSetSecrets = vi.fn().mockResolvedValue(null)
+
+      const client = new SupabaseSetupClient({
+        accessToken: mockAccessToken,
+        projectRef: mockProjectRef,
+      })
+
+      // Mock only what we need to test
+      // @ts-expect-error - mocking for test
+      client.validateProject = vi
+        .fn()
+        .mockResolvedValue({ id: mockProjectRef, name: 'test', region: 'us-east-1' })
+      // @ts-expect-error - mocking for test
+      client.runSQL = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.deployFunction = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.setSecrets = mockSetSecrets
+      // @ts-expect-error - mocking for test
+      client.invokeFunction = vi.fn().mockResolvedValue({ success: true })
+      // @ts-expect-error - mocking for test
+      client.setupPgCronJob = vi.fn().mockResolvedValue(null)
+      // @ts-expect-error - mocking for test
+      client.updateInstallationComment = vi.fn().mockResolvedValue(null)
+
+      await client.install('sk_test_key')
+
+      // Should only set STRIPE_SECRET_KEY
+      expect(mockSetSecrets).toHaveBeenCalledWith([
+        { name: 'STRIPE_SECRET_KEY', value: 'sk_test_key' },
+      ])
+    })
+  })
 })

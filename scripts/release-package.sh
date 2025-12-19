@@ -26,9 +26,9 @@ fi
 gh release create "$VERSION" \
   "$TARBALL" \
   --title "$VERSION" \
-  --notes "Release $VERSION with StripeAutoSync support"
+  --notes "Release $VERSION with StripeSync support"
 
 echo "✓ Release $VERSION created successfully"
 echo ""
 echo "To use in your project, add to package.json:"
-echo "  \"@supabase/stripe-sync-engine\": \"https://github.com/tx-stripe/stripe-sync-engine/releases/download/$VERSION/supabase-stripe-sync-engine-0.0.0.tgz\""
+echo "  \"@supabase/stripe-sync-engine\": \"https://github.com/stripe-experiments/sync-engine/releases/download/$VERSION/supabase-stripe-sync-engine-0.0.0.tgz\""

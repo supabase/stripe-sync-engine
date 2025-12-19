@@ -1,6 +1,6 @@
 {
   "name": "stripe-experiment-sync",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data to Postgres",
   "type": "module",
@@ -62,11 +62,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tx-stripe/stripe-sync-engine.git"
+    "url": "https://github.com/stripe-experiments/sync-engine.git"
   },
-  "homepage": "https://github.com/tx-stripe/stripe-sync-engine#readme",
+  "homepage": "https://github.com/stripe-experiments/sync-engine#readme",
   "bugs": {
-    "url": "https://github.com/tx-stripe/stripe-sync-engine/issues"
+    "url": "https://github.com/stripe-experiments/sync-engine/issues"
   },
   "keywords": [
     "stripe",
@@ -78,5 +78,5 @@
     "database",
     "typescript"
   ],
-  "author": "Supabase <https://supabase.com/>"
+  "author": "Stripe <https://stripe.com/>"
 }

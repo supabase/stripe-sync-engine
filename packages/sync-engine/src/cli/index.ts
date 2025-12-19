@@ -77,6 +77,10 @@ supabase
   .option('--worker-interval <seconds>', 'Worker interval in seconds (defaults to 60)', (val) =>
     parseInt(val, 10)
   )
+  .option(
+    '--management-url <url>',
+    'Supabase management API URL with protocol (e.g., http://localhost:54323, defaults to https://api.supabase.com or SUPABASE_MANAGEMENT_URL env)'
+  )
   .action(async (options) => {
     await installCommand({
       supabaseAccessToken: options.token,
@@ -84,6 +88,7 @@ supabase
       stripeKey: options.stripeKey,
       packageVersion: options.packageVersion,
       workerInterval: options.workerInterval,
+      supabaseManagementUrl: options.managementUrl,
     })
   })
 
@@ -92,10 +97,15 @@ supabase
   .description('Uninstall Stripe sync from Supabase Edge Functions')
   .option('--token <token>', 'Supabase access token (or SUPABASE_ACCESS_TOKEN env)')
   .option('--project <ref>', 'Supabase project ref (or SUPABASE_PROJECT_REF env)')
+  .option(
+    '--management-url <url>',
+    'Supabase management API URL with protocol (e.g., http://localhost:54323, defaults to https://api.supabase.com or SUPABASE_MANAGEMENT_URL env)'
+  )
   .action(async (options) => {
     await uninstallCommand({
       supabaseAccessToken: options.token,
       supabaseProjectRef: options.project,
+      supabaseManagementUrl: options.managementUrl,
     })
   })
 

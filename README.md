@@ -1,13 +1,11 @@
 # Stripe Sync Engine Monorepo
 
-![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
-![NPM Version](https://img.shields.io/npm/v/%40supabase%2Fstripe-sync-engine)
-![Docker Image Version](https://img.shields.io/docker/v/supabase/stripe-sync-engine?label=Docker)
+![GitHub License](https://img.shields.io/github/license/stripe-experiments/sync-engine)
+![NPM Version](https://img.shields.io/npm/v/stripe-experiment-sync)
 
 This monorepo contains packages for synchronizing your Stripe account with a PostgreSQL database:
 
-- [`@supabase/stripe-sync-engine`](./packages/sync-engine/README.md): A TypeScript library with `StripeAutoSync` for easy integration into Express apps, plus lower-level APIs for custom implementations.
-- [`stripe-sync-cli`](./packages/cli/README.md): A CLI tool for development and testing with automatic ngrok tunnel setup.
+- [`stripe-experiment-sync`](./packages/sync-engine/README.md): A TypeScript library for syncing Stripe data to PostgreSQL with managed webhooks, CLI tools, and Supabase Edge Function deployment.
 - [`stripe-sync-fastify`](./packages/fastify-app/README.md): A Fastify-based server and Docker image for production deployments.
 
 ![Sync Stripe with PostgreSQL](./docs/stripe-sync-engine.jpg)
@@ -22,43 +20,106 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 
 ---
 
-## StripeAutoSync
+## Quick Start
 
-The easiest way to integrate Stripe sync into your Express application:
+The easiest way to sync Stripe data to PostgreSQL:
 
 ```typescript
-import { StripeAutoSync } from 'stripe-experiment-sync'
+import { StripeSync } from 'stripe-experiment-sync'
 
-// baseUrl is a function for dynamic URL generation
-// (e.g., for ngrok tunnels, Replit domains, or environment-based URLs)
-const getPublicUrl = () => {
-  if (process.env.PUBLIC_URL) {
-    return process.env.PUBLIC_URL
-  }
-  // Or dynamically determine from request, ngrok, etc.
-  return `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`
-}
-
-const stripeAutoSync = new StripeAutoSync({
-  databaseUrl: process.env.DATABASE_URL,
-  stripeApiKey: process.env.STRIPE_SECRET_KEY,
-  baseUrl: getPublicUrl,
+const sync = new StripeSync({
+  poolConfig: {
+    connectionString: process.env.DATABASE_URL,
+    max: 10,
+  },
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY,
 })
 
-await stripeAutoSync.start(app) // Express app
-// ... later
-await stripeAutoSync.stop() // Cleanup
+// Create a managed webhook - automatically syncs all Stripe events
+const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks')
+
+// Cleanup when done
+await sync.close()
 ```
 
-### Configuration Options
+### Manual Webhook Processing
 
-| Option             | Required | Default            | Description                           |
-| ------------------ | -------- | ------------------ | ------------------------------------- |
-| `databaseUrl`      | Yes      | -                  | PostgreSQL connection string          |
-| `stripeApiKey`     | Yes      | -                  | Stripe secret key (sk\_...)           |
-| `baseUrl`          | Yes      | -                  | Function returning your public URL    |
-| `webhookPath`      | No       | `/stripe-webhooks` | Path where webhook handler is mounted |
-| `stripeApiVersion` | No       | `2020-08-27`       | Stripe API version                    |
+If you need to process webhooks in your own Express/Node.js app:
+
+```typescript
+import express from 'express'
+import { StripeSync } from 'stripe-experiment-sync'
+
+const app = express()
+const sync = new StripeSync({
+  poolConfig: {
+    connectionString: process.env.DATABASE_URL,
+    max: 10,
+  },
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+})
+
+app.post('/stripe-webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature']
+
+  try {
+    await sync.processWebhook(req.body, signature)
+    res.status(200).send({ received: true })
+  } catch (error) {
+    res.status(400).send({ error: error.message })
+  }
+})
+
+app.listen(3000)
+```
+
+### Supabase Edge Functions
+
+Deploy to Supabase for serverless operation:
+
+```bash
+npx stripe-experiment-sync supabase install \
+  --token $SUPABASE_ACCESS_TOKEN \
+  --project $SUPABASE_PROJECT_REF \
+  --stripe-key $STRIPE_API_KEY
+```
+
+### CLI Commands
+
+```bash
+# Run database migrations
+npx stripe-experiment-sync migrate --database-url $DATABASE_URL
+
+# Start local sync with ngrok tunnel
+npx stripe-experiment-sync start \
+  --stripe-key $STRIPE_API_KEY \
+  --ngrok-token $NGROK_AUTH_TOKEN \
+  --database-url $DATABASE_URL
+
+# Backfill historical data
+npx stripe-experiment-sync backfill customer \
+  --stripe-key $STRIPE_API_KEY \
+  --database-url $DATABASE_URL
+```
+
+---
+
+## Configuration Options
+
+| Option                          | Type    | Description                                                                                              |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `poolConfig`                    | object  | **Required.** PostgreSQL connection pool configuration. Supports `connectionString`, `max`, `keepAlive`. |
+| `stripeSecretKey`               | string  | **Required.** Stripe secret key (sk\_...)                                                                |
+| `stripeWebhookSecret`           | string  | Stripe webhook signing secret (only needed for manual webhook processing)                                |
+| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                               |
+| `enableSigma`                   | boolean | Enable Stripe Sigma reporting data sync. Default: false                                                  |
+| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                               |
+| `backfillRelatedEntities`       | boolean | Ensure related entities exist for foreign key integrity                                                  |
+| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest data from Stripe instead of trusting webhook payload                                 |
+| `maxRetries`                    | number  | Maximum retry attempts for 429 rate limits. Default: 5                                                   |
+| `initialRetryDelayMs`           | number  | Initial retry delay in milliseconds. Default: 1000                                                       |
+| `maxRetryDelayMs`               | number  | Maximum retry delay in milliseconds. Default: 60000                                                      |
+| `logger`                        | Logger  | Logger instance (pino-compatible)                                                                        |
 
 ---
 
@@ -68,26 +129,34 @@ await stripeAutoSync.stop() // Cleanup
 
 - Automatically runs database migrations to create the `stripe` schema with tables matching Stripe objects.
 - Creates managed webhooks in Stripe for automatic event synchronization.
-- Exposes a webhook endpoint that listens to Stripe events.
-- Automatically applies body parsing middleware (protecting webhook routes from JSON parsing).
-- Inserts, updates, or deletes records in the database whenever there is a change to Stripe.
-- Cleans up webhooks automatically on shutdown.
+- Processes webhook events and syncs data to PostgreSQL in real-time.
+- Supports backfilling historical data from Stripe.
+- Tracks sync runs and provides observability into sync operations.
+- Built-in retry logic for rate limits and transient errors.
 
 ---
 
 ## Packages
 
-- [Library: @supabase/stripe-sync-engine](./packages/sync-engine/README.md)
-- [CLI: stripe-sync](./packages/cli/README.md)
-- [Docker/Server: supabase/stripe-sync-engine](./packages/fastify-app/README.md)
+- [Library & CLI: stripe-experiment-sync](./packages/sync-engine/README.md)
+- [Docker/Server: stripe-sync-fastify](./packages/fastify-app/README.md)
 
 Each package has its own README with installation, configuration, and usage instructions.
 
 ---
 
-## Supabase Edge Function
+## Supabase Edge Function Deployment
 
-To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./docs/edge-function.md).
+Deploy the sync engine to Supabase Edge Functions for serverless operation with automatic webhook processing. See the [sync-engine README](./packages/sync-engine/README.md#supabase-deployment) for detailed instructions.
+
+```bash
+npx stripe-experiment-sync supabase install \
+  --token $SUPABASE_ACCESS_TOKEN \
+  --project $SUPABASE_PROJECT_REF \
+  --stripe-key $STRIPE_API_KEY
+```
+
+---
 
 ## Webhook Support
 
@@ -187,3 +256,13 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `subscription_schedule.released` 🟢
 - [x] `subscription_schedule.updated` 🟢
 - [x] `entitlements.active_entitlement_summary.updated` 🟢
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome at [https://github.com/stripe-experiments/sync-engine](https://github.com/stripe-experiments/sync-engine).
+
+## License
+
+See [LICENSE](LICENSE) file.

@@ -1,14 +1,19 @@
 # Stripe Sync Engine
 
-![GitHub License](https://img.shields.io/github/license/tx-stripe/stripe-sync-engine)
+![GitHub License](https://img.shields.io/github/license/stripe-experiments/sync-engine)
 ![NPM Version](https://img.shields.io/npm/v/stripe-experiment-sync)
 
 A TypeScript library to synchronize Stripe data into a PostgreSQL database, designed for use in Node.js backends and serverless environments.
 
 ## Features
 
-- Programmatic management of Stripe webhooks for real-time updates
-- Sync Stripe objects (customers, invoices, products, etc.) to your PostgreSQL database
+- **Managed Webhooks:** Automatic webhook creation and lifecycle management with built-in processing
+- **Real-time Sync:** Keep your database in sync with Stripe automatically
+- **Backfill Support:** Sync historical data from Stripe to your database
+- **Stripe Sigma:** Support for Stripe Sigma reporting data
+- **Supabase Ready:** Deploy to Supabase Edge Functions with one command
+- **Automatic Retries:** Built-in retry logic for rate limits and transient errors
+- **Observability:** Track sync runs and monitor progress
 
 ## Installation
 
@@ -20,7 +25,7 @@ pnpm add stripe-experiment-sync stripe
 yarn add stripe-experiment-sync stripe
 ```
 
-## Usage
+## Quick Start
 
 ```ts
 import { StripeSync } from 'stripe-experiment-sync'
@@ -28,124 +33,119 @@ import { StripeSync } from 'stripe-experiment-sync'
 const sync = new StripeSync({
   poolConfig: {
     connectionString: 'postgres://user:pass@host:port/db',
-    max: 10, // Maximum number of connections
+    max: 10,
   },
   stripeSecretKey: 'sk_test_...',
-  stripeWebhookSecret: 'whsec_...',
-  // logger: <a pino logger>
 })
 
-// Example: process a Stripe webhook
-await sync.processWebhook(payload, signature)
+// Create a managed webhook - no additional processing needed!
+const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks')
+
+// Cleanup when done (closes PostgreSQL connection pool)
+await sync.close()
 ```
 
-## Low-Level API (Advanced)
+## Managed Webhooks
 
-For more control, you can use the `StripeSync` class directly:
+The Stripe Sync Engine automatically manages webhook endpoints and their processing. Once created, managed webhooks handle everything automatically - you don't need to manually process events.
 
-```ts
-import { StripeSync } from 'stripe-experiment-sync'
-
-const sync = new StripeSync({
-  poolConfig: {
-    connectionString: 'postgres://user:pass@host:port/db',
-    max: 10, // Maximum number of connections
-  },
-  stripeSecretKey: 'sk_test_...',
-  stripeWebhookSecret: 'whsec_...',
-  // logger: <a pino logger>
-})
-
-// Example: process a Stripe webhook
-await sync.processWebhook(payload, signature)
-```
-
-### Processing Webhooks
-
-The `processWebhook` method validates and processes Stripe webhook events:
+### Creating Managed Webhooks
 
 ```typescript
-// Process a webhook event with signature validation
-await sync.processWebhook(payload, signature)
+// Create or reuse an existing webhook endpoint
+// This webhook will automatically sync all Stripe events to your database
+const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks')
 
-// Or process an event directly (no signature validation):
-await sync.processEvent(event)
-```
-
-### Managed Webhook Endpoints
-
-The library provides methods to create and manage webhook endpoints:
-
-```typescript
-// Create or reuse an existing webhook endpoint for a URL
-const webhook = await sync.findOrCreateManagedWebhook('https://example.com/stripe-webhooks', {
-  enabled_events: ['*'], // or specific events like ['customer.created', 'invoice.paid']
-  description: 'My app webhook',
-})
-
-// Create a new webhook endpoint (always creates new)
+// Create a webhook for specific events
 const webhook = await sync.createManagedWebhook('https://example.com/stripe-webhooks', {
-  enabled_events: ['customer.created', 'customer.updated'],
+  enabled_events: ['customer.created', 'customer.updated', 'invoice.paid'],
 })
 
-// Get a managed webhook by ID
+console.log(webhook.id) // we_xxx
+console.log(webhook.secret) // whsec_xxx
+```
+
+**⚠️ Important:** Managed webhooks are tracked in the database and automatically process incoming events. You don't need to call `processWebhook()` for managed webhooks - the library handles this internally.
+
+### Managing Webhooks
+
+```typescript
+// List all managed webhooks
+const webhooks = await sync.listManagedWebhooks()
+
+// Get a specific webhook
 const webhook = await sync.getManagedWebhook('we_xxx')
 
 // Delete a managed webhook
 await sync.deleteManagedWebhook('we_xxx')
 ```
 
-**Note:** The library automatically manages webhook endpoints for you. When you call `findOrCreateManagedWebhook()` with a URL, it will reuse an existing webhook if one is found in the database, or create a new one if needed. Old or orphaned webhooks from this package are automatically cleaned up.
+### How It Works
 
-**Race Condition Protection:** The library uses PostgreSQL advisory locks to prevent race conditions when multiple instances call `findOrCreateManagedWebhook()` concurrently for the same URL. A unique constraint on `(url, account_id)` provides an additional safety net at the database level.
+**Automatic Processing:** Managed webhooks are stored in the `stripe._managed_webhooks` table. When Stripe sends events to these webhooks, they are automatically processed and synced to your database.
+
+**Race Condition Protection:** PostgreSQL advisory locks prevent race conditions when multiple instances call `findOrCreateManagedWebhook()` concurrently. A unique constraint on `(url, account_id)` provides additional safety.
+
+**Automatic Cleanup:** When you call `findOrCreateManagedWebhook()`, it will:
+
+1. Check if a webhook already exists for the URL in the database
+2. If found, reuse the existing webhook
+3. If not found, create a new webhook in Stripe and record it
+4. Clean up any orphaned webhooks from previous installations
+
+## Manual Webhook Processing
+
+If you need to process webhooks outside of managed webhooks (e.g., for testing or custom integrations):
+
+```typescript
+// Validate and process a webhook event
+app.post('/stripe-webhooks', async (req, res) => {
+  const signature = req.headers['stripe-signature']
+  const payload = req.body
+
+  try {
+    await sync.processWebhook(payload, signature)
+    res.status(200).send({ received: true })
+  } catch (error) {
+    res.status(400).send({ error: error.message })
+  }
+})
+
+// Or process an event directly (no signature validation)
+await sync.processEvent(stripeEvent)
+
+// Cleanup when done
+await sync.close()
+```
+
+**Note:** This is only needed for custom webhook endpoints. Managed webhooks handle processing automatically.
 
 ## Configuration
 
-| Option                          | Type    | Description                                                                                                                                                                                                                                                                                              |
-| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `databaseUrl`                   | string  | **Deprecated:** Use `poolConfig` with a connection string instead.                                                                                                                                                                                                                                       |
-| `stripeSecretKey`               | string  | Stripe secret key                                                                                                                                                                                                                                                                                        |
-| `stripeWebhookSecret`           | string  | Stripe webhook signing secret                                                                                                                                                                                                                                                                            |
-| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               |
-| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                               |
-| `backfillRelatedEntities`       | boolean | Ensure related entities are present for foreign key integrity                                                                                                                                                                                                                                            |
-| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
-| `poolConfig`                    | object  | Configuration for PostgreSQL connection pooling. Supports options like `connectionString`, `max`, and `keepAlive`. For more details, refer to the [Node-Postgres Pool API documentation](https://node-postgres.com/apis/pool).                                                                           |
-| `maxPostgresConnections`        | number  | **Deprecated:** Use `poolConfig.max` instead to configure the maximum number of PostgreSQL connections.                                                                                                                                                                                                  |
-| `logger`                        | Logger  | Logger instance (pino)                                                                                                                                                                                                                                                                                   |
+| Option                          | Type    | Description                                                                                                                                                                                                                                                                                            |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `poolConfig`                    | object  | **Required.** PostgreSQL connection pool configuration. Supports `connectionString`, `max`, `keepAlive`. See [Node-Postgres Pool API](https://node-postgres.com/apis/pool).                                                                                                                            |
+| `stripeSecretKey`               | string  | **Required.** Stripe secret key                                                                                                                                                                                                                                                                        |
+| `stripeWebhookSecret`           | string  | Stripe webhook signing secret (only needed for manual webhook processing)                                                                                                                                                                                                                              |
+| `stripeApiVersion`              | string  | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                             |
+| `enableSigma`                   | boolean | Enable Stripe Sigma reporting data sync. Default: false                                                                                                                                                                                                                                                |
+| `autoExpandLists`               | boolean | Fetch all list items from Stripe (not just the default 10)                                                                                                                                                                                                                                             |
+| `backfillRelatedEntities`       | boolean | Ensure related entities exist for foreign key integrity                                                                                                                                                                                                                                                |
+| `revalidateObjectsViaStripeApi` | Array   | Always fetch latest data from Stripe instead of trusting webhook payload. Possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id |
+| `maxRetries`                    | number  | Maximum retry attempts for 429 rate limits. Default: 5                                                                                                                                                                                                                                                 |
+| `initialRetryDelayMs`           | number  | Initial retry delay in milliseconds. Default: 1000                                                                                                                                                                                                                                                     |
+| `maxRetryDelayMs`               | number  | Maximum retry delay in milliseconds. Default: 60000                                                                                                                                                                                                                                                    |
+| `logger`                        | Logger  | Logger instance (pino-compatible)                                                                                                                                                                                                                                                                      |
 
 ## Database Schema
 
-The library will create and manage a `stripe` schema in your PostgreSQL database, with tables for all supported Stripe objects (products, customers, invoices, etc.).
+The library creates and manages a `stripe` schema in PostgreSQL with tables for all supported Stripe objects.
 
-> **Important:** The library uses a fixed schema name of `stripe`. This cannot be configured as the SQL migrations hardcode this schema name.
+> **Important:** The schema name is fixed as `stripe` and cannot be configured.
 
-> **Note:** Fields and tables prefixed with an underscore (`_`) are reserved for internal metadata managed by the sync engine and should not be modified directly. These include fields like `_account_id`, `_last_synced_at`, `_updated_at`, and tables like `_migrations`, `_managed_webhooks`, `_sync_runs`, and `_sync_obj_runs`.
+> **Note:** Fields and tables prefixed with `_` are reserved for internal metadata: `_account_id`, `_last_synced_at`, `_updated_at`, `_migrations`, `_managed_webhooks`, `_sync_runs`, `_sync_obj_runs`.
 
-### Observability
-
-The sync engine tracks sync operations in the `sync_runs` view, which provides aggregated metrics for each sync session:
-
-```sql
-SELECT
-  account_id,
-  started_at,
-  closed_at,
-  status,              -- 'running', 'complete', or 'error'
-  total_processed,     -- Total records synced across all objects
-  complete_count,      -- Number of object types completed
-  error_count,         -- Number of object types with errors
-  running_count,       -- Number of object types currently syncing
-  pending_count        -- Number of object types not yet started
-FROM stripe.sync_runs
-ORDER BY started_at DESC;
-```
-
-For detailed per-object status, you can query the internal `_sync_obj_runs` table (though this is not recommended for production use).
-
-### Migrations
-
-Migrations are automatically included with the package and bundled in the `dist/migrations` directory when built. You can run them using the provided `runMigrations` function:
+### Running Migrations
 
 ```ts
 import { runMigrations } from 'stripe-experiment-sync'
@@ -153,83 +153,155 @@ import { runMigrations } from 'stripe-experiment-sync'
 await runMigrations({ databaseUrl: 'postgres://...' })
 ```
 
-## Account Management
+### Observability
 
-### Getting Current Account
+Track sync operations with the `sync_runs` view:
 
-Retrieve the currently authenticated Stripe account:
-
-```ts
-const account = await sync.getCurrentAccount()
-console.log(account.id) // e.g., "acct_xxx"
+```sql
+SELECT
+  account_id,
+  started_at,
+  closed_at,
+  status,              -- 'running', 'complete', or 'error'
+  total_processed,     -- Total records synced
+  complete_count,      -- Completed object types
+  error_count,         -- Object types with errors
+  running_count,       -- Currently syncing
+  pending_count        -- Not yet started
+FROM stripe.sync_runs
+ORDER BY started_at DESC;
 ```
 
-### Listing Synced Accounts
+## Syncing Data
 
-Get all Stripe accounts that have been synced to the database:
-
-```ts
-const accounts = await sync.getAllSyncedAccounts()
-// Returns array of Stripe account objects from database
-```
-
-### Deleting Synced Account Data
-
-**⚠️ DANGEROUS:** Delete all synced data for a specific Stripe account from the database. This operation cannot be undone!
+### Sync a Single Entity
 
 ```ts
-// Preview what will be deleted (dry-run mode)
-const preview = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx', {
-  dryRun: true,
-  useTransaction: true,
-})
-console.log(preview.deletedRecordCounts) // Shows count per table
-
-// Actually delete the data
-const result = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx', {
-  dryRun: false, // default
-  useTransaction: true, // default - wraps deletion in transaction
-})
-```
-
-Options:
-
-- `dryRun` (default: `false`): If true, only counts records without deleting
-- `useTransaction` (default: `true`): If true, wraps all deletions in a database transaction for atomicity
-
-The method returns:
-
-- `deletedAccountId`: The account ID that was deleted
-- `deletedRecordCounts`: Object mapping table names to number of records deleted
-- `warnings`: Array of warning messages (e.g., if you're deleting your cached account)
-
-## Backfilling and Syncing Data
-
-### Syncing a Single Entity
-
-You can sync or update a single Stripe entity by its ID using the `syncSingleEntity` method:
-
-```ts
+// Automatically detects entity type from ID prefix
 await sync.syncSingleEntity('cus_12345')
+await sync.syncSingleEntity('prod_xyz')
 ```
 
-The entity type is detected automatically based on the Stripe ID prefix (e.g., `cus_` for customer, `prod_` for product). `ent_` is not supported at the moment.
-
-### Syncing Data
-
-To sync Stripe data (e.g., all products created after a certain date), use the `processUntilDone` method:
+### Backfill Historical Data
 
 ```ts
+// Sync all products created after a date
 await sync.processUntilDone({
   object: 'product',
   created: { gte: 1643872333 }, // Unix timestamp
 })
+
+// Sync all customers
+await sync.processUntilDone({ object: 'customer' })
+
+// Sync everything
+await sync.processUntilDone({ object: 'all' })
 ```
 
-- `object` can be one of: `all`, `charge`, `checkout_sessions`, `credit_note`, `customer`, `customer_with_entitlements`, `dispute`, `early_fraud_warning`, `invoice`, `payment_intent`, `payment_method`, `plan`, `price`, `product`, `refund`, `setup_intent`, `subscription`, `subscription_schedules`, `tax_id`.
-- `created` is a Stripe RangeQueryParam and supports `gt`, `gte`, `lt`, `lte`.
+Supported objects: `all`, `charge`, `checkout_sessions`, `credit_note`, `customer`, `customer_with_entitlements`, `dispute`, `early_fraud_warning`, `invoice`, `payment_intent`, `payment_method`, `plan`, `price`, `product`, `refund`, `setup_intent`, `subscription`, `subscription_schedules`, `tax_id`.
 
-The sync engine automatically tracks per-account cursors in the `_sync_runs` and `_sync_obj_runs` tables. When you call sync methods without an explicit `created` filter, they will automatically resume from the last synced position for that account and resource. This enables incremental syncing that can resume after interruptions.
+The sync engine tracks cursors per account and resource, enabling incremental syncing that resumes after interruptions.
 
-> **Note:**
-> For large Stripe accounts (more than 10,000 objects), it is recommended to write a script that loops through each day and sets the `created` date filters to the start and end of day. This avoids timeouts and memory issues when syncing large datasets.
+> **Tip:** For large Stripe accounts (>10,000 objects), loop through date ranges day-by-day to avoid timeouts.
+
+## Account Management
+
+### Get Current Account
+
+```ts
+const account = await sync.getCurrentAccount()
+console.log(account.id) // acct_xxx
+```
+
+### List Synced Accounts
+
+```ts
+const accounts = await sync.getAllSyncedAccounts()
+```
+
+### Delete Account Data
+
+**⚠️ WARNING:** This permanently deletes all synced data for an account.
+
+```ts
+// Preview deletion
+const preview = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx', {
+  dryRun: true,
+})
+console.log(preview.deletedRecordCounts)
+
+// Actually delete
+const result = await sync.dangerouslyDeleteSyncedAccountData('acct_xxx')
+```
+
+## Supabase Deployment
+
+Deploy to Supabase Edge Functions for serverless operation with automatic webhook processing:
+
+```bash
+# Install
+npx stripe-experiment-sync supabase install \
+  --token $SUPABASE_ACCESS_TOKEN \
+  --project $SUPABASE_PROJECT_REF \
+  --stripe-key $STRIPE_API_KEY
+
+# Install specific version
+npx stripe-experiment-sync supabase install \
+  --token $SUPABASE_ACCESS_TOKEN \
+  --project $SUPABASE_PROJECT_REF \
+  --stripe-key $STRIPE_API_KEY \
+  --package-version 1.0.15
+
+# Uninstall
+npx stripe-experiment-sync supabase uninstall \
+  --token $SUPABASE_ACCESS_TOKEN \
+  --project $SUPABASE_PROJECT_REF
+```
+
+### Install Options
+
+- `--token <token>` - Supabase access token (or `SUPABASE_ACCESS_TOKEN` env)
+- `--project <ref>` - Supabase project ref (or `SUPABASE_PROJECT_REF` env)
+- `--stripe-key <key>` - Stripe API key (or `STRIPE_API_KEY` env)
+- `--package-version <version>` - npm package version (default: latest)
+- `--worker-interval <seconds>` - Worker interval in seconds (default: 60)
+- `--management-url <url>` - Supabase management API URL with protocol (default: https://api.supabase.com). For local testing: http://localhost:54323
+
+The install command will:
+
+1. Deploy Edge Functions: `stripe-setup`, `stripe-webhook`, `stripe-worker`
+2. Run database migrations to create the `stripe` schema
+3. Create a managed Stripe webhook pointing to your Supabase project
+4. Set up a pg_cron job for automatic background syncing
+
+## CLI Commands
+
+```bash
+# Run database migrations
+npx stripe-experiment-sync migrate --database-url $DATABASE_URL
+
+# Start local sync with ngrok tunnel
+npx stripe-experiment-sync start \
+  --stripe-key $STRIPE_API_KEY \
+  --ngrok-token $NGROK_AUTH_TOKEN \
+  --database-url $DATABASE_URL
+
+# Backfill specific entity type
+npx stripe-experiment-sync backfill customer \
+  --stripe-key $STRIPE_API_KEY \
+  --database-url $DATABASE_URL
+
+# Enable Sigma data syncing
+npx stripe-experiment-sync start \
+  --stripe-key $STRIPE_API_KEY \
+  --database-url $DATABASE_URL \
+  --sigma
+```
+
+## License
+
+See [LICENSE](LICENSE) file.
+
+## Contributing
+
+Issues and pull requests are welcome at [https://github.com/stripe-experiments/sync-engine](https://github.com/stripe-experiments/sync-engine).

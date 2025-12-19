@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import Stripe from 'stripe'
+import pkg from '../../package.json' with { type: 'json' }
 import type { Logger } from '../types'
 
 type SigmaQueryRunStatus = 'running' | 'succeeded' | 'failed'
@@ -78,7 +79,13 @@ export async function runSigmaQueryAndDownloadCsv(params: {
   const pollTimeoutMs = params.pollTimeoutMs ?? 5 * 60 * 1000
   const pollIntervalMs = params.pollIntervalMs ?? 2000
 
-  const stripe = new Stripe(params.apiKey)
+  const stripe = new Stripe(params.apiKey, {
+    appInfo: {
+      name: 'Stripe Sync Engine',
+      version: pkg.version,
+      url: pkg.homepage,
+    },
+  })
 
   // 1) Create query run
   const created = (await stripe.rawRequest('POST', '/v1/sigma/query_runs', {
