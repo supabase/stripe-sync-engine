@@ -124,6 +124,12 @@ jobs:
           chmod +x ./scripts/test-integration-backfill.sh
           ./scripts/test-integration-backfill.sh
 
+      - name: Run Sync Run Lifecycle Integration Test
+        run: |
+          cd packages/sync-engine
+          chmod +x ./scripts/test-integration-sync-run-lifecycle.sh
+          ./scripts/test-integration-sync-run-lifecycle.sh
+
       - name: Run Sigma Sync Integration Test
         run: |
           cd packages/sync-engine
