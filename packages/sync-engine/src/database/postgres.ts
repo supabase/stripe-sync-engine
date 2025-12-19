@@ -610,16 +610,22 @@ export class PostgresClient {
   /**
    * Create object run entries for a sync run.
    * All objects start as 'pending'.
+   *
+   * @param resourceNames - Database resource names (e.g. 'products', 'customers', NOT 'product', 'customer')
    */
-  async createObjectRuns(accountId: string, runStartedAt: Date, objects: string[]): Promise<void> {
-    if (objects.length === 0) return
+  async createObjectRuns(
+    accountId: string,
+    runStartedAt: Date,
+    resourceNames: string[]
+  ): Promise<void> {
+    if (resourceNames.length === 0) return
 
-    const values = objects.map((_, i) => `($1, $2, $${i + 3})`).join(', ')
+    const values = resourceNames.map((_, i) => `($1, $2, $${i + 3})`).join(', ')
     await this.query(
       `INSERT INTO "${this.config.schema}"."_sync_obj_runs" ("_account_id", run_started_at, object)
        VALUES ${values}
        ON CONFLICT ("_account_id", run_started_at, object) DO NOTHING`,
-      [accountId, runStartedAt, ...objects]
+      [accountId, runStartedAt, ...resourceNames]
     )
   }
 
