@@ -86,7 +86,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   stripe-sync:
-    image: supabase/stripe-sync-fastify:latest
+    image: supabase/stripe-sync-engine:latest
     depends_on:
       - postgres
     ports:
