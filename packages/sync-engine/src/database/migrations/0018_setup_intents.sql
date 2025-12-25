@@ -1,4 +1,4 @@
-create table if not exists "stripe"."setup_intents" (
+create table if not exists "{{schema}}"."setup_intents" (
     id text primary key,
     object text,
     created integer,
@@ -14,4 +14,4 @@ create table if not exists "stripe"."setup_intents" (
     on_behalf_of text
 );
 
-CREATE INDEX stripe_setup_intents_customer_idx ON "stripe"."setup_intents" USING btree (customer);
+CREATE INDEX stripe_setup_intents_customer_idx ON "{{schema}}"."setup_intents" USING btree (customer);

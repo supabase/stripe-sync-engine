@@ -1,4 +1,4 @@
-create table if not exists "stripe".events (
+create table if not exists "{{schema}}"."events" (
     id text primary key,
     object text,
     data jsonb,

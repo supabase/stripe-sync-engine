@@ -1,5 +1,5 @@
 create table if not exists
-  "stripe"."credit_notes" (
+  "{{schema}}"."credit_notes" (
     "id" text primary key,
     object text,
     amount integer,
@@ -31,6 +31,6 @@ create table if not exists
     voided_at text
   );
 
-create index stripe_credit_notes_customer_idx on "stripe"."credit_notes" using btree (customer);
+create index stripe_credit_notes_customer_idx on "{{schema}}"."credit_notes" using btree (customer);
 
-create index stripe_credit_notes_invoice_idx on "stripe"."credit_notes" using btree (invoice);
+create index stripe_credit_notes_invoice_idx on "{{schema}}"."credit_notes" using btree (invoice);
