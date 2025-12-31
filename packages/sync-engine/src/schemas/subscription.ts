@@ -37,5 +37,6 @@ export const subscriptionSchema: EntitySchema = {
     'customer',
     'latest_invoice',
     'plan',
+    'billing_mode',
   ],
 } as const

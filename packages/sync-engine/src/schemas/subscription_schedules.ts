@@ -20,5 +20,6 @@ export const subscriptionScheduleSchema: EntitySchema = {
     'status',
     'subscription',
     'test_clock',
+    'billing_mode',
   ],
 } as const
