@@ -1,5 +1,5 @@
 
-create table if not exists "stripe".charges (
+create table if not exists "{{schema}}"."charges" (
     id text primary key,
     object text,
     card jsonb,

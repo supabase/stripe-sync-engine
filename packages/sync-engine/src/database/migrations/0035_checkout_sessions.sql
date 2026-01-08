@@ -1,5 +1,5 @@
 create table
-    if not exists "stripe"."checkout_sessions" (
+    if not exists "{{schema}}"."checkout_sessions" (
         "id" text primary key,
         "object" text,
         "adaptive_pricing" jsonb,
@@ -65,13 +65,13 @@ create table
         "last_synced_at" timestamptz
     );
 
-create index stripe_checkout_sessions_customer_idx on "stripe"."checkout_sessions" using btree (customer);
-create index stripe_checkout_sessions_subscription_idx on "stripe"."checkout_sessions" using btree (subscription);
-create index stripe_checkout_sessions_payment_intent_idx on "stripe"."checkout_sessions" using btree (payment_intent);
-create index stripe_checkout_sessions_invoice_idx on "stripe"."checkout_sessions" using btree (invoice);
+create index stripe_checkout_sessions_customer_idx on "{{schema}}"."checkout_sessions" using btree (customer);
+create index stripe_checkout_sessions_subscription_idx on "{{schema}}"."checkout_sessions" using btree (subscription);
+create index stripe_checkout_sessions_payment_intent_idx on "{{schema}}"."checkout_sessions" using btree (payment_intent);
+create index stripe_checkout_sessions_invoice_idx on "{{schema}}"."checkout_sessions" using btree (invoice);
 
 create trigger handle_updated_at
     before update
-    on stripe.checkout_sessions
+    on "{{schema}}"."checkout_sessions"
     for each row
     execute procedure set_updated_at();

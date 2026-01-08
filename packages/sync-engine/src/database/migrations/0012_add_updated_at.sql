@@ -8,103 +8,101 @@ begin
 end;
 $$;
 
-alter function set_updated_at() owner to postgres;
-
-alter table stripe.subscriptions
+alter table "{{schema}}"."subscriptions"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.subscriptions
+    on "{{schema}}"."subscriptions"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.products
+alter table "{{schema}}"."products"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.products
+    on "{{schema}}"."products"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.customers
+alter table "{{schema}}"."customers"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.customers
+    on "{{schema}}"."customers"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.prices
+alter table "{{schema}}"."prices"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.prices
+    on "{{schema}}"."prices"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.invoices
+alter table "{{schema}}"."invoices"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.invoices
+    on "{{schema}}"."invoices"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.charges
+alter table "{{schema}}"."charges"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.charges
+    on "{{schema}}"."charges"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.coupons
+alter table "{{schema}}"."coupons"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.coupons
+    on "{{schema}}"."coupons"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.disputes
+alter table "{{schema}}"."disputes"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.disputes
+    on "{{schema}}"."disputes"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.events
+alter table "{{schema}}"."events"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.events
+    on "{{schema}}"."events"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.payouts
+alter table "{{schema}}"."payouts"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.payouts
+    on "{{schema}}"."payouts"
     for each row
     execute procedure set_updated_at();
 
-alter table stripe.plans
+alter table "{{schema}}"."plans"
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
 create trigger handle_updated_at
     before update
-    on stripe.plans
+    on "{{schema}}"."plans"
     for each row
     execute procedure set_updated_at();

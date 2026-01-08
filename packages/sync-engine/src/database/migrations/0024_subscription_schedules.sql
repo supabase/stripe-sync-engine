@@ -1,13 +1,17 @@
-do $$
+DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_schedule_status') THEN
-        create type "stripe"."subscription_schedule_status" as enum ('not_started', 'active', 'completed', 'released', 'canceled');
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE t.typname = 'subscription_schedule_status' AND n.nspname = '{{schema}}'
+    ) THEN
+        create type "{{schema}}"."subscription_schedule_status" as enum ('not_started', 'active', 'completed', 'released', 'canceled');
     END IF;
 END
 $$;
 
 create table if not exists
-    "stripe"."subscription_schedules" (
+    "{{schema}}"."subscription_schedules" (
         id text primary key,
         object text,
         application text,
@@ -23,7 +27,7 @@ create table if not exists
         phases jsonb not null,
         released_at integer,
         released_subscription text,
-        status stripe.subscription_schedule_status not null,
+        status "{{schema}}"."subscription_schedule_status" not null,
         subscription text,
         test_clock text
     );

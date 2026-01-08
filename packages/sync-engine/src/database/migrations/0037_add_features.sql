@@ -1,5 +1,5 @@
 create table
-    if not exists "stripe"."features" (
+    if not exists "{{schema}}"."features" (
         "id" text primary key,
         object text,
         livemode boolean,
@@ -13,6 +13,6 @@ create table
 
 create trigger handle_updated_at
     before update
-    on stripe.features
+    on "{{schema}}"."features"
     for each row
     execute procedure set_updated_at();
