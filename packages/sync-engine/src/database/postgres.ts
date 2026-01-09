@@ -731,14 +731,10 @@ export class PostgresClient {
         [accountId, runStartedAt, object, cursor]
       )
     } else {
+      // For non-numeric cursors (Stripe IDs), always update - they represent pagination position
       await this.query(
         `UPDATE "${this.config.schema}"."_sync_obj_runs"
-         SET cursor = CASE
-           WHEN cursor IS NULL THEN $4
-           WHEN (cursor COLLATE "C") < ($4::text COLLATE "C") THEN $4
-           ELSE cursor
-         END,
-         updated_at = now()
+         SET cursor = $4, updated_at = now()
          WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
         [accountId, runStartedAt, object, cursor]
       )
