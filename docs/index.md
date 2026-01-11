@@ -78,7 +78,7 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 - [x] `payment_intent.amount_capturable_updated` 🟢
 - [x] `payment_intent.canceled` 🟢
 - [x] `payment_intent.created` 🟢
-- [x] `payment_intent.partially_refunded` 🟢
+- [x] `payment_intent.partially_funded` 🟢
 - [x] `payment_intent.payment_failed` 🟢
 - [x] `payment_intent.processing` 🟢
 - [x] `payment_intent.requires_action` 🟢
