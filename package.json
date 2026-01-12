@@ -30,7 +30,7 @@
     "typescript": "^5.9.2",
     "vite": "^7.2.6"
   },
-  "packageManager": "pnpm@10.27.0",
+  "packageManager": "pnpm@10.28.0",
   "overrides": {
     "sucrase": "^3.35.1"
   }
