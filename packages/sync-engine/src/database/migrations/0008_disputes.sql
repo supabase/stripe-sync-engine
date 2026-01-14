@@ -1,4 +1,4 @@
-create table if not exists "stripe".disputes (
+create table if not exists "{{schema}}"."disputes" (
     id text primary key,
     object text,
     amount bigint,

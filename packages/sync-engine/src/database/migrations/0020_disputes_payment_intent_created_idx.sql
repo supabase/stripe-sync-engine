@@ -1,3 +1,3 @@
-ALTER TABLE "stripe"."disputes" ADD COLUMN IF NOT EXISTS payment_intent TEXT;
+ALTER TABLE "{{schema}}"."disputes" ADD COLUMN IF NOT EXISTS payment_intent TEXT;
 
-CREATE INDEX IF NOT EXISTS stripe_dispute_created_idx ON "stripe"."disputes" USING btree (created);
+CREATE INDEX IF NOT EXISTS stripe_dispute_created_idx ON "{{schema}}"."disputes" USING btree (created);
