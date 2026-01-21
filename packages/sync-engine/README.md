@@ -202,6 +202,9 @@ Supported objects: `all`, `charge`, `checkout_sessions`, `credit_note`, `custome
 
 The sync engine tracks cursors per account and resource, enabling incremental syncing that resumes after interruptions.
 
+For paged backfills, the engine keeps a separate per-run pagination cursor (`page_cursor`) while the
+incremental cursor continues to track the highest `created` timestamp.
+
 > **Tip:** For large Stripe accounts (>10,000 objects), loop through date ranges day-by-day to avoid timeouts.
 
 ## Account Management

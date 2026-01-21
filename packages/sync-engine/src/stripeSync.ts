@@ -1037,80 +1037,100 @@ export class StripeSync {
     object: Exclude<SyncObject, 'all' | 'customer_with_entitlements'>,
     params?: ProcessNextParams
   ): Promise<ProcessNextResult> {
-    // Ensure account exists before syncing
-    await this.getCurrentAccount()
-    const accountId = await this.getAccountId()
+    try {
+      // Ensure account exists before syncing
+      await this.getCurrentAccount()
+      const accountId = await this.getAccountId()
 
-    // Map object type to resource name (database table)
-    const resourceName = this.getResourceName(object)
+      // Map object type to resource name (database table)
+      const resourceName = this.getResourceName(object)
 
-    // Get or create sync run
-    let runStartedAt: Date
-    if (params?.runStartedAt) {
-      runStartedAt = params.runStartedAt
-    } else {
-      const { runKey } = await this.joinOrCreateSyncRun(params?.triggeredBy ?? 'processNext')
-      runStartedAt = runKey.runStartedAt
-    }
-
-    // Ensure object run exists
-    await this.postgresClient.createObjectRuns(accountId, runStartedAt, [resourceName])
-
-    // Check object status and try to claim if pending
-    const objRun = await this.postgresClient.getObjectRun(accountId, runStartedAt, resourceName)
-    if (objRun?.status === 'complete' || objRun?.status === 'error') {
-      // Object already finished - return early
-      return {
-        processed: 0,
-        hasMore: false,
-        runStartedAt,
+      // Get or create sync run
+      let runStartedAt: Date
+      if (params?.runStartedAt) {
+        runStartedAt = params.runStartedAt
+      } else {
+        const { runKey } = await this.joinOrCreateSyncRun(params?.triggeredBy ?? 'processNext')
+        runStartedAt = runKey.runStartedAt
       }
-    }
 
-    // Try to start if pending (for first call on this object)
-    if (objRun?.status === 'pending') {
-      const started = await this.postgresClient.tryStartObjectSync(
-        accountId,
-        runStartedAt,
-        resourceName
-      )
-      if (!started) {
-        // At concurrency limit - return early
+      // Ensure object run exists
+      await this.postgresClient.createObjectRuns(accountId, runStartedAt, [resourceName])
+
+      // Check object status and try to claim if pending
+      const objRun = await this.postgresClient.getObjectRun(accountId, runStartedAt, resourceName)
+      if (objRun?.status === 'complete' || objRun?.status === 'error') {
+        // Object already finished - return early
         return {
           processed: 0,
-          hasMore: true,
+          hasMore: false,
           runStartedAt,
         }
       }
-    }
-    // If status is 'running', we continue processing (fetch next page)
 
-    // Get cursor for incremental sync
-    // If user provided explicit created filter, use null cursor
-    // Otherwise, check current run's cursor, then fall back to last completed sync's cursor
-    let cursor: string | null = null
-    if (!params?.created) {
-      if (objRun?.cursor) {
-        // Continue from where we left off in current run
-        cursor = objRun.cursor
-      } else {
-        // New run - start from last completed sync's cursor
-        const lastCursor = await this.postgresClient.getLastCompletedCursor(accountId, resourceName)
+      // Try to start if pending (for first call on this object)
+      if (objRun?.status === 'pending') {
+        const started = await this.postgresClient.tryStartObjectSync(
+          accountId,
+          runStartedAt,
+          resourceName
+        )
+        if (!started) {
+          // At concurrency limit - return early
+          return {
+            processed: 0,
+            hasMore: true,
+            runStartedAt,
+          }
+        }
+      }
+      // If status is 'running', we continue processing (fetch next page)
+
+      // Get cursor for incremental sync
+      // If user provided explicit created filter, use it
+      // Otherwise, use the cursor from the last completed run.
+      //
+      // Note: Do not use the current run’s cursor as created.gte. That cursor while paging, and using it would keep jumping to newest-only, and can get stuck syncing ~100 rows forever.
+      let cursor: string | null = null
+      if (!params?.created) {
+        const lastCursor = await this.postgresClient.getLastCursorBeforeRun(
+          accountId,
+          resourceName,
+          runStartedAt
+        )
         cursor = lastCursor ?? null
       }
+
+      // Fetch one page and upsert
+      const result = await this.fetchOnePage(
+        object,
+        accountId,
+        resourceName,
+        runStartedAt,
+        cursor,
+        objRun?.pageCursor ?? null,
+        params
+      )
+
+      return result
+    } catch (error) {
+      throw this.appendMigrationHint(error)
+    }
+  }
+
+  private appendMigrationHint(error: unknown): Error {
+    const hint =
+      'Error occurred. Make sure you are up to date with DB migrations which can sometimes help with this. Details:'
+    const withHint = (message: string) => (message.includes(hint) ? message : `${hint}\n${message}`)
+
+    if (error instanceof Error) {
+      const { stack } = error
+      error.message = withHint(error.message)
+      if (stack) error.stack = stack
+      return error
     }
 
-    // Fetch one page and upsert
-    const result = await this.fetchOnePage(
-      object,
-      accountId,
-      resourceName,
-      runStartedAt,
-      cursor,
-      params
-    )
-
-    return result
+    return new Error(withHint(String(error)))
   }
 
   /**
@@ -1150,6 +1170,7 @@ export class StripeSync {
     resourceName: string,
     runStartedAt: Date,
     cursor: string | null,
+    pageCursor: string | null,
     params?: ProcessNextParams
   ): Promise<ProcessNextResult> {
     const limit = 100 // Stripe page size
@@ -1191,8 +1212,22 @@ export class StripeSync {
         }
       }
 
+      // Add pagination cursor if present
+      if (pageCursor) {
+        listParams.starting_after = pageCursor
+      }
+
       // Fetch from Stripe
       const response = await config.listFn(listParams)
+
+      // Defensive: Stripe should not return has_more=true with empty data. Avoid infinite loops by failing this object run if it ever happens.
+      if (response.data.length === 0 && response.has_more) {
+        const message = `Stripe returned has_more=true with empty page for ${resourceName}. Aborting to avoid infinite loop.`
+        this.config.logger?.warn(message)
+
+        await this.postgresClient.failObjectSync(accountId, runStartedAt, resourceName, message)
+        return { processed: 0, hasMore: false, runStartedAt }
+      }
 
       // Upsert the data
       if (response.data.length > 0) {
@@ -1217,6 +1252,17 @@ export class StripeSync {
             runStartedAt,
             resourceName,
             String(maxCreated)
+          )
+        }
+
+        // Update pagination page_cursor with last item's ID
+        const lastId = (response.data[response.data.length - 1] as { id: string }).id
+        if (response.has_more) {
+          await this.postgresClient.updateObjectPageCursor(
+            accountId,
+            runStartedAt,
+            resourceName,
+            lastId
           )
         }
       }

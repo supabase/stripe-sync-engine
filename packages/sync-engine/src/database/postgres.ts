@@ -473,7 +473,8 @@ export class PostgresClient {
       `UPDATE "${this.config.schema}"."_sync_obj_runs" o
        SET status = 'error',
            error_message = 'Auto-cancelled: stale (no update in 5 min)',
-           completed_at = now()
+           completed_at = now(),
+           page_cursor = NULL
        WHERE o."_account_id" = $1
          AND o.status = 'running'
          AND o.updated_at < now() - interval '5 minutes'`,
@@ -672,9 +673,10 @@ export class PostgresClient {
     status: string
     processedCount: number
     cursor: string | null
+    pageCursor: string | null
   } | null> {
     const result = await this.query(
-      `SELECT object, status, processed_count, cursor
+      `SELECT object, status, processed_count, cursor, page_cursor
        FROM "${this.config.schema}"."_sync_obj_runs"
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object]
@@ -687,6 +689,7 @@ export class PostgresClient {
       status: row.status,
       processedCount: row.processed_count,
       cursor: row.cursor,
+      pageCursor: row.page_cursor,
     }
   }
 
@@ -706,6 +709,34 @@ export class PostgresClient {
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object, count]
     )
+  }
+
+  /**
+   * Update the pagination page_cursor used for backfills using Stripe list calls.
+   */
+  async updateObjectPageCursor(
+    accountId: string,
+    runStartedAt: Date,
+    object: string,
+    pageCursor: string | null
+  ): Promise<void> {
+    await this.query(
+      `UPDATE "${this.config.schema}"."_sync_obj_runs"
+       SET page_cursor = $4, updated_at = now()
+       WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
+      [accountId, runStartedAt, object, pageCursor]
+    )
+  }
+
+  /**
+   * Clear the pagination page_cursor for an object sync.
+   */
+  async clearObjectPageCursor(
+    accountId: string,
+    runStartedAt: Date,
+    object: string
+  ): Promise<void> {
+    await this.updateObjectPageCursor(accountId, runStartedAt, object, null)
   }
 
   /**
@@ -747,9 +778,10 @@ export class PostgresClient {
 
   /**
    * Get the highest cursor from previous syncs for an object type.
-   * This considers completed, error, AND running runs to ensure recovery syncs
-   * don't re-process data that was already synced before a crash.
-   * A 'running' status with a cursor means the process was killed mid-sync.
+   * Uses only completed object runs.
+   * - During the initial backfill we page through history, but we also update the cursor as we go.
+   *   If we crash mid-backfill and reuse that cursor, we can accidentally switch into incremental mode
+   *   too early and only ever fetch the newest page (breaking the historical backfill).
    *
    * Handles two cursor formats:
    * - Numeric: compared as bigint for correct ordering
@@ -766,8 +798,33 @@ export class PostgresClient {
        FROM "${this.config.schema}"."_sync_obj_runs" o
        WHERE o."_account_id" = $1
          AND o.object = $2
-         AND o.cursor IS NOT NULL`,
+         AND o.cursor IS NOT NULL
+         AND o.status = 'complete'`,
       [accountId, object]
+    )
+    return result.rows[0]?.cursor ?? null
+  }
+
+  /**
+   * Get the highest cursor from previous syncs for an object type, excluding the current run.
+   */
+  async getLastCursorBeforeRun(
+    accountId: string,
+    object: string,
+    runStartedAt: Date
+  ): Promise<string | null> {
+    const result = await this.query(
+      `SELECT CASE
+         WHEN BOOL_OR(o.cursor !~ '^\\d+$') THEN MAX(o.cursor COLLATE "C")
+         ELSE MAX(CASE WHEN o.cursor ~ '^\\d+$' THEN o.cursor::bigint END)::text
+       END as cursor
+       FROM "${this.config.schema}"."_sync_obj_runs" o
+       WHERE o."_account_id" = $1
+         AND o.object = $2
+         AND o.cursor IS NOT NULL
+         AND o.status = 'complete'
+         AND o.run_started_at < $3`,
+      [accountId, object, runStartedAt]
     )
     return result.rows[0]?.cursor ?? null
   }
@@ -794,7 +851,7 @@ export class PostgresClient {
   async completeObjectSync(accountId: string, runStartedAt: Date, object: string): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_obj_runs"
-       SET status = 'complete', completed_at = now()
+       SET status = 'complete', completed_at = now(), page_cursor = NULL
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object]
     )
@@ -818,7 +875,7 @@ export class PostgresClient {
   ): Promise<void> {
     await this.query(
       `UPDATE "${this.config.schema}"."_sync_obj_runs"
-       SET status = 'error', error_message = $4, completed_at = now()
+       SET status = 'error', error_message = $4, completed_at = now(), page_cursor = NULL
        WHERE "_account_id" = $1 AND run_started_at = $2 AND object = $3`,
       [accountId, runStartedAt, object, errorMessage]
     )

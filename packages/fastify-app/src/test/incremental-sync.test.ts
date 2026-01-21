@@ -499,7 +499,7 @@ describe('processNext', () => {
     expect(result.runStartedAt).toBeInstanceOf(Date)
   })
 
-  test('should use cursor for incremental sync on second call', async () => {
+  test('processNext should continue historical paging on second call (starting_after), not switch into incremental mode early', async () => {
     // First page
     const firstPageProducts: Stripe.Product[] = [
       {
@@ -540,10 +540,11 @@ describe('processNext', () => {
     await stripeSync.processNext('product')
     await stripeSync.processNext('product')
 
-    // Should have been called with created filter using cursor
+    // Second call should continue paging within the same run using starting_after (page cursor).
+    // We should NOT switch into created.gte incremental mode mid-run (that causes "newest page only" issues).
     expect(listSpy).toHaveBeenLastCalledWith({
       limit: 100,
-      created: { gte: 1704902400 },
+      starting_after: 'test_prod_inc_1',
     })
   })
 
