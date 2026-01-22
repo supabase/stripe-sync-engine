@@ -58,8 +58,7 @@ async function connectAndMigrate(
   logOnError = false
 ) {
   if (!fs.existsSync(migrationsDirectory)) {
-    config.logger?.info(`Migrations directory ${migrationsDirectory} not found, skipping`)
-    return
+    throw new Error(`Migrations directory not found. ${migrationsDirectory} does not exist.`)
   }
 
   const optionalConfig = {
@@ -89,8 +88,10 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
   const schema = 'stripe'
 
   try {
+    console.log('Starting migrations')
     // Run migrations
     await client.connect()
+    console.log('Connected to database')
 
     // Ensure schema exists, not doing it via migration to not break current migration checksums
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema};`)
@@ -112,7 +113,7 @@ export async function runMigrations(config: MigrationConfig): Promise<void> {
 
     config.logger?.info('Running migrations')
 
-    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config)
+    await connectAndMigrate(client, path.resolve(__dirname, './migrations'), config, true)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
     throw err

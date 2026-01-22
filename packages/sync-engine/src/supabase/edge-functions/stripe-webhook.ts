@@ -1,4 +1,4 @@
-import { StripeSync } from 'npm:stripe-experiment-sync'
+import { StripeSync } from '../../index'
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -10,11 +10,10 @@ Deno.serve(async (req) => {
     return new Response('Missing stripe-signature header', { status: 400 })
   }
 
-  const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
-  if (!rawDbUrl) {
+  const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+  if (!dbUrl) {
     return new Response(JSON.stringify({ error: 'SUPABASE_DB_URL not set' }), { status: 500 })
   }
-  const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
 
   const stripeSync = new StripeSync({
     poolConfig: { connectionString: dbUrl, max: 1 },

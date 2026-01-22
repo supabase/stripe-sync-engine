@@ -20,8 +20,8 @@
  *   processing on timeout/crash is safe.
  */
 
-import { StripeSync } from 'npm:stripe-experiment-sync'
-import postgres from 'npm:postgres'
+import { StripeSync } from '../../index'
+import postgres from 'postgres'
 
 const QUEUE_NAME = 'stripe_sync_work'
 const VISIBILITY_TIMEOUT = 60 // seconds
@@ -35,11 +35,10 @@ Deno.serve(async (req) => {
 
   const token = authHeader.substring(7) // Remove 'Bearer '
 
-  const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
-  if (!rawDbUrl) {
+  const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+  if (!dbUrl) {
     return new Response(JSON.stringify({ error: 'SUPABASE_DB_URL not set' }), { status: 500 })
   }
-  const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
 
   let sql
   let stripeSync

@@ -1,5 +1,5 @@
-import { StripeSync, runMigrations, VERSION } from 'npm:stripe-experiment-sync'
-import postgres from 'npm:postgres'
+import { StripeSync, runMigrations, VERSION } from '../../index'
+import postgres from 'postgres'
 
 // Get management API base URL from environment variable (for testing against localhost/staging)
 // Caller should provide full URL with protocol (e.g., http://localhost:54323 or https://api.supabase.com)
@@ -93,15 +93,14 @@ Deno.serve(async (req) => {
 
   // Handle GET requests for status
   if (req.method === 'GET') {
-    const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
-    if (!rawDbUrl) {
+    const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+    if (!dbUrl) {
       return new Response(JSON.stringify({ error: 'SUPABASE_DB_URL not set' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
     let sql
 
     try {
@@ -183,12 +182,10 @@ Deno.serve(async (req) => {
     let stripeSync = null
     try {
       // Get and validate database URL
-      const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
-      if (!rawDbUrl) {
+      const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+      if (!dbUrl) {
         throw new Error('SUPABASE_DB_URL environment variable is not set')
       }
-      // Remove sslmode from connection string (not supported by pg in Deno)
-      const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
 
       // Stripe key is required for uninstall to delete webhooks
       const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
@@ -335,14 +332,12 @@ Deno.serve(async (req) => {
   let stripeSync = null
   try {
     // Get and validate database URL
-    const rawDbUrl = Deno.env.get('SUPABASE_DB_URL')
-    if (!rawDbUrl) {
+    const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+    if (!dbUrl) {
       throw new Error('SUPABASE_DB_URL environment variable is not set')
     }
-    // Remove sslmode from connection string (not supported by pg in Deno)
-    const dbUrl = rawDbUrl.replace(/[?&]sslmode=[^&]*/g, '').replace(/[?&]$/, '')
 
-    await runMigrations({ databaseUrl: dbUrl })
+    await runMigrations({ databaseUrl: dbUrl, logger: console })
 
     stripeSync = new StripeSync({
       poolConfig: { connectionString: dbUrl, max: 2 }, // Need 2 for advisory lock + queries
