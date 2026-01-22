@@ -7,7 +7,9 @@ export { StripeSync } from './stripeSync'
 export type * from './types'
 
 export { PostgresClient } from './database/postgres'
-export { runMigrations } from './database/migrate'
+export { runMigrations, runMigrationsFromContent } from './database/migrate'
+export { embeddedMigrations } from './database/migrations-embedded'
+export type { EmbeddedMigration } from './database/migrations-embedded'
 export { hashApiKey } from './utils/hashApiKey'
 export { createStripeWebSocketClient } from './websocket-client'
 export type {

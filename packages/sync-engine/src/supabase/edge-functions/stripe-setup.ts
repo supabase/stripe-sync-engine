@@ -1,4 +1,4 @@
-import { StripeSync, runMigrations, VERSION } from '../../index'
+import { StripeSync, runMigrationsFromContent, VERSION, embeddedMigrations } from '../../index'
 import postgres from 'postgres'
 
 // Get management API base URL from environment variable (for testing against localhost/staging)
@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
       throw new Error('SUPABASE_DB_URL environment variable is not set')
     }
 
-    await runMigrations({ databaseUrl: dbUrl, logger: console })
+    await runMigrationsFromContent({ databaseUrl: dbUrl, logger: console }, embeddedMigrations)
 
     stripeSync = new StripeSync({
       poolConfig: { connectionString: dbUrl, max: 2 }, // Need 2 for advisory lock + queries
