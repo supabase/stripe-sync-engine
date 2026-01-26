@@ -33,7 +33,7 @@ jobs:
 
       - name: Run semantic-release
         id: semantic-release
-        uses: cycjimmy/semantic-release-action@v4
+        uses: cycjimmy/semantic-release-action@v6
         with:
           semantic_version: 19
         env:
