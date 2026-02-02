@@ -1,7 +1,6 @@
 import fastify, { FastifyInstance, FastifyServerOptions } from 'fastify'
 import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
-import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
 import { getConfig } from './utils/config'
 import { StripeSync } from '@supabase/stripe-sync-engine'
@@ -41,10 +40,6 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
           version: '0.0.1',
         },
       },
-    })
-
-    await app.register(fastifySwaggerUi, {
-      routePrefix: '/docs',
     })
   }
 

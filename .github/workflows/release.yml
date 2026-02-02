@@ -33,7 +33,7 @@ jobs:
 
       - name: Run semantic-release
         id: semantic-release
-        uses: cycjimmy/semantic-release-action@v4
+        uses: cycjimmy/semantic-release-action@v6
         with:
           semantic_version: 19
         env:
@@ -102,10 +102,15 @@ jobs:
           cd packages/sync-engine
           pnpm version ${{ needs.release.outputs.new-release-version }} --no-git-tag-version
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
       - name: Publish sync-engine to npm
         run: |
           cd packages/sync-engine
           pnpm install --frozen-lockfile
           pnpm run build
           pnpm pack
-          pnpm publish --access public
+          npm publish --access public

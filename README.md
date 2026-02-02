@@ -29,6 +29,13 @@ This project synchronizes your Stripe account to a PostgreSQL database. It can b
 - Exposes a `/webhooks` endpoint that listens to any Stripe webhooks (via the Fastify app).
 - Inserts, updates, or deletes changes into the tables whenever there is a change to Stripe.
 
+> **Note:** If other PostgreSQL users need access to the `stripe` schema, grant them privileges:
+>
+> ```sql
+> GRANT USAGE ON SCHEMA stripe TO your_user;
+> GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA stripe TO your_user;
+> ```
+
 ---
 
 ## Packages
@@ -63,6 +70,7 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `checkout.session.async_payment_failed` 🟢
 - [x] `checkout.session.async_payment_succeeded` 🟢
 - [x] `checkout.session.completed` 🟢
+- [x] `checkout.session.expired` 🟢
 - [x] `credit_note.created` 🟢
 - [x] `credit_note.updated` 🟢
 - [x] `credit_note.voided` 🟢
@@ -98,13 +106,14 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `invoice.overpaid` 🟢
 - [x] `invoice.will_be_due` 🟢
 - [x] `invoice.voided` 🟢
+- [x] `invoice_payment.paid` 🟢
 - [ ] `issuing_authorization.request`
 - [ ] `issuing_card.created`
 - [ ] `issuing_cardholder.created`
 - [x] `payment_intent.amount_capturable_updated` 🟢
 - [x] `payment_intent.canceled` 🟢
 - [x] `payment_intent.created` 🟢
-- [x] `payment_intent.partially_refunded` 🟢
+- [x] `payment_intent.partially_funded` 🟢
 - [x] `payment_intent.payment_failed` 🟢
 - [x] `payment_intent.processing` 🟢
 - [x] `payment_intent.requires_action` 🟢
