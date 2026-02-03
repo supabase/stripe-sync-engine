@@ -55,7 +55,7 @@ export function nodePrefixBuiltinsPlugin(): esbuild.Plugin {
   }
 }
 
-const rawTsBundledPlugin: esbuild.Plugin = {
+export const rawTsBundledPlugin: esbuild.Plugin = {
   name: 'raw-ts-bundled',
   setup(build) {
     // Resolve `./foo.ts?raw` -> actual `foo.ts` path, in a special namespace
@@ -108,7 +108,7 @@ const rawTsBundledPlugin: esbuild.Plugin = {
 // Plugin to embed all SQL migrations from a directory at build time
 // Usage: import migrations from './migrations?embedded'
 // Returns: Array<{name: string, sql: string}> sorted by filename
-const embeddedMigrationsPlugin: esbuild.Plugin = {
+export const embeddedMigrationsPlugin: esbuild.Plugin = {
   name: 'embedded-migrations',
   setup(build) {
     build.onResolve({ filter: /\?embedded$/ }, (args) => {
@@ -121,7 +121,10 @@ const embeddedMigrationsPlugin: esbuild.Plugin = {
 
     build.onLoad({ filter: /.*/, namespace: 'embedded-migrations' }, async (args) => {
       const migrationsDir = args.path
-      const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()
+      const files = fs
+        .readdirSync(migrationsDir)
+        .filter((f) => f.endsWith('.sql'))
+        .sort()
 
       const migrations = files.map((filename) => ({
         name: filename,

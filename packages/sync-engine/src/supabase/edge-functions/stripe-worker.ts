@@ -21,7 +21,7 @@
  */
 
 import { StripeSync } from '../../index'
-import postgres from 'postgres'
+import postgres from 'npm:postgres'
 
 const QUEUE_NAME = 'stripe_sync_work'
 const VISIBILITY_TIMEOUT = 60 // seconds
@@ -42,10 +42,12 @@ Deno.serve(async (req) => {
 
   let sql
   let stripeSync
-
+  console.log('Starting stripe sync worker')
   try {
+    console.log('connecting with postgres package', { dbUrl })
     sql = postgres(dbUrl, { max: 1, prepare: false })
   } catch (error) {
+    console.error(error)
     return new Response(
       JSON.stringify({
         error: 'Failed to create postgres connection',
@@ -74,13 +76,15 @@ Deno.serve(async (req) => {
       await sql.end()
       return new Response('Forbidden: Invalid worker secret', { status: 403 })
     }
-
+    console.log('Creating StripeSync instance')
     stripeSync = new StripeSync({
       poolConfig: { connectionString: dbUrl, max: 1 },
       stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
       enableSigma: (Deno.env.get('ENABLE_SIGMA') ?? 'false') === 'true',
     })
+    console.log('StripeSync instance created')
   } catch (error) {
+    console.error(error)
     await sql.end()
     return new Response(
       JSON.stringify({
@@ -97,6 +101,7 @@ Deno.serve(async (req) => {
     const messages = await sql`
       SELECT * FROM pgmq.read(${QUEUE_NAME}::text, ${VISIBILITY_TIMEOUT}::int, ${BATCH_SIZE}::int)
     `
+    console.log(`Read ${messages.length} messages from queue`)
 
     // If queue empty, enqueue all objects for continuous sync
     if (messages.length === 0) {
