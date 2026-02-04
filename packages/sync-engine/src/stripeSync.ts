@@ -606,7 +606,7 @@ export class StripeSync {
   async syncSingleEntity(stripeId: string) {
     if (stripeId.startsWith('cus_')) {
       return this.stripe.customers.retrieve(stripeId).then((it) => {
-        if (!it || it.deleted) return
+        if (!it) return
 
         return this.upsertCustomers([it])
       })
