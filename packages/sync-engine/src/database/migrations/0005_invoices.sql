@@ -1,14 +1,18 @@
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status') THEN
-        create type "stripe"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE t.typname = 'invoice_status' AND n.nspname = '{{schema}}'
+    ) THEN
+        create type "{{schema}}"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
     END IF;
 END
 $$;
 
 
-create table if not exists "stripe"."invoices" (
+create table if not exists "{{schema}}"."invoices" (
   "id" text primary key,
   "object" text,
   "auto_advance" boolean,
@@ -20,7 +24,7 @@ create table if not exists "stripe"."invoices" (
   "metadata" jsonb,
   "period_end" integer,
   "period_start" integer,
-  "status" "stripe"."invoice_status",
+  "status" "{{schema}}"."invoice_status",
   "total" bigint,
   "account_country" text,
   "account_name" text,
@@ -67,8 +71,8 @@ create table if not exists "stripe"."invoices" (
   "transfer_data" jsonb,
   "webhooks_delivered_at" integer,
 
-  "customer" text references "stripe"."customers",
-  "subscription" text references "stripe"."subscriptions",
+  "customer" text references "{{schema}}"."customers",
+  "subscription" text references "{{schema}}"."subscriptions",
   "payment_intent" text,  -- not yet implemented
   "default_payment_method" text, -- not yet implemented
   "default_source" text, -- not yet implemented
