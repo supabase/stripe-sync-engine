@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
   let sql
   let stripeSync
   try {
-    sql = postgres(dbUrl, { max: 1, prepare: false })
+    sql = postgres(dbUrl.split('?')[0], { max: 1, prepare: false, ssl: false })
   } catch (error) {
     console.error(error)
     return new Response(
