@@ -8,8 +8,6 @@ begin
 end;
 $$;
 
-alter function set_updated_at() owner to postgres;
-
 alter table stripe.subscriptions
     add updated_at timestamptz default timezone('utc'::text, now()) not null;
 
