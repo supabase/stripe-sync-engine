@@ -26,7 +26,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "prebuild": "npm run clean && npm run build:functions",
-    "build:functions": "tsx scripts/build-functions.ts",
+    "build:functions": "tsx scripts/build-functions.ts && prettier --write src/database/migrations-embedded.ts",
     "build": "tsup src/index.ts src/supabase/index.ts src/cli/index.ts src/cli/lib.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
