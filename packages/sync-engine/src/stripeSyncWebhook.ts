@@ -61,6 +61,7 @@ export class StripeSyncWebhook {
       signature,
       webhookSecret
     )
+
     return this.processEvent(event)
   }
 
@@ -70,6 +71,16 @@ export class StripeSyncWebhook {
         ? (event.data.object as { account?: string }).account
         : undefined
     const accountId = await this.deps.getAccountId(objectAccountId)
+
+    // Skip events whose data.object lacks an id — these are preview/draft objects
+    // (e.g. invoice.upcoming) that cannot be persisted due to NOT NULL constraint on id
+    const dataObject = event.data?.object as { id?: string } | undefined
+    if (dataObject && typeof dataObject === 'object' && !dataObject.id) {
+      this.deps.config.logger?.info(
+        `Skipping webhook ${event.id}: ${event.type} — data.object has no id (preview/draft object)`
+      )
+      return
+    }
     await this.handleAnyEvent(event, accountId)
   }
 
