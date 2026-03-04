@@ -1,8 +1,5 @@
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from 'fastify'
-import { getConfig } from './config'
 import { timingSafeEqual } from 'node:crypto'
-
-const config = getConfig()
 
 export const verifyApiKey = (
   request: FastifyRequest,
@@ -13,7 +10,7 @@ export const verifyApiKey = (
     return reply.code(401).send('Unauthorized')
   }
   const { authorization } = request.headers
-  if (!apiKeyMatches(authorization, config.apiKey)) {
+  if (!apiKeyMatches(authorization, process.env.API_KEY ?? 'false')) {
     return reply.code(401).send('Unauthorized')
   }
   done()

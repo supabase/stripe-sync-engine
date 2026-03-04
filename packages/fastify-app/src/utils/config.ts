@@ -11,37 +11,14 @@ function getConfigFromEnv(key: string, defaultValue?: string): string {
 }
 
 export type StripeSyncServerConfig = {
-  /** Postgres database URL including authentication */
-  databaseUrl: string
+  /** Full host -> merchant runtime config registry. */
+  merchantConfigByHost: Record<string, MerchantConfig>
 
-  /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
-  stripeSecretKey: string
-
-  /**
-   * Opt-in sync for Sigma tables. Requires stripeSecretKey to have Sigma write permissions
-   */
-  enableSigma?: boolean
-
-  /** Webhook secret from Stripe to verify the signature of webhook events. */
-  stripeWebhookSecret: string
-
-  /** API_KEY is used to authenticate "admin" endpoints (i.e. for backfilling), make sure to generate a secure string. */
+  /** API_KEY is used by internal admin paths. */
   apiKey: string
 
   /** Stripe API version for the webhooks, defaults to 2020-08-27 */
   stripeApiVersion: string
-
-  /**
-   * Stripe limits related lists like invoice items in an invoice to 10 by default.
-   * By enabling this, sync-engine automatically fetches the remaining elements before saving
-   * */
-  autoExpandLists?: boolean
-
-  /**
-   * If true, the sync engine will backfill related entities, i.e. when a invoice webhook comes in, it ensures that the customer is present and synced.
-   * This ensures foreign key integrity, but comes at the cost of additional queries to the database (and added latency for Stripe calls if the entity is actually missing).
-   */
-  backfillRelatedEntities?: boolean
 
   maxPostgresConnections?: number
 
@@ -58,19 +35,49 @@ export type StripeSyncServerConfig = {
   sslConnectionOptions?: ConnectionOptions
 }
 
+export type MerchantConfig = {
+  stripeSecretKey: string
+  stripeWebhookSecret: string
+  databaseUrl: string
+  enableSigma?: boolean
+  autoExpandLists?: boolean
+  backfillRelatedEntities?: boolean
+}
+
+export function normalizeHost(rawHost: string): string {
+  const trimmed = rawHost.trim().toLowerCase()
+  if (!trimmed) return ''
+  const host = trimmed.split(',')[0].trim()
+  if (!host) return ''
+
+  if (host.startsWith('[')) {
+    const closingIdx = host.indexOf(']')
+    if (closingIdx > -1) {
+      return host.slice(0, closingIdx + 1)
+    }
+  }
+
+  return host.split(':')[0]
+}
+
 export function getConfig(): StripeSyncServerConfig {
   config()
 
+  const defaultEnableSigma = getConfigFromEnv('ENABLE_SIGMA', 'false') === 'true'
+  const defaultAutoExpandLists = getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true'
+  const defaultBackfillRelatedEntities =
+    getConfigFromEnv('BACKFILL_RELATED_ENTITIES', 'true') === 'true'
+  const merchantConfigByHost = parseMerchantConfigFromEnv({
+    defaultEnableSigma,
+    defaultAutoExpandLists,
+    defaultBackfillRelatedEntities,
+  })
+
   return {
-    databaseUrl: getConfigFromEnv('DATABASE_URL'),
-    stripeSecretKey: getConfigFromEnv('STRIPE_SECRET_KEY', ''),
-    enableSigma: process.env.ENABLE_SIGMA === 'true',
-    stripeWebhookSecret: getConfigFromEnv('STRIPE_WEBHOOK_SECRET'),
+    merchantConfigByHost,
     apiKey: getConfigFromEnv('API_KEY', 'false'),
     stripeApiVersion: getConfigFromEnv('STRIPE_API_VERSION', '2020-08-27'),
     port: Number(getConfigFromEnv('PORT', '8080')),
-    autoExpandLists: getConfigFromEnv('AUTO_EXPAND_LISTS', 'false') === 'true',
-    backfillRelatedEntities: getConfigFromEnv('BACKFILL_RELATED_ENTITIES', 'true') === 'true',
     maxPostgresConnections: Number(getConfigFromEnv('MAX_POSTGRES_CONNECTIONS', '10')),
     revalidateObjectsViaStripeApi: getConfigFromEnv('REVALIDATE_OBJECTS_VIA_STRIPE_API', '')
       .split(',')
@@ -81,6 +88,97 @@ export function getConfig(): StripeSyncServerConfig {
     disableMigrations: getConfigFromEnv('DISABLE_MIGRATIONS', 'false') === 'true',
     sslConnectionOptions: sslConnnectionOptionsFromEnv(),
   }
+}
+
+function parseMerchantConfigFromEnv(defaults: {
+  defaultEnableSigma: boolean
+  defaultAutoExpandLists: boolean
+  defaultBackfillRelatedEntities: boolean
+}): Record<string, MerchantConfig> {
+  const rawMerchantConfig = getConfigFromEnv('MERCHANT_CONFIG_JSON')
+
+  let parsedMerchantConfig: unknown
+  try {
+    parsedMerchantConfig = JSON.parse(rawMerchantConfig)
+  } catch {
+    throw new Error('MERCHANT_CONFIG_JSON must be valid JSON')
+  }
+
+  if (
+    parsedMerchantConfig == null ||
+    typeof parsedMerchantConfig !== 'object' ||
+    Array.isArray(parsedMerchantConfig)
+  ) {
+    throw new Error('MERCHANT_CONFIG_JSON must be an object map keyed by host')
+  }
+
+  const merchantConfigByHost: Record<string, MerchantConfig> = {}
+  for (const [rawHost, value] of Object.entries(parsedMerchantConfig)) {
+    const host = normalizeHost(rawHost)
+    if (!host) {
+      throw new Error(`MERCHANT_CONFIG_JSON contains an invalid host key: "${rawHost}"`)
+    }
+    if (merchantConfigByHost[host]) {
+      throw new Error(
+        `MERCHANT_CONFIG_JSON contains duplicate host key after normalization: "${host}"`
+      )
+    }
+    merchantConfigByHost[host] = parseSingleMerchantConfig(value, host, defaults)
+  }
+
+  if (Object.keys(merchantConfigByHost).length === 0) {
+    throw new Error('MERCHANT_CONFIG_JSON must contain at least one host mapping')
+  }
+
+  return merchantConfigByHost
+}
+
+function parseSingleMerchantConfig(
+  value: unknown,
+  host: string,
+  defaults: {
+    defaultEnableSigma: boolean
+    defaultAutoExpandLists: boolean
+    defaultBackfillRelatedEntities: boolean
+  }
+): MerchantConfig {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`MERCHANT_CONFIG_JSON["${host}"] must be an object`)
+  }
+
+  const merchant = value as Record<string, unknown>
+  return {
+    stripeSecretKey: getRequiredString(merchant.stripeSecretKey, `${host}.stripeSecretKey`),
+    stripeWebhookSecret: getRequiredString(
+      merchant.stripeWebhookSecret,
+      `${host}.stripeWebhookSecret`
+    ),
+    databaseUrl: getRequiredString(merchant.databaseUrl, `${host}.databaseUrl`),
+    enableSigma:
+      getOptionalBoolean(merchant.enableSigma, `${host}.enableSigma`) ??
+      defaults.defaultEnableSigma,
+    autoExpandLists:
+      getOptionalBoolean(merchant.autoExpandLists, `${host}.autoExpandLists`) ??
+      defaults.defaultAutoExpandLists,
+    backfillRelatedEntities:
+      getOptionalBoolean(merchant.backfillRelatedEntities, `${host}.backfillRelatedEntities`) ??
+      defaults.defaultBackfillRelatedEntities,
+  }
+}
+
+function getRequiredString(value: unknown, fieldPath: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`MERCHANT_CONFIG_JSON field "${fieldPath}" must be a non-empty string`)
+  }
+  return value
+}
+
+function getOptionalBoolean(value: unknown, fieldPath: string): boolean | undefined {
+  if (value == null) return undefined
+  if (typeof value !== 'boolean') {
+    throw new Error(`MERCHANT_CONFIG_JSON field "${fieldPath}" must be a boolean when defined`)
+  }
+  return value
 }
 
 function sslConnnectionOptionsFromEnv(): ConnectionOptions | undefined {

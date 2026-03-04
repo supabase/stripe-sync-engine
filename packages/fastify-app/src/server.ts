@@ -16,11 +16,16 @@ const main = async () => {
   const config = getConfig()
 
   if (!config.disableMigrations) {
-    await runMigrations({
-      databaseUrl: config.databaseUrl,
-      logger: logger,
-      ssl: config.sslConnectionOptions,
-    })
+    const migratedDatabaseUrls = new Set<string>()
+    for (const merchantConfig of Object.values(config.merchantConfigByHost)) {
+      if (migratedDatabaseUrls.has(merchantConfig.databaseUrl)) continue
+      migratedDatabaseUrls.add(merchantConfig.databaseUrl)
+      await runMigrations({
+        databaseUrl: merchantConfig.databaseUrl,
+        logger: logger,
+        ssl: config.sslConnectionOptions,
+      })
+    }
   }
 
   // Start the server

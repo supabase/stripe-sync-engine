@@ -3,7 +3,7 @@ import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
-import { getConfig } from './utils/config'
+import { getConfig, normalizeHost } from './utils/config'
 import { StripeSync } from 'stripe-experiment-sync'
 import { errorSchema } from './error'
 import { logger } from './logger'
@@ -17,17 +17,38 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
   const app = fastify(opts)
 
   const config = getConfig()
+  app.decorate('merchantConfigByHost', config.merchantConfigByHost)
+  app.decorate('resolveMerchantByHost', (host: string) => {
+    const normalized = normalizeHost(host)
+    if (!normalized) return undefined
+    const merchantConfig = config.merchantConfigByHost[normalized]
+    if (!merchantConfig) return undefined
+    return {
+      host: normalized,
+      config: merchantConfig,
+    }
+  })
+  app.decorate('createStripeSyncForHost', async (host: string) => {
+    const merchantRuntime = app.resolveMerchantByHost(host)
+    if (!merchantRuntime) return undefined
 
-  const poolConfig: PoolConfig = {
-    max: config.maxPostgresConnections ?? 10,
-    connectionString: config.databaseUrl,
-    keepAlive: true,
-    ssl: config.sslConnectionOptions,
-  }
+    const poolConfig: PoolConfig = {
+      max: config.maxPostgresConnections ?? 10,
+      connectionString: merchantRuntime.config.databaseUrl,
+      keepAlive: true,
+      ssl: config.sslConnectionOptions,
+    }
 
-  const stripeSync = await StripeSync.create({ ...config, logger, poolConfig })
-
-  app.decorate('stripeSync', stripeSync)
+    return StripeSync.create({
+      ...merchantRuntime.config,
+      stripeApiVersion: config.stripeApiVersion,
+      stripeAccountId: config.stripeAccountId,
+      revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
+      ...(config.partnerId ? { partnerId: config.partnerId } : {}),
+      logger,
+      poolConfig,
+    })
+  })
 
   /**
    * Expose swagger docs

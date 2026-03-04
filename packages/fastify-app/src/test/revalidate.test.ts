@@ -4,24 +4,36 @@ import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 import type Stripe from 'stripe'
+import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
-let stripeSync: StripeSync
+let stripeSync: StripeSync | undefined
+
+ensureTestMerchantConfig()
 
 beforeAll(async () => {
   process.env.REVALIDATE_OBJECTS_VIA_STRIPE_API = 'invoice'
 
   const config = getConfig()
+  const primaryMerchantConfig = Object.values(config.merchantConfigByHost)[0]
+  if (!primaryMerchantConfig) {
+    throw new Error('MERCHANT_CONFIG_JSON must define at least one merchant')
+  }
   await runMigrations({
-    databaseUrl: config.databaseUrl,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
 
     logger,
   })
 
   stripeSync = await StripeSync.create({
-    ...config,
+    ...primaryMerchantConfig,
+    stripeApiVersion: config.stripeApiVersion,
     stripeAccountId: 'acct_test_account',
+    revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
+    maxPostgresConnections: config.maxPostgresConnections,
+    ...(config.partnerId ? { partnerId: config.partnerId } : {}),
+    logger,
     poolConfig: {
-      connectionString: config.databaseUrl,
+      connectionString: primaryMerchantConfig.databaseUrl,
     },
   })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)

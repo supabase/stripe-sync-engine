@@ -2,6 +2,9 @@
 import { FastifyInstance } from 'fastify'
 import { beforeAll, describe, test, expect, afterAll } from 'vitest'
 import { createServer } from '../app'
+import { ensureTestMerchantConfig } from './helpers/merchantConfig'
+
+ensureTestMerchantConfig()
 
 describe('/health', () => {
   let server: FastifyInstance

@@ -1,43 +1,45 @@
 import type Stripe from 'stripe'
-import { StripeSync, runMigrations, hashApiKey } from 'stripe-experiment-sync'
+import { StripeSync, runMigrations } from 'stripe-experiment-sync'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
+import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
 let stripeSync: StripeSync | undefined
 const TEST_ACCOUNT_ID = 'acct_test_account'
+
+ensureTestMerchantConfig()
 
 beforeAll(async () => {
   process.env.AUTO_EXPAND_LISTS = 'true'
   process.env.BACKFILL_RELATED_ENTITIES = 'false'
 
   const config = getConfig()
+  const primaryMerchantConfig = Object.values(config.merchantConfigByHost)[0]
+  if (!primaryMerchantConfig) {
+    throw new Error('MERCHANT_CONFIG_JSON must define at least one merchant')
+  }
   await runMigrations({
-    databaseUrl: config.databaseUrl,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
 
     logger,
   })
 
   stripeSync = await StripeSync.create({
-    ...config,
+    ...primaryMerchantConfig,
+    stripeApiVersion: config.stripeApiVersion,
     stripeAccountId: TEST_ACCOUNT_ID,
+    revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
+    maxPostgresConnections: config.maxPostgresConnections,
+    ...(config.partnerId ? { partnerId: config.partnerId } : {}),
+    logger,
     poolConfig: {
-      connectionString: config.databaseUrl,
+      connectionString: primaryMerchantConfig.databaseUrl,
     },
   })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
-
-  // Ensure test account exists in database with API key hash
-  const apiKeyHash = hashApiKey(config.stripeSecretKey)
-  await stripeSync.postgresClient.upsertAccount(
-    {
-      id: TEST_ACCOUNT_ID,
-      raw_data: { id: TEST_ACCOUNT_ID, object: 'account' },
-    },
-    apiKeyHash
-  )
 })
 
 describe('invoices', () => {

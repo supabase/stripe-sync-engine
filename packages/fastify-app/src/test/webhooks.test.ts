@@ -1,44 +1,57 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
-import { PostgresClient, StripeSync, runMigrations } from 'stripe-experiment-sync'
+import { PostgresClient, runMigrations, type StripeSync } from 'stripe-experiment-sync'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
 import { logger } from '../logger'
-import { mockStripe } from './helpers/mockStripe'
+import { ensureTestMerchantConfig } from './helpers/merchantConfig'
+
+ensureTestMerchantConfig()
+
+const runtimeConfig = getConfig()
+const [primaryHost, primaryMerchantConfig] =
+  Object.entries(runtimeConfig.merchantConfigByHost)[0] ?? []
+if (!primaryHost || !primaryMerchantConfig) {
+  throw new Error('MERCHANT_CONFIG_JSON must define at least one merchant')
+}
+const secondaryHost = Object.keys(runtimeConfig.merchantConfigByHost).find(
+  (host) => host !== primaryHost
+)
+const primaryWebhookSecret = primaryMerchantConfig.stripeWebhookSecret
+const secondaryWebhookSecret = secondaryHost
+  ? runtimeConfig.merchantConfigByHost[secondaryHost].stripeWebhookSecret
+  : undefined
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
-const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
 const postgresClient = new PostgresClient({
   poolConfig: {
-    connectionString: getConfig().databaseUrl,
+    connectionString: primaryMerchantConfig.databaseUrl,
   },
   schema: 'stripe',
 })
 
 describe('POST /webhooks', () => {
   let server: FastifyInstance | undefined
+  const testWithSecondaryMerchant = secondaryHost && secondaryWebhookSecret ? test : test.skip
 
   beforeAll(async () => {
     const config = getConfig()
-    await postgresClient.query('DROP SCHEMA IF EXISTS stripe CASCADE')
-    await runMigrations({
-      databaseUrl: config.databaseUrl,
-      logger,
-    })
+    const migratedDatabaseUrls = new Set<string>()
+    for (const merchantConfig of Object.values(config.merchantConfigByHost)) {
+      if (migratedDatabaseUrls.has(merchantConfig.databaseUrl)) continue
+      migratedDatabaseUrls.add(merchantConfig.databaseUrl)
+      await runMigrations({
+        databaseUrl: merchantConfig.databaseUrl,
+        logger,
+      })
+    }
 
     process.env.AUTO_EXPAND_LISTS = 'false'
-    process.env.STRIPE_ACCOUNT_ID = process.env.STRIPE_ACCOUNT_ID || 'acct_test_account'
-
+    process.env.BACKFILL_RELATED_ENTITIES = 'false'
     server = await createServer()
-
-    const stripeSync = server.getDecorator<StripeSync>('stripeSync')
-    const stripe = Object.assign(stripeSync.stripe, mockStripe)
-    vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
-
-    await stripeSync.getCurrentAccount()
   })
 
   afterAll(async () => {
@@ -134,7 +147,7 @@ describe('POST /webhooks', () => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     // Update the event body created timestamp to be the current time
     eventBody.created = unixtime
-    const signature = createHmac('sha256', stripeWebhookSecret)
+    const signature = createHmac('sha256', primaryWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
       .digest('hex')
     const entity = eventBody.data.object
@@ -146,6 +159,7 @@ describe('POST /webhooks', () => {
       url: `/webhooks`,
       method: 'POST',
       headers: {
+        host: primaryHost,
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: eventBody,
@@ -187,7 +201,7 @@ describe('POST /webhooks', () => {
     'invoice_upcoming.json',
   ])('process event %s', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
-    const signature = createHmac('sha256', stripeWebhookSecret)
+    const signature = createHmac('sha256', primaryWebhookSecret)
       .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
       .digest('hex')
 
@@ -195,6 +209,7 @@ describe('POST /webhooks', () => {
       url: `/webhooks`,
       method: 'POST',
       headers: {
+        host: primaryHost,
         'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
       },
       payload: eventBody,
@@ -219,11 +234,10 @@ describe('POST /webhooks', () => {
     // Clean up any existing test data
     await deleteTestData(entityType, entityId)
 
-    // Use a fresh timestamp to avoid Stripe's signature tolerance window (300s)
-    // expiring when earlier tests take a long time to run
-    const newerTimestamp = Math.floor(Date.now() / 1000)
+    // First, send a webhook with current timestamp (newer data)
+    const newerTimestamp = unixtime
     const newerEventBody = { ...eventBody, created: newerTimestamp }
-    const newerSignature = createHmac('sha256', stripeWebhookSecret)
+    const newerSignature = createHmac('sha256', primaryWebhookSecret)
       .update(`${newerTimestamp}.${JSON.stringify(newerEventBody)}`, 'utf8')
       .digest('hex')
 
@@ -231,6 +245,7 @@ describe('POST /webhooks', () => {
       url: `/webhooks`,
       method: 'POST',
       headers: {
+        host: primaryHost,
         'stripe-signature': `t=${newerTimestamp},v1=${newerSignature},v0=ff`,
       },
       payload: newerEventBody,
@@ -261,7 +276,7 @@ describe('POST /webhooks', () => {
         },
       },
     }
-    const olderSignature = createHmac('sha256', stripeWebhookSecret)
+    const olderSignature = createHmac('sha256', primaryWebhookSecret)
       .update(`${olderTimestamp}.${JSON.stringify(olderEventBody)}`, 'utf8')
       .digest('hex')
 
@@ -269,6 +284,7 @@ describe('POST /webhooks', () => {
       url: `/webhooks`,
       method: 'POST',
       headers: {
+        host: primaryHost,
         'stripe-signature': `t=${olderTimestamp},v1=${olderSignature},v0=ff`,
       },
       payload: olderEventBody,
@@ -290,5 +306,107 @@ describe('POST /webhooks', () => {
     // Verify the paid field still reflects the newer webhook's value
     expect(olderDbEntity.paid).toBe(newerEventBody.data.object.paid)
     expect(olderDbEntity.paid).not.toBe(olderEventBody.data.object.paid)
+  })
+
+  test('returns 400 when signature uses another merchant secret', async () => {
+    if (!secondaryWebhookSecret) return
+
+    const eventBody = await import('./stripe/customer_updated.json').then(
+      ({ default: myData }) => myData
+    )
+    const signature = createHmac('sha256', secondaryWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        host: primaryHost,
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: eventBody,
+    })
+
+    expect(response.statusCode).toBe(400)
+  })
+
+  test('returns 404 for unknown host', async () => {
+    const eventBody = await import('./stripe/customer_updated.json').then(
+      ({ default: myData }) => myData
+    )
+    const signature = createHmac('sha256', primaryWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
+      .digest('hex')
+
+    const response = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        host: 'unknown-merchant.local',
+        'stripe-signature': `t=${unixtime},v1=${signature},v0=ff`,
+      },
+      payload: eventBody,
+    })
+
+    expect(response.statusCode).toBe(404)
+  })
+
+  testWithSecondaryMerchant('routes requests to the matching merchant instance', async () => {
+    if (!secondaryHost) return
+
+    const eventBody = await import('./stripe/customer_updated.json').then(
+      ({ default: myData }) => myData
+    )
+    const processWebhookSpy = vitest.fn().mockResolvedValue(undefined)
+    const closeSpy = vitest.fn().mockResolvedValue(undefined)
+
+    const createStripeSyncSpy = vitest
+      .spyOn(server, 'createStripeSyncForHost')
+      .mockImplementation(() => {
+        return Promise.resolve({
+          webhook: {
+            processWebhook: processWebhookSpy,
+          },
+          close: closeSpy,
+        } as unknown as StripeSync)
+      })
+
+    const primarySignature = createHmac('sha256', primaryWebhookSecret)
+      .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
+      .digest('hex')
+    const secondarySignature = createHmac('sha256', secondaryWebhookSecret!)
+      .update(`${unixtime}.${JSON.stringify(eventBody)}`, 'utf8')
+      .digest('hex')
+
+    const primaryResponse = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        host: primaryHost,
+        'stripe-signature': `t=${unixtime},v1=${primarySignature},v0=ff`,
+      },
+      payload: eventBody,
+    })
+
+    const secondaryResponse = await server.inject({
+      url: `/webhooks`,
+      method: 'POST',
+      headers: {
+        host: secondaryHost,
+        'stripe-signature': `t=${unixtime},v1=${secondarySignature},v0=ff`,
+      },
+      payload: eventBody,
+    })
+
+    expect(primaryResponse.statusCode).toBe(200)
+    expect(secondaryResponse.statusCode).toBe(200)
+    expect(createStripeSyncSpy).toHaveBeenCalledTimes(2)
+    expect(createStripeSyncSpy).toHaveBeenNthCalledWith(1, primaryHost)
+    expect(createStripeSyncSpy).toHaveBeenNthCalledWith(2, secondaryHost)
+    expect(processWebhookSpy).toHaveBeenCalledTimes(2)
+    expect(closeSpy).toHaveBeenCalledTimes(2)
+
+    createStripeSyncSpy.mockRestore()
   })
 })

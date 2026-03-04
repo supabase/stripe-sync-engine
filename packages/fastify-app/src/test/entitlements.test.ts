@@ -4,35 +4,52 @@ import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 import Stripe from 'stripe'
+import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
 let stripeSync: StripeSync | undefined
 const customerId = 'cus_111'
+
+ensureTestMerchantConfig()
 
 beforeAll(async () => {
   process.env.REVALIDATE_ENTITY_VIA_STRIPE_API = 'false'
   process.env.BACKFILL_RELATED_ENTITIES = 'false'
 
   const config = getConfig()
+  const primaryMerchantConfig = Object.values(config.merchantConfigByHost)[0]
+  if (!primaryMerchantConfig) {
+    throw new Error('MERCHANT_CONFIG_JSON must define at least one merchant')
+  }
   await runMigrations({
-    databaseUrl: config.databaseUrl,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
 
     logger,
   })
 
-  stripeSync = await StripeSync.create({ ...config, stripeAccountId: 'acct_test_account' })
+  stripeSync = await StripeSync.create({
+    ...primaryMerchantConfig,
+    stripeApiVersion: config.stripeApiVersion,
+    stripeAccountId: 'acct_test_account',
+    revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
+    maxPostgresConnections: config.maxPostgresConnections,
+    ...(config.partnerId ? { partnerId: config.partnerId } : {}),
+    logger,
+    poolConfig: {
+      connectionString: primaryMerchantConfig.databaseUrl,
+    },
+  })
   const stripe = Object.assign(stripeSync.stripe, mockStripe)
   vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
-
-  const accountId = await stripeSync.getAccountId()
-  await stripeSync.postgresClient.upsertAccount(
-    { id: accountId, raw_data: { id: accountId } },
-    'test_hash'
-  )
 })
 
 afterAll(async () => {
   if (stripeSync) {
-    await stripeSync.postgresClient.pool.end()
+    await Promise.all([
+      stripeSync.postgresClient.query(
+        `delete from stripe.active_entitlements where customer = '${customerId}'`
+      ),
+      stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
+    ])
   }
 })
 
