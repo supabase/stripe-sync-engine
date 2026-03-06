@@ -1,6 +1,6 @@
 /**
- * Backfill E2E Test
- * Tests backfill command with real Stripe data and incremental sync
+ * Sync E2E Test
+ * Tests sync command with real Stripe data and incremental sync
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { execSync } from 'child_process'
@@ -17,7 +17,7 @@ import {
 import { ResourceTracker } from './helpers/cleanup.js'
 import { runCliCommand } from './helpers/cli-process.js'
 
-describe('Backfill E2E', () => {
+describe('Sync E2E', () => {
   let pool: pg.Pool
   let container: PostgresContainer
   const tracker = new ResourceTracker()
@@ -100,8 +100,8 @@ describe('Backfill E2E', () => {
     await container?.stop()
   }, 30000)
 
-  it('should backfill all data from Stripe', async () => {
-    runCliCommand('backfill', ['all'], {
+  it('should sync all data from Stripe', async () => {
+    runCliCommand('sync', ['all', '--rate-limit', '10', '--worker-count', '5'], {
       cwd,
       env: { DATABASE_URL: container.databaseUrl },
     })
@@ -125,7 +125,8 @@ describe('Backfill E2E', () => {
     expect(priceCount).toBeGreaterThanOrEqual(3)
   }, 120000)
 
-  it('should save sync cursor after backfill', async () => {
+  it('should save sync cursor after sync', async () => {
+    // Get account ID from synced data
     const accountRow = await queryDbSingle<{ _account_id: string }>(
       pool,
       'SELECT DISTINCT _account_id FROM stripe.products LIMIT 1'
@@ -161,20 +162,24 @@ describe('Backfill E2E', () => {
     expect(statusRow?.status).toBe('complete')
   })
 
-  it('should perform incremental sync on subsequent backfill', async () => {
+  it('should perform incremental sync on subsequent run', async () => {
     const newProduct = await stripe.products.create({
       name: 'Test Product 4 - Incremental',
-      description: 'Integration test product 4 - created after first backfill',
+      description: 'Integration test product 4 - created after first sync',
     })
     productIds.push(newProduct.id)
     tracker.trackProduct(newProduct.id)
 
     await sleep(2000)
 
-    runCliCommand('backfill', ['product'], {
-      cwd,
-      env: { DATABASE_URL: container.databaseUrl },
-    })
+    runCliCommand(
+      'sync',
+      ['product', '--interval', '0', '--rate-limit', '10', '--worker-count', '5'],
+      {
+        cwd,
+        env: { DATABASE_URL: container.databaseUrl },
+      }
+    )
 
     const newProductInDb = await queryDbCount(
       pool,

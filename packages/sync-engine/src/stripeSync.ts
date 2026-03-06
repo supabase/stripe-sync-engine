@@ -370,24 +370,14 @@ export class StripeSync {
     workerCount: number = 100
   ): Promise<RunKey | null> {
     const priorities = this.buildPriorityMap(objects)
-    let runKey: RunKey | null
-    if (segmentedSync) {
-      runKey = await this.postgresClient.reconciliationRun(
-        this.accountId,
-        triggeredBy,
-        [],
-        interval,
-        priorities
-      )
-    } else {
-      runKey = await this.postgresClient.reconciliationRun(
-        this.accountId,
-        triggeredBy,
-        tableNames,
-        interval,
-        priorities
-      )
-    }
+    const runKey = await this.postgresClient.reconciliationRun(
+      this.accountId,
+      triggeredBy,
+      tableNames,
+      interval,
+      priorities,
+      segmentedSync
+    )
     if (runKey == null) {
       return null
     }

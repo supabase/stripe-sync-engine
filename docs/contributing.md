@@ -1,35 +1,27 @@
 # Contributing
 
-Contributions are welcome! This document provides guidelines for contributing to the Stripe Sync Engine project.
+Thanks for your interest in Stripe Sync Engine.
 
-## Contributing to the Docs
+This project is currently accepting code contributions only. Docs are maintained by project maintainers.
 
-Building documentation requires Python 3.8+ and uv.
+## Quick Workflow
 
-### Install Dependencies
+1. Fork the repo and create a branch.
+2. Make your changes.
+3. Run relevant checks locally.
+4. Open a pull request with a clear description.
 
-Create a virtual environment and install mkdocs, themes, and extensions using uv.
+## Development Setup
+
+This repo uses `pnpm` workspaces.
 
 ```sh
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r docs/requirements_docs.txt
+pnpm install
 ```
 
-### Serving
-
-To serve the documentation locally, make sure your virtual environment is activated and run:
+Common checks from the repo root:
 
 ```sh
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-mkdocs serve
-```
-
-and visit the docs at [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-
-### Deploying
-
-If you have write access to the repository, documentation can be updated using:
-
-```sh
-mkdocs gh-deploy
+pnpm lint
+pnpm test
 ```

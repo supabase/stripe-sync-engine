@@ -1,12 +1,12 @@
 # stripe-experiment-sync CLI
 
-CLI tool for syncing Stripe data to PostgreSQL with real-time webhook streaming and Supabase Edge Functions deployment.
+CLI tool for syncing Stripe data to PostgreSQL with optional real-time event streaming and Supabase Edge Functions deployment.
 
 ## Features
 
-- 🔄 Real-time Stripe webhook streaming to PostgreSQL
+- 🔄 Full historical backfill from Stripe to PostgreSQL
+- 📡 Optional real-time event streaming via WebSocket or ngrok webhook
 - 🚀 Automatic table creation and migrations
-- 🌐 Built-in ngrok tunnel for local development
 - 🔐 Secure webhook signature verification
 - 🧹 Automatic cleanup on exit
 - ☁️ Supabase Edge Functions deployment for serverless webhook handling
@@ -19,46 +19,57 @@ npm install -g stripe-experiment-sync
 
 ## Commands
 
-### Local Development
-
-#### Start Webhook Server
-
-```bash
-stripe-experiment-sync start [options]
-
-Options:
-  --stripe-key <key>       Stripe API key (or STRIPE_API_KEY env)
-  --ngrok-token <token>    ngrok auth token (or NGROK_AUTH_TOKEN env)
-  --database-url <url>     Postgres DATABASE_URL (or DATABASE_URL env)
-```
-
-Starts a local webhook server with ngrok tunnel for real-time Stripe event syncing.
-
-#### Run Migrations
+### Run Migrations
 
 ```bash
 stripe-experiment-sync migrate [options]
 
 Options:
   --database-url <url>     Postgres DATABASE_URL (or DATABASE_URL env)
+  --sigma                  Create Sigma tables during migration
 ```
 
 Runs database migrations to create Stripe schema tables.
 
-#### Backfill Data
+### Sync Data
 
 ```bash
-stripe-experiment-sync backfill <object> [options]
+stripe-experiment-sync sync [entityName] [options]
 
 Arguments:
-  object                   Stripe object to backfill (e.g., customers, products, prices)
+  entityName               Optional Stripe entity to sync (e.g., customer, invoice, product)
 
 Options:
   --stripe-key <key>       Stripe API key (or STRIPE_API_KEY env)
   --database-url <url>     Postgres DATABASE_URL (or DATABASE_URL env)
+  --sigma                  Enable Sigma tables
+  --interval <seconds>     Skip resync if a successful run completed within this many seconds (default: 86400)
+  --worker-count <count>   Number of parallel sync workers (default: 50)
+  --rate-limit <limit>     Max requests per second (default: 25)
+  --listen-mode <mode>     Event listener mode: websocket, webhook, or disabled (default: disabled)
 ```
 
-Backfills historical data from Stripe to PostgreSQL.
+Syncs data from Stripe to PostgreSQL. When called without an entity name, syncs all supported objects. When an entity name is provided, syncs only that entity.
+
+The `--listen-mode` option controls real-time event streaming after the backfill completes:
+
+- **`disabled`** (default) — performs the backfill and exits.
+- **`websocket`** — connects directly to Stripe via WebSocket (no ngrok needed). After the backfill, the process stays alive streaming live changes.
+- **`webhook`** — creates an ngrok tunnel and Express server to receive webhook events. Requires `NGROK_AUTH_TOKEN`. After the backfill, the process stays alive streaming live changes.
+
+If a successful sync run completed within the `--interval` window, the backfill is skipped entirely.
+
+### Monitor
+
+```bash
+stripe-experiment-sync monitor [options]
+
+Options:
+  --database-url <url>     Postgres DATABASE_URL (or DATABASE_URL env)
+  --stripe-key <key>       Stripe API key (or STRIPE_API_KEY env)
+```
+
+Live display of table row counts in the stripe schema.
 
 ### Supabase Deployment
 
@@ -68,14 +79,18 @@ Backfills historical data from Stripe to PostgreSQL.
 stripe-experiment-sync supabase install [options]
 
 Options:
-  --token <token>          Supabase access token (or SUPABASE_ACCESS_TOKEN env)
-  --project <ref>          Supabase project ref (or SUPABASE_PROJECT_REF env)
-  --stripe-key <key>       Stripe API key (or STRIPE_API_KEY env)
+  --token <token>              Supabase access token (or SUPABASE_ACCESS_TOKEN env)
+  --project <ref>              Supabase project ref (or SUPABASE_PROJECT_REF env)
+  --stripe-key <key>           Stripe API key (or STRIPE_API_KEY env)
   --worker-interval <seconds>  Worker interval in seconds (defaults to 60)
-                               Valid values: 1-59 (seconds) or multiples of 60 up to 3540 (59 minutes)
+  --sync-interval <seconds>    Full resync interval in seconds (default: 604800 = 1 week)
+  --rate-limit <limit>         Max Stripe API requests per second (default: 60)
+  --sigma                      Enable Sigma sync
+  --management-url <url>       Supabase management API URL (or SUPABASE_MANAGEMENT_URL env)
+  --package-version <version>  Package version to install (defaults to latest)
 ```
 
-Deploys Stripe sync engine as Supabase Edge Functions. The worker interval controls how frequently the pg_cron job invokes the worker function to process sync operations. Intervals of 1-59 seconds use pg_cron's interval format, while minute-based intervals (60, 120, 180, etc.) use cron format.
+Deploys Stripe sync engine as Supabase Edge Functions. The worker interval controls how frequently the pg_cron job invokes the worker function to process sync operations.
 
 #### Uninstall from Supabase
 
@@ -85,6 +100,7 @@ stripe-experiment-sync supabase uninstall [options]
 Options:
   --token <token>          Supabase access token (or SUPABASE_ACCESS_TOKEN env)
   --project <ref>          Supabase project ref (or SUPABASE_PROJECT_REF env)
+  --management-url <url>   Supabase management API URL (or SUPABASE_MANAGEMENT_URL env)
 ```
 
 Removes Stripe sync Edge Functions from Supabase.
@@ -94,11 +110,11 @@ Removes Stripe sync Edge Functions from Supabase.
 Create a `.env` file in your project (see `.env.sample`):
 
 ```env
-# Required for all commands
+# Required for sync commands
 STRIPE_API_KEY=sk_test_...
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 
-# Required for local development (start command)
+# Required for webhook listen mode
 NGROK_AUTH_TOKEN=your_ngrok_token
 
 # Required for Supabase deployment
@@ -109,57 +125,46 @@ SUPABASE_PROJECT_REF=your_project_ref
 Then run commands without options:
 
 ```bash
-stripe-experiment-sync start
 stripe-experiment-sync migrate
-stripe-experiment-sync backfill customers
+stripe-experiment-sync sync
+stripe-experiment-sync sync customer
 stripe-experiment-sync supabase install
 ```
 
 ## Usage Examples
 
-### Local Development Workflow
+### One-off Backfill
 
-1. **Run migrations**:
+```bash
+# Sync all data and exit
+stripe-experiment-sync sync
 
-   ```bash
-   stripe-experiment-sync migrate
-   ```
+# Sync a specific entity
+stripe-experiment-sync sync customer
+```
 
-2. **Start webhook server**:
+### Continuous Sync (Backfill + Live Streaming)
 
-   ```bash
-   stripe-experiment-sync start
-   ```
+```bash
+# Backfill then stream via WebSocket (no ngrok needed)
+stripe-experiment-sync sync --listen-mode websocket
 
-   Output:
-
-   ```
-   Creating tables............ ✓
-   Populating tables.......... ✓
-   Streaming live changes..... ● [press Ctrl-C to abort]
-   ```
-
-3. **Backfill historical data** (optional):
-   ```bash
-   stripe-experiment-sync backfill customers
-   stripe-experiment-sync backfill products
-   ```
+# Backfill then stream via ngrok webhook
+stripe-experiment-sync sync --listen-mode webhook
+```
 
 ### Supabase Deployment Workflow
 
 1. **Deploy to Supabase**:
 
    ```bash
-   # Default: worker runs every 60 seconds
    stripe-experiment-sync supabase install
-
-   # Custom interval: worker runs every 2 minutes
-   stripe-experiment-sync supabase install --worker-interval 120
    ```
 
 2. **Update webhook endpoint in Stripe dashboard** to point to your Supabase Edge Function
 
 3. **To remove**:
+
    ```bash
    stripe-experiment-sync supabase uninstall
    ```
@@ -182,20 +187,6 @@ This uses the [Stripe CLI](https://stripe.com/docs/stripe-cli) to send test webh
 - Download: https://github.com/stripe/stripe-cli/releases/latest
 
 ## How It Works
-
-### Local Development Mode
-
-1. **Creates Tables**: Runs database migrations to create Stripe schema tables
-2. **Sets Up Tunnel**: Creates an ngrok tunnel to expose your local server
-3. **Registers Webhook**: Creates a Stripe webhook endpoint listening to all events (`*`)
-4. **Streams Changes**: Real-time syncing of all Stripe events to PostgreSQL
-
-The CLI automatically:
-
-- Starts an Express server with webhook handling
-- Creates an ngrok tunnel for webhook delivery
-- Manages webhook lifecycle (creation/cleanup)
-- Verifies webhook signatures for security
 
 ### Supabase Deployment Mode
 

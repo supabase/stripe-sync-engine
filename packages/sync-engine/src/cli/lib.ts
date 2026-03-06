@@ -1,11 +1,4 @@
-export {
-  syncCommand,
-  migrateCommand,
-  backfillCommand,
-  fullSyncCommand,
-  installCommand,
-  uninstallCommand,
-} from './commands'
+export { migrateCommand, fullSyncCommand, installCommand, uninstallCommand } from './commands'
 export type { DeployOptions, CliOptions } from './commands'
 export { loadConfig } from './config'
 export { createTunnel } from './ngrok'

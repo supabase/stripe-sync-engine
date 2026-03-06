@@ -747,11 +747,15 @@ export class PostgresClient {
     accountId: string,
     triggeredBy: string,
     resourceNames: string[],
-    priorities?: Record<string, number>
+    priorities?: Record<string, number>,
+    segmentedSync: boolean = false
   ): Promise<{ accountId: string; runStartedAt: Date }> {
     const run = await this.getOrCreateSyncRun(accountId, triggeredBy)
 
-    await this.createObjectRuns(run.accountId, run.runStartedAt, resourceNames, priorities)
+    if (!segmentedSync) {
+      console.log({ accountId, triggeredBy, resourceNames }, 'Creating object runs')
+      await this.createObjectRuns(run.accountId, run.runStartedAt, resourceNames, priorities)
+    }
 
     return { accountId: run.accountId, runStartedAt: run.runStartedAt }
   }
@@ -797,12 +801,19 @@ export class PostgresClient {
     triggeredBy: string,
     resourceNames: string[],
     interval: number = DAY,
-    priorities?: Record<string, number>
+    priorities?: Record<string, number>,
+    segmentedSync: boolean = false
   ): Promise<{ accountId: string; runStartedAt: Date } | null> {
     const completedRun = await this.getCompletedRun(accountId, interval)
     if (completedRun) return null
 
-    return this.joinOrCreateSyncRun(accountId, triggeredBy, resourceNames, priorities)
+    return this.joinOrCreateSyncRun(
+      accountId,
+      triggeredBy,
+      resourceNames,
+      priorities,
+      segmentedSync
+    )
   }
 
   /**

@@ -2,6 +2,8 @@ import dotenv from 'dotenv'
 import inquirer from 'inquirer'
 import chalk from 'chalk'
 
+export type ListenMode = 'websocket' | 'webhook' | 'disabled'
+
 export interface Config {
   stripeApiKey: string
   ngrokAuthToken?: string // Optional - if not provided, use WebSocket mode
@@ -14,6 +16,11 @@ export interface CliOptions {
   ngrokToken?: string
   databaseUrl?: string
   enableSigma?: boolean
+  interval?: number
+  workerCount?: number
+  rateLimit?: number
+  listenMode?: ListenMode
+  listenOnly?: boolean
 }
 
 /**
@@ -36,9 +43,7 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
   config.databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
 
   // Get Sigma sync option
-  config.enableSigma =
-    options.enableSigma ??
-    (process.env.ENABLE_SIGMA !== undefined ? process.env.ENABLE_SIGMA === 'true' : undefined)
+  config.enableSigma = options.enableSigma ?? false
 
   // Prompt for missing required values
   const questions = []
@@ -79,15 +84,6 @@ export async function loadConfig(options: CliOptions): Promise<Config> {
         }
         return true
       },
-    })
-  }
-
-  if (config.enableSigma === undefined) {
-    questions.push({
-      type: 'confirm',
-      name: 'enableSigma',
-      message: 'Enable Sigma sync? (Requires Sigma access in Stripe API key)',
-      default: false,
     })
   }
 

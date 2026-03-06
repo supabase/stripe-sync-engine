@@ -3,7 +3,7 @@ import express from 'express'
 import http from 'node:http'
 import dotenv from 'dotenv'
 import { type PoolConfig } from 'pg'
-import { loadConfig, type CliOptions } from './config'
+import { loadConfig, type CliOptions, type ListenMode } from './config'
 import {
   StripeSync,
   runMigrations,
@@ -12,9 +12,8 @@ import {
   type StripeWebhookEvent,
 } from '../index'
 import { createTunnel, type NgrokTunnel } from './ngrok'
-import { SYNC_OBJECTS, type StripeObject } from '../resourceRegistry'
+import { type StripeObject } from '../resourceRegistry'
 import { install, uninstall } from '../supabase'
-import { SIGMA_INGESTION_CONFIGS } from '../sigma/sigmaIngestionConfigs'
 
 /**
  * Monitor command - live display of table row counts.
@@ -112,193 +111,6 @@ export interface DeployOptions {
 export type { CliOptions }
 
 /**
- * Backfill command - backfills a specific entity type from Stripe.
- */
-export async function backfillCommand(options: CliOptions, entityName: string): Promise<void> {
-  let stripeSync: StripeSync | null = null
-
-  try {
-    // For backfill, we only need stripe key and database URL (not ngrok token)
-    dotenv.config()
-
-    // Check if sigma is enabled via CLI option or env var
-    const enableSigma = options.enableSigma ?? process.env.ENABLE_SIGMA === 'true'
-
-    // Validate entity name - allow sigma table names when sigma is enabled
-    const sigmaTableNames = enableSigma ? Object.keys(SIGMA_INGESTION_CONFIGS) : []
-    const validEntities = new Set<string>([...SYNC_OBJECTS, ...sigmaTableNames])
-    if (!validEntities.has(entityName)) {
-      const entityList = enableSigma
-        ? `${SYNC_OBJECTS.join(', ')}, and ${sigmaTableNames.length} sigma tables`
-        : SYNC_OBJECTS.join(', ')
-      console.error(
-        chalk.red(`Error: Invalid entity name "${entityName}". Valid entities are: ${entityList}`)
-      )
-      process.exit(1)
-    }
-
-    // Check if this is a sigma table
-    const isSigmaTable = sigmaTableNames.includes(entityName)
-
-    let stripeApiKey =
-      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
-    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
-
-    if (!stripeApiKey || !databaseUrl) {
-      const inquirer = (await import('inquirer')).default
-      const questions = []
-
-      if (!stripeApiKey) {
-        questions.push({
-          type: 'password',
-          name: 'stripeApiKey',
-          message: 'Enter your Stripe API key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim() === '') {
-              return 'Stripe API key is required'
-            }
-            if (!input.startsWith('sk_') && !input.startsWith('rk_')) {
-              return 'Stripe API key should start with "sk_" or "rk_"'
-            }
-            return true
-          },
-        })
-      }
-
-      if (!databaseUrl) {
-        questions.push({
-          type: 'password',
-          name: 'databaseUrl',
-          message: 'Enter your Postgres DATABASE_URL:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim() === '') {
-              return 'DATABASE_URL is required'
-            }
-            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
-              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
-            }
-            return true
-          },
-        })
-      }
-
-      if (questions.length > 0) {
-        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
-        const answers = await inquirer.prompt(questions)
-        if (answers.stripeApiKey) stripeApiKey = answers.stripeApiKey
-        if (answers.databaseUrl) databaseUrl = answers.databaseUrl
-      }
-    }
-
-    const config = {
-      stripeApiKey,
-      databaseUrl,
-      ngrokAuthToken: '', // Not needed for backfill
-    }
-    const schemaName = isSigmaTable ? 'sigma' : 'stripe'
-    console.log(chalk.blue(`Backfilling ${entityName} from Stripe in '${schemaName}' schema...`))
-    console.log(chalk.gray(`Database: ${config.databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
-
-    // Run migrations first (will check for legacy installations and throw if detected)
-    try {
-      const schemaName = process.env.SYNC_SCHEMA_NAME ?? undefined
-      const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME ?? undefined
-      await runMigrations({
-        databaseUrl: config.databaseUrl,
-        enableSigma,
-        stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
-        schemaName,
-        syncTablesSchemaName,
-      })
-    } catch (migrationError) {
-      console.error(chalk.red('Failed to run migrations:'))
-      console.error(
-        migrationError instanceof Error ? migrationError.message : String(migrationError)
-      )
-      throw migrationError
-    }
-
-    // Create StripeSync instance
-    const poolConfig: PoolConfig = {
-      max: 10,
-      connectionString: config.databaseUrl,
-      keepAlive: true,
-    }
-
-    stripeSync = await StripeSync.create({
-      databaseUrl: config.databaseUrl,
-      stripeSecretKey: config.stripeApiKey,
-      enableSigma,
-      stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
-      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
-      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
-      poolConfig,
-    })
-
-    // Run sync for the specified entity
-    if (entityName === 'all') {
-      const backfill = await stripeSync.fullSync()
-      const objectCount = Object.keys(backfill.totals).length
-      console.log(
-        chalk.green(
-          `✓ Backfill complete: ${backfill.totalSynced} rows synced across ${objectCount} objects`
-        )
-      )
-      if (backfill.skipped.length > 0) {
-        console.log(
-          chalk.yellow(
-            `Skipped ${backfill.skipped.length} Sigma tables without access: ${backfill.skipped.join(', ')}`
-          )
-        )
-      }
-      if (backfill.errors.length > 0) {
-        console.log(chalk.red(`Backfill finished with ${backfill.errors.length} errors:`))
-        for (const err of backfill.errors) {
-          console.log(chalk.red(`  - ${err.object}: ${err.message}`))
-        }
-      }
-    } else {
-      // Use fullSync for specific objects (including sigma tables)
-      // Cast to allow sigma table names which aren't in SyncObject type
-      const result = await stripeSync.fullSync(
-        [entityName] as StripeObject[],
-        true,
-        20,
-        10,
-        true,
-        0
-      )
-      const tableType = isSigmaTable ? '(sigma)' : ''
-      console.log(
-        chalk.green(
-          `✓ Full sync complete: ${result.totalSynced} ${entityName} ${tableType} rows synced`
-        )
-      )
-    }
-
-    // Clean up database pool
-    await stripeSync.close()
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(chalk.red(error.message))
-    }
-
-    // Clean up database pool on error
-    if (stripeSync) {
-      try {
-        await stripeSync.close()
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
-    process.exit(1)
-  }
-}
-
-/**
  * Migration command - runs database migrations only.
  */
 export async function migrateCommand(options: CliOptions): Promise<void> {
@@ -372,100 +184,218 @@ export async function migrateCommand(options: CliOptions): Promise<void> {
   }
 }
 
+interface EventListenerResult {
+  wsClient: StripeWebSocketClient | null
+  tunnel: NgrokTunnel | null
+  server: http.Server | null
+  webhookId: string | null
+}
+
 /**
- * Main sync command - syncs Stripe data to PostgreSQL using webhooks for real-time updates.
- * Supports two modes:
- * - WebSocket mode (default): Direct connection to Stripe via WebSocket, no ngrok needed
- * - Webhook mode: Uses ngrok tunnel + Express server (when NGROK_AUTH_TOKEN is provided)
+ * Sets up real-time event listening via WebSocket or ngrok webhook tunnel.
+ * Returns the created resources so the caller can manage their lifecycle.
  */
-export async function syncCommand(options: CliOptions): Promise<void> {
-  let stripeSync: StripeSync
-  let tunnel: NgrokTunnel | null = null
-  let server: http.Server | null = null
-  let webhookId: string | null = null
-  let wsClient: StripeWebSocketClient | null = null
+export async function setupEventListener(
+  stripeSync: StripeSync,
+  config: { stripeApiKey: string; ngrokAuthToken?: string; databaseUrl: string },
+  mode: ListenMode = 'websocket'
+): Promise<EventListenerResult> {
+  const modeLabel = mode === 'websocket' ? 'WebSocket' : 'Webhook (ngrok)'
+  console.log(chalk.blue(`\nMode: ${modeLabel}`))
 
-  // Setup cleanup handler
-  const cleanup = async (signal?: string) => {
-    console.log(chalk.blue(`\n\nCleaning up... (signal: ${signal || 'manual'})`))
+  const databaseUrlWithoutPassword = config.databaseUrl.replace(/:[^:@]+@/, ':****@')
 
-    // Close WebSocket client if in WebSocket mode
-    if (wsClient) {
-      try {
-        wsClient.close()
-        console.log(chalk.green('✓ WebSocket closed'))
-      } catch {
-        console.log(chalk.yellow('⚠ Could not close WebSocket'))
-      }
+  if (mode === 'websocket') {
+    console.log(chalk.blue('\nConnecting to Stripe WebSocket...'))
+
+    const wsClient = await createStripeWebSocketClient({
+      stripeApiKey: config.stripeApiKey,
+      onEvent: async (event: StripeWebhookEvent) => {
+        try {
+          const payload = JSON.parse(event.event_payload)
+          console.log(chalk.cyan(`← ${payload.type}`) + chalk.gray(` (${payload.id})`))
+          await stripeSync.webhook.processEvent(payload)
+          return {
+            status: 200,
+            event_type: payload.type,
+            event_id: payload.id,
+            databaseUrl: databaseUrlWithoutPassword,
+          }
+        } catch (err) {
+          console.error(chalk.red('Error processing event:'), err)
+          return {
+            status: 500,
+            databaseUrl: databaseUrlWithoutPassword,
+            error: err instanceof Error ? err.message : String(err),
+          }
+        }
+      },
+      onReady: (secret) => {
+        console.log(chalk.green('✓ Connected to Stripe WebSocket'))
+        const maskedSecret =
+          secret.length > 14 ? `${secret.slice(0, 10)}...${secret.slice(-4)}` : '****'
+        console.log(chalk.gray(`  Webhook secret: ${maskedSecret}`))
+      },
+      onError: (error) => {
+        console.error(chalk.red('WebSocket error:'), error.message)
+      },
+      onClose: (code, reason) => {
+        console.log(chalk.yellow(`WebSocket closed: ${code} - ${reason}`))
+      },
+    })
+
+    return { wsClient, tunnel: null, server: null, webhookId: null }
+  }
+
+  // Webhook mode (ngrok)
+  const port = 3000
+  const tunnel = await createTunnel(port, config.ngrokAuthToken!)
+
+  const webhookPath = process.env.WEBHOOK_PATH || '/stripe-webhooks'
+  console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
+  const webhook = await stripeSync.webhook.findOrCreateManagedWebhook(`${tunnel.url}${webhookPath}`)
+  const webhookId = webhook.id
+  const eventCount = webhook.enabled_events?.length || 0
+  console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
+  console.log(chalk.cyan(`  URL: ${webhook.url}`))
+  console.log(chalk.cyan(`  Events: ${eventCount} supported events`))
+
+  const app = express()
+  const webhookRoute = webhookPath
+  app.use(webhookRoute, express.raw({ type: 'application/json' }))
+
+  app.post(webhookRoute, async (req, res) => {
+    const sig = req.headers['stripe-signature']
+    if (!sig || typeof sig !== 'string') {
+      console.error('[Webhook] Missing stripe-signature header')
+      return res.status(400).send({ error: 'Missing stripe-signature header' })
     }
 
-    // Delete webhook endpoint if created (unless keepWebhooksOnShutdown is true)
-    const keepWebhooksOnShutdown = process.env.KEEP_WEBHOOKS_ON_SHUTDOWN === 'true'
-    if (webhookId && stripeSync && !keepWebhooksOnShutdown) {
-      try {
-        await stripeSync.webhook.deleteManagedWebhook(webhookId)
-        console.log(chalk.green('✓ Webhook cleanup complete'))
-      } catch {
-        console.log(chalk.yellow('⚠ Could not delete webhook'))
-      }
+    const rawBody = req.body
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      console.error('[Webhook] Body is not a Buffer!')
+      return res.status(400).send({ error: 'Missing raw body for signature verification' })
     }
 
-    // Close server
-    if (server) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          server!.close((err) => {
-            if (err) reject(err)
-            else resolve()
-          })
+    try {
+      await stripeSync.webhook.processWebhook(rawBody, sig)
+      return res.status(200).send({ received: true })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('[Webhook] Processing error:', errorMessage)
+      return res.status(400).send({ error: errorMessage })
+    }
+  })
+
+  app.use(express.json())
+  app.use(express.urlencoded({ extended: false }))
+  app.get('/health', async (req, res) => res.status(200).json({ status: 'ok' }))
+
+  console.log(chalk.blue(`\nStarting server on port ${port}...`))
+  const server = await new Promise<http.Server>((resolve, reject) => {
+    const srv = app.listen(port, '0.0.0.0', () => resolve(srv))
+    srv.on('error', reject)
+  })
+  console.log(chalk.green(`✓ Server started on port ${port}`))
+
+  return { wsClient: null, tunnel, server, webhookId }
+}
+
+/**
+ * Tears down all resources: event listener (WebSocket/webhook/tunnel) and database pool.
+ */
+export async function cleanup(
+  listener: EventListenerResult,
+  stripeSync?: StripeSync,
+  signal?: string
+): Promise<void> {
+  console.log(chalk.blue(`\n\nCleaning up... (signal: ${signal || 'manual'})`))
+
+  if (listener.wsClient) {
+    try {
+      listener.wsClient.close()
+      console.log(chalk.green('✓ WebSocket closed'))
+    } catch {
+      console.log(chalk.yellow('⚠ Could not close WebSocket'))
+    }
+  }
+
+  const keepWebhooksOnShutdown = process.env.KEEP_WEBHOOKS_ON_SHUTDOWN === 'true'
+  if (listener.webhookId && stripeSync && !keepWebhooksOnShutdown) {
+    try {
+      await stripeSync.webhook.deleteManagedWebhook(listener.webhookId)
+      console.log(chalk.green('✓ Webhook cleanup complete'))
+    } catch {
+      console.log(chalk.yellow('⚠ Could not delete webhook'))
+    }
+  }
+
+  if (listener.server) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        listener.server!.close((err) => {
+          if (err) reject(err)
+          else resolve()
         })
-        console.log(chalk.green('✓ Server stopped'))
-      } catch {
-        console.log(chalk.yellow('⚠ Server already stopped'))
-      }
+      })
+      console.log(chalk.green('✓ Server stopped'))
+    } catch {
+      console.log(chalk.yellow('⚠ Server already stopped'))
     }
+  }
 
-    // Close tunnel
-    if (tunnel) {
-      try {
-        await tunnel.close()
-      } catch {
-        console.log(chalk.yellow('⚠ Could not close tunnel'))
-      }
+  if (listener.tunnel) {
+    try {
+      await listener.tunnel.close()
+    } catch {
+      console.log(chalk.yellow('⚠ Could not close tunnel'))
     }
+  }
 
-    // Close database pool
-    if (stripeSync) {
-      try {
-        await stripeSync.close()
-        console.log(chalk.green('✓ Database pool closed'))
-      } catch {
-        console.log(chalk.yellow('⚠ Could not close database pool'))
-      }
+  if (stripeSync) {
+    try {
+      await stripeSync.close()
+      console.log(chalk.green('✓ Database pool closed'))
+    } catch {
+      console.log(chalk.yellow('⚠ Could not close database pool'))
     }
+  }
+}
 
+/**
+ * Full resync command - uses reconciliation to skip if a successful run
+ * completed within the given interval, otherwise re-syncs everything from Stripe.
+ */
+export async function fullSyncCommand(
+  options: CliOptions,
+  entityName: string = 'all'
+): Promise<void> {
+  let stripeSync: StripeSync
+  let listener: EventListenerResult = {
+    wsClient: null,
+    tunnel: null,
+    server: null,
+    webhookId: null,
+  }
+
+  const shutdown = async (signal?: string) => {
+    await cleanup(listener, stripeSync, signal)
     process.exit(0)
   }
 
-  // Register cleanup handlers
-  process.on('SIGINT', () => cleanup('SIGINT'))
-  process.on('SIGTERM', () => cleanup('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
 
   try {
-    // Load configuration
     const config = await loadConfig(options)
+    const intervalSeconds = options.interval ?? 86400
 
-    // Determine mode based on USE_WEBSOCKET env var or ngrok token availability
-    // USE_WEBSOCKET=true explicitly forces WebSocket mode (useful for tests)
-    const useWebSocketMode = process.env.USE_WEBSOCKET === 'true' || !config.ngrokAuthToken
-    const modeLabel = useWebSocketMode ? 'WebSocket' : 'Webhook (ngrok)'
-    console.log(chalk.blue(`\nMode: ${modeLabel}`))
-
-    // Show command with database URL (masked)
     const maskedDbUrl = config.databaseUrl.replace(/:[^:@]+@/, ':****@')
+    const entityLabel = entityName ? `Stripe ${entityName} data` : 'all Stripe data'
+    console.log(chalk.blue(`\nPerforming full resync of ${entityLabel}...`))
     console.log(chalk.gray(`Database: ${maskedDbUrl}`))
+    console.log(chalk.gray(`Reconciliation interval: ${intervalSeconds}s`))
 
-    // 1. Run migrations (will check for legacy installations and throw if detected)
     try {
       const schemaName = process.env.SYNC_SCHEMA_NAME ?? undefined
       const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME ?? undefined
@@ -484,7 +414,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       throw migrationError
     }
 
-    // 2. Create StripeSync instance
     const poolConfig: PoolConfig = {
       max: 10,
       connectionString: config.databaseUrl,
@@ -495,266 +424,6 @@ export async function syncCommand(options: CliOptions): Promise<void> {
       databaseUrl: config.databaseUrl,
       stripeSecretKey: config.stripeApiKey,
       enableSigma: config.enableSigma,
-      stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
-      autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
-      backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
-      poolConfig,
-    })
-
-    // let's get a database URL without password for logging purposes
-    const databaseUrlWithoutPassword = config.databaseUrl.replace(/:[^:@]+@/, ':****@')
-
-    if (useWebSocketMode) {
-      // ===== WEBSOCKET MODE =====
-      console.log(chalk.blue('\nConnecting to Stripe WebSocket...'))
-
-      wsClient = await createStripeWebSocketClient({
-        stripeApiKey: config.stripeApiKey,
-        onEvent: async (event: StripeWebhookEvent) => {
-          try {
-            const payload = JSON.parse(event.event_payload)
-            console.log(chalk.cyan(`← ${payload.type}`) + chalk.gray(` (${payload.id})`))
-            if (stripeSync) {
-              await stripeSync.webhook.processEvent(payload)
-              return {
-                status: 200,
-                event_type: payload.type,
-                event_id: payload.id,
-                databaseUrl: databaseUrlWithoutPassword,
-              }
-            }
-          } catch (err) {
-            console.error(chalk.red('Error processing event:'), err)
-            return {
-              status: 500,
-              databaseUrl: databaseUrlWithoutPassword,
-              error: err instanceof Error ? err.message : String(err),
-            }
-          }
-        },
-        onReady: (secret) => {
-          console.log(chalk.green('✓ Connected to Stripe WebSocket'))
-          const maskedSecret =
-            secret.length > 14 ? `${secret.slice(0, 10)}...${secret.slice(-4)}` : '****'
-          console.log(chalk.gray(`  Webhook secret: ${maskedSecret}`))
-        },
-        onError: (error) => {
-          console.error(chalk.red('WebSocket error:'), error.message)
-        },
-        onClose: (code, reason) => {
-          console.log(chalk.yellow(`WebSocket closed: ${code} - ${reason}`))
-        },
-      })
-    } else {
-      // ===== WEBHOOK MODE (ngrok) =====
-      const port = 3000
-      tunnel = await createTunnel(port, config.ngrokAuthToken!)
-
-      // Create managed webhook endpoint
-      const webhookPath = process.env.WEBHOOK_PATH || '/stripe-webhooks'
-      console.log(chalk.blue('\nCreating Stripe webhook endpoint...'))
-      const webhook = await stripeSync.webhook.findOrCreateManagedWebhook(
-        `${tunnel.url}${webhookPath}`
-      )
-      webhookId = webhook.id
-      const eventCount = webhook.enabled_events?.length || 0
-      console.log(chalk.green(`✓ Webhook created: ${webhook.id}`))
-      console.log(chalk.cyan(`  URL: ${webhook.url}`))
-      console.log(chalk.cyan(`  Events: ${eventCount} supported events`))
-
-      // Create Express app and mount webhook handler
-      const app = express()
-      const webhookRoute = webhookPath
-      app.use(webhookRoute, express.raw({ type: 'application/json' }))
-
-      app.post(webhookRoute, async (req, res) => {
-        const sig = req.headers['stripe-signature']
-        if (!sig || typeof sig !== 'string') {
-          console.error('[Webhook] Missing stripe-signature header')
-          return res.status(400).send({ error: 'Missing stripe-signature header' })
-        }
-
-        const rawBody = req.body
-        if (!rawBody || !Buffer.isBuffer(rawBody)) {
-          console.error('[Webhook] Body is not a Buffer!')
-          return res.status(400).send({ error: 'Missing raw body for signature verification' })
-        }
-
-        try {
-          await stripeSync.webhook.processWebhook(rawBody, sig)
-          return res.status(200).send({ received: true })
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          console.error('[Webhook] Processing error:', errorMessage)
-          return res.status(400).send({ error: errorMessage })
-        }
-      })
-
-      app.use(express.json())
-      app.use(express.urlencoded({ extended: false }))
-      app.get('/health', async (req, res) => res.status(200).json({ status: 'ok' }))
-
-      // Start Express server
-      console.log(chalk.blue(`\nStarting server on port ${port}...`))
-      await new Promise<void>((resolve, reject) => {
-        server = app.listen(port, '0.0.0.0', () => resolve())
-        server.on('error', reject)
-      })
-      console.log(chalk.green(`✓ Server started on port ${port}`))
-    }
-
-    // Run historical backfill sweep (unless disabled)
-    if (process.env.SKIP_BACKFILL !== 'true') {
-      if (!stripeSync) {
-        throw new Error('StripeSync not initialized.')
-      }
-
-      console.log(chalk.blue('\nStarting historical backfill (parallel sweep)...'))
-      const backfill = await stripeSync.fullSync()
-      const objectCount = Object.keys(backfill.totals).length
-      console.log(
-        chalk.green(
-          `✓ Historical backfill complete: ${backfill.totalSynced} rows synced across ${objectCount} objects`
-        )
-      )
-      if (backfill.skipped.length > 0) {
-        console.log(
-          chalk.yellow(
-            `Skipped ${backfill.skipped.length} Sigma tables without access: ${backfill.skipped.join(', ')}`
-          )
-        )
-      }
-      if (backfill.errors.length > 0) {
-        console.log(
-          chalk.red(
-            `Historical backfill finished with ${backfill.errors.length} errors. See logs above.`
-          )
-        )
-      }
-    } else {
-      console.log(chalk.yellow('\n⏭️  Skipping initial sync (SKIP_BACKFILL=true)'))
-    }
-
-    console.log(
-      chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
-    )
-
-    // Keep the process alive
-    await new Promise(() => {})
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(chalk.red(error.message))
-    }
-    await cleanup()
-    process.exit(1)
-  }
-}
-
-/**
- * Full resync command - uses reconciliation to skip if a successful run
- * completed within the given interval, otherwise re-syncs everything from Stripe.
- */
-export async function fullSyncCommand(
-  options: CliOptions & { interval?: number; workerCount?: number; rateLimit?: number }
-): Promise<void> {
-  let stripeSync: StripeSync | null = null
-
-  try {
-    dotenv.config()
-
-    const enableSigma = options.enableSigma ?? process.env.ENABLE_SIGMA === 'true'
-    const intervalSeconds = options.interval ?? 86400
-
-    let stripeApiKey =
-      options.stripeKey || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET_KEY || ''
-    let databaseUrl = options.databaseUrl || process.env.DATABASE_URL || ''
-
-    if (!stripeApiKey || !databaseUrl) {
-      const inquirer = (await import('inquirer')).default
-      const questions = []
-
-      if (!stripeApiKey) {
-        questions.push({
-          type: 'password',
-          name: 'stripeApiKey',
-          message: 'Enter your Stripe API key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim() === '') {
-              return 'Stripe API key is required'
-            }
-            if (!input.startsWith('sk_') && !input.startsWith('rk_')) {
-              return 'Stripe API key should start with "sk_" or "rk_"'
-            }
-            return true
-          },
-        })
-      }
-
-      if (!databaseUrl) {
-        questions.push({
-          type: 'password',
-          name: 'databaseUrl',
-          message: 'Enter your Postgres DATABASE_URL:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim() === '') {
-              return 'DATABASE_URL is required'
-            }
-            if (!input.startsWith('postgres://') && !input.startsWith('postgresql://')) {
-              return 'DATABASE_URL should start with "postgres://" or "postgresql://"'
-            }
-            return true
-          },
-        })
-      }
-
-      if (questions.length > 0) {
-        console.log(chalk.yellow('\nMissing required configuration. Please provide:'))
-        const answers = await inquirer.prompt(questions)
-        if (answers.stripeApiKey) stripeApiKey = answers.stripeApiKey
-        if (answers.databaseUrl) databaseUrl = answers.databaseUrl
-      }
-    }
-
-    const config = {
-      stripeApiKey,
-      databaseUrl,
-    }
-
-    console.log(chalk.blue('\nPerforming full resync of all Stripe data...'))
-    console.log(chalk.gray(`Database: ${config.databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
-    console.log(chalk.gray(`Reconciliation interval: ${intervalSeconds}s`))
-
-    // Run migrations first
-    try {
-      const schemaName = process.env.SYNC_SCHEMA_NAME ?? undefined
-      const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME ?? undefined
-      await runMigrations({
-        databaseUrl: config.databaseUrl,
-        enableSigma,
-        schemaName,
-        syncTablesSchemaName,
-      })
-    } catch (migrationError) {
-      console.error(chalk.red('Failed to run migrations:'))
-      console.error(
-        migrationError instanceof Error ? migrationError.message : String(migrationError)
-      )
-      throw migrationError
-    }
-
-    // Create StripeSync instance
-    const poolConfig: PoolConfig = {
-      max: 10,
-      connectionString: config.databaseUrl,
-      keepAlive: true,
-    }
-
-    stripeSync = await StripeSync.create({
-      databaseUrl: config.databaseUrl,
-      stripeSecretKey: config.stripeApiKey,
-      enableSigma,
       stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
       autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
       backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
@@ -776,13 +445,31 @@ export async function fullSyncCommand(
       return
     }
 
-    // Run full resync
+    if (options.listenMode && options.listenMode !== 'disabled') {
+      listener = await setupEventListener(stripeSync, config, options.listenMode)
+    }
+
+    if (options.listenOnly) {
+      console.log(chalk.yellow('Skipping initial sync (--listen-only)'))
+      if (options.listenMode && options.listenMode !== 'disabled') {
+        console.log(
+          chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
+        )
+        await new Promise(() => {})
+      }
+      await shutdown()
+      return
+    }
+
     const startTime = Date.now()
+    const tables = entityName !== 'all' ? [entityName as StripeObject] : undefined
     const result = await stripeSync.fullSync(
-      undefined,
-      undefined,
+      tables,
+      true,
       options.workerCount,
-      options.rateLimit
+      options.rateLimit,
+      true,
+      intervalSeconds
     )
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
     const objectCount = Object.keys(result.totals).length
@@ -805,22 +492,19 @@ export async function fullSyncCommand(
       }
     }
 
-    // Clean up database pool
-    await stripeSync.close()
+    if (options.listenMode && options.listenMode !== 'disabled') {
+      console.log(
+        chalk.cyan('\n● Streaming live changes...') + chalk.gray(' [press Ctrl-C to abort]')
+      )
+      await new Promise(() => {})
+    } else {
+      await shutdown()
+    }
   } catch (error) {
     if (error instanceof Error) {
       console.error(chalk.red(error.message))
     }
-
-    // Clean up database pool on error
-    if (stripeSync) {
-      try {
-        await stripeSync.close()
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-
+    await shutdown()
     process.exit(1)
   }
 }

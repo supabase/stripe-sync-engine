@@ -55,14 +55,18 @@ describe('Sigma E2E', () => {
     await container?.stop()
   }, 30000)
 
-  it('should backfill products (non-sigma)', async () => {
-    runCliCommand('backfill', ['product'], {
-      cwd,
-      env: {
-        DATABASE_URL: container.databaseUrl,
-        STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
-      },
-    })
+  it('should sync products (non-sigma)', async () => {
+    runCliCommand(
+      'sync',
+      ['product', '--interval', '0', '--rate-limit', '10', '--worker-count', '5'],
+      {
+        cwd,
+        env: {
+          DATABASE_URL: container.databaseUrl,
+          STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
+        },
+      }
+    )
 
     const productCount = await queryDbCount(
       pool,
@@ -71,14 +75,27 @@ describe('Sigma E2E', () => {
     expect(productCount).toBe(1)
   }, 60000)
 
-  it('should backfill subscription_item_change_events_v2_beta (sigma)', async () => {
-    runCliCommand('backfill', ['--sigma', 'subscription_item_change_events_v2_beta'], {
-      cwd,
-      env: {
-        DATABASE_URL: container.databaseUrl,
-        STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
-      },
-    })
+  it('should sync subscription_item_change_events_v2_beta (sigma)', async () => {
+    runCliCommand(
+      'sync',
+      [
+        '--sigma',
+        'subscription_item_change_events_v2_beta',
+        '--interval',
+        '0',
+        '--rate-limit',
+        '10',
+        '--worker-count',
+        '5',
+      ],
+      {
+        cwd,
+        env: {
+          DATABASE_URL: container.databaseUrl,
+          STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
+        },
+      }
+    )
 
     const count = await queryDbCount(
       pool,
@@ -87,14 +104,27 @@ describe('Sigma E2E', () => {
     expect(count).toBeGreaterThan(0)
   }, 60000)
 
-  it('should backfill exchange_rates_from_usd (sigma)', async () => {
-    runCliCommand('backfill', ['--sigma', 'exchange_rates_from_usd'], {
-      cwd,
-      env: {
-        DATABASE_URL: container.databaseUrl,
-        STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
-      },
-    })
+  it('should sync exchange_rates_from_usd (sigma)', async () => {
+    runCliCommand(
+      'sync',
+      [
+        '--sigma',
+        'exchange_rates_from_usd',
+        '--interval',
+        '0',
+        '--rate-limit',
+        '10',
+        '--worker-count',
+        '5',
+      ],
+      {
+        cwd,
+        env: {
+          DATABASE_URL: container.databaseUrl,
+          STRIPE_API_KEY: process.env.STRIPE_API_KEY_3!,
+        },
+      }
+    )
 
     const count = await queryDbCount(pool, 'SELECT COUNT(*) FROM sigma.exchange_rates_from_usd')
     expect(count).toBeGreaterThan(0)
