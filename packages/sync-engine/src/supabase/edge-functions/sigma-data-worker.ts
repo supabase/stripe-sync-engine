@@ -28,6 +28,9 @@ Deno.serve(async (req) => {
   if (!dbUrl) {
     return jsonResponse({ error: 'SUPABASE_DB_URL not set' }, 500)
   }
+  const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
+  const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
+  const safeSyncSchema = syncTablesSchemaName.replace(/"/g, '""')
 
   let sql: ReturnType<typeof postgres> | undefined
   let stripeSync: StripeSync | undefined
@@ -70,6 +73,8 @@ Deno.serve(async (req) => {
       stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
       enableSigma: true,
       sigmaPageSizeOverride: 1000,
+      schemaName,
+      syncTablesSchemaName,
     })
   } catch (error: unknown) {
     const err = error as Error
@@ -105,7 +110,7 @@ Deno.serve(async (req) => {
     // Legacy cleanup: remove any prefixed sigma object runs that can block concurrency.
     // Previous versions stored objects as "sigma.<table>" which no longer matches processNext.
     await stripeSync.postgresClient.query(
-      `UPDATE "stripe"."_sync_obj_runs"
+      `UPDATE "${safeSyncSchema}"."_sync_obj_runs"
        SET status = 'error',
            error_message = 'Legacy sigma worker prefix run (sigma.*); superseded by unprefixed runs',
            completed_at = now()
@@ -177,7 +182,7 @@ Deno.serve(async (req) => {
       })
       let selfTriggered = false
       try {
-        await sql`SELECT stripe.trigger_sigma_worker()`
+        await sql.unsafe(`SELECT "${safeSyncSchema}".trigger_sigma_worker()`)
         selfTriggered = true
       } catch (error: unknown) {
         const err = error as Error
@@ -274,7 +279,7 @@ Deno.serve(async (req) => {
         remainingMinutes,
       })
       try {
-        await sql`SELECT stripe.trigger_sigma_worker()`
+        await sql.unsafe(`SELECT "${safeSyncSchema}".trigger_sigma_worker()`)
         selfTriggered = true
       } catch (error: unknown) {
         const err = error as Error

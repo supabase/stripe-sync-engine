@@ -21,7 +21,7 @@ describe('Observable Sync System Methods', () => {
       { id: testAccountId, raw_data: { id: testAccountId, object: 'account' } },
       `test_api_key_hash_${testAccountId}`
     )
-  }, 30_000)
+  })
 
   afterAll(async () => {
     if (postgresClient) await postgresClient.pool.end()

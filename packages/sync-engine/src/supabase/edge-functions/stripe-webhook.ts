@@ -11,6 +11,8 @@ Deno.serve(async (req) => {
   }
 
   const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+  const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
+  const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
   if (!dbUrl) {
     return new Response(JSON.stringify({ error: 'SUPABASE_DB_URL not set' }), { status: 500 })
   }
@@ -19,6 +21,8 @@ Deno.serve(async (req) => {
     poolConfig: { connectionString: dbUrl, max: 1 },
     stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
     partnerId: 'pp_supabase',
+    schemaName,
+    syncTablesSchemaName,
   })
 
   try {

@@ -23,7 +23,7 @@ describe('StripeSync Integration Tests', () => {
   beforeAll(async () => {
     db = await setupTestDatabase()
     validator = new DatabaseValidator(db.databaseUrl)
-  }, 30_000)
+  })
 
   afterAll(async () => {
     if (validator) await validator.close()

@@ -1,6 +1,7 @@
 import { type PoolConfig } from 'pg'
 import Stripe from 'stripe'
 import type { SigmaIngestionConfig } from './sigma/sigmaIngestion'
+import type { RevalidateEntityName, SyncObjectName } from './resourceRegistry'
 
 /**
  * Simple logger interface compatible with both pino and console
@@ -11,25 +12,7 @@ export interface Logger {
   error(message?: unknown, ...optionalParams: unknown[]): void
 }
 
-export type RevalidateEntity =
-  | 'charge'
-  | 'credit_note'
-  | 'customer'
-  | 'dispute'
-  | 'invoice'
-  | 'payment_intent'
-  | 'payment_method'
-  | 'plan'
-  | 'price'
-  | 'product'
-  | 'refund'
-  | 'review'
-  | 'radar.early_fraud_warning'
-  | 'setup_intent'
-  | 'subscription'
-  | 'subscription_schedule'
-  | 'tax_id'
-  | 'entitlements'
+export type RevalidateEntity = RevalidateEntityName
 
 export type StripeSyncConfig = {
   /** @deprecated Use `poolConfig` with a connection string instead. */
@@ -56,6 +39,18 @@ export type StripeSyncConfig = {
    * Default: "sigma"
    */
   sigmaSchemaName?: string
+
+  /**
+   * Postgres schema name for core Stripe data tables.
+   * Default: "stripe"
+   */
+  schemaName?: string
+
+  /**
+   * Postgres schema name for sync metadata tables (accounts, _sync_runs, _managed_webhooks, etc.).
+   * Defaults to schemaName when not provided.
+   */
+  syncTablesSchemaName?: string
 
   /** Stripe account ID. If not provided, will be retrieved from Stripe API. Used as fallback option. */
   stripeAccountId?: string
@@ -103,26 +98,7 @@ export type StripeSyncConfig = {
   maxConcurrentCustomers?: number
 }
 
-export type SyncObject =
-  | 'all'
-  | 'customer'
-  | 'customer_with_entitlements'
-  | 'invoice'
-  | 'price'
-  | 'product'
-  | 'subscription'
-  | 'subscription_schedules'
-  | 'setup_intent'
-  | 'payment_method'
-  | 'dispute'
-  | 'charge'
-  | 'payment_intent'
-  | 'plan'
-  | 'tax_id'
-  | 'credit_note'
-  | 'early_fraud_warning'
-  | 'refund'
-  | 'checkout_sessions'
+export type SyncObject = SyncObjectName
 
 export const SUPPORTED_WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
   'charge.captured',
@@ -292,7 +268,7 @@ export type BaseResourceConfig = {
   /** Whether this resource is included in sync runs by default. Default: true */
   sync?: boolean
   /** Resource types that must be backfilled before this one (e.g. price depends on product) */
-  dependencies?: string[]
+  dependencies?: readonly string[]
   /** Function to check if an entity is in a final state and doesn't need revalidation */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   isFinalState?: (entity: any) => boolean

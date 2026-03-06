@@ -20,6 +20,8 @@ if (!dbUrl) {
 const SYNC_INTERVAL = Number(Deno.env.get('SYNC_INTERVAL')) || 60 * 60 * 24 * 7 // Once a week default
 const rateLimit = Number(Deno.env.get('RATE_LIMIT')) || 60
 const workerCount = Number(Deno.env.get('WORKER_COUNT')) || 10
+const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
+const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
 
 const sql = postgres(dbUrl, { max: 1, prepare: false })
 const stripeSync = await StripeSync.create({
@@ -27,6 +29,8 @@ const stripeSync = await StripeSync.create({
   stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
   enableSigma: (Deno.env.get('ENABLE_SIGMA') ?? 'false') === 'true',
   partnerId: 'pp_supabase',
+  schemaName,
+  syncTablesSchemaName,
 })
 const objects = stripeSync.getSupportedSyncObjects()
 const tableNames = objects.map(

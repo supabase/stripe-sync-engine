@@ -64,6 +64,18 @@ export class StripeSync {
     return this.sigma.sigmaSchemaName
   }
 
+  private get dataSchemaName(): string {
+    return this.config.schemaName ?? 'stripe'
+  }
+
+  private get syncMetadataSchemaName(): string {
+    return this.config.syncTablesSchemaName ?? this.dataSchemaName
+  }
+
+  private quoteSyncMetadataSchemaName(): string {
+    return `"${this.syncMetadataSchemaName.replaceAll('"', '""')}"`
+  }
+
   private disableLogger() {
     this.savedLogger = this.config.logger ?? null
     this.config.logger = { info() {}, warn() {}, error() {} }
@@ -101,7 +113,8 @@ export class StripeSync {
     const poolConfig = buildPoolConfig(config)
 
     this.postgresClient = new PostgresClient({
-      schema: 'stripe',
+      schema: this.dataSchemaName,
+      syncSchema: this.syncMetadataSchemaName,
       poolConfig,
     })
 
@@ -600,9 +613,10 @@ export class StripeSync {
     subscriptionId: string,
     currentSubItemIds: string[]
   ): Promise<{ rowCount: number }> {
+    const schema = this.quoteSyncMetadataSchemaName()
     // deleted is a generated column that may be NULL for non-deleted items
     let prepared = sql(`
-    select id from "stripe"."subscription_items"
+    select id from ${schema}."subscription_items"
     where subscription = :subscriptionId and COALESCE(deleted, false) = false;
     `)({ subscriptionId })
     const { rows } = await this.postgresClient.query(prepared.text, prepared.values)
@@ -615,7 +629,7 @@ export class StripeSync {
       // Since deleted is a generated column, we need to update raw_data instead
       // Use jsonb_set to set the deleted field to true in the raw_data JSON
       prepared = sql(`
-      update "stripe"."subscription_items"
+      update ${schema}."subscription_items"
       set _raw_data = jsonb_set(_raw_data, '{deleted}', 'true'::jsonb)
       where id=any(:ids::text[]);
       `)({ ids })
@@ -662,8 +676,9 @@ export class StripeSync {
     await this.postgresClient.pool.end()
   }
   async printProgress(runKey: RunKey): Promise<void> {
+    const schema = this.quoteSyncMetadataSchemaName()
     const syncQuery = {
-      text: `SELECT * FROM "stripe"."sync_obj_progress"
+      text: `SELECT * FROM ${schema}."sync_obj_progress"
                   WHERE account_id = $1 AND run_started_at = $2
                   ORDER BY object`,
       values: [runKey.accountId, runKey.runStartedAt],

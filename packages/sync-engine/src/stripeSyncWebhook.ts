@@ -29,12 +29,21 @@ export type StripeSyncWebhookDeps = {
 export class StripeSyncWebhook {
   constructor(private readonly deps: StripeSyncWebhookDeps) {}
 
+  private get syncMetadataSchemaName(): string {
+    return this.deps.config.syncTablesSchemaName ?? this.deps.config.schemaName ?? 'stripe'
+  }
+
+  private quoteSyncMetadataSchemaName(): string {
+    return `"${this.syncMetadataSchemaName.replaceAll('"', '""')}"`
+  }
+
   async processWebhook(payload: Buffer | Uint8Array | string, signature: string | undefined) {
     let webhookSecret: string | undefined = this.deps.config.stripeWebhookSecret
 
     if (!webhookSecret) {
+      const schema = this.quoteSyncMetadataSchemaName()
       const result = await this.deps.postgresClient.query(
-        `SELECT secret FROM "stripe"."_managed_webhooks" WHERE account_id = $1 LIMIT 1`,
+        `SELECT secret FROM ${schema}."_managed_webhooks" WHERE account_id = $1 LIMIT 1`,
         [this.deps.accountId]
       )
 
@@ -305,24 +314,27 @@ export class StripeSyncWebhook {
   }
 
   async getManagedWebhook(id: string): Promise<Stripe.WebhookEndpoint | null> {
+    const schema = this.quoteSyncMetadataSchemaName()
     const result = await this.deps.postgresClient.query(
-      `SELECT * FROM "stripe"."_managed_webhooks" WHERE id = $1 AND "account_id" = $2`,
+      `SELECT * FROM ${schema}."_managed_webhooks" WHERE id = $1 AND "account_id" = $2`,
       [id, this.deps.accountId]
     )
     return result.rows.length > 0 ? (result.rows[0] as Stripe.WebhookEndpoint) : null
   }
 
   async getManagedWebhookByUrl(url: string): Promise<Stripe.WebhookEndpoint | null> {
+    const schema = this.quoteSyncMetadataSchemaName()
     const result = await this.deps.postgresClient.query(
-      `SELECT * FROM "stripe"."_managed_webhooks" WHERE url = $1 AND "account_id" = $2`,
+      `SELECT * FROM ${schema}."_managed_webhooks" WHERE url = $1 AND "account_id" = $2`,
       [url, this.deps.accountId]
     )
     return result.rows.length > 0 ? (result.rows[0] as Stripe.WebhookEndpoint) : null
   }
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint>> {
+    const schema = this.quoteSyncMetadataSchemaName()
     const result = await this.deps.postgresClient.query(
-      `SELECT * FROM "stripe"."_managed_webhooks" WHERE "account_id" = $1 ORDER BY created DESC`,
+      `SELECT * FROM ${schema}."_managed_webhooks" WHERE "account_id" = $1 ORDER BY created DESC`,
       [this.deps.accountId]
     )
     return result.rows as Array<Stripe.WebhookEndpoint>

@@ -111,10 +111,11 @@ Deno.serve(async (req) => {
       sql = postgres(dbUrl, { max: 1, prepare: false })
 
       // Query installation status from schema comment
+      const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
       const commentResult = await sql`
         SELECT obj_description(oid, 'pg_namespace') as comment
         FROM pg_namespace
-        WHERE nspname = 'stripe'
+        WHERE nspname = ${schemaName}
       `
 
       const comment = commentResult[0]?.comment || null
@@ -123,14 +124,16 @@ Deno.serve(async (req) => {
       let syncStatus: Array<Record<string, unknown>> = []
       if (comment) {
         try {
-          syncStatus = await sql`
+          const syncSchema = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
+          const safeSchema = syncSchema.replace(/"/g, '""')
+          syncStatus = await sql.unsafe(`
             SELECT DISTINCT ON (account_id)
               account_id, started_at, closed_at, status, error_message,
               total_processed, total_objects, complete_count, error_count,
               running_count, pending_count, triggered_by, max_concurrent
-            FROM stripe.sync_runs
+            FROM "${safeSchema}"."sync_runs"
             ORDER BY account_id, started_at DESC
-          `
+          `)
         } catch (err) {
           // Ignore errors if sync_runs view doesn't exist yet
           console.warn('sync_runs query failed (may not exist yet):', err)
@@ -189,9 +192,13 @@ Deno.serve(async (req) => {
       }
 
       // Step 1: Delete Stripe webhooks and clean up database
+      const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
+      const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
       stripeSync = await StripeSync.create({
         poolConfig: { connectionString: dbUrl, max: 2 },
         stripeSecretKey: stripeKey,
+        schemaName,
+        syncTablesSchemaName,
       })
 
       // Delete all managed webhooks
@@ -238,33 +245,38 @@ Deno.serve(async (req) => {
 
       // Drop Sigma self-trigger function if present
       try {
-        await stripeSync.postgresClient.query(`
-          DROP FUNCTION IF EXISTS stripe.trigger_sigma_worker();
-        `)
+        const dropSchema = syncTablesSchemaName.replace(/"/g, '""')
+        await stripeSync.postgresClient.query(
+          `DROP FUNCTION IF EXISTS "${dropSchema}".trigger_sigma_worker()`
+        )
       } catch (err) {
         console.warn('Could not drop sigma trigger function:', err)
       }
 
-      // Terminate connections holding locks on stripe schema
+      // Terminate connections holding locks on schema
       try {
-        await stripeSync.postgresClient.query(`
-          SELECT pg_terminate_backend(pid)
-          FROM pg_locks l
-          JOIN pg_class c ON l.relation = c.oid
-          JOIN pg_namespace n ON c.relnamespace = n.oid
-          WHERE n.nspname = 'stripe'
-            AND l.pid != pg_backend_pid()
-        `)
+        await stripeSync.postgresClient.query(
+          `SELECT pg_terminate_backend(pid)
+           FROM pg_locks l
+           JOIN pg_class c ON l.relation = c.oid
+           JOIN pg_namespace n ON c.relnamespace = n.oid
+           WHERE n.nspname = $1 AND l.pid != pg_backend_pid()`,
+          [syncTablesSchemaName]
+        )
       } catch (err) {
         console.warn('Could not terminate connections:', err)
       }
 
-      // Drop schema with retry
+      // Drop schema(s) with retry
+      const schemasToDrop = [...new Set([schemaName, syncTablesSchemaName])]
       let dropAttempts = 0
       const maxAttempts = 3
       while (dropAttempts < maxAttempts) {
         try {
-          await stripeSync.postgresClient.query('DROP SCHEMA IF EXISTS stripe CASCADE')
+          for (const s of schemasToDrop) {
+            const safe = s.replace(/"/g, '""')
+            await stripeSync.postgresClient.query(`DROP SCHEMA IF EXISTS "${safe}" CASCADE`)
+          }
           break // Success, exit loop
         } catch (err: unknown) {
           const error = err as Error
@@ -369,14 +381,24 @@ Deno.serve(async (req) => {
     }
 
     const enableSigma = (Deno.env.get('ENABLE_SIGMA') ?? 'false') === 'true'
+    const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
+    const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
     await runMigrationsFromContent(
-      { databaseUrl: dbUrl, enableSigma, logger: console },
+      {
+        databaseUrl: dbUrl,
+        enableSigma,
+        stripeApiVersion: Deno.env.get('STRIPE_API_VERSION') ?? '2020-08-27',
+        schemaName,
+        syncTablesSchemaName,
+      },
       embeddedMigrations
     )
 
     stripeSync = await StripeSync.create({
       poolConfig: { connectionString: dbUrl, max: 2 }, // Need 2 for advisory lock + queries
       stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY'),
+      schemaName,
+      syncTablesSchemaName,
     })
 
     // Release any stale advisory locks from previous timeouts
