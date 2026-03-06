@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "declaration": true,
     "outDir": "dist",
     "esModuleInterop": true,
@@ -14,5 +14,6 @@
       "npm:stripe-experiment-sync": ["./src/index.ts"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "scripts/**/*"],
+  "exclude": ["src/supabase/edge-functions/**/*"]
 }

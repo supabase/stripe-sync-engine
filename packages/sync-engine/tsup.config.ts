@@ -83,7 +83,8 @@ export const rawTsBundledPlugin: esbuild.Plugin = {
 
         // You probably want imports preserved for externals (like pg, etc.)
         // NOTE: Keep this aligned with your tsup externals.
-        external: ['npm:*', 'chalk', 'inquirer'],
+        // Also external edge-function-code to avoid circular dependencies
+        external: ['npm:*', 'chalk', 'inquirer', './edge-function-code'],
 
         // Avoid sourcemaps inside the embedded string unless you want them
         sourcemap: false,

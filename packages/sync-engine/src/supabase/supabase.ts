@@ -6,13 +6,7 @@ import {
   sigmaWorkerFunctionCode,
 } from './edge-function-code'
 import pkg from '../../package.json' with { type: 'json' }
-
-export const STRIPE_SCHEMA_COMMENT_PREFIX = 'stripe-sync'
-export const INSTALLATION_STARTED_SUFFIX = 'installation:started'
-export const INSTALLATION_ERROR_SUFFIX = 'installation:error'
-export const INSTALLATION_INSTALLED_SUFFIX = 'installed'
-export const UNINSTALLATION_STARTED_SUFFIX = 'uninstallation:started'
-export const UNINSTALLATION_ERROR_SUFFIX = 'uninstallation:error'
+import { parseSchemaComment, SchemaInstallationStatus, StripeSchemaComment } from './schemaComment'
 
 export interface DeployClientOptions {
   accessToken: string
@@ -337,13 +331,36 @@ export class SupabaseSetupClient {
           SELECT 1 FROM information_schema.schemata
           WHERE schema_name = '${schema}'
         ) as schema_exists`
-      )) as { rows?: { schema_exists: boolean }[] }[]
+      )) as { schema_exists: boolean }[]
 
-      return schemaCheck[0]?.rows?.[0]?.schema_exists === true
+      return schemaCheck[0].schema_exists === true
     } catch {
       // Return false if query fails
       return false
     }
+  }
+
+  /**
+   * Reads and parses comment from a schema
+   * @param schema schema to read comment from
+   * @returns parsed comment or null if either schema or the comment doesn't exist
+   */
+  private async readAndParseComment(schema = 'stripe'): Promise<StripeSchemaComment | null> {
+    const schemaExistsResult = await this.schemaExists(schema)
+
+    if (!schemaExistsResult) {
+      return null
+    }
+
+    const commentCheck = (await this.runSQL(
+      `SELECT obj_description(oid, 'pg_namespace') as comment
+         FROM pg_namespace
+         WHERE nspname = '${schema}'`
+    )) as { comment: string | null }[]
+
+    const comment = commentCheck[0]?.comment ?? null
+    const parsedComment = parseSchemaComment(comment)
+    return parsedComment
   }
 
   /**
@@ -359,40 +376,30 @@ export class SupabaseSetupClient {
    */
   async isInstalled(schema = 'stripe'): Promise<boolean> {
     try {
-      // Step 1: Duck typing - check if schema exists
-      const schemaExistsResult = await this.schemaExists(schema)
-
-      if (!schemaExistsResult) {
-        // Schema doesn't exist - not installed
-        return false
-      }
-
-      // Step 2: Check if migrations table exists (either old 'migrations' or new '_migrations')
+      // Check if migrations table exists (either old 'migrations' or new '_migrations')
       const migrationsCheck = (await this.runSQL(
         `SELECT EXISTS (
           SELECT 1 FROM information_schema.tables
           WHERE table_schema = '${schema}' AND table_name IN ('migrations', '_migrations')
         ) as table_exists`
-      )) as { rows?: { table_exists: boolean }[] }[]
+      )) as { table_exists: boolean }[]
 
-      const migrationsTableExists = migrationsCheck[0]?.rows?.[0]?.table_exists === true
+      const migrationsTableExists = migrationsCheck[0].table_exists === true
 
       if (!migrationsTableExists) {
         // Schema exists but no migrations table - incomplete/manual installation
         return false
       }
 
-      // Step 3: Duck typing passed - now check comment
-      const commentCheck = (await this.runSQL(
-        `SELECT obj_description(oid, 'pg_namespace') as comment
-         FROM pg_namespace
-         WHERE nspname = '${schema}'`
-      )) as { rows?: { comment: string | null }[] }[]
+      const parsedComment = await this.readAndParseComment()
 
-      const comment = commentCheck[0]?.rows?.[0]?.comment
+      if (!parsedComment) {
+        // Schema doesn't exist - not installed
+        return false
+      }
 
-      // If schema + migrations table exist but no comment, throw error (legacy installation)
-      if (!comment || !comment.includes(STRIPE_SCHEMA_COMMENT_PREFIX)) {
+      // If schema + migrations table exist but no valid comment, throw error (legacy installation)
+      if (parsedComment.status === 'uninstalled') {
         throw new Error(
           `Legacy installation detected: Schema '${schema}' and migrations table exist, but missing stripe-sync comment marker. ` +
             `This may be a legacy installation or manually created schema. ` +
@@ -401,29 +408,28 @@ export class SupabaseSetupClient {
       }
 
       // Check for uninstallation in progress
-      // NOTE: Check uninstallation before installation since "uninstallation:*" contains "installation:*"
-      if (comment.includes(UNINSTALLATION_STARTED_SUFFIX)) {
+      if (parsedComment.status === 'uninstalling') {
         return false
       }
 
       // Check for failed uninstallation (requires manual intervention)
-      if (comment.includes(UNINSTALLATION_ERROR_SUFFIX)) {
+      if (parsedComment.status === 'uninstall error') {
         throw new Error(
           `Uninstallation failed: Schema '${schema}' exists but uninstallation encountered an error. ` +
-            `Comment: ${comment}. Manual cleanup may be required.`
+            `${parsedComment.errorMessage ? `Error: ${parsedComment.errorMessage}` : ''}. Manual cleanup may be required.`
         )
       }
 
       // Check for incomplete installation (can retry)
-      if (comment.includes(INSTALLATION_STARTED_SUFFIX)) {
+      if (parsedComment.status === 'installing') {
         return false
       }
 
       // Check for failed installation (requires manual intervention)
-      if (comment.includes(INSTALLATION_ERROR_SUFFIX)) {
+      if (parsedComment.status === 'install error') {
         throw new Error(
           `Installation failed: Schema '${schema}' exists but installation encountered an error. ` +
-            `Comment: ${comment}. Please uninstall and install again.`
+            `${parsedComment.errorMessage ? `Error: ${parsedComment.errorMessage}` : ''}. Please uninstall and install again.`
         )
       }
 
@@ -447,10 +453,20 @@ export class SupabaseSetupClient {
   /**
    * Update installation progress comment on the stripe schema
    */
-  async updateInstallationComment(message: string): Promise<void> {
+  async updateComment(
+    status: SchemaInstallationStatus,
+    oldVersion?: string,
+    errorMessage?: string
+  ): Promise<void> {
+    const comment = JSON.stringify({
+      status,
+      newVersion: pkg.version,
+      oldVersion,
+      errorMessage,
+    })
     // Escape single quotes to prevent SQL injection
-    const escapedMessage = message.replace(/'/g, "''")
-    await this.runSQL(`COMMENT ON SCHEMA stripe IS '${escapedMessage}'`)
+    const escapedComment = comment.replace(/'/g, "''")
+    await this.runSQL(`COMMENT ON SCHEMA stripe IS '${escapedComment}'`)
   }
 
   /**
@@ -463,9 +479,7 @@ export class SupabaseSetupClient {
       // Check if schema exists and mark uninstall as started
       const hasSchema = await this.schemaExists('stripe')
       if (hasSchema) {
-        await this.updateInstallationComment(
-          `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${UNINSTALLATION_STARTED_SUFFIX}`
-        )
+        await this.updateComment('uninstalling')
       }
 
       // Invoke the DELETE endpoint on stripe-setup function
@@ -481,11 +495,8 @@ export class SupabaseSetupClient {
       try {
         const hasSchema = await this.schemaExists('stripe')
         if (hasSchema) {
-          await this.updateInstallationComment(
-            `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${UNINSTALLATION_ERROR_SUFFIX} - ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          )
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          await this.updateComment('uninstall error', undefined, errorMessage)
         }
       } catch (error) {
         throw new Error(
@@ -519,10 +530,13 @@ export class SupabaseSetupClient {
       // Create schema if it doesn't exist (before we can comment on it)
       await this.runSQL(`CREATE SCHEMA IF NOT EXISTS stripe`)
 
+      const existingComment = await this.readAndParseComment()
+      // new version now becomes the old version and the current package version
+      // will become the new version (upgrade scenrio)
+      const oldVersion = existingComment?.newVersion
+
       // Signal installation started
-      await this.updateInstallationComment(
-        `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_STARTED_SUFFIX}`
-      )
+      await this.updateComment('installing', oldVersion)
 
       // Set secrets first -- stripe-setup needs STRIPE_SECRET_KEY to run
       const secrets = [{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }]
@@ -576,16 +590,11 @@ export class SupabaseSetupClient {
       await this.invokeFunction('stripe-worker', 'POST', this.workerSecret)
 
       // Set final version comment
-      await this.updateInstallationComment(
-        `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_INSTALLED_SUFFIX}`
-      )
+      await this.updateComment('installed', oldVersion)
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       try {
-        await this.updateInstallationComment(
-          `${STRIPE_SCHEMA_COMMENT_PREFIX} v${pkg.version} ${INSTALLATION_ERROR_SUFFIX} - ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        )
+        await this.updateComment('install error', undefined, errorMessage)
       } catch {
         // Schema may not exist if early steps failed -- don't mask the original error
       }
@@ -650,4 +659,8 @@ export async function uninstall(params: {
   })
 
   await client.uninstall()
+}
+
+export function getCurrentVersion(): string {
+  return pkg.version
 }

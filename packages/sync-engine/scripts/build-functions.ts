@@ -16,10 +16,10 @@ export function generateEmbeddedMigrations() {
 
   const files = fs
     .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
+    .filter((f: string) => f.endsWith('.sql'))
     .sort()
 
-  const migrations = files.map((filename) => ({
+  const migrations = files.map((filename: string) => ({
     name: filename,
     sql: fs.readFileSync(path.join(migrationsDir, filename), 'utf-8'),
   }))
@@ -50,7 +50,7 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true })
 }
 
-const files = fs.readdirSync(srcDir).filter((f) => f.endsWith('.ts'))
+const files = fs.readdirSync(srcDir).filter((f: string) => f.endsWith('.ts'))
 
 console.log(`Found ${files.length} functions in ${srcDir}`)
 

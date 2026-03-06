@@ -1,4 +1,8 @@
-import { StripeSync, runMigrationsFromContent, VERSION, embeddedMigrations } from '../../index'
+import { StripeSync } from '../../stripeSync.ts'
+import { runMigrationsFromContent } from '../../database/migrate.ts'
+import { VERSION } from '../../version.ts'
+import { embeddedMigrations } from '../../database/migrations-embedded.ts'
+import { parseSchemaComment } from '../schemaComment.ts'
 import postgres from 'postgres'
 
 // Get management API base URL from environment variable (for testing against localhost/staging)
@@ -114,21 +118,9 @@ Deno.serve(async (req) => {
       `
 
       const comment = commentResult[0]?.comment || null
-      let installationStatus = 'not_installed'
-
-      if (comment && comment.includes('stripe-sync')) {
-        // Parse installation status from comment
-        if (comment.includes('installation:started')) {
-          installationStatus = 'installing'
-        } else if (comment.includes('installation:error')) {
-          installationStatus = 'error'
-        } else if (comment.includes('installed')) {
-          installationStatus = 'installed'
-        }
-      }
 
       // Query sync runs (only if schema exists)
-      let syncStatus = []
+      let syncStatus: Array<Record<string, unknown>> = []
       if (comment) {
         try {
           syncStatus = await sql`
@@ -145,10 +137,12 @@ Deno.serve(async (req) => {
         }
       }
 
+      const parsedComment = parseSchemaComment(comment)
+
       return new Response(
         JSON.stringify({
           package_version: VERSION,
-          installation_status: installationStatus,
+          installation_status: parsedComment.status,
           sync_status: syncStatus,
         }),
         {
@@ -159,11 +153,12 @@ Deno.serve(async (req) => {
           },
         }
       )
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error as Error
       console.error('Status query error:', error)
       return new Response(
         JSON.stringify({
-          error: error.message,
+          error: err.message,
           package_version: VERSION,
           installation_status: 'not_installed',
         }),
@@ -204,7 +199,7 @@ Deno.serve(async (req) => {
         const webhooks = await stripeSync.webhook.listManagedWebhooks()
         for (const webhook of webhooks) {
           try {
-            await stripeSync.deleteManagedWebhook(webhook.id)
+            await stripeSync.webhook.deleteManagedWebhook(webhook.id)
             console.log(`Deleted webhook: ${webhook.id}`)
           } catch (err) {
             console.warn(`Could not delete webhook ${webhook.id}:`, err)
@@ -271,13 +266,14 @@ Deno.serve(async (req) => {
         try {
           await stripeSync.postgresClient.query('DROP SCHEMA IF EXISTS stripe CASCADE')
           break // Success, exit loop
-        } catch (err) {
+        } catch (err: unknown) {
+          const error = err as Error
           dropAttempts++
           if (dropAttempts >= maxAttempts) {
             throw new Error(
               `Failed to drop schema after ${maxAttempts} attempts. ` +
                 `There may be active connections or locks on the stripe schema. ` +
-                `Error: ${err.message}`
+                `Error: ${error.message}`
             )
           }
           // Wait 1 second before retrying
@@ -341,7 +337,8 @@ Deno.serve(async (req) => {
           headers: { 'Content-Type': 'application/json' },
         }
       )
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error as Error
       console.error('Uninstall error:', error)
       // Cleanup on error
       if (stripeSync) {
@@ -351,7 +348,7 @@ Deno.serve(async (req) => {
           console.warn('Cleanup failed:', cleanupErr)
         }
       }
-      return new Response(JSON.stringify({ success: false, error: error.message }), {
+      return new Response(JSON.stringify({ success: false, error: err.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -407,7 +404,8 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json' },
       }
     )
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Error
     console.error('Setup error:', error)
     // Cleanup on error
     if (stripeSync) {
@@ -418,7 +416,7 @@ Deno.serve(async (req) => {
         console.warn('Cleanup failed:', cleanupErr)
       }
     }
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

@@ -5,8 +5,8 @@
  * Progress persists in _sync_runs and _sync_obj_runs across invocations.
  */
 
-import { StripeSync } from 'npm:stripe-experiment-sync'
-import postgres from 'npm:postgres'
+import { StripeSync } from '../../index.ts'
+import postgres from 'postgres'
 
 const BATCH_SIZE = 1
 const MAX_RUN_AGE_MS = 6 * 60 * 60 * 1000
@@ -34,12 +34,13 @@ Deno.serve(async (req) => {
 
   try {
     sql = postgres(dbUrl, { max: 1, prepare: false })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Error
     return jsonResponse(
       {
         error: 'Failed to create postgres connection',
-        details: error.message,
-        stack: error.stack,
+        details: err.message,
+        stack: err.stack,
       },
       500
     )
@@ -70,13 +71,14 @@ Deno.serve(async (req) => {
       enableSigma: true,
       sigmaPageSizeOverride: 1000,
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Error
     await sql.end()
     return jsonResponse(
       {
         error: 'Failed to create StripeSync',
-        details: error.message,
-        stack: error.stack,
+        details: err.message,
+        stack: err.stack,
       },
       500
     )
@@ -177,8 +179,9 @@ Deno.serve(async (req) => {
       try {
         await sql`SELECT stripe.trigger_sigma_worker()`
         selfTriggered = true
-      } catch (error) {
-        console.warn('Failed to self-trigger sigma worker:', error.message)
+      } catch (error: unknown) {
+        const err = error as Error
+        console.warn('Failed to self-trigger sigma worker:', err.message)
       }
 
       return jsonResponse({
@@ -197,11 +200,13 @@ Deno.serve(async (req) => {
         console.info(`Sigma worker: processing ${object}`)
 
         // Process one sigma page and upsert results.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await stripeSync.processNext(object as any, {
-          runStartedAt,
-          triggeredBy: 'sigma-worker',
-        })
+        const result = await stripeSync.processNext(
+          object as keyof typeof stripeSync.resourceRegistry,
+          {
+            runStartedAt,
+            triggeredBy: 'sigma-worker',
+          }
+        )
 
         results.push({
           object,
@@ -217,7 +222,8 @@ Deno.serve(async (req) => {
         } else {
           console.info(`Sigma worker: ${object} complete, processed ${result.processed} rows`)
         }
-      } catch (error) {
+      } catch (error: unknown) {
+        const err = error as Error
         console.error(`Sigma worker: error processing ${object}:`, error)
 
         // Mark object as failed and move on (no retries)
@@ -225,7 +231,7 @@ Deno.serve(async (req) => {
           accountId,
           runStartedAt,
           objectKey,
-          error.message ?? 'Unknown error'
+          err.message ?? 'Unknown error'
         )
 
         results.push({
@@ -233,7 +239,7 @@ Deno.serve(async (req) => {
           processed: 0,
           hasMore: false,
           status: 'error',
-          error: error.message,
+          error: err.message,
         })
       }
     }
@@ -270,8 +276,9 @@ Deno.serve(async (req) => {
       try {
         await sql`SELECT stripe.trigger_sigma_worker()`
         selfTriggered = true
-      } catch (error) {
-        console.warn('Failed to self-trigger sigma worker:', error.message)
+      } catch (error: unknown) {
+        const err = error as Error
+        console.warn('Failed to self-trigger sigma worker:', err.message)
       }
     } else if (pendingAfter.length > 0 || runningAfter.length > 0) {
       // Would self-trigger but run timed out
@@ -289,9 +296,10 @@ Deno.serve(async (req) => {
       selfTriggered,
       remaining: { pending: pendingAfter.length, running: runningAfter.length },
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Error
     console.error('Sigma worker error:', error)
-    return jsonResponse({ error: error.message, stack: error.stack }, 500)
+    return jsonResponse({ error: err.message, stack: err.stack }, 500)
   } finally {
     if (sql) await sql.end()
     if (stripeSync) await stripeSync.postgresClient.pool.end()

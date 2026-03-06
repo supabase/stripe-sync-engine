@@ -1,6 +1,4 @@
-import pkg from '../package.json' with { type: 'json' }
-
-export const VERSION = pkg.version
+export { VERSION } from './version'
 
 export { StripeSync } from './stripeSync'
 export { StripeSyncWorker } from './stripeSyncWorker'
@@ -13,6 +11,11 @@ export { runMigrations, runMigrationsFromContent } from './database/migrate'
 export { embeddedMigrations } from './database/migrations-embedded'
 export type { EmbeddedMigration } from './database/migrations-embedded'
 export { hashApiKey } from './utils/hashApiKey'
+export {
+  parseSchemaComment,
+  type StripeSchemaComment,
+  type SchemaInstallationStatus,
+} from './supabase/schemaComment'
 export { createStripeWebSocketClient } from './websocket-client'
 export type {
   StripeWebSocketOptions,

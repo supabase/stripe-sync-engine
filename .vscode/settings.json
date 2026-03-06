@@ -1,0 +1,4 @@
+{
+  "deno.enable": true,
+  "deno.enablePaths": ["./packages/sync-engine/src/supabase/edge-functions"]
+}

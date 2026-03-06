@@ -454,12 +454,30 @@ COMMENT_RESULT=$(curl -s -X POST "https://api.supabase.com/v1/projects/$SUPABASE
 
 SCHEMA_COMMENT=$(echo "$COMMENT_RESULT" | jq -r '.[0].comment // empty')
 
-if [ -n "$SCHEMA_COMMENT" ] && echo "$SCHEMA_COMMENT" | grep -q "stripe-sync.*installed"; then
-    echo "✓ Schema comment set: $SCHEMA_COMMENT"
+# Try parsing as JSON first (new format), otherwise fall back to legacy plain-text check
+if [ -n "$SCHEMA_COMMENT" ]; then
+    # Try to parse as JSON and check status field
+    COMMENT_STATUS=$(echo "$SCHEMA_COMMENT" | jq -r '.status // empty' 2>/dev/null || echo "")
+    
+    if [ "$COMMENT_STATUS" = "installed" ]; then
+        # JSON format with installed status
+        COMMENT_VERSION=$(echo "$SCHEMA_COMMENT" | jq -r '.version // empty' 2>/dev/null || echo "")
+        echo "✓ Schema comment set (JSON format): status=$COMMENT_STATUS, version=$COMMENT_VERSION"
+    elif echo "$SCHEMA_COMMENT" | grep -q "stripe-sync.*installed"; then
+        # Legacy plain-text format
+        echo "✓ Schema comment set (legacy format): $SCHEMA_COMMENT"
+    else
+        echo "❌ Schema comment NOT set correctly"
+        echo "   Expected JSON: {\"status\":\"installed\",\"version\":\"x.y.z\"}"
+        echo "   Or legacy: 'stripe-sync {version} installed'"
+        echo "   Got: '$SCHEMA_COMMENT'"
+        exit 1
+    fi
 else
     echo "❌ Schema comment NOT set correctly"
-    echo "   Expected: 'stripe-sync v{version} installed'"
-    echo "   Got: '$SCHEMA_COMMENT'"
+    echo "   Expected JSON: {\"status\":\"installed\",\"version\":\"x.y.z\"}"
+    echo "   Or legacy: 'stripe-sync {version} installed'"
+    echo "   Got: (empty)"
     exit 1
 fi
 

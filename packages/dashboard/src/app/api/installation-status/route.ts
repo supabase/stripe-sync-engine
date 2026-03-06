@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/sessions'
+import { parseSchemaComment } from 'stripe-experiment-sync'
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,21 +38,38 @@ export async function GET(request: NextRequest) {
     const result = await response.json()
     const comment = result && result.length > 0 ? result[0]?.comment : null
 
-    // Parse comment to determine status
+    // Parse comment (supports both JSON and legacy plain-text format)
+    const parsedComment = parseSchemaComment(comment)
+
+    // Map to response format
     let status: 'not_started' | 'in_progress' | 'completed' | 'error' = 'not_started'
     let step = ''
 
-    if (!comment) {
+    if (!parsedComment) {
       status = 'not_started'
-    } else if (comment.startsWith('installation:error')) {
-      status = 'error'
-      step = comment.replace('installation:error - ', '')
-    } else if (comment.startsWith('installation:')) {
-      status = 'in_progress'
-      step = comment.replace('installation:', '')
-    } else if (comment.includes('installed')) {
-      status = 'completed'
-      step = comment
+    } else {
+      switch (parsedComment.status) {
+        case 'installing':
+          status = 'in_progress'
+          step = 'installing'
+          break
+        case 'installed':
+          status = 'completed'
+          step = `installed${parsedComment.newVersion ? ` (v${parsedComment.newVersion})` : ''}`
+          break
+        case 'install error':
+          status = 'error'
+          step = parsedComment.errorMessage || 'Installation error'
+          break
+        case 'uninstalling':
+          status = 'in_progress'
+          step = 'uninstalling'
+          break
+        case 'uninstall error':
+          status = 'error'
+          step = parsedComment.errorMessage || 'Uninstallation error'
+          break
+      }
     }
 
     return NextResponse.json({ status, step, comment })

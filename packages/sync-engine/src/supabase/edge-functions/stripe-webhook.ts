@@ -1,4 +1,4 @@
-import { StripeSync } from '../../index'
+import { StripeSync } from '../../stripeSync.ts'
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -28,12 +28,13 @@ Deno.serve(async (req) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Error & { type?: string }
     console.error('Webhook processing error:', error)
     const isSignatureError =
-      error.message?.includes('signature') || error.type === 'StripeSignatureVerificationError'
+      err.message?.includes('signature') || err.type === 'StripeSignatureVerificationError'
     const status = isSignatureError ? 400 : 500
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: err.message }), {
       status,
       headers: { 'Content-Type': 'application/json' },
     })
