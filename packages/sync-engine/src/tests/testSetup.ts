@@ -226,10 +226,12 @@ type MockStripeObject = { id: string; created: number; [key: string]: unknown }
 
 let customerIdCounter = 0
 let planIdCounter = 0
+let couponIdCounter = 0
 
 export function resetMockCounters(): void {
   customerIdCounter = 0
   planIdCounter = 0
+  couponIdCounter = 0
 }
 
 export function createMockCustomer(
@@ -252,6 +254,23 @@ export function createMockPlan(
     object: 'plan',
     created: overrides.created ?? Math.floor(Date.now() / 1000) - planIdCounter,
   }
+}
+
+export function createMockCoupon(
+  overrides: { id?: string; created?: number; deleted?: boolean } = {}
+): MockStripeObject {
+  couponIdCounter++
+  return {
+    id: overrides.id ?? `coupon_test_${couponIdCounter.toString().padStart(6, '0')}`,
+    object: 'coupon',
+    created: overrides.created ?? Math.floor(Date.now() / 1000) - couponIdCounter,
+    ...(overrides.deleted != null ? { deleted: overrides.deleted } : {}),
+  }
+}
+
+export function createMockCouponBatch(count: number, startTimestamp?: number): MockStripeObject[] {
+  const baseTimestamp = startTimestamp ?? Math.floor(Date.now() / 1000)
+  return Array.from({ length: count }, (_, i) => createMockCoupon({ created: baseTimestamp - i }))
 }
 
 export function createMockCustomerBatch(

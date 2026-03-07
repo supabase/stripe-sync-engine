@@ -5,6 +5,7 @@ import {
   upsertTestAccount,
   resetMockCounters,
   createMockCustomerBatch,
+  createMockCouponBatch,
   createPaginatedResponse,
   DatabaseValidator,
   type MockStripeObject,
@@ -19,6 +20,7 @@ describe('StripeSync Integration Tests', () => {
   let db: TestDatabase
   let validator: DatabaseValidator
   let mockCustomers: MockStripeObject[] = []
+  let mockCoupons: MockStripeObject[] = []
 
   beforeAll(async () => {
     db = await setupTestDatabase()
@@ -36,8 +38,13 @@ describe('StripeSync Integration Tests', () => {
 
     resetMockCounters()
     mockCustomers = []
+    mockCoupons = []
 
-    await validator.clearAccountData(TEST_ACCOUNT_ID, ['stripe.customers', 'stripe.plans'])
+    await validator.clearAccountData(TEST_ACCOUNT_ID, [
+      'stripe.customers',
+      'stripe.plans',
+      'stripe.coupons',
+    ])
 
     sync = await createTestStripeSync({
       databaseUrl: db.databaseUrl,
@@ -57,6 +64,20 @@ describe('StripeSync Integration Tests', () => {
         .fn()
         .mockImplementation((id: string) =>
           Promise.resolve(mockCustomers.find((c) => c.id === id) ?? null)
+        ),
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(sync.stripe as any).coupons = {
+      list: vi
+        .fn()
+        .mockImplementation((params) =>
+          Promise.resolve(createPaginatedResponse(mockCoupons, params))
+        ),
+      retrieve: vi
+        .fn()
+        .mockImplementation((id: string) =>
+          Promise.resolve(mockCoupons.find((c) => c.id === id) ?? null)
         ),
     }
   })
@@ -140,6 +161,91 @@ describe('StripeSync Integration Tests', () => {
       expect(customersAfterIncremental).toStrictEqual(
         [...historicalCustomers, ...newCustomers].map((c) => c.id)
       )
+    })
+  })
+
+  describe('coupon fullSync', () => {
+    it('should sync all coupons via fullSync', async () => {
+      mockCoupons = createMockCouponBatch(150)
+
+      const result = await sync.fullSync(['coupon'], true, 1, 50, false)
+
+      expect(result.totalSynced).toStrictEqual(150)
+
+      const countInDb = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(countInDb).toStrictEqual(150)
+
+      const couponsInDb = await validator.getColumnValues('stripe.coupons', 'id', TEST_ACCOUNT_ID)
+      expect(couponsInDb).toStrictEqual(mockCoupons.map((c) => c.id))
+    })
+
+    it('should sync new coupons for incremental consistency', async () => {
+      await sync.fullSync(['coupon'], true, 2, 50, false)
+
+      mockCoupons = createMockCouponBatch(50)
+
+      const result = await sync.fullSync(['coupon'], true, 2, 50, false, 0)
+
+      expect(result.totalSynced).toStrictEqual(50)
+
+      const countInDb = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(countInDb).toStrictEqual(50)
+
+      const couponsInDb = await validator.getColumnValues('stripe.coupons', 'id', TEST_ACCOUNT_ID)
+      expect(couponsInDb).toStrictEqual(mockCoupons.map((c) => c.id))
+    })
+
+    it('should backfill historical coupons and then pick up new coupons on next sync', async () => {
+      const historicalStartTimestamp = Math.floor(Date.now() / 1000) - 10000
+      const historicalCoupons = createMockCouponBatch(100, historicalStartTimestamp)
+      mockCoupons = historicalCoupons
+
+      const result = await sync.fullSync(['coupon'], true, 2, 50, false, 0)
+      expect(result.totalSynced).toStrictEqual(100)
+
+      let countInDb = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(countInDb).toStrictEqual(100)
+
+      const newStartTimestamp = Math.floor(Date.now() / 1000)
+      const newCoupons = createMockCouponBatch(3, newStartTimestamp)
+      mockCoupons = [...newCoupons, ...mockCoupons]
+
+      const couponsAfterBackfill = await validator.getColumnValues(
+        'stripe.coupons',
+        'id',
+        TEST_ACCOUNT_ID
+      )
+      expect(couponsAfterBackfill).toStrictEqual(historicalCoupons.map((c) => c.id))
+
+      await sync.fullSync(['coupon'], true, 2, 50, false, 0)
+
+      countInDb = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(countInDb).toStrictEqual(103)
+
+      const couponsAfterIncremental = await validator.getColumnValues(
+        'stripe.coupons',
+        'id',
+        TEST_ACCOUNT_ID
+      )
+      expect(couponsAfterIncremental).toStrictEqual(
+        [...historicalCoupons, ...newCoupons].map((c) => c.id)
+      )
+    })
+
+    it('should handle deleted coupons during sync', async () => {
+      mockCoupons = createMockCouponBatch(10)
+
+      await sync.fullSync(['coupon'], true, 1, 50, false)
+
+      const countInDb = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(countInDb).toStrictEqual(10)
+
+      mockCoupons = mockCoupons.map((c, i) => (i < 3 ? { ...c, deleted: true } : c))
+
+      await sync.fullSync(['coupon'], true, 1, 50, false, 0)
+
+      const finalCount = await validator.getRowCount('stripe.coupons', TEST_ACCOUNT_ID)
+      expect(finalCount).toStrictEqual(10)
     })
   })
 })

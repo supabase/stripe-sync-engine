@@ -183,6 +183,7 @@ export class StripeSyncWebhook {
     'price.deleted',
     'plan.deleted',
     'invoice.deleted',
+    'coupon.deleted',
     'customer.tax_id.deleted',
   ])
 

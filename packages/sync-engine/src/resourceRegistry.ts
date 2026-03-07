@@ -33,6 +33,15 @@ const RESOURCE_MAP: Record<string, ResourceDef> = {
     supportsCreatedFilter: true,
     sync: true,
   },
+  coupon: {
+    order: 1,
+    tableName: 'coupons',
+    list: (s) => (p) => s.coupons.list(p),
+    retrieve: (s) => (id) => s.coupons.retrieve(id),
+    supportsCreatedFilter: true,
+    sync: true,
+    isFinalState: (c: Stripe.Coupon | Stripe.DeletedCoupon) => 'deleted' in c && c.deleted === true,
+  },
   price: {
     order: 2,
     tableName: 'prices',
