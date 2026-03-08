@@ -91,6 +91,12 @@ export type StripeSyncConfig = {
   logger?: Logger
 
   /**
+   * Optional callback invoked after every database write (upsert or delete).
+   * Errors thrown by the callback are caught and logged — they never block the sync pipeline.
+   */
+  onSync?: (event: SyncEvent) => void | Promise<void>
+
+  /**
    * Maximum number of customers to process concurrently when syncing payment methods.
    * Lower values reduce API load but increase sync time.
    * Default: 10
@@ -311,6 +317,23 @@ export type SigmaResourceConfig = BaseResourceConfig & {
 
 /** Union of all resource configuration types */
 export type ResourceConfig = StripeListResourceConfig | SigmaResourceConfig
+
+/**
+ * Event emitted after a successful database write (upsert or delete).
+ * Provided to consumers via the `onSync` callback in `StripeSyncConfig`.
+ */
+export type SyncEvent = {
+  /** Table that was modified (e.g., 'customers', 'charges') */
+  table: string
+  /** Stripe account ID */
+  accountId: string
+  /** The operation that occurred */
+  operation: 'upsert' | 'delete'
+  /** Rows affected -- full row data for upserts, [{id}] for deletes */
+  rows: Record<string, unknown>[]
+  /** ISO timestamp of the sync */
+  timestamp: string
+}
 
 /**
  * Installation status of the stripe-sync package
