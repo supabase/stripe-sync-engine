@@ -4,6 +4,7 @@ import { managedWebhookSchema } from './schemas/managed_webhook'
 import {
   type StripeSyncConfig,
   type ResourceConfig,
+  type SyncEvent,
   SUPPORTED_WEBHOOK_EVENTS,
   RevalidateEntity,
 } from './types'
@@ -24,6 +25,7 @@ export type StripeSyncWebhookDeps = {
     syncTimestamp?: string
   ) => Promise<unknown[]>
   resourceRegistry: Record<string, ResourceConfig>
+  fireOnSync: (event: SyncEvent) => Promise<void>
 }
 
 export class StripeSyncWebhook {
@@ -111,7 +113,16 @@ export class StripeSyncWebhook {
         this.getSyncTimestamp(event, false)
       )
     } else {
-      await this.deps.postgresClient.delete(tableName, stripeObject.id)
+      const deleted = await this.deps.postgresClient.delete(tableName, stripeObject.id)
+      if (deleted) {
+        await this.deps.fireOnSync({
+          table: tableName,
+          accountId,
+          operation: 'delete',
+          rows: [{ id: stripeObject.id }],
+          timestamp: this.getSyncTimestamp(event, false),
+        })
+      }
     }
   }
 

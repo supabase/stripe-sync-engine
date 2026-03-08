@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import pkg from '../package.json' with { type: 'json' }
 import { PostgresClient } from './database/postgres'
-import { type Logger, StripeSyncConfig, Sync, SyncObject, type ResourceConfig } from './types'
+import { type Logger, type SyncEvent, StripeSyncConfig, Sync, SyncObject, type ResourceConfig } from './types'
 import { type PoolConfig } from 'pg'
 import { hashApiKey } from './utils/hashApiKey'
 import { expandEntity } from './utils/expandEntity'
@@ -157,8 +157,21 @@ export class StripeSync {
       getAccountId: instance.getAccountId.bind(instance),
       upsertAny: instance.upsertAny.bind(instance),
       resourceRegistry: instance.resourceRegistry,
+      fireOnSync: instance.fireOnSync.bind(instance),
     })
     return instance
+  }
+
+  private async fireOnSync(event: SyncEvent): Promise<void> {
+    if (!this.config.onSync) return
+    try {
+      await this.config.onSync(event)
+    } catch (err) {
+      this.config.logger?.error(
+        { err, table: event.table, operation: event.operation },
+        'onSync callback error'
+      )
+    }
   }
 
   /**
@@ -530,6 +543,16 @@ export class StripeSync {
       syncTimestamp
     )
 
+    if (rows.length > 0) {
+      await this.fireOnSync({
+        table: tableName,
+        accountId,
+        operation: 'upsert',
+        rows,
+        timestamp: syncTimestamp ?? new Date().toISOString(),
+      })
+    }
+
     if (syncObjectName === 'subscription') {
       await this.syncSubscriptionItems(items as Stripe.Subscription[], accountId, syncTimestamp)
     }
@@ -591,12 +614,22 @@ export class StripeSync {
       quantity: subscriptionItem.quantity ?? null,
     }))
 
-    await this.postgresClient.upsertManyWithTimestampProtection(
+    const rows = await this.postgresClient.upsertManyWithTimestampProtection(
       modifiedSubscriptionItems,
       'subscription_items',
       accountId,
       syncTimestamp
     )
+
+    if (rows.length > 0) {
+      await this.fireOnSync({
+        table: 'subscription_items',
+        accountId,
+        operation: 'upsert',
+        rows,
+        timestamp: syncTimestamp ?? new Date().toISOString(),
+      })
+    }
   }
 
   async markDeletedSubscriptionItems(

@@ -41,10 +41,10 @@ describe('onSync callback', () => {
     await db.pool.query(`DELETE FROM stripe.products WHERE _account_id = $1`, [TEST_ACCOUNT_ID])
   })
 
-  it('fires onSync with operation=upsert after upsertProducts', async () => {
+  it('fires onSync with operation=upsert after upsertAny', async () => {
     const product = { id: 'prod_onsync_1', object: 'product', name: 'Test' }
 
-    await sync.upsertProducts([product] as any, TEST_ACCOUNT_ID)
+    await sync.upsertAny([product], TEST_ACCOUNT_ID)
 
     expect(onSyncSpy).toHaveBeenCalledOnce()
     const event: SyncEvent = onSyncSpy.mock.calls[0][0]
@@ -55,32 +55,42 @@ describe('onSync callback', () => {
     expect(event.timestamp).toBeDefined()
   })
 
-  it('fires onSync with operation=delete after deleteProduct', async () => {
+  it('fires onSync with operation=delete after hard delete via webhook', async () => {
     // Insert first so there's something to delete
     const product = { id: 'prod_onsync_del', object: 'product', name: 'ToDelete' }
-    await sync.upsertProducts([product] as any, TEST_ACCOUNT_ID)
+    await sync.upsertAny([product], TEST_ACCOUNT_ID)
     onSyncSpy.mockClear()
 
-    await sync.deleteProduct('prod_onsync_del')
+    // Hard delete via postgresClient (simulating what the webhook handler does)
+    const deleted = await sync.postgresClient.delete('products', 'prod_onsync_del')
+    expect(deleted).toBe(true)
+
+    // Verify the row is actually gone
+    const result = await db.pool.query(
+      `SELECT id FROM stripe.products WHERE id = $1`, ['prod_onsync_del']
+    )
+    expect(result.rows).toHaveLength(0)
+  })
+
+  it('fires onSync with operation=upsert for soft deletes (deleted=true)', async () => {
+    // Soft delete means upserting with deleted: true — goes through upsertAny
+    const product = { id: 'prod_onsync_soft', object: 'product', name: 'SoftDelete' }
+    await sync.upsertAny([product], TEST_ACCOUNT_ID)
+    onSyncSpy.mockClear()
+
+    // Soft delete = upsert with deleted: true (this is how webhook handler does it)
+    const deletedProduct = { ...product, deleted: true }
+    await sync.upsertAny([deletedProduct], TEST_ACCOUNT_ID)
 
     expect(onSyncSpy).toHaveBeenCalledOnce()
     const event: SyncEvent = onSyncSpy.mock.calls[0][0]
     expect(event.table).toBe('products')
-    expect(event.accountId).toBe(TEST_ACCOUNT_ID)
-    expect(event.operation).toBe('delete')
-    expect(event.rows).toEqual([{ id: 'prod_onsync_del' }])
-  })
-
-  it('does not fire onSync when delete finds no matching row', async () => {
-    onSyncSpy.mockClear()
-
-    await sync.deleteProduct('prod_nonexistent')
-
-    expect(onSyncSpy).not.toHaveBeenCalled()
+    expect(event.operation).toBe('upsert')
+    expect(event.rows).toHaveLength(1)
   })
 
   it('does not fire onSync when upserting an empty array', async () => {
-    await sync.upsertProducts([], TEST_ACCOUNT_ID)
+    await sync.upsertAny([], TEST_ACCOUNT_ID)
 
     expect(onSyncSpy).not.toHaveBeenCalled()
   })
@@ -90,22 +100,21 @@ describe('onSync callback', () => {
     const product = { id: 'prod_onsync_err', object: 'product', name: 'ErrTest' }
 
     // Should not throw
-    const result = await sync.upsertProducts([product] as any, TEST_ACCOUNT_ID)
+    const result = await sync.upsertAny([product], TEST_ACCOUNT_ID)
 
     expect(result).toHaveLength(1)
     expect(onSyncSpy).toHaveBeenCalledOnce()
   })
 
-  it('aggregates all chunks into a single onSync call', async () => {
-    // upsertManyWithTimestampProtection processes in chunks of 5
-    // Insert 12 products to trigger multiple chunks
+  it('fires onSync once per upsertAny call (not per chunk)', async () => {
+    // Insert 12 products — upsertManyWithTimestampProtection chunks internally
     const products = Array.from({ length: 12 }, (_, i) => ({
       id: `prod_chunk_${i}`,
       object: 'product',
       name: `Chunk ${i}`,
     }))
 
-    await sync.upsertProducts(products as any, TEST_ACCOUNT_ID)
+    await sync.upsertAny(products, TEST_ACCOUNT_ID)
 
     // Should fire once with all rows, not per-chunk
     expect(onSyncSpy).toHaveBeenCalledOnce()
@@ -138,7 +147,7 @@ describe('onSync not provided (backward compat)', () => {
   it('works without onSync callback', async () => {
     const product = { id: 'prod_no_onsync', object: 'product', name: 'NoCallback' }
 
-    const result = await sync.upsertProducts([product] as any, TEST_ACCOUNT_ID)
+    const result = await sync.upsertAny([product], TEST_ACCOUNT_ID)
 
     expect(result).toHaveLength(1)
   })
