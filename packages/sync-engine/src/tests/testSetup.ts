@@ -180,12 +180,14 @@ export async function createTestStripeSync(opts: {
   accountId?: string
   stripeSecretKey?: string
   enableSigma?: boolean
+  onSync?: StripeSyncConfig['onSync']
 }): Promise<StripeSync> {
   return StripeSync.create({
     stripeSecretKey: opts.stripeSecretKey ?? 'sk_test_fake',
     stripeAccountId: opts.accountId,
     databaseUrl: opts.databaseUrl,
     enableSigma: opts.enableSigma,
+    onSync: opts.onSync,
   })
 }
 
