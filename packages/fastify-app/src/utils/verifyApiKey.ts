@@ -8,13 +8,15 @@ export const verifyApiKey = (
   request: FastifyRequest,
   reply: FastifyReply,
   done: HookHandlerDoneFunction
-): unknown => {
+): void => {
   if (!request.headers || !request.headers.authorization) {
-    return reply.code(401).send('Unauthorized')
+    reply.code(401).send('Unauthorized')
+    return
   }
   const { authorization } = request.headers
   if (!apiKeyMatches(authorization, config.apiKey)) {
-    return reply.code(401).send('Unauthorized')
+    reply.code(401).send('Unauthorized')
+    return
   }
   done()
 }
