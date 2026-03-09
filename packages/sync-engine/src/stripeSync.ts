@@ -189,15 +189,22 @@ export class StripeSync {
           (subscription) =>
             subscription.status === 'canceled' || subscription.status === 'incomplete_expired'
         )
+        const syncTimestamp = this.getSyncTimestamp(event, refetched)
 
         this.config.logger?.info(
           `Received webhook ${event.id}: ${event.type} for subscription ${subscription.id}`
         )
 
-        await this.upsertSubscriptions(
+        const upsertedSubscriptions = await this.upsertSubscriptions(
           [subscription],
           false,
-          this.getSyncTimestamp(event, refetched)
+          syncTimestamp
+        )
+        await this.resolveEqualTimestampSubscriptionConflict(
+          subscription.id,
+          upsertedSubscriptions,
+          refetched,
+          syncTimestamp
         )
         break
       }
@@ -579,6 +586,32 @@ export class StripeSync {
 
   private getSyncTimestamp(event: Stripe.Event, refetched: boolean) {
     return refetched ? new Date().toISOString() : new Date(event.created * 1000).toISOString()
+  }
+
+  private async resolveEqualTimestampSubscriptionConflict(
+    subscriptionId: string,
+    upsertedSubscriptions: Stripe.Subscription[],
+    refetched: boolean,
+    syncTimestamp: string
+  ) {
+    if (refetched || upsertedSubscriptions.length > 0) return
+
+    const query = `
+      select 1
+      from "${this.config.schema}"."subscriptions"
+      where id = $1
+        and last_synced_at = $2::timestamptz
+      limit 1
+    `
+    const result = await this.postgresClient.query(query, [subscriptionId, syncTimestamp])
+    if (!result.rows.length) return
+
+    this.config.logger?.warn(
+      `Equal timestamp detected for subscription ${subscriptionId}. Refetching from Stripe for deterministic state.`
+    )
+
+    const latestSubscription = await this.stripe.subscriptions.retrieve(subscriptionId)
+    await this.upsertSubscriptions([latestSubscription], false, new Date().toISOString())
   }
 
   private shouldRefetchEntity(entity: { object: string }) {
