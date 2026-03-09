@@ -4,6 +4,7 @@ import { PostgresClient } from './database/postgres'
 import { chargeSchema } from './schemas/charge'
 import { checkoutSessionSchema } from './schemas/checkout_sessions'
 import { checkoutSessionLineItemSchema } from './schemas/checkout_session_line_items'
+import { couponSchema } from './schemas/coupon'
 import { creditNoteSchema } from './schemas/credit_note'
 import { customerDeletedSchema, customerSchema } from './schemas/customer'
 import { disputeSchema } from './schemas/dispute'
@@ -13,6 +14,7 @@ import { priceSchema } from './schemas/price'
 import { productSchema } from './schemas/product'
 import { paymentIntentSchema } from './schemas/payment_intent'
 import { paymentMethodsSchema } from './schemas/payment_methods'
+import { promotionCodeSchema } from './schemas/promotion_code'
 import { setupIntentsSchema } from './schemas/setup_intents'
 import { taxIdSchema } from './schemas/tax_id'
 import { subscriptionItemSchema } from './schemas/subscription_item'
@@ -158,6 +160,26 @@ export class StripeSync {
           false,
           this.getSyncTimestamp(event, refetched)
         )
+        break
+      }
+      case 'coupon.created':
+      case 'coupon.updated': {
+        const { entity: coupon, refetched } = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.Coupon,
+          (id) => this.stripe.coupons.retrieve(id)
+        )
+
+        this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`)
+
+        await this.upsertCoupons([coupon], this.getSyncTimestamp(event, refetched))
+        break
+      }
+      case 'coupon.deleted': {
+        const coupon = event.data.object as Stripe.Coupon | { id: string }
+
+        this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`)
+
+        await this.deleteCoupon(coupon.id)
         break
       }
       case 'customer.created':
@@ -410,6 +432,30 @@ export class StripeSync {
         )
         break
       }
+      case 'promotion_code.created':
+      case 'promotion_code.updated': {
+        const { entity: promotionCode, refetched } = await this.fetchOrUseWebhookData(
+          event.data.object as Stripe.PromotionCode,
+          (id) => this.stripe.promotionCodes.retrieve(id)
+        )
+
+        const syncTimestamp = this.getSyncTimestamp(event, refetched)
+
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for promotionCode ${promotionCode.id}`
+        )
+
+        const coupon =
+          (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
+            .coupon ?? promotionCode.promotion?.coupon ?? null
+
+        if (coupon && typeof coupon !== 'string') {
+          await this.upsertCoupons([coupon], syncTimestamp)
+        }
+
+        await this.upsertPromotionCodes([promotionCode], false, syncTimestamp)
+        break
+      }
       case 'charge.dispute.created':
       case 'charge.dispute.funds_reinstated':
       case 'charge.dispute.funds_withdrawn':
@@ -654,6 +700,10 @@ export class StripeSync {
       return this.stripe.entitlements.features
         .retrieve(stripeId)
         .then((it) => this.upsertFeatures([it]))
+    } else if (stripeId.startsWith('promo_')) {
+      return this.stripe.promotionCodes
+        .retrieve(stripeId)
+        .then((it) => this.upsertPromotionCodes([it]))
     } else if (stripeId.startsWith('cs_')) {
       return this.stripe.checkout.sessions
         .retrieve(stripeId)
@@ -1361,6 +1411,27 @@ export class StripeSync {
     return this.postgresClient.delete('plans', id)
   }
 
+  async upsertCoupons(coupons: Stripe.Coupon[], syncTimestamp?: string): Promise<Stripe.Coupon[]> {
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      coupons,
+      'coupons',
+      couponSchema,
+      syncTimestamp
+    )
+  }
+
+  async deleteCoupon(id: string): Promise<boolean> {
+    return this.postgresClient.delete('coupons', id)
+  }
+
+  async backfillCoupons(couponIds: string[]) {
+    const missingCouponIds = await this.postgresClient.findMissingEntries('coupons', couponIds)
+
+    await this.fetchMissingEntities(missingCouponIds, (id) => this.stripe.coupons.retrieve(id)).then(
+      (coupons) => this.upsertCoupons(coupons)
+    )
+  }
+
   async upsertPrices(
     prices: Stripe.Price[],
     backfillRelatedEntities?: boolean,
@@ -1479,6 +1550,70 @@ export class StripeSync {
 
   async deleteTaxId(id: string): Promise<boolean> {
     return this.postgresClient.delete('tax_ids', id)
+  }
+
+  async upsertPromotionCodes(
+    promotionCodes: Stripe.PromotionCode[],
+    backfillRelatedEntities?: boolean,
+    syncTimestamp?: string
+  ): Promise<Stripe.PromotionCode[]> {
+    if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
+      const couponIds = promotionCodes
+        .map((promotionCode) => {
+          const coupon =
+            (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
+              .coupon ?? promotionCode.promotion?.coupon ?? null
+
+          if (!coupon) return null
+
+          return typeof coupon === 'string' ? coupon : coupon.id.toString()
+        })
+        .filter((id): id is string => Boolean(id))
+      const customerIds = promotionCodes
+        .map((promotionCode) => {
+          if (!promotionCode.customer) return null
+
+          return typeof promotionCode.customer === 'string'
+            ? promotionCode.customer
+            : promotionCode.customer.id.toString()
+        })
+        .filter((id): id is string => Boolean(id))
+
+      await Promise.all([this.backfillCoupons(couponIds), this.backfillCustomers(customerIds)])
+    }
+
+    const normalizedPromotionCodes = promotionCodes.map((promotionCode) => {
+      const coupon =
+        (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
+          .coupon ?? promotionCode.promotion?.coupon ?? null
+      const customerAccount = (promotionCode as Stripe.PromotionCode & {
+        customer_account?: string | { id: string } | null
+      }).customer_account
+
+      return {
+        ...promotionCode,
+        coupon: !coupon ? null : typeof coupon === 'string' ? coupon : coupon.id.toString(),
+        customer:
+          !promotionCode.customer
+            ? null
+            : typeof promotionCode.customer === 'string'
+              ? promotionCode.customer
+              : promotionCode.customer.id.toString(),
+        customer_account:
+          !customerAccount
+            ? null
+            : typeof customerAccount === 'string'
+              ? customerAccount
+              : (customerAccount as { id: string }).id.toString(),
+      }
+    })
+
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      normalizedPromotionCodes,
+      'promotion_codes',
+      promotionCodeSchema,
+      syncTimestamp
+    )
   }
 
   async upsertSubscriptionItems(

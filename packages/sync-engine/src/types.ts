@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 
 export type RevalidateEntity =
   | 'charge'
+  | 'coupon'
   | 'credit_note'
   | 'customer'
   | 'dispute'
@@ -12,6 +13,7 @@ export type RevalidateEntity =
   | 'payment_method'
   | 'plan'
   | 'price'
+  | 'promotion_code'
   | 'product'
   | 'refund'
   | 'review'
