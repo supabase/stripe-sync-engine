@@ -1,6 +1,27 @@
 import { vitest } from 'vitest'
 
 export const mockStripe = {
+  coupons: {
+    retrieve: vitest.fn((id) =>
+      Promise.resolve({
+        id,
+        object: 'coupon',
+        amount_off: null,
+        created: 1773056115,
+        currency: null,
+        duration: 'once',
+        duration_in_months: null,
+        livemode: false,
+        max_redemptions: null,
+        metadata: {},
+        name: 'TEST_DISCOUNT',
+        percent_off: 100,
+        redeem_by: null,
+        times_redeemed: 0,
+        valid: true,
+      })
+    ),
+  },
   checkout: {
     sessions: {
       retrieve: vitest.fn((id) =>
@@ -94,6 +115,30 @@ export const mockStripe = {
         },
       })),
     },
+  },
+  promotionCodes: {
+    retrieve: vitest.fn((id) =>
+      Promise.resolve({
+        id,
+        object: 'promotion_code',
+        active: true,
+        code: 'FREE2026',
+        coupon: '82cOWD3z',
+        created: 1773056115,
+        customer: null,
+        customer_account: null,
+        expires_at: null,
+        livemode: false,
+        max_redemptions: null,
+        metadata: {},
+        restrictions: {
+          first_time_transaction: true,
+          minimum_amount: null,
+          minimum_amount_currency: null,
+        },
+        times_redeemed: 0,
+      })
+    ),
   },
   invoices: {
     retrieve: vitest.fn((id) =>
