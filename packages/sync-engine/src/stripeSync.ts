@@ -169,7 +169,9 @@ export class StripeSync {
           (id) => this.stripe.coupons.retrieve(id)
         )
 
-        this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`)
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`
+        )
 
         await this.upsertCoupons([coupon], this.getSyncTimestamp(event, refetched))
         break
@@ -177,7 +179,9 @@ export class StripeSync {
       case 'coupon.deleted': {
         const coupon = event.data.object as Stripe.Coupon | { id: string }
 
-        this.config.logger?.info(`Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`)
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`
+        )
 
         await this.deleteCoupon(coupon.id)
         break
@@ -447,7 +451,9 @@ export class StripeSync {
 
         const coupon =
           (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-            .coupon ?? promotionCode.promotion?.coupon ?? null
+            .coupon ??
+          promotionCode.promotion?.coupon ??
+          null
 
         if (coupon && typeof coupon !== 'string') {
           await this.upsertCoupons([coupon], syncTimestamp)
@@ -1427,9 +1433,9 @@ export class StripeSync {
   async backfillCoupons(couponIds: string[]) {
     const missingCouponIds = await this.postgresClient.findMissingEntries('coupons', couponIds)
 
-    await this.fetchMissingEntities(missingCouponIds, (id) => this.stripe.coupons.retrieve(id)).then(
-      (coupons) => this.upsertCoupons(coupons)
-    )
+    await this.fetchMissingEntities(missingCouponIds, (id) =>
+      this.stripe.coupons.retrieve(id)
+    ).then((coupons) => this.upsertCoupons(coupons))
   }
 
   async upsertPrices(
@@ -1562,7 +1568,9 @@ export class StripeSync {
         .map((promotionCode) => {
           const coupon =
             (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-              .coupon ?? promotionCode.promotion?.coupon ?? null
+              .coupon ??
+            promotionCode.promotion?.coupon ??
+            null
 
           if (!coupon) return null
 
@@ -1585,26 +1593,28 @@ export class StripeSync {
     const normalizedPromotionCodes = promotionCodes.map((promotionCode) => {
       const coupon =
         (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-          .coupon ?? promotionCode.promotion?.coupon ?? null
-      const customerAccount = (promotionCode as Stripe.PromotionCode & {
-        customer_account?: string | { id: string } | null
-      }).customer_account
+          .coupon ??
+        promotionCode.promotion?.coupon ??
+        null
+      const customerAccount = (
+        promotionCode as Stripe.PromotionCode & {
+          customer_account?: string | { id: string } | null
+        }
+      ).customer_account
 
       return {
         ...promotionCode,
         coupon: !coupon ? null : typeof coupon === 'string' ? coupon : coupon.id.toString(),
-        customer:
-          !promotionCode.customer
-            ? null
-            : typeof promotionCode.customer === 'string'
-              ? promotionCode.customer
-              : promotionCode.customer.id.toString(),
-        customer_account:
-          !customerAccount
-            ? null
-            : typeof customerAccount === 'string'
-              ? customerAccount
-              : (customerAccount as { id: string }).id.toString(),
+        customer: !promotionCode.customer
+          ? null
+          : typeof promotionCode.customer === 'string'
+            ? promotionCode.customer
+            : promotionCode.customer.id.toString(),
+        customer_account: !customerAccount
+          ? null
+          : typeof customerAccount === 'string'
+            ? customerAccount
+            : (customerAccount as { id: string }).id.toString(),
       }
     })
 
