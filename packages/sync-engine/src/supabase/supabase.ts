@@ -6,7 +6,7 @@ import {
   sigmaWorkerFunctionCode,
 } from './edge-function-code'
 import pkg from '../../package.json' with { type: 'json' }
-import { parseSchemaComment, SchemaInstallationStatus, StripeSchemaComment } from './schemaComment'
+import { parseSchemaComment, StripeSchemaComment } from './schemaComment'
 
 export interface DeployClientOptions {
   accessToken: string
@@ -429,19 +429,11 @@ export class SupabaseSetupClient {
   /**
    * Update installation progress comment on the stripe schema
    */
-  async updateComment(
-    status: SchemaInstallationStatus,
-    oldVersion?: string,
-    errorMessage?: string
-  ): Promise<void> {
-    const comment = JSON.stringify({
-      status,
-      newVersion: pkg.version,
-      oldVersion,
-      errorMessage,
-    })
+  async updateComment(comment: StripeSchemaComment): Promise<void> {
+    comment.newVersion = pkg.version
+    const commentJson = JSON.stringify(comment)
     // Escape single quotes to prevent SQL injection
-    const escapedComment = comment.replace(/'/g, "''")
+    const escapedComment = commentJson.replace(/'/g, "''")
     await this.runSQL(`COMMENT ON SCHEMA stripe IS '${escapedComment}'`)
   }
 
@@ -450,12 +442,12 @@ export class SupabaseSetupClient {
    * Invokes the stripe-setup edge function's DELETE endpoint which handles cleanup
    * Tracks uninstallation progress via schema comments
    */
-  async uninstall(): Promise<void> {
+  async uninstall(startTime?: number): Promise<void> {
     try {
       // Check if schema exists and mark uninstall as started
       const hasSchema = await this.schemaExists('stripe')
       if (hasSchema) {
-        await this.updateComment('uninstalling')
+        await this.updateComment({ status: 'uninstalling', startTime })
       }
 
       // Invoke the DELETE endpoint on stripe-setup function
@@ -472,7 +464,7 @@ export class SupabaseSetupClient {
         const hasSchema = await this.schemaExists('stripe')
         if (hasSchema) {
           const errorMessage = error instanceof Error ? error.message : String(error)
-          await this.updateComment('uninstall error', undefined, errorMessage)
+          await this.updateComment({ status: 'uninstall error', errorMessage })
         }
       } catch (error) {
         throw new Error(
@@ -489,7 +481,8 @@ export class SupabaseSetupClient {
     workerIntervalSeconds?: number,
     enableSigma?: boolean,
     rateLimit?: number,
-    syncIntervalSeconds?: number
+    syncIntervalSeconds?: number,
+    startTime?: number
   ): Promise<void> {
     const trimmedStripeKey = stripeKey.trim()
     if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
@@ -509,7 +502,7 @@ export class SupabaseSetupClient {
       const oldVersion = existingComment?.newVersion
 
       // Signal installation started
-      await this.updateComment('installing', oldVersion)
+      await this.updateComment({ status: 'installing', oldVersion, startTime })
 
       // Set secrets first -- stripe-setup needs STRIPE_SECRET_KEY to run
       const secrets = [{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }]
@@ -563,11 +556,11 @@ export class SupabaseSetupClient {
       await this.invokeFunction('stripe-worker', 'POST', this.workerSecret)
 
       // Set final version comment
-      await this.updateComment('installed', oldVersion)
+      await this.updateComment({ status: 'installed', oldVersion })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       try {
-        await this.updateComment('install error', undefined, errorMessage)
+        await this.updateComment({ status: 'install error', errorMessage })
       } catch {
         // Schema may not exist if early steps failed -- don't mask the original error
       }
@@ -587,6 +580,7 @@ export async function install(params: {
   enableSigma?: boolean
   rateLimit?: number
   syncIntervalSeconds?: number
+  startTime?: number
 }): Promise<void> {
   const {
     supabaseAccessToken,
@@ -597,6 +591,7 @@ export async function install(params: {
     enableSigma,
     rateLimit,
     syncIntervalSeconds,
+    startTime,
   } = params
 
   const client = new SupabaseSetupClient({
@@ -612,7 +607,8 @@ export async function install(params: {
     workerIntervalSeconds,
     enableSigma,
     rateLimit,
-    syncIntervalSeconds
+    syncIntervalSeconds,
+    startTime
   )
 }
 
@@ -621,8 +617,9 @@ export async function uninstall(params: {
   supabaseProjectRef: string
   baseProjectUrl?: string
   supabaseManagementUrl?: string
+  startTime?: number
 }): Promise<void> {
-  const { supabaseAccessToken, supabaseProjectRef } = params
+  const { supabaseAccessToken, supabaseProjectRef, startTime } = params
 
   const client = new SupabaseSetupClient({
     accessToken: supabaseAccessToken,
@@ -631,7 +628,7 @@ export async function uninstall(params: {
     supabaseManagementUrl: params.supabaseManagementUrl,
   })
 
-  await client.uninstall()
+  await client.uninstall(startTime)
 }
 
 export function getCurrentVersion(): string {
