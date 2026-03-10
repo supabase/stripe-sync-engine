@@ -441,8 +441,14 @@ export async function fullSyncCommand(
           `✓ Skipping resync — a successful run completed at ${completedRun.runStartedAt.toISOString()} (within ${intervalSeconds}s window)`
         )
       )
-      await stripeSync.close()
-      return
+      if (!options.listenOnly || !options.listenMode || options.listenMode === 'disabled') {
+        await stripeSync.close()
+        return
+      }
+    }
+
+    if (entityName !== 'all') {
+      stripeSync.webhook.setObjectFilter([entityName])
     }
 
     if (options.listenMode && options.listenMode !== 'disabled') {

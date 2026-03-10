@@ -27,7 +27,13 @@ export type StripeSyncWebhookDeps = {
 }
 
 export class StripeSyncWebhook {
+  private _allowedObjects: Set<string> | null = null
+
   constructor(private readonly deps: StripeSyncWebhookDeps) {}
+
+  setObjectFilter(objects: string[] | null): void {
+    this._allowedObjects = objects ? new Set(objects) : null
+  }
 
   private get syncMetadataSchemaName(): string {
     return this.deps.config.syncTablesSchemaName ?? this.deps.config.schemaName ?? 'stripe'
@@ -75,6 +81,16 @@ export class StripeSyncWebhook {
   }
 
   async processEvent(event: Stripe.Event) {
+    if (this._allowedObjects) {
+      const objectType = (event.data?.object as { object?: string })?.object
+      if (objectType && !this._allowedObjects.has(normalizeStripeObjectName(objectType))) {
+        this.deps.config.logger?.info(
+          `Skipping webhook ${event.id}: ${event.type} — object type "${objectType}" not in sync filter`
+        )
+        return
+      }
+    }
+
     const objectAccountId =
       event.data?.object && typeof event.data.object === 'object' && 'account' in event.data.object
         ? (event.data.object as { account?: string }).account
