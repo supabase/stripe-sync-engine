@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    let sql
+    let sql: ReturnType<typeof postgres> | undefined
 
     try {
       sql = postgres(dbUrl, { max: 1, prepare: false })
