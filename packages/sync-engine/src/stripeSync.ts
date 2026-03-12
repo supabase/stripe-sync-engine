@@ -282,16 +282,34 @@ export class StripeSync {
   async createChunks(
     objects: StripeObject[],
     workerCount: number = 100
-  ): Promise<{ chunkCursors: Record<string, number[]>; nonChunkTables: string[] }> {
+  ): Promise<{
+    chunkCursors: Record<string, number[]>
+    nonChunkTables: string[]
+    failedObjects: Array<{ tableName: string; error: string }>
+  }> {
+    const failedObjects: Array<{ tableName: string; error: string }> = []
+    const failedObjectKeys = new Set<StripeObject>()
+
     const cursors = await Promise.all(
       objects
         .filter((obj) => this.resourceRegistry[obj]?.supportsCreatedFilter)
         .map(async (obj) => {
           const config = this.resourceRegistry[obj]
           if (!config.listFn) return null
-          const oldest = await this.findOldestItem(config.listFn)
-          if (oldest === null) return null
-          return { object: obj, oldest }
+          try {
+            const oldest = await this.findOldestItem(config.listFn)
+            if (oldest === null) return null
+            return { object: obj, oldest }
+          } catch (err) {
+            const tableName = getTableName(obj, this.getRegistryForObject(obj))
+            this.config.logger?.warn(
+              { err, object: obj },
+              'Failed to probe oldest item for object during initialization; marking as errored'
+            )
+            failedObjectKeys.add(obj)
+            failedObjects.push({ tableName, error: String(err) })
+            return null
+          }
         })
     )
 
@@ -300,7 +318,9 @@ export class StripeSync {
       (c): c is { object: StripeObject; oldest: number } => c !== null
     )
     const chunkCursors: Record<string, number[]> = {}
-    const nonChunkCursors = objects.filter((obj) => !validCursors.some((c) => c.object === obj))
+    const nonChunkCursors = objects.filter(
+      (obj) => !validCursors.some((c) => c.object === obj) && !failedObjectKeys.has(obj)
+    )
     const nonChunkTables = nonChunkCursors.map((obj) =>
       getTableName(obj, this.getRegistryForObject(obj))
     )
@@ -319,7 +339,7 @@ export class StripeSync {
       chunkCursors[tableName] = timestamps
     }
 
-    return { chunkCursors, nonChunkTables }
+    return { chunkCursors, nonChunkTables, failedObjects }
   }
 
   /**
@@ -342,7 +362,10 @@ export class StripeSync {
     objects: StripeObject[],
     workerCount: number
   ): Promise<RunKey> {
-    const { chunkCursors, nonChunkTables } = await this.createChunks(objects, workerCount)
+    const { chunkCursors, nonChunkTables, failedObjects } = await this.createChunks(
+      objects,
+      workerCount
+    )
     const priorities = this.buildPriorityMap(objects)
     await this.postgresClient.createChunkedObjectRuns(
       runKey.accountId,
@@ -356,6 +379,20 @@ export class StripeSync {
         runKey.runStartedAt,
         nonChunkTables,
         priorities
+      )
+    }
+    for (const { tableName, error } of failedObjects) {
+      await this.postgresClient.createObjectRuns(
+        runKey.accountId,
+        runKey.runStartedAt,
+        [tableName],
+        priorities
+      )
+      await this.postgresClient.failObjectSync(
+        runKey.accountId,
+        runKey.runStartedAt,
+        tableName,
+        `Initialization failed: ${error}`
       )
     }
     return runKey
