@@ -9,7 +9,7 @@ import { logger } from '../logger'
 import { mockStripe } from './helpers/mockStripe'
 import { StripeSync } from '@supabase/stripe-sync-engine'
 
-const unixtime = Math.floor(new Date().getTime() / 1000)
+const unixtime = Math.floor(Date.now() / 1000)
 const stripeWebhookSecret = getConfig().stripeWebhookSecret
 
 const postgresClient = new PostgresClient({
