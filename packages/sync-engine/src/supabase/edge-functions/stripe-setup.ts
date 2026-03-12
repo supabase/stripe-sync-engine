@@ -388,7 +388,7 @@ Deno.serve(async (req) => {
     if (!supabaseUrl) {
       throw new Error('SUPABASE_URL environment variable is not set')
     }
-    const webhookUrl = `'${supabaseUrl}/functions/v1/stripe-webhook`
+    const webhookUrl = `${supabaseUrl}/functions/v1/stripe-webhook`
 
     const webhook = await stripeSync.webhook.findOrCreateManagedWebhook(webhookUrl)
 
