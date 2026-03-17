@@ -5,7 +5,9 @@
   "description": "DEPRECATED - This package has moved to https://github.com/stripe/sync-engine",
   "type": "module",
   "main": "./dist/index.cjs",
-  "bin": "./dist/cli/index.js",
+  "bin": {
+    "sync-engine": "./dist/cli/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -33,6 +35,7 @@
     "test:integration": "vitest run src/tests/integration/",
     "test:e2e": "pnpm run build && vitest run --config vitest.e2e.config.ts && vitest run --config vitest.e2e.webhook.config.ts",
     "sync": "pnpm run build && node dist/cli/index.js sync",
+    "dev": "tsup src/index.ts src/supabase/index.ts src/cli/index.ts src/cli/lib.ts --format esm --shims --watch --onSuccess 'cp -r src/database/migrations dist/migrations && node dist/cli/index.js sync'",
     "generate:sigma-schema": "tsx src/sigma/schema/fetch-schema.ts"
   },
   "files": [
@@ -43,7 +46,6 @@
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
-    "esbuild": "^0.27.3",
     "express": "^4.18.2",
     "inquirer": "^12.3.0",
     "papaparse": "5.4.1",
