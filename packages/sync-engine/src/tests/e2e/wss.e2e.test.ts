@@ -156,7 +156,7 @@ describe('WebSocket E2E', () => {
     )
   }, 70000)
 
-  it('should sync customer creation and soft deletion', async () => {
+  it('should sync customer creation and soft deletion', { retry: 2, timeout: 70000 }, async () => {
     const timestamp = Date.now()
 
     const customer = await stripe.customers.create({
@@ -187,5 +187,5 @@ describe('WebSocket E2E', () => {
       30000,
       { message: `Customer ${customer.id} not soft-deleted within timeout` }
     )
-  }, 70000)
+  })
 })

@@ -82,6 +82,14 @@ export class StripeSyncWebhook {
   }
 
   async processEvent(event: Stripe.Event) {
+    const rawObjectType = (event.data?.object as { object?: string })?.object
+    if (rawObjectType && !this.deps.resourceRegistry[normalizeStripeObjectName(rawObjectType)]) {
+      this.deps.config.logger?.info(
+        `Skipping webhook ${event.id}: ${event.type} — object type "${rawObjectType}" is not supported`
+      )
+      return
+    }
+
     if (this._allowedObjects) {
       const objectType = (event.data?.object as { object?: string })?.object
       if (objectType && !this._allowedObjects.has(normalizeStripeObjectName(objectType))) {
@@ -92,12 +100,6 @@ export class StripeSyncWebhook {
       }
     }
 
-    const objectAccountId =
-      event.data?.object && typeof event.data.object === 'object' && 'account' in event.data.object
-        ? (event.data.object as { account?: string }).account
-        : undefined
-    const accountId = await this.deps.getAccountId(objectAccountId)
-
     // Skip events whose data.object lacks an id — these are preview/draft objects
     // (e.g. invoice.upcoming) that cannot be persisted due to NOT NULL constraint on id
     const dataObject = event.data?.object as { id?: string } | undefined
@@ -107,6 +109,12 @@ export class StripeSyncWebhook {
       )
       return
     }
+
+    const objectAccountId =
+      event.data?.object && typeof event.data.object === 'object' && 'account' in event.data.object
+        ? (event.data.object as { account?: string }).account
+        : undefined
+    const accountId = await this.deps.getAccountId(objectAccountId)
     await this.handleAnyEvent(event, accountId)
   }
 

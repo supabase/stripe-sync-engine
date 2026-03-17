@@ -52,6 +52,42 @@ describe('selective sync / webhook object filter', () => {
     )
   })
 
+  it('should skip unsupported objects before account lookup or writes', async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const stripeSync = await createMockedStripeSync({ logger })
+
+    const getAccountIdSpy = vi.fn().mockResolvedValue('acct_test')
+    const upsertSpy = vi.fn()
+    const deleteSpy = vi.fn().mockResolvedValue(undefined)
+    const columnExistsSpy = vi.fn().mockResolvedValue(false)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(stripeSync.webhook as any).deps.getAccountId = getAccountIdSpy
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(stripeSync.webhook as any).deps.upsertAny = upsertSpy
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(stripeSync.webhook as any).deps.postgresClient.delete = deleteSpy
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(stripeSync.webhook as any).deps.postgresClient.columnExists = columnExistsSpy
+
+    const event = {
+      id: 'evt_person_updated',
+      type: 'person.updated',
+      data: { object: { id: 'person_123', object: 'person', account: 'acct_connect' } },
+      created: Math.floor(Date.now() / 1000),
+    } as unknown as Stripe.Event
+
+    await expect(stripeSync.webhook.processEvent(event)).resolves.toBeUndefined()
+
+    expect(getAccountIdSpy).not.toHaveBeenCalled()
+    expect(upsertSpy).not.toHaveBeenCalled()
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(columnExistsSpy).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('object type "person" is not supported')
+    )
+  })
+
   it('should process all events when no filter is set', async () => {
     const stripeSync = await createMockedStripeSync()
 
