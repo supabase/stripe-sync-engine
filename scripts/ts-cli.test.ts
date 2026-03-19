@@ -29,7 +29,7 @@ function run(
         resolve({ lines, stderr, code: error?.code ?? 0 })
       }
     )
-    if (stdin) {
+    if (stdin !== undefined) {
       child.stdin?.write(stdin)
       child.stdin?.end()
     }
@@ -109,6 +109,62 @@ describe('ts-cli', () => {
       const { code, stderr } = await run(['counter', 'nonExistent'])
       expect(code).not.toBe(0)
       expect(stderr).toContain('not found')
+    })
+  })
+
+  describe('arg model: named, positional, stdin', () => {
+    it('spec() — no args', async () => {
+      const { lines } = await run(['writer', 'spec'])
+      expect(lines).toEqual([{ config: {} }])
+    })
+
+    it('check() — named only', async () => {
+      const { lines } = await run(['writer', 'check', '--config', '{"key":"val"}'])
+      expect(lines).toEqual([{ status: 'ok', received: { key: 'val' } }])
+    })
+
+    it('positional args only', async () => {
+      const { lines } = await run(['counter', 'add', '10'])
+      expect(lines).toEqual([52])
+    })
+
+    it('stdin only — exported function', async () => {
+      const input = ['{"n":1}', '{"n":2}'].join('\n')
+      const { lines } = await run(['double'], input)
+      expect(lines).toEqual([{ n: 2 }, { n: 4 }])
+    })
+
+    it('stdin only — object method', async () => {
+      const input = ['{"v":"a"}', '{"v":"b"}'].join('\n')
+      const { lines } = await run(['collector', 'collect'], input)
+      expect(lines).toEqual([{ collected: ['a', 'b'] }])
+    })
+
+    it('named + stdin', async () => {
+      const input = ['{"v":"hello"}'].join('\n')
+      const { lines } = await run(['writer', 'write', '--config', '{"x":1}'], input)
+      expect(lines).toEqual([{ config: { x: 1 }, messages: ['hello'] }])
+    })
+
+    it('positional + stdin', async () => {
+      const input = ['{"text":"hi"}'].join('\n')
+      const { lines } = await run(['transformer', 'apply', 'uppercase'], input)
+      expect(lines).toEqual([{ mode: 'uppercase', texts: ['hi'] }])
+    })
+
+    it('named + positional + stdin', async () => {
+      const input = ['{"text":"hi"}'].join('\n')
+      const { lines } = await run(
+        ['transformer', 'applyWithOpts', 'upper', '--trim', 'true'],
+        input
+      )
+      expect(lines).toEqual([{ opts: { trim: true }, mode: 'upper', texts: ['hi'] }])
+    })
+
+    it('named + empty stdin', async () => {
+      // When stdin is piped but empty, the method still receives an async iterable (that yields nothing)
+      const { lines } = await run(['writer', 'writeOptional', '--config', '{"x":1}'], '')
+      expect(lines).toEqual([{ config: { x: 1 }, messages: [] }])
     })
   })
 })

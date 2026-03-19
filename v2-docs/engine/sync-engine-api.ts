@@ -16,6 +16,7 @@ import type {
   Stream,
 } from './sync-engine-types'
 import type { Sync } from '../3-sync/sync-types'
+import { SyncConfig } from '@stripe/sync-protocol'
 
 // MARK: - Source
 //
@@ -69,7 +70,7 @@ export interface Destination {
    * ErrorMessage on write failures, LogMessage for diagnostics.
    */
   write(
-    catalog: CatalogMessage,
+    params: { catalog: CatalogMessage },
     messages: AsyncIterableIterator<DestinationInput>
   ): AsyncIterableIterator<DestinationOutput>
 }
@@ -172,4 +173,15 @@ export interface Orchestrator {
 
   /** Signal graceful shutdown. */
   stop(): Promise<void>
+}
+
+/** Data Plane API */
+export interface SyncEngineAPI {
+  // MARK: - Credentials
+
+  // check(config: SyncConfig): SyncEngineAPI
+
+  read(config: SyncConfig): AsyncIterable<SyncConfig['state']>
+
+  write(config: SyncConfig): AsyncIterable<SyncConfig['state']>
 }

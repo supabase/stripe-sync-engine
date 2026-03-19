@@ -71,11 +71,10 @@ export class FsOrchestrator implements Orchestrator<FsSyncConfig> {
       state,
     })
     const forwarded = this.forward(sourceMessages)
-    const destOutput = destination.write({
-      config: this.sync.destination,
-      catalog: configuredCatalog,
-      messages: forwarded,
-    })
+    const destOutput = destination.write(
+      { config: this.sync.destination, catalog: configuredCatalog },
+      forwarded
+    )
     const collected = this.collect(destOutput)
 
     // 6. Drain pipeline, persisting checkpoints

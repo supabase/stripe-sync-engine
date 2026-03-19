@@ -167,7 +167,7 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog, messages }) {
+  async *write({ config, catalog }, messages) {
     const sheets = makeSheetsClient(config)
     const batchSize = 50
     const spreadsheetId = config.spreadsheet_id

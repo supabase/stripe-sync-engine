@@ -104,11 +104,7 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
       state: this.sync.state,
     })
     const forwarded = this.forward(sourceMessages)
-    const destOutput = destination.write({
-      config: {},
-      catalog: configuredCatalog,
-      messages: forwarded,
-    })
+    const destOutput = destination.write({ config: {}, catalog: configuredCatalog }, forwarded)
     const collected = this.collect(destOutput)
 
     // 5. Drain pipeline, collecting and persisting checkpoints

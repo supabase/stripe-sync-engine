@@ -13,14 +13,15 @@
 //   npx tsx ts-cli.ts ./mod read --config '...' --catalog '...'
 //   ... | npx tsx ts-cli.ts ./mod write --config '...' --catalog '...'
 //
-// Named params (--key value) are collected into a single object and passed
-// as the first argument. If stdin is piped, it's injected as "messages".
+// Calling convention:
+//   fn(...[named if non-empty], ...positional, ...[stdin if piped])
 //
-// Positional args (no --flags) are still supported for backwards compat.
+// Named params (--key value) are collected into a single object. Positional
+// args (no -- prefix) are passed as separate arguments. If stdin is piped,
+// it's appended as the last argument (as an async iterator of parsed NDJSON).
 //
-// Auto-detects the pattern: if stdin is piped, passes it as the first
-// argument (as an async iterator of parsed NDJSON lines). If the return
-// value is async-iterable, each yielded value is written as NDJSON to stdout.
+// If the return value is async-iterable, each yielded value is written as
+// NDJSON to stdout.
 
 import { resolve } from 'node:path'
 import { createInterface } from 'readline'
@@ -62,28 +63,31 @@ function parseArg(s: string): unknown {
 }
 
 /**
- * Parse --key value pairs into a named params object.
- * Returns null if no --flags are present (positional mode).
+ * Parse CLI args into named flags and positional values.
+ * Named: `--key value` pairs collected into an object (null if none).
+ * Positional: non-flag args, JSON-parsed where possible.
  */
-function parseNamedArgs(rawArgs: string[]): Record<string, unknown> | null {
-  if (!rawArgs.some((a) => a.startsWith('--'))) return null
-
+function parseArgs(rawArgs: string[]): {
+  named: Record<string, unknown> | null
+  positional: unknown[]
+} {
   const named: Record<string, unknown> = {}
+  const positional: unknown[] = []
+  let hasNamed = false
 
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i]!
     if (arg.startsWith('--')) {
+      hasNamed = true
       const key = arg.slice(2)
       const value = rawArgs[++i]
-      if (value === undefined) {
-        named[key] = true
-      } else {
-        named[key] = parseArg(value)
-      }
+      named[key] = value === undefined ? true : parseArg(value)
+    } else {
+      positional.push(parseArg(arg))
     }
   }
 
-  return named
+  return { named: hasNamed ? named : null, positional }
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -153,13 +157,17 @@ async function main() {
     process.exit(1)
   }
 
-  const args = rawArgs.map(parseArg)
-
   // Case 1: target is a function (transform or factory)
   if (typeof target === 'function' && !methodName) {
-    // It's a pipe: stdin → transform → stdout
-    const stdin = readStdin()
-    const result = target(stdin, ...args)
+    const hasPipedInput = !process.stdin.isTTY
+    const { named, positional } = parseArgs(rawArgs)
+
+    const callArgs: unknown[] = []
+    if (named) callArgs.push(named)
+    callArgs.push(...positional)
+    if (hasPipedInput) callArgs.push(readStdin())
+
+    const result = target(...callArgs)
     if (isAsyncIterable(result)) {
       await writeAll(result)
     } else {
@@ -193,18 +201,12 @@ async function main() {
     // If it resolved to a function, call it
     if (typeof current === 'function') {
       const hasPipedInput = !process.stdin.isTTY
-      const named = parseNamedArgs(rawArgs)
+      const { named, positional } = parseArgs(rawArgs)
 
-      let callArgs: unknown[]
-      if (named) {
-        // Named params mode: pass as single object
-        // If stdin is piped, inject it as "messages" (convention for write())
-        if (hasPipedInput) named['messages'] = readStdin()
-        callArgs = [named]
-      } else {
-        // Positional mode (legacy): stdin appended as last arg
-        callArgs = hasPipedInput ? [...args, readStdin()] : args
-      }
+      const callArgs: unknown[] = []
+      if (named) callArgs.push(named)
+      callArgs.push(...positional)
+      if (hasPipedInput) callArgs.push(readStdin())
 
       const result = current.call(parent, ...callArgs)
       if (isAsyncIterable(result)) {

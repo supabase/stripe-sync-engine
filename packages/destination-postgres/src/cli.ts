@@ -41,7 +41,7 @@ export async function main(opts: DestinationCliOptions): Promise<void> {
 
   if (opts.command === 'write') {
     const messages = readNdjsonStdin()
-    const output = destination.write({ config: {}, catalog, messages })
+    const output = destination.write({ config: {}, catalog }, messages)
     for await (const msg of output) {
       process.stdout.write(JSON.stringify(msg) + '\n')
     }

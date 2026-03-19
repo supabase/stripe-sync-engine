@@ -38,11 +38,7 @@ export async function runPipeline(
   const forwarded = orchestrator.forward(sourceMessages)
 
   // 3. Destination writes records, yields output (StateMessage, LogMessage, ErrorMessage)
-  const destOutput = destination.write({
-    config: destinationConfig ?? {},
-    catalog,
-    messages: forwarded,
-  })
+  const destOutput = destination.write({ config: destinationConfig ?? {}, catalog }, forwarded)
 
   // 4. Orchestrator collects: persist state checkpoints, route logs/errors
   const collected = orchestrator.collect(destOutput)

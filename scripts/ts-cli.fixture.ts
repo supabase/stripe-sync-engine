@@ -68,3 +68,49 @@ export const collector = {
     yield { collected: values }
   },
 }
+
+// ── Named + stdin consumer (the write() pattern) ────────────────
+
+export const writer = {
+  async *write(params: { config: unknown }, messages: AsyncIterable<{ v: string }>) {
+    const msgs: string[] = []
+    for await (const m of messages) msgs.push(m.v)
+    yield { config: params.config, messages: msgs }
+  },
+
+  async *writeOptional(params: { config: unknown }, messages?: AsyncIterable<{ v: string }>) {
+    const msgs: string[] = []
+    if (messages) {
+      for await (const m of messages) msgs.push(m.v)
+    }
+    yield { config: params.config, messages: msgs }
+  },
+
+  spec() {
+    return { config: {} }
+  },
+
+  async check(params: { config: unknown }) {
+    return { status: 'ok', received: params.config }
+  },
+}
+
+// ── Positional + stdin ──────────────────────────────────────────
+
+export const transformer = {
+  async *apply(mode: string, messages: AsyncIterable<{ text: string }>) {
+    const texts: string[] = []
+    for await (const m of messages) texts.push(m.text)
+    yield { mode, texts }
+  },
+
+  async *applyWithOpts(
+    opts: { trim: boolean },
+    mode: string,
+    messages: AsyncIterable<{ text: string }>
+  ) {
+    const texts: string[] = []
+    for await (const m of messages) texts.push(m.text)
+    yield { opts, mode, texts }
+  },
+}

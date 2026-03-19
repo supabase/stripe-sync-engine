@@ -59,7 +59,7 @@ Destructure in the method signature:
 async check({ config }) { ... }
 async discover({ config }) { ... }
 async *read({ config, catalog, state }) { ... }
-async *write({ config, catalog, messages }) { ... }
+async *write({ config, catalog }, messages) { ... }
 ```
 
 This maps directly to the CLI's `--key value` flags:
@@ -129,11 +129,10 @@ for each configured stream:
 interface Destination<TConfig> {
   spec(): ConnectorSpecification
   check(params: { config: TConfig }): Promise<CheckResult>
-  write(params: {
-    config: TConfig
-    catalog: ConfiguredCatalog
+  write(
+    params: { config: TConfig; catalog: ConfiguredCatalog },
     messages: AsyncIterable<DestinationInput>
-  }): AsyncIterable<DestinationOutput>
+  ): AsyncIterable<DestinationOutput>
 }
 ```
 
@@ -141,7 +140,7 @@ interface Destination<TConfig> {
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `spec()`                               | Return JSON Schema for the config.                                                                                             |
 | `check({ config })`                    | Test connectivity (e.g. `SELECT 1`).                                                                                           |
-| `write({ config, catalog, messages })` | Consume `DestinationInput` messages, write records, yield `DestinationOutput`. `messages` comes from stdin when piped via CLI. |
+| `write({ config, catalog }, messages)` | Consume `DestinationInput` messages, write records, yield `DestinationOutput`. `messages` comes from stdin when piped via CLI. |
 
 ### write() messages
 
@@ -237,7 +236,7 @@ const destination = {
     return { status: 'succeeded' as const }
   },
 
-  async *write({ config, catalog, messages }) {
+  async *write({ config, catalog }, messages) {
     for await (const msg of messages) {
       if (msg.type === 'state') {
         yield msg // passthrough after commit

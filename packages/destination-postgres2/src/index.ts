@@ -50,7 +50,7 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog, messages }) {
+  async *write({ config, catalog }, messages) {
     const pool = new pg.Pool({ connectionString: config.connection_string })
     const schema = config.schema ?? 'public'
 

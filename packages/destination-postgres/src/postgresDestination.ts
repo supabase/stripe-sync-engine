@@ -89,12 +89,10 @@ export class PostgresDestination implements Destination {
     await this.writer.close()
   }
 
-  async *write(params: {
-    config: Record<string, unknown>
-    catalog: ConfiguredCatalog
+  async *write(
+    params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
     messages: AsyncIterable<DestinationInput>
-  }): AsyncIterable<DestinationOutput> {
-    const { messages } = params
+  ): AsyncIterable<DestinationOutput> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
 

@@ -62,13 +62,13 @@ const destination = {
     await dest.teardown({ config })
   },
 
-  async *write({ config, catalog, messages }) {
+  async *write({ config, catalog }, messages) {
     const dest = new PostgresDestination({
       schema: config.schema ?? 'stripe',
       poolConfig: { connectionString: config.connection_string },
       batchSize: config.batch_size,
     })
-    yield* dest.write({ config, catalog, messages })
+    yield* dest.write({ config, catalog }, messages)
   },
 } satisfies Destination<Config>
 

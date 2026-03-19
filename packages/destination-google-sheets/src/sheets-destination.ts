@@ -67,12 +67,10 @@ export class SheetsDestination implements Destination {
     }
   }
 
-  async *write(params: {
-    config: Record<string, unknown>
-    catalog: ConfiguredCatalog
+  async *write(
+    params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
     messages: AsyncIterable<DestinationInput>
-  }): AsyncIterable<DestinationOutput> {
-    const { messages } = params
+  ): AsyncIterable<DestinationOutput> {
     // Resolve or create spreadsheet
     const spreadsheetId =
       this.config.spreadsheet_id ??

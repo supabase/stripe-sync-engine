@@ -85,12 +85,10 @@ function createMockDestination(): {
   const destination: Destination = {
     spec: () => ({ config: {} }),
     check: async () => ({ status: 'succeeded' as const }),
-    async *write(params: {
-      config: Record<string, unknown>
-      catalog: ConfiguredCatalog
+    async *write(
+      params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
       messages: AsyncIterable<DestinationInput>
-    }): AsyncIterable<DestinationOutput> {
-      const { messages } = params
+    ): AsyncIterable<DestinationOutput> {
       for await (const msg of messages) {
         received.push(msg)
         // After receiving a state message, re-emit it as output

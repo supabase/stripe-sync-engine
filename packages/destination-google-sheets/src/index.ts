@@ -54,7 +54,7 @@ const destination = {
     return dest.check({ config })
   },
 
-  async *write({ config, catalog, messages }) {
+  async *write({ config, catalog }, messages) {
     const sheets = makeSheetsClient(config)
     const dest = new SheetsDestination(
       {
@@ -64,7 +64,7 @@ const destination = {
       },
       sheets
     )
-    yield* dest.write({ config, catalog, messages })
+    yield* dest.write({ config, catalog }, messages)
   },
 } satisfies Destination<Config>
 

@@ -144,7 +144,7 @@ describe('PostgresDestination', () => {
         makeRecord('customers', { id: 'cus_2', name: 'Bob' }),
       ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream, messages }))
+      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
 
       // Records should be flushed (final flush at end of stream)
       expect(mockWriter.upsertMany).toHaveBeenCalledWith(
@@ -168,7 +168,7 @@ describe('PostgresDestination', () => {
         makeRecord('customers', { id: 'cus_5' }),
       ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream, messages }))
+      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
 
       // Should flush at record 2, record 4, then remaining 1 at end
       const upsertCalls = (mockWriter.upsertMany as ReturnType<typeof vi.fn>).mock.calls
@@ -187,7 +187,7 @@ describe('PostgresDestination', () => {
       )
       const messages = toAsyncIter(records)
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream, messages }))
+      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
 
       // Only one flush at the end (50 < 100)
       const upsertCalls = (mockWriter.upsertMany as ReturnType<typeof vi.fn>).mock.calls
@@ -208,7 +208,7 @@ describe('PostgresDestination', () => {
       ])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream, messages })
+        dest.write({ config: {}, catalog: catalogWithStream }, messages)
       )
 
       // First output should be the re-emitted StateMessage
@@ -241,7 +241,7 @@ describe('PostgresDestination', () => {
       const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream, messages })
+        dest.write({ config: {}, catalog: catalogWithStream }, messages)
       )
 
       const errorOutputs = outputs.filter((m) => m.type === 'error')
@@ -262,7 +262,7 @@ describe('PostgresDestination', () => {
       const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream, messages })
+        dest.write({ config: {}, catalog: catalogWithStream }, messages)
       )
 
       const errorOutputs = outputs.filter((m) => m.type === 'error')
@@ -281,7 +281,7 @@ describe('PostgresDestination', () => {
       const dest = new PostgresDestination(stubConfig, mockWriter)
       const messages = toAsyncIter([])
 
-      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog, messages }))
+      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog }, messages))
 
       expect(mockWriter.close).toHaveBeenCalled()
     })
@@ -292,7 +292,7 @@ describe('PostgresDestination', () => {
       const dest = new PostgresDestination(stubConfig, mockWriter)
       const messages = toAsyncIter([])
 
-      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog, messages }))
+      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog }, messages))
 
       expect(mockWriter.close).toHaveBeenCalled()
     })
@@ -303,7 +303,7 @@ describe('PostgresDestination', () => {
       const messages = toAsyncIter([])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: emptyCatalog, messages })
+        dest.write({ config: {}, catalog: emptyCatalog }, messages)
       )
 
       const logOutputs = outputs.filter((m) => m.type === 'log')

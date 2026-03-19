@@ -68,10 +68,9 @@ export const source: Source = {
  */
 export const destination = {
   async *write(
-    catalogOrMessages: CatalogMessage | AsyncIterableIterator<DataMessage>,
-    maybeMessages?: AsyncIterableIterator<DataMessage>
+    _params: { config?: unknown; catalog?: CatalogMessage },
+    messages: AsyncIterableIterator<DataMessage>
   ) {
-    const messages = maybeMessages ?? (catalogOrMessages as AsyncIterableIterator<DataMessage>)
     for await (const msg of messages) {
       if (msg.type === 'record') {
         console.log(JSON.stringify(msg))
@@ -204,7 +203,7 @@ export const orchestrator = {
     const dataMessages = forward(messages)
 
     // Destination → collect
-    for await (const _state of collect(destination.write(catalog, dataMessages))) {
+    for await (const _state of collect(destination.write({ catalog }, dataMessages))) {
       // collect handles persistence; nothing else to do here
     }
   },

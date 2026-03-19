@@ -129,7 +129,7 @@ Destination workers form a Kafka consumer group. Each worker pulls from assigned
 
 ```
 kafka.consume('sync-messages', group='destination-workers')
-  → destination.write({ config, catalog, messages })
+  → destination.write({ config, catalog }, messages)
   → on StateMessage: commit Kafka offset + persist checkpoint
 ```
 
@@ -170,9 +170,15 @@ async function SyncWorkflow(sync: SyncConfig) {
   let deleted = false
 
   // Signal handlers
-  setHandler(pauseSignal, () => { paused = true })
-  setHandler(resumeSignal, () => { paused = false })
-  setHandler(deleteSignal, () => { deleted = true })
+  setHandler(pauseSignal, () => {
+    paused = true
+  })
+  setHandler(resumeSignal, () => {
+    paused = false
+  })
+  setHandler(deleteSignal, () => {
+    deleted = true
+  })
 
   // 1. Provision (idempotent)
   await activities.sourceSetup(sync)
@@ -191,12 +197,15 @@ async function SyncWorkflow(sync: SyncConfig) {
     // Health check + incremental work
     const health = await activities.checkHealth(sync)
     if (health.webhookMissing) {
-      await activities.sourceSetup(sync)  // re-register
+      await activities.sourceSetup(sync) // re-register
     }
 
     // Check DB for config changes
     const latest = await activities.getSyncFromDB(sync.id)
-    if (!latest) { deleted = true; break }
+    if (!latest) {
+      deleted = true
+      break
+    }
     sync = latest
 
     // Avoid unbounded history
@@ -217,15 +226,15 @@ Config is passed as a workflow argument — no DB lookup needed on startup, avoi
 
 ### Activities
 
-| Activity | What it does | Idempotent |
-|---|---|---|
-| `sourceSetup` | Register webhook, create replication slot, etc. | Yes |
-| `destinationSetup` | Create schema, tables, spreadsheet tabs, etc. | Yes |
-| `runBackfill` | `source.read()` → `forward()` → produce to Kafka. Heartbeats cursor position. | Yes (resumes from state) |
-| `checkHealth` | Verify webhook active, consumer lag, error rate | Yes (read-only) |
-| `getSyncFromDB` | Load latest sync config from DB | Yes (read-only) |
-| `sourceTeardown` | Delete webhook (if last sync for account), drop replication slot | Yes |
-| `destinationTeardown` | Optional cleanup (drop schema, etc.) | Yes |
+| Activity              | What it does                                                                  | Idempotent               |
+| --------------------- | ----------------------------------------------------------------------------- | ------------------------ |
+| `sourceSetup`         | Register webhook, create replication slot, etc.                               | Yes                      |
+| `destinationSetup`    | Create schema, tables, spreadsheet tabs, etc.                                 | Yes                      |
+| `runBackfill`         | `source.read()` → `forward()` → produce to Kafka. Heartbeats cursor position. | Yes (resumes from state) |
+| `checkHealth`         | Verify webhook active, consumer lag, error rate                               | Yes (read-only)          |
+| `getSyncFromDB`       | Load latest sync config from DB                                               | Yes (read-only)          |
+| `sourceTeardown`      | Delete webhook (if last sync for account), drop replication slot              | Yes                      |
+| `destinationTeardown` | Optional cleanup (drop schema, etc.)                                          | Yes                      |
 
 All activities are idempotent. Temporal can retry any of them safely.
 
@@ -324,6 +333,7 @@ source.read() emits StateMessage (cursor position)
 ```
 
 On crash recovery:
+
 1. Kafka consumer restarts from last committed offset
 2. Some messages may be reprocessed (at-least-once delivery)
 3. Destination upserts are idempotent (keyed by primary key) — duplicates are harmless
@@ -331,14 +341,14 @@ On crash recovery:
 
 ## Scaling properties
 
-| Component | Scaling | Bottleneck |
-|---|---|---|
-| API Server | Horizontal (stateless) | DB connections |
-| Webhook Ingress | Horizontal (stateless) | Kafka producer throughput |
-| Temporal Workers | Horizontal (Temporal distributes) | Source API rate limits |
-| Kafka | Add partitions | Disk I/O, network |
-| Destination Workers | Horizontal (up to # partitions) | Destination write throughput |
-| DB | Horizontal (read replicas / sharding) | Write throughput |
+| Component           | Scaling                               | Bottleneck                   |
+| ------------------- | ------------------------------------- | ---------------------------- |
+| API Server          | Horizontal (stateless)                | DB connections               |
+| Webhook Ingress     | Horizontal (stateless)                | Kafka producer throughput    |
+| Temporal Workers    | Horizontal (Temporal distributes)     | Source API rate limits       |
+| Kafka               | Add partitions                        | Disk I/O, network            |
+| Destination Workers | Horizontal (up to # partitions)       | Destination write throughput |
+| DB                  | Horizontal (read replicas / sharding) | Write throughput             |
 
 **Key scaling constraint**: number of Kafka partitions determines max consumer parallelism. Start with more partitions than syncs (e.g. 32 or 64) to allow growth without repartitioning.
 
@@ -385,13 +395,13 @@ services:
 
 ## Migration path from local dev
 
-| Local (plan-003) | Cloud (this doc) |
-|---|---|
-| Postgres `_queue` table | Kafka topic |
-| In-process reconcile loop | Temporal long-running workflow per sync |
-| `PgQueue.push()` | `kafka.produce()` |
-| `PgQueue[Symbol.asyncIterator]()` | Kafka consumer |
-| `AbortController` for pause | Temporal signal |
-| Single process | Independent scalable services |
+| Local (plan-003)                  | Cloud (this doc)                        |
+| --------------------------------- | --------------------------------------- |
+| Postgres `_queue` table           | Kafka topic                             |
+| In-process reconcile loop         | Temporal long-running workflow per sync |
+| `PgQueue.push()`                  | `kafka.produce()`                       |
+| `PgQueue[Symbol.asyncIterator]()` | Kafka consumer                          |
+| `AbortController` for pause       | Temporal signal                         |
+| Single process                    | Independent scalable services           |
 
 The `produce()` / `consume()` split from plan-003 maps directly: the producer writes to Kafka instead of Postgres, the consumer reads from Kafka instead of Postgres. The `Source` and `Destination` interfaces are unchanged.
