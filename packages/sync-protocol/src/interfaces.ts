@@ -35,13 +35,22 @@ import type {
  * The same interface covers REST API polling, webhook ingestion,
  * event bridge, Kafka replay, database CDC, etc.
  *
- * TConfig is the connector's configuration type, inferred from its Zod spec.
+ * Type parameters:
+ *   TConfig      — connector's configuration type, inferred from its Zod spec
+ *   TStreamState — per-stream checkpoint shape (opaque to the orchestrator)
+ *   TInput       — serializable data passed to read() for event-driven reads
+ *                  (e.g. a single webhook event). When absent, read() performs
+ *                  a pull-based backfill.
  *
  * Subprocess equivalent:
  *   discover -> run source process, collect CatalogMessage from stdout
  *   read    -> run source process, stream Message lines from stdout
  */
-export interface Source<TConfig extends Record<string, unknown> = Record<string, unknown>> {
+export interface Source<
+  TConfig extends Record<string, unknown> = Record<string, unknown>,
+  TStreamState = unknown,
+  TInput = unknown,
+> {
   /** Return the JSON Schema for this connector's configuration. */
   spec(): ConnectorSpecification
 
@@ -55,8 +64,9 @@ export interface Source<TConfig extends Record<string, unknown> = Record<string,
   read(params: {
     config: TConfig
     catalog: ConfiguredCatalog
-    state?: Record<string, unknown>
-  }): AsyncIterableIterator<Message>
+    state?: Record<string, TStreamState>
+    input?: TInput
+  }): AsyncIterable<Message>
 }
 
 // MARK: - Destination
@@ -96,6 +106,6 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   write(params: {
     config: TConfig
     catalog: ConfiguredCatalog
-    messages: AsyncIterableIterator<DestinationInput>
-  }): AsyncIterableIterator<DestinationOutput>
+    messages: AsyncIterable<DestinationInput>
+  }): AsyncIterable<DestinationOutput>
 }

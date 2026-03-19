@@ -63,7 +63,11 @@ export interface ConfiguredCatalog {
 /** JSON Schema describing the configuration a connector requires. */
 export interface ConnectorSpecification {
   /** JSON Schema for the connector's configuration object. */
-  connection_specification: Record<string, unknown>
+  config: Record<string, unknown>
+  /** JSON Schema for per-stream state (cursor/checkpoint shape). */
+  stream_state?: Record<string, unknown>
+  /** JSON Schema for the read() input parameter (e.g. a webhook event). */
+  input?: Record<string, unknown>
 }
 
 /** Result of a connection check. */

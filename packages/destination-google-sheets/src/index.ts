@@ -38,7 +38,7 @@ function makeSheetsClient(config: Config) {
 
 const destination = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {
@@ -49,7 +49,7 @@ const destination = {
         spreadsheet_id: config.spreadsheet_id,
         batch_size: config.batch_size,
       },
-      sheets,
+      sheets
     )
     return dest.check({ config })
   },
@@ -62,7 +62,7 @@ const destination = {
         spreadsheet_id: config.spreadsheet_id,
         batch_size: config.batch_size,
       },
-      sheets,
+      sheets
     )
     yield* dest.write({ config, catalog, messages })
   },

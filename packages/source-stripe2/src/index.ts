@@ -61,7 +61,7 @@ function makeClient(config: Config): Stripe {
 
 const source = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {
@@ -93,8 +93,8 @@ const source = {
     const entries = Object.entries(resources).filter(([, r]) => selectedNames.has(r.table))
 
     for (const [, resource] of entries) {
-      const streamState = state?.find((st) => st.stream === resource.table)
-      let cursor: string | null = (streamState?.data as any)?.pageCursor ?? null
+      const streamState = state?.[resource.table] as { pageCursor?: string | null } | undefined
+      let cursor: string | null = streamState?.pageCursor ?? null
 
       yield { type: 'stream_status', stream: resource.table, status: 'started' }
 

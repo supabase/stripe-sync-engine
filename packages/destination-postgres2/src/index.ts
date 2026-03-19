@@ -35,7 +35,7 @@ function extractPk(data: Readonly<Record<string, unknown>>, primaryKey: string[]
 
 const destination = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {

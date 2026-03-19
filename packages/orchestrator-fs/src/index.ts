@@ -37,11 +37,11 @@ export class FsOrchestrator implements Orchestrator<FsSyncConfig> {
     this.callbacks = callbacks ?? {}
   }
 
-  forward(messages: AsyncIterableIterator<Message>): AsyncIterableIterator<DestinationInput> {
+  forward(messages: AsyncIterable<Message>): AsyncIterable<DestinationInput> {
     return routerForward(messages, this.callbacks)
   }
 
-  collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage> {
+  collect(output: AsyncIterable<DestinationOutput>): AsyncIterable<StateMessage> {
     return routerCollect(output, this.callbacks)
   }
 

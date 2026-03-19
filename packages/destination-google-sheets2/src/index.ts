@@ -151,7 +151,7 @@ function isTransient(err: unknown): boolean {
 
 const destination = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {

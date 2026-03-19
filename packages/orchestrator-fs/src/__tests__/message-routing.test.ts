@@ -14,7 +14,7 @@ async function* toAsync<T>(items: T[]): AsyncIterableIterator<T> {
   for (const item of items) yield item
 }
 
-async function drain<T>(iter: AsyncIterableIterator<T>): Promise<T[]> {
+async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []
   for await (const item of iter) result.push(item)
   return result

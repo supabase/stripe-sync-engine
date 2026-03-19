@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import type { ConfiguredCatalog } from '@stripe/sync-protocol'
-import source, { type Config } from './backfill'
+import source, { type Config, type StripeStreamState } from './backfill'
 
 export interface SourceCliOptions {
   command: 'discover' | 'read'
@@ -34,9 +34,9 @@ export async function main(opts: SourceCliOptions): Promise<void> {
       throw new Error('--catalog is required for the read command')
     }
     const catalog = loadJson(opts.catalog) as ConfiguredCatalog
-    let state: Record<string, unknown> | undefined
+    let state: Record<string, StripeStreamState> | undefined
     if (opts.state) {
-      state = loadJson(opts.state) as Record<string, unknown>
+      state = loadJson(opts.state) as Record<string, StripeStreamState>
     }
 
     const messages = source.read({ config, catalog, state })

@@ -27,6 +27,18 @@ export const spec = z.object({
 
 export type Config = z.infer<typeof spec>
 
+// MARK: - Stream state
+
+export type StripeStreamState = {
+  pageCursor: string | null
+  status: 'pending' | 'complete'
+}
+
+const streamStateSpec = z.object({
+  pageCursor: z.string().nullable(),
+  status: z.enum(['pending', 'complete']),
+})
+
 // MARK: - Helpers
 
 function makeClient(config: Config): Stripe {
@@ -93,14 +105,17 @@ export function fromWebhookEvent(
 
 export function createSource(
   _registryForTesting?: Record<string, ResourceConfig>
-): Source<Config> {
+): Source<Config, StripeStreamState, Stripe.Event> {
   function getRegistry(config: Config) {
     return _registryForTesting ?? buildResourceRegistry(makeClient(config))
   }
 
   return {
     spec(): ConnectorSpecification {
-      return { connection_specification: z.toJSONSchema(spec) }
+      return {
+        config: z.toJSONSchema(spec),
+        stream_state: z.toJSONSchema(streamStateSpec),
+      }
     },
 
     async check({ config }) {
@@ -117,9 +132,21 @@ export function createSource(
       return catalogFromRegistry(getRegistry(config))
     },
 
-    async *read({ config, catalog, state }) {
+    async *read({ config, catalog, state, input }) {
       const registry = getRegistry(config)
 
+      // Live mode: process a single webhook event
+      if (input) {
+        const result = fromWebhookEvent(input, registry)
+        if (!result) return
+        const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
+        if (!streamNames.has(result.record.stream)) return
+        yield result.record
+        yield result.state
+        return
+      }
+
+      // Backfill: paginate through each configured stream
       for (const configuredStream of catalog.streams) {
         const stream = configuredStream.stream
         const resourceConfig = findConfigByTableName(registry, stream.name)
@@ -140,9 +167,7 @@ export function createSource(
         } satisfies StreamStatusMessage
 
         // Restore cursor from combined state if available
-        const streamState = state?.[stream.name] as
-          | { pageCursor?: string | null }
-          | undefined
+        const streamState = state?.[stream.name]
         let pageCursor: string | null = streamState?.pageCursor ?? null
 
         try {

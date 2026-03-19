@@ -49,8 +49,8 @@ export function isDataMessage(msg: Message): msg is DestinationInput {
  * and status messages before passing the stream to a destination.
  */
 export async function* filterDataMessages(
-  messages: AsyncIterableIterator<Message>
-): AsyncIterableIterator<DestinationInput> {
+  messages: AsyncIterable<Message>
+): AsyncIterable<DestinationInput> {
   for await (const msg of messages) {
     if (isDataMessage(msg)) {
       yield msg
@@ -72,9 +72,9 @@ export type RouterCallbacks = {
  * Routes LogMessage, ErrorMessage, StreamStatusMessage to callbacks.
  */
 export async function* forward(
-  messages: AsyncIterableIterator<Message>,
+  messages: AsyncIterable<Message>,
   callbacks?: RouterCallbacks
-): AsyncIterableIterator<DestinationInput> {
+): AsyncIterable<DestinationInput> {
   for await (const msg of messages) {
     if (isDataMessage(msg)) {
       yield msg
@@ -95,9 +95,9 @@ export async function* forward(
  * Routes ErrorMessage and LogMessage to callbacks.
  */
 export async function* collect(
-  output: AsyncIterableIterator<DestinationOutput>,
+  output: AsyncIterable<DestinationOutput>,
   callbacks?: RouterCallbacks
-): AsyncIterableIterator<StateMessage> {
+): AsyncIterable<StateMessage> {
   for await (const msg of output) {
     if (msg.type === 'state') {
       yield msg

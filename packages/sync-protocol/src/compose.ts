@@ -4,7 +4,7 @@ import type { Message } from './types'
  * Transforms a message stream. Composable -- multiple transforms can be
  * chained into a pipeline between source and destination.
  *
- * Because it operates on AsyncIterableIterator, a transform can:
+ * Because it operates on AsyncIterable, a transform can:
  *   - Filter (drop messages)
  *   - Map (modify records)
  *   - Buffer (batch/window)
@@ -12,7 +12,7 @@ import type { Message } from './types'
  *   - Aggregate (reduce many records into one)
  */
 export interface Transform {
-  (messages: AsyncIterableIterator<Message>): AsyncIterableIterator<Message>
+  (messages: AsyncIterable<Message>): AsyncIterable<Message>
 }
 
 /**
@@ -24,8 +24,5 @@ export interface Transform {
  */
 export function compose(...transforms: Transform[]): Transform {
   return (messages) =>
-    transforms.reduce<AsyncIterableIterator<Message>>(
-      (stream, transform) => transform(stream),
-      messages
-    )
+    transforms.reduce<AsyncIterable<Message>>((stream, transform) => transform(stream), messages)
 }

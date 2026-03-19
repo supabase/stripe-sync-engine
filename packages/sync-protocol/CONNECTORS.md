@@ -23,7 +23,7 @@ packages/source-example/
 
 - Define config as a `z.object({...})` and export it as `spec`
 - All field names use **snake_case** (e.g. `api_key`, `connection_string`)
-- `spec()` returns `{ connection_specification: z.toJSONSchema(spec) }`
+- `spec()` returns `{ config: z.toJSONSchema(spec) }`
 - Export the inferred type: `export type Config = z.infer<typeof spec>`
 - Config is for **connection details only** — stream selection belongs on `ConfiguredCatalog`
 
@@ -83,15 +83,16 @@ return { type: 'catalog' as const, streams: [...] }
 ## Source interface
 
 ```ts
-interface Source<TConfig> {
+interface Source<TConfig, TStreamState = unknown, TInput = unknown> {
   spec(): ConnectorSpecification
   check(params: { config: TConfig }): Promise<CheckResult>
   discover(params: { config: TConfig }): Promise<CatalogMessage>
   read(params: {
     config: TConfig
     catalog: ConfiguredCatalog
-    state?: StateMessage[]
-  }): AsyncIterableIterator<Message>
+    state?: Record<string, TStreamState>
+    input?: TInput
+  }): AsyncIterable<Message>
 }
 ```
 
@@ -131,8 +132,8 @@ interface Destination<TConfig> {
   write(params: {
     config: TConfig
     catalog: ConfiguredCatalog
-    messages: AsyncIterableIterator<DestinationInput>
-  }): AsyncIterableIterator<DestinationOutput>
+    messages: AsyncIterable<DestinationInput>
+  }): AsyncIterable<DestinationOutput>
 }
 ```
 
@@ -187,7 +188,7 @@ export type Config = z.infer<typeof spec>
 
 const source = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {
@@ -228,7 +229,7 @@ export type Config = z.infer<typeof spec>
 
 const destination = {
   spec() {
-    return { connection_specification: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check({ config }) {

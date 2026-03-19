@@ -44,7 +44,7 @@ export class SheetsDestination implements Destination {
 
   spec(): ConnectorSpecification {
     return {
-      connection_specification: {
+      config: {
         type: 'object',
         required: ['spreadsheet_title'],
         properties: {
@@ -70,8 +70,8 @@ export class SheetsDestination implements Destination {
   async *write(params: {
     config: Record<string, unknown>
     catalog: ConfiguredCatalog
-    messages: AsyncIterableIterator<DestinationInput>
-  }): AsyncIterableIterator<DestinationOutput> {
+    messages: AsyncIterable<DestinationInput>
+  }): AsyncIterable<DestinationOutput> {
     const { messages } = params
     // Resolve or create spreadsheet
     const spreadsheetId =

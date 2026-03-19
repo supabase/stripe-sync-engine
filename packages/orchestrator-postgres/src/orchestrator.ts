@@ -11,7 +11,11 @@ import type {
   Stream,
 } from '@stripe/sync-protocol'
 import type { PostgresStateManager } from './stateManager'
-import { forward as routerForward, collect as routerCollect, type RouterCallbacks } from '@stripe/sync-protocol'
+import {
+  forward as routerForward,
+  collect as routerCollect,
+  type RouterCallbacks,
+} from '@stripe/sync-protocol'
 
 /**
  * Minimal Sync type for the orchestrator.
@@ -55,7 +59,7 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
    * Forwards RecordMessage and StateMessage to stdout (for destination).
    * Routes LogMessage, ErrorMessage, StreamStatusMessage to stderr.
    */
-  forward(messages: AsyncIterableIterator<Message>): AsyncIterableIterator<DestinationInput> {
+  forward(messages: AsyncIterable<Message>): AsyncIterable<DestinationInput> {
     return routerForward(messages, this.callbacks)
   }
 
@@ -64,7 +68,7 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
    * Reads destination output, persists StateMessage checkpoints to disk.
    * Routes ErrorMessage and LogMessage to stderr.
    */
-  collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage> {
+  collect(output: AsyncIterable<DestinationOutput>): AsyncIterable<StateMessage> {
     return routerCollect(output, this.callbacks)
   }
 
@@ -94,7 +98,11 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
     }
 
     // 5. Compose pipeline: source.read -> forward -> destination.write -> collect
-    const sourceMessages = source.read({ config: {}, catalog: configuredCatalog, state: this.sync.state })
+    const sourceMessages = source.read({
+      config: {},
+      catalog: configuredCatalog,
+      state: this.sync.state,
+    })
     const forwarded = this.forward(sourceMessages)
     const destOutput = destination.write({
       config: {},

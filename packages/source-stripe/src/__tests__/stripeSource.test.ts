@@ -36,7 +36,7 @@ function catalog(...streams: Array<{ name: string; primary_key?: string[][] }>):
 }
 
 /** Collect all messages from an async iterator into an array. */
-async function collect(iter: AsyncIterableIterator<Message>): Promise<Message[]> {
+async function collect(iter: AsyncIterable<Message>): Promise<Message[]> {
   const results: Message[] = []
   for await (const msg of iter) {
     results.push(msg)

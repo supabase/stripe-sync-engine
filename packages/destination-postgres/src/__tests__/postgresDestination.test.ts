@@ -60,7 +60,7 @@ function makeState(stream: string, data: unknown): StateMessage {
 }
 
 /** Helper to create an async iterable from an array of DestinationInput messages. */
-async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterableIterator<DestinationInput> {
+async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterable<DestinationInput> {
   for (const msg of msgs) {
     yield msg
   }
@@ -68,7 +68,7 @@ async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterableIterator<Des
 
 /** Collect all yielded DestinationOutput messages. */
 async function collectOutputs(
-  iter: AsyncIterableIterator<DestinationOutput>
+  iter: AsyncIterable<DestinationOutput>
 ): Promise<DestinationOutput[]> {
   const results: DestinationOutput[] = []
   for await (const msg of iter) {

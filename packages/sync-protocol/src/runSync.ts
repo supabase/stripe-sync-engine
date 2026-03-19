@@ -50,7 +50,7 @@ export async function* runSync(
   config: SyncConfig,
   source: Source,
   destination: Destination
-): AsyncIterableIterator<StateMessage> {
+): AsyncIterable<StateMessage> {
   // 1. Discover available streams
   const catalogMsg = await source.discover({ config: config.source_config })
 

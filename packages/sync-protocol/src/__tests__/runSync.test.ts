@@ -19,13 +19,13 @@ import { runSync } from '../runSync'
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function* toAsync<T>(items: T[]): AsyncIterableIterator<T> {
+async function* toAsync<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) {
     yield item
   }
 }
 
-async function drain<T>(iter: AsyncIterableIterator<T>): Promise<T[]> {
+async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []
   for await (const item of iter) {
     result.push(item)
@@ -49,12 +49,12 @@ function createMockSource(
     (_params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-      state?: StateMessage[]
-    }): AsyncIterableIterator<Message> => toAsync(messages)
+      state?: Record<string, unknown>
+    }): AsyncIterable<Message> => toAsync(messages)
   )
   return {
     source: {
-      spec: () => ({ connection_specification: {} }),
+      spec: () => ({ config: {} }),
       check: async () => ({ status: 'succeeded' as const }),
       discover: async () => discoverCatalog,
       read: readSpy,
@@ -73,8 +73,8 @@ function createMockDestination(): {
     (params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-      messages: AsyncIterableIterator<DestinationInput>
-    }): AsyncIterableIterator<DestinationOutput> => {
+      messages: AsyncIterable<DestinationInput>
+    }): AsyncIterable<DestinationOutput> => {
       // Pass through: drain inputs, collect them, yield back any StateMessages
       return (async function* () {
         for await (const msg of params.messages) {
@@ -88,7 +88,7 @@ function createMockDestination(): {
   )
   return {
     destination: {
-      spec: () => ({ connection_specification: {} }),
+      spec: () => ({ config: {} }),
       check: async () => ({ status: 'succeeded' as const }),
       write: writeSpy,
     },

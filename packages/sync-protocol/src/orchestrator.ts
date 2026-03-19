@@ -19,13 +19,13 @@ export interface Orchestrator<TSync = unknown> {
    * Filter source messages for the destination.
    * Forwards RecordMessage and StateMessage; routes logs, errors, and status to callbacks.
    */
-  forward(messages: AsyncIterableIterator<Message>): AsyncIterableIterator<DestinationInput>
+  forward(messages: AsyncIterable<Message>): AsyncIterable<DestinationInput>
 
   /**
    * Process destination output.
    * Persists StateMessage checkpoints; routes logs and errors to callbacks.
    */
-  collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage>
+  collect(output: AsyncIterable<DestinationOutput>): AsyncIterable<StateMessage>
 
   /**
    * Run the full sync pipeline: discover, read, forward, write, collect.

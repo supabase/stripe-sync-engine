@@ -21,15 +21,15 @@ import { forward, collect } from '@stripe/sync-protocol'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Convert an array into an AsyncIterableIterator. */
-async function* toAsync<T>(items: T[]): AsyncIterableIterator<T> {
+/** Convert an array into an AsyncIterable. */
+async function* toAsync<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) {
     yield item
   }
 }
 
-/** Drain an AsyncIterableIterator into an array. */
-async function drain<T>(iter: AsyncIterableIterator<T>): Promise<T[]> {
+/** Drain an AsyncIterable into an array. */
+async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []
   for await (const item of iter) {
     result.push(item)
@@ -54,14 +54,14 @@ function createMockSource(
     (_params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-      state?: StateMessage[]
-    }): AsyncIterableIterator<Message> => {
+      state?: Record<string, unknown>
+    }): AsyncIterable<Message> => {
       return toAsync(messages)
     }
   )
 
   const source: Source = {
-    spec: () => ({ connection_specification: {} }),
+    spec: () => ({ config: {} }),
     check: async () => ({ status: 'succeeded' as const }),
     async discover(_params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
       return discoverCatalog
@@ -83,13 +83,13 @@ function createMockDestination(): {
   const received: DestinationInput[] = []
 
   const destination: Destination = {
-    spec: () => ({ connection_specification: {} }),
+    spec: () => ({ config: {} }),
     check: async () => ({ status: 'succeeded' as const }),
     async *write(params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-      messages: AsyncIterableIterator<DestinationInput>
-    }): AsyncIterableIterator<DestinationOutput> {
+      messages: AsyncIterable<DestinationInput>
+    }): AsyncIterable<DestinationOutput> {
       const { messages } = params
       for await (const msg of messages) {
         received.push(msg)
@@ -418,7 +418,7 @@ describe('run()', () => {
     // Create a source that yields messages slowly so we can stop mid-stream
     let yieldCount = 0
     const slowSource: Source = {
-      spec: () => ({ connection_specification: {} }),
+      spec: () => ({ config: {} }),
       check: async () => ({ status: 'succeeded' as const }),
       async discover(_params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
         return catalogMsg
@@ -426,8 +426,8 @@ describe('run()', () => {
       async *read(_params: {
         config: Record<string, unknown>
         catalog: ConfiguredCatalog
-        state?: StateMessage[]
-      }): AsyncIterableIterator<Message> {
+        state?: Record<string, unknown>
+      }): AsyncIterable<Message> {
         for (let i = 0; i < 100; i++) {
           yieldCount++
           yield {

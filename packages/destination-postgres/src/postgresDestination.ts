@@ -35,7 +35,7 @@ export class PostgresDestination implements Destination {
 
   spec(): ConnectorSpecification {
     return {
-      connection_specification: {
+      config: {
         type: 'object',
         required: ['connectionString'],
         properties: {
@@ -77,8 +77,8 @@ export class PostgresDestination implements Destination {
   async *write(params: {
     config: Record<string, unknown>
     catalog: ConfiguredCatalog
-    messages: AsyncIterableIterator<DestinationInput>
-  }): AsyncIterableIterator<DestinationOutput> {
+    messages: AsyncIterable<DestinationInput>
+  }): AsyncIterable<DestinationOutput> {
     const { messages } = params
     // Per-stream state: whether table has been created and buffered records
     const tableCreated = new Set<string>()
