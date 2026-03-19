@@ -252,8 +252,9 @@ describe('persistence', () => {
         credential_id: 'cred_x',
       },
       destination: {
-        type: 'stripe-database',
-        database_id: 'db_persist',
+        type: 'postgres',
+        schema_name: 'persist_test',
+        credential_id: 'cred_persist',
       },
     })
     const file = join(tmpDir, 'syncs.json')
@@ -262,7 +263,7 @@ describe('persistence', () => {
     const values = Object.values(data) as any[]
     const sync = values.find((s) => s.account_id === 'acct_persist')
     expect(sync).toBeDefined()
-    expect(sync.destination.database_id).toBe('db_persist')
+    expect(sync.destination.schema_name).toBe('persist_test')
   })
 
   it('updates persist across reads', async () => {

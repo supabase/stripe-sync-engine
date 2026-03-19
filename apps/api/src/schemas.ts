@@ -88,10 +88,6 @@ export const DestinationConfigSchema = z.discriminatedUnion('type', [
     google_sheet_id: z.string(),
     credential_id: z.string(),
   }),
-  z.object({
-    type: z.literal('stripe-database'),
-    database_id: z.string(),
-  }),
 ])
 
 // ── Stream Config ───────────────────────────────────────────────
