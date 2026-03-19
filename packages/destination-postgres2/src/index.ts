@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import pg from 'pg'
 import type {
-  CatalogMessage,
-  ConnectorSpecification,
+  ConfiguredCatalog,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -11,7 +10,7 @@ import type {
 // MARK: - Spec
 
 export const spec = z.object({
-  connectionString: z.string().describe('Postgres connection string'),
+  connection_string: z.string().describe('Postgres connection string'),
   schema: z.string().default('public').describe('Target schema name'),
 })
 
@@ -34,35 +33,31 @@ function extractPk(data: Readonly<Record<string, unknown>>, primaryKey: string[]
 
 // MARK: - Destination
 
-const destination: Destination<Config> = {
-  spec(): ConnectorSpecification {
+const destination = {
+  spec() {
     return { connection_specification: z.toJSONSchema(spec) }
   },
 
-  async check(config) {
-    const pool = new pg.Pool({ connectionString: config.connectionString })
+  async check({ config }) {
+    const pool = new pg.Pool({ connectionString: config.connection_string })
     try {
       await pool.query('SELECT 1')
-      return { status: 'succeeded' }
+      return { status: 'succeeded' as const }
     } catch (err: any) {
-      return { status: 'failed', message: err.message }
+      return { status: 'failed' as const, message: err.message }
     } finally {
       await pool.end()
     }
   },
 
-  async *write(
-    config,
-    catalog: CatalogMessage,
-    messages: AsyncIterableIterator<DestinationInput>
-  ): AsyncIterableIterator<DestinationOutput> {
-    const pool = new pg.Pool({ connectionString: config.connectionString })
+  async *write({ config, catalog, messages }) {
+    const pool = new pg.Pool({ connectionString: config.connection_string })
     const schema = config.schema ?? 'public'
 
     // Build a lookup from stream name → primary key paths
     const streamPks = new Map<string, string[][]>()
-    for (const stream of catalog.streams) {
-      streamPks.set(stream.name, stream.primary_key)
+    for (const cs of catalog.streams) {
+      streamPks.set(cs.stream.name, cs.stream.primary_key)
     }
 
     // Track which tables we've auto-created
@@ -75,8 +70,9 @@ const destination: Destination<Config> = {
           yield msg
           continue
         }
+        if (msg.type !== 'record') continue // skip non-data messages (e.g. stream_status)
 
-        // msg.type === 'record'
+
         const table = msg.stream
         const pk = streamPks.get(table)
 
@@ -121,6 +117,6 @@ const destination: Destination<Config> = {
       await pool.end()
     }
   },
-}
+} satisfies Destination<Config>
 
 export default destination
