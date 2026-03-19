@@ -13,7 +13,7 @@
     "react": "^19",
     "react-dom": "^19",
     "@supabase/supabase-js": "^2",
-    "@stripe/sync-engine": "workspace:*"
+    "@stripe/integration-supabase": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

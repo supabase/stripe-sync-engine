@@ -1,5 +1,6 @@
 import type {
   CatalogMessage,
+  ConfiguredCatalog,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -77,7 +78,7 @@ export class PostgresOrchestrator {
    */
   async run(source: Source, destination: Destination): Promise<StateMessage[]> {
     // 1. Discover catalog from source
-    const catalog = await source.discover({})
+    const catalog = await source.discover({ config: {} })
 
     // 2. Load state from Sync.state -> StateMessage[]
     const state = this.loadState()
@@ -85,10 +86,23 @@ export class PostgresOrchestrator {
     // 3. Resolve streams from Sync config against catalog
     const streams = this.getStreams(catalog)
 
-    // 4. Compose pipeline: source.read -> forward -> destination.write -> collect
-    const sourceMessages = source.read({}, streams, state)
+    // 4. Build ConfiguredCatalog from resolved streams
+    const configuredCatalog: ConfiguredCatalog = {
+      streams: streams.map((stream) => ({
+        stream,
+        sync_mode: 'full_refresh' as const,
+        destination_sync_mode: 'overwrite' as const,
+      })),
+    }
+
+    // 5. Compose pipeline: source.read -> forward -> destination.write -> collect
+    const sourceMessages = source.read({ config: {}, catalog: configuredCatalog, state })
     const forwarded = this.forward(sourceMessages)
-    const destOutput = destination.write({}, catalog, forwarded)
+    const destOutput = destination.write({
+      config: {},
+      catalog: configuredCatalog,
+      messages: forwarded,
+    })
     const collected = this.collect(destOutput)
 
     // 5. Drain pipeline, collecting and persisting checkpoints

@@ -1,6 +1,6 @@
 import { type PoolConfig } from 'pg'
 import Stripe from 'stripe'
-import type { RevalidateEntityName, SyncObjectName } from './resourceRegistry'
+import type { RevalidateEntityName, SyncObjectName } from '@stripe/source-stripe'
 
 /**
  * Simple logger interface compatible with both pino and console

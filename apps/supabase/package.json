@@ -21,7 +21,6 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "supabase-management-js": "^2.0.2"
   },

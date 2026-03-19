@@ -3,6 +3,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type Stripe from 'stripe'
 import type {
+  ConfiguredCatalog,
   ErrorMessage,
   Message,
   RecordMessage,
@@ -21,6 +22,17 @@ function makeConfig(
     retrieveFn: (() => Promise.resolve({})) as ResourceConfig['retrieveFn'],
     ...overrides,
   } as ResourceConfig
+}
+
+/** Build a ConfiguredCatalog from stream specs for tests. */
+function catalog(...streams: Array<{ name: string; primary_key?: string[][] }>): ConfiguredCatalog {
+  return {
+    streams: streams.map((s) => ({
+      stream: { name: s.name, primary_key: s.primary_key },
+      sync_mode: 'full_refresh' as const,
+      destination_sync_mode: 'overwrite' as const,
+    })),
+  }
 }
 
 /** Collect all messages from an async iterator into an array. */
@@ -77,7 +89,7 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const catalog = await source.discover({})
+      const catalog = await source.discover({ config: {} })
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toHaveLength(2)
@@ -91,7 +103,7 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const catalog = await source.discover({})
+      const catalog = await source.discover({ config: {} })
 
       expect(catalog.streams).toHaveLength(1)
       expect(catalog.streams[0].name).toBe('customers')
@@ -99,7 +111,7 @@ describe('StripeSource', () => {
 
     it('returns empty streams for empty registry', async () => {
       const source = new StripeSource({})
-      const catalog = await source.discover({})
+      const catalog = await source.discover({ config: {} })
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toEqual([])
@@ -134,7 +146,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // Expected sequence:
@@ -206,10 +218,13 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [
-          { name: 'customers', primary_key: [['id']] },
-          { name: 'invoices', primary_key: [['id']] },
-        ])
+        source.read({
+          config: {},
+          catalog: catalog(
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
+          ),
+        })
       )
 
       // Each stream: started + record + state + complete = 4 messages each
@@ -268,7 +283,11 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [{ name: 'customers', primary_key: [['id']] }], priorState)
+        source.read({
+          config: {},
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: priorState,
+        })
       )
 
       // Should call listFn with starting_after from the saved cursor
@@ -296,7 +315,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // stream_status(started) + state(complete) + stream_status(complete)
@@ -455,7 +474,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // stream_status(started) + error
@@ -477,7 +496,10 @@ describe('StripeSource', () => {
     it('emits ErrorMessage with failure_type config_error for unknown stream', async () => {
       const source = new StripeSource({})
       const messages = await collect(
-        source.read({}, [{ name: 'nonexistent', primary_key: [['id']] }])
+        source.read({
+          config: {},
+          catalog: catalog({ name: 'nonexistent', primary_key: [['id']] }),
+        })
       )
 
       expect(messages).toHaveLength(1)
@@ -502,7 +524,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
@@ -534,10 +556,13 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read({}, [
-          { name: 'customers', primary_key: [['id']] },
-          { name: 'invoices', primary_key: [['id']] },
-        ])
+        source.read({
+          config: {},
+          catalog: catalog(
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
+          ),
+        })
       )
 
       // customers: started + error = 2

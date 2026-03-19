@@ -1,6 +1,6 @@
 import pg, { PoolConfig, QueryResult } from 'pg'
 import { pg as sql } from 'yesql'
-import { QueryUtils, type InsertColumn } from './QueryUtils'
+import { QueryUtils, type InsertColumn } from '@stripe/destination-postgres'
 
 type PostgresConfig = {
   schema: string

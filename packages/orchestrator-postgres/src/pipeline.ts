@@ -1,12 +1,11 @@
 import type {
-  CatalogMessage,
+  ConfiguredCatalog,
   Destination,
   DestinationInput,
   DestinationOutput,
   Message,
   Source,
   StateMessage,
-  Stream,
 } from '@stripe/sync-protocol'
 
 /**
@@ -22,7 +21,7 @@ export interface PipelineOrchestrator {
  * Compose Source + Destination + Orchestrator into a full sync pipeline.
  *
  * Data flow:
- *   source.read(streams, state)
+ *   source.read(catalog, state)
  *     | orchestrator.forward()    -- filter to RecordMessage + StateMessage
  *     | destination.write(catalog) -- write records, yield StateMessage on commit
  *     | orchestrator.collect()    -- persist checkpoints, yield final states
@@ -33,20 +32,23 @@ export async function runPipeline(
   source: Source,
   destination: Destination,
   orchestrator: PipelineOrchestrator,
-  catalog: CatalogMessage,
-  streams: Stream[],
+  catalog: ConfiguredCatalog,
   sourceConfig?: Record<string, unknown>,
   destinationConfig?: Record<string, unknown>,
   state?: StateMessage[]
 ): Promise<StateMessage[]> {
   // 1. Source emits messages
-  const sourceMessages = source.read(sourceConfig ?? {}, streams, state)
+  const sourceMessages = source.read({ config: sourceConfig ?? {}, catalog, state })
 
   // 2. Orchestrator filters: only RecordMessage + StateMessage reach destination
   const forwarded = orchestrator.forward(sourceMessages)
 
   // 3. Destination writes records, yields output (StateMessage, LogMessage, ErrorMessage)
-  const destOutput = destination.write(destinationConfig ?? {}, catalog, forwarded)
+  const destOutput = destination.write({
+    config: destinationConfig ?? {},
+    catalog,
+    messages: forwarded,
+  })
 
   // 4. Orchestrator collects: persist state checkpoints, route logs/errors
   const collected = orchestrator.collect(destOutput)

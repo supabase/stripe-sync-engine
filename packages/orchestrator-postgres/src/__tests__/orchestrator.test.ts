@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
   CatalogMessage,
+  ConfiguredCatalog,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -10,7 +11,6 @@ import type {
   RecordMessage,
   Source,
   StateMessage,
-  Stream,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
 import { PostgresOrchestrator, type Sync } from '../orchestrator'
@@ -51,11 +51,11 @@ function createMockSource(
     streams: [{ name: 'customers', primary_key: [['id']] }],
   }
   const readSpy = vi.fn(
-    (
-      _config: Record<string, unknown>,
-      _streams: Stream[],
-      _state?: StateMessage[]
-    ): AsyncIterableIterator<Message> => {
+    (_params: {
+      config: Record<string, unknown>
+      catalog: ConfiguredCatalog
+      state?: StateMessage[]
+    }): AsyncIterableIterator<Message> => {
       return toAsync(messages)
     }
   )
@@ -63,7 +63,7 @@ function createMockSource(
   const source: Source = {
     spec: () => ({ connection_specification: {} }),
     check: async () => ({ status: 'succeeded' as const }),
-    async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
+    async discover(_params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
       return discoverCatalog
     },
     read: readSpy,
@@ -85,11 +85,12 @@ function createMockDestination(): {
   const destination: Destination = {
     spec: () => ({ connection_specification: {} }),
     check: async () => ({ status: 'succeeded' as const }),
-    async *write(
-      _config: Record<string, unknown>,
-      _catalog: CatalogMessage,
+    async *write(params: {
+      config: Record<string, unknown>
+      catalog: ConfiguredCatalog
       messages: AsyncIterableIterator<DestinationInput>
-    ): AsyncIterableIterator<DestinationOutput> {
+    }): AsyncIterableIterator<DestinationOutput> {
+      const { messages } = params
       for await (const msg of messages) {
         received.push(msg)
         // After receiving a state message, re-emit it as output
@@ -320,7 +321,7 @@ describe('run()', () => {
 
     // source.read() was called with loaded state
     expect(readSpy).toHaveBeenCalledOnce()
-    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
+    const { state: stateArg } = readSpy.mock.calls[0][0]
     expect(stateArg).toEqual([
       { type: 'state', stream: 'customers', data: { cursor: '2024-06-01' } },
     ])
@@ -347,11 +348,14 @@ describe('run()', () => {
 
     // source.read() was called with only the requested streams from catalog
     expect(readSpy).toHaveBeenCalledOnce()
-    const [_config, streamsArg] = readSpy.mock.calls[0]
-    expect(streamsArg).toHaveLength(2)
-    expect(streamsArg.map((s: Stream) => s.name)).toEqual(['customers', 'invoices'])
+    const { catalog: catalogArg } = readSpy.mock.calls[0][0]
+    expect(catalogArg.streams).toHaveLength(2)
+    expect(catalogArg.streams.map((s: { stream: { name: string } }) => s.stream.name)).toEqual([
+      'customers',
+      'invoices',
+    ])
     // The streams include full catalog metadata (primary_key)
-    expect(streamsArg[0].primary_key).toEqual([['id']])
+    expect(catalogArg.streams[0].stream.primary_key).toEqual([['id']])
   })
 
   it('uses all catalog streams when sync.streams is not set', async () => {
@@ -372,9 +376,12 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [_config, streamsArg] = readSpy.mock.calls[0]
-    expect(streamsArg).toHaveLength(2)
-    expect(streamsArg.map((s: Stream) => s.name)).toEqual(['customers', 'invoices'])
+    const { catalog: catalogArg } = readSpy.mock.calls[0][0]
+    expect(catalogArg.streams).toHaveLength(2)
+    expect(catalogArg.streams.map((s: { stream: { name: string } }) => s.stream.name)).toEqual([
+      'customers',
+      'invoices',
+    ])
   })
 
   it('handles empty source (no messages)', async () => {
@@ -415,10 +422,14 @@ describe('run()', () => {
     const slowSource: Source = {
       spec: () => ({ connection_specification: {} }),
       check: async () => ({ status: 'succeeded' as const }),
-      async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
+      async discover(_params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
         return catalogMsg
       },
-      async *read(_config: Record<string, unknown>): AsyncIterableIterator<Message> {
+      async *read(_params: {
+        config: Record<string, unknown>
+        catalog: ConfiguredCatalog
+        state?: StateMessage[]
+      }): AsyncIterableIterator<Message> {
         for (let i = 0; i < 100; i++) {
           yieldCount++
           yield {
@@ -481,7 +492,7 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
+    const { state: stateArg } = readSpy.mock.calls[0][0]
     expect(stateArg).toHaveLength(2)
     expect(stateArg).toEqual(
       expect.arrayContaining([
@@ -499,7 +510,7 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
+    const { state: stateArg } = readSpy.mock.calls[0][0]
     expect(stateArg).toEqual([])
   })
 

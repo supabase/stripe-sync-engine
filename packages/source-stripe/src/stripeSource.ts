@@ -1,13 +1,13 @@
 import type {
   CatalogMessage,
   CheckResult,
+  ConfiguredCatalog,
   ConnectorSpecification,
   ErrorMessage,
   Message,
   RecordMessage,
   Source,
   StateMessage,
-  Stream,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
 import { toRecordMessage } from '@stripe/sync-protocol'
@@ -38,20 +38,22 @@ export class StripeSource implements Source {
     }
   }
 
-  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+  async check(_params: { config: Record<string, unknown> }): Promise<CheckResult> {
     return { status: 'succeeded' }
   }
 
-  async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
+  async discover(_params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
     return catalogFromRegistry(this.registry)
   }
 
-  async *read(
-    _config: Record<string, unknown>,
-    streams: Stream[],
+  async *read(params: {
+    config: Record<string, unknown>
+    catalog: ConfiguredCatalog
     state?: StateMessage[]
-  ): AsyncIterableIterator<Message> {
-    for (const stream of streams) {
+  }): AsyncIterableIterator<Message> {
+    const { catalog, state } = params
+    for (const configuredStream of catalog.streams) {
+      const stream = configuredStream.stream
       const config = this.findConfigByTableName(stream.name)
       if (!config) {
         yield {

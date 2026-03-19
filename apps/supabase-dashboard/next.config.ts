@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@stripe/sync-engine'],
+  transpilePackages: ['@stripe/integration-supabase'],
   serverExternalPackages: ['esbuild'],
   webpack: (config, { isServer }) => {
     if (isServer) {

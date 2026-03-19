@@ -1,6 +1,6 @@
 import type {
-  CatalogMessage,
   CheckResult,
+  ConfiguredCatalog,
   ConnectorSpecification,
   Destination,
   DestinationInput,
@@ -46,7 +46,7 @@ export class PostgresDestination implements Destination {
     }
   }
 
-  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+  async check(_params: { config: Record<string, unknown> }): Promise<CheckResult> {
     try {
       await this.writer.query('SELECT 1')
       return { status: 'succeeded' }
@@ -74,11 +74,12 @@ export class PostgresDestination implements Destination {
     `)
   }
 
-  async *write(
-    _config: Record<string, unknown>,
-    _catalog: CatalogMessage,
+  async *write(params: {
+    config: Record<string, unknown>
+    catalog: ConfiguredCatalog
     messages: AsyncIterableIterator<DestinationInput>
-  ): AsyncIterableIterator<DestinationOutput> {
+  }): AsyncIterableIterator<DestinationOutput> {
+    const { messages } = params
     // Per-stream state: whether table has been created and buffered records
     const tableCreated = new Set<string>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

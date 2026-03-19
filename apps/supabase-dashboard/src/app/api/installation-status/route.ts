@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/sessions'
-import { parseSchemaComment } from '@stripe/sync-engine'
+import { parseSchemaComment } from '@stripe/integration-supabase'
 
 export async function GET(request: NextRequest) {
   try {

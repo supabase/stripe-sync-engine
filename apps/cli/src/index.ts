@@ -8,9 +8,10 @@ export { StripeSyncWorker, type WorkerTaskManager } from '@stripe/source-stripe'
 export type { DestinationWriter } from '@stripe/destination-postgres'
 export { getTableName } from '@stripe/source-stripe'
 
+export type * from './types'
 export type * from '@stripe/sync-protocol'
 
-export { PostgresClient } from '@stripe/sync-engine'
+export { PostgresClient } from './database/postgres'
 export { runMigrations, runMigrationsFromContent } from '@stripe/destination-postgres'
 export { embeddedMigrations } from '@stripe/destination-postgres'
 export type { EmbeddedMigration } from '@stripe/destination-postgres'

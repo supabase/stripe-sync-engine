@@ -1,6 +1,6 @@
 import type {
-  CatalogMessage,
   CheckResult,
+  ConfiguredCatalog,
   ConnectorSpecification,
   Destination,
   DestinationInput,
@@ -56,7 +56,7 @@ export class SheetsDestination implements Destination {
     }
   }
 
-  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+  async check(_params: { config: Record<string, unknown> }): Promise<CheckResult> {
     try {
       await this.sheets.spreadsheets.get({
         spreadsheetId: this.config.spreadsheet_id ?? 'test',
@@ -67,11 +67,12 @@ export class SheetsDestination implements Destination {
     }
   }
 
-  async *write(
-    _config: Record<string, unknown>,
-    _catalog: CatalogMessage,
+  async *write(params: {
+    config: Record<string, unknown>
+    catalog: ConfiguredCatalog
     messages: AsyncIterableIterator<DestinationInput>
-  ): AsyncIterableIterator<DestinationOutput> {
+  }): AsyncIterableIterator<DestinationOutput> {
+    const { messages } = params
     // Resolve or create spreadsheet
     const spreadsheetId =
       this.config.spreadsheet_id ??

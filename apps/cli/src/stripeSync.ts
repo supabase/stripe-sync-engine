@@ -1,15 +1,9 @@
 import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import { VERSION } from './version'
-import { PostgresClient } from '@stripe/sync-engine'
+import { PostgresClient } from './database/postgres'
 import type { DestinationWriter } from '@stripe/destination-postgres'
-import type {
-  StripeSyncConfig,
-  SyncResult,
-  SyncObject,
-  ResourceConfig,
-  Logger,
-} from '@stripe/sync-engine'
+import type { StripeSyncConfig, SyncResult, SyncObject, ResourceConfig, Logger } from './types'
 import { type PoolConfig } from 'pg'
 import {
   hashApiKey,
