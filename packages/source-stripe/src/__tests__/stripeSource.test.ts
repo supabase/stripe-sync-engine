@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Stripe from 'stripe'
 import type {
   ConfiguredCatalog,
@@ -584,6 +584,199 @@ describe('StripeSource', () => {
       expect(messages[5]).toMatchObject({
         type: 'stream_status',
         stream: 'invoices',
+        status: 'complete',
+      })
+    })
+  })
+
+  describe('read() — invocation modes', () => {
+    // Shared registry for these tests
+    const listFn = vi.fn()
+    const registry: Record<string, ResourceConfig> = {
+      customer: makeConfig({
+        order: 1,
+        tableName: 'customers',
+        listFn: listFn as ResourceConfig['listFn'],
+      }),
+    }
+
+    beforeEach(() => {
+      listFn.mockReset()
+    })
+
+    it('backfill only: no input, no state → paginates from beginning', async () => {
+      listFn.mockResolvedValueOnce({
+        data: [{ id: 'cus_1', name: 'Alice' }],
+        has_more: false,
+      })
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          // no input, no state
+        })
+      )
+
+      // Should paginate: started + record + state(complete) + complete
+      expect(messages).toHaveLength(4)
+      expect(messages[0]).toMatchObject({ type: 'stream_status', status: 'started' })
+      expect(messages[1]).toMatchObject({ type: 'record', stream: 'customers' })
+      expect(messages[2]).toMatchObject({
+        type: 'state',
+        data: { pageCursor: null, status: 'complete' },
+      })
+      expect(messages[3]).toMatchObject({ type: 'stream_status', status: 'complete' })
+
+      // No starting_after on first call
+      expect(listFn).toHaveBeenCalledWith({ limit: 100 })
+    })
+
+    it('stream via webhook (input): single event → record + state, no pagination', async () => {
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_wh_1',
+        type: 'customer.updated',
+        created: 1700000000,
+        dataObject: { id: 'cus_1', object: 'customer', name: 'Updated Alice' },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          input: event,
+        })
+      )
+
+      // Live mode: exactly 1 record + 1 state
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1', name: 'Updated Alice' },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'state',
+        stream: 'customers',
+        data: { eventId: 'evt_wh_1', eventCreated: 1700000000 },
+      })
+
+      // listFn should NOT be called — no pagination in live mode
+      expect(listFn).not.toHaveBeenCalled()
+    })
+
+    it('stream via websocket (input): same code path as webhook', async () => {
+      // WebSocket is a transport concern — the Stripe.Event is identical.
+      // read() with input= behaves the same regardless of transport.
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_ws_1',
+        type: 'customer.created',
+        created: 1700000001,
+        dataObject: { id: 'cus_2', object: 'customer', name: 'Bob via WS' },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          input: event,
+        })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2', name: 'Bob via WS' },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'state',
+        data: { eventId: 'evt_ws_1' },
+      })
+
+      expect(listFn).not.toHaveBeenCalled()
+    })
+
+    it('stream via input: filters out events for streams not in catalog', async () => {
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_other',
+        type: 'invoice.paid',
+        dataObject: { id: 'inv_1', object: 'invoice', amount: 100 },
+      })
+
+      // Catalog only has customers, but event is for invoices
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          input: event,
+        })
+      )
+
+      // Event is for a stream not in catalog → no output
+      expect(messages).toHaveLength(0)
+    })
+
+    it('backfill + prior webhook state: resumes pagination from cursor', async () => {
+      // Simulates: webhook events were processed (state has eventId),
+      // then backfill is invoked with that state to fill historical data.
+      // The backfill reads pageCursor from state, ignoring webhook-specific fields.
+      listFn.mockResolvedValueOnce({
+        data: [{ id: 'cus_3', name: 'Charlie' }],
+        has_more: false,
+      })
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { customers: { pageCursor: 'cus_2', status: 'pending' } },
+          // no input → backfill mode, but with state from prior run
+        })
+      )
+
+      // Resumes from cus_2
+      expect(listFn).toHaveBeenCalledWith({ limit: 100, starting_after: 'cus_2' })
+
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records).toHaveLength(1)
+      expect(records[0].data).toMatchObject({ id: 'cus_3' })
+    })
+
+    it('backfill + prior websocket state: resumes pagination from cursor', async () => {
+      // Same as above — transport doesn't matter, state shape determines resume behavior
+      listFn.mockResolvedValueOnce({
+        data: [
+          { id: 'cus_4', name: 'Dana' },
+          { id: 'cus_5', name: 'Eve' },
+        ],
+        has_more: false,
+      })
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { customers: { pageCursor: 'cus_3', status: 'pending' } },
+        })
+      )
+
+      expect(listFn).toHaveBeenCalledWith({ limit: 100, starting_after: 'cus_3' })
+
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records).toHaveLength(2)
+      expect(records.map((r) => r.data.id)).toEqual(['cus_4', 'cus_5'])
+
+      // Final state should be complete
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      expect(states[states.length - 1].data).toMatchObject({
+        pageCursor: null,
         status: 'complete',
       })
     })
