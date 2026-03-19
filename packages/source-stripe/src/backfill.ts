@@ -13,6 +13,8 @@ import { z } from 'zod'
 import type { ResourceConfig } from './types'
 import { buildResourceRegistry } from './resourceRegistry'
 import { catalogFromRegistry } from './catalog'
+import type { StripeWebSocketClient, StripeWebhookEvent } from './websocket-client'
+import { createStripeWebSocketClient } from './websocket-client'
 
 // MARK: - Spec
 
@@ -28,6 +30,7 @@ export const spec = z.object({
     .url()
     .optional()
     .describe('URL for managed webhook endpoint registration'),
+  websocket: z.boolean().optional().describe('Enable WebSocket streaming for live events'),
 })
 
 export type Config = z.infer<typeof spec>
@@ -115,6 +118,27 @@ export function createSource(
     return _registryForTesting ?? buildResourceRegistry(makeClient(config))
   }
 
+  // WebSocket closure state
+  let wsClient: StripeWebSocketClient | null = null
+  let eventWaiter: ((event: Stripe.Event) => void) | null = null
+  const eventQueue: Stripe.Event[] = []
+
+  function pushEvent(event: Stripe.Event) {
+    if (eventWaiter) {
+      const waiter = eventWaiter
+      eventWaiter = null
+      waiter(event)
+    } else {
+      eventQueue.push(event)
+    }
+  }
+
+  function waitForEvent(): Promise<Stripe.Event> {
+    return new Promise<Stripe.Event>((resolve) => {
+      eventWaiter = resolve
+    })
+  }
+
   return {
     spec(): ConnectorSpecification {
       return {
@@ -138,31 +162,48 @@ export function createSource(
     },
 
     async setup({ config, catalog }) {
-      if (!config.webhook_url) return
+      if (config.webhook_url) {
+        const stripe = makeClient(config)
+        const existing = await stripe.webhookEndpoints.list({ limit: 100 })
+        const managed = existing.data.find(
+          (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
+        )
+        if (!(managed && managed.status === 'enabled')) {
+          await stripe.webhookEndpoints.create({
+            url: config.webhook_url,
+            enabled_events: catalog.streams.map(
+              (s) => `${s.stream.name}.*` as Stripe.WebhookEndpointCreateParams.EnabledEvent
+            ),
+            metadata: { managed_by: 'stripe-sync' },
+          })
+        }
+      }
 
-      const stripe = makeClient(config)
-      const existing = await stripe.webhookEndpoints.list({ limit: 100 })
-      const managed = existing.data.find(
-        (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
-      )
-      if (managed && managed.status === 'enabled') return
-
-      await stripe.webhookEndpoints.create({
-        url: config.webhook_url,
-        enabled_events: catalog.streams.map(
-          (s) => `${s.stream.name}.*` as Stripe.WebhookEndpointCreateParams.EnabledEvent
-        ),
-        metadata: { managed_by: 'stripe-sync' },
-      })
+      if (config.websocket) {
+        wsClient = await createStripeWebSocketClient({
+          stripeApiKey: config.api_key,
+          onEvent: (wsEvent: StripeWebhookEvent) => {
+            const event = JSON.parse(wsEvent.event_payload) as Stripe.Event
+            pushEvent(event)
+          },
+        })
+      }
     },
 
     async teardown({ config }) {
-      const stripe = makeClient(config)
-      const existing = await stripe.webhookEndpoints.list({ limit: 100 })
-      for (const wh of existing.data) {
-        if (wh.metadata?.managed_by === 'stripe-sync') {
-          await stripe.webhookEndpoints.del(wh.id)
+      if (config.webhook_url) {
+        const stripe = makeClient(config)
+        const existing = await stripe.webhookEndpoints.list({ limit: 100 })
+        for (const wh of existing.data) {
+          if (wh.metadata?.managed_by === 'stripe-sync') {
+            await stripe.webhookEndpoints.del(wh.id)
+          }
         }
+      }
+
+      if (wsClient) {
+        wsClient.close()
+        wsClient = null
       }
     },
 
@@ -178,6 +219,20 @@ export function createSource(
         yield result.record
         yield result.state
         return
+      }
+
+      const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
+
+      // Helper: yield all queued WebSocket events matching the catalog
+      function* drainQueue(): Generator<Message> {
+        while (eventQueue.length > 0) {
+          const event = eventQueue.shift()!
+          const result = fromWebhookEvent(event, registry)
+          if (!result) continue
+          if (!streamNames.has(result.record.stream)) continue
+          yield result.record
+          yield result.state
+        }
       }
 
       // Backfill: paginate through each configured stream
@@ -207,6 +262,9 @@ export function createSource(
         try {
           let hasMore = true
           while (hasMore) {
+            // Drain any queued WebSocket events before each page
+            if (wsClient) yield* drainQueue()
+
             const params: { limit: number; starting_after?: string } = { limit: 100 }
             if (pageCursor) {
               params.starting_after = pageCursor
@@ -248,6 +306,22 @@ export function createSource(
             stream: stream.name,
             ...(err instanceof Error ? { stack_trace: err.stack } : {}),
           } satisfies ErrorMessage
+        }
+      }
+
+      // After backfill: stream WebSocket events indefinitely
+      if (wsClient) {
+        // Drain anything that arrived during the last page
+        yield* drainQueue()
+
+        // Block on new events (infinite loop until wsClient is closed)
+        while (wsClient) {
+          const event = await waitForEvent()
+          const result = fromWebhookEvent(event, registry)
+          if (!result) continue
+          if (!streamNames.has(result.record.stream)) continue
+          yield result.record
+          yield result.state
         }
       }
     },
