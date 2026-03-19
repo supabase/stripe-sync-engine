@@ -3,19 +3,17 @@
 #
 # Prerequisites:
 #   pnpm install
-#   docker compose up -d          # starts postgres on :54320 + stripe-mock on :12111
+#   docker compose up -d postgres   # starts postgres on :54320
 #
 # All commands run from the monorepo root.
 #
 # Setup:
 #   alias dest-postgres='bun scripts/ts-cli.ts ./packages/destination-postgres2/src/index.ts'
-#   alias source-stripe='bun scripts/ts-cli.ts ./packages/source-stripe2/src/index.ts'
 #
 # Then:
 #   dest-postgres spec
 #   dest-postgres check --config '{"connection_string":"postgresql://postgres:postgres@localhost:54320/postgres"}'
-#   source-stripe read --config '...' --catalog '...' \
-#     | dest-postgres write --config '{"connection_string":"..."}' --catalog '{"streams":[...]}'
+#   echo '{"type":"record",...}' | dest-postgres write --config '...' --catalog '...'
 
 set -euo pipefail
 set -x
@@ -29,18 +27,11 @@ else
 fi
 
 dest_postgres="$TS $ROOT/scripts/ts-cli.ts $ROOT/packages/destination-postgres2/src/index.ts"
-source_stripe="$TS $ROOT/scripts/ts-cli.ts $ROOT/packages/source-stripe2/src/index.ts"
 
 # Postgres config
 PG_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:54320/postgres}"
-DEST_CONFIG="{\"connection_string\":\"$PG_URL\",\"schema\":\"public\"}"
+CONFIG="{\"connection_string\":\"$PG_URL\",\"schema\":\"public\"}"
 
-# Stripe-mock config
-API_KEY="${STRIPE_MOCK_KEY:-sk_test_fake}"
-BASE_URL="${STRIPE_BASE_URL:-http://localhost:12111}"
-SRC_CONFIG="{\"api_key\":\"$API_KEY\",\"base_url\":\"$BASE_URL\"}"
-
-# Catalog — must match what the source discovers
 CATALOG='{"streams":[{"stream":{"name":"customers","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"},{"stream":{"name":"products","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
 
 # ── spec: JSON Schema for the connector's config ─────────────────
@@ -50,20 +41,29 @@ $dest_postgres spec | jq .
 # ── check: verify postgres connection works ──────────────────────
 echo ""
 echo "=== dest-postgres check ==="
-$dest_postgres check --config "$DEST_CONFIG"
+$dest_postgres check --config "$CONFIG"
 
-# ── write: pipe source-stripe → dest-postgres ────────────────────
+# ── write: pipe hard-coded NDJSON → dest-postgres ────────────────
 echo ""
-echo "=== source-stripe read | dest-postgres write ==="
-$source_stripe read --config "$SRC_CONFIG" --catalog "$CATALOG" \
-  | $dest_postgres write --config "$DEST_CONFIG" --catalog "$CATALOG"
+echo "=== dest-postgres write ==="
+NOW=$(date +%s000)
+printf '%s\n' \
+  "{\"type\":\"record\",\"stream\":\"customers\",\"data\":{\"id\":\"cus_1\",\"name\":\"Alice\",\"email\":\"alice@example.com\"},\"emitted_at\":$NOW}" \
+  "{\"type\":\"record\",\"stream\":\"customers\",\"data\":{\"id\":\"cus_2\",\"name\":\"Bob\",\"email\":\"bob@example.com\"},\"emitted_at\":$NOW}" \
+  "{\"type\":\"state\",\"stream\":\"customers\",\"data\":{\"after\":\"cus_2\"}}" \
+  "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_1\",\"name\":\"T-shirt\",\"price\":2500},\"emitted_at\":$NOW}" \
+  "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_2\",\"name\":\"Hoodie\",\"price\":5500},\"emitted_at\":$NOW}" \
+  "{\"type\":\"state\",\"stream\":\"products\",\"data\":{\"after\":\"prod_2\"}}" \
+  "{\"type\":\"record\",\"stream\":\"customers\",\"data\":{\"id\":\"cus_1\",\"name\":\"Alice Smith\",\"email\":\"alice@example.com\"},\"emitted_at\":$NOW}" \
+  "{\"type\":\"state\",\"stream\":\"customers\",\"data\":{\"after\":\"cus_1\",\"phase\":\"update\"}}" \
+  | $dest_postgres write --config "$CONFIG" --catalog "$CATALOG"
 
 # ── verify: query what landed ────────────────────────────────────
 echo ""
 echo "=== customers ==="
 docker exec stripe-db psql -U postgres -d postgres \
-  -c "SELECT _pk, data->>'name' AS name FROM customers ORDER BY _pk;"
+  -c "SELECT _pk, data->>'name' AS name, data->>'email' AS email FROM customers ORDER BY _pk;"
 
 echo "=== products ==="
 docker exec stripe-db psql -U postgres -d postgres \
-  -c "SELECT _pk, data->>'name' AS name FROM products ORDER BY _pk;"
+  -c "SELECT _pk, data->>'name' AS name, data->>'price' AS price FROM products ORDER BY _pk;"
