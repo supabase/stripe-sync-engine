@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --shims",
     "lint": "eslint src --ext .ts",
-    "test": "vitest"
+    "test": "vitest --passWithNoTests"
   },
   "files": [
     "dist"
