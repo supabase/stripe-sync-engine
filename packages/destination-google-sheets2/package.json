@@ -1,0 +1,12 @@
+{
+  "name": "@stripe/destination-google-sheets2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "googleapis": "^148.0.0",
+    "zod": "^4.3.6"
+  }
+}
