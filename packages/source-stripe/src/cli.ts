@@ -1,11 +1,10 @@
 import fs from 'node:fs'
 import type { ConfiguredCatalog, StateMessage } from '@stripe/sync-protocol'
 import { StripeSource } from './backfill'
-import type { ResourceConfig } from './types'
 
 export interface SourceCliOptions {
   command: 'discover' | 'read'
-  config: string // path to config JSON (resource registry)
+  config: string // path to config JSON ({ api_key: string })
   catalog?: string // path to catalog JSON (for read)
   state?: string // path to state JSON (for read)
 }
@@ -22,8 +21,8 @@ function loadJson(filePath: string): unknown {
  *   read --config <path> --catalog <path> [--state <path>]  Stream NDJSON to stdout.
  */
 export async function main(opts: SourceCliOptions): Promise<void> {
-  const registry = loadJson(opts.config) as Record<string, ResourceConfig>
-  const source = new StripeSource(registry)
+  const config = loadJson(opts.config) as { api_key: string }
+  const source = new StripeSource({ apiKey: config.api_key })
 
   if (opts.command === 'discover') {
     const catalog = await source.discover({ config: {} })

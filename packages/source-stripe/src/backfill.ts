@@ -11,8 +11,9 @@ import type {
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
 import { toRecordMessage } from '@stripe/sync-protocol'
-import type Stripe from 'stripe'
+import Stripe from 'stripe'
 import type { ResourceConfig } from './types'
+import { buildResourceRegistry } from './resourceRegistry'
 import { catalogFromRegistry } from './catalog'
 
 /**
@@ -23,7 +24,15 @@ import { catalogFromRegistry } from './catalog'
  * - Live: receive webhook events, emit RecordMessage per event
  */
 export class StripeSource implements Source {
-  constructor(private readonly registry: Record<string, ResourceConfig>) {}
+  private readonly registry: Record<string, ResourceConfig>
+
+  constructor(
+    config: { apiKey: string },
+    _registryForTesting?: Record<string, ResourceConfig>
+  ) {
+    const stripe = new Stripe(config.apiKey)
+    this.registry = _registryForTesting ?? buildResourceRegistry(stripe)
+  }
 
   spec(): ConnectorSpecification {
     return {
