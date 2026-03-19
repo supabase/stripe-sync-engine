@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import type { ConfiguredCatalog, StateMessage } from '@stripe/sync-protocol'
-import { StripeSource } from './backfill'
+import source, { type Config } from './backfill'
 
 export interface SourceCliOptions {
   command: 'discover' | 'read'
@@ -21,11 +21,10 @@ function loadJson(filePath: string): unknown {
  *   read --config <path> --catalog <path> [--state <path>]  Stream NDJSON to stdout.
  */
 export async function main(opts: SourceCliOptions): Promise<void> {
-  const config = loadJson(opts.config) as { api_key: string }
-  const source = new StripeSource({ apiKey: config.api_key })
+  const config = loadJson(opts.config) as Config
 
   if (opts.command === 'discover') {
-    const catalog = await source.discover({ config: {} })
+    const catalog = await source.discover({ config })
     process.stdout.write(JSON.stringify(catalog) + '\n')
     return
   }
@@ -40,7 +39,7 @@ export async function main(opts: SourceCliOptions): Promise<void> {
       state = loadJson(opts.state) as StateMessage[]
     }
 
-    const messages = source.read({ config: {}, catalog, state })
+    const messages = source.read({ config, catalog, state })
     for await (const msg of messages) {
       process.stdout.write(JSON.stringify(msg) + '\n')
     }

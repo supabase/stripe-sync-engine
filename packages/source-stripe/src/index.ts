@@ -16,7 +16,7 @@ export type { EntitySchema } from './streams/types'
 export type { Source } from '@stripe/sync-protocol'
 
 // Source
-export { StripeSource } from './backfill'
+export { default, spec, type Config, createSource, fromWebhookEvent } from './backfill'
 export { liveReader } from './live'
 
 // Resource Registry

@@ -10,7 +10,7 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
-import { StripeSource } from '../backfill'
+import { createSource, fromWebhookEvent } from '../backfill'
 import type { ResourceConfig } from '../types'
 
 function makeConfig(
@@ -80,6 +80,8 @@ function makeEvent(overrides: {
   } as Stripe.Event
 }
 
+const config = { api_key: 'sk_test_fake' }
+
 describe('StripeSource', () => {
   describe('discover()', () => {
     it('returns a CatalogMessage with known streams', async () => {
@@ -88,8 +90,8 @@ describe('StripeSource', () => {
         invoice: makeConfig({ order: 2, tableName: 'invoices' }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
-      const catalog = await source.discover({ config: {} })
+      const source = createSource(registry)
+      const catalog = await source.discover({ config })
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toHaveLength(2)
@@ -102,16 +104,16 @@ describe('StripeSource', () => {
         internal: makeConfig({ order: 2, tableName: 'internal', sync: false }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
-      const catalog = await source.discover({ config: {} })
+      const source = createSource(registry)
+      const catalog = await source.discover({ config })
 
       expect(catalog.streams).toHaveLength(1)
       expect(catalog.streams[0].name).toBe('customers')
     })
 
     it('returns empty streams for empty registry', async () => {
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, {})
-      const catalog = await source.discover({ config: {} })
+      const source = createSource({})
+      const catalog = await source.discover({ config })
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toEqual([])
@@ -144,9 +146,9 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
-        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // Expected sequence:
@@ -216,10 +218,10 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
         source.read({
-          config: {},
+          config,
           catalog: catalog(
             { name: 'customers', primary_key: [['id']] },
             { name: 'invoices', primary_key: [['id']] }
@@ -281,10 +283,10 @@ describe('StripeSource', () => {
         },
       ]
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
         source.read({
-          config: {},
+          config,
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: priorState,
         })
@@ -313,9 +315,9 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
-        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // stream_status(started) + state(complete) + stream_status(complete)
@@ -356,7 +358,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1', object: 'customer', name: 'Alice' },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
 
       expect(result).not.toBeNull()
       expect(result!.record.type).toBe('record')
@@ -385,7 +387,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'unknown_1', object: 'unknown_type' },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
       expect(result).toBeNull()
     })
 
@@ -399,7 +401,7 @@ describe('StripeSource', () => {
         dataObject: { object: 'invoice', amount_due: 5000 },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
       expect(result).toBeNull()
     })
 
@@ -413,7 +415,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1', object: 'customer', deleted: true },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
 
       expect(result).not.toBeNull()
       expect(result!.record.data).toMatchObject({
@@ -432,7 +434,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1' },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
       expect(result).toBeNull()
     })
 
@@ -451,7 +453,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'inv_1', object: 'invoice', amount_paid: 1000 },
       })
 
-      const result = StripeSource.fromWebhookEvent(event, registry)
+      const result = fromWebhookEvent(event, registry)
 
       expect(result).not.toBeNull()
       expect(result!.record.stream).toBe('invoices')
@@ -472,9 +474,9 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
-        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       // stream_status(started) + error
@@ -494,10 +496,10 @@ describe('StripeSource', () => {
     })
 
     it('emits ErrorMessage with failure_type config_error for unknown stream', async () => {
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, {})
+      const source = createSource({})
       const messages = await collect(
         source.read({
-          config: {},
+          config,
           catalog: catalog({ name: 'nonexistent', primary_key: [['id']] }),
         })
       )
@@ -522,9 +524,9 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
-        source.read({ config: {}, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
       expect(messages).toHaveLength(2)
@@ -554,10 +556,10 @@ describe('StripeSource', () => {
         }),
       }
 
-      const source = new StripeSource({ apiKey: 'sk_test_fake' }, registry)
+      const source = createSource(registry)
       const messages = await collect(
         source.read({
-          config: {},
+          config,
           catalog: catalog(
             { name: 'customers', primary_key: [['id']] },
             { name: 'invoices', primary_key: [['id']] }
