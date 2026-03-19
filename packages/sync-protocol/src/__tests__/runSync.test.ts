@@ -233,9 +233,7 @@ describe('runSync', () => {
     const { source } = createMockSource([logMsg, errorMsg, statusMsg, record, stateMsg])
     const { destination, received } = createMockDestination()
 
-    await drain(
-      runSync({ source_config: {}, destination_config: {} }, source, destination)
-    )
+    await drain(runSync({ source_config: {}, destination_config: {} }, source, destination))
 
     // Only record + state reach destination
     expect(received).toHaveLength(2)
