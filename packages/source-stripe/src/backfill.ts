@@ -23,6 +23,11 @@ export const spec = z.object({
     .url()
     .optional()
     .describe('Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)'),
+  webhook_url: z
+    .string()
+    .url()
+    .optional()
+    .describe('URL for managed webhook endpoint registration'),
 })
 
 export type Config = z.infer<typeof spec>
@@ -130,6 +135,35 @@ export function createSource(
 
     async discover({ config }) {
       return catalogFromRegistry(getRegistry(config))
+    },
+
+    async setup({ config, catalog }) {
+      if (!config.webhook_url) return
+
+      const stripe = makeClient(config)
+      const existing = await stripe.webhookEndpoints.list({ limit: 100 })
+      const managed = existing.data.find(
+        (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
+      )
+      if (managed && managed.status === 'enabled') return
+
+      await stripe.webhookEndpoints.create({
+        url: config.webhook_url,
+        enabled_events: catalog.streams.map(
+          (s) => `${s.stream.name}.*` as Stripe.WebhookEndpointCreateParams.EnabledEvent
+        ),
+        metadata: { managed_by: 'stripe-sync' },
+      })
+    },
+
+    async teardown({ config }) {
+      const stripe = makeClient(config)
+      const existing = await stripe.webhookEndpoints.list({ limit: 100 })
+      for (const wh of existing.data) {
+        if (wh.metadata?.managed_by === 'stripe-sync') {
+          await stripe.webhookEndpoints.del(wh.id)
+        }
+      }
     },
 
     async *read({ config, catalog, state, input }) {

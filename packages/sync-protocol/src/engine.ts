@@ -14,6 +14,8 @@ import { forward, collect } from './filters'
 // MARK: - Engine interface
 
 export interface Engine {
+  setup(): Promise<void>
+  teardown(): Promise<void>
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
   read(): AsyncIterable<Message>
   write(messages: AsyncIterable<Message>): AsyncIterable<StateMessage>
@@ -80,6 +82,21 @@ export function createEngine(
   }
 
   return {
+    async setup() {
+      const catalog = await getCatalog()
+      await Promise.all([
+        connectors.source.setup?.({ config: config.source_config, catalog }),
+        connectors.destination.setup?.({ config: config.destination_config, catalog }),
+      ])
+    },
+
+    async teardown() {
+      await Promise.all([
+        connectors.source.teardown?.({ config: config.source_config }),
+        connectors.destination.teardown?.({ config: config.destination_config }),
+      ])
+    },
+
     async check() {
       const [source, destination] = await Promise.all([
         connectors.source.check({ config: config.source_config }),
@@ -100,15 +117,15 @@ export function createEngine(
     async *write(messages: AsyncIterable<Message>) {
       const catalog = await getCatalog()
       const forwarded = forward(messages, cb)
-      const destOutput = connectors.destination.write({
-        config: config.destination_config,
-        catalog,
-        messages: forwarded,
-      })
+      const destOutput = connectors.destination.write(
+        { config: config.destination_config, catalog },
+        forwarded
+      )
       yield* collect(destOutput, cb)
     },
 
     async *run() {
+      await this.setup()
       yield* this.write(this.read())
     },
   }

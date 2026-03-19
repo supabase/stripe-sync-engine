@@ -90,27 +90,24 @@ describe('PostgresDestination', () => {
     expect(typeof dest.write).toBe('function')
   })
 
-  describe('write() -- schema scenarios', () => {
-    it('creates schema on startup', async () => {
+  describe('setup()', () => {
+    it('creates schema', async () => {
       const mockWriter = createMockWriter()
       const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
 
-      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog, messages }))
+      await dest.setup({ config: {}, catalog: emptyCatalog })
 
       expect(mockWriter.query).toHaveBeenCalledWith(
         expect.stringContaining('CREATE SCHEMA IF NOT EXISTS "public"')
       )
     })
 
-    it('creates tables from CatalogMessage on first record', async () => {
+    it('creates tables for each configured stream', async () => {
       const mockWriter = createMockWriter()
       const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream, messages }))
+      await dest.setup({ config: {}, catalog: catalogWithStream })
 
-      // Should have called CREATE TABLE IF NOT EXISTS
       const queryCalls = (mockWriter.query as ReturnType<typeof vi.fn>).mock.calls
       const createTableCall = queryCalls.find(
         (call: unknown[]) =>
@@ -122,25 +119,19 @@ describe('PostgresDestination', () => {
       expect(createTableCall![0]).toContain('_raw_data')
       expect(createTableCall![0]).toContain('jsonb')
     })
+  })
 
-    it('only creates table once per stream even with multiple records', async () => {
+  describe('teardown()', () => {
+    it('drops schema CASCADE', async () => {
       const mockWriter = createMockWriter()
       const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([
-        makeRecord('customers', { id: 'cus_1', name: 'Alice' }),
-        makeRecord('customers', { id: 'cus_2', name: 'Bob' }),
-      ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream, messages }))
+      await dest.teardown({ config: {} })
 
-      const queryCalls = (mockWriter.query as ReturnType<typeof vi.fn>).mock.calls
-      const createTableCalls = queryCalls.filter(
-        (call: unknown[]) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('CREATE TABLE IF NOT EXISTS') &&
-          call[0].includes('"customers"')
+      expect(mockWriter.query).toHaveBeenCalledWith(
+        expect.stringContaining('DROP SCHEMA IF EXISTS "public" CASCADE')
       )
-      expect(createTableCalls).toHaveLength(1)
+      expect(mockWriter.close).toHaveBeenCalled()
     })
   })
 
@@ -241,17 +232,16 @@ describe('PostgresDestination', () => {
   })
 
   describe('write() -- error scenarios', () => {
-    it('emits ErrorMessage on connection failure', async () => {
+    it('emits ErrorMessage on upsert connection failure', async () => {
       const mockWriter = createMockWriter()
-      // Make ensureSchema fail (first query call)
-      ;(mockWriter.query as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      ;(mockWriter.upsertMany as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('ECONNREFUSED: connection refused')
       )
       const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
+      const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: emptyCatalog, messages })
+        dest.write({ config: {}, catalog: catalogWithStream, messages })
       )
 
       const errorOutputs = outputs.filter((m) => m.type === 'error')
@@ -265,14 +255,14 @@ describe('PostgresDestination', () => {
 
     it('emits system_error for non-transient failures', async () => {
       const mockWriter = createMockWriter()
-      ;(mockWriter.query as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      ;(mockWriter.upsertMany as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('syntax error at position 42')
       )
       const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
+      const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: emptyCatalog, messages })
+        dest.write({ config: {}, catalog: catalogWithStream, messages })
       )
 
       const errorOutputs = outputs.filter((m) => m.type === 'error')

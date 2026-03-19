@@ -56,12 +56,12 @@ export class PostgresDestination implements Destination {
   }
 
   /** Run `CREATE SCHEMA IF NOT EXISTS` for the configured schema. */
-  private async ensureSchema(): Promise<void> {
+  async ensureSchema(): Promise<void> {
     await this.writer.query(`CREATE SCHEMA IF NOT EXISTS "${this.config.schema}"`)
   }
 
   /** Run `CREATE TABLE IF NOT EXISTS` with the raw JSON column pattern. */
-  private async ensureTable(streamName: string): Promise<void> {
+  async ensureTable(streamName: string): Promise<void> {
     const schema = this.config.schema
     await this.writer.query(`
       CREATE TABLE IF NOT EXISTS "${schema}"."${streamName}" (
@@ -74,14 +74,27 @@ export class PostgresDestination implements Destination {
     `)
   }
 
+  async setup(params: {
+    config: Record<string, unknown>
+    catalog: ConfiguredCatalog
+  }): Promise<void> {
+    await this.ensureSchema()
+    for (const { stream } of params.catalog.streams) {
+      await this.ensureTable(stream.name)
+    }
+  }
+
+  async teardown(_params: { config: Record<string, unknown> }): Promise<void> {
+    await this.writer.query(`DROP SCHEMA IF EXISTS "${this.config.schema}" CASCADE`)
+    await this.writer.close()
+  }
+
   async *write(params: {
     config: Record<string, unknown>
     catalog: ConfiguredCatalog
     messages: AsyncIterable<DestinationInput>
   }): AsyncIterable<DestinationOutput> {
     const { messages } = params
-    // Per-stream state: whether table has been created and buffered records
-    const tableCreated = new Set<string>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
 
@@ -99,17 +112,11 @@ export class PostgresDestination implements Destination {
     }
 
     try {
-      // Ensure schema exists before processing any messages
-      await this.ensureSchema()
-
       for await (const msg of messages) {
         if (msg.type === 'record') {
           const { stream, data } = msg
 
-          // First record for this stream — ensure table exists
-          if (!tableCreated.has(stream)) {
-            await this.ensureTable(stream)
-            tableCreated.add(stream)
+          if (!streamBuffers.has(stream)) {
             streamBuffers.set(stream, [])
           }
 

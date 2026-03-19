@@ -212,6 +212,12 @@ export interface Source<
     state?: Record<string, TStreamState>
     input?: TInput
   }): AsyncIterable<Message>
+
+  /** Provision external resources (webhook endpoints, replication slots, etc.). Called before first read(). */
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+
+  /** Clean up external resources. Called when a sync is deleted. */
+  teardown?(params: { config: TConfig }): Promise<void>
 }
 
 // MARK: - Destination
@@ -248,9 +254,14 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
    * Yields messages back to the orchestrator: StateMessage after committing,
    * ErrorMessage on write failures, LogMessage for diagnostics.
    */
-  write(params: {
-    config: TConfig
-    catalog: ConfiguredCatalog
+  write(
+    params: { config: TConfig; catalog: ConfiguredCatalog },
     messages: AsyncIterable<DestinationInput>
-  }): AsyncIterable<DestinationOutput>
+  ): AsyncIterable<DestinationOutput>
+
+  /** Provision downstream resources (schemas, tables, etc.). Called before first write(). */
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+
+  /** Clean up downstream resources. Called when a sync is deleted. */
+  teardown?(params: { config: TConfig }): Promise<void>
 }

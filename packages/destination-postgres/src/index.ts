@@ -46,6 +46,22 @@ const destination = {
     return dest.check({ config })
   },
 
+  async setup({ config, catalog }) {
+    const dest = new PostgresDestination({
+      schema: config.schema ?? 'stripe',
+      poolConfig: { connectionString: config.connection_string },
+    })
+    await dest.setup({ config, catalog })
+  },
+
+  async teardown({ config }) {
+    const dest = new PostgresDestination({
+      schema: config.schema ?? 'stripe',
+      poolConfig: { connectionString: config.connection_string },
+    })
+    await dest.teardown({ config })
+  },
+
   async *write({ config, catalog, messages }) {
     const dest = new PostgresDestination({
       schema: config.schema ?? 'stripe',
