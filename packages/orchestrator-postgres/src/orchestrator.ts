@@ -5,6 +5,7 @@ import type {
   DestinationInput,
   DestinationOutput,
   Message,
+  Orchestrator,
   Source,
   StateMessage,
   Stream,
@@ -37,7 +38,7 @@ export interface Sync {
  * `run()` is the supervisor: discovers catalog, loads state, composes the
  * source -> forward -> write -> collect pipeline, and persists checkpoints.
  */
-export class PostgresOrchestrator {
+export class PostgresOrchestrator implements Orchestrator<Sync> {
   readonly sync: Sync
   private stateManager: PostgresStateManager
   private callbacks: RouterCallbacks
@@ -64,7 +65,7 @@ export class PostgresOrchestrator {
    * Routes ErrorMessage and LogMessage to stderr.
    */
   collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage> {
-    return routerCollect(output, this.stateManager, this.callbacks)
+    return routerCollect(output, this.callbacks)
   }
 
   /**

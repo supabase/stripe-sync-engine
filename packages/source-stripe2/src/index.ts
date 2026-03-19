@@ -1,6 +1,12 @@
 import Stripe from 'stripe'
 import { z } from 'zod'
-import type { ConfiguredCatalog, ConnectorSpecification, Message, Source, StateMessage } from '@stripe/sync-protocol'
+import type {
+  ConfiguredCatalog,
+  ConnectorSpecification,
+  Message,
+  Source,
+  StateMessage,
+} from '@stripe/sync-protocol'
 import { toRecordMessage } from '@stripe/sync-protocol'
 
 // MARK: - Spec

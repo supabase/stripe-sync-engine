@@ -227,7 +227,9 @@ const destination = {
         // ignore flush errors during error handling
       }
 
-      const failure_type = isTransient(err) ? 'transient_error' as const : 'system_error' as const
+      const failure_type = isTransient(err)
+        ? ('transient_error' as const)
+        : ('system_error' as const)
       yield {
         type: 'error' as const,
         failure_type,

@@ -253,7 +253,7 @@ describe('forward()', () => {
 describe('collect()', () => {
   it('yields StateMessage', async () => {
     const output: DestinationOutput[] = [state1]
-    const result = await drain(collect(toAsync(output), stubStateManager))
+    const result = await drain(collect(toAsync(output)))
     expect(result).toHaveLength(1)
     expect(result[0]).toBe(state1)
   })
@@ -261,7 +261,7 @@ describe('collect()', () => {
   it('routes LogMessage to onLog callback', async () => {
     const onLog = vi.fn()
     const output: DestinationOutput[] = [logMsg]
-    const result = await drain(collect(toAsync(output), stubStateManager, { onLog }))
+    const result = await drain(collect(toAsync(output), { onLog }))
     expect(result).toHaveLength(0)
     expect(onLog).toHaveBeenCalledOnce()
     expect(onLog).toHaveBeenCalledWith('Sync started', 'info')
@@ -270,14 +270,14 @@ describe('collect()', () => {
   it('routes ErrorMessage to onError callback', async () => {
     const onError = vi.fn()
     const output: DestinationOutput[] = [errorMsg]
-    const result = await drain(collect(toAsync(output), stubStateManager, { onError }))
+    const result = await drain(collect(toAsync(output), { onError }))
     expect(result).toHaveLength(0)
     expect(onError).toHaveBeenCalledOnce()
     expect(onError).toHaveBeenCalledWith('Rate limited', 'transient_error')
   })
 
   it('handles empty stream', async () => {
-    const result = await drain(collect(toAsync([]), stubStateManager))
+    const result = await drain(collect(toAsync([])))
     expect(result).toHaveLength(0)
   })
 })

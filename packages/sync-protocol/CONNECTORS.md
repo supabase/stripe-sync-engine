@@ -30,6 +30,7 @@ packages/source-example/
 ### satisfies pattern
 
 Use `satisfies` on the object literal, not on the export. This lets the compiler:
+
 - **Check** that the object conforms to `Source<Config>` or `Destination<Config>`
 - **Infer** parameter types from the interface (no need to annotate params)
 - **Preserve** the narrow return types (the export keeps the inferred type, not the wide interface type)
@@ -94,11 +95,11 @@ interface Source<TConfig> {
 }
 ```
 
-| Method | Purpose |
-|--------|---------|
-| `spec()` | Return JSON Schema for the config. No params — called before config exists. |
-| `check({ config })` | Test connectivity. Return `{ status: 'succeeded' }` or `{ status: 'failed', message }`. |
-| `discover({ config })` | Return a `CatalogMessage` listing available streams with their schemas and primary keys. |
+| Method                              | Purpose                                                                                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec()`                            | Return JSON Schema for the config. No params — called before config exists.                                                                                          |
+| `check({ config })`                 | Test connectivity. Return `{ status: 'succeeded' }` or `{ status: 'failed', message }`.                                                                              |
+| `discover({ config })`              | Return a `CatalogMessage` listing available streams with their schemas and primary keys.                                                                             |
 | `read({ config, catalog, state? })` | Yield messages for the configured streams. `catalog` is `ConfiguredCatalog` (user's selection + sync modes). `state` is the previous checkpoint for resumable syncs. |
 
 ### read() messages
@@ -135,19 +136,21 @@ interface Destination<TConfig> {
 }
 ```
 
-| Method | Purpose |
-|--------|---------|
-| `spec()` | Return JSON Schema for the config. |
-| `check({ config })` | Test connectivity (e.g. `SELECT 1`). |
+| Method                                 | Purpose                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `spec()`                               | Return JSON Schema for the config.                                                                                             |
+| `check({ config })`                    | Test connectivity (e.g. `SELECT 1`).                                                                                           |
 | `write({ config, catalog, messages })` | Consume `DestinationInput` messages, write records, yield `DestinationOutput`. `messages` comes from stdin when piped via CLI. |
 
 ### write() messages
 
 Input (`DestinationInput`):
+
 - **`RecordMessage`** — upsert this record
 - **`StateMessage`** — passthrough; yield it back after committing the batch
 
 Output (`DestinationOutput`):
+
 - **`StateMessage`** — re-yield after commit so the orchestrator can checkpoint
 - **`ErrorMessage`** — write failures
 - **`LogMessage`** — diagnostics
@@ -195,9 +198,7 @@ const source = {
   async discover({ config }) {
     return {
       type: 'catalog' as const,
-      streams: [
-        { name: 'widgets', primary_key: [['id']] },
-      ],
+      streams: [{ name: 'widgets', primary_key: [['id']] }],
     }
   },
 
@@ -238,7 +239,7 @@ const destination = {
   async *write({ config, catalog, messages }) {
     for await (const msg of messages) {
       if (msg.type === 'state') {
-        yield msg  // passthrough after commit
+        yield msg // passthrough after commit
         continue
       }
       // msg.type === 'record' — write to downstream system

@@ -21,7 +21,6 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/destination-postgres": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "pg": "^8.16.3",
     "stripe": "^17.7.0",
@@ -29,6 +28,7 @@
     "yesql": "^7.0.0"
   },
   "optionalDependencies": {
+    "@stripe/destination-postgres": "workspace:*",
     "@fastify/autoload": "^6.3.1",
     "@fastify/swagger": "^9.5.1",
     "@fastify/swagger-ui": "^5.2.3",

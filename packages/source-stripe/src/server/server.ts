@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { Server, IncomingMessage, ServerResponse } from 'node:http'
+import { Client as PgClient } from 'pg'
 import { runMigrations } from '@stripe/destination-postgres'
+import { applyStripeSchema } from '../openapi/applyStripeSchema'
 import { createServer } from './app'
 import { getConfig } from './utils/config'
 import { logger } from './logger'
@@ -25,6 +27,20 @@ const main = async () => {
         logger: logger,
         ssl: config.sslConnectionOptions,
       })
+
+      const client = new PgClient({
+        connectionString: merchantConfig.databaseUrl,
+        ssl: config.sslConnectionOptions,
+      })
+      try {
+        await client.connect()
+        await applyStripeSchema(client, {
+          stripeApiVersion: config.stripeApiVersion,
+          logger: logger,
+        })
+      } finally {
+        await client.end()
+      }
     }
   }
 

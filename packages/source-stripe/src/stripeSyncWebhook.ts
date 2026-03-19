@@ -1,13 +1,13 @@
 import Stripe from 'stripe'
 import pkg from '../package.json' with { type: 'json' }
-import { managedWebhookSchema } from './schemas/managed_webhook'
+import { managedWebhookSchema } from './streams/managed_webhook'
 import {
   type ResourceConfig,
   SUPPORTED_WEBHOOK_EVENTS,
   type RevalidateEntity,
   type Logger,
 } from './types'
-import type { DestinationWriter } from '@stripe/destination-postgres'
+import type { WebhookWriter } from './webhookWriter'
 import { getTableName, normalizeStripeObjectName } from './resourceRegistry'
 import { toRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 
@@ -21,7 +21,7 @@ export type WebhookConfig = {
 
 export type StripeSyncWebhookDeps = {
   stripe: Stripe
-  writer: DestinationWriter
+  writer: WebhookWriter
   config: WebhookConfig
   readonly accountId: string
   getAccountId: (objectAccountId?: string) => Promise<string>

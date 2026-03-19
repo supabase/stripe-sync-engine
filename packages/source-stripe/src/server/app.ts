@@ -3,6 +3,7 @@ import autoload from '@fastify/autoload'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
+import { PostgresDestinationWriter } from '@stripe/destination-postgres'
 import { getConfig, normalizeHost } from './utils/config'
 import { createWebhookService, type WebhookService } from './webhookService'
 import { errorSchema } from './error'
@@ -39,19 +40,31 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
       ssl: config.sslConnectionOptions,
     }
 
-    return createWebhookService({
-      stripeSecretKey: merchantRuntime.config.stripeSecretKey,
-      stripeWebhookSecret: merchantRuntime.config.stripeWebhookSecret,
-      databaseUrl: merchantRuntime.config.databaseUrl,
-      stripeApiVersion: config.stripeApiVersion,
-      stripeAccountId: config.stripeAccountId,
-      autoExpandLists: merchantRuntime.config.autoExpandLists,
-      backfillRelatedEntities: merchantRuntime.config.backfillRelatedEntities,
-      revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
-      ...(config.partnerId ? { partnerId: config.partnerId } : {}),
-      logger,
+    const dataSchema = merchantRuntime.config.schemaName ?? 'stripe'
+    const syncSchema = merchantRuntime.config.syncTablesSchemaName ?? dataSchema
+
+    const writer = new PostgresDestinationWriter({
+      schema: dataSchema,
+      syncSchema,
       poolConfig,
     })
+
+    return createWebhookService(
+      {
+        stripeSecretKey: merchantRuntime.config.stripeSecretKey,
+        stripeWebhookSecret: merchantRuntime.config.stripeWebhookSecret,
+        stripeApiVersion: config.stripeApiVersion,
+        stripeAccountId: config.stripeAccountId,
+        autoExpandLists: merchantRuntime.config.autoExpandLists,
+        backfillRelatedEntities: merchantRuntime.config.backfillRelatedEntities,
+        revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
+        ...(config.partnerId ? { partnerId: config.partnerId } : {}),
+        schemaName: dataSchema,
+        syncTablesSchemaName: syncSchema,
+        logger,
+      },
+      writer
+    )
   })
 
   /**

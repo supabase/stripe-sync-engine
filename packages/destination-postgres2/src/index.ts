@@ -72,7 +72,6 @@ const destination = {
         }
         if (msg.type !== 'record') continue // skip non-data messages (e.g. stream_status)
 
-
         const table = msg.stream
         const pk = streamPks.get(table)
 

@@ -12,11 +12,12 @@ export type {
   ProcessNextResult,
 } from './types'
 export { SUPPORTED_WEBHOOK_EVENTS } from './types'
-export type { EntitySchema } from './schemas/types'
+export type { EntitySchema } from './streams/types'
 export type { Source } from '@stripe/sync-protocol'
 
 // Source
-export { StripeSource } from './stripeSource'
+export { StripeSource } from './backfill'
+export { liveReader } from './live'
 
 // Resource Registry
 export {
@@ -43,6 +44,7 @@ export type {
 // Webhook
 export { StripeSyncWebhook } from './stripeSyncWebhook'
 export type { StripeSyncWebhookDeps, WebhookConfig } from './stripeSyncWebhook'
+export type { WebhookWriter } from './webhookWriter'
 
 // Worker
 export { StripeSyncWorker } from './stripeSyncWorker'
@@ -73,27 +75,42 @@ export {
 export { expandEntity } from './utils/expandEntity'
 export { hashApiKey } from './utils/hashApiKey'
 
+// OpenAPI spec → DDL
+export type * from './openapi/types'
+export {
+  SpecParser,
+  OPENAPI_RESOURCE_TABLE_ALIASES,
+  RUNTIME_RESOURCE_ALIASES,
+} from './openapi/specParser'
+export { OPENAPI_COMPATIBILITY_COLUMNS } from './openapi/runtimeMappings'
+export { PostgresAdapter } from './openapi/postgresAdapter'
+export { WritePathPlanner } from './openapi/writePathPlanner'
+export { resolveOpenApiSpec } from './openapi/specFetchHelper'
+export type { DialectAdapter } from './openapi/dialectAdapter'
+export { applyStripeSchema } from './openapi/applyStripeSchema'
+export type { ApplyStripeSchemaConfig } from './openapi/applyStripeSchema'
+
 // Schemas
-export { activeEntitlementSchema } from './schemas/active_entitlement'
-export { chargeSchema } from './schemas/charge'
-export { checkoutSessionLineItemSchema } from './schemas/checkout_session_line_items'
-export { checkoutSessionSchema, checkoutSessionDeletedSchema } from './schemas/checkout_sessions'
-export { creditNoteSchema } from './schemas/credit_note'
-export { customerSchema, customerDeletedSchema } from './schemas/customer'
-export { disputeSchema } from './schemas/dispute'
-export { earlyFraudWarningSchema } from './schemas/early_fraud_warning'
-export { featureSchema } from './schemas/feature'
-export { invoiceSchema } from './schemas/invoice'
-export { managedWebhookSchema } from './schemas/managed_webhook'
-export { paymentIntentSchema } from './schemas/payment_intent'
-export { paymentMethodsSchema } from './schemas/payment_methods'
-export { planSchema } from './schemas/plan'
-export { priceSchema } from './schemas/price'
-export { productSchema } from './schemas/product'
-export { refundSchema } from './schemas/refund'
-export { reviewSchema } from './schemas/review'
-export { setupIntentsSchema } from './schemas/setup_intents'
-export { subscriptionItemSchema } from './schemas/subscription_item'
-export { subscriptionScheduleSchema } from './schemas/subscription_schedules'
-export { subscriptionSchema } from './schemas/subscription'
-export { taxIdSchema } from './schemas/tax_id'
+export { activeEntitlementSchema } from './streams/active_entitlement'
+export { chargeSchema } from './streams/charge'
+export { checkoutSessionLineItemSchema } from './streams/checkout_session_line_items'
+export { checkoutSessionSchema, checkoutSessionDeletedSchema } from './streams/checkout_sessions'
+export { creditNoteSchema } from './streams/credit_note'
+export { customerSchema, customerDeletedSchema } from './streams/customer'
+export { disputeSchema } from './streams/dispute'
+export { earlyFraudWarningSchema } from './streams/early_fraud_warning'
+export { featureSchema } from './streams/feature'
+export { invoiceSchema } from './streams/invoice'
+export { managedWebhookSchema } from './streams/managed_webhook'
+export { paymentIntentSchema } from './streams/payment_intent'
+export { paymentMethodsSchema } from './streams/payment_methods'
+export { planSchema } from './streams/plan'
+export { priceSchema } from './streams/price'
+export { productSchema } from './streams/product'
+export { refundSchema } from './streams/refund'
+export { reviewSchema } from './streams/review'
+export { setupIntentsSchema } from './streams/setup_intents'
+export { subscriptionItemSchema } from './streams/subscription_item'
+export { subscriptionScheduleSchema } from './streams/subscription_schedules'
+export { subscriptionSchema } from './streams/subscription'
+export { taxIdSchema } from './streams/tax_id'

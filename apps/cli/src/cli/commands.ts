@@ -5,9 +5,11 @@ import dotenv from 'dotenv'
 import { type PoolConfig } from 'pg'
 import { loadConfig, type CliOptions, type ListenMode } from './config'
 import { StripeSync } from '../stripeSync'
+import { Client as PgClient } from 'pg'
 import { runMigrations } from '@stripe/destination-postgres'
 import {
   createStripeWebSocketClient,
+  applyStripeSchema,
   type StripeWebSocketClient,
   type StripeWebhookEvent,
   type StripeObject,
@@ -150,10 +152,22 @@ export async function migrateCommand(options: CliOptions): Promise<void> {
     try {
       await runMigrations({
         databaseUrl,
-        stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
         schemaName,
         syncTablesSchemaName,
       })
+
+      const client = new PgClient({ connectionString: databaseUrl })
+      try {
+        await client.connect()
+        await applyStripeSchema(client, {
+          stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+          schemaName,
+          syncTablesSchemaName,
+        })
+      } finally {
+        await client.end()
+      }
+
       console.log(chalk.green('✓ Migrations completed successfully'))
     } catch (migrationError) {
       // Migration failed
@@ -394,10 +408,21 @@ export async function fullSyncCommand(
       const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME ?? undefined
       await runMigrations({
         databaseUrl: config.databaseUrl,
-        stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
         schemaName,
         syncTablesSchemaName,
       })
+
+      const client = new PgClient({ connectionString: config.databaseUrl })
+      try {
+        await client.connect()
+        await applyStripeSchema(client, {
+          stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
+          schemaName,
+          syncTablesSchemaName,
+        })
+      } finally {
+        await client.end()
+      }
     } catch (migrationError) {
       console.error(chalk.red('Failed to run migrations:'))
       console.error(

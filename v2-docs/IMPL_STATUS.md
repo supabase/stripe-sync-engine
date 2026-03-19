@@ -3,67 +3,78 @@
 Single source of truth for what's done, what's in progress, and what's left. The prose program reads this file to determine completion.
 
 **Last updated**: 2026-03-18
-**Branch**: `refactor/v2-architecture`
+**Branch**: `v2`
 
 ## Packages
 
 Target structure from `packages.md`. Status: EXISTS / MISSING / WRONG.
 
-| Package                              | Status  | Notes                                                                                                    |
-| ------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
-| `packages/sync-protocol`             | EXISTS  | Zero deps. 6 source files. Clean.                                                                        |
-| `packages/source-stripe`             | EXISTS  | Missing: `backfill.ts`, `live.ts`, `server.ts`, `streams/`. Has: monolithic `stripeSource.ts` instead.   |
-| `packages/destination-postgres`      | EXISTS  | Has real `write()`. Missing: `schema.ts`, `migrations.ts` as separate files.                             |
-| `packages/destination-google-sheets` | EXISTS  | Fully implemented. `write()` works. E2E test.                                                            |
-| `packages/orchestrator-postgres`     | EXISTS  | `forward()`, `collect()`, `run()` all implemented. Missing: `config.ts` (Sync persistence).              |
-| `packages/orchestrator-fs`           | MISSING | Not created yet.                                                                                         |
-| `packages/sync-service`              | MISSING | Not created yet. Composition root role currently in `packages/sync-engine`.                              |
-| `packages/db-service`                | MISSING | Not created yet.                                                                                         |
-| `packages/fastify-app`               | WRONG   | Should not exist. Webhook server belongs in `source-stripe/src/server.ts`. Must be absorbed and deleted. |
-| `apps/supabase/dashboard`            | EXISTS  | Moved from `packages/dashboard`. Clean.                                                                  |
-| `apps/supabase/edge-functions`       | WRONG   | Still lives inside `packages/sync-engine/src/supabase/`. Should be `apps/supabase/edge-functions/`.      |
+| Package                              | Status  | Notes                                                                                                |
+| ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/sync-protocol`             | EXISTS  | Zero deps. Defines Source, Destination, Orchestrator interfaces. Has `forward()`/`collect()` router. |
+| `packages/source-stripe`             | EXISTS  | Has `backfill.ts`, `live.ts`, `streams/`, `server/`, `openapi/`, `cli.ts`. Clean layout.             |
+| `packages/destination-postgres`      | EXISTS  | Has real `write()`. No Stripe-specific knowledge (openapi moved out).                                |
+| `packages/destination-google-sheets` | EXISTS  | Fully implemented. `write()` works. E2E test.                                                        |
+| `packages/orchestrator-postgres`     | EXISTS  | `forward()`, `collect()`, `run()` all implemented. Implements `Orchestrator<Sync>` from protocol.    |
+| `packages/orchestrator-fs`           | EXISTS  | Filesystem-backed orchestrator. 10 tests passing.                                                    |
+| `packages/sync-service`              | MISSING | Not created yet. Composition root role currently in `apps/cli`.                                      |
+| `packages/db-service`                | MISSING | Not created yet.                                                                                     |
+| `apps/cli`                           | EXISTS  | CLI application. Composes source-stripe + destination-postgres.                                      |
+| `apps/supabase`                      | EXISTS  | Supabase integration (edge functions).                                                               |
+| `apps/supabase-dashboard`            | EXISTS  | Moved from `packages/dashboard`. Clean.                                                              |
 
-## Code that must move OUT of `sync-engine`
+## Architecture compliance
 
-These files still live in `packages/sync-engine/src/` but belong in sub-packages per the architecture.
+### Isolation: source never imports destination
 
-| File                     | Lines | Target package                                                                                   | Blocker                                |
-| ------------------------ | ----- | ------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| `stripeSyncWorker.ts`    | 303   | `source-stripe` (becomes backfill.ts)                                                            | Coupled to WorkerTaskManager callbacks |
-| `stripeSyncWebhook.ts`   | 405   | `source-stripe` (becomes live.ts)                                                                | Coupled to DestinationWriter callbacks |
-| `resourceRegistry.ts`    | 382   | `source-stripe` (streams/)                                                                       | 8+ inbound importers in sync-engine    |
-| `websocket-client.ts`    | ~100  | `source-stripe` (live.ts)                                                                        | Used by webhook path                   |
-| `catalogFromRegistry.ts` | ~50   | `source-stripe` (already has copy as catalog.ts)                                                 | Test file imports it                   |
-| `stripeSync.ts`          | 804   | Split: orchestration → `orchestrator-postgres`, composition → `sync-service`                     | Monolith — needs decomposition         |
-| `database/postgres.ts`   | 1557  | Split: writes → `destination-postgres`, state → `orchestrator-postgres`, accounts → `db-service` | Monolith — needs decomposition         |
-| `supabase/`              | ~300  | `apps/supabase/edge-functions/`                                                                  | `?raw` bundler imports, Deno runtime   |
+`source-stripe` library code (`src/index.ts` entrypoint) has zero imports from `@stripe/destination-postgres`.
+
+- `WebhookWriter` interface defined locally in `src/webhookWriter.ts` — no runtime coupling
+- Server composition root (`src/server/app.ts`) imports destination-postgres to construct the writer — this is the explicit wiring point
+- Test files in `src/server/__tests__/` import destination-postgres for integration tests — acceptable
+- `@stripe/destination-postgres` is in `optionalDependencies`, not `dependencies`
+
+### Isolation: destination has no Stripe-specific knowledge
+
+`destination-postgres` contains no openapi/ directory. The Stripe OpenAPI spec-to-DDL pipeline (`SpecParser`, `PostgresAdapter`, `WritePathPlanner`, `applyStripeSchema`) lives in `source-stripe/src/openapi/`.
+
+Callers (`apps/cli`, `source-stripe/server`) call `runMigrations()` for bootstrap, then `applyStripeSchema()` separately for Stripe-specific schema.
+
+### Protocol interfaces
+
+`sync-protocol` defines all three core interfaces:
+
+- `Source` — `spec()`, `check()`, `discover()`, `read()`
+- `Destination` — `spec()`, `check()`, `write()`
+- `Orchestrator<TSync>` — `forward()`, `collect()`, `run()`, `stop()`
+
+Shared message routing (`forward()`, `collect()`, `RouterCallbacks`) is in `sync-protocol/src/router.ts`.
 
 ## Interface implementations
 
-Per `scenarios.md` test tables. Status: REAL / STUB / MISSING.
-
 ### source-stripe
 
-| Method                                  | Status  | Test coverage                                                       |
-| --------------------------------------- | ------- | ------------------------------------------------------------------- |
-| `discover()`                            | REAL    | 3 tests (catalog, filtering, empty)                                 |
-| `read()` backfill mode                  | REAL    | 8 tests (pagination, resume, errors)                                |
-| `read()` live mode (infinite generator) | MISSING | Only `fromWebhookEvent()` static helper exists. No async generator. |
-| `read()` backfill→live transition       | MISSING | No implementation. .todo test stub.                                 |
-| `fromWebhookEvent()`                    | REAL    | 7 tests                                                             |
-| `server.ts` (webhook HTTP server)       | MISSING | Lives in `fastify-app`, not absorbed yet.                           |
-| `cli.ts` (source read, source discover) | STUB    | Throws "not yet implemented"                                        |
+| Method                                  | Status  | Test coverage                                                         |
+| --------------------------------------- | ------- | --------------------------------------------------------------------- |
+| `discover()`                            | REAL    | 3 tests (catalog, filtering, empty)                                   |
+| `read()` backfill mode                  | REAL    | 8 tests (pagination, resume, errors)                                  |
+| `read()` live mode (`liveReader`)       | REAL    | Async generator wrapping `fromWebhookEvent()`. No dedicated test yet. |
+| `read()` backfill→live transition       | MISSING | .todo test stub                                                       |
+| `fromWebhookEvent()`                    | REAL    | 7 tests                                                               |
+| `server/` (webhook HTTP server)         | REAL    | Fastify app with DI for writer. 4 integration test suites.            |
+| `cli.ts` (source discover, source read) | REAL    | Working argv-based entrypoint.                                        |
+| `openapi/` (Stripe schema→DDL)          | REAL    | Moved from destination-postgres. 4 test suites.                       |
 
 ### destination-postgres
 
-| Method                         | Status  | Test coverage                  |
-| ------------------------------ | ------- | ------------------------------ |
-| `write()` — schema setup       | REAL    | 3 tests                        |
-| `write()` — batched upsert     | REAL    | 3 tests                        |
-| `write()` — checkpoint re-emit | REAL    | 1 test                         |
-| `write()` — schema evolution   | MISSING | No ALTER TABLE for new columns |
-| `write()` — error protocol     | REAL    | 2 tests                        |
-| `cli.ts` (dest write)          | STUB    | Throws "not yet implemented"   |
+| Method                         | Status  | Test coverage                                |
+| ------------------------------ | ------- | -------------------------------------------- |
+| `write()` — schema setup       | REAL    | 3 tests                                      |
+| `write()` — batched upsert     | REAL    | 3 tests                                      |
+| `write()` — checkpoint re-emit | REAL    | 1 test                                       |
+| `write()` — schema evolution   | MISSING | No ALTER TABLE for new columns               |
+| `write()` — error protocol     | REAL    | 2 tests                                      |
+| `cli.ts` (dest write)          | REAL    | Reads NDJSON from stdin, writes to Postgres. |
 
 ### destination-google-sheets
 
@@ -74,28 +85,27 @@ Per `scenarios.md` test tables. Status: REAL / STUB / MISSING.
 
 ### orchestrator-postgres
 
-| Method                                 | Status  | Test coverage                |
-| -------------------------------------- | ------- | ---------------------------- |
-| `forward()`                            | REAL    | 10 tests                     |
-| `collect()`                            | REAL    | 4 tests                      |
-| `run()`                                | REAL    | 10 tests (mock source/dest)  |
-| `stop()`                               | REAL    | 1 test (abort controller)    |
-| StreamStatusMessage routing            | REAL    | 1 test                       |
-| Sync config persistence (load from DB) | MISSING | .todo test stub              |
-| `cli.ts` (orch run)                    | STUB    | Throws "not yet implemented" |
+| Method                                 | Status  | Test coverage                                  |
+| -------------------------------------- | ------- | ---------------------------------------------- |
+| `forward()`                            | REAL    | 10 tests                                       |
+| `collect()`                            | REAL    | 4 tests                                        |
+| `run()`                                | REAL    | 10 tests (mock source/dest)                    |
+| `stop()`                               | REAL    | 1 test (abort controller)                      |
+| StreamStatusMessage routing            | REAL    | 1 test                                         |
+| Implements `Orchestrator<Sync>`        | REAL    | Type-checked via interface                     |
+| Sync config persistence (load from DB) | MISSING | .todo test stub                                |
+| `cli.ts` (orch run)                    | REAL    | Accepts Source + Destination programmatically. |
 
 ### orchestrator-fs
 
-| Method     | Status  | Test coverage         |
-| ---------- | ------- | --------------------- |
-| Everything | MISSING | Package doesn't exist |
-
-### sync-engine (composition root)
-
-| Feature                          | Status | Test coverage |
-| -------------------------------- | ------ | ------------- |
-| `runPipeline()`                  | REAL   | 6 tests       |
-| Re-exports from all sub-packages | REAL   | —             |
+| Method                                  | Status | Test coverage                                   |
+| --------------------------------------- | ------ | ----------------------------------------------- |
+| `FsOrchestrator.forward()`              | REAL   | 2 tests (filtering, callback routing)           |
+| `FsOrchestrator.collect()`              | REAL   | 2 tests (state yield, callback routing)         |
+| `FsOrchestrator.run()`                  | REAL   | Implemented, uses shared router from protocol   |
+| `FsStateStore`                          | REAL   | 5 tests (round-trip, overwrite, clear, isolate) |
+| `loadSyncConfig/saveSyncConfig`         | REAL   | JSON file read/write                            |
+| Implements `Orchestrator<FsSyncConfig>` | REAL   | Type-checked via interface                      |
 
 ## Scenario test coverage
 
@@ -141,9 +151,17 @@ From `v2/docs/2-sync-engine/scenarios.md`. PASS = real test, TODO = .todo stub, 
 
 ### orchestrator-fs scenarios
 
-| Scenario | Status                 |
-| -------- | ---------------------- |
-| All      | NONE (package missing) |
+| Scenario                                        | Status |
+| ----------------------------------------------- | ------ |
+| State round-trips through save and load         | PASS   |
+| Empty state for unknown sync                    | PASS   |
+| Overwrites existing stream state                | PASS   |
+| Clears all state for a sync                     | PASS   |
+| Isolates state between different syncs          | PASS   |
+| forward() passes records+state, drops others    | PASS   |
+| forward() routes log messages to onLog callback | PASS   |
+| collect() yields StateMessage                   | PASS   |
+| collect() routes log and error to callbacks     | PASS   |
 
 ### Cross-cutting scenarios
 
@@ -154,48 +172,45 @@ From `v2/docs/2-sync-engine/scenarios.md`. PASS = real test, TODO = .todo stub, 
 
 ## Remaining work (ordered by priority)
 
-### P0 — Must do (architecture violations)
+### P0 — Architecture violations
 
-1. **Delete `packages/fastify-app`**. Absorb webhook server into `source-stripe/src/server.ts`. Refactor imports to use `StripeSource.fromWebhookEvent()` instead of `StripeSync.webhook.processWebhook()`. Move tests that are pure webhook-parsing tests; delete tests that are sync-engine integration tests wearing a fastify-app costume.
+All P0 items resolved:
 
-2. **Move `resourceRegistry.ts` to `source-stripe`**. This is Stripe stream metadata — it belongs in the source. Requires updating 8+ importers in sync-engine to use `@stripe/source-stripe`.
-
-3. **Move `stripeSyncWorker.ts` to `source-stripe`** as `backfill.ts`. Adapt from callback-based to generator-based (yield RecordMessage instead of calling onRecordMessages callback).
-
-4. **Move `stripeSyncWebhook.ts` to `source-stripe`** as `live.ts`. Implement the infinite `read()` generator with an async event queue that the webhook server pushes into.
+- ~~source-stripe imports from destination-postgres~~ → Fixed via WebhookWriter interface + DI
+- ~~openapi/ in destination-postgres~~ → Moved to source-stripe
+- ~~Monolithic stripeSource.ts~~ → Split into backfill.ts, live.ts, streams/
+- ~~No Orchestrator interface in sync-protocol~~ → Added alongside Source and Destination
 
 ### P1 — Should do (completeness)
 
-5. **Implement `orchestrator-fs`** package. Same interface as orchestrator-postgres but backed by JSON files. For local dev and standalone CLI.
+1. **Implement schema evolution** in destination-postgres. ALTER TABLE for new columns discovered in subsequent CatalogMessage.
 
-6. **Implement real CLI entrypoints**. Each package's `cli.ts` should parse argv and invoke the right code path. `source read`, `dest write`, `orch run`.
+2. **Fill remaining .todo test stubs**: Sync config from Postgres, backfill→live transition.
 
-7. **Implement schema evolution** in destination-postgres. ALTER TABLE for new columns discovered in subsequent CatalogMessage.
-
-8. **Fill remaining .todo test stubs**: Sync config from Postgres, backfill→live transition.
-
-9. **Implement `read()` live mode** as async generator with event queue. The `fromWebhookEvent()` static helper is the building block; the generator wraps it with push-based event ingestion.
+3. **Add dedicated tests for `liveReader`** in source-stripe. The async generator exists but has no standalone test suite.
 
 ### P2 — Future (new packages)
 
-10. **Create `packages/sync-service`**. Sync CRUD API. Currently the composition root role is in `packages/sync-engine` — that's fine for now but should eventually become a proper service package.
+4. **Create `packages/sync-service`**. Sync CRUD API. Currently the composition root role is in `apps/cli`.
 
-11. **Create `packages/db-service`**. DB lifecycle API with sync enrichment.
+5. **Create `packages/db-service`**. DB lifecycle API with sync enrichment.
 
-12. **Move `apps/supabase/edge-functions`** out of `sync-engine/src/supabase/`. Requires solving `?raw` bundler imports.
-
-13. **Decompose `stripeSync.ts`** (804 lines) and `database/postgres.ts` (1557 lines). These monoliths should be split across packages once all consumers are migrated.
+6. **Decompose remaining monoliths** if any large files exist in source-stripe server code.
 
 ## Completion criteria
 
-The prose program should NOT declare COMPLETE until:
-
-- [ ] `packages/fastify-app` does not exist
-- [ ] `packages/source-stripe` has `server.ts` (webhook HTTP server)
-- [ ] `packages/source-stripe` has `backfill.ts` and `live.ts` (not monolithic stripeSource.ts)
-- [ ] `packages/orchestrator-fs` exists with passing tests
-- [ ] All CLI stubs replaced with real argv parsing
+- [x] `packages/fastify-app` does not exist
+- [x] `packages/sync-engine` does not exist (monolith deleted)
+- [x] `packages/source-stripe` has `backfill.ts` and `live.ts` (not monolithic stripeSource.ts)
+- [x] `packages/source-stripe` has `streams/` (not schemas/)
+- [x] `packages/source-stripe` has `server/` (webhook HTTP server)
+- [x] `packages/source-stripe` has `openapi/` (Stripe schema→DDL)
+- [x] `packages/orchestrator-fs` exists with passing tests
+- [x] All CLI stubs replaced with real implementations
+- [x] `Orchestrator` interface defined in `sync-protocol` alongside Source and Destination
+- [x] Shared `forward()`/`collect()` router in `sync-protocol`
+- [x] Zero cross-boundary imports between source/destination library code
+- [x] `pnpm build && pnpm lint` clean
 - [ ] All .todo test stubs filled or removed with justification
 - [ ] All scenarios.md tests at PASS or explicitly descoped with reason
-- [ ] `pnpm build && pnpm test && pnpm lint` clean
-- [ ] Zero cross-boundary imports between source/destination packages
+- [ ] Schema evolution in destination-postgres

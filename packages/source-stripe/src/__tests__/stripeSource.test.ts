@@ -10,7 +10,7 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
-import { StripeSource } from '../stripeSource'
+import { StripeSource } from '../backfill'
 import type { ResourceConfig } from '../types'
 
 function makeConfig(

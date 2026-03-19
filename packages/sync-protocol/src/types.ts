@@ -137,6 +137,16 @@ export interface StreamStatusMessage {
   status: 'started' | 'running' | 'complete' | 'incomplete'
 }
 
+// MARK: - Sync config
+
+/** Configuration for a sync run. Passed to `runSync()`. */
+export interface SyncConfig {
+  source_config: Record<string, unknown>
+  destination_config: Record<string, unknown>
+  streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
+  state?: Record<string, unknown>
+}
+
 // MARK: - Message unions
 
 /** The subset of messages the destination receives. */

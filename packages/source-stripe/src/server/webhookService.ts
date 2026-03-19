@@ -4,21 +4,18 @@
  */
 import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
-import { PostgresDestinationWriter } from '@stripe/destination-postgres'
-import type { DestinationWriter } from '@stripe/destination-postgres'
 import { fromRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 import { StripeSyncWebhook, type WebhookConfig } from '../stripeSyncWebhook'
+import type { WebhookWriter } from '../webhookWriter'
 import { buildResourceRegistry, normalizeStripeObjectName, getTableName } from '../resourceRegistry'
 import type { ResourceConfig, Logger, RevalidateEntity } from '../types'
 import { expandLists, syncSubscriptionItems, upsertSubscriptionItems } from '../transforms'
 import { hashApiKey } from '../utils/hashApiKey'
-import type { PoolConfig } from 'pg'
 import pkg from '../../package.json' with { type: 'json' }
 
 export interface WebhookServiceConfig {
   stripeSecretKey: string
   stripeWebhookSecret?: string
-  databaseUrl: string
   stripeApiVersion?: string
   stripeAccountId?: string
   partnerId?: string
@@ -28,7 +25,6 @@ export interface WebhookServiceConfig {
   backfillRelatedEntities?: boolean
   revalidateObjectsViaStripeApi?: Array<RevalidateEntity>
   logger?: Logger
-  poolConfig?: PoolConfig
 }
 
 export interface WebhookService {
@@ -37,7 +33,7 @@ export interface WebhookService {
   /** The underlying Stripe client (useful for mocking in tests). */
   stripe: Stripe
   /** The underlying destination writer (useful for raw queries in tests). */
-  writer: PostgresDestinationWriter
+  writer: WebhookWriter & { pool: { end(): Promise<void> } }
   /** Convenience: upsert raw Stripe objects. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   upsertAny(
@@ -62,9 +58,12 @@ export interface WebhookService {
 
 /**
  * Creates a webhook service — a lightweight alternative to StripeSync for webhook-only workloads.
- * Composes StripeSyncWebhook + PostgresDestinationWriter + ResourceRegistry directly.
+ * Composes StripeSyncWebhook + ResourceRegistry directly with an injected writer.
  */
-export async function createWebhookService(config: WebhookServiceConfig): Promise<WebhookService> {
+export async function createWebhookService(
+  config: WebhookServiceConfig,
+  writer: WebhookWriter & { pool: { end(): Promise<void> } }
+): Promise<WebhookService> {
   const dataSchema = config.schemaName ?? 'stripe'
   const syncSchema = config.syncTablesSchemaName ?? dataSchema
   const logger = config.logger ?? console
@@ -83,20 +82,7 @@ export async function createWebhookService(config: WebhookServiceConfig): Promis
     },
   })
 
-  // 2. Create destination writer (pool + queries)
-  const poolConfig: PoolConfig = {
-    max: 10,
-    keepAlive: true,
-    connectionString: config.databaseUrl,
-    ...config.poolConfig,
-  }
-  const writer = new PostgresDestinationWriter({
-    schema: dataSchema,
-    syncSchema,
-    poolConfig,
-  })
-
-  // 3. Resolve account ID
+  // 2. Resolve account ID
   let accountId: string
   if (config.stripeAccountId) {
     accountId = config.stripeAccountId
@@ -122,10 +108,10 @@ export async function createWebhookService(config: WebhookServiceConfig): Promis
     )
   }
 
-  // 4. Build resource registry
+  // 3. Build resource registry
   const resourceRegistry = buildResourceRegistry(stripe)
 
-  // 5. Create upsertAny for webhook events
+  // 4. Create upsertAny for webhook events
   const quotedSyncSchema = `"${syncSchema.replaceAll('"', '""')}"`
   const autoExpandLists = config.autoExpandLists ?? false
 
@@ -205,10 +191,10 @@ export async function createWebhookService(config: WebhookServiceConfig): Promis
     return rows
   }
 
-  // 6. Create webhook handler
+  // 5. Create webhook handler
   const webhookHandler = new StripeSyncWebhook({
     stripe,
-    writer: writer as DestinationWriter,
+    writer,
     config: {
       stripeWebhookSecret: config.stripeWebhookSecret,
       schemaName: dataSchema,

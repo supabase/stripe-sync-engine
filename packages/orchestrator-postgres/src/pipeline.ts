@@ -1,21 +1,15 @@
 import type {
   ConfiguredCatalog,
   Destination,
-  DestinationInput,
-  DestinationOutput,
-  Message,
+  Orchestrator,
   Source,
   StateMessage,
 } from '@stripe/sync-protocol'
 
 /**
- * Orchestrator shape required by the pipeline.
- * Duck-typed so we don't couple to PostgresOrchestrator directly.
+ * @deprecated Use `Orchestrator` from `@stripe/sync-protocol` instead.
  */
-export interface PipelineOrchestrator {
-  forward(messages: AsyncIterableIterator<Message>): AsyncIterableIterator<DestinationInput>
-  collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage>
-}
+export type PipelineOrchestrator = Pick<Orchestrator, 'forward' | 'collect'>
 
 /**
  * Compose Source + Destination + Orchestrator into a full sync pipeline.
