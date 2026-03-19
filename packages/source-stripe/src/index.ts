@@ -3,12 +3,60 @@ export type { SourceCliOptions } from './cli'
 export { main as cliMain } from './cli'
 
 // Types
-export type { BaseResourceConfig, StripeListResourceConfig, ResourceConfig } from './types'
+export type {
+  BaseResourceConfig,
+  StripeListResourceConfig,
+  ResourceConfig,
+  Logger,
+  RevalidateEntity,
+  ProcessNextResult,
+} from './types'
+export { SUPPORTED_WEBHOOK_EVENTS } from './types'
 export type { EntitySchema } from './schemas/types'
 export type { Source } from '@stripe/sync-protocol'
 
 // Source
 export { StripeSource } from './stripeSource'
+
+// Resource Registry
+export {
+  buildResourceRegistry,
+  normalizeStripeObjectName,
+  getTableName,
+  getResourceConfigFromId,
+  getResourceFromPrefix,
+  CORE_SYNC_OBJECTS,
+  SYNC_OBJECTS,
+  REVALIDATE_ENTITIES,
+  RESOURCE_TABLE_NAME_MAP,
+  RUNTIME_REQUIRED_TABLES,
+  STRIPE_OBJECT_TO_SYNC_OBJECT_ALIASES,
+  PREFIX_RESOURCE_MAP,
+} from './resourceRegistry'
+export type {
+  StripeObject,
+  CoreSyncObject,
+  SyncObjectName,
+  RevalidateEntityName,
+} from './resourceRegistry'
+
+// Webhook
+export { StripeSyncWebhook } from './stripeSyncWebhook'
+export type { StripeSyncWebhookDeps, WebhookConfig } from './stripeSyncWebhook'
+
+// Worker
+export { StripeSyncWorker } from './stripeSyncWorker'
+export type { WorkerTaskManager, SyncTask, RunKey, WorkerConfig } from './stripeSyncWorker'
+
+// WebSocket
+export { createStripeWebSocketClient } from './websocket-client'
+export type {
+  StripeWebSocketClient,
+  StripeWebSocketOptions,
+  WebhookProcessingResult,
+  WebhookResponse,
+  StripeWebhookEvent,
+} from './websocket-client'
 
 // Catalog
 export { catalogFromRegistry } from './catalog'
@@ -23,6 +71,7 @@ export {
 
 // Utils
 export { expandEntity } from './utils/expandEntity'
+export { hashApiKey } from './utils/hashApiKey'
 
 // Schemas
 export { activeEntitlementSchema } from './schemas/active_entitlement'

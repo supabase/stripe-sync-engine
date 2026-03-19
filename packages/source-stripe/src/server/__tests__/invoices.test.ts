@@ -1,12 +1,13 @@
 import type Stripe from 'stripe'
-import { StripeSync, runMigrations } from '@stripe/sync-engine'
+import { runMigrations } from '@stripe/destination-postgres'
+import { createWebhookService, type WebhookService } from '../webhookService'
 import { vitest, beforeAll, describe, test, expect } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
 import { logger } from '../logger'
 import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
-let stripeSync: StripeSync | undefined
+let stripeSync: WebhookService | undefined
 const TEST_ACCOUNT_ID = 'acct_test_account'
 
 ensureTestMerchantConfig()
@@ -26,20 +27,22 @@ beforeAll(async () => {
     logger,
   })
 
-  stripeSync = await StripeSync.create({
-    ...primaryMerchantConfig,
+  stripeSync = await createWebhookService({
+    stripeSecretKey: primaryMerchantConfig.stripeSecretKey,
+    stripeWebhookSecret: primaryMerchantConfig.stripeWebhookSecret,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
     stripeApiVersion: config.stripeApiVersion,
     stripeAccountId: TEST_ACCOUNT_ID,
+    autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
+    backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
     revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
-    maxPostgresConnections: config.maxPostgresConnections,
     ...(config.partnerId ? { partnerId: config.partnerId } : {}),
     logger,
     poolConfig: {
       connectionString: primaryMerchantConfig.databaseUrl,
     },
   })
-  const stripe = Object.assign(stripeSync.stripe, mockStripe)
-  vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
+  Object.assign(stripeSync.stripe, mockStripe)
 })
 
 describe('invoices', () => {
@@ -58,7 +61,7 @@ describe('invoices', () => {
 
     await stripeSync.upsertAny(invoices, TEST_ACCOUNT_ID, false)
 
-    const lineItems = await stripeSync.postgresClient.query(
+    const lineItems = await stripeSync.query(
       `select lines->'data' as lines from stripe.invoices where id = 'in_xyz' limit 1`
     )
     expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }])
@@ -79,7 +82,7 @@ describe('invoices', () => {
 
     await stripeSync.upsertAny(invoices, TEST_ACCOUNT_ID, false)
 
-    const lineItems = await stripeSync.postgresClient.query(
+    const lineItems = await stripeSync.query(
       `select lines->'data' as lines from stripe.invoices where id = 'in_xyz2' limit 1`
     )
     expect(lineItems.rows[0].lines).toEqual([{ id: 'li_123' }, { id: 'li_1234' }])

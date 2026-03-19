@@ -1,5 +1,7 @@
 import type {
   CatalogMessage,
+  CheckResult,
+  ConnectorSpecification,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -31,6 +33,28 @@ export class PostgresDestination implements Destination {
     this.writer = _writerForTesting ?? new PostgresDestinationWriter(config)
   }
 
+  spec(): ConnectorSpecification {
+    return {
+      connection_specification: {
+        type: 'object',
+        required: ['connectionString'],
+        properties: {
+          connectionString: { type: 'string' },
+          schema: { type: 'string', default: 'stripe' },
+        },
+      },
+    }
+  }
+
+  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+    try {
+      await this.writer.query('SELECT 1')
+      return { status: 'succeeded' }
+    } catch (err) {
+      return { status: 'failed', message: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
   /** Run `CREATE SCHEMA IF NOT EXISTS` for the configured schema. */
   private async ensureSchema(): Promise<void> {
     await this.writer.query(`CREATE SCHEMA IF NOT EXISTS "${this.config.schema}"`)
@@ -51,6 +75,7 @@ export class PostgresDestination implements Destination {
   }
 
   async *write(
+    _config: Record<string, unknown>,
     _catalog: CatalogMessage,
     messages: AsyncIterableIterator<DestinationInput>
   ): AsyncIterableIterator<DestinationOutput> {

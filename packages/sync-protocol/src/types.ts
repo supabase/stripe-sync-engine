@@ -34,6 +34,30 @@ export interface Stream {
   metadata?: Record<string, unknown>
 }
 
+// MARK: - Configured catalog
+
+/** A stream selected by the user with sync settings applied. */
+export interface ConfiguredStream {
+  stream: Stream
+
+  /** How the source reads this stream. */
+  sync_mode: 'full_refresh' | 'incremental'
+
+  /** How the destination writes this stream. */
+  destination_sync_mode: 'append' | 'overwrite' | 'append_dedup'
+
+  /** Field path used as the cursor for incremental syncs. */
+  cursor_field?: string[]
+}
+
+/**
+ * The user's selected and configured streams.
+ * Persisted on the Sync resource. Passed to read() and write().
+ */
+export interface ConfiguredCatalog {
+  streams: ConfiguredStream[]
+}
+
 // MARK: - Connector specification
 
 /** JSON Schema describing the configuration a connector requires. */
@@ -77,7 +101,7 @@ export interface StateMessage {
   data: unknown
 }
 
-/** Catalog of available streams. Emitted by a source during discovery. */
+/** Catalog of available streams. Emitted by a source during discover(). */
 export interface CatalogMessage {
   type: 'catalog'
   streams: Stream[]

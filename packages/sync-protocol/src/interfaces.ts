@@ -15,12 +15,12 @@
 import type {
   CatalogMessage,
   CheckResult,
+  ConfiguredCatalog,
   ConnectorSpecification,
   DestinationInput,
   DestinationOutput,
   Message,
   StateMessage,
-  Stream,
 } from './types'
 
 // MARK: - Source
@@ -42,9 +42,7 @@ import type {
  *   discover -> run source process, collect CatalogMessage from stdout
  *   read    -> run source process, stream Message lines from stdout
  */
-export interface Source<
-  TConfig extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface Source<TConfig extends Record<string, unknown> = Record<string, unknown>> {
   /** Return the JSON Schema for this connector's configuration. */
   spec(): ConnectorSpecification
 
@@ -55,11 +53,7 @@ export interface Source<
   discover(config: TConfig): Promise<CatalogMessage>
 
   /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
-  read(
-    config: TConfig,
-    streams: Stream[],
-    state?: StateMessage[],
-  ): AsyncIterableIterator<Message>
+  read(config: TConfig, catalog: ConfiguredCatalog, state?: StateMessage[]): AsyncIterableIterator<Message>
 }
 
 // MARK: - Destination
@@ -84,9 +78,7 @@ export interface Source<
  *   destination write --config config.json --catalog catalog.json
  *   Reads DestinationInput lines from stdin, emits DestinationOutput on stdout.
  */
-export interface Destination<
-  TConfig extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface Destination<TConfig extends Record<string, unknown> = Record<string, unknown>> {
   /** Return the JSON Schema for this connector's configuration. */
   spec(): ConnectorSpecification
 
@@ -100,7 +92,7 @@ export interface Destination<
    */
   write(
     config: TConfig,
-    catalog: CatalogMessage,
-    messages: AsyncIterableIterator<DestinationInput>,
+    catalog: ConfiguredCatalog,
+    messages: AsyncIterableIterator<DestinationInput>
   ): AsyncIterableIterator<DestinationOutput>
 }

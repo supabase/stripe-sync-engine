@@ -1,8 +1,7 @@
 import Stripe from 'stripe'
 import { ProcessNextResult, ResourceConfig, StripeSyncConfig } from './types'
-import { SigmaSyncProcessor } from './sigma/sigmaSyncProcessor'
 import { RunKey } from './stripeSync'
-import { toRecordMessage, type RecordMessage, type StateMessage } from './protocol'
+import { toRecordMessage, type RecordMessage, type StateMessage } from '@stripe/sync-protocol'
 
 export interface WorkerTaskManager {
   claimNextTask(
@@ -58,11 +57,9 @@ export class StripeSyncWorker {
   constructor(
     private readonly stripe: Stripe,
     private readonly config: StripeSyncConfig,
-    private readonly sigma: SigmaSyncProcessor,
     private readonly taskManager: WorkerTaskManager,
     private readonly accountId: string,
     private readonly resourceRegistry: Record<string, ResourceConfig>,
-    private readonly sigmaRegistry: Record<string, ResourceConfig>,
     private readonly runKey: RunKey,
     private readonly upsertAny: (
       messages: RecordMessage[],
@@ -142,8 +139,6 @@ export class StripeSyncWorker {
     created_gte?: number | null,
     created_lte?: number | null
   ) {
-    if (config.sigma)
-      throw new Error(`Sigma sync not supported in worker (config: ${JSON.stringify(config)})`)
     const listParams: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam } = {
       limit: 100,
     }
@@ -175,17 +170,6 @@ export class StripeSyncWorker {
     if (!claimed) return null
 
     const object = claimed.object
-
-    const config = this.getConfigForTaskObject(object)
-    if (config?.sigma) {
-      return {
-        object,
-        cursor: claimed.cursor,
-        pageCursor: claimed.pageCursor,
-        created_gte: 0,
-        created_lte: 0,
-      }
-    }
 
     return {
       object,
@@ -244,35 +228,6 @@ export class StripeSyncWorker {
     const config = this.getConfigForTaskObject(task.object)
     if (!config) throw new Error(`Unsupported object type for processSingleTask: ${task.object}`)
 
-    // Sigma resources are processed via the SigmaSyncProcessor
-    if (config.sigma) {
-      if (!this.config.enableSigma) {
-        throw new Error(`Sigma sync is disabled. Enable sigma to sync ${task.object}.`)
-      }
-
-      const result = await this.sigma.fetchOneSigmaPage(
-        this.accountId,
-        task.object,
-        this.runKey.runStartedAt,
-        task.cursor,
-        config.sigma
-      )
-
-      // fetchOneSigmaPage handles progress, cursor advancement, and completion internally.
-      // If there are more pages, release the task back to pending for re-claiming.
-      if (result.hasMore) {
-        await this.taskManager.releaseObjectSync(
-          this.accountId,
-          this.runKey.runStartedAt,
-          task.object,
-          task.cursor ?? ''
-        )
-      }
-
-      return result
-    }
-
-    // Core Stripe API resources
     const { data, has_more } = await this.fetchOnePage(
       task.object,
       task.cursor,
@@ -304,11 +259,6 @@ export class StripeSyncWorker {
   }
 
   private getConfigForTaskObject(taskObject: string): ResourceConfig | undefined {
-    const coreMatch = Object.values(this.resourceRegistry).find(
-      (cfg) => cfg.tableName === taskObject
-    )
-    if (coreMatch) return coreMatch
-
-    return Object.values(this.sigmaRegistry).find((cfg) => cfg.tableName === taskObject)
+    return Object.values(this.resourceRegistry).find((cfg) => cfg.tableName === taskObject)
   }
 }

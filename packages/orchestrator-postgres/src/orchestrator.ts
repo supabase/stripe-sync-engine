@@ -77,7 +77,7 @@ export class PostgresOrchestrator {
    */
   async run(source: Source, destination: Destination): Promise<StateMessage[]> {
     // 1. Discover catalog from source
-    const catalog = await source.discover()
+    const catalog = await source.discover({})
 
     // 2. Load state from Sync.state -> StateMessage[]
     const state = this.loadState()
@@ -86,9 +86,9 @@ export class PostgresOrchestrator {
     const streams = this.getStreams(catalog)
 
     // 4. Compose pipeline: source.read -> forward -> destination.write -> collect
-    const sourceMessages = source.read(streams, state)
+    const sourceMessages = source.read({}, streams, state)
     const forwarded = this.forward(sourceMessages)
-    const destOutput = destination.write(catalog, forwarded)
+    const destOutput = destination.write({}, catalog, forwarded)
     const collected = this.collect(destOutput)
 
     // 5. Drain pipeline, collecting and persisting checkpoints

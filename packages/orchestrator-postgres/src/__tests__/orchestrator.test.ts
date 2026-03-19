@@ -51,13 +51,19 @@ function createMockSource(
     streams: [{ name: 'customers', primary_key: [['id']] }],
   }
   const readSpy = vi.fn(
-    (_streams: Stream[], _state?: StateMessage[]): AsyncIterableIterator<Message> => {
+    (
+      _config: Record<string, unknown>,
+      _streams: Stream[],
+      _state?: StateMessage[]
+    ): AsyncIterableIterator<Message> => {
       return toAsync(messages)
     }
   )
 
   const source: Source = {
-    async discover(): Promise<CatalogMessage> {
+    spec: () => ({ connection_specification: {} }),
+    check: async () => ({ status: 'succeeded' as const }),
+    async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
       return discoverCatalog
     },
     read: readSpy,
@@ -77,7 +83,10 @@ function createMockDestination(): {
   const received: DestinationInput[] = []
 
   const destination: Destination = {
+    spec: () => ({ connection_specification: {} }),
+    check: async () => ({ status: 'succeeded' as const }),
     async *write(
+      _config: Record<string, unknown>,
       _catalog: CatalogMessage,
       messages: AsyncIterableIterator<DestinationInput>
     ): AsyncIterableIterator<DestinationOutput> {
@@ -311,7 +320,7 @@ describe('run()', () => {
 
     // source.read() was called with loaded state
     expect(readSpy).toHaveBeenCalledOnce()
-    const [_streams, stateArg] = readSpy.mock.calls[0]
+    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
     expect(stateArg).toEqual([
       { type: 'state', stream: 'customers', data: { cursor: '2024-06-01' } },
     ])
@@ -338,7 +347,7 @@ describe('run()', () => {
 
     // source.read() was called with only the requested streams from catalog
     expect(readSpy).toHaveBeenCalledOnce()
-    const [streamsArg] = readSpy.mock.calls[0]
+    const [_config, streamsArg] = readSpy.mock.calls[0]
     expect(streamsArg).toHaveLength(2)
     expect(streamsArg.map((s: Stream) => s.name)).toEqual(['customers', 'invoices'])
     // The streams include full catalog metadata (primary_key)
@@ -363,7 +372,7 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [streamsArg] = readSpy.mock.calls[0]
+    const [_config, streamsArg] = readSpy.mock.calls[0]
     expect(streamsArg).toHaveLength(2)
     expect(streamsArg.map((s: Stream) => s.name)).toEqual(['customers', 'invoices'])
   })
@@ -404,10 +413,12 @@ describe('run()', () => {
     // Create a source that yields messages slowly so we can stop mid-stream
     let yieldCount = 0
     const slowSource: Source = {
-      async discover(): Promise<CatalogMessage> {
+      spec: () => ({ connection_specification: {} }),
+      check: async () => ({ status: 'succeeded' as const }),
+      async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
         return catalogMsg
       },
-      async *read(): AsyncIterableIterator<Message> {
+      async *read(_config: Record<string, unknown>): AsyncIterableIterator<Message> {
         for (let i = 0; i < 100; i++) {
           yieldCount++
           yield {
@@ -470,7 +481,7 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [_streams, stateArg] = readSpy.mock.calls[0]
+    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
     expect(stateArg).toHaveLength(2)
     expect(stateArg).toEqual(
       expect.arrayContaining([
@@ -488,7 +499,7 @@ describe('run()', () => {
 
     await orch.run(source, destination)
 
-    const [_streams, stateArg] = readSpy.mock.calls[0]
+    const [_config, _streams, stateArg] = readSpy.mock.calls[0]
     expect(stateArg).toEqual([])
   })
 

@@ -1,7 +1,8 @@
 'use strict'
 import { FastifyInstance } from 'fastify'
 import { createHmac } from 'node:crypto'
-import { PostgresClient, runMigrations, type StripeSync } from '@stripe/sync-engine'
+import { runMigrations } from '@stripe/destination-postgres'
+import { PostgresDestinationWriter } from '@stripe/destination-postgres'
 import { beforeAll, describe, test, expect, afterAll, vitest } from 'vitest'
 import { getConfig } from '../utils/config'
 import { createServer } from '../app'
@@ -26,11 +27,12 @@ const secondaryWebhookSecret = secondaryHost
 
 const unixtime = Math.floor(new Date().getTime() / 1000)
 
-const postgresClient = new PostgresClient({
+const postgresClient = new PostgresDestinationWriter({
   poolConfig: {
     connectionString: primaryMerchantConfig.databaseUrl,
   },
   schema: 'stripe',
+  syncSchema: 'stripe',
 })
 
 describe('POST /webhooks', () => {

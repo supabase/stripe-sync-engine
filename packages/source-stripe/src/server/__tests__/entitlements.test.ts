@@ -1,4 +1,5 @@
-import { StripeSync, runMigrations } from '@stripe/sync-engine'
+import { runMigrations } from '@stripe/destination-postgres'
+import { createWebhookService, type WebhookService } from '../webhookService'
 import { vitest, beforeAll, describe, test, expect, afterAll } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
@@ -6,7 +7,7 @@ import { logger } from '../logger'
 import Stripe from 'stripe'
 import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
-let stripeSync: StripeSync | undefined
+let stripeSync: WebhookService | undefined
 const customerId = 'cus_111'
 
 ensureTestMerchantConfig()
@@ -26,29 +27,27 @@ beforeAll(async () => {
     logger,
   })
 
-  stripeSync = await StripeSync.create({
-    ...primaryMerchantConfig,
+  stripeSync = await createWebhookService({
+    stripeSecretKey: primaryMerchantConfig.stripeSecretKey,
+    stripeWebhookSecret: primaryMerchantConfig.stripeWebhookSecret,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
     stripeApiVersion: config.stripeApiVersion,
     stripeAccountId: 'acct_test_account',
     revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
-    maxPostgresConnections: config.maxPostgresConnections,
     ...(config.partnerId ? { partnerId: config.partnerId } : {}),
     logger,
     poolConfig: {
       connectionString: primaryMerchantConfig.databaseUrl,
     },
   })
-  const stripe = Object.assign(stripeSync.stripe, mockStripe)
-  vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
+  Object.assign(stripeSync.stripe, mockStripe)
 })
 
 afterAll(async () => {
   if (stripeSync) {
     await Promise.all([
-      stripeSync.postgresClient.query(
-        `delete from stripe.active_entitlements where customer = '${customerId}'`
-      ),
-      stripeSync.postgresClient.query(`delete from stripe.customers where id = '${customerId}'`),
+      stripeSync.query(`delete from stripe.active_entitlements where customer = '${customerId}'`),
+      stripeSync.query(`delete from stripe.customers where id = '${customerId}'`),
     ])
   }
 })
@@ -77,13 +76,13 @@ describe('entitlements', () => {
       },
     ]
 
-    await stripeSync.postgresClient.deleteRemovedActiveEntitlements(
+    await stripeSync.writer.deleteRemovedActiveEntitlements(
       customerId,
       activeEntitlements.map((entitlement) => entitlement.id)
     )
     await stripeSync.upsertActiveEntitlements(customerId, activeEntitlements, accountId, false)
 
-    const entitlements = await stripeSync.postgresClient.query(
+    const entitlements = await stripeSync.query(
       `select * from stripe.active_entitlements where customer = '${customerId}'`
     )
 
@@ -124,14 +123,14 @@ describe('entitlements', () => {
       },
     ]
 
-    await stripeSync.postgresClient.deleteRemovedActiveEntitlements(
+    await stripeSync.writer.deleteRemovedActiveEntitlements(
       customerId,
       newActiveEntitlements.map((entitlement) => entitlement.id)
     )
 
     await stripeSync.upsertActiveEntitlements(customerId, newActiveEntitlements, accountId, false)
 
-    const updatedEntitlements = await stripeSync.postgresClient.query(
+    const updatedEntitlements = await stripeSync.query(
       `select * from stripe.active_entitlements where customer = '${customerId}'`
     )
 

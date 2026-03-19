@@ -359,13 +359,11 @@ Deno.serve(async (req) => {
       throw new Error('SUPABASE_DB_URL environment variable is not set')
     }
 
-    const enableSigma = (Deno.env.get('ENABLE_SIGMA') ?? 'false') === 'true'
     const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
     const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
     await runMigrationsFromContent(
       {
         databaseUrl: dbUrl,
-        enableSigma,
         stripeApiVersion: Deno.env.get('STRIPE_API_VERSION') ?? '2020-08-27',
         schemaName,
         syncTablesSchemaName,

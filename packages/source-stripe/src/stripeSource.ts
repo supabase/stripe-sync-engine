@@ -1,5 +1,7 @@
 import type {
   CatalogMessage,
+  CheckResult,
+  ConnectorSpecification,
   ErrorMessage,
   Message,
   RecordMessage,
@@ -23,11 +25,32 @@ import { catalogFromRegistry } from './catalog'
 export class StripeSource implements Source {
   constructor(private readonly registry: Record<string, ResourceConfig>) {}
 
-  async discover(): Promise<CatalogMessage> {
+  spec(): ConnectorSpecification {
+    return {
+      connection_specification: {
+        type: 'object',
+        required: ['stripe_secret_key'],
+        properties: {
+          stripe_secret_key: { type: 'string' },
+          stripe_account_id: { type: 'string' },
+        },
+      },
+    }
+  }
+
+  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+    return { status: 'succeeded' }
+  }
+
+  async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
     return catalogFromRegistry(this.registry)
   }
 
-  async *read(streams: Stream[], state?: StateMessage[]): AsyncIterableIterator<Message> {
+  async *read(
+    _config: Record<string, unknown>,
+    streams: Stream[],
+    state?: StateMessage[]
+  ): AsyncIterableIterator<Message> {
     for (const stream of streams) {
       const config = this.findConfigByTableName(stream.name)
       if (!config) {

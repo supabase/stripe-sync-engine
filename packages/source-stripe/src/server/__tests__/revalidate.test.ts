@@ -1,4 +1,5 @@
-import { StripeSync, runMigrations } from '@stripe/sync-engine'
+import { runMigrations } from '@stripe/destination-postgres'
+import { createWebhookService, type WebhookService } from '../webhookService'
 import { vitest, beforeAll, describe, test, expect, afterEach } from 'vitest'
 import { getConfig } from '../utils/config'
 import { mockStripe } from './helpers/mockStripe'
@@ -6,7 +7,7 @@ import { logger } from '../logger'
 import type Stripe from 'stripe'
 import { ensureTestMerchantConfig } from './helpers/merchantConfig'
 
-let stripeSync: StripeSync | undefined
+let stripeSync: WebhookService | undefined
 
 ensureTestMerchantConfig()
 
@@ -24,20 +25,20 @@ beforeAll(async () => {
     logger,
   })
 
-  stripeSync = await StripeSync.create({
-    ...primaryMerchantConfig,
+  stripeSync = await createWebhookService({
+    stripeSecretKey: primaryMerchantConfig.stripeSecretKey,
+    stripeWebhookSecret: primaryMerchantConfig.stripeWebhookSecret,
+    databaseUrl: primaryMerchantConfig.databaseUrl,
     stripeApiVersion: config.stripeApiVersion,
     stripeAccountId: 'acct_test_account',
     revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
-    maxPostgresConnections: config.maxPostgresConnections,
     ...(config.partnerId ? { partnerId: config.partnerId } : {}),
     logger,
     poolConfig: {
       connectionString: primaryMerchantConfig.databaseUrl,
     },
   })
-  const stripe = Object.assign(stripeSync.stripe, mockStripe)
-  vitest.spyOn(stripeSync, 'stripe', 'get').mockReturnValue(stripe)
+  Object.assign(stripeSync.stripe, mockStripe)
 })
 
 afterEach(() => {
@@ -52,7 +53,7 @@ describe('invoices', () => {
 
     await stripeSync.webhook.processEvent(eventBody as unknown as Stripe.Event)
 
-    const result = await stripeSync.postgresClient.query(
+    const result = await stripeSync.query(
       `select customer from stripe.invoices where id = 'in_1KJdKkJDPojXS6LNSwSWkZSN' limit 1`
     )
     expect(mockStripe.invoices.retrieve).toHaveBeenCalled()
@@ -66,7 +67,7 @@ describe('invoices', () => {
 
     await stripeSync.webhook.processEvent(eventBody as unknown as Stripe.Event)
 
-    const result = await stripeSync.postgresClient.query(
+    const result = await stripeSync.query(
       `select customer from stripe.invoices where id = 'in_1KJqKBJDPojXS6LNJbvLUgEy' limit 1`
     )
     expect(mockStripe.invoices.retrieve).not.toHaveBeenCalled()

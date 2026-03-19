@@ -4,7 +4,7 @@ import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import { join } from 'node:path'
 import { getConfig, normalizeHost } from './utils/config'
-import { StripeSync } from '@stripe/sync-engine'
+import { createWebhookService, type WebhookService } from './webhookService'
 import { errorSchema } from './error'
 import { logger } from './logger'
 import { type PoolConfig } from 'pg'
@@ -39,10 +39,14 @@ export async function createServer(opts: buildOpts = {}): Promise<FastifyInstanc
       ssl: config.sslConnectionOptions,
     }
 
-    return StripeSync.create({
-      ...merchantRuntime.config,
+    return createWebhookService({
+      stripeSecretKey: merchantRuntime.config.stripeSecretKey,
+      stripeWebhookSecret: merchantRuntime.config.stripeWebhookSecret,
+      databaseUrl: merchantRuntime.config.databaseUrl,
       stripeApiVersion: config.stripeApiVersion,
       stripeAccountId: config.stripeAccountId,
+      autoExpandLists: merchantRuntime.config.autoExpandLists,
+      backfillRelatedEntities: merchantRuntime.config.backfillRelatedEntities,
       revalidateObjectsViaStripeApi: config.revalidateObjectsViaStripeApi,
       ...(config.partnerId ? { partnerId: config.partnerId } : {}),
       logger,

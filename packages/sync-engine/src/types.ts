@@ -1,6 +1,5 @@
 import { type PoolConfig } from 'pg'
 import Stripe from 'stripe'
-import type { SigmaIngestionConfig } from './sigma/sigmaIngestion'
 import type { RevalidateEntityName, SyncObjectName } from './resourceRegistry'
 
 /**
@@ -20,25 +19,6 @@ export type StripeSyncConfig = {
 
   /** Stripe secret key used to authenticate requests to the Stripe API. Defaults to empty string */
   stripeSecretKey: string
-
-  /**
-   * Enables syncing Stripe Sigma (reporting) tables via the Sigma API.
-   *
-   * Default: false (opt-in, so workers don't enqueue Sigma jobs unexpectedly).
-   */
-  enableSigma?: boolean
-
-  /**
-   * Optional override for Sigma page size (per query).
-   * Useful for edge function CPU limits; lower values reduce per-invocation work.
-   */
-  sigmaPageSizeOverride?: number
-
-  /**
-   * Postgres schema name for Sigma tables.
-   * Default: "sigma"
-   */
-  sigmaSchemaName?: string
 
   /**
    * Postgres schema name for core Stripe data tables.
@@ -244,8 +224,6 @@ export interface ProcessNextResult {
   hasMore: boolean
   /** The sync run this processing belongs to */
   runStartedAt: Date
-  /** Sigma-only: whether this step started a new Sigma query run */
-  startedQuery?: boolean
 }
 
 /**
@@ -288,29 +266,10 @@ export type StripeListResourceConfig = BaseResourceConfig & {
   retrieveFn: (id: string) => Promise<Stripe.Response<any>>
   /** Optional list of sub-resources to expand during upsert/fetching (e.g. 'refunds', 'listLineItems') */
   listExpands?: Record<string, (id: string) => Promise<Stripe.ApiList<{ id?: string }>>>[]
-  /** discriminator */
-  sigma?: undefined
-}
-
-/**
- * Configuration for Sigma query-backed resources.
- * Uses Stripe Sigma SQL queries with composite cursor pagination.
- */
-export type SigmaResourceConfig = BaseResourceConfig & {
-  /** Sigma uses composite cursors, not created filter */
-  supportsCreatedFilter: false
-  /** Sigma ingestion configuration (query, cursor spec, upsert options) */
-  sigma: SigmaIngestionConfig
-  /** discriminator */
-  listFn?: undefined
-  /** discriminator */
-  retrieveFn?: undefined
-  /** discriminator */
-  listExpands?: Record<string, (id: string) => Promise<Stripe.ApiList<{ id?: string }>>>[]
 }
 
 /** Union of all resource configuration types */
-export type ResourceConfig = StripeListResourceConfig | SigmaResourceConfig
+export type ResourceConfig = StripeListResourceConfig
 
 /**
  * Installation status of the stripe-sync package

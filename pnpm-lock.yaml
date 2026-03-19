@@ -55,6 +55,116 @@ importers:
         specifier: ^7.1.11
         version: 7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  apps/cli:
+    dependencies:
+      '@ngrok/ngrok':
+        specifier: ^1.4.1
+        version: 1.5.2
+      '@stripe/destination-google-sheets':
+        specifier: workspace:*
+        version: link:../../packages/destination-google-sheets
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/integration-supabase':
+        specifier: workspace:*
+        version: link:../supabase
+      '@stripe/orchestrator-postgres':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      chalk:
+        specifier: ^5.3.0
+        version: 5.6.2
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+      express:
+        specifier: ^4.18.2
+        version: 4.21.2
+      inquirer:
+        specifier: ^12.3.0
+        version: 12.11.0(@types/node@24.10.1)
+      papaparse:
+        specifier: 5.4.1
+        version: 5.4.1
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+      stripe:
+        specifier: ^17.7.0
+        version: 17.7.0
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
+      yesql:
+        specifier: ^7.0.0
+        version: 7.0.0
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/inquirer':
+        specifier: ^9.0.7
+        version: 9.0.9
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      '@types/papaparse':
+        specifier: 5.3.16
+        version: 5.3.16
+      '@types/pg':
+        specifier: ^8.15.5
+        version: 8.15.6
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+      '@types/yesql':
+        specifier: ^4.1.4
+        version: 4.1.4
+      '@vitest/ui':
+        specifier: ^4.0.9
+        version: 4.0.9(vitest@3.2.4)
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  apps/supabase:
+    dependencies:
+      '@stripe/sync-engine':
+        specifier: workspace:*
+        version: link:../../packages/sync-engine
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      supabase-management-js:
+        specifier: ^2.0.2
+        version: 2.0.2
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
   apps/supabase-dashboard:
     dependencies:
       '@stripe/sync-engine':
@@ -97,7 +207,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/destination-postgres:
     dependencies:
@@ -119,7 +229,23 @@ importers:
         version: 4.1.4
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/destination-postgres2:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      pg:
+        specifier: ^8.16.0
+        version: 8.16.3
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.15.6
 
   packages/orchestrator-postgres:
     dependencies:
@@ -141,16 +267,28 @@ importers:
         version: 4.1.4
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/source-stripe:
     dependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../destination-postgres
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../sync-protocol
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
+      yesql:
+        specifier: ^7.0.0
+        version: 7.0.0
     devDependencies:
       '@types/node':
         specifier: ^24.5.0
@@ -158,9 +296,12 @@ importers:
       '@types/pg':
         specifier: ^8.15.2
         version: 8.15.6
+      '@types/ws':
+        specifier: ^8.18.0
+        version: 8.18.1
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
     optionalDependencies:
       '@fastify/autoload':
         specifier: ^6.3.1
@@ -171,9 +312,6 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.3
         version: 5.2.3
-      '@stripe/sync-engine':
-        specifier: workspace:*
-        version: link:../sync-engine
       dotenv:
         specifier: ^17.2.2
         version: 17.2.3
@@ -183,6 +321,18 @@ importers:
       pino:
         specifier: ^9.0.0
         version: 9.14.0
+
+  packages/source-stripe2:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      stripe:
+        specifier: ^17.7.0
+        version: 17.7.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
   packages/sync-engine:
     dependencies:
@@ -4524,7 +4674,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.20.6)(yaml@2.8.1)
+      vitest: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -6312,7 +6462,7 @@ snapshots:
       - tsx
       - yaml
 
-  vitest@3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1):
+  vitest@3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1):
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
@@ -6339,6 +6489,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.10.1
+      '@vitest/ui': 4.0.9(vitest@3.2.4)
     transitivePeerDependencies:
       - jiti
       - less

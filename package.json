@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "workspaces": [
     "packages/*",
-    "apps/supabase/*"
+    "apps/*"
   ],
   "scripts": {
     "build": "pnpm -r run build",

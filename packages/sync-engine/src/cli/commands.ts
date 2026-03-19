@@ -104,7 +104,6 @@ export interface DeployOptions {
   workerInterval?: number
   syncInterval?: number
   supabaseManagementUrl?: string
-  enableSigma?: boolean
   rateLimit?: number
 }
 
@@ -142,22 +141,15 @@ export async function migrateCommand(options: CliOptions): Promise<void> {
       databaseUrl = answers.databaseUrl
     }
 
-    // Check if sigma is enabled via CLI option or env var
-    const enableSigma = options.enableSigma ?? process.env.ENABLE_SIGMA === 'true'
-
     const schemaName = process.env.SYNC_SCHEMA_NAME
     const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME
 
     console.log(chalk.blue(`Running database migrations in '${schemaName ?? 'stripe'}' schema...`))
     console.log(chalk.gray(`Database: ${databaseUrl.replace(/:[^:@]+@/, ':****@')}`))
-    if (enableSigma) {
-      console.log(chalk.blue('Sigma tables enabled'))
-    }
 
     try {
       await runMigrations({
         databaseUrl,
-        enableSigma,
         stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
         schemaName,
         syncTablesSchemaName,
@@ -402,7 +394,6 @@ export async function fullSyncCommand(
       const syncTablesSchemaName = process.env.SYNC_TABLES_SCHEMA_NAME ?? undefined
       await runMigrations({
         databaseUrl: config.databaseUrl,
-        enableSigma: config.enableSigma,
         stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
         schemaName,
         syncTablesSchemaName,
@@ -424,7 +415,6 @@ export async function fullSyncCommand(
     stripeSync = await StripeSync.create({
       databaseUrl: config.databaseUrl,
       stripeSecretKey: config.stripeApiKey,
-      enableSigma: config.enableSigma,
       stripeApiVersion: process.env.STRIPE_API_VERSION || '2020-08-27',
       autoExpandLists: process.env.AUTO_EXPAND_LISTS === 'true',
       backfillRelatedEntities: process.env.BACKFILL_RELATED_ENTITIES !== 'false',
@@ -617,7 +607,6 @@ export async function installCommand(options: DeployOptions): Promise<void> {
       workerIntervalSeconds: options.workerInterval,
       syncIntervalSeconds: options.syncInterval,
       supabaseManagementUrl,
-      enableSigma: options.enableSigma,
       rateLimit: options.rateLimit,
     })
 

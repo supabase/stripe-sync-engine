@@ -10,7 +10,7 @@
 
 import { StripeSync } from '../../stripeSync.ts'
 import { StripeSyncWorker, type WorkerTaskManager } from '../../stripeSyncWorker.ts'
-import { fromRecordMessage, type RecordMessage } from '../../protocol/index.ts'
+import { fromRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 import postgres from 'postgres'
 
 // Reuse these between requests
@@ -28,7 +28,6 @@ const sql = postgres(dbUrl, { max: 1, prepare: false })
 const stripeSync = await StripeSync.create({
   poolConfig: { connectionString: dbUrl, max: 1 },
   stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
-  enableSigma: false,
   partnerId: 'pp_supabase',
   schemaName,
   syncTablesSchemaName,
@@ -125,11 +124,9 @@ Deno.serve(async (req) => {
       new StripeSyncWorker(
         stripeSync.stripe,
         stripeSync.config,
-        stripeSync.sigma,
         taskManager,
         stripeSync.accountId,
         stripeSync.resourceRegistry,
-        stripeSync.sigmaRegistry,
         runKey,
         async (messages: RecordMessage[], accountId: string, backfillRelated?: boolean) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

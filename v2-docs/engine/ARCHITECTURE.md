@@ -289,8 +289,8 @@ The source uses the map to resume each stream from its last checkpoint.
 
 ## Files
 
-| File                                                 | Description                                               |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| `sync-engine-types.ts`                               | Message protocol — Stream, Record, State, etc.            |
-| `sync-engine-api.ts`                                 | Interfaces — Source, Destination, Transform, Orchestrator |
-| `ARCHITECTURE.md`                                    | This document                                             |
+| File                   | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `sync-engine-types.ts` | Message protocol — Stream, Record, State, etc.            |
+| `sync-engine-api.ts`   | Interfaces — Source, Destination, Transform, Orchestrator |
+| `ARCHITECTURE.md`      | This document                                             |

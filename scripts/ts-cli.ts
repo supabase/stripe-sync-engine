@@ -16,6 +16,7 @@
 // argument (as an async iterator of parsed NDJSON lines). If the return
 // value is async-iterable, each yielded value is written as NDJSON to stdout.
 
+import { resolve } from 'node:path'
 import { createInterface } from 'readline'
 
 // ── NDJSON helpers ──────────────────────────────────────────────
@@ -72,9 +73,7 @@ async function main() {
   }
 
   // Resolve relative paths against cwd, not this script's location
-  const resolved = modulePath.startsWith('.')
-    ? require('path').resolve(process.cwd(), modulePath)
-    : modulePath
+  const resolved = modulePath.startsWith('.') ? resolve(process.cwd(), modulePath) : modulePath
   const mod = await import(resolved)
   const target = mod[exportName]
 

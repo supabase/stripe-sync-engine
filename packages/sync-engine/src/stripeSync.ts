@@ -6,18 +6,16 @@ import type { DestinationWriter } from '@stripe/destination-postgres'
 import { type Logger, StripeSyncConfig, SyncResult, SyncObject, type ResourceConfig } from './types'
 import { type PoolConfig } from 'pg'
 import { hashApiKey } from './utils/hashApiKey'
-import { SigmaSyncProcessor, type SigmaDestinationWriter } from './sigma/sigmaSyncProcessor'
 import { StripeSyncWebhook } from './stripeSyncWebhook'
 import {
   buildResourceRegistry,
-  buildSigmaRegistry,
   getResourceConfigFromId,
   getTableName,
   normalizeStripeObjectName,
   StripeObject,
 } from './resourceRegistry'
 import { StripeSyncWorker, type WorkerTaskManager } from './stripeSyncWorker'
-import { fromRecordMessage, type RecordMessage } from './protocol'
+import { fromRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 import {
   backfillDependencies,
   expandLists,
@@ -53,16 +51,10 @@ export class StripeSync {
   postgresClient: PostgresClient
   config: StripeSyncConfig
   readonly resourceRegistry: Record<StripeObject, ResourceConfig>
-  readonly sigmaRegistry: Record<string, ResourceConfig>
   webhook!: StripeSyncWebhook
-  readonly sigma: SigmaSyncProcessor
   accountId!: string
   private savedLogger: Logger | null = null
   private previousLineCount = 0
-
-  get sigmaSchemaName(): string {
-    return this.sigma.sigmaSchemaName
-  }
 
   private get dataSchemaName(): string {
     return this.config.schemaName ?? 'stripe'
@@ -118,43 +110,7 @@ export class StripeSync {
       poolConfig,
     })
 
-    const pgClient = this.postgresClient
-    const sigmaWriter: SigmaDestinationWriter = {
-      query: (text, params) => pgClient.query(text, params),
-      upsertManyWithTimestampProtection: (
-        entries,
-        table,
-        accountId,
-        syncTimestamp,
-        upsertOptions,
-        schemaOverride
-      ) =>
-        pgClient.upsertManyWithTimestampProtection(
-          entries,
-          table,
-          accountId,
-          syncTimestamp,
-          upsertOptions,
-          schemaOverride
-        ),
-      completeObjectSync: (accountId, runStartedAt, object) =>
-        pgClient.completeObjectSync(accountId, runStartedAt, object),
-      incrementObjectProgress: (accountId, runStartedAt, object, count) =>
-        pgClient.incrementObjectProgress(accountId, runStartedAt, object, count),
-      updateObjectCursor: (accountId, runStartedAt, object, cursor) =>
-        pgClient.updateObjectCursor(accountId, runStartedAt, object, cursor),
-    }
-
-    this.sigma = new SigmaSyncProcessor(sigmaWriter, {
-      stripeSecretKey: config.stripeSecretKey,
-      enableSigma: config.enableSigma,
-      sigmaPageSizeOverride: config.sigmaPageSizeOverride,
-      sigmaSchemaName: config.sigmaSchemaName,
-      logger: this.config.logger,
-    })
-
     this.resourceRegistry = buildResourceRegistry(this.stripe)
-    this.sigmaRegistry = buildSigmaRegistry(this.sigma, this.resourceRegistry)
   }
 
   /**
@@ -254,25 +210,10 @@ export class StripeSync {
    * Order is determined by the `order` field in resourceRegistry.
    */
   public getSupportedSyncObjects(): Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[] {
-    const coreObjects = Object.entries(this.resourceRegistry)
+    return Object.entries(this.resourceRegistry)
       .filter(([, cfg]) => cfg.sync !== false)
       .sort(([, a], [, b]) => a.order - b.order)
       .map(([key]) => key) as Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[]
-
-    if (!this.config.enableSigma) {
-      return coreObjects
-    }
-
-    const sigmaObjects = Object.entries(this.sigmaRegistry)
-      .filter(([, cfg]) => cfg.sync !== false)
-      .sort(([, a], [, b]) => a.order - b.order)
-      .map(([key]) => key) as Exclude<SyncObject, 'all' | 'customer_with_entitlements'>[]
-
-    return [...coreObjects, ...sigmaObjects]
-  }
-
-  public getSupportedSigmaObjects(): string[] {
-    return this.sigma.getSupportedSigmaObjects(this.sigmaRegistry)
   }
 
   async syncSingleEntity(stripeId: string) {
@@ -285,9 +226,7 @@ export class StripeSync {
     await this.upsertAny([item], accountId, false)
   }
 
-  private getRegistryForObject(object: string): Record<string, ResourceConfig> {
-    if (object in this.resourceRegistry) return this.resourceRegistry
-    if (object in this.sigmaRegistry) return this.sigmaRegistry
+  private getRegistryForObject(_object: string): Record<string, ResourceConfig> {
     return this.resourceRegistry
   }
 
@@ -544,11 +483,9 @@ export class StripeSync {
         new StripeSyncWorker(
           this.stripe,
           this.config,
-          this.sigma,
           taskManager,
           this.accountId,
           this.resourceRegistry,
-          this.sigmaRegistry,
           runKey,
           this.upsertRecordMessages.bind(this),
           Infinity,

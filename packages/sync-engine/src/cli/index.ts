@@ -22,11 +22,9 @@ program
   .command('migrate')
   .description('Run database migrations only')
   .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')
-  .option('--sigma', 'Create Sigma tables during migration')
   .action(async (options) => {
     await migrateCommand({
       databaseUrl: options.databaseUrl,
-      enableSigma: options.sigma,
     })
   })
 
@@ -38,7 +36,6 @@ program
   )
   .option('--stripe-key <key>', 'Stripe API key (or STRIPE_API_KEY env)')
   .option('--database-url <url>', 'Postgres DATABASE_URL (or DATABASE_URL env)')
-  .option('--sigma', 'Enable Sigma tables')
   .option(
     '--interval <seconds>',
     'Skip resync if a successful run completed within this many seconds (default: 86400)',
@@ -68,7 +65,6 @@ program
       {
         stripeKey: options.stripeKey,
         databaseUrl: options.databaseUrl,
-        enableSigma: options.sigma,
         interval: options.interval,
         workerCount: options.workerCount,
         rateLimit: options.rateLimit,
@@ -115,7 +111,6 @@ supabase
     '--management-url <url>',
     'Supabase management API URL with protocol (e.g., http://localhost:54323, defaults to https://api.supabase.com or SUPABASE_MANAGEMENT_URL env)'
   )
-  .option('--sigma', 'Enable Sigma sync (deploy sigma worker and cron job)')
   .option(
     '--rate-limit <limit>',
     'Max Stripe API requests per second (default: 60)',
@@ -137,7 +132,6 @@ supabase
       workerInterval: options.workerInterval,
       syncInterval: options.syncInterval,
       supabaseManagementUrl: options.managementUrl,
-      enableSigma: options.sigma,
       rateLimit: options.rateLimit,
     })
   })

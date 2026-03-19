@@ -136,11 +136,11 @@ export interface TestDatabase {
  * Start a fresh Postgres container, run migrations, return a pool + helpers.
  * Each call spins up its own isolated database.
  */
-export async function setupTestDatabase(opts?: { enableSigma?: boolean }): Promise<TestDatabase> {
+export async function setupTestDatabase(): Promise<TestDatabase> {
   const container = await startPostgresContainer()
   const { databaseUrl } = container
 
-  await runMigrations({ databaseUrl, enableSigma: opts?.enableSigma })
+  await runMigrations({ databaseUrl })
 
   const pool = new pg.Pool({ connectionString: databaseUrl })
 
@@ -179,13 +179,11 @@ export async function createTestStripeSync(opts: {
   databaseUrl: string
   accountId?: string
   stripeSecretKey?: string
-  enableSigma?: boolean
 }): Promise<StripeSync> {
   return StripeSync.create({
     stripeSecretKey: opts.stripeSecretKey ?? 'sk_test_fake',
     stripeAccountId: opts.accountId,
     databaseUrl: opts.databaseUrl,
-    enableSigma: opts.enableSigma,
   })
 }
 

@@ -5,6 +5,6 @@ services:
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     restart: unless-stopped
     ports:
-      - 55432:5432
+      - 54320:5432
     environment:
       POSTGRES_PASSWORD: postgres

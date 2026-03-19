@@ -72,9 +72,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         'acct_test',
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         { accountId: 'acct_test', runStartedAt: new Date() },
         vi.fn() as any // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -96,9 +94,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         'acct_test',
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         { accountId: 'acct_test', runStartedAt: new Date() },
         vi.fn() as any // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -115,9 +111,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         'acct_test',
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         { accountId: 'acct_test', runStartedAt: new Date() },
         vi.fn() as any // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -138,9 +132,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         'acct_test',
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         { accountId: 'acct_test', runStartedAt: new Date() },
         vi.fn() as any // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -163,9 +155,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         'acct_test',
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         { accountId: 'acct_test', runStartedAt: new Date() },
         vi.fn() as any // eslint-disable-line @typescript-eslint/no-explicit-any

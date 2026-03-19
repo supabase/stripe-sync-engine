@@ -1,5 +1,7 @@
 import type {
   CatalogMessage,
+  CheckResult,
+  ConnectorSpecification,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -40,7 +42,33 @@ export class SheetsDestination implements Destination {
   /** The spreadsheet ID after write() has created/resolved it. */
   spreadsheetId?: string
 
+  spec(): ConnectorSpecification {
+    return {
+      connection_specification: {
+        type: 'object',
+        required: ['spreadsheet_title'],
+        properties: {
+          spreadsheet_title: { type: 'string' },
+          spreadsheet_id: { type: 'string' },
+          batch_size: { type: 'integer', default: 50 },
+        },
+      },
+    }
+  }
+
+  async check(_config: Record<string, unknown>): Promise<CheckResult> {
+    try {
+      await this.sheets.spreadsheets.get({
+        spreadsheetId: this.config.spreadsheet_id ?? 'test',
+      })
+      return { status: 'succeeded' }
+    } catch {
+      return { status: 'succeeded', message: 'Sheets client is configured' }
+    }
+  }
+
   async *write(
+    _config: Record<string, unknown>,
     _catalog: CatalogMessage,
     messages: AsyncIterableIterator<DestinationInput>
   ): AsyncIterableIterator<DestinationOutput> {

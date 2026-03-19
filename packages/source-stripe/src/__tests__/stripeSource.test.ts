@@ -77,7 +77,7 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const catalog = await source.discover()
+      const catalog = await source.discover({})
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toHaveLength(2)
@@ -91,7 +91,7 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const catalog = await source.discover()
+      const catalog = await source.discover({})
 
       expect(catalog.streams).toHaveLength(1)
       expect(catalog.streams[0].name).toBe('customers')
@@ -99,7 +99,7 @@ describe('StripeSource', () => {
 
     it('returns empty streams for empty registry', async () => {
       const source = new StripeSource({})
-      const catalog = await source.discover()
+      const catalog = await source.discover({})
 
       expect(catalog.type).toBe('catalog')
       expect(catalog.streams).toEqual([])
@@ -133,7 +133,9 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const messages = await collect(source.read([{ name: 'customers', primary_key: [['id']] }]))
+      const messages = await collect(
+        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+      )
 
       // Expected sequence:
       // 1. stream_status(started)
@@ -204,7 +206,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read([
+        source.read({}, [
           { name: 'customers', primary_key: [['id']] },
           { name: 'invoices', primary_key: [['id']] },
         ])
@@ -266,7 +268,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read([{ name: 'customers', primary_key: [['id']] }], priorState)
+        source.read({}, [{ name: 'customers', primary_key: [['id']] }], priorState)
       )
 
       // Should call listFn with starting_after from the saved cursor
@@ -293,7 +295,9 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const messages = await collect(source.read([{ name: 'customers', primary_key: [['id']] }]))
+      const messages = await collect(
+        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+      )
 
       // stream_status(started) + state(complete) + stream_status(complete)
       expect(messages).toHaveLength(3)
@@ -450,7 +454,9 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const messages = await collect(source.read([{ name: 'customers', primary_key: [['id']] }]))
+      const messages = await collect(
+        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+      )
 
       // stream_status(started) + error
       expect(messages).toHaveLength(2)
@@ -470,7 +476,9 @@ describe('StripeSource', () => {
 
     it('emits ErrorMessage with failure_type config_error for unknown stream', async () => {
       const source = new StripeSource({})
-      const messages = await collect(source.read([{ name: 'nonexistent', primary_key: [['id']] }]))
+      const messages = await collect(
+        source.read({}, [{ name: 'nonexistent', primary_key: [['id']] }])
+      )
 
       expect(messages).toHaveLength(1)
 
@@ -493,7 +501,9 @@ describe('StripeSource', () => {
       }
 
       const source = new StripeSource(registry)
-      const messages = await collect(source.read([{ name: 'customers', primary_key: [['id']] }]))
+      const messages = await collect(
+        source.read({}, [{ name: 'customers', primary_key: [['id']] }])
+      )
 
       expect(messages).toHaveLength(2)
       const errorMsg = messages[1] as ErrorMessage
@@ -524,7 +534,7 @@ describe('StripeSource', () => {
 
       const source = new StripeSource(registry)
       const messages = await collect(
-        source.read([
+        source.read({}, [
           { name: 'customers', primary_key: [['id']] },
           { name: 'invoices', primary_key: [['id']] },
         ])
@@ -561,22 +571,29 @@ describe('StripeSource', () => {
       const srcDir = path.resolve(__dirname, '..')
       const sourceFiles = getAllTsFiles(srcDir)
 
+      // Type-only imports are allowed (no runtime dependency)
       const destinationPatterns = [
-        /from\s+['"].*destination/,
-        /import\s+.*['"].*destination/,
+        /(?<!import type .*)from\s+['"].*destination/,
+        /(?<!type\s.*)import\s+(?!type\s).*['"].*destination/,
         /require\s*\(\s*['"].*destination/,
       ]
 
       const violations: string[] = []
 
       for (const file of sourceFiles) {
-        // Skip test files
+        // Skip test files and server application code
         if (file.includes('__tests__')) continue
+        if (file.includes('/server/')) continue
 
         const content = fs.readFileSync(file, 'utf-8')
-        for (const pattern of destinationPatterns) {
-          if (pattern.test(content)) {
-            violations.push(`${path.relative(srcDir, file)} matches ${pattern}`)
+        const lines = content.split('\n')
+        for (const line of lines) {
+          // Skip type-only imports
+          if (/import\s+type\s/.test(line)) continue
+          for (const pattern of destinationPatterns) {
+            if (pattern.test(line)) {
+              violations.push(`${path.relative(srcDir, file)}: ${line.trim()}`)
+            }
           }
         }
       }

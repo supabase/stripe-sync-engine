@@ -37,10 +37,20 @@ async function* toAsync<T>(items: T[]): AsyncIterableIterator<T> {
 /** A mock source that emits a predefined sequence of messages. */
 function createMockSource(messages: Message[]): Source {
   return {
-    async discover(): Promise<CatalogMessage> {
+    spec() {
+      return { connection_specification: {} }
+    },
+    async check(_config: Record<string, unknown>) {
+      return { status: 'succeeded' as const }
+    },
+    async discover(_config: Record<string, unknown>): Promise<CatalogMessage> {
       return { type: 'catalog', streams: [] }
     },
-    read(_streams: Stream[], _state?: StateMessage[]): AsyncIterableIterator<Message> {
+    read(
+      _config: Record<string, unknown>,
+      _streams: Stream[],
+      _state?: StateMessage[]
+    ): AsyncIterableIterator<Message> {
       return toAsync(messages)
     },
   }
@@ -61,7 +71,14 @@ function createMockDestination(): {
   const received: DestinationInput[] = []
 
   const destination: Destination = {
+    spec() {
+      return { connection_specification: {} }
+    },
+    async check(_config: Record<string, unknown>) {
+      return { status: 'succeeded' as const }
+    },
     async *write(
+      _config: Record<string, unknown>,
       _catalog: CatalogMessage,
       messages: AsyncIterableIterator<DestinationInput>
     ): AsyncIterableIterator<DestinationOutput> {

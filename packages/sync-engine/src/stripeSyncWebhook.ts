@@ -9,7 +9,7 @@ import {
 } from './types'
 import type { DestinationWriter } from '@stripe/destination-postgres'
 import { getTableName, normalizeStripeObjectName } from './resourceRegistry'
-import { toRecordMessage, type RecordMessage } from './protocol'
+import { toRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 
 export type StripeSyncWebhookDeps = {
   stripe: Stripe

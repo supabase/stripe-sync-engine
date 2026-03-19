@@ -7,7 +7,7 @@ export type { DestinationWriter } from '@stripe/destination-postgres'
 export { getTableName } from './resourceRegistry'
 
 export type * from './types'
-export type * from './protocol'
+export type * from '@stripe/sync-protocol'
 
 export { PostgresClient } from './database/postgres'
 export { runMigrations, runMigrationsFromContent } from './database/migrate'

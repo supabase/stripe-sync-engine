@@ -1,4 +1,4 @@
-import type { CatalogMessage, Stream } from './protocol'
+import type { CatalogMessage, Stream } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types'
 
 /** Derive a CatalogMessage from the existing resource registry. */

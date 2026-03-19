@@ -1,10 +1,5 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
-import {
-  setupFunctionCode,
-  webhookFunctionCode,
-  workerFunctionCode,
-  sigmaWorkerFunctionCode,
-} from './edge-function-code'
+import { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
 import pkg from '../../package.json' with { type: 'json' }
 import { parseSchemaComment, StripeSchemaComment } from './schemaComment'
 
@@ -174,64 +169,6 @@ export class SupabaseSetupClient {
           SELECT 1 FROM vault.decrypted_secrets
           WHERE name = 'stripe_sync_skip_until'
             AND decrypted_secret::timestamptz > NOW()
-        )
-        $$
-      );
-    `
-    await this.runSQL(sql)
-  }
-
-  /**
-   * Setup pg_cron job for Sigma data worker (every 12 hours)
-   * Creates secret, self-trigger function, and cron job
-   */
-  async setupSigmaPgCronJob(): Promise<void> {
-    // Generate a unique secret for sigma-data-worker authentication
-    const sigmaWorkerSecret = crypto.randomUUID()
-    const escapedSigmaWorkerSecret = sigmaWorkerSecret.replace(/'/g, "''")
-
-    const sql = `
-      -- Enable extensions
-      CREATE EXTENSION IF NOT EXISTS pg_cron;
-      CREATE EXTENSION IF NOT EXISTS pg_net;
-
-      -- Store unique sigma worker secret in vault
-      DELETE FROM vault.secrets WHERE name = 'stripe_sigma_worker_secret';
-      SELECT vault.create_secret('${escapedSigmaWorkerSecret}', 'stripe_sigma_worker_secret');
-
-      -- Create self-trigger function for sigma worker continuation
-      -- This allows the worker to trigger itself when there's more work
-      CREATE OR REPLACE FUNCTION stripe.trigger_sigma_worker()
-      RETURNS void
-      LANGUAGE plpgsql
-      SECURITY DEFINER
-      AS $$
-      BEGIN
-        PERFORM net.http_post(
-          url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/sigma-data-worker',
-          headers := jsonb_build_object(
-            'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sigma_worker_secret')
-          )
-        );
-      END;
-      $$;
-
-      -- Delete existing sigma job if it exists
-      SELECT cron.unschedule('stripe-sigma-worker') WHERE EXISTS (
-        SELECT 1 FROM cron.job WHERE jobname = 'stripe-sigma-worker'
-      );
-
-      -- Create cron job for Sigma sync
-      -- Runs at 00:00 and 12:00 UTC
-      SELECT cron.schedule(
-        'stripe-sigma-worker',
-        '0 */12 * * *',
-        $$
-        SELECT net.http_post(
-          url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/sigma-data-worker',
-          headers := jsonb_build_object(
-            'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sigma_worker_secret')
-          )
         )
         $$
       );
@@ -479,7 +416,6 @@ export class SupabaseSetupClient {
     stripeKey: string,
     packageVersion?: string,
     workerIntervalSeconds?: number,
-    enableSigma?: boolean,
     rateLimit?: number,
     syncIntervalSeconds?: number,
     startTime?: number
@@ -509,9 +445,6 @@ export class SupabaseSetupClient {
       if (this.supabaseManagementUrl) {
         secrets.push({ name: 'MANAGEMENT_API_URL', value: this.supabaseManagementUrl })
       }
-      if (enableSigma) {
-        secrets.push({ name: 'ENABLE_SIGMA', value: 'true' })
-      }
       if (rateLimit != null) {
         secrets.push({ name: 'RATE_LIMIT', value: String(rateLimit) })
       }
@@ -538,18 +471,8 @@ export class SupabaseSetupClient {
       await this.deployFunction('stripe-webhook', versionedWebhook, false)
       await this.deployFunction('stripe-worker', versionedWorker, false)
 
-      if (enableSigma) {
-        const versionedSigmaWorker = this.injectPackageVersion(sigmaWorkerFunctionCode, version)
-        await this.deployFunction('sigma-data-worker', versionedSigmaWorker, false)
-      }
-
       // Setup pg_cron - this is required for automatic syncing
       await this.setupPgCronJob(workerIntervalSeconds)
-
-      // Setup Sigma pg_cron only if enabled - dedicated 12-hourly worker for Sigma data
-      if (enableSigma) {
-        await this.setupSigmaPgCronJob()
-      }
 
       // Invoke stripe-worker immediately to trigger first sync for better UX on Supabase
       // dashboard. We want to see the first sync run immediately after an installation.
@@ -577,7 +500,6 @@ export async function install(params: {
   workerIntervalSeconds?: number
   baseProjectUrl?: string
   supabaseManagementUrl?: string
-  enableSigma?: boolean
   rateLimit?: number
   syncIntervalSeconds?: number
   startTime?: number
@@ -588,7 +510,6 @@ export async function install(params: {
     stripeKey,
     packageVersion,
     workerIntervalSeconds,
-    enableSigma,
     rateLimit,
     syncIntervalSeconds,
     startTime,
@@ -605,7 +526,6 @@ export async function install(params: {
     stripeKey,
     packageVersion,
     workerIntervalSeconds,
-    enableSigma,
     rateLimit,
     syncIntervalSeconds,
     startTime

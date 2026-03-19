@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { StripeSyncWorker, type WorkerTaskManager, type SyncTask } from '../../stripeSyncWorker'
 import type { ResourceConfig } from '../../types'
-import type { StateMessage } from '../../protocol/types'
+import type { StateMessage } from '@stripe/sync-protocol'
 
 /**
  * Tests for StateMessage emission from StripeSyncWorker.updateTaskProgress().
@@ -50,11 +50,9 @@ describe('Worker StateMessage emission', () => {
     return new StripeSyncWorker(
       {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       mockTaskManager,
       'acct_test',
       resourceRegistry,
-      {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       { accountId: 'acct_test', runStartedAt: new Date() },
       vi.fn().mockResolvedValue([]) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       Infinity,
