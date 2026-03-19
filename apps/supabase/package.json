@@ -1,7 +1,8 @@
 {
-  "name": "@stripe/destination-google-sheets",
+  "name": "@stripe/integration-supabase",
   "version": "0.1.0",
   "private": false,
+  "description": "Supabase integration for Stripe Sync Engine — edge functions and deployment",
   "type": "module",
   "main": "./dist/index.cjs",
   "exports": {
@@ -12,17 +13,21 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build": "tsup src/index.ts --format esm,cjs --dts --shims",
+    "lint": "eslint src --ext .ts",
     "test": "vitest"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
+    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
-    "googleapis": "^148.0.0"
+    "supabase-management-js": "^2.0.2"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.27.2",
     "vitest": "^3.2.4"
   }
 }

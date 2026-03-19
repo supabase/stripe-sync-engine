@@ -6,13 +6,13 @@
   "main": "./dist/index.cjs",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build": "tsup src/index.ts --format esm,cjs --dts && mkdir -p dist/database && cp -r src/database/migrations dist/database/migrations",
     "test": "vitest"
   },
   "files": [

@@ -6,7 +6,7 @@
   "main": "./dist/index.cjs",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
@@ -21,8 +21,10 @@
     "dist"
   ],
   "dependencies": {
+    "@stripe/destination-postgres": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "ws": "^8.18.0"
   },
   "optionalDependencies": {
     "@fastify/autoload": "^6.3.1",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@types/pg": "^8.15.2",
     "@types/node": "^24.5.0",
+    "@types/ws": "^8.18.0",
     "vitest": "^3.2.4"
   }
 }

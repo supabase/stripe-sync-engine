@@ -1,8 +1,8 @@
 {
-  "name": "@stripe/sync-engine",
+  "name": "@stripe/sync-engine-cli",
   "version": "0.1.0",
   "private": false,
-  "description": "DEPRECATED - This package has moved to https://github.com/stripe/sync-engine",
+  "description": "Stripe Sync Engine CLI — composition root for sync pipeline",
   "type": "module",
   "main": "./dist/index.cjs",
   "bin": {
@@ -14,11 +14,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./supabase": {
-      "types": "./src/supabase/index.ts",
-      "import": "./dist/supabase/index.js",
-      "require": "./dist/supabase/index.cjs"
-    },
     "./cli": {
       "types": "./src/cli/lib.ts",
       "import": "./dist/cli/lib.js",
@@ -26,27 +21,23 @@
     }
   },
   "scripts": {
-    "clean": "rimraf dist",
-    "prebuild": "npm run clean && npm run build:functions",
-    "build:functions": "tsx scripts/build-functions.ts && prettier --write src/database/migrations-embedded.ts",
-    "build": "tsup src/index.ts src/supabase/index.ts src/cli/index.ts src/cli/lib.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
+    "build": "tsup src/index.ts src/cli/index.ts src/cli/lib.ts --format esm,cjs --dts --shims",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
-    "test:integration": "vitest run src/tests/integration/",
-    "test:e2e": "pnpm run build && vitest run --config vitest.e2e.config.ts && vitest run --config vitest.e2e.webhook.config.ts",
     "sync": "pnpm run build && node dist/cli/index.js sync",
-    "dev": "tsup src/index.ts src/supabase/index.ts src/cli/index.ts src/cli/lib.ts --format esm --shims --watch --onSuccess 'cp -r src/database/migrations dist/migrations && node dist/cli/index.js sync'",
-    "generate:sigma-schema": "tsx src/sigma/schema/fetch-schema.ts"
+    "dev": "tsup src/index.ts src/cli/index.ts src/cli/lib.ts --format esm --shims --watch"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
+    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
     "@stripe/destination-google-sheets": "workspace:*",
     "@stripe/orchestrator-postgres": "workspace:*",
+    "@stripe/integration-supabase": "workspace:*",
     "@ngrok/ngrok": "^1.4.1",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
@@ -56,7 +47,6 @@
     "papaparse": "5.4.1",
     "pg": "^8.16.3",
     "stripe": "^17.7.0",
-    "supabase-management-js": "^2.0.2",
     "ws": "^8.18.0",
     "yesql": "^7.0.0"
   },
@@ -70,7 +60,6 @@
     "@types/yesql": "^4.1.4",
     "@vitest/ui": "^4.0.9",
     "esbuild": "^0.27.2",
-    "tsx": "^4.19.2",
     "vitest": "^3.2.4"
   },
   "repository": {
