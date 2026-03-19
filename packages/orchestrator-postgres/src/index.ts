@@ -4,7 +4,7 @@ export { main as cliMain } from './cli'
 
 export { PostgresOrchestrator, type Sync } from './orchestrator'
 export { PostgresStateManager, type StateManagerConfig } from './stateManager'
-export { forward, collect, type RouterCallbacks } from './router'
+export { forward, collect, type RouterCallbacks } from '@stripe/sync-protocol'
 
 // Pipeline
 export { runPipeline, type PipelineOrchestrator } from './pipeline'

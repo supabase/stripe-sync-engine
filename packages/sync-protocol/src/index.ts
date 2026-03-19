@@ -13,7 +13,8 @@ export {
   isStreamStatusMessage,
   isDataMessage,
   filterDataMessages,
+  forward,
+  collect,
 } from './filters'
-export { forward, collect } from './router'
-export type { RouterCallbacks } from './router'
+export type { RouterCallbacks } from './filters'
 export { runSync } from './runSync'

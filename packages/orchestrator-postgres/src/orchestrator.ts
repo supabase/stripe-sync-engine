@@ -11,7 +11,7 @@ import type {
   Stream,
 } from '@stripe/sync-protocol'
 import type { PostgresStateManager } from './stateManager'
-import { forward as routerForward, collect as routerCollect, type RouterCallbacks } from './router'
+import { forward as routerForward, collect as routerCollect, type RouterCallbacks } from '@stripe/sync-protocol'
 
 /**
  * Minimal Sync type for the orchestrator.

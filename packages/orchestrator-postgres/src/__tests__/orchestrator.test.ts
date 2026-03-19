@@ -15,7 +15,7 @@ import type {
 } from '@stripe/sync-protocol'
 import { PostgresOrchestrator, type Sync } from '../orchestrator'
 import { PostgresStateManager } from '../stateManager'
-import { forward, collect } from '../router'
+import { forward, collect } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Helpers

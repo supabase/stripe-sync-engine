@@ -4,12 +4,17 @@ import type {
   StateMessage,
   Stream,
   SyncConfig,
-  Message,
-  DestinationInput,
-  DestinationOutput,
 } from './types'
 import type { Destination, Source } from './interfaces'
-import { isDataMessage, isLogMessage, isErrorMessage, isStreamStatusMessage } from './filters'
+import { forward, collect } from './filters'
+
+const stderrCallbacks = {
+  onLog: (message: string, level: string) => console.error(`[${level}] ${message}`),
+  onError: (message: string, failureType: string) =>
+    console.error(`[error:${failureType}] ${message}`),
+  onStreamStatus: (stream: string, status: string) =>
+    console.error(`[status] ${stream}: ${status}`),
+}
 
 /**
  * Build a ConfiguredCatalog from discovered streams, optionally filtered
@@ -39,44 +44,6 @@ function buildCatalog(
   }
 
   return { streams }
-}
-
-/**
- * Forward source messages to the destination.
- * RecordMessage + StateMessage pass through; logs/errors/status go to stderr.
- */
-async function* forward(
-  messages: AsyncIterableIterator<Message>
-): AsyncIterableIterator<DestinationInput> {
-  for await (const msg of messages) {
-    if (isDataMessage(msg)) {
-      yield msg
-    } else if (isLogMessage(msg)) {
-      console.error(`[${msg.level}] ${msg.message}`)
-    } else if (isErrorMessage(msg)) {
-      console.error(`[error:${msg.failure_type}] ${msg.message}`)
-    } else if (isStreamStatusMessage(msg)) {
-      console.error(`[status] ${msg.stream}: ${msg.status}`)
-    }
-  }
-}
-
-/**
- * Collect destination output. Yields StateMessage checkpoints;
- * routes errors/logs to stderr.
- */
-async function* collect(
-  output: AsyncIterableIterator<DestinationOutput>
-): AsyncIterableIterator<StateMessage> {
-  for await (const msg of output) {
-    if (msg.type === 'state') {
-      yield msg
-    } else if (msg.type === 'log') {
-      console.error(`[dest:${msg.level}] ${msg.message}`)
-    } else if (msg.type === 'error') {
-      console.error(`[dest:error:${msg.failure_type}] ${msg.message}`)
-    }
-  }
 }
 
 /**
@@ -111,7 +78,7 @@ export async function* runSync(
     catalog,
     state: state.length > 0 ? state : undefined,
   })
-  const forwarded = forward(sourceMessages)
+  const forwarded = forward(sourceMessages, stderrCallbacks)
   const destOutput = destination.write({
     config: config.destination_config,
     catalog,
@@ -119,5 +86,5 @@ export async function* runSync(
   })
 
   // 5. Yield state checkpoints
-  yield* collect(destOutput)
+  yield* collect(destOutput, stderrCallbacks)
 }
