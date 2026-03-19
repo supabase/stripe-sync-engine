@@ -20,7 +20,6 @@ import type {
   DestinationInput,
   DestinationOutput,
   Message,
-  StateMessage,
 } from './types'
 
 // MARK: - Source
@@ -56,7 +55,7 @@ export interface Source<TConfig extends Record<string, unknown> = Record<string,
   read(params: {
     config: TConfig
     catalog: ConfiguredCatalog
-    state?: StateMessage[]
+    state?: Record<string, unknown>
   }): AsyncIterableIterator<Message>
 }
 

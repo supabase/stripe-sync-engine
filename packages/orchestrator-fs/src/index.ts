@@ -50,12 +50,7 @@ export class FsOrchestrator implements Orchestrator<FsSyncConfig> {
     const catalog = await source.discover({ config: this.sync.source })
 
     // 2. Load state from filesystem
-    const stateRecord = this.stateStore.loadState(this.sync.id)
-    const state: StateMessage[] = Object.entries(stateRecord).map(([stream, data]) => ({
-      type: 'state' as const,
-      stream,
-      data,
-    }))
+    const state = this.stateStore.loadState(this.sync.id)
 
     // 3. Resolve streams
     const streams = this.getStreams(catalog)

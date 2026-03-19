@@ -322,9 +322,7 @@ describe('run()', () => {
     // source.read() was called with loaded state
     expect(readSpy).toHaveBeenCalledOnce()
     const { state: stateArg } = readSpy.mock.calls[0][0]
-    expect(stateArg).toEqual([
-      { type: 'state', stream: 'customers', data: { cursor: '2024-06-01' } },
-    ])
+    expect(stateArg).toEqual({ customers: { cursor: '2024-06-01' } })
   })
 
   it('extracts streams from sync config against catalog', async () => {
@@ -493,16 +491,13 @@ describe('run()', () => {
     await orch.run(source, destination)
 
     const { state: stateArg } = readSpy.mock.calls[0][0]
-    expect(stateArg).toHaveLength(2)
-    expect(stateArg).toEqual(
-      expect.arrayContaining([
-        { type: 'state', stream: 'customers', data: { cursor: '2024-01-01' } },
-        { type: 'state', stream: 'invoices', data: { cursor: 'inv_50' } },
-      ])
-    )
+    expect(stateArg).toEqual({
+      customers: { cursor: '2024-01-01' },
+      invoices: { cursor: 'inv_50' },
+    })
   })
 
-  it('passes empty state array when Sync.state is undefined', async () => {
+  it('passes undefined state when Sync.state is undefined', async () => {
     const sync: Sync = { ...stubSync, state: undefined }
     const { source, readSpy } = createMockSource([])
     const { destination } = createMockDestination()
@@ -511,7 +506,7 @@ describe('run()', () => {
     await orch.run(source, destination)
 
     const { state: stateArg } = readSpy.mock.calls[0][0]
-    expect(stateArg).toEqual([])
+    expect(stateArg).toBeUndefined()
   })
 
   it('filters non-data messages from reaching the destination', async () => {

@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import type { ConfiguredCatalog, StateMessage } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog } from '@stripe/sync-protocol'
 import source, { type Config } from './backfill'
 
 export interface SourceCliOptions {
@@ -34,9 +34,9 @@ export async function main(opts: SourceCliOptions): Promise<void> {
       throw new Error('--catalog is required for the read command')
     }
     const catalog = loadJson(opts.catalog) as ConfiguredCatalog
-    let state: StateMessage[] | undefined
+    let state: Record<string, unknown> | undefined
     if (opts.state) {
-      state = loadJson(opts.state) as StateMessage[]
+      state = loadJson(opts.state) as Record<string, unknown>
     }
 
     const messages = source.read({ config, catalog, state })

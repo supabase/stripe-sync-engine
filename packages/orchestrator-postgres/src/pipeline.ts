@@ -29,7 +29,7 @@ export async function runPipeline(
   catalog: ConfiguredCatalog,
   sourceConfig?: Record<string, unknown>,
   destinationConfig?: Record<string, unknown>,
-  state?: StateMessage[]
+  state?: Record<string, unknown>
 ): Promise<StateMessage[]> {
   // 1. Source emits messages
   const sourceMessages = source.read({ config: sourceConfig ?? {}, catalog, state })

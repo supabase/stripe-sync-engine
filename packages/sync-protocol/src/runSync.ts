@@ -1,10 +1,4 @@
-import type {
-  ConfiguredCatalog,
-  ConfiguredStream,
-  StateMessage,
-  Stream,
-  SyncConfig,
-} from './types'
+import type { ConfiguredCatalog, ConfiguredStream, StateMessage, Stream, SyncConfig } from './types'
 import type { Destination, Source } from './interfaces'
 import { forward, collect } from './filters'
 
@@ -63,20 +57,11 @@ export async function* runSync(
   // 2. Build configured catalog, filtered by config.streams
   const catalog = buildCatalog(catalogMsg.streams, config.streams)
 
-  // 3. Convert config.state → StateMessage[] for source resume
-  const state: StateMessage[] = config.state
-    ? Object.entries(config.state).map(([stream, data]) => ({
-        type: 'state' as const,
-        stream,
-        data,
-      }))
-    : []
-
-  // 4. Compose pipeline
+  // 3. Compose pipeline
   const sourceMessages = source.read({
     config: config.source_config,
     catalog,
-    state: state.length > 0 ? state : undefined,
+    state: config.state,
   })
   const forwarded = forward(sourceMessages, stderrCallbacks)
   const destOutput = destination.write({

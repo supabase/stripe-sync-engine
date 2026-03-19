@@ -139,10 +139,11 @@ export function createSource(
           status: 'started',
         } satisfies StreamStatusMessage
 
-        // Restore cursor from state array if available
-        const streamState = state?.find((s) => s.stream === stream.name)
-        let pageCursor: string | null =
-          (streamState?.data as { pageCursor?: string | null })?.pageCursor ?? null
+        // Restore cursor from combined state if available
+        const streamState = state?.[stream.name] as
+          | { pageCursor?: string | null }
+          | undefined
+        let pageCursor: string | null = streamState?.pageCursor ?? null
 
         try {
           let hasMore = true

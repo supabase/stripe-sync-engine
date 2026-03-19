@@ -275,13 +275,9 @@ describe('StripeSource', () => {
         }),
       }
 
-      const priorState: StateMessage[] = [
-        {
-          type: 'state',
-          stream: 'customers',
-          data: { pageCursor: 'cus_2', status: 'pending' },
-        },
-      ]
+      const priorState: Record<string, unknown> = {
+        customers: { pageCursor: 'cus_2', status: 'pending' },
+      }
 
       const source = createSource(registry)
       const messages = await collect(

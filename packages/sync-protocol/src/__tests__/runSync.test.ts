@@ -170,9 +170,7 @@ describe('runSync', () => {
 
     expect(readSpy).toHaveBeenCalledOnce()
     const callArgs = readSpy.mock.calls[0]![0]
-    expect(callArgs.state).toEqual([
-      { type: 'state', stream: 'customers', data: { after: 'cus_50' } },
-    ])
+    expect(callArgs.state).toEqual({ customers: { after: 'cus_50' } })
   })
 
   it('stream filtering: only configures requested streams', async () => {

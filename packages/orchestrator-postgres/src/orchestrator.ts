@@ -81,10 +81,7 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
     // 1. Discover catalog from source
     const catalog = await source.discover({ config: {} })
 
-    // 2. Load state from Sync.state -> StateMessage[]
-    const state = this.loadState()
-
-    // 3. Resolve streams from Sync config against catalog
+    // 2. Resolve streams from Sync config against catalog
     const streams = this.getStreams(catalog)
 
     // 4. Build ConfiguredCatalog from resolved streams
@@ -97,7 +94,7 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
     }
 
     // 5. Compose pipeline: source.read -> forward -> destination.write -> collect
-    const sourceMessages = source.read({ config: {}, catalog: configuredCatalog, state })
+    const sourceMessages = source.read({ config: {}, catalog: configuredCatalog, state: this.sync.state })
     const forwarded = this.forward(sourceMessages)
     const destOutput = destination.write({
       config: {},
@@ -130,21 +127,6 @@ export class PostgresOrchestrator implements Orchestrator<Sync> {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Convert Sync.state (Record<string, unknown>) to StateMessage[].
-   * Each key in the state record becomes a separate StateMessage for that stream.
-   */
-  private loadState(): StateMessage[] {
-    const stateRecord = this.sync.state
-    if (!stateRecord) return []
-
-    return Object.entries(stateRecord).map(([stream, data]) => ({
-      type: 'state' as const,
-      stream,
-      data,
-    }))
-  }
 
   /**
    * Resolve streams from Sync config against the discovered catalog.
