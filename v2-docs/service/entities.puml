@@ -1,0 +1,89 @@
+@startuml
+skinparam defaultFontName "Menlo"
+skinparam defaultFontSize 14
+skinparam backgroundColor #fafafa
+
+skinparam jsonArrowColor #e67e22
+skinparam jsonArrowThickness 2
+
+skinparam wrapWidth 300
+skinparam padding 8
+skinparam nodesep 60
+skinparam ranksep 80
+
+left to right direction
+
+json "<b><size:16>  Sync  </size></b>" as SC {
+  "id": "<color:#2563eb>sync_*",
+  "account_id": "<color:#2563eb>acct_*",
+  "status": "<color:#7c3aed>backfilling | syncing | paused | error",
+  " ": " ",
+  "<color:#16a34a><b>source</b> <i>— discriminator: <b>type</b></i></color>": {
+    "<color:#7c3aed>type = <b>stripe-api-core</b></color>": {
+      "livemode": "boolean",
+      "api_version": "StripeApiVersion",
+      "credential_id": "<color:#e67e22>→ Credential <i>(stripe)</i>"
+    },
+    "<color:#7c3aed>type = <b>stripe-api-reporting</b></color>": {
+      "livemode": "boolean",
+      "api_version": "StripeApiVersion",
+      "credential_id": "<color:#e67e22>→ Credential <i>(stripe)</i>"
+    },
+    "<color:#7c3aed>type = <b>stripe-event-bridge</b></color>": {
+      "livemode": "boolean",
+      "account_id": "<color:#2563eb>acct_*"
+    },
+  },
+  "  ": " ",
+  "<color:#ea580c><b>destination</b> <i>— discriminator: <b>type</b></i></color>": {
+    "<color:#7c3aed>type = <b>postgres</b></color>": {
+      "schema_name": "string",
+      "credential_id": "<color:#e67e22>→ Credential <i>(postgres)</i>"
+    },
+    "<color:#7c3aed>type = <b>google-sheets</b></color>": {
+      "google_sheet_id": "string",
+      "credential_id": "<color:#e67e22>→ Credential <i>(google)</i>"
+    },
+    "<color:#7c3aed>type = <b>stripe-database</b></color>": {
+      "database_id": "<color:#2563eb>db_*"
+    }
+  },
+  "   ": " ",
+  "<color:#0891b2><b>streams?</b> <i>— selective sync (omit for all)</i></color>": {
+    "[0]": {
+      "name": "string",
+      "sync_mode?": "incremental | full_refresh",
+      "skip_backfill?": "boolean"
+    }
+  },
+  "    ": " ",
+  "<color:#64748b><b>state?</b> <i>— per-stream checkpoints (orchestrator-managed)</i></color>": {
+    "<i>stream_name</i>": "<i>opaque cursor data</i>"
+  }
+}
+
+json "<b><size:16>  Credential  </size></b>" as CR {
+  "id": "<color:#2563eb>cred_*",
+  "account_id": "<color:#2563eb>acct_*",
+  " ": " ",
+  "<color:#16a34a><i>discriminator: <b>type</b></i></color>": {
+    "<color:#7c3aed>type = <b>postgres</b></color>": {
+      "host": "string",
+      "port": "number",
+      "user": "string",
+      "password": "string",
+      "database": "string"
+    },
+    "<color:#7c3aed>type = <b>google</b></color>": {
+      "client_id": "string",
+      "client_secret": "string",
+      "refresh_token": "string?"
+    },
+    "<color:#7c3aed>type = <b>stripe</b></color>": {
+      "api_key": "string"
+    },
+  }
+}
+
+SC -[#e67e22,thickness=2]-> CR : <size:13><color:#e67e22>  credential_id  </color></size>
+@enduml
