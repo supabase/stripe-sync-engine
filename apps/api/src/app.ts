@@ -55,7 +55,7 @@ app.openapi(
       },
     },
   }),
-  (c) => c.json(credentials.list() as any, 200),
+  (c) => c.json(credentials.list() as any, 200)
 )
 
 // Create credential
@@ -80,7 +80,7 @@ app.openapi(
   (c) => {
     const body = c.req.valid('json')
     return c.json(credentials.create(body) as any, 200)
-  },
+  }
 )
 
 // Get credential
@@ -107,7 +107,7 @@ app.openapi(
     const cred = credentials.get(id)
     if (!cred) return c.json({ error: `Credential ${id} not found` }, 404)
     return c.json(cred as any, 200)
-  },
+  }
 )
 
 // Update credential
@@ -140,7 +140,7 @@ app.openapi(
     const cred = credentials.update(id, body)
     if (!cred) return c.json({ error: `Credential ${id} not found` }, 404)
     return c.json(cred as any, 200)
-  },
+  }
 )
 
 // Delete credential
@@ -167,7 +167,7 @@ app.openapi(
     const result = credentials.delete(id)
     if (!result) return c.json({ error: `Credential ${id} not found` }, 404)
     return c.json(result as any, 200)
-  },
+  }
 )
 
 // ── Syncs ───────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ app.openapi(
       },
     },
   }),
-  (c) => c.json(syncs.list() as any, 200),
+  (c) => c.json(syncs.list() as any, 200)
 )
 
 // Create sync
@@ -213,7 +213,7 @@ app.openapi(
   (c) => {
     const body = c.req.valid('json')
     return c.json(syncs.create(body) as any, 200)
-  },
+  }
 )
 
 // Get sync
@@ -240,7 +240,7 @@ app.openapi(
     const sync = syncs.get(id)
     if (!sync) return c.json({ error: `Sync ${id} not found` }, 404)
     return c.json(sync as any, 200)
-  },
+  }
 )
 
 // Update sync
@@ -273,7 +273,7 @@ app.openapi(
     const sync = syncs.update(id, body)
     if (!sync) return c.json({ error: `Sync ${id} not found` }, 404)
     return c.json(sync as any, 200)
-  },
+  }
 )
 
 // Delete sync
@@ -300,7 +300,7 @@ app.openapi(
     const result = syncs.delete(id)
     if (!result) return c.json({ error: `Sync ${id} not found` }, 404)
     return c.json(result as any, 200)
-  },
+  }
 )
 
 // ── OpenAPI spec + Swagger UI ───────────────────────────────────

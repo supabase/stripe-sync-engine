@@ -104,12 +104,7 @@ export const StreamConfigSchema = z.object({
 
 // ── Sync Status ─────────────────────────────────────────────────
 
-export const SyncStatusSchema = z.enum([
-  'backfilling',
-  'syncing',
-  'paused',
-  'error',
-])
+export const SyncStatusSchema = z.enum(['backfilling', 'syncing', 'paused', 'error'])
 
 // ── Sync ────────────────────────────────────────────────────────
 
