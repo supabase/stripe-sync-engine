@@ -32,7 +32,7 @@ GOOGLE_ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
   -d refresh_token="$GOOGLE_REFRESH_TOKEN" \
   -d grant_type=refresh_token | jq -r .access_token)
 
-CONFIG=$(jq -n \
+CONFIG=$(jq -cn \
   --arg cid "$GOOGLE_CLIENT_ID" \
   --arg cs "$GOOGLE_CLIENT_SECRET" \
   --arg at "$GOOGLE_ACCESS_TOKEN" \
@@ -46,6 +46,9 @@ echo "To use interactively, add this alias:"
 echo ""
 echo "  alias dest-sheets='$TS scripts/ts-cli.ts ./packages/destination-google-sheets2/src/index.ts'"
 echo ""
+echo "CONFIG=$CONFIG"
+echo "CATALOG=$CATALOG"
+echo ""
 
 # ── spec ──────────────────────────────────────────────────────────
 echo "$ dest-sheets spec"
@@ -53,7 +56,7 @@ $dest_sheets spec | jq .
 echo ""
 
 # ── check ─────────────────────────────────────────────────────────
-echo "$ dest-sheets check --config '{\$CONFIG}'"
+echo "$ dest-sheets check --config '$CONFIG'"
 $dest_sheets check --config "$CONFIG" | jq .
 echo ""
 
@@ -71,7 +74,7 @@ EOF
 )
 cat <<COMMAND
 $ cat <<NDJSON | dest-sheets write \\
-    --config '\$CONFIG' \\
+    --config '$CONFIG' \\
     --catalog '$CATALOG'
 $NDJSON_BODY
 NDJSON
