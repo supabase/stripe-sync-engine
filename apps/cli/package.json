@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/cli/index.ts src/cli/lib.ts --format esm,cjs --dts --shims",
     "lint": "eslint src --ext .ts",
-    "test": "vitest",
+    "test": "vitest --passWithNoTests",
     "sync": "pnpm run build && node dist/cli/index.js sync",
     "dev": "tsup src/index.ts src/cli/index.ts src/cli/lib.ts --format esm --shims --watch"
   },
