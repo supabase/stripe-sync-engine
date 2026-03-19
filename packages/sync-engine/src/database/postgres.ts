@@ -1006,8 +1006,7 @@ export class PostgresClient {
    */
   async claimNextTask(
     accountId: string,
-    runStartedAt: Date,
-    rateLimit: number = 50
+    runStartedAt: Date
   ): Promise<{
     object: string
     cursor: string | null
@@ -1017,12 +1016,6 @@ export class PostgresClient {
   } | null> {
     const run = await this.getSyncRun(accountId, runStartedAt)
     if (!run) return null
-
-    await this.query(`SELECT "${this.syncSchema}".check_rate_limit($1, $2, $3)`, [
-      'claimNextTask',
-      rateLimit,
-      1,
-    ])
 
     const result = await this.query(
       `UPDATE "${this.syncSchema}"."_sync_obj_runs"
@@ -1553,5 +1546,26 @@ export class PostgresClient {
    */
   async close(): Promise<void> {
     await this.pool.end()
+  }
+
+  async waitForRateLimit(maxRate: number): Promise<void> {
+    const sleepMs = Math.floor(Math.random() * 31) + 20
+    while (true) {
+      try {
+        await this.query(`SELECT "${this.syncSchema}".check_rate_limit($1, $2, $3)`, [
+          'stripe',
+          maxRate,
+          1,
+        ])
+        return
+      } catch (err) {
+        const msg = (err as Error)?.message ?? ''
+        if (msg.includes('Rate limit exceeded')) {
+          await new Promise((r) => setTimeout(r, sleepMs))
+          continue
+        }
+        throw err
+      }
+    }
   }
 }

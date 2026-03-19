@@ -49,6 +49,8 @@ describe('Pagination regression tests', () => {
   describe('StripeSyncWorker.fetchOnePage pagination behavior', () => {
     let mockCreditNotesList: ReturnType<typeof vi.fn>
     let creditNotesConfig: ResourceConfig
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockPostgres = { waitForRateLimit: vi.fn().mockResolvedValue(undefined) } as any
 
     beforeEach(async () => {
       mockCreditNotesList = vi.fn().mockResolvedValue({
@@ -63,6 +65,7 @@ describe('Pagination regression tests', () => {
         tableName: 'credit_notes',
         order: 0,
         supportsCreatedFilter: true,
+        supportsLimit: true,
         listFn: mockCreditNotesList,
       } as unknown as ResourceConfig
     })
@@ -72,7 +75,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        mockPostgres,
         'acct_test',
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -96,7 +99,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        mockPostgres,
         'acct_test',
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -115,7 +118,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        mockPostgres,
         'acct_test',
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -138,7 +141,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        mockPostgres,
         'acct_test',
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -163,7 +166,7 @@ describe('Pagination regression tests', () => {
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-        {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        mockPostgres,
         'acct_test',
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any

@@ -64,30 +64,21 @@ export class StripeSyncWorker {
         await this.processSingleTask(task)
         this.tasksCompleted++
       } catch (err) {
-        const isRateLimit = err instanceof Error && err.message.includes('Rate limit exceeded')
-        if (isRateLimit) {
-          const randomWait = Math.random() * 200 // 0 - 200ms random wait
-          this.config.logger?.warn(
-            `Rate limited on claimNextTask, backing off ${Math.round(randomWait)}ms`
+        if (task) {
+          await this.postgresClient.updateSyncObject(
+            this.accountId,
+            this.runKey.runStartedAt,
+            task.object,
+            task.created_gte,
+            task.created_lte,
+            {
+              status: 'error',
+              errorMessage: `Task processing failed: ${String(err)}`,
+            }
           )
-          await new Promise((r) => setTimeout(r, randomWait))
-        } else {
-          if (task) {
-            await this.postgresClient.updateSyncObject(
-              this.accountId,
-              this.runKey.runStartedAt,
-              task.object,
-              task.created_gte,
-              task.created_lte,
-              {
-                status: 'error',
-                errorMessage: `Task processing failed: ${String(err)}`,
-              }
-            )
-          }
-          this.config.logger?.error({ err }, 'Task processing failed; sleeping 1s before retry')
-          await new Promise((r) => setTimeout(r, 1000))
         }
+        this.config.logger?.error({ err }, 'Task processing failed; sleeping 1s before retry')
+        await new Promise((r) => setTimeout(r, 100))
       }
     }
   }
@@ -125,6 +116,7 @@ export class StripeSyncWorker {
     }
 
     // Fetch from Stripe
+    await this.postgresClient.waitForRateLimit(this.rateLimit)
     const response = await config.listFn(listParams)
     return response
   }
@@ -133,7 +125,7 @@ export class StripeSyncWorker {
     const { accountId, runStartedAt } = this.runKey
 
     // Atomically claim the next pending task (FOR UPDATE SKIP LOCKED).
-    const claimed = await this.postgresClient.claimNextTask(accountId, runStartedAt, this.rateLimit)
+    const claimed = await this.postgresClient.claimNextTask(accountId, runStartedAt)
     if (!claimed) return null
 
     const object = claimed.object
