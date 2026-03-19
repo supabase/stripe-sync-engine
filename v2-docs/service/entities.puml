@@ -43,9 +43,6 @@ json "<b><size:16>  Sync  </size></b>" as SC {
     "<color:#7c3aed>type = <b>google-sheets</b></color>": {
       "google_sheet_id": "string",
       "credential_id": "<color:#e67e22>→ Credential <i>(google)</i>"
-    },
-    "<color:#7c3aed>type = <b>stripe-database</b></color>": {
-      "database_id": "<color:#2563eb>db_*"
     }
   },
   "   ": " ",

@@ -60,21 +60,6 @@ POST /syncs        { source: { type: "stripe-api-core", credential_id: "cred_str
 | Sync with `streams: [{ name: "customers" }, { name: "invoices" }]` only syncs those streams    | Stream selection |
 | Sync with `streams: [{ name: "charges", skip_backfill: true }]` skips backfill for that stream | Skip backfill    |
 
-### Stripe → managed Stripe DB
-
-The convenience flow: sync Stripe data into a Stripe-managed database.
-
-```
-POST /syncs  { source: { type: "stripe-api-core", credential_id: "cred_stripe_..." },
-               destination: { type: "stripe-database", database_id: "db_abc123" } }
-```
-
-| Test                                                         | Validates               |
-| ------------------------------------------------------------ | ----------------------- |
-| No credential needed for destination (Stripe DB is internal) | Internal auth           |
-| Sync targets the correct database by `database_id`           | Destination routing     |
-| DB API shows this sync in its `syncs[]` enrichment           | Cross-layer integration |
-
 ### Stripe → Google Sheets
 
 ```
@@ -104,32 +89,6 @@ Both target the same Postgres host with different schemas.
 | Each writes to its own schema                     | Schema isolation    |
 | Each has its own `Sync.state` checkpoint map      | State isolation     |
 | Pausing Sync A does not affect Sync B             | Lifecycle isolation |
-
-### Two syncs targeting one Stripe DB
-
-```
-Sync A: stripe-api-core      → stripe-database (db_abc123)
-Sync B: stripe-api-reporting  → stripe-database (db_abc123)
-```
-
-| Test                                                  | Validates    |
-| ----------------------------------------------------- | ------------ |
-| DB API returns both syncs in `syncs[]` array          | Enrichment   |
-| `stripe db list` shows "2 (1 syncing, 1 backfilling)" | CLI display  |
-| Deleting Sync A leaves Sync B running                 | Independence |
-
-### Zero syncs on a database
-
-```
-Create db_abc123 (creates default sync)
-Delete the default sync
-```
-
-| Test                                         | Validates              |
-| -------------------------------------------- | ---------------------- |
-| Database still accessible for direct queries | DB independence        |
-| `syncs[]` is empty in DB API response        | Enrichment correctness |
-| `stripe db list` shows "—" in syncs column   | CLI display            |
 
 ## Files
 

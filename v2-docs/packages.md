@@ -10,8 +10,7 @@ packages/
 ├── destination-google-sheets/← Google Sheets destination (+ CLI)
 ├── orchestrator-postgres/    ← orchestrator with Postgres state (+ CLI)
 ├── orchestrator-fs/          ← orchestrator with filesystem state (+ CLI)
-├── sync-service/             ← Sync API service (Layer 3)
-└── db-service/               ← DB API service (Layer 4)
+└── sync-service/             ← Sync API service (Layer 3)
 apps/
 └── supabase/                 ← Supabase integration (edge functions + dashboard)
 docker-compose.yml            ← root-level: shared Postgres + Stripe fixtures
@@ -44,11 +43,6 @@ docker-compose.yml            ← root-level: shared Postgres + Stripe fixtures
                    ┌──────┴───────┐
                    │ sync-service │   ← wires sources + destinations +
                    │  (Layer 3)   │      orchestrators together
-                   └──────┬───────┘
-                          │
-                   ┌──────┴───────┐
-                   │  db-service  │   ← convenience layer on top
-                   │  (Layer 4)   │
                    └──────────────┘
 ```
 
@@ -215,32 +209,6 @@ sync-service/
 **Exports:** Sync API routes, service factory.
 
 **Dependencies:** `sync-protocol`, all source/destination/orchestrator packages (as the composition root).
-
-### `db-service` — DB API (Layer 4)
-
-The managed database service. Provisions infrastructure, manages users, enriches responses with sync status. Built on top of sync-service.
-
-```
-db-service/
-├── src/
-│   ├── index.ts          # Service entrypoint
-│   ├── api/
-│   │   ├── databases.ts  # POST/GET/DELETE /v2/data/databases
-│   │   ├── users.ts      # POST/GET/DELETE /v2/data/databases/:id/users
-│   │   └── query.ts      # POST /v2/data/databases/:id/query
-│   ├── provisioner.ts    # RDS/DuckDB provisioning
-│   └── enrichment.ts     # SyncSummary lookup from sync-service
-├── test/
-│   ├── databases.test.ts
-│   ├── users.test.ts
-│   ├── query.test.ts
-│   └── enrichment.test.ts
-└── package.json
-```
-
-**Exports:** DB API routes, service factory.
-
-**Dependencies:** `sync-protocol` (for types), `sync-service` (for sync enrichment).
 
 ### `apps/supabase` — Supabase integration
 

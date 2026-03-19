@@ -28,19 +28,9 @@ The Stripe Sync product: Sync resources, source/destination configs, scheduling,
 - `sync-api.ts` — API routes
 - `sync-cli.md` — CLI help text
 
-### Layer 4 · [`4-db/`](4-db/ARCHITECTURE.md)
-
-The Stripe DB product: managed databases, access management, query API. A convenience layer built on top of Stripe Sync.
-
-- `ARCHITECTURE.md` — database types, lifecycle, access methods, API surface
-- `db-types.ts` — Database, DatabaseUser, PostgresConnection
-- `db-api.ts` — API routes with SyncSummary enrichment
-- `db-cli.md` — CLI help text
-
 ## How to read this
 
 Start from the layer you care about:
 
 - **Building a new source or destination?** Start with [`2-sync-engine/ARCHITECTURE.md`](2-sync-engine/ARCHITECTURE.md).
 - **Configuring a sync pipeline?** Start with [`3-sync/ARCHITECTURE.md`](3-sync/ARCHITECTURE.md).
-- **Working on the managed database product?** Start with [`4-db/ARCHITECTURE.md`](4-db/ARCHITECTURE.md).

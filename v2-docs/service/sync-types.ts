@@ -62,10 +62,6 @@ export type DestinationConfig =
       /** Credential type: `google` */
       credential_id: string
     }
-  | {
-      type: 'stripe-database'
-      database_id: `db_${string}`
-    }
 
 export type SyncStatus = 'backfilling' | 'syncing' | 'paused' | 'error'
 

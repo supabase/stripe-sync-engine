@@ -18,7 +18,6 @@ Target structure from `packages.md`. Status: EXISTS / MISSING / WRONG.
 | `packages/orchestrator-postgres`     | EXISTS  | `forward()`, `collect()`, `run()` all implemented. Implements `Orchestrator<Sync>` from protocol.    |
 | `packages/orchestrator-fs`           | EXISTS  | Filesystem-backed orchestrator. 10 tests passing.                                                    |
 | `packages/sync-service`              | MISSING | Not created yet. Composition root role currently in `apps/cli`.                                      |
-| `packages/db-service`                | MISSING | Not created yet.                                                                                     |
 | `apps/cli`                           | EXISTS  | CLI application. Composes source-stripe + destination-postgres.                                      |
 | `apps/supabase`                      | EXISTS  | Supabase integration (edge functions).                                                               |
 | `apps/supabase-dashboard`            | EXISTS  | Moved from `packages/dashboard`. Clean.                                                              |
@@ -193,9 +192,7 @@ All P0 items resolved:
 
 4. **Create `packages/sync-service`**. Sync CRUD API. Currently the composition root role is in `apps/cli`.
 
-5. **Create `packages/db-service`**. DB lifecycle API with sync enrichment.
-
-6. **Decompose remaining monoliths** if any large files exist in source-stripe server code.
+5. **Decompose remaining monoliths** if any large files exist in source-stripe server code.
 
 ## Completion criteria
 

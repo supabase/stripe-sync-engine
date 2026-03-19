@@ -22,7 +22,7 @@ Sync Service (API + scheduling + credential management)
 A **Sync** (aka sync pipeline) connects a **source** to a **destination**. Both may reference a **credential** for authentication.
 
 - **SourceConfig** — where data comes from (e.g. Stripe API Core, EventBridge)
-- **DestinationConfig** — where data lands (e.g. Postgres, Google Sheets, Stripe Database)
+- **DestinationConfig** — where data lands (e.g. Postgres, Google Sheets)
 - **Credential** — stored connection secrets (API keys, database passwords, OAuth tokens)
 
 ## Why "source" and not just "Stripe"?
@@ -31,7 +31,7 @@ The source isn't always Stripe. Other data providers may have their own source i
 
 ## Source credentials
 
-A Stripe organization may want to sync from a specific Stripe account. For first-party Stripe sources we can provision a system key internally, so a user-supplied credential may not be required. Third-party sources will always need a credential.
+A Stripe organization may want to sync from a specific Stripe account. The source needs a credential (API key) to authenticate. Third-party sources will always need a user-supplied credential.
 
 ## Open questions
 

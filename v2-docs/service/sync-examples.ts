@@ -31,37 +31,6 @@ export const cred_google_finance = {
   refresh_token: '1//0abc123',
 } satisfies Credential
 
-// MARK: - Stripe → Stripe Database
-
-export const sync_stripe_to_db = {
-  id: 'sync_stripe_to_db',
-  account_id: 'acct_abc123',
-  source: {
-    type: 'stripe-api-core',
-    api_version: '2025-04-30.basil',
-    credential_id: 'cred_stripe_prod',
-  },
-  destination: {
-    type: 'stripe-database',
-    database_id: 'db_234sr4s',
-  },
-} satisfies Sync
-
-// MARK: - Stripe EventBridge → Stripe Database
-
-export const sync_eventbridge_to_db = {
-  id: 'sync_eventbridge_to_db',
-  account_id: 'acct_abc123',
-  source: {
-    type: 'stripe-event-bridge',
-    account_id: 'acct_abc123',
-  },
-  destination: {
-    type: 'stripe-database',
-    database_id: 'db_234sr4s',
-  },
-} satisfies Sync
-
 // MARK: - Stripe → Postgres
 
 export const sync_stripe_to_pg = {
