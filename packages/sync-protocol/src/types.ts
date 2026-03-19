@@ -34,6 +34,20 @@ export interface Stream {
   metadata?: Record<string, unknown>
 }
 
+// MARK: - Connector specification
+
+/** JSON Schema describing the configuration a connector requires. */
+export interface ConnectorSpecification {
+  /** JSON Schema for the connector's configuration object. */
+  connection_specification: Record<string, unknown>
+}
+
+/** Result of a connection check. */
+export interface CheckResult {
+  status: 'succeeded' | 'failed'
+  message?: string
+}
+
 // MARK: - Messages
 
 /** One record for one stream. */
