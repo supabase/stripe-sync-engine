@@ -4,13 +4,13 @@
 
 Some connectors require external registration before they can produce or consume data:
 
-| Connector | Setup | Teardown |
-|---|---|---|
-| Stripe (webhooks) | `stripe.webhookEndpoints.create()` | `stripe.webhookEndpoints.del()` |
-| Postgres CDC | Create logical replication slot | Drop replication slot |
-| Kafka source | Subscribe to topics | Unsubscribe / delete consumer group |
-| Google Sheets dest | Create spreadsheet tabs | (no-op) |
-| S3 destination | Ensure bucket/prefix exists | (no-op) |
+| Connector          | Setup                              | Teardown                            |
+| ------------------ | ---------------------------------- | ----------------------------------- |
+| Stripe (webhooks)  | `stripe.webhookEndpoints.create()` | `stripe.webhookEndpoints.del()`     |
+| Postgres CDC       | Create logical replication slot    | Drop replication slot               |
+| Kafka source       | Subscribe to topics                | Unsubscribe / delete consumer group |
+| Google Sheets dest | Create spreadsheet tabs            | (no-op)                             |
+| S3 destination     | Ensure bucket/prefix exists        | (no-op)                             |
 
 Today this logic is either buried inside `read()`/`write()` (mixing lifecycle with data flow) or handled ad-hoc outside the interface (`findOrCreateManagedWebhook()` in `stripeSyncWebhook.ts`). This makes it invisible to the orchestrator — it can't manage webhook registration, detect stale endpoints, or clean up on sync deletion.
 
@@ -136,6 +136,7 @@ Destinations may also need provisioning: creating a schema, ensuring a bucket ex
 ### Why not in `read()` / `write()`?
 
 Separation of concerns:
+
 - `setup()` runs **once** when a sync is activated. It's about provisioning.
 - `read()` runs **continuously** (or per-backfill). It's about data flow.
 - `teardown()` runs **once** when a sync is deleted. It's about cleanup.
