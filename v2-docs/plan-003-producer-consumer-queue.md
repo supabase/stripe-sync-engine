@@ -5,7 +5,7 @@
 The sync pipeline is tightly coupled via in-process async iterators:
 
 ```
-source.read() ──async iter──▶ forward() ──async iter──▶ destination.write()
+source.read() --async iter--> forward() --async iter--> destination.write()
 ```
 
 Producer and consumer run in lock-step. If the destination is slow, the source blocks. For webhook ingestion this is fatal: Stripe expects a fast 200 response, but `destination.write()` might be slow (Postgres insert, Google Sheets API, etc.).
@@ -16,11 +16,11 @@ We need to decouple producer from consumer with a durable buffer between them.
 
 ```
 Producer                      Postgres                    Consumer
-source.read()                ┌──────────┐               destination.write()
-  → forward()  ──INSERT──▶   │  _queue  │  ──DELETE──▶    → collect()
-  → close()                  │ (JSONB)  │  SKIP LOCKED    → persist state
-                             └──────────┘
-                                  ▲
+source.read()                +----------+               destination.write()
+  -> forward()  --INSERT-->  |  _queue  |  --DELETE-->    -> collect()
+  -> close()                 | (JSONB)  |  SKIP LOCKED    -> persist state
+                             +----------+
+                                  ^
                             Reconciler (cron)
                             ensures producer + consumer
                             are running for each sync
@@ -134,15 +134,15 @@ The reconciler also manages webhook lifecycle:
 
 ```
 packages/queue/
-├── package.json            # @stripe/sync-queue
-├── tsconfig.json
-├── vitest.config.ts
-└── src/
-    ├── index.ts            # re-exports
-    ├── pgQueue.ts          # PgQueue class
-    ├── pipeline.ts         # produce() + consume() helpers
-    └── __tests__/
-        └── queue.test.ts
+  package.json            # @stripe/sync-queue
+  tsconfig.json
+  vitest.config.ts
+  src/
+    index.ts              # re-exports
+    pgQueue.ts            # PgQueue class
+    pipeline.ts           # produce() + consume() helpers
+    __tests__/
+      queue.test.ts
 ```
 
 ### `PgQueue` class
