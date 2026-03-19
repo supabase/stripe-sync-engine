@@ -37,12 +37,12 @@ $dest_postgres spec | jq .
 echo ""
 
 # ── check ────────────────────────────────────────────────────────
-echo "$ dest-postgres check --config '...'"
+echo "$ dest-postgres check --config '$CONFIG'"
 $dest_postgres check --config "$CONFIG" | jq .
 echo ""
 
 # ── write ────────────────────────────────────────────────────────
-echo '$ cat <<NDJSON | dest-postgres write --config ... --catalog ...'
+echo "$ cat <<NDJSON | dest-postgres write --config '$CONFIG' --catalog '$CATALOG'"
 echo ""
 NOW=$(date +%s000)
 cat <<NDJSON | $dest_postgres write --config "$CONFIG" --catalog "$CATALOG" | jq -c '{type, stream}'
