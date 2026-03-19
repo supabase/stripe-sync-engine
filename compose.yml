@@ -1,10 +1,16 @@
 services:
-  db:
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    ports:
+      - "12111:12111" # HTTP
+      - "12112:12112" # HTTPS
+
+  postgres:
     container_name: stripe-db
     image: supabase/postgres:15.1.1.4
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     restart: unless-stopped
     ports:
-      - 54320:5432
+      - "54320:5432"
     environment:
       POSTGRES_PASSWORD: postgres

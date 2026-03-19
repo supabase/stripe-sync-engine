@@ -1,6 +1,0 @@
-services:
-  stripe-mock:
-    image: stripe/stripe-mock:latest
-    ports:
-      - "12111:12111" # HTTP
-      - "12112:12112" # HTTPS
