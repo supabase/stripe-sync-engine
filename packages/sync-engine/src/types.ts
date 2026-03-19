@@ -194,7 +194,7 @@ export const SUPPORTED_WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.Enable
   'entitlements.active_entitlement_summary.updated',
 ]
 
-export interface Sync {
+export interface SyncResult {
   synced: number
 }
 

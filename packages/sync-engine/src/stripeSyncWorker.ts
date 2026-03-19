@@ -1,8 +1,46 @@
 import Stripe from 'stripe'
-import { PostgresClient } from './database/postgres'
 import { ProcessNextResult, ResourceConfig, StripeSyncConfig } from './types'
 import { SigmaSyncProcessor } from './sigma/sigmaSyncProcessor'
 import { RunKey } from './stripeSync'
+import { toRecordMessage, type RecordMessage, type StateMessage } from './protocol'
+
+export interface WorkerTaskManager {
+  claimNextTask(
+    accountId: string,
+    runStartedAt: Date,
+    rateLimit: number
+  ): Promise<{
+    object: string
+    cursor: string | null
+    pageCursor: string | null
+    created_gte: number | null
+    created_lte: number | null
+  } | null>
+
+  updateSyncObject(
+    accountId: string,
+    runStartedAt: Date,
+    object: string,
+    createdGte: number,
+    createdLte: number,
+    updates: {
+      processedCount?: number
+      cursor?: string | null
+      status?: 'pending' | 'complete' | 'error'
+      pageCursor?: string | null
+      errorMessage?: string
+    }
+  ): Promise<number>
+
+  releaseObjectSync(
+    accountId: string,
+    runStartedAt: Date,
+    object: string,
+    pageCursor: string,
+    createdGte?: number,
+    createdLte?: number
+  ): Promise<void>
+}
 
 export type SyncTask = {
   object: string
@@ -21,19 +59,19 @@ export class StripeSyncWorker {
     private readonly stripe: Stripe,
     private readonly config: StripeSyncConfig,
     private readonly sigma: SigmaSyncProcessor,
-    private readonly postgresClient: PostgresClient,
+    private readonly taskManager: WorkerTaskManager,
     private readonly accountId: string,
     private readonly resourceRegistry: Record<string, ResourceConfig>,
     private readonly sigmaRegistry: Record<string, ResourceConfig>,
     private readonly runKey: RunKey,
     private readonly upsertAny: (
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: { [Key: string]: any }[],
+      messages: RecordMessage[],
       accountId: string,
       backfillRelated?: boolean
     ) => Promise<unknown[] | void>,
     private readonly taskLimit: number = Infinity,
-    private readonly rateLimit: number = 50
+    private readonly rateLimit: number = 50,
+    private readonly onStateMessage?: (msg: StateMessage) => void
   ) {}
 
   start(): void {
@@ -73,7 +111,7 @@ export class StripeSyncWorker {
           await new Promise((r) => setTimeout(r, randomWait))
         } else {
           if (task) {
-            await this.postgresClient.updateSyncObject(
+            await this.taskManager.updateSyncObject(
               this.accountId,
               this.runKey.runStartedAt,
               task.object,
@@ -133,7 +171,7 @@ export class StripeSyncWorker {
     const { accountId, runStartedAt } = this.runKey
 
     // Atomically claim the next pending task (FOR UPDATE SKIP LOCKED).
-    const claimed = await this.postgresClient.claimNextTask(accountId, runStartedAt, this.rateLimit)
+    const claimed = await this.taskManager.claimNextTask(accountId, runStartedAt, this.rateLimit)
     if (!claimed) return null
 
     const object = claimed.object
@@ -176,7 +214,7 @@ export class StripeSyncWorker {
     const lastId =
       has_more && data.length > 0 ? (data[data.length - 1] as { id: string }).id : undefined
 
-    await this.postgresClient.updateSyncObject(
+    await this.taskManager.updateSyncObject(
       this.accountId,
       this.runKey.runStartedAt,
       task.object,
@@ -189,6 +227,17 @@ export class StripeSyncWorker {
         pageCursor: complete ? null : lastId,
       }
     )
+
+    this.onStateMessage?.({
+      type: 'state',
+      stream: task.object,
+      data: {
+        cursor,
+        pageCursor: complete ? null : lastId,
+        status: complete ? 'complete' : 'pending',
+        processedCount: data.length,
+      },
+    })
   }
 
   async processSingleTask(task: SyncTask): Promise<ProcessNextResult> {
@@ -212,7 +261,7 @@ export class StripeSyncWorker {
       // fetchOneSigmaPage handles progress, cursor advancement, and completion internally.
       // If there are more pages, release the task back to pending for re-claiming.
       if (result.hasMore) {
-        await this.postgresClient.releaseObjectSync(
+        await this.taskManager.releaseObjectSync(
           this.accountId,
           this.runKey.runStartedAt,
           task.object,
@@ -233,7 +282,7 @@ export class StripeSyncWorker {
       task.created_lte
     )
     if (data.length === 0 && has_more) {
-      await this.postgresClient.updateSyncObject(
+      await this.taskManager.updateSyncObject(
         this.accountId,
         this.runKey.runStartedAt,
         task.object,
@@ -242,12 +291,16 @@ export class StripeSyncWorker {
         { status: 'error', errorMessage: 'Stripe returned has_more=true with empty page' }
       )
     } else if (data.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await this.upsertAny(data as { [Key: string]: any }[], this.accountId, false)
+      const records = this.toRecordMessages(task.object, data)
+      await this.upsertAny(records, this.accountId, false)
     }
 
     await this.updateTaskProgress(task, data, has_more)
     return { hasMore: has_more, processed: data.length, runStartedAt: this.runKey.runStartedAt }
+  }
+
+  private toRecordMessages(tableName: string, data: unknown[]): RecordMessage[] {
+    return data.map((item) => toRecordMessage(tableName, item as Record<string, unknown>))
   }
 
   private getConfigForTaskObject(taskObject: string): ResourceConfig | undefined {

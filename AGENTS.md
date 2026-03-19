@@ -39,7 +39,7 @@ If you edit migrations, also verify `migrations-embedded.ts` is up to date:
 ## Monorepo Layout
 
 - `packages/sync-engine` — core sync engine + CLI (published as `@stripe/sync-engine`)
-- `packages/fastify-app` — demo/reference Fastify app
+- `packages/source-stripe` — Stripe source connector + webhook ingress server (Fastify)
 - `packages/sync-engine/src/supabase` — Supabase edge functions (Deno runtime, not Node)
 
 ## GitHub Workflow

@@ -9,7 +9,8 @@
  */
 
 import { StripeSync } from '../../stripeSync.ts'
-import { StripeSyncWorker } from '../../stripeSyncWorker.ts'
+import { StripeSyncWorker, type WorkerTaskManager } from '../../stripeSyncWorker.ts'
+import { fromRecordMessage, type RecordMessage } from '../../protocol/index.ts'
 import postgres from 'postgres'
 
 // Reuse these between requests
@@ -95,6 +96,29 @@ Deno.serve(async (req) => {
   }
   await stripeSync.postgresClient.resetStuckRunningObjects(runKey.accountId, runKey.runStartedAt, 1)
 
+  const taskManager: WorkerTaskManager = {
+    claimNextTask: (accountId, runStartedAt, rl) =>
+      stripeSync.postgresClient.claimNextTask(accountId, runStartedAt, rl),
+    updateSyncObject: (accountId, runStartedAt, object, createdGte, createdLte, updates) =>
+      stripeSync.postgresClient.updateSyncObject(
+        accountId,
+        runStartedAt,
+        object,
+        createdGte,
+        createdLte,
+        updates
+      ),
+    releaseObjectSync: (accountId, runStartedAt, object, pageCursor, createdGte, createdLte) =>
+      stripeSync.postgresClient.releaseObjectSync(
+        accountId,
+        runStartedAt,
+        object,
+        pageCursor,
+        createdGte,
+        createdLte
+      ),
+  }
+
   const workers = Array.from(
     { length: workerCount },
     () =>
@@ -102,12 +126,16 @@ Deno.serve(async (req) => {
         stripeSync.stripe,
         stripeSync.config,
         stripeSync.sigma,
-        stripeSync.postgresClient,
+        taskManager,
         stripeSync.accountId,
         stripeSync.resourceRegistry,
         stripeSync.sigmaRegistry,
         runKey,
-        stripeSync.upsertAny.bind(stripeSync),
+        async (messages: RecordMessage[], accountId: string, backfillRelated?: boolean) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const items = messages.map(fromRecordMessage) as { [Key: string]: any }[]
+          return stripeSync.upsertAny(items, accountId, backfillRelated)
+        },
         Infinity,
         rateLimit
       )

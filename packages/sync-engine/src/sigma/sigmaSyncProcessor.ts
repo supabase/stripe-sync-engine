@@ -1,4 +1,3 @@
-import type { PostgresClient } from '../database/postgres'
 import type { Logger, ProcessNextResult, ResourceConfig } from '../types'
 import { parseCsvObjects, runSigmaQueryAndDownloadCsv } from './sigmaApi'
 import { SIGMA_INGESTION_CONFIGS } from './sigmaIngestionConfigs'
@@ -8,6 +7,46 @@ import {
   sigmaCursorFromEntry,
   type SigmaIngestionConfig,
 } from './sigmaIngestion'
+
+/**
+ * Interface capturing the write/read operations that SigmaSyncProcessor uses on the destination.
+ */
+export interface SigmaDestinationWriter {
+  query(
+    text: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    params?: any[]
+  ): Promise<{ rows: any[]; rowCount: number | null }> // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  upsertManyWithTimestampProtection<
+    T extends {
+      [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
+    },
+  >(
+    entries: T[],
+    table: string,
+    accountId: string,
+    syncTimestamp?: string,
+    upsertOptions?: SigmaIngestionConfig['upsert'],
+    schemaOverride?: string
+  ): Promise<T[]>
+
+  completeObjectSync(accountId: string, runStartedAt: Date, object: string): Promise<void>
+
+  incrementObjectProgress(
+    accountId: string,
+    runStartedAt: Date,
+    object: string,
+    count: number
+  ): Promise<number>
+
+  updateObjectCursor(
+    accountId: string,
+    runStartedAt: Date,
+    object: string,
+    cursor: string | null
+  ): Promise<void>
+}
 
 export type SigmaSyncProcessorConfig = {
   stripeSecretKey: string
@@ -25,15 +64,15 @@ export type SigmaSyncProcessorConfig = {
  * - Utility helpers (isSigmaResource, getSupportedSigmaObjects)
  */
 export class SigmaSyncProcessor {
-  private readonly postgresClient: PostgresClient
+  private readonly writer: SigmaDestinationWriter
   private readonly config: SigmaSyncProcessorConfig
 
   get sigmaSchemaName(): string {
     return this.config.sigmaSchemaName ?? 'sigma'
   }
 
-  constructor(postgresClient: PostgresClient, config: SigmaSyncProcessorConfig) {
-    this.postgresClient = postgresClient
+  constructor(writer: SigmaDestinationWriter, config: SigmaSyncProcessorConfig) {
+    this.writer = writer
     this.config = config
   }
 
@@ -105,7 +144,7 @@ export class SigmaSyncProcessor {
     const selectCols = cursorCols.map((c) => `"${c.column}"`).join(', ')
     const orderBy = cursorCols.map((c) => `"${c.column}" DESC`).join(', ')
 
-    const result = await this.postgresClient.query(
+    const result = await this.writer.query(
       `SELECT ${selectCols}
        FROM "${sigmaSchema}"."${sigmaConfig.destinationTable}"
        WHERE "_account_id" = $1
@@ -179,7 +218,7 @@ export class SigmaSyncProcessor {
 
     const rows = parseCsvObjects(csv)
     if (rows.length === 0) {
-      await this.postgresClient.completeObjectSync(accountId, runStartedAt, resourceName)
+      await this.writer.completeObjectSync(accountId, runStartedAt, resourceName)
       return { processed: 0, hasMore: false, runStartedAt }
     }
 
@@ -192,7 +231,7 @@ export class SigmaSyncProcessor {
       'Sigma sync: upserting rows'
     )
 
-    await this.postgresClient.upsertManyWithTimestampProtection(
+    await this.writer.upsertManyWithTimestampProtection(
       entries,
       resourceName,
       accountId,
@@ -201,19 +240,14 @@ export class SigmaSyncProcessor {
       this.sigmaSchemaName
     )
 
-    await this.postgresClient.incrementObjectProgress(
-      accountId,
-      runStartedAt,
-      resourceName,
-      entries.length
-    )
+    await this.writer.incrementObjectProgress(accountId, runStartedAt, resourceName, entries.length)
 
     const newCursor = sigmaCursorFromEntry(sigmaConfig, entries[entries.length - 1]!)
-    await this.postgresClient.updateObjectCursor(accountId, runStartedAt, resourceName, newCursor)
+    await this.writer.updateObjectCursor(accountId, runStartedAt, resourceName, newCursor)
 
     const hasMore = rows.length === sigmaConfig.pageSize
     if (!hasMore) {
-      await this.postgresClient.completeObjectSync(accountId, runStartedAt, resourceName)
+      await this.writer.completeObjectSync(accountId, runStartedAt, resourceName)
     }
 
     return { processed: entries.length, hasMore, runStartedAt }

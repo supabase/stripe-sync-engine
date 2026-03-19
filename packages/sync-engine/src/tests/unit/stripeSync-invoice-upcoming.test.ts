@@ -96,7 +96,13 @@ describe('invoice.upcoming handling', () => {
     await expect(stripeSync.webhook.processEvent(event)).resolves.toBeUndefined()
 
     expect(upsertSpy).toHaveBeenCalledWith(
-      [event.data.object],
+      [
+        expect.objectContaining({
+          type: 'record',
+          stream: 'invoice',
+          data: event.data.object,
+        }),
+      ],
       'acct_test',
       false,
       expect.any(String)

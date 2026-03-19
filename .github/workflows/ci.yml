@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - v2
   workflow_dispatch:
 
 jobs:
@@ -41,14 +42,14 @@ jobs:
 
       - name: Set up .env file
         run: |
-          touch packages/fastify-app/.env
-          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> packages/fastify-app/.env
-          echo NODE_ENV=dev >> packages/fastify-app/.env
-          echo STRIPE_SECRET_KEY=sk_test_ >> packages/fastify-app/.env
-          echo STRIPE_WEBHOOK_SECRET=whsec_ >> packages/fastify-app/.env
-          echo SCHEMA=stripe >> packages/fastify-app/.env
-          echo PORT=8080 >> packages/fastify-app/.env
-          echo API_KEY=api_key_test >> packages/fastify-app/.env
+          touch packages/source-stripe/.env
+          echo DATABASE_URL='postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe' >> packages/source-stripe/.env
+          echo NODE_ENV=dev >> packages/source-stripe/.env
+          echo STRIPE_SECRET_KEY=sk_test_ >> packages/source-stripe/.env
+          echo STRIPE_WEBHOOK_SECRET=whsec_ >> packages/source-stripe/.env
+          echo SCHEMA=stripe >> packages/source-stripe/.env
+          echo PORT=8080 >> packages/source-stripe/.env
+          echo API_KEY=api_key_test >> packages/source-stripe/.env
 
       - name: Install dependencies
         run: |

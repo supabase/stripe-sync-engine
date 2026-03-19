@@ -42,6 +42,11 @@
     "dist"
   ],
   "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/source-stripe": "workspace:*",
+    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/destination-google-sheets": "workspace:*",
+    "@stripe/orchestrator-postgres": "workspace:*",
     "@ngrok/ngrok": "^1.4.1",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",

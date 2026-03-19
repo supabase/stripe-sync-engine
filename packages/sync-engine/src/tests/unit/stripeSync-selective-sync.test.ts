@@ -45,7 +45,13 @@ describe('selective sync / webhook object filter', () => {
     await stripeSync.webhook.processEvent(event)
 
     expect(upsertSpy).toHaveBeenCalledWith(
-      [event.data.object],
+      [
+        expect.objectContaining({
+          type: 'record',
+          stream: 'customer',
+          data: event.data.object,
+        }),
+      ],
       'acct_test',
       false,
       expect.any(String)
@@ -66,9 +72,9 @@ describe('selective sync / webhook object filter', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(stripeSync.webhook as any).deps.upsertAny = upsertSpy
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(stripeSync.webhook as any).deps.postgresClient.delete = deleteSpy
+    ;(stripeSync.webhook as any).deps.writer.delete = deleteSpy
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(stripeSync.webhook as any).deps.postgresClient.columnExists = columnExistsSpy
+    ;(stripeSync.webhook as any).deps.writer.columnExists = columnExistsSpy
 
     const event = {
       id: 'evt_person_updated',

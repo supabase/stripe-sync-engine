@@ -1,0 +1,401 @@
+# Incremental Architecture Refactor — Stripe Sync Engine
+#
+# Refactors the sync-engine-v1 repo to align with the v2 architecture:
+# generic source–destination protocol, pure message-based communication,
+# no coupling between sources and destinations.
+#
+# Strategy: plan → execute → validate → test → commit → replan → repeat
+
+# ── Agents ────────────────────────────────────────────────────────────
+
+agent captain:
+  model: opus
+  persist: true
+  prompt: """
+    You are the refactoring captain for the Stripe sync engine.
+
+    Your job is to plan SMALL, incremental refactoring steps that move
+    the codebase from its current state toward the v2 architecture.
+    You never implement — you only plan and review.
+
+    The target architecture (in v2/docs/) has 4 layers:
+    - Layer 1: Data API (out of scope — don't touch)
+    - Layer 2: Sync Engine — generic Source/Destination protocol, NDJSON messages,
+      orchestrator as message router. Sources and destinations MUST NOT know about
+      each other. The message protocol is the ONLY interface between them.
+    - Layer 3: Stripe Sync — Credential + Sync CRUD, source/destination configs
+    - Layer 4: Stripe DB — managed databases, pure infrastructure
+
+    Planning rules:
+    - Each increment should be ONE logical change (extract interface, move file,
+      rename type, remove coupling, add abstraction)
+    - Each increment MUST leave the codebase in a working state (tests pass)
+    - Prefer mechanical refactors (rename, extract, move) over behavioral changes
+    - Never plan more than 3-5 steps ahead — replan after each execution
+    - Order by risk: low-risk structural changes first, behavioral changes last
+    - Flag any change that might break existing tests
+
+    Architecture purity rules (STRICT):
+    - Sources MUST NOT import from or reference any destination code
+    - Destinations MUST NOT import from or reference any source code
+    - The engine/orchestrator is a message router — it does NOT transform data
+    - All communication between source and destination is via the 6-type message protocol
+    - State lives on the Sync resource (Sync.state), not in a separate store
+    - Schema is discovered at runtime via CatalogMessage, never hardcoded
+  """
+
+agent executor:
+  model: opus
+  prompt: """
+    You are a precise code refactoring executor for the Stripe sync engine.
+    You implement exactly what the plan says — no more, no less.
+
+    Rules:
+    - Make the MINIMUM change to accomplish the planned step
+    - Do NOT add features, refactor surrounding code, or "improve" things
+    - Do NOT add comments, docstrings, or type annotations beyond what's planned
+    - Preserve existing test behavior unless the plan explicitly says to change it
+    - If a planned change would break something the plan didn't anticipate,
+      STOP and report the issue — do not improvise a fix
+    - After making changes, run the relevant tests to verify nothing broke
+    - Use `pnpm build` before testing — this codebase requires built output
+
+    Build & test commands:
+    - pnpm build          (required before running anything)
+    - pnpm test           (unit tests)
+    - pnpm test:integration  (needs local Postgres)
+    - pnpm lint
+    - pnpm format
+  """
+
+agent validator:
+  model: opus
+  prompt: """
+    You are an EXCEPTIONALLY STRICT architecture validator for the Stripe sync engine.
+    You are the last line of defense against architectural drift. You are paranoid.
+
+    Your job: verify that every change maintains architecture purity. You FAIL builds
+    that violate these rules, even if the code "works."
+
+    HARD RULES (any violation = FAIL):
+
+    1. SOURCE–DESTINATION ISOLATION
+       - No source file may import from any destination module
+       - No destination file may import from any source module
+       - No source type definition may reference a destination type
+       - No destination type definition may reference a source type
+       - grep for cross-imports. Check the actual import statements.
+
+    2. MESSAGE PROTOCOL PURITY
+       - All data flowing between source and destination passes through the
+         6-type message protocol (record, state, catalog, log, error, stream_status)
+       - No direct function calls between source and destination implementations
+       - No shared mutable state between source and destination
+       - The orchestrator only routes messages — it does NOT transform record data
+
+    3. INTERFACE CONTRACTS
+       - Source implements: discover() and read()
+       - Destination implements: write()
+       - These interfaces accept/return Message types, nothing else
+       - No "Stripe-specific" or "Postgres-specific" methods on the base interfaces
+
+    4. STATE PURITY
+       - Checkpoint state lives on Sync.state (per-stream map)
+       - No separate state store for sync progress
+       - State is opaque to the destination — only the source interprets it
+
+    5. SCHEMA DISCOVERY
+       - Schema comes from CatalogMessage at runtime
+       - No hardcoded table names, column types, or Stripe object shapes in the engine layer
+
+    Validation process:
+    - Read the git diff of the changes
+    - Check every new/modified file against the rules above
+    - Check import graphs for coupling violations
+    - Report PASS with confidence level, or FAIL with specific violations
+    - Be paranoid: when in doubt, FAIL and explain why
+  """
+
+# ── Setup ─────────────────────────────────────────────────────────────
+
+# Create a fresh branch for the refactor
+session "Create refactor branch"
+  model: sonnet
+  prompt: """
+    In the repo at /Users/tx/stripe/github/stripe/sync-engine-v1:
+
+    1. Make sure we're on a clean working tree (stash or error if dirty)
+    2. Create and checkout a new branch: refactor/v2-architecture
+       (based off the current v2 branch)
+    3. Confirm the branch is ready
+
+    Just do the git operations, nothing else.
+  """
+  permissions:
+    bash: allow
+
+# Read the architecture spec and current codebase structure
+parallel:
+  architecture = session "Read the v2 architecture docs"
+    model: sonnet
+    prompt: """
+      Read ALL of the following architecture docs and return a structured summary
+      of the target architecture. Focus on interfaces, type definitions, and
+      module boundaries.
+
+      Files to read:
+      - v2/docs/README.md
+      - v2/docs/2-sync-engine/ARCHITECTURE.md
+      - v2/docs/2-sync-engine/sync-engine-types.ts
+      - v2/docs/2-sync-engine/sync-engine-api.ts
+      - v2/docs/3-sync/ARCHITECTURE.md
+      - v2/docs/3-sync/sync-types.ts
+      - v2/docs/3-sync/sync-api.ts
+      - v2/docs/4-db/ARCHITECTURE.md
+      - v2/docs/4-db/db-types.ts
+      - v2/docs/4-db/db-api.ts
+
+      Return:
+      1. The exact Source interface (discover, read)
+      2. The exact Destination interface (write)
+      3. The 6 message types and their TypeScript definitions
+      4. The Sync type definition
+      5. The Database type definition
+      6. Module boundaries (what imports what)
+      7. What MUST NOT be coupled (source ↔ destination isolation)
+    """
+
+  codebase = session "Map the current codebase"
+    model: sonnet
+    prompt: """
+      In the repo at /Users/tx/stripe/github/stripe/sync-engine-v1,
+      map the current codebase structure in packages/sync-engine/src/.
+
+      For each source file, note:
+      1. What it exports (types, functions, classes)
+      2. What it imports (and from where)
+      3. Whether it's source-specific, destination-specific, or engine-core
+
+      Focus on identifying:
+      - Where Stripe-specific logic lives
+      - Where Postgres-specific logic lives
+      - Where source and destination are coupled
+      - What the current message types look like
+      - How state is currently managed
+
+      Return a structured map: filename → role + imports + exports + coupling notes
+    """
+    permissions:
+      bash: allow
+
+# ── Plan–Execute–Validate Loop ────────────────────────────────────────
+
+# Captain creates the initial plan
+session: captain
+  prompt: """
+    You have the target architecture and the current codebase map.
+
+    Create the FIRST increment plan: 3-5 small, safe refactoring steps
+    that begin moving the codebase toward the v2 architecture.
+
+    Start with the lowest-risk structural changes:
+    - Extracting interfaces that don't exist yet
+    - Moving files to align with the layer structure
+    - Renaming types to match the v2 naming
+    - Removing obvious source↔destination coupling
+
+    For each step, specify:
+    1. What to change (specific files and lines)
+    2. Why this step (which architecture goal it serves)
+    3. Risk level (low/medium/high)
+    4. How to verify (which tests to run)
+    5. Dependencies (must step X complete first?)
+
+    Output the plan as a numbered list. Steps 1-N.
+  """
+  context: { architecture, codebase }
+
+# Execute–Validate–Commit loop
+loop until **_the codebase fully aligns with the v2 architecture — all source/destination coupling is removed, interfaces match the spec, message protocol is pure, and the captain confirms no more increments are needed_** (max: 200):
+
+  # Execute the current plan
+  let result = session: executor
+    prompt: """
+      Execute the refactoring plan. Work through each step IN ORDER.
+
+      For EACH step:
+      1. Make the code change
+      2. Run `pnpm build` to verify it compiles
+      3. Run `pnpm test` to verify tests pass
+      4. If build or tests fail, fix the issue if it's trivial,
+         otherwise STOP and report what went wrong
+
+      After completing all steps (or stopping on failure), report:
+      - Which steps completed successfully
+      - Which steps failed and why
+      - What the git diff looks like (run git diff --stat)
+
+      Do NOT commit yet — the validator needs to review first.
+    """
+    permissions:
+      bash: allow
+
+  # Strict architecture validation
+  let validation = session: validator
+    prompt: """
+      Validate the changes made by the executor.
+
+      1. Run `git diff` to see exactly what changed
+      2. Check every rule in your validation checklist
+      3. Pay special attention to:
+         - New import statements (do they cross source↔destination boundary?)
+         - Type definitions (do they reference types from the wrong layer?)
+         - Function signatures (do they accept/return the right message types?)
+         - Any hardcoded Stripe or Postgres references in engine-layer code
+
+      Output:
+      - PASS or FAIL
+      - Confidence level (high/medium/low)
+      - Specific findings (violations or confirmations)
+      - If FAIL: exact files and lines that violate the rules
+    """
+    permissions:
+      bash: allow
+
+  # Only commit if validation passes
+  if **validation passed (PASS verdict)**:
+    session "Commit and format"
+      model: sonnet
+      prompt: """
+        In the repo at /Users/tx/stripe/github/stripe/sync-engine-v1:
+
+        1. Run `pnpm format` to fix any formatting issues
+        2. Run `pnpm lint` and fix any lint errors
+        3. Run `pnpm build && pnpm test` one final time
+        4. Stage all changes and commit with a descriptive message
+           following the repo's commit style (conventional commits):
+           e.g. "refactor: extract Source interface from stripe-specific code"
+        5. Do NOT push yet
+
+        The commit message should explain WHAT changed and WHY
+        (which architecture goal this serves).
+      """
+      permissions:
+        bash: allow
+  else:
+    # If validation failed, the executor needs to fix violations
+    session: executor
+      prompt: """
+        The validator found architecture violations. Fix them.
+
+        Validation findings are in context. Address each violation:
+        - Remove cross-boundary imports
+        - Fix type definitions that couple source and destination
+        - Ensure message protocol purity
+
+        After fixing, run `pnpm build && pnpm test` to verify.
+        Do NOT commit — we'll re-validate.
+      """
+      context: validation
+      permissions:
+        bash: allow
+
+    # Re-validate after fixes
+    let revalidation = session: validator
+      prompt: "Re-validate after fixes. Same rules, same strictness. PASS or FAIL."
+      permissions:
+        bash: allow
+
+    if **re-validation passed**:
+      session "Commit after fix"
+        model: sonnet
+        prompt: """
+          Format, lint, build, test, then commit the changes.
+          Run: pnpm format && pnpm lint --fix && pnpm build && pnpm test
+          Then stage and commit with a descriptive conventional commit message.
+        """
+        permissions:
+          bash: allow
+    else:
+      # Captain needs to intervene — plan was bad
+      resume: captain
+        prompt: """
+          The executor's changes failed validation twice. We need to replan.
+          Review what went wrong and create a revised plan that avoids
+          the coupling issues.
+        """
+        context: revalidation
+
+  # Replan: captain reviews progress and creates next increment
+  resume: captain
+    prompt: """
+      Review what was just completed (or failed).
+
+      1. What's the current state of the codebase vs the v2 architecture?
+      2. What coupling still exists?
+      3. What are the next 3-5 incremental steps?
+      4. Are we getting close to done? If so, focus on final cleanup.
+
+      Output:
+      - Progress assessment (% complete, major remaining gaps)
+      - Next increment plan (same format as before: numbered steps)
+      - OR: "COMPLETE — no more increments needed" if we're done
+    """
+    context: result
+
+# ── Finalize ──────────────────────────────────────────────────────────
+
+# Final validation pass
+let final_check = session: validator
+  prompt: """
+    FINAL ARCHITECTURE VALIDATION.
+
+    This is the last check before we push. Be even MORE paranoid than usual.
+
+    1. Read the full codebase (packages/sync-engine/src/)
+    2. Build a complete import graph
+    3. Verify EVERY rule:
+       - Zero source→destination imports
+       - Zero destination→source imports
+       - Message protocol is the only interface
+       - No hardcoded schemas in engine layer
+       - State on Sync.state, not separate store
+    4. Compare against the v2 architecture docs
+
+    Output: FINAL PASS or FINAL FAIL with full report.
+  """
+  permissions:
+    bash: allow
+
+if **final validation passed**:
+  # Push the branch
+  session "Push refactor branch"
+    model: sonnet
+    prompt: """
+      In the repo at /Users/tx/stripe/github/stripe/sync-engine-v1:
+
+      1. Run final: pnpm format:check && pnpm lint && pnpm build && pnpm test
+      2. Push the branch: git push -u origin refactor/v2-architecture
+      3. Report the branch URL and commit count
+    """
+    permissions:
+      bash: allow
+
+  resume: captain
+    prompt: """
+      The refactor is complete and pushed. Write a final summary:
+      1. What was changed (high-level)
+      2. How many commits / what they cover
+      3. Architecture purity status
+      4. Any remaining TODOs or known issues
+      5. Recommendation for review
+    """
+else:
+  resume: captain
+    prompt: """
+      Final validation failed. Review the failures and write a report:
+      1. What violations remain
+      2. Why they couldn't be fixed in this pass
+      3. Recommended next steps
+    """
+    context: final_check

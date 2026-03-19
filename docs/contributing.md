@@ -21,7 +21,7 @@ pnpm install
 
 ### Build
 
-The sync-engine package must be built before the fastify-app tests can run.
+The sync-engine package must be built before the source-stripe server tests can run.
 The Supabase edge functions use Vite `?raw` imports and `import ... with { type: 'json' }`
 (import attributes), both of which require a bundler — they can't be executed directly
 by `node` or `tsx`.
@@ -39,7 +39,7 @@ pnpm test
 ```
 
 This runs tests across all workspace packages. The sync-engine unit tests are
-pure mocks. The fastify-app tests need a local Postgres instance (see below).
+pure mocks. The source-stripe server tests need a local Postgres instance (see below).
 
 **Integration tests** (requires Postgres):
 
@@ -70,7 +70,7 @@ Copy `.env.sample` to `.env` in `packages/sync-engine/` and fill in your keys.
 
 ### Local Postgres
 
-The fastify-app integration tests default to `postgres://postgres:postgres@localhost:5432/postgres`.
+The source-stripe server integration tests default to `postgres://postgres:postgres@localhost:5432/postgres`.
 If your local Postgres uses a different role, either:
 
 - Create the expected role: `psql -c "CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';"`

@@ -6,7 +6,7 @@
 This monorepo contains packages for synchronizing your Stripe account with a PostgreSQL database:
 
 - [`@stripe/sync-engine`](./packages/sync-engine/README.md): A TypeScript library for syncing Stripe data to PostgreSQL with managed webhooks, CLI tools, and Supabase Edge Function deployment.
-- [`stripe-sync-fastify`](./packages/fastify-app/README.md): A Fastify-based server and Docker image for production deployments.
+- [`@stripe/source-stripe`](./packages/source-stripe/README.md): Stripe source connector with webhook ingress server (Fastify) and Docker image for production deployments.
 
 ![Sync Stripe with PostgreSQL](./docs/stripe-sync-engine.jpg)
 
@@ -79,7 +79,7 @@ npx @stripe/sync-engine supabase install \
 ## Packages
 
 - [Library & CLI: @stripe/sync-engine](./packages/sync-engine/README.md)
-- [Docker/Server: stripe-sync-fastify](./packages/fastify-app/README.md)
+- [Source + Server: @stripe/source-stripe](./packages/source-stripe/SERVER.md)
 
 Each package has its own README with installation, configuration, and usage instructions.
 

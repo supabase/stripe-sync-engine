@@ -1,0 +1,28 @@
+{
+  "name": "@stripe/destination-google-sheets",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "test": "vitest"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "googleapis": "^148.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

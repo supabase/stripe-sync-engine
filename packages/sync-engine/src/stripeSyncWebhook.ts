@@ -1,28 +1,28 @@
 import Stripe from 'stripe'
 import pkg from '../package.json' with { type: 'json' }
-import { managedWebhookSchema } from './schemas/managed_webhook'
+import { managedWebhookSchema } from '@stripe/source-stripe'
 import {
   type StripeSyncConfig,
   type ResourceConfig,
   SUPPORTED_WEBHOOK_EVENTS,
   RevalidateEntity,
 } from './types'
-import { PostgresClient } from './database/postgres'
+import type { DestinationWriter } from '@stripe/destination-postgres'
 import { getTableName, normalizeStripeObjectName } from './resourceRegistry'
+import { toRecordMessage, type RecordMessage } from './protocol'
 
 export type StripeSyncWebhookDeps = {
   stripe: Stripe
-  postgresClient: PostgresClient
+  writer: DestinationWriter
   config: StripeSyncConfig
   readonly accountId: string
   getAccountId: (objectAccountId?: string) => Promise<string>
   upsertAny: (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    items: any[],
+    messages: RecordMessage[],
     accountId: string,
     backfillRelatedEntities?: boolean,
     syncTimestamp?: string
-  ) => Promise<unknown[]>
+  ) => Promise<unknown[] | void>
   resourceRegistry: Record<string, ResourceConfig>
 }
 
@@ -48,7 +48,7 @@ export class StripeSyncWebhook {
 
     if (!webhookSecret) {
       const schema = this.quoteSyncMetadataSchemaName()
-      const result = await this.deps.postgresClient.query(
+      const result = await this.deps.writer.query(
         `SELECT secret FROM ${schema}."_managed_webhooks" WHERE account_id = $1 LIMIT 1`,
         [this.deps.accountId]
       )
@@ -125,18 +125,18 @@ export class StripeSyncWebhook {
   async handleDeletedEvent(event: Stripe.Event, accountId: string): Promise<void> {
     const objectType = normalizeStripeObjectName(event.data.object.object)
     const tableName = getTableName(objectType, this.deps.resourceRegistry)
-    const softDelete = await this.deps.postgresClient.columnExists(tableName, 'deleted')
+    const softDelete = await this.deps.writer.columnExists(tableName, 'deleted')
     const stripeObject = event.data.object as { id: string; object: string }
     if (softDelete) {
       const deletedObject = { ...stripeObject, deleted: true }
       await this.deps.upsertAny(
-        [deletedObject],
+        [toRecordMessage(objectType, deletedObject)],
         accountId,
         false,
         this.getSyncTimestamp(event, false)
       )
     } else {
-      await this.deps.postgresClient.delete(tableName, stripeObject.id)
+      await this.deps.writer.delete(tableName, stripeObject.id)
     }
   }
 
@@ -157,7 +157,7 @@ export class StripeSyncWebhook {
       refetched = true
     }
     await this.deps.upsertAny(
-      [stripeObject],
+      [toRecordMessage(objectType, stripeObject)],
       accountId,
       false,
       this.getSyncTimestamp(event, refetched)
@@ -188,13 +188,13 @@ export class StripeSyncWebhook {
       lookup_key: entitlement.lookup_key,
     }))
 
-    await this.deps.postgresClient.deleteRemovedActiveEntitlements(
+    await this.deps.writer.deleteRemovedActiveEntitlements(
       customerId,
       activeEntitlements.map((e) => e.id)
     )
     if (activeEntitlements.length > 0) {
       await this.deps.upsertAny(
-        activeEntitlements,
+        activeEntitlements.map((e) => toRecordMessage(e.object, e)),
         accountId,
         false,
         this.getSyncTimestamp(event, false)
@@ -246,7 +246,7 @@ export class StripeSyncWebhook {
     }
     const lockKey = `webhook:${this.deps.accountId}:${url}`
 
-    return this.deps.postgresClient.withAdvisoryLock(lockKey, async () => {
+    return this.deps.writer.withAdvisoryLock(lockKey, async () => {
       const existingWebhook = await this.getManagedWebhookByUrl(url)
 
       if (existingWebhook) {
@@ -260,7 +260,7 @@ export class StripeSyncWebhook {
             'Webhook is disabled, deleting and will recreate'
           )
           await this.deps.stripe.webhookEndpoints.del(existingWebhook.id)
-          await this.deps.postgresClient.delete('_managed_webhooks', existingWebhook.id)
+          await this.deps.writer.delete('_managed_webhooks', existingWebhook.id)
         } catch (error) {
           const stripeError = error as { statusCode?: number; code?: string }
           if (stripeError?.statusCode === 404 || stripeError?.code === 'resource_missing') {
@@ -268,7 +268,7 @@ export class StripeSyncWebhook {
               { error, webhookId: existingWebhook.id },
               'Webhook not found in Stripe (404), removing from database'
             )
-            await this.deps.postgresClient.delete('_managed_webhooks', existingWebhook.id)
+            await this.deps.writer.delete('_managed_webhooks', existingWebhook.id)
           } else {
             this.deps.config.logger?.error(
               { error, webhookId: existingWebhook.id },
@@ -294,7 +294,7 @@ export class StripeSyncWebhook {
               'Failed to delete old webhook from Stripe'
             )
           }
-          await this.deps.postgresClient.delete('_managed_webhooks', dbWebhook.id)
+          await this.deps.writer.delete('_managed_webhooks', dbWebhook.id)
         }
       }
 
@@ -341,7 +341,7 @@ export class StripeSyncWebhook {
 
   async getManagedWebhook(id: string): Promise<Stripe.WebhookEndpoint | null> {
     const schema = this.quoteSyncMetadataSchemaName()
-    const result = await this.deps.postgresClient.query(
+    const result = await this.deps.writer.query(
       `SELECT * FROM ${schema}."_managed_webhooks" WHERE id = $1 AND "account_id" = $2`,
       [id, this.deps.accountId]
     )
@@ -350,7 +350,7 @@ export class StripeSyncWebhook {
 
   async getManagedWebhookByUrl(url: string): Promise<Stripe.WebhookEndpoint | null> {
     const schema = this.quoteSyncMetadataSchemaName()
-    const result = await this.deps.postgresClient.query(
+    const result = await this.deps.writer.query(
       `SELECT * FROM ${schema}."_managed_webhooks" WHERE url = $1 AND "account_id" = $2`,
       [url, this.deps.accountId]
     )
@@ -359,7 +359,7 @@ export class StripeSyncWebhook {
 
   async listManagedWebhooks(): Promise<Array<Stripe.WebhookEndpoint>> {
     const schema = this.quoteSyncMetadataSchemaName()
-    const result = await this.deps.postgresClient.query(
+    const result = await this.deps.writer.query(
       `SELECT * FROM ${schema}."_managed_webhooks" WHERE "account_id" = $1 ORDER BY created DESC`,
       [this.deps.accountId]
     )
@@ -377,7 +377,7 @@ export class StripeSyncWebhook {
 
   async deleteManagedWebhook(id: string): Promise<boolean> {
     await this.deps.stripe.webhookEndpoints.del(id)
-    return this.deps.postgresClient.delete('_managed_webhooks', id)
+    return this.deps.writer.delete('_managed_webhooks', id)
   }
 
   async upsertManagedWebhooks(
@@ -395,7 +395,7 @@ export class StripeSyncWebhook {
       return filtered
     })
 
-    return this.deps.postgresClient.upsertManyWithTimestampProtection(
+    return this.deps.writer.upsertManyWithTimestampProtection(
       filteredWebhooks as unknown as Array<Stripe.WebhookEndpoint>,
       '_managed_webhooks',
       accountId,

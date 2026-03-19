@@ -13,3 +13,9 @@ private/
 .mcp.*
 .vercel
 .env*.local
+
+# Generated diagram outputs
+scripts/*.svg
+.prose/
+docs/sync2-architecture/
+private/

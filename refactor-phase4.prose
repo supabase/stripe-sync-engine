@@ -1,0 +1,253 @@
+# Phase 4: Complete the Architecture — Stripe Sync Engine
+#
+# Source of truth: v2/docs/IMPL_STATUS.md
+#
+# The IMPL_STATUS.md file lists every remaining task, ordered by priority.
+# The captain reads it at the start of each increment to determine what's
+# next. The validator reads it at the end to check completion criteria.
+# The loop does NOT exit until all completion criteria checkboxes in
+# IMPL_STATUS.md are checked.
+#
+# NO DEFERRALS. If the plan says to do it, do it. If something is genuinely
+# impossible in one increment, split it into sub-steps but do NOT punt it
+# to a "future phase." There are no future phases.
+
+# -- Agents ----------------------------------------------------------------
+
+agent captain:
+  model: opus
+  persist: true
+  prompt: """
+    You are the refactoring captain. You plan increments and review results.
+    You never implement — you only plan.
+
+    YOUR SOURCE OF TRUTH is `v2/docs/IMPL_STATUS.md`. Read it at the start
+    of every planning cycle. The P0 items are MUST DO. The P1 items are
+    SHOULD DO. The completion criteria at the bottom define DONE.
+
+    RULES:
+    - NO DEFERRALS. If something is listed in IMPL_STATUS.md, plan it.
+    - If an item is too big for one increment, split it into sub-steps
+      that each leave the codebase working.
+    - Each increment = ONE logical change. Build + test must pass after.
+    - After each increment, UPDATE IMPL_STATUS.md to reflect what changed.
+    - Order: P0 items first, then P1, then P2.
+    - DO NOT declare COMPLETE until every completion criteria checkbox
+      in IMPL_STATUS.md is checked.
+
+    ARCHITECTURE RULES:
+    - Sources MUST NOT import from destinations
+    - Destinations MUST NOT import from sources
+    - sync-protocol has ZERO runtime deps
+    - Each package owns its CLI entrypoint
+    - packages/fastify-app MUST NOT EXIST when we're done
+  """
+
+agent executor:
+  model: opus
+  prompt: """
+    You are a precise code refactoring executor. You implement exactly what
+    the plan says — no more, no less.
+
+    RULES:
+    - Make the MINIMUM change to accomplish the planned step
+    - MOVE existing code rather than rewriting when possible
+    - After changes: pnpm build && pnpm test must pass
+    - If something breaks, fix it — do NOT defer
+    - When deleting a package (fastify-app), update pnpm-workspace.yaml,
+      root package.json scripts, and run pnpm install
+
+    BUILD COMMANDS:
+    - pnpm install (after package.json changes)
+    - pnpm build
+    - pnpm test
+    - pnpm lint
+    - pnpm format
+  """
+
+agent validator:
+  model: opus
+  prompt: """
+    You are an EXCEPTIONALLY STRICT architecture validator. You are paranoid.
+
+    HARD RULES (any violation = FAIL):
+    1. SOURCE-DESTINATION ISOLATION — no cross-imports
+    2. MESSAGE PROTOCOL PURITY — 6-type message protocol
+    3. INTERFACE CONTRACTS — Source/Destination match sync-protocol
+    4. STATE PURITY — Sync.state, no separate store
+    5. SCHEMA DISCOVERY — CatalogMessage at runtime
+    6. PACKAGE ISOLATION — zero deps in sync-protocol
+    7. NO DEAD PACKAGES — fastify-app must not exist
+    8. RUNTIME CORRECTNESS — no stubs in shipping code
+
+    After each increment, also verify:
+    - Read v2/docs/IMPL_STATUS.md
+    - Confirm the changes match what the status file says was planned
+    - Confirm the status file was UPDATED to reflect new state
+  """
+
+# -- Setup -----------------------------------------------------------------
+
+# Read the source of truth
+let status = session "Read IMPL_STATUS.md"
+  model: sonnet
+  prompt: """
+    Read /Users/tx/stripe/github/stripe/sync-engine-v1/v2/docs/IMPL_STATUS.md
+    and return its full contents. This is the source of truth for what needs
+    to be done.
+  """
+
+# Read the current codebase
+let codebase = session "Map current state"
+  model: sonnet
+  prompt: """
+    In /Users/tx/stripe/github/stripe/sync-engine-v1:
+    1. ls packages/ and apps/
+    2. For fastify-app: list all src/ files and their imports from @stripe/sync-engine
+    3. For source-stripe: list all src/ files
+    4. Check what sync-engine/src/ still has that should move
+    5. Count tests per package
+  """
+  permissions:
+    bash: allow
+
+# -- Captain creates first plan from IMPL_STATUS.md -----------------------
+
+session: captain
+  prompt: """
+    Read v2/docs/IMPL_STATUS.md (the source of truth).
+
+    Plan the FIRST increment: P0 item #1 — Delete packages/fastify-app,
+    absorb webhook server into source-stripe.
+
+    This is the top priority. The user explicitly asked for this.
+
+    Steps should include:
+    1. Create source-stripe/src/server.ts from fastify-app's webhook handling
+    2. Move any reusable test fixtures (webhook JSON payloads)
+    3. Delete packages/fastify-app entirely
+    4. Update workspace config, root package.json
+    5. pnpm install && pnpm build && pnpm test
+
+    Be specific about files. No hand-waving.
+  """
+  context: { status, codebase }
+
+# -- Execute-Validate-Commit Loop -----------------------------------------
+
+loop until **every completion criteria checkbox in v2/docs/IMPL_STATUS.md is checked — read the file and verify** (max: 500):
+
+  let result = session: executor
+    prompt: """
+      Execute the plan from the captain. Work through each step IN ORDER.
+
+      For EACH step:
+      1. Make the code change
+      2. Run pnpm build to verify
+      3. Run pnpm test to verify
+      4. If something breaks, FIX IT — do not defer
+
+      After all steps: git diff --stat. Do NOT commit.
+    """
+    permissions:
+      bash: allow
+
+  let validation = session: validator
+    prompt: """
+      Validate the changes.
+      1. Run git diff
+      2. Check every architecture rule
+      3. Read v2/docs/IMPL_STATUS.md — was it updated?
+      4. Verify the increment matches what was planned
+      Output: PASS or FAIL.
+    """
+    permissions:
+      bash: allow
+
+  if **validation passed**:
+    session "Commit"
+      model: sonnet
+      prompt: """
+        In /Users/tx/stripe/github/stripe/sync-engine-v1:
+        1. pnpm format && pnpm lint --fix
+        2. pnpm build && pnpm test
+        3. Stage all changes (git add -A), commit with conventional message
+        4. Do NOT push
+      """
+      permissions:
+        bash: allow
+  else:
+    session: executor
+      prompt: "Validator found violations. Fix them. Do NOT commit."
+      context: validation
+      permissions:
+        bash: allow
+
+    let revalidation = session: validator
+      prompt: "Re-validate. Same rules."
+      permissions:
+        bash: allow
+
+    if **re-validation passed**:
+      session "Commit after fix"
+        model: sonnet
+        prompt: "pnpm format && pnpm lint --fix && pnpm build && pnpm test. Stage and commit."
+        permissions:
+          bash: allow
+    else:
+      resume: captain
+        prompt: "Failed twice. Replan — but do NOT defer. Find another approach."
+        context: revalidation
+
+  # Captain reads IMPL_STATUS.md and plans next increment
+  resume: captain
+    prompt: """
+      Read v2/docs/IMPL_STATUS.md again. What just changed?
+      Update the status file to reflect completed work.
+      Then plan the NEXT increment from the remaining P0/P1 items.
+
+      If all P0 items are done, move to P1.
+      If all P1 items are done, check the completion criteria.
+      If all completion criteria are checked, declare COMPLETE.
+
+      DO NOT declare COMPLETE if any checkbox is unchecked.
+    """
+    context: result
+
+# -- Finalize --------------------------------------------------------------
+
+let final_check = session: validator
+  prompt: """
+    FINAL VALIDATION.
+
+    1. Read v2/docs/IMPL_STATUS.md — every completion criteria checkbox
+       must be checked
+    2. Verify packages/fastify-app does NOT exist
+    3. Verify source-stripe has server.ts
+    4. Verify orchestrator-fs exists
+    5. Verify all CLIs are real (not stubs)
+    6. Verify all .todo tests filled or removed
+    7. pnpm build && pnpm test && pnpm lint clean
+
+    FINAL PASS or FINAL FAIL.
+  """
+  permissions:
+    bash: allow
+
+if **final validation passed**:
+  session "Push"
+    model: sonnet
+    prompt: """
+      pnpm format:check && pnpm lint && pnpm build && pnpm test
+      git push -u origin refactor/v2-architecture
+      Report commit count.
+    """
+    permissions:
+      bash: allow
+
+  resume: captain
+    prompt: "Write final summary. What was achieved. What the package structure looks like now."
+else:
+  resume: captain
+    prompt: "Final validation failed. What's left?"
+    context: final_check

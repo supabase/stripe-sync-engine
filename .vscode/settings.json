@@ -1,4 +1,5 @@
 {
   "deno.enable": true,
-  "deno.enablePaths": ["./packages/sync-engine/src/supabase/edge-functions"]
+  "deno.enablePaths": ["./packages/sync-engine/src/supabase/edge-functions"],
+  "explorer.sortOrder": "type"
 }

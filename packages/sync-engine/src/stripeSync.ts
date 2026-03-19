@@ -2,11 +2,11 @@ import Stripe from 'stripe'
 import { pg as sql } from 'yesql'
 import pkg from '../package.json' with { type: 'json' }
 import { PostgresClient } from './database/postgres'
-import { type Logger, StripeSyncConfig, Sync, SyncObject, type ResourceConfig } from './types'
+import type { DestinationWriter } from '@stripe/destination-postgres'
+import { type Logger, StripeSyncConfig, SyncResult, SyncObject, type ResourceConfig } from './types'
 import { type PoolConfig } from 'pg'
 import { hashApiKey } from './utils/hashApiKey'
-import { expandEntity } from './utils/expandEntity'
-import { SigmaSyncProcessor } from './sigma/sigmaSyncProcessor'
+import { SigmaSyncProcessor, type SigmaDestinationWriter } from './sigma/sigmaSyncProcessor'
 import { StripeSyncWebhook } from './stripeSyncWebhook'
 import {
   buildResourceRegistry,
@@ -16,7 +16,15 @@ import {
   normalizeStripeObjectName,
   StripeObject,
 } from './resourceRegistry'
-import { StripeSyncWorker } from './stripeSyncWorker'
+import { StripeSyncWorker, type WorkerTaskManager } from './stripeSyncWorker'
+import { fromRecordMessage, type RecordMessage } from './protocol'
+import {
+  backfillDependencies,
+  expandLists,
+  syncSubscriptionItems,
+  upsertSubscriptionItems,
+  type ResourceConfig as SourceResourceConfig,
+} from '@stripe/source-stripe'
 
 /**
  * Identifies a specific sync run.
@@ -38,14 +46,6 @@ function buildPoolConfig(config: StripeSyncConfig): PoolConfig {
 function buildProgressBar(pct: number, width: number): string {
   const filled = Math.round((pct / 100) * width)
   return '[' + '█'.repeat(filled) + '░'.repeat(width - filled) + ']'
-}
-
-function getUniqueIds<T>(entries: T[], key: keyof T & string): string[] {
-  const set = new Set(
-    entries.map((entry) => entry?.[key]?.toString()).filter((it): it is string => Boolean(it))
-  )
-
-  return Array.from(set)
 }
 
 export class StripeSync {
@@ -118,7 +118,34 @@ export class StripeSync {
       poolConfig,
     })
 
-    this.sigma = new SigmaSyncProcessor(this.postgresClient, {
+    const pgClient = this.postgresClient
+    const sigmaWriter: SigmaDestinationWriter = {
+      query: (text, params) => pgClient.query(text, params),
+      upsertManyWithTimestampProtection: (
+        entries,
+        table,
+        accountId,
+        syncTimestamp,
+        upsertOptions,
+        schemaOverride
+      ) =>
+        pgClient.upsertManyWithTimestampProtection(
+          entries,
+          table,
+          accountId,
+          syncTimestamp,
+          upsertOptions,
+          schemaOverride
+        ),
+      completeObjectSync: (accountId, runStartedAt, object) =>
+        pgClient.completeObjectSync(accountId, runStartedAt, object),
+      incrementObjectProgress: (accountId, runStartedAt, object, count) =>
+        pgClient.incrementObjectProgress(accountId, runStartedAt, object, count),
+      updateObjectCursor: (accountId, runStartedAt, object, cursor) =>
+        pgClient.updateObjectCursor(accountId, runStartedAt, object, cursor),
+    }
+
+    this.sigma = new SigmaSyncProcessor(sigmaWriter, {
       stripeSecretKey: config.stripeSecretKey,
       enableSigma: config.enableSigma,
       sigmaPageSizeOverride: config.sigmaPageSizeOverride,
@@ -149,13 +176,24 @@ export class StripeSync {
       const account = await instance.getCurrentAccount()
       instance.accountId = account.id
     }
+    const pg = instance.postgresClient
+    const writer: DestinationWriter = {
+      upsertManyWithTimestampProtection: (entries, table, accountId, syncTimestamp) =>
+        pg.upsertManyWithTimestampProtection(entries, table, accountId, syncTimestamp),
+      delete: (table, id) => pg.delete(table, id),
+      columnExists: (table, column) => pg.columnExists(table, column),
+      deleteRemovedActiveEntitlements: (customerId, currentIds) =>
+        pg.deleteRemovedActiveEntitlements(customerId, currentIds),
+      query: (text, params) => pg.query(text, params),
+      withAdvisoryLock: (key, fn) => pg.withAdvisoryLock(key, fn),
+    }
     instance.webhook = new StripeSyncWebhook({
       stripe: instance.stripe,
-      postgresClient: instance.postgresClient,
+      writer,
       config: instance.config,
       accountId: instance.accountId,
       getAccountId: instance.getAccountId.bind(instance),
-      upsertAny: instance.upsertAny.bind(instance),
+      upsertAny: instance.upsertRecordMessages.bind(instance),
       resourceRegistry: instance.resourceRegistry,
     })
     return instance
@@ -443,7 +481,7 @@ export class StripeSync {
     monitorProgress: boolean = true,
     interval?: number
   ): Promise<{
-    results: Record<string, Sync>
+    results: Record<string, SyncResult>
     totals: Record<string, number>
     totalSynced: number
     skipped: string[]
@@ -477,6 +515,29 @@ export class StripeSync {
       )
     }
 
+    const taskManager: WorkerTaskManager = {
+      claimNextTask: (accountId, runStartedAt, rl) =>
+        this.postgresClient.claimNextTask(accountId, runStartedAt, rl),
+      updateSyncObject: (accountId, runStartedAt, object, createdGte, createdLte, updates) =>
+        this.postgresClient.updateSyncObject(
+          accountId,
+          runStartedAt,
+          object,
+          createdGte,
+          createdLte,
+          updates
+        ),
+      releaseObjectSync: (accountId, runStartedAt, object, pageCursor, createdGte, createdLte) =>
+        this.postgresClient.releaseObjectSync(
+          accountId,
+          runStartedAt,
+          object,
+          pageCursor,
+          createdGte,
+          createdLte
+        ),
+    }
+
     const workers = Array.from(
       { length: workerCount },
       () =>
@@ -484,12 +545,12 @@ export class StripeSync {
           this.stripe,
           this.config,
           this.sigma,
-          this.postgresClient,
+          taskManager,
           this.accountId,
           this.resourceRegistry,
           this.sigmaRegistry,
           runKey,
-          this.upsertAny.bind(this),
+          this.upsertRecordMessages.bind(this),
           Infinity,
           rateLimit
         )
@@ -512,7 +573,7 @@ export class StripeSync {
       runKey.runStartedAt
     )
 
-    const results: Record<string, Sync> = {}
+    const results: Record<string, SyncResult> = {}
     const errors: Array<{ object: string; message: string }> = []
     for (const [obj, count] of Object.entries(totals)) {
       results[obj] = { synced: count }
@@ -522,6 +583,17 @@ export class StripeSync {
     await this.postgresClient.closeSyncRun(runKey.accountId, runKey.runStartedAt)
 
     return { results, totals, totalSynced, skipped: [], errors }
+  }
+
+  private async upsertRecordMessages(
+    messages: RecordMessage[],
+    accountId: string,
+    backfillRelated?: boolean,
+    syncTimestamp?: string
+  ): Promise<unknown[] | void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = messages.map(fromRecordMessage) as { [Key: string]: any }[]
+    return this.upsertAny(items, accountId, backfillRelated, syncTimestamp)
   }
 
   async upsertAny(
@@ -535,28 +607,22 @@ export class StripeSync {
 
     const syncObjectName = normalizeStripeObjectName(stripeObjectName)
     const registry = this.getRegistryForObject(syncObjectName)
-    const dependencies = registry[syncObjectName]?.dependencies ?? []
     if (backfillRelatedEntities ?? this.config.backfillRelatedEntities) {
-      await Promise.all(
-        dependencies.map((dependency) =>
-          this.backfillAny(
-            getUniqueIds(items, dependency),
-            dependency as StripeObject,
-            accountId,
-            syncTimestamp
-          )
-        )
-      )
+      await backfillDependencies({
+        items,
+        syncObjectName,
+        accountId,
+        syncTimestamp,
+        registry: registry as Record<string, SourceResourceConfig>,
+        backfillAny: (ids, objectName, acctId, ts) =>
+          this.backfillAny(ids, objectName as StripeObject, acctId, ts),
+      })
     }
 
     const config = registry[syncObjectName]
     const autoExpandLists = this.config.autoExpandLists ?? false
     if (autoExpandLists && config?.listExpands) {
-      for (const expandEntry of config.listExpands) {
-        for (const [property, expandFn] of Object.entries(expandEntry)) {
-          await expandEntity(items, property, (id) => expandFn(id))
-        }
-      }
+      await expandLists({ items, listExpands: config.listExpands })
     }
 
     const tableName = getTableName(syncObjectName, registry)
@@ -568,7 +634,21 @@ export class StripeSync {
     )
 
     if (syncObjectName === 'subscription') {
-      await this.syncSubscriptionItems(items as Stripe.Subscription[], accountId, syncTimestamp)
+      await syncSubscriptionItems({
+        subscriptions: items as Stripe.Subscription[],
+        accountId,
+        syncTimestamp,
+        upsertItems: (subItems, acctId, ts) =>
+          upsertSubscriptionItems(
+            subItems,
+            acctId,
+            (entries, table, aid, sts) =>
+              this.postgresClient.upsertManyWithTimestampProtection(entries, table, aid, sts),
+            ts
+          ),
+        markDeleted: (subscriptionId, currentSubItemIds) =>
+          this.markDeletedSubscriptionItems(subscriptionId, currentSubItemIds),
+      })
     }
 
     return rows
@@ -590,50 +670,6 @@ export class StripeSync {
 
     const items = await this.fetchMissingEntities(missingIds, (id) => config.retrieveFn!(id))
     return this.upsertAny(items, accountId, false, syncTimestamp)
-  }
-
-  /**
-   * Upsert subscription items into a separate table and mark removed items as deleted.
-   * Skips deleted subscriptions that have no items data.
-   */
-  private async syncSubscriptionItems(
-    subscriptions: Stripe.Subscription[],
-    accountId: string,
-    syncTimestamp?: string
-  ) {
-    const subscriptionsWithItems = subscriptions.filter((s) => s.items?.data)
-
-    const allSubscriptionItems = subscriptionsWithItems.flatMap((s) => s.items.data)
-    await this.upsertSubscriptionItems(allSubscriptionItems, accountId, syncTimestamp)
-
-    // Mark existing subscription items in db as deleted
-    // if they don't exist in the current subscriptionItems list
-    await Promise.all(
-      subscriptionsWithItems.map((subscription) => {
-        const subItemIds = subscription.items.data.map((x: Stripe.SubscriptionItem) => x.id)
-        return this.markDeletedSubscriptionItems(subscription.id, subItemIds)
-      })
-    )
-  }
-
-  async upsertSubscriptionItems(
-    subscriptionItems: Stripe.SubscriptionItem[],
-    accountId: string,
-    syncTimestamp?: string
-  ) {
-    const modifiedSubscriptionItems = subscriptionItems.map((subscriptionItem) => ({
-      ...subscriptionItem,
-      price: subscriptionItem.price.id.toString(),
-      deleted: subscriptionItem.deleted ?? false,
-      quantity: subscriptionItem.quantity ?? null,
-    }))
-
-    await this.postgresClient.upsertManyWithTimestampProtection(
-      modifiedSubscriptionItems,
-      'subscription_items',
-      accountId,
-      syncTimestamp
-    )
   }
 
   async markDeletedSubscriptionItems(

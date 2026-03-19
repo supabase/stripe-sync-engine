@@ -5,10 +5,11 @@
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "resolveJsonModule": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "strict": true
   },
-  "include": ["src"],
-  "exclude": ["src/test", "node_modules", "dist"]
+  "include": ["src/server"],
+  "exclude": ["src/server/__tests__", "node_modules", "dist"]
 }
