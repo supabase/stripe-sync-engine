@@ -42,10 +42,8 @@ $dest_postgres check --config "$CONFIG" | jq .
 echo ""
 
 # ── write ────────────────────────────────────────────────────────
-echo "$ cat <<NDJSON | dest-postgres write --config '$CONFIG' --catalog '$CATALOG'"
-echo ""
 NOW=$(date +%s000)
-cat <<NDJSON | $dest_postgres write --config "$CONFIG" --catalog "$CATALOG" | jq -c '{type, stream}'
+NDJSON_BODY=$(cat <<EOF
 {"type":"record","stream":"customers","data":{"id":"cus_1","name":"Alice","email":"alice@example.com"},"emitted_at":$NOW}
 {"type":"record","stream":"customers","data":{"id":"cus_2","name":"Bob","email":"bob@example.com"},"emitted_at":$NOW}
 {"type":"state","stream":"customers","data":{"after":"cus_2"}}
@@ -54,7 +52,17 @@ cat <<NDJSON | $dest_postgres write --config "$CONFIG" --catalog "$CATALOG" | jq
 {"type":"state","stream":"products","data":{"after":"prod_2"}}
 {"type":"record","stream":"customers","data":{"id":"cus_1","name":"Alice Smith","email":"alice@example.com"},"emitted_at":$NOW}
 {"type":"state","stream":"customers","data":{"after":"cus_1","phase":"update"}}
+EOF
+)
+cat <<COMMAND
+$ cat <<NDJSON | dest-postgres write \\
+    --config '$CONFIG' \\
+    --catalog '$CATALOG'
+$NDJSON_BODY
 NDJSON
+COMMAND
+echo ""
+echo "$NDJSON_BODY" | $dest_postgres write --config "$CONFIG" --catalog "$CATALOG" | jq -c '{type, stream}'
 echo ""
 
 # ── verify ───────────────────────────────────────────────────────
