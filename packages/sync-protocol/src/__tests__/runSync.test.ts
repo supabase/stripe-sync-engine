@@ -72,11 +72,11 @@ function createMockDestination(): {
   const writeSpy = vi.fn(
     (
       params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
-      messages: AsyncIterable<DestinationInput>
+      $stdin: AsyncIterable<DestinationInput>
     ): AsyncIterable<DestinationOutput> => {
       // Pass through: drain inputs, collect them, yield back any StateMessages
       return (async function* () {
-        for await (const msg of messages) {
+        for await (const msg of $stdin) {
           received.push(msg)
           if (msg.type === 'state') {
             yield msg

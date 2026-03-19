@@ -87,9 +87,9 @@ function createMockDestination(): {
     check: async () => ({ status: 'succeeded' as const }),
     async *write(
       params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
-      messages: AsyncIterable<DestinationInput>
+      $stdin: AsyncIterable<DestinationInput>
     ): AsyncIterable<DestinationOutput> {
-      for await (const msg of messages) {
+      for await (const msg of $stdin) {
         received.push(msg)
         // After receiving a state message, re-emit it as output
         // (simulates: destination committed the batch, now checkpointing)

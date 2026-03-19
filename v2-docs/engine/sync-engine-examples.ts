@@ -69,9 +69,9 @@ export const source: Source = {
 export const destination = {
   async *write(
     _params: { config?: unknown; catalog?: CatalogMessage },
-    messages: AsyncIterableIterator<DataMessage>
+    $stdin: AsyncIterableIterator<DataMessage>
   ) {
-    for await (const msg of messages) {
+    for await (const msg of $stdin) {
       if (msg.type === 'record') {
         console.log(JSON.stringify(msg))
       }

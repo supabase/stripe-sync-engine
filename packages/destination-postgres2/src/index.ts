@@ -50,7 +50,7 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog }, messages) {
+  async *write({ config, catalog }, $stdin) {
     const pool = new pg.Pool({ connectionString: config.connection_string })
     const schema = config.schema ?? 'public'
 
@@ -64,7 +64,7 @@ const destination = {
     const createdTables = new Set<string>()
 
     try {
-      for await (const msg of messages) {
+      for await (const msg of $stdin) {
         if (msg.type === 'state') {
           // Passthrough — the orchestrator persists this as a checkpoint
           yield msg

@@ -71,7 +71,7 @@ export interface Destination {
    */
   write(
     params: { catalog: CatalogMessage },
-    messages: AsyncIterableIterator<DestinationInput>
+    $stdin: AsyncIterableIterator<DestinationInput>
   ): AsyncIterableIterator<DestinationOutput>
 }
 

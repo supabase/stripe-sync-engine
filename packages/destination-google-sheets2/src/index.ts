@@ -167,7 +167,7 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog }, messages) {
+  async *write({ config, catalog }, $stdin) {
     const sheets = makeSheetsClient(config)
     const batchSize = 50
     const spreadsheetId = config.spreadsheet_id
@@ -190,7 +190,7 @@ const destination = {
     }
 
     try {
-      for await (const msg of messages) {
+      for await (const msg of $stdin) {
         if (msg.type === 'state') {
           await flushStream(msg.stream)
           yield msg

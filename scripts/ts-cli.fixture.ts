@@ -72,16 +72,16 @@ export const collector = {
 // ── Named + stdin consumer (the write() pattern) ────────────────
 
 export const writer = {
-  async *write(params: { config: unknown }, messages: AsyncIterable<{ v: string }>) {
+  async *write(params: { config: unknown }, $stdin: AsyncIterable<{ v: string }>) {
     const msgs: string[] = []
-    for await (const m of messages) msgs.push(m.v)
+    for await (const m of $stdin) msgs.push(m.v)
     yield { config: params.config, messages: msgs }
   },
 
-  async *writeOptional(params: { config: unknown }, messages?: AsyncIterable<{ v: string }>) {
+  async *writeOptional(params: { config: unknown }, $stdin?: AsyncIterable<{ v: string }>) {
     const msgs: string[] = []
-    if (messages) {
-      for await (const m of messages) msgs.push(m.v)
+    if ($stdin) {
+      for await (const m of $stdin) msgs.push(m.v)
     }
     yield { config: params.config, messages: msgs }
   },
@@ -98,19 +98,19 @@ export const writer = {
 // ── Positional + stdin ──────────────────────────────────────────
 
 export const transformer = {
-  async *apply(mode: string, messages: AsyncIterable<{ text: string }>) {
+  async *apply(mode: string, $stdin: AsyncIterable<{ text: string }>) {
     const texts: string[] = []
-    for await (const m of messages) texts.push(m.text)
+    for await (const m of $stdin) texts.push(m.text)
     yield { mode, texts }
   },
 
   async *applyWithOpts(
     opts: { trim: boolean },
     mode: string,
-    messages: AsyncIterable<{ text: string }>
+    $stdin: AsyncIterable<{ text: string }>
   ) {
     const texts: string[] = []
-    for await (const m of messages) texts.push(m.text)
+    for await (const m of $stdin) texts.push(m.text)
     yield { opts, mode, texts }
   },
 }

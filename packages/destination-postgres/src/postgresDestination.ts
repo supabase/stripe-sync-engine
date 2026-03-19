@@ -91,7 +91,7 @@ export class PostgresDestination implements Destination {
 
   async *write(
     params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
-    messages: AsyncIterable<DestinationInput>
+    $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
@@ -110,7 +110,7 @@ export class PostgresDestination implements Destination {
     }
 
     try {
-      for await (const msg of messages) {
+      for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg
 

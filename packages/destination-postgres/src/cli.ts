@@ -40,8 +40,8 @@ export async function main(opts: DestinationCliOptions): Promise<void> {
   const destination = new PostgresDestination(config)
 
   if (opts.command === 'write') {
-    const messages = readNdjsonStdin()
-    const output = destination.write({ config: {}, catalog }, messages)
+    const stdin = readNdjsonStdin()
+    const output = destination.write({ config: {}, catalog }, stdin)
     for await (const msg of output) {
       process.stdout.write(JSON.stringify(msg) + '\n')
     }

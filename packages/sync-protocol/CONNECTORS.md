@@ -59,7 +59,7 @@ Destructure in the method signature:
 async check({ config }) { ... }
 async discover({ config }) { ... }
 async *read({ config, catalog, state }) { ... }
-async *write({ config, catalog }, messages) { ... }
+async *write({ config, catalog }, $stdin) { ... }
 ```
 
 This maps directly to the CLI's `--key value` flags:
@@ -131,16 +131,16 @@ interface Destination<TConfig> {
   check(params: { config: TConfig }): Promise<CheckResult>
   write(
     params: { config: TConfig; catalog: ConfiguredCatalog },
-    messages: AsyncIterable<DestinationInput>
+    $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput>
 }
 ```
 
-| Method                                 | Purpose                                                                                                                        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `spec()`                               | Return JSON Schema for the config.                                                                                             |
-| `check({ config })`                    | Test connectivity (e.g. `SELECT 1`).                                                                                           |
-| `write({ config, catalog }, messages)` | Consume `DestinationInput` messages, write records, yield `DestinationOutput`. `messages` comes from stdin when piped via CLI. |
+| Method                               | Purpose                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `spec()`                             | Return JSON Schema for the config.                                                                                           |
+| `check({ config })`                  | Test connectivity (e.g. `SELECT 1`).                                                                                         |
+| `write({ config, catalog }, $stdin)` | Consume `DestinationInput` messages, write records, yield `DestinationOutput`. `$stdin` comes from stdin when piped via CLI. |
 
 ### write() messages
 
@@ -236,8 +236,8 @@ const destination = {
     return { status: 'succeeded' as const }
   },
 
-  async *write({ config, catalog }, messages) {
-    for await (const msg of messages) {
+  async *write({ config, catalog }, $stdin) {
+    for await (const msg of $stdin) {
       if (msg.type === 'state') {
         yield msg // passthrough after commit
         continue

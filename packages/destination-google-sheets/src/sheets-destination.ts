@@ -69,7 +69,7 @@ export class SheetsDestination implements Destination {
 
   async *write(
     params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
-    messages: AsyncIterable<DestinationInput>
+    $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput> {
     // Resolve or create spreadsheet
     const spreadsheetId =
@@ -95,7 +95,7 @@ export class SheetsDestination implements Destination {
     }
 
     try {
-      for await (const msg of messages) {
+      for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg
 
