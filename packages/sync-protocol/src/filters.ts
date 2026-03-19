@@ -8,7 +8,7 @@ import type {
   RecordMessage,
   StateMessage,
   StreamStatusMessage,
-} from './types'
+} from './protocol'
 
 // MARK: - Type guards
 

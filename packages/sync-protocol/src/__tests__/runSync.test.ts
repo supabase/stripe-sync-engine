@@ -12,7 +12,7 @@ import type {
   Source,
   StateMessage,
   StreamStatusMessage,
-} from '../types'
+} from '../protocol'
 import { runSync } from '../runSync'
 
 // ---------------------------------------------------------------------------

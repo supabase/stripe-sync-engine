@@ -1,4 +1,4 @@
-import type { Message } from './types'
+import type { Message } from './protocol'
 
 /**
  * Transforms a message stream. Composable -- multiple transforms can be

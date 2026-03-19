@@ -1,5 +1,4 @@
-import type { DestinationInput, DestinationOutput, Message, StateMessage } from './types'
-import type { Destination, Source } from './interfaces'
+import type { Destination, DestinationInput, DestinationOutput, Message, Source, StateMessage } from './protocol'
 
 /**
  * Orchestrator — the third pillar alongside Source and Destination.

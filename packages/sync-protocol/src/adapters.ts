@@ -1,4 +1,4 @@
-import type { RecordMessage } from './types'
+import type { RecordMessage } from './protocol'
 
 /** Wrap a raw object into a RecordMessage. */
 export function toRecordMessage(stream: string, data: Record<string, unknown>): RecordMessage {

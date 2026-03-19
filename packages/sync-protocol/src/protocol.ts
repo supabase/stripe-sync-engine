@@ -1,9 +1,8 @@
-// Sync Engine — Message Protocol
+// Sync Engine — Protocol
 //
-// Everything is a Message, one per line (NDJSON). These types define
-// the data structures that flow through the engine. For the interfaces
-// that sources, destinations, and the orchestrator implement, see
-// interfaces.ts.
+// Types and interfaces for the sync protocol. Data shapes (messages, catalog,
+// config) followed by the Source and Destination contracts that connectors
+// implement.
 
 // MARK: - Data model
 
@@ -167,3 +166,91 @@ export type Message =
   | LogMessage
   | ErrorMessage
   | StreamStatusMessage
+
+// MARK: - Source
+//
+// In-process sources implement this interface directly.
+// Subprocess sources read/write NDJSON on stdin/stdout and a thin
+// adapter converts between the two.
+
+/**
+ * Reads data from an upstream system by emitting messages.
+ *
+ * A source can be finite (backfill) or infinite (live/streaming).
+ * The same interface covers REST API polling, webhook ingestion,
+ * event bridge, Kafka replay, database CDC, etc.
+ *
+ * Type parameters:
+ *   TConfig      — connector's configuration type, inferred from its Zod spec
+ *   TStreamState — per-stream checkpoint shape (opaque to the orchestrator)
+ *   TInput       — serializable data passed to read() for event-driven reads
+ *                  (e.g. a single webhook event). When absent, read() performs
+ *                  a pull-based backfill.
+ *
+ * Subprocess equivalent:
+ *   discover -> run source process, collect CatalogMessage from stdout
+ *   read    -> run source process, stream Message lines from stdout
+ */
+export interface Source<
+  TConfig extends Record<string, unknown> = Record<string, unknown>,
+  TStreamState = unknown,
+  TInput = unknown,
+> {
+  /** Return the JSON Schema for this connector's configuration. */
+  spec(): ConnectorSpecification
+
+  /** Validate that the provided configuration can connect to the upstream system. */
+  check(params: { config: TConfig }): Promise<CheckResult>
+
+  /** Discover available streams. Returns them as a CatalogMessage. */
+  discover(params: { config: TConfig }): Promise<CatalogMessage>
+
+  /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
+  read(params: {
+    config: TConfig
+    catalog: ConfiguredCatalog
+    state?: Record<string, TStreamState>
+    input?: TInput
+  }): AsyncIterable<Message>
+}
+
+// MARK: - Destination
+//
+// In-process destinations implement this interface directly.
+// Subprocess destinations read DestinationInputs from stdin and emit
+// DestinationOutput on stdout after committing.
+
+/**
+ * Writes records into a downstream system.
+ *
+ * A destination can be a database, spreadsheet, warehouse, Stripe API
+ * (e.g. Custom Objects for reverse ETL), Kafka topic, etc.
+ *
+ * TConfig is the connector's configuration type, inferred from its Zod spec.
+ *
+ * The destination only receives RecordMessage and StateMessage -- the
+ * orchestrator filters out logs, errors, and status messages before
+ * they reach the destination.
+ *
+ * Subprocess equivalent:
+ *   destination write --config config.json --catalog catalog.json
+ *   Reads DestinationInput lines from stdin, emits DestinationOutput on stdout.
+ */
+export interface Destination<TConfig extends Record<string, unknown> = Record<string, unknown>> {
+  /** Return the JSON Schema for this connector's configuration. */
+  spec(): ConnectorSpecification
+
+  /** Validate that the provided configuration can connect to the downstream system. */
+  check(params: { config: TConfig }): Promise<CheckResult>
+
+  /**
+   * Consume data messages and write records to the downstream system.
+   * Yields messages back to the orchestrator: StateMessage after committing,
+   * ErrorMessage on write failures, LogMessage for diagnostics.
+   */
+  write(params: {
+    config: TConfig
+    catalog: ConfiguredCatalog
+    messages: AsyncIterable<DestinationInput>
+  }): AsyncIterable<DestinationOutput>
+}

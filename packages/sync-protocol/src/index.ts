@@ -1,5 +1,4 @@
-export type * from './types'
-export type * from './interfaces'
+export type * from './protocol'
 export type { Orchestrator } from './orchestrator'
 export { toRecordMessage, fromRecordMessage } from './adapters'
 export type { Transform } from './compose'
@@ -17,4 +16,7 @@ export {
   collect,
 } from './filters'
 export type { RouterCallbacks } from './filters'
+export { createEngine } from './engine'
+export type { Engine } from './engine'
+export { buildCatalog } from './engine'
 export { runSync } from './runSync'
