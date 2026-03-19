@@ -1,0 +1,12 @@
+{
+  "name": "@stripe/source-stripe2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "stripe": "^17.7.0",
+    "zod": "^4.3.6"
+  }
+}

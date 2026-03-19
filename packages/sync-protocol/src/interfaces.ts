@@ -10,7 +10,7 @@
 //
 //   import source, { spec } from '@stripe/source-stripe2'
 //   type Config = z.infer<typeof spec>   // ← fully typed
-//   source.discover(config)              // ← config is Config
+//   source.discover({ config })           // ← config is Config
 
 import type {
   CatalogMessage,
@@ -47,13 +47,17 @@ export interface Source<TConfig extends Record<string, unknown> = Record<string,
   spec(): ConnectorSpecification
 
   /** Validate that the provided configuration can connect to the upstream system. */
-  check(config: TConfig): Promise<CheckResult>
+  check(params: { config: TConfig }): Promise<CheckResult>
 
   /** Discover available streams. Returns them as a CatalogMessage. */
-  discover(config: TConfig): Promise<CatalogMessage>
+  discover(params: { config: TConfig }): Promise<CatalogMessage>
 
   /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
-  read(config: TConfig, catalog: ConfiguredCatalog, state?: StateMessage[]): AsyncIterableIterator<Message>
+  read(params: {
+    config: TConfig
+    catalog: ConfiguredCatalog
+    state?: StateMessage[]
+  }): AsyncIterableIterator<Message>
 }
 
 // MARK: - Destination
@@ -83,16 +87,16 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   spec(): ConnectorSpecification
 
   /** Validate that the provided configuration can connect to the downstream system. */
-  check(config: TConfig): Promise<CheckResult>
+  check(params: { config: TConfig }): Promise<CheckResult>
 
   /**
    * Consume data messages and write records to the downstream system.
    * Yields messages back to the orchestrator: StateMessage after committing,
    * ErrorMessage on write failures, LogMessage for diagnostics.
    */
-  write(
-    config: TConfig,
-    catalog: ConfiguredCatalog,
+  write(params: {
+    config: TConfig
+    catalog: ConfiguredCatalog
     messages: AsyncIterableIterator<DestinationInput>
-  ): AsyncIterableIterator<DestinationOutput>
+  }): AsyncIterableIterator<DestinationOutput>
 }
