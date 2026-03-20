@@ -18,7 +18,7 @@ if (!dbUrl) {
   throw new Error('SUPABASE_DB_URL secret not configured')
 }
 const SYNC_INTERVAL = Number(Deno.env.get('SYNC_INTERVAL')) || 60 * 60 * 24 * 7 // Once a week default
-const rateLimit = Number(Deno.env.get('RATE_LIMIT')) || 60
+const rateLimit = Number(Deno.env.get('RATE_LIMIT')) || 25
 const workerCount = Number(Deno.env.get('WORKER_COUNT')) || 10
 const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
 const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
