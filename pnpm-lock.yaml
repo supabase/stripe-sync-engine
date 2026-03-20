@@ -70,6 +70,12 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.10.1
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
       vitest:
         specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
@@ -130,44 +136,60 @@ importers:
         specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/stateful-sync:
+  apps/stateful-api:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1
+        version: 1.19.11(hono@4.12.8)
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      '@stripe/sync-service':
+        specifier: workspace:*
+        version: link:../../packages/sync-service
+      hono:
+        specifier: ^4
+        version: 4.12.8
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.10.1
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      vitest:
+        specifier: ^3.2
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  apps/stateful-cli:
     dependencies:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
-      hono:
-        specifier: ^4
-        version: 4.12.8
-      pg:
-        specifier: ^8.16.3
-        version: 8.16.3
-      yesql:
-        specifier: ^7.0.0
-        version: 7.0.0
+      '@stripe/sync-service':
+        specifier: workspace:*
+        version: link:../../packages/sync-service
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
     devDependencies:
-      '@stripe/destination-postgres2':
-        specifier: workspace:*
-        version: link:../../packages/destination-postgres2
-      '@stripe/source-stdin':
-        specifier: workspace:*
-        version: link:../../packages/source-stdin
       '@types/node':
         specifier: ^24
         version: 24.10.1
-      '@types/pg':
-        specifier: ^8.15.4
-        version: 8.15.6
-      '@types/yesql':
-        specifier: ^4.1.4
-        version: 4.1.4
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
       vitest:
-        specifier: ^3.2.4
+        specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
   apps/supabase:
@@ -181,9 +203,9 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
-      stateful-sync:
+      '@stripe/sync-service':
         specifier: workspace:*
-        version: link:../stateful-sync
+        version: link:../../packages/sync-service
       supabase-management-js:
         specifier: ^2.0.2
         version: 2.0.2
@@ -349,6 +371,43 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.1
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/sync-service:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+      yesql:
+        specifier: ^7.0.0
+        version: 7.0.0
+    devDependencies:
+      '@stripe/destination-postgres2':
+        specifier: workspace:*
+        version: link:../destination-postgres2
+      '@stripe/source-stdin':
+        specifier: workspace:*
+        version: link:../source-stdin
+      '@types/node':
+        specifier: ^24
+        version: 24.10.1
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.15.6
+      '@types/yesql':
+        specifier: ^4.1.4
+        version: 4.1.4
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/util-postgres:

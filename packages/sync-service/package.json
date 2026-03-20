@@ -1,5 +1,5 @@
 {
-  "name": "stateful-sync",
+  "name": "@stripe/sync-service",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
-    "hono": "^4",
     "pg": "^8.16.3",
     "yesql": "^7.0.0"
   },

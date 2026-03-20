@@ -70,7 +70,7 @@ jobs:
       - name: Check migrations-embedded.ts is up to date
         run: |
           pnpm format
-          git diff --exit-code apps/stateful-sync/src/database/migrations-embedded.ts || \
+          git diff --exit-code packages/sync-service/src/database/migrations-embedded.ts || \
             (echo "::error::migrations-embedded.ts is out of date. Run 'pnpm build && pnpm format' locally and commit the updated file." && exit 1)
 
       - name: Initialize DB schema

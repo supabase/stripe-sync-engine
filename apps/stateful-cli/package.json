@@ -1,0 +1,54 @@
+{
+  "name": "@stripe/sync-engine-stateful-cli",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Stripe Sync Engine stateful CLI — persistent sync with credential and state management",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "bin": {
+    "sync-engine-stateful": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/cli/index.ts --format esm,cjs --dts --shims",
+    "dev": "tsup src/index.ts src/cli/index.ts --format esm --shims --watch",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-service": "workspace:*",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "esbuild": "^0.27.2",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stripe/sync-engine.git"
+  },
+  "homepage": "https://github.com/stripe/sync-engine#readme",
+  "bugs": {
+    "url": "https://github.com/stripe/sync-engine/issues"
+  },
+  "keywords": [
+    "stripe",
+    "sync",
+    "stateful",
+    "cli",
+    "typescript"
+  ],
+  "author": "Stripe <https://stripe.com/>"
+}

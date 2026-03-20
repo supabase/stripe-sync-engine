@@ -1,4 +1,4 @@
-import { runMigrationsFromContent, embeddedMigrations } from 'stateful-sync'
+import { runMigrationsFromContent, embeddedMigrations } from '@stripe/sync-service'
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
 
@@ -389,6 +389,12 @@ Deno.serve(async (req) => {
         await deleteEdgeFunction(projectRef, 'stripe-worker', accessToken)
       } catch (err) {
         console.warn('Could not delete stripe-worker function:', err)
+      }
+
+      try {
+        await deleteEdgeFunction(projectRef, 'stripe-backfill-worker', accessToken)
+      } catch (err) {
+        console.warn('Could not delete stripe-backfill-worker function:', err)
       }
 
       try {
