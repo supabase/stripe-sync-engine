@@ -5,8 +5,8 @@
 # list, get, update, delete — all via curl against localhost:4010.
 #
 # Usage:
-#   bun apps/api/src/index.ts &    # start server
-#   bash apps/api/examples.sh      # run smoke test
+#   bun apps/control-plane-api/src/index.ts &    # start server
+#   bash apps/control-plane-api/examples.sh      # run smoke test
 
 set -euo pipefail
 
@@ -62,7 +62,7 @@ Sync API Examples (HTTP)
 ========================
 
 Setup:
-  bun apps/api/src/index.ts &
+  bun apps/control-plane-api/src/index.ts &
   alias api='curl -s localhost:4010'
 
 ┌───┬──────────────────────┬──────────────────────────────────────────────────────────────┐

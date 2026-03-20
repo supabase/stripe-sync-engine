@@ -3,10 +3,10 @@
 ## Overview
 
 ```
-                      +--------------+
-                      |  API Server  |  CRUD: credentials, syncs
-                      |  (apps/api)  |  Starts Temporal workflows
-                      +------+-------+
+                +----------------------------+
+                |        API Server          |  CRUD: credentials, syncs
+                | (apps/control-plane-api)   |  Starts Temporal workflows
+                +-------------+--------------+
                              |
                              | POST /syncs
                              |   1. db.syncs.insert(sync)
@@ -240,7 +240,7 @@ All activities are idempotent. Temporal can retry any of them safely.
 
 ## Components
 
-### API Server (`apps/api`)
+### API Server (`apps/control-plane-api`)
 
 - CRUD for credentials and syncs (DB)
 - On sync create:

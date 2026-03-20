@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-api",
+  "name": "@stripe/control-plane-api",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
