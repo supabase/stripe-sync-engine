@@ -8,14 +8,15 @@ The sync engine is a pure function: `runSync(params, source, destination) → As
 
 ## The Four Concerns
 
-| Concern | Sensitivity | Mutability | Access pattern | Lifetime |
-|---|---|---|---|---|
+| Concern         | Sensitivity               | Mutability                    | Access pattern                       | Lifetime                             |
+| --------------- | ------------------------- | ----------------------------- | ------------------------------------ | ------------------------------------ |
 | **Credentials** | High (encrypted, audited) | Rarely — except token refresh | Read on sync start, refresh mid-sync | Outlives syncs (shared across syncs) |
-| **Config** | Low (user-editable) | User-initiated only | Read on sync start | Tied to sync definition |
-| **State** | None (opaque cursors) | Every checkpoint (~seconds) | Read on resume, write continuously | Tied to sync progress |
-| **Logs** | Low | Append-only, never updated | Write continuously, read for debug | Ephemeral (retention-bounded) |
+| **Config**      | Low (user-editable)       | User-initiated only           | Read on sync start                   | Tied to sync definition              |
+| **State**       | None (opaque cursors)     | Every checkpoint (~seconds)   | Read on resume, write continuously   | Tied to sync progress                |
+| **Logs**        | Low                       | Append-only, never updated    | Write continuously, read for debug   | Ephemeral (retention-bounded)        |
 
 These must be stored separately because they have different:
+
 - **Security requirements** — credentials encrypted at rest + audit-logged; config/state/logs are not
 - **Write frequency** — state writes every few seconds; credentials almost never; config only on user action
 - **Sharing** — one credential serves many syncs; config/state are per-sync
@@ -34,15 +35,15 @@ What lives in the config store. Has credential **references**, no state:
 ```ts
 type SyncConfig = {
   id: string
-  source_credential_id: string        // reference → CredentialStore
-  destination_credential_id: string   // reference → CredentialStore
+  source_credential_id: string // reference → CredentialStore
+  destination_credential_id: string // reference → CredentialStore
   source: {
-    type: string                       // e.g. "stripe"
-    [key: string]: unknown             // non-sensitive source config
+    type: string // e.g. "stripe"
+    [key: string]: unknown // non-sensitive source config
   }
   destination: {
-    type: string                       // e.g. "postgres"
-    [key: string]: unknown             // non-sensitive destination config
+    type: string // e.g. "postgres"
+    [key: string]: unknown // non-sensitive destination config
   }
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
 }
@@ -54,10 +55,10 @@ What the engine receives. Credentials inlined, state included. This is the exist
 
 ```ts
 type SyncParams = {
-  source?: string                              // connector specifier (default: 'stripe')
-  destination: string                          // connector specifier
-  source_config: Record<string, unknown>       // credential fields + config merged
-  destination_config: Record<string, unknown>  // credential fields + config merged
+  source?: string // connector specifier (default: 'stripe')
+  destination: string // connector specifier
+  source_config: Record<string, unknown> // credential fields + config merged
+  destination_config: Record<string, unknown> // credential fields + config merged
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
   state?: Record<string, unknown>
 }
@@ -105,8 +106,8 @@ interface CredentialStore {
 
 type Credential = {
   id: string
-  type: string                          // "stripe", "postgres", "google"
-  fields: Record<string, unknown>       // type-specific fields (api_key, tokens, etc.)
+  type: string // "stripe", "postgres", "google"
+  fields: Record<string, unknown> // type-specific fields (api_key, tokens, etc.)
   created_at: string
   updated_at: string
 }
@@ -143,7 +144,7 @@ Implementations: Postgres `_sync_state` table, destination-embedded, JSON files 
 
 ```ts
 interface LogSink {
-  write(syncId: string, entry: LogEntry): void   // fire-and-forget, non-blocking
+  write(syncId: string, entry: LogEntry): void // fire-and-forget, non-blocking
 }
 
 type LogEntry = {
@@ -165,6 +166,7 @@ Token refresh is handled by the **service**, not the source. The source interfac
 ### Why service-level, not per-request
 
 An alternative is injecting a `credentialProvider` into the source for per-request refresh (zero wasted work on 401). This was rejected because it changes the Source interface. The coarse retry tradeoff is acceptable:
+
 - Stripe API keys don't expire (most common case — refresh never triggers)
 - OAuth tokens have ~1-hour lifetimes — a single retry handles it
 - State is checkpointed, so re-runs resume near where they left off
@@ -246,7 +248,7 @@ class SyncService {
       for await (const msg of engine.run()) {
         if (msg.type === 'error' && msg.failure_type === 'auth_error') {
           authError = true
-          break  // exit pipeline, will retry
+          break // exit pipeline, will retry
         }
         // Persist state checkpoint
         if (msg.type === 'state') {
@@ -255,7 +257,7 @@ class SyncService {
         yield msg
       }
 
-      if (!authError) return  // success — all streams completed
+      if (!authError) return // success — all streams completed
 
       // Refresh the failed credential and retry
       await this.refreshCredential(config.source_credential_id)
@@ -281,11 +283,11 @@ The same `SyncService` class works across all deployment modes by swapping store
 
 ```ts
 const service = new SyncService({
-  credentials: envCredentialStore(),          // reads from env vars / flags
-  configs:     flagConfigStore(cliFlags),     // builds config from CLI flags
-  states:      pgStateStore(postgresUrl),     // reads _sync_state from destination
-  logs:        stderrLogSink(),               // logs to stderr
-  connectors:  preloadedConnectors({ source, destination }),
+  credentials: envCredentialStore(), // reads from env vars / flags
+  configs: flagConfigStore(cliFlags), // builds config from CLI flags
+  states: pgStateStore(postgresUrl), // reads _sync_state from destination
+  logs: stderrLogSink(), // logs to stderr
+  connectors: preloadedConnectors({ source, destination }),
 })
 ```
 
@@ -294,10 +296,10 @@ const service = new SyncService({
 ```ts
 const service = new SyncService({
   credentials: fileCredentialStore('~/.sync-engine/credentials.json'),
-  configs:     fileConfigStore('~/.sync-engine/syncs.json'),
-  states:      fileStateStore('~/.sync-engine/state/'),
-  logs:        fileLogSink('~/.sync-engine/logs/'),
-  connectors:  autoInstallConnectors(),
+  configs: fileConfigStore('~/.sync-engine/syncs.json'),
+  states: fileStateStore('~/.sync-engine/state/'),
+  logs: fileLogSink('~/.sync-engine/logs/'),
+  connectors: autoInstallConnectors(),
 })
 ```
 
@@ -305,11 +307,11 @@ const service = new SyncService({
 
 ```ts
 const service = new SyncService({
-  credentials: pgCredentialStore({ pool, encryptionKey }),   // encrypted at rest
-  configs:     pgConfigStore({ pool }),
-  states:      pgStateStore({ pool }),
-  logs:        kafkaLogSink({ producer: kafkaProducer }),
-  connectors:  cachedConnectorResolver(),
+  credentials: pgCredentialStore({ pool, encryptionKey }), // encrypted at rest
+  configs: pgConfigStore({ pool }),
+  states: pgStateStore({ pool }),
+  logs: kafkaLogSink({ producer: kafkaProducer }),
+  connectors: cachedConnectorResolver(),
 })
 ```
 
@@ -342,10 +344,10 @@ The engine (`createEngine`, `runSync`), the source/destination connectors, the `
 
 ## Key Files
 
-| File | Role |
-|---|---|
+| File                                     | Role                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `packages/sync-protocol/src/protocol.ts` | `SyncParams` (resolved form), `ErrorMessage` (needs `auth_error`), Source/Destination interfaces |
-| `packages/sync-protocol/src/engine.ts` | `createEngine()` — the engine factory the service calls |
-| `packages/sync-protocol/src/runSync.ts` | `runSync()` — convenience wrapper over `createEngine().run()` |
-| `apps/control-plane-api/src/store.ts` | Current file store — to be replaced by separate stores |
-| `apps/control-plane-api/src/schemas.ts` | Credential/sync schemas (SyncConfig stored form) |
+| `packages/sync-protocol/src/engine.ts`   | `createEngine()` — the engine factory the service calls                                          |
+| `packages/sync-protocol/src/runSync.ts`  | `runSync()` — convenience wrapper over `createEngine().run()`                                    |
+| `apps/control-plane-api/src/store.ts`    | Current file store — to be replaced by separate stores                                           |
+| `apps/control-plane-api/src/schemas.ts`  | Credential/sync schemas (SyncConfig stored form)                                                 |

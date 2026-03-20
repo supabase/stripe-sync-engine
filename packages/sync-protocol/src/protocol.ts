@@ -157,6 +157,10 @@ export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
 /** Parameters for a sync run — config, catalog selection, and runtime state. */
 export const SyncParams = z.object({
+  /** Connector specifier for the source (short name, scoped package, or file path). Defaults to 'stripe'. */
+  source: z.string().optional().default('stripe'),
+  /** Connector specifier for the destination (short name, scoped package, or file path). */
+  destination: z.string(),
   source_config: z.record(z.string(), z.unknown()),
   destination_config: z.record(z.string(), z.unknown()),
   streams: z

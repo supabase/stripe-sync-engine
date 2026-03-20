@@ -1,4 +1,4 @@
-import type { StateMessage, SyncConfig } from './protocol'
+import type { StateMessage, SyncParams } from './protocol'
 import type { Destination, Source } from './protocol'
 import { createEngine } from './engine'
 
@@ -9,7 +9,7 @@ import { createEngine } from './engine'
  * The caller imports source and destination explicitly and passes them in.
  */
 export async function* runSync(
-  config: SyncConfig,
+  config: SyncParams,
   source: Source,
   destination: Destination
 ): AsyncIterable<StateMessage> {

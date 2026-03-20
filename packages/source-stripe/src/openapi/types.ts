@@ -79,10 +79,3 @@ export type ResolvedOpenApiSpec = {
   cachePath?: string
   commitSha?: string
 }
-
-export type WritePlan = {
-  tableName: string
-  conflictTarget: string[]
-  extraColumns: Array<{ column: string; pgType: string; entryKey: string }>
-  metadataColumns: ['_raw_data', '_last_synced_at', '_account_id']
-}

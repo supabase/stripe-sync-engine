@@ -10,6 +10,7 @@ import type {
 } from '@stripe/sync-protocol'
 import type { PostgresConfig } from './types'
 import { PostgresDestinationWriter } from './writer'
+import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'
 
 /**
  * Postgres destination implementation.
@@ -80,7 +81,19 @@ export class PostgresDestination implements Destination {
   }): Promise<void> {
     await this.ensureSchema()
     for (const { stream } of params.catalog.streams) {
-      await this.ensureTable(stream.name)
+      if (stream.json_schema) {
+        const stmts = buildCreateTableWithSchema(
+          this.config.schema,
+          stream.name,
+          stream.json_schema,
+          { accountSchema: this.config.syncSchema ?? this.config.schema }
+        )
+        for (const stmt of stmts) {
+          await runSqlAdditive(this.writer, stmt)
+        }
+      } else {
+        await this.ensureTable(stream.name)
+      }
     }
   }
 

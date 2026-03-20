@@ -6,9 +6,5 @@ export {
   RUNTIME_RESOURCE_ALIASES,
 } from './specParser'
 export { OPENAPI_COMPATIBILITY_COLUMNS } from './runtimeMappings'
-export { PostgresAdapter } from './postgresAdapter'
-export { WritePathPlanner } from './writePathPlanner'
 export { resolveOpenApiSpec } from './specFetchHelper'
-export type { DialectAdapter } from './dialectAdapter'
-export { applyStripeSchema } from './applyStripeSchema'
-export type { ApplyStripeSchemaConfig } from './applyStripeSchema'
+export { parsedTableToJsonSchema } from './jsonSchemaConverter'

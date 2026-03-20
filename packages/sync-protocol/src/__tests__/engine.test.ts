@@ -290,12 +290,20 @@ describe('protocol schemas', () => {
 
   describe('SyncParams', () => {
     it('parses minimal params', () => {
-      const result = SyncParams.parse({ source_config: {}, destination_config: {} })
+      const result = SyncParams.parse({
+        destination: 'postgres',
+        source_config: {},
+        destination_config: {},
+      })
+      expect(result.source).toBe('stripe') // default
+      expect(result.destination).toBe('postgres')
       expect(result.source_config).toEqual({})
     })
 
     it('parses with all fields', () => {
       const result = SyncParams.parse({
+        source: 'stripe',
+        destination: 'postgres',
         source_config: { api_key: 'sk_test' },
         destination_config: { url: 'pg://...' },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
@@ -303,6 +311,10 @@ describe('protocol schemas', () => {
       })
       expect(result.streams).toHaveLength(1)
       expect(result.state).toEqual({ customers: { cursor: 'abc' } })
+    })
+
+    it('rejects missing destination', () => {
+      expect(() => SyncParams.parse({ source_config: {}, destination_config: {} })).toThrow()
     })
   })
 })
@@ -316,7 +328,10 @@ describe('engine config validation', () => {
     const source = mockSource([])
     const { destination } = mockDestination()
     expect(() =>
-      createEngine({ source_config: {}, destination_config: {} }, { source, destination })
+      createEngine(
+        { destination: 'postgres', source_config: {}, destination_config: {} },
+        { source, destination }
+      )
     ).not.toThrow()
   })
 
@@ -331,7 +346,10 @@ describe('engine config validation', () => {
     }
     const { destination } = mockDestination()
     expect(() =>
-      createEngine({ source_config: {}, destination_config: {} }, { source, destination })
+      createEngine(
+        { destination: 'postgres', source_config: {}, destination_config: {} },
+        { source, destination }
+      )
     ).toThrow()
   })
 
@@ -350,7 +368,10 @@ describe('engine config validation', () => {
         })(),
     }
     expect(() =>
-      createEngine({ source_config: {}, destination_config: {} }, { source, destination })
+      createEngine(
+        { destination: 'postgres', source_config: {}, destination_config: {} },
+        { source, destination }
+      )
     ).toThrow()
   })
 
@@ -370,7 +391,7 @@ describe('engine config validation', () => {
     const { destination } = mockDestination()
 
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination }
     )
     // Trigger discover to verify the default was applied
@@ -407,7 +428,7 @@ describe('engine message validation', () => {
     const source = mockSource([record, state])
     const { destination } = mockDestination()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination }
     )
 
@@ -433,7 +454,7 @@ describe('engine message validation', () => {
     }
     const { destination } = mockDestination()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source: badSource, destination }
     )
 
@@ -463,7 +484,7 @@ describe('engine message validation', () => {
     }
 
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination: badDest }
     )
 
@@ -486,7 +507,7 @@ describe('engine stream membership validation', () => {
     const source = mockSource([record])
     const { destination } = mockDestination()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination }
     )
 
@@ -506,7 +527,7 @@ describe('engine stream membership validation', () => {
     const { destination } = mockDestination()
     const onError = vi.fn()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination },
       { onError }
     )
@@ -530,7 +551,7 @@ describe('engine stream membership validation', () => {
     const { destination } = mockDestination()
     const onError = vi.fn()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination },
       { onError }
     )
@@ -554,7 +575,7 @@ describe('engine stream membership validation', () => {
     const source = mockSource([log, error])
     const { destination } = mockDestination()
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { destination: 'postgres', source_config: {}, destination_config: {} },
       { source, destination }
     )
 
