@@ -5,6 +5,7 @@
   "description": "DEPRECATED - This package has moved to https://github.com/stripe/sync-engine",
   "type": "module",
   "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
   "bin": {
     "sync-engine": "./dist/cli/index.js"
   },

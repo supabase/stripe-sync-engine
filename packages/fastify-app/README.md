@@ -1,92 +1,124 @@
 # Stripe Sync Engine - Fastify App
 
-![GitHub License](https://img.shields.io/github/license/supabase/stripe-sync-engine)
-![Docker Image Version](https://img.shields.io/docker/v/supabase/stripe-sync-engine?label=Docker)
+Simple internal Fastify service and Docker image for running the sync engine as a long-running process.
 
-A Fastify-based webhook ingress service for syncing multiple Stripe merchants to PostgreSQL in real time. Built on top of the Stripe Sync Engine.
+## API Contract
 
-## Features
+This service exposes three routes:
 
-- Exposes a single `POST /webhooks` endpoint for public Stripe webhook ingress
-- Routes each request to the correct merchant via the request `Host` header
-- Supports multiple merchants from one deployment via `MERCHANT_CONFIG_JSON`
-- Keeps public surface area small (`/webhooks` + `/health`)
-- Runs as a lightweight Docker container
+- `GET /health`
+- `POST /setup`
+- `POST /webhook`
 
-## Quick Start
+The HTTP layer is intentionally thin:
 
-### 1. Pull the image
+- Merchant-specific config is provided in each request body.
+- There is no host-based tenant routing.
+- There is no webhook signature verification in this service.
+- Errors are returned as `{ "error": "..." }`.
 
-```sh
-docker pull supabase/stripe-sync-engine:latest
+## Request Bodies
+
+`POST /setup`
+
+```json
+{
+  "merchantId": "acct_123",
+  "merchantConfig": {
+    "databaseUrl": "postgresql://postgres:postgres@localhost:5432/postgres",
+    "stripeSecretKey": "sk_test_123",
+    "schemaName": "stripe_acct_123"
+  }
+}
 ```
 
-### 2. Run the container
+Runs migrations for the supplied merchant database/schema and returns:
 
-```sh
-docker run -d \
-  -e MERCHANT_CONFIG_JSON='{"acct-a.sync.stripedb.com":{"databaseUrl":"postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable&search_path=stripe","stripeSecretKey":"sk_test_a","stripeWebhookSecret":"whsec_a"},"acct-b.sync.stripedb.com":{"databaseUrl":"postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable&search_path=stripe","stripeSecretKey":"sk_test_b","stripeWebhookSecret":"whsec_b"}}' \
-  -p 8080:8080 \
-  supabase/stripe-sync-engine:latest
+```json
+{
+  "ok": true,
+  "merchantId": "acct_123",
+  "schemaName": "stripe_acct_123"
+}
 ```
 
-### 3. Configuration
+`POST /webhook`
 
-Configure one Stripe webhook endpoint per merchant host (for example, `https://acct-a.sync.stripedb.com/webhooks`) and include every host in `MERCHANT_CONFIG_JSON`.
+```json
+{
+  "merchantId": "acct_123",
+  "merchantConfig": {
+    "databaseUrl": "postgresql://postgres:postgres@localhost:5432/postgres",
+    "stripeSecretKey": "sk_test_123",
+    "schemaName": "stripe_acct_123"
+  },
+  "event": {
+    "id": "evt_123",
+    "object": "event",
+    "type": "invoice.updated",
+    "data": {
+      "object": {
+        "id": "in_123",
+        "object": "invoice"
+      }
+    }
+  }
+}
+```
+
+Processes a pre-validated Stripe event and returns:
+
+```json
+{
+  "ok": true,
+  "merchantId": "acct_123",
+  "eventId": "evt_123",
+  "eventType": "invoice.updated"
+}
+```
+
+`GET /health`
+
+```json
+{
+  "ok": true
+}
+```
 
 ## Environment Variables
 
-| Variable                            | Description                                                                                                                                                                                                                                                                                              | Required |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `MERCHANT_CONFIG_JSON`              | JSON object keyed by host: `{ "<host>": { "databaseUrl", "stripeSecretKey", "stripeWebhookSecret", "enableSigma?", "autoExpandLists?", "backfillRelatedEntities?" } }`                                                                                                                                   | Yes      |
-| `PORT`                              | Port to run the server on (default: 8080)                                                                                                                                                                                                                                                                | No       |
-| `STRIPE_API_VERSION`                | Stripe API version (default: `2020-08-27`)                                                                                                                                                                                                                                                               | No       |
-| `ENABLE_SIGMA`                      | Default value for merchant entries that omit `enableSigma` (default: false)                                                                                                                                                                                                                              | No       |
-| `AUTO_EXPAND_LISTS`                 | Default value for merchant entries that omit `autoExpandLists` (default: false)                                                                                                                                                                                                                          | No       |
-| `BACKFILL_RELATED_ENTITIES`         | Default value for merchant entries that omit `backfillRelatedEntities` (default: true)                                                                                                                                                                                                                   | No       |
-| `MAX_POSTGRES_CONNECTIONS`          | Max PostgreSQL connection pool size per merchant `StripeSync` instance (default: 10)                                                                                                                                                                                                                     | No       |
-| `REVALIDATE_OBJECTS_VIA_STRIPE_API` | Always fetch latest entity from Stripe instead of trusting webhook payload, possible values: charge, credit_note, customer, dispute, invoice, payment_intent, payment_method, plan, price, product, refund, review, radar.early_fraud_warning, setup_intent, subscription, subscription_schedule, tax_id | No       |
-| `DISABLE_MIGRATIONS`                | Disable automated database migrations on app startup (default: false)                                                                                                                                                                                                                                    | No       |
-| `PG_SSL_CONFIG_ENABLED`             | Whether to explicitly use the SSL configuration (default: false)                                                                                                                                                                                                                                         | No       |
-| `PG_SSL_REJECT_UNAUTHORIZED`        | If true the server will reject any connection not authorized with supplied CAs (effective when `requestCert` is true)                                                                                                                                                                                    | No       |
-| `PG_SSL_REQUEST_CERT`               | If true the server will request a client certificate and verify it (default: false)                                                                                                                                                                                                                      | No       |
-| `PG_SSL_CA`                         | Optionally override trusted CA certificates                                                                                                                                                                                                                                                              | No       |
-| `PG_SSL_CERT`                       | Certificate chain in PEM format                                                                                                                                                                                                                                                                          | No       |
+Only server-level runtime settings come from environment variables:
 
-## Endpoints
+| Variable                     | Description                                                | Required |
+| ---------------------------- | ---------------------------------------------------------- | -------- |
+| `PORT`                       | Port to listen on. Defaults to `8080`.                     | No       |
+| `MAX_POSTGRES_CONNECTIONS`   | Connection pool size per request. Defaults to `10`.        | No       |
+| `PG_SSL_CONFIG_ENABLED`      | Enables explicit Postgres SSL config. Defaults to `false`. | No       |
+| `PG_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL connections. Defaults to `false`.  | No       |
+| `PG_SSL_REQUEST_CERT`        | Request a client certificate. Defaults to `false`.         | No       |
+| `PG_SSL_CA`                  | Optional PEM CA bundle.                                    | No       |
+| `PG_SSL_CERT`                | Optional PEM client certificate chain.                     | No       |
 
-- `POST /webhooks` — Receives Stripe webhook events and syncs data to PostgreSQL
-- `GET /health` — Health check endpoint
+Merchant credentials and schema information are not loaded from environment variables. Send them in the `/setup` and `/webhook` request body.
 
-## Example Docker Compose
+## Local Usage
 
-```yaml
-version: '3'
-services:
-  postgres:
-    image: postgres:17
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - 5432:5432
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+Build the monorepo first:
 
-  stripe-sync:
-    image: supabase/stripe-sync-fastify:latest
-    depends_on:
-      - postgres
-    ports:
-      - 8080:8080
-    environment:
-      MERCHANT_CONFIG_JSON: >
-        {"acct-a.sync.stripedb.com":{"databaseUrl":"postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable&search_path=stripe","stripeSecretKey":"sk_test_a","stripeWebhookSecret":"whsec_a"}}
-
-volumes:
-  pgdata:
+```sh
+pnpm install
+pnpm build
 ```
 
-Backfill/admin operations should run through internal one-off tasks, not public HTTP routes.
+Build and run the Docker image from the repo root:
+
+```sh
+docker build -t sync-engine-fastify .
+docker run --rm -p 8080:8080 sync-engine-fastify
+```
+
+Example health check:
+
+```sh
+curl http://localhost:8080/health
+```

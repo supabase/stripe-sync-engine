@@ -39,7 +39,8 @@ pnpm test
 ```
 
 This runs tests across all workspace packages. The sync-engine unit tests are
-pure mocks. The fastify-app tests need a local Postgres instance (see below).
+pure mocks. The fastify-app tests cover the small internal HTTP contract and do
+not require Postgres.
 
 **Integration tests** (requires Postgres):
 
@@ -67,14 +68,6 @@ The API keys need **write permissions** (`rak_customer_write`, `rak_product_writ
 the sync pipeline end-to-end.
 
 Copy `.env.sample` to `.env` in `packages/sync-engine/` and fill in your keys.
-
-### Local Postgres
-
-The fastify-app integration tests default to `postgres://postgres:postgres@localhost:5432/postgres`.
-If your local Postgres uses a different role, either:
-
-- Create the expected role: `psql -c "CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';"`
-- Or set `DATABASE_URL` to point at your existing setup.
 
 ### Dev Mode (watch + auto-rebuild)
 
