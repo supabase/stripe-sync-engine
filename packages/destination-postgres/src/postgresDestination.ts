@@ -41,7 +41,7 @@ export class PostgresDestination implements Destination {
         required: ['connectionString'],
         properties: {
           connectionString: { type: 'string' },
-          schema: { type: 'string', default: 'stripe' },
+          schema: { type: 'string' },
         },
       },
     }
@@ -67,9 +67,9 @@ export class PostgresDestination implements Destination {
     await this.writer.query(`
       CREATE TABLE IF NOT EXISTS "${schema}"."${streamName}" (
         "_raw_data" jsonb NOT NULL,
-        "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
         "_last_synced_at" timestamptz,
-        "_account_id" text,
+        "_updated_at" timestamptz NOT NULL DEFAULT now(),
+        "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
         PRIMARY KEY ("id")
       )
     `)
@@ -80,19 +80,19 @@ export class PostgresDestination implements Destination {
     catalog: ConfiguredCatalog
   }): Promise<void> {
     await this.ensureSchema()
-    for (const { stream } of params.catalog.streams) {
-      if (stream.json_schema) {
+    for (const configuredStream of params.catalog.streams) {
+      if (configuredStream.stream.json_schema) {
         const stmts = buildCreateTableWithSchema(
           this.config.schema,
-          stream.name,
-          stream.json_schema,
-          { accountSchema: this.config.syncSchema ?? this.config.schema }
+          configuredStream.stream.name,
+          configuredStream.stream.json_schema,
+          { system_columns: configuredStream.system_columns }
         )
         for (const stmt of stmts) {
           await runSqlAdditive(this.writer, stmt)
         }
       } else {
-        await this.ensureTable(stream.name)
+        await this.ensureTable(configuredStream.stream.name)
       }
     }
   }

@@ -132,6 +132,15 @@ importers:
 
   apps/supabase:
     dependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/orchestrator-postgres':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol

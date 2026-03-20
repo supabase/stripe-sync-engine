@@ -22,13 +22,7 @@ function createMockWriter() {
     query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
     upsertMany: vi.fn().mockResolvedValue([]),
     close: vi.fn().mockResolvedValue(undefined),
-    // Unused methods required by the class shape
     pool: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    delete: vi.fn(),
-    upsertManyWithTimestampProtection: vi.fn(),
-    findMissingEntries: vi.fn(),
-    columnExists: vi.fn(),
-    deleteRemovedActiveEntitlements: vi.fn(),
     acquireAdvisoryLock: vi.fn(),
     releaseAdvisoryLock: vi.fn(),
     withAdvisoryLock: vi.fn(),

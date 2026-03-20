@@ -64,7 +64,7 @@ describe('buildRdsIamPasswordFn', () => {
     expect(mockSend).toHaveBeenCalledTimes(1)
     expect(AssumeRoleCommand).toHaveBeenCalledWith({
       RoleArn: 'arn:aws:iam::123456789012:role/MyRole',
-      RoleSessionName: 'stripe-sync-engine',
+      RoleSessionName: 'sync-engine',
     })
 
     const token = await passwordFn()
@@ -130,7 +130,7 @@ describe('buildRdsIamPasswordFn', () => {
 
     expect(AssumeRoleCommand).toHaveBeenCalledWith({
       RoleArn: 'arn:aws:iam::123456789012:role/MyRole',
-      RoleSessionName: 'stripe-sync-engine',
+      RoleSessionName: 'sync-engine',
       ExternalId: 'ext-123',
     })
   })

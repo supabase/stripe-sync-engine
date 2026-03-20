@@ -11,7 +11,7 @@ export const spec = z.object({
   port: z.number().default(5432).describe('Postgres port'),
   database: z.string().optional().describe('Database name (required for AWS IAM)'),
   user: z.string().optional().describe('Database user (required for AWS IAM)'),
-  schema: z.string().default('stripe').describe('Target schema name'),
+  schema: z.string().describe('Target schema name'),
   batch_size: z.number().default(100).describe('Records to buffer before flushing'),
   aws: z
     .object({
@@ -62,11 +62,9 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
 export type { DestinationCliOptions } from './cli'
 export { main as cliMain } from './cli'
 
-export type { DestinationWriter } from './destinationWriter'
 export { PostgresDestination } from './postgresDestination'
 export { PostgresDestinationWriter } from './writer'
-export { QueryUtils, type InsertColumn } from './QueryUtils'
-export { METADATA_TABLES, type PostgresConfig, type RawJsonUpsertOptions } from './types'
+export type { PostgresConfig } from './types'
 
 // Schema projection (JSON Schema → Postgres DDL)
 export {
@@ -75,12 +73,14 @@ export {
   runSqlAdditive,
   applySchemaFromCatalog,
   type ApplySchemaFromCatalogConfig,
+  type BuildTableOptions,
+  type SystemColumn,
 } from './schemaProjection'
 
 // Migrations
 export { runMigrations, runMigrationsFromContent } from './database/migrate'
 export type { MigrationConfig } from './database/migrate'
-export { embeddedMigrations } from './database/migrations-embedded'
+export { embeddedMigrations, genericBootstrapMigrations } from './database/migrations-embedded'
 export type { EmbeddedMigration } from './database/migrations-embedded'
 export { renderMigrationTemplate } from './database/migrationTemplate'
 
@@ -94,7 +94,7 @@ const destination = {
   async check({ config }) {
     const poolConfig = await buildPoolConfig(config)
     const dest = new PostgresDestination({
-      schema: config.schema ?? 'stripe',
+      schema: config.schema,
       poolConfig,
     })
     return dest.check({ config })
@@ -103,7 +103,7 @@ const destination = {
   async setup({ config, catalog }) {
     const poolConfig = await buildPoolConfig(config)
     const dest = new PostgresDestination({
-      schema: config.schema ?? 'stripe',
+      schema: config.schema,
       poolConfig,
     })
     await dest.setup({ config, catalog })
@@ -112,7 +112,7 @@ const destination = {
   async teardown({ config }) {
     const poolConfig = await buildPoolConfig(config)
     const dest = new PostgresDestination({
-      schema: config.schema ?? 'stripe',
+      schema: config.schema,
       poolConfig,
     })
     await dest.teardown({ config })
@@ -121,7 +121,7 @@ const destination = {
   async *write({ config, catalog }, $stdin) {
     const poolConfig = await buildPoolConfig(config)
     const dest = new PostgresDestination({
-      schema: config.schema ?? 'stripe',
+      schema: config.schema,
       poolConfig,
       batchSize: config.batch_size,
     })

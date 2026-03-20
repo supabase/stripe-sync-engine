@@ -47,7 +47,7 @@ async function doesTableExist(client: Client, schema: string, tableName: string)
 
 async function renameMigrationsTableIfNeeded(
   client: Client,
-  schema = 'stripe',
+  schema = 'public',
   logger?: Logger
 ): Promise<void> {
   const oldTableExists = await doesTableExist(client, schema, 'migrations')
@@ -206,13 +206,11 @@ async function runMigrationsWithContent(
     ssl: config.ssl,
     connectionTimeoutMillis: 10_000,
   })
-  const dataSchema = config.schemaName ?? 'stripe'
+  const dataSchema = config.schemaName ?? 'public'
   const syncSchema = config.syncTablesSchemaName ?? dataSchema
   const tableName = '_migrations'
   const parsedMigrations = parseMigrations(renderBootstrapMigrations(migrations, syncSchema))
 
-  // In this codepath, a "custom schema name" means using one non-default schema name
-  // instead of "stripe". It does not mean split data and metadata schemas.
   // todo: split-schema (different data and sync-metadata schemas) is not yet supported
   // because several internal SQL statements mix the two without proper parameterisation.
   if (dataSchema !== syncSchema) {

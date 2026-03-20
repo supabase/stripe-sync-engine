@@ -3,16 +3,25 @@
  *
  * Triggered by pg_cron at a configurable interval (default: 60 seconds).
  *
- * Flow:
- *
- * Concurrency:
+ * Uses v2 packages directly:
+ * - @stripe/source-stripe for StripeSyncWorker + resource registry
+ * - @stripe/orchestrator-postgres for PostgresStateManager (task management)
+ * - @stripe/destination-postgres for PostgresDestinationWriter (upserts)
  */
 
-import { StripeSync, StripeSyncWorker, type WorkerTaskManager } from '@stripe/sync-engine'
+import Stripe from 'stripe'
+import pg from 'pg'
+import {
+  StripeSyncWorker,
+  buildResourceRegistry,
+  CORE_SYNC_OBJECTS,
+  type WorkerTaskManager,
+} from '@stripe/source-stripe'
+import { PostgresStateManager } from '@stripe/orchestrator-postgres'
+import { PostgresDestinationWriter } from '@stripe/destination-postgres'
 import { fromRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
-import postgres from 'postgres'
 
-// Reuse these between requests
+// Reuse these between requests (Deno edge functions reuse module-level state)
 const dbUrl = Deno.env.get('SUPABASE_DB_URL')
 if (!dbUrl) {
   throw new Error('SUPABASE_DB_URL secret not configured')
@@ -23,18 +32,21 @@ const workerCount = Number(Deno.env.get('WORKER_COUNT')) || 10
 const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
 const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
 
-const sql = postgres(dbUrl, { max: 1, prepare: false })
-const stripeSync = await StripeSync.create({
-  poolConfig: { connectionString: dbUrl, max: 1 },
-  stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
-  partnerId: 'pp_supabase',
-  schemaName,
-  syncTablesSchemaName,
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
+const accountId = Deno.env.get('STRIPE_ACCOUNT_ID')!
+
+const pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
+const registry = buildResourceRegistry(stripe)
+const stateManager = new PostgresStateManager(pool, {
+  schema: schemaName,
+  syncSchema: syncTablesSchemaName,
 })
-const objects = stripeSync.getSupportedSyncObjects()
-const tableNames = objects.map(
-  (obj: keyof typeof stripeSync.resourceRegistry) => stripeSync.resourceRegistry[obj].tableName
-)
+const writer = new PostgresDestinationWriter({
+  schema: schemaName,
+  poolConfig: { connectionString: dbUrl },
+})
+
+const tableNames = CORE_SYNC_OBJECTS.map((obj: keyof typeof registry) => registry[obj].tableName)
 
 Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization')
@@ -45,46 +57,40 @@ Deno.serve(async (req) => {
   const token = authHeader.substring(7) // Remove 'Bearer '
 
   // Validate that the token matches the unique worker secret stored in vault
-  const vaultResult = await sql`
-    SELECT decrypted_secret
-    FROM vault.decrypted_secrets
-    WHERE name = 'stripe_sync_worker_secret'
-  `
+  const vaultResult = await pool.query(
+    `SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_worker_secret'`
+  )
 
-  if (vaultResult.length === 0) {
+  if (vaultResult.rows.length === 0) {
     return new Response('Worker secret not configured in vault', { status: 500 })
   }
-  const storedSecret = vaultResult[0].decrypted_secret
+  const storedSecret = vaultResult.rows[0].decrypted_secret
   if (token !== storedSecret) {
     return new Response('Forbidden: Invalid worker secret', { status: 403 })
   }
-  const runKey = await stripeSync.reconciliationSync(
-    objects,
-    tableNames,
-    true,
+
+  const runKey = await stateManager.reconciliationRun(
+    accountId,
     'edge-worker',
+    tableNames,
     SYNC_INTERVAL
   )
   if (runKey === null) {
-    const activeSkipResult = await sql`SELECT decrypted_secret::timestamptz::text AS skip_until
-      FROM vault.decrypted_secrets
-      WHERE name = 'stripe_sync_skip_until'
-        AND decrypted_secret::timestamptz >= NOW()
-      LIMIT 1`
+    const activeSkipResult = await pool.query(
+      `SELECT decrypted_secret::timestamptz::text AS skip_until
+       FROM vault.decrypted_secrets
+       WHERE name = 'stripe_sync_skip_until'
+         AND decrypted_secret::timestamptz >= NOW()
+       LIMIT 1`
+    )
 
-    let skipUntil = activeSkipResult[0]?.skip_until
+    let skipUntil = activeSkipResult.rows[0]?.skip_until
     if (!skipUntil) {
       skipUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-      await sql`DELETE FROM vault.secrets WHERE name = 'stripe_sync_skip_until'`
-      await sql`SELECT vault.create_secret(
-        ${skipUntil},
-        'stripe_sync_skip_until'
-      )`
+      await pool.query(`DELETE FROM vault.secrets WHERE name = 'stripe_sync_skip_until'`)
+      await pool.query(`SELECT vault.create_secret($1, 'stripe_sync_skip_until')`, [skipUntil])
     }
-    const completedRun = await stripeSync.postgresClient.getCompletedRun(
-      stripeSync.accountId,
-      SYNC_INTERVAL
-    )
+    const completedRun = await stateManager.getCompletedRun(accountId, SYNC_INTERVAL)
     const message = `Skipping resync — a successful run completed at ${completedRun?.runStartedAt.toISOString()} (within ${SYNC_INTERVAL}s window). Cron paused until ${skipUntil}.`
     console.log(message)
     return new Response(JSON.stringify({ skipped: true, message }), {
@@ -92,45 +98,38 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     })
   }
-  await stripeSync.postgresClient.resetStuckRunningObjects(runKey.accountId, runKey.runStartedAt, 1)
+  await stateManager.resetStuckRunningObjects(runKey.accountId, runKey.runStartedAt, 1)
 
   const taskManager: WorkerTaskManager = {
-    claimNextTask: (accountId, runStartedAt, rl) =>
-      stripeSync.postgresClient.claimNextTask(accountId, runStartedAt, rl),
-    updateSyncObject: (accountId, runStartedAt, object, createdGte, createdLte, updates) =>
-      stripeSync.postgresClient.updateSyncObject(
-        accountId,
-        runStartedAt,
-        object,
-        createdGte,
-        createdLte,
-        updates
-      ),
-    releaseObjectSync: (accountId, runStartedAt, object, pageCursor, createdGte, createdLte) =>
-      stripeSync.postgresClient.releaseObjectSync(
-        accountId,
-        runStartedAt,
-        object,
-        pageCursor,
-        createdGte,
-        createdLte
-      ),
+    claimNextTask: (aid, rst, rl) => stateManager.claimNextTask(aid, rst, rl),
+    updateSyncObject: (aid, rst, obj, gte, lte, updates) =>
+      stateManager.updateSyncObject(aid, rst, obj, gte, lte, updates),
+    releaseObjectSync: (aid, rst, obj, pc, gte, lte) =>
+      stateManager.releaseObjectSync(aid, rst, obj, pc, gte, lte),
   }
 
   const workers = Array.from(
     { length: workerCount },
     () =>
       new StripeSyncWorker(
-        stripeSync.stripe,
-        stripeSync.config,
+        stripe,
+        {},
         taskManager,
-        stripeSync.accountId,
-        stripeSync.resourceRegistry,
+        accountId,
+        registry,
         runKey,
-        async (messages: RecordMessage[], accountId: string, backfillRelated?: boolean) => {
+        async (messages: RecordMessage[], _accountId: string) => {
+          // Group by stream (table name) and upsert
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const items = messages.map(fromRecordMessage) as { [Key: string]: any }[]
-          return stripeSync.upsertAny(items, accountId, backfillRelated)
+          const byStream = new Map<string, { [Key: string]: any }[]>()
+          for (const msg of messages) {
+            const items = byStream.get(msg.stream) ?? []
+            items.push(fromRecordMessage(msg))
+            byStream.set(msg.stream, items)
+          }
+          for (const [table, items] of byStream) {
+            await writer.upsertMany(items, table)
+          }
         },
         Infinity,
         rateLimit
@@ -143,10 +142,7 @@ Deno.serve(async (req) => {
     new Promise((resolve) => setTimeout(resolve, MAX_EXECUTION_MS)),
   ])
   workers.forEach((w) => w.shutdown())
-  const totals = await stripeSync.postgresClient.getObjectSyncedCounts(
-    stripeSync.accountId,
-    runKey.runStartedAt
-  )
+  const totals = await stateManager.getObjectSyncedCounts(accountId, runKey.runStartedAt)
   const totalSynced = (Object.values(totals) as number[]).reduce(
     (sum: number, n: number) => sum + n,
     0

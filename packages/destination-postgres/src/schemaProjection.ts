@@ -92,17 +92,27 @@ export function jsonSchemaToColumns(jsonSchema: Record<string, unknown>): Column
 /**
  * Build DDL statements to create a table with generated columns from JSON Schema.
  * Returns an array of SQL statements (CREATE TABLE + ALTER TABLE ADD COLUMN for each column
- * + FK + index + trigger).
+ * + indexes + trigger).
  */
+export type SystemColumn = {
+  name: string
+  type: string
+  index?: boolean
+}
+
+export type BuildTableOptions = {
+  /** Extra system columns to add to the table (e.g. _account_id). */
+  system_columns?: SystemColumn[]
+}
+
 export function buildCreateTableWithSchema(
   schema: string,
   tableName: string,
   jsonSchema: Record<string, unknown>,
-  options: { accountSchema?: string } = {}
+  options: BuildTableOptions = {}
 ): string[] {
   const quotedSchema = quoteIdent(schema)
   const quotedTable = quoteIdent(tableName)
-  const accountSchema = options.accountSchema ?? schema
 
   const columns = jsonSchemaToColumns(jsonSchema)
 
@@ -114,28 +124,40 @@ export function buildCreateTableWithSchema(
     (colDef) => `ALTER TABLE ${quotedSchema}.${quotedTable} ADD COLUMN IF NOT EXISTS ${colDef};`
   )
 
+  const systemColumnDefs = (options.system_columns ?? []).map(
+    (col) => `${quoteIdent(col.name)} ${col.type}`
+  )
+
   const columnDefs = [
     '"_raw_data" jsonb NOT NULL',
     '"_last_synced_at" timestamptz',
     '"_updated_at" timestamptz NOT NULL DEFAULT now()',
-    '"_account_id" text NOT NULL',
+    ...systemColumnDefs,
     `"id" text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED`,
     ...generatedColumnDefs,
     'PRIMARY KEY ("id")',
   ]
 
-  const fkName = safeIdentifier(`fk_${tableName}_account`)
-  const accountIdxName = safeIdentifier(`idx_${tableName}_account_id`)
-  const quotedAccountSchema = quoteIdent(accountSchema)
-
-  return [
+  const stmts: string[] = [
     `CREATE TABLE ${quotedSchema}.${quotedTable} (\n  ${columnDefs.join(',\n  ')}\n);`,
     ...generatedColumnAlters,
-    `ALTER TABLE ${quotedSchema}.${quotedTable} ADD CONSTRAINT ${quoteIdent(fkName)} FOREIGN KEY ("_account_id") REFERENCES ${quotedAccountSchema}."accounts" (id);`,
-    `CREATE INDEX ${quoteIdent(accountIdxName)} ON ${quotedSchema}.${quotedTable} ("_account_id");`,
-    `DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`,
-    `CREATE TRIGGER handle_updated_at BEFORE UPDATE ON ${quotedSchema}.${quotedTable} FOR EACH ROW EXECUTE FUNCTION set_updated_at();`,
   ]
+
+  for (const col of options.system_columns ?? []) {
+    if (col.index) {
+      const idxName = safeIdentifier(`idx_${tableName}_${col.name}`)
+      stmts.push(
+        `CREATE INDEX ${quoteIdent(idxName)} ON ${quotedSchema}.${quotedTable} (${quoteIdent(col.name)});`
+      )
+    }
+  }
+
+  stmts.push(
+    `DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`,
+    `CREATE TRIGGER handle_updated_at BEFORE UPDATE ON ${quotedSchema}.${quotedTable} FOR EACH ROW EXECUTE FUNCTION set_updated_at();`
+  )
+
+  return stmts
 }
 
 /**
@@ -251,7 +273,8 @@ async function insertMigrationMarker(
 export type ApplySchemaFromCatalogConfig = {
   dataSchema?: string
   syncSchema?: string
-  accountSchema?: string
+  /** Extra system columns to add to each table. */
+  system_columns?: SystemColumn[]
   apiVersion?: string
 }
 
@@ -264,9 +287,8 @@ export async function applySchemaFromCatalog(
   streams: Array<{ name: string; json_schema?: Record<string, unknown> }>,
   config: ApplySchemaFromCatalogConfig = {}
 ): Promise<void> {
-  const dataSchema = config.dataSchema ?? 'stripe'
+  const dataSchema = config.dataSchema ?? 'public'
   const syncSchema = config.syncSchema ?? dataSchema
-  const accountSchema = config.accountSchema ?? syncSchema
   const apiVersion = config.apiVersion ?? '2020-08-27'
 
   // Compute fingerprint of all json_schemas
@@ -306,7 +328,7 @@ export async function applySchemaFromCatalog(
   for (const stream of streams) {
     if (!stream.json_schema) continue
     const stmts = buildCreateTableWithSchema(dataSchema, stream.name, stream.json_schema, {
-      accountSchema,
+      system_columns: config.system_columns,
     })
     for (const stmt of stmts) {
       await runSqlAdditive(client, stmt)

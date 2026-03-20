@@ -42,7 +42,7 @@ async function assumeRole(
   const sts = new STSClient({ region })
   const command = new AssumeRoleCommand({
     RoleArn: roleArn,
-    RoleSessionName: 'stripe-sync-engine',
+    RoleSessionName: 'sync-engine',
     ...(externalId ? { ExternalId: externalId } : {}),
   })
 

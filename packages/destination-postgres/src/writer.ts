@@ -1,33 +1,11 @@
 import pg, { QueryResult } from 'pg'
-import { pg as sql } from 'yesql'
-import { QueryUtils, type InsertColumn } from './QueryUtils'
-import type { DestinationWriter } from './destinationWriter'
-import { METADATA_TABLES, type PostgresConfig, type RawJsonUpsertOptions } from './types'
+import type { PostgresConfig } from './types'
 
-export class PostgresDestinationWriter implements DestinationWriter {
+export class PostgresDestinationWriter {
   pool: pg.Pool
 
   constructor(private config: PostgresConfig) {
     this.pool = new pg.Pool(config.poolConfig)
-  }
-
-  private get syncSchema(): string {
-    return this.config.syncSchema ?? this.config.schema
-  }
-
-  private schemaForTable(table: string): string {
-    return METADATA_TABLES.has(table) ? this.syncSchema : this.config.schema
-  }
-
-  async delete(table: string, id: string): Promise<boolean> {
-    const schema = this.schemaForTable(table)
-    const prepared = sql(`
-    delete from "${schema}"."${table}"
-    where id = :id
-    returning id;
-    `)({ id })
-    const { rows } = await this.query(prepared.text, prepared.values)
-    return rows.length > 0
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,175 +49,6 @@ export class PostgresDestinationWriter implements DestinationWriter {
     }
 
     return results.flatMap((it) => it.rows)
-  }
-
-  async upsertManyWithTimestampProtection<
-    T extends {
-      [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
-    },
-  >(
-    entries: T[],
-    table: string,
-    accountId: string,
-    syncTimestamp?: string,
-    upsertOptions?: RawJsonUpsertOptions,
-    schemaOverride?: string
-  ): Promise<T[]> {
-    const timestamp = syncTimestamp || new Date().toISOString()
-
-    if (!entries.length) return []
-
-    const targetSchema = table.startsWith('_')
-      ? this.syncSchema
-      : (schemaOverride ?? this.config.schema)
-
-    // Max 5 in parallel to avoid exhausting connection pool
-    const chunkSize = 5
-    const results: pg.QueryResult<T>[] = []
-
-    for (let i = 0; i < entries.length; i += chunkSize) {
-      const chunk = entries.slice(i, i + chunkSize)
-
-      const queries: Promise<pg.QueryResult<T>>[] = []
-      chunk.forEach((entry) => {
-        // Internal tables (starting with _) use old column-based format with yesql
-        if (table.startsWith('_')) {
-          const columns = Object.keys(entry).filter(
-            (k) => k !== 'last_synced_at' && k !== 'account_id'
-          )
-
-          const upsertSql = `
-            INSERT INTO "${targetSchema}"."${table}" (
-              ${columns.map((c) => `"${c}"`).join(', ')}, "last_synced_at", "account_id"
-            )
-            VALUES (
-              ${columns.map((c) => `:${c}`).join(', ')}, :last_synced_at, :account_id
-            )
-            ON CONFLICT ("id")
-            DO UPDATE SET
-              ${columns.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ')},
-              "last_synced_at" = :last_synced_at,
-              "account_id" = EXCLUDED."account_id"
-            WHERE "${table}"."last_synced_at" IS NULL
-               OR "${table}"."last_synced_at" < :last_synced_at
-            RETURNING *
-          `
-
-          const cleansed = this.cleanseArrayField(entry)
-          cleansed.last_synced_at = timestamp
-          cleansed.account_id = accountId
-          const prepared = sql(upsertSql, { useNullForMissing: true })(cleansed)
-          queries.push(this.pool.query(prepared.text, prepared.values))
-        } else {
-          // Raw JSON upsert path: store entry as _raw_data jsonb
-          const conflictTarget = upsertOptions?.conflictTarget ?? ['id']
-          const extraColumns = upsertOptions?.extraColumns ?? []
-          if (!conflictTarget.length) {
-            throw new Error(`Invalid upsert config for ${table}: conflictTarget must be non-empty`)
-          }
-
-          // Build column list: _raw_data + any extra typed columns + metadata
-          const columns: InsertColumn[] = [
-            { column: '_raw_data', pgType: 'jsonb', value: JSON.stringify(entry) },
-            ...extraColumns.map((c) => ({
-              column: c.column,
-              pgType: c.pgType,
-              value: entry[c.entryKey],
-            })),
-            { column: '_last_synced_at', pgType: 'timestamptz', value: timestamp },
-            { column: '_account_id', pgType: 'text', value: accountId },
-          ]
-
-          // Validate all values are present
-          for (const c of columns) {
-            if (c.value === undefined) {
-              throw new Error(`Missing required value for ${table}.${c.column}`)
-            }
-          }
-
-          const { sql: upsertSql, params } = QueryUtils.buildRawJsonUpsertQuery(
-            targetSchema,
-            table,
-            columns,
-            conflictTarget,
-            extraColumns.map((c) => c.column) // Pass extra column names for ON CONFLICT UPDATE
-          )
-          queries.push(this.pool.query(upsertSql, params))
-        }
-      })
-
-      const chunkResults = await Promise.all(queries)
-      results.push(...chunkResults)
-
-      // if upsert returns 0 rows for non-empty input
-      const chunkRowCount = chunkResults.reduce((sum, r) => sum + (r.rowCount ?? 0), 0)
-      if (chunkRowCount === 0 && chunk.length > 0) {
-        console.warn(
-          `[upsert] 0 rows returned for ${targetSchema}.${table} ` +
-            `(input: ${chunk.length} entries, timestamp: ${timestamp}, accountId: ${accountId}). `
-        )
-      }
-    }
-
-    return results.flatMap((it) => it.rows)
-  }
-
-  private cleanseArrayField(obj: {
-    [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
-  }): {
-    [Key: string]: any // eslint-disable-line @typescript-eslint/no-explicit-any
-  } {
-    const cleansed = { ...obj }
-    Object.keys(cleansed).map((k) => {
-      const data = cleansed[k]
-      if (Array.isArray(data)) {
-        cleansed[k] = JSON.stringify(data)
-      }
-    })
-    return cleansed
-  }
-
-  async findMissingEntries(table: string, ids: string[]): Promise<string[]> {
-    if (!ids.length) return []
-
-    const schema = this.schemaForTable(table)
-    const prepared = sql(`
-    select id from "${schema}"."${table}"
-    where id=any(:ids::text[]);
-    `)({ ids })
-
-    const { rows } = await this.query(prepared.text, prepared.values)
-    const existingIds = rows.map((it) => it.id)
-
-    const missingIds = ids.filter((it) => !existingIds.includes(it))
-
-    return missingIds
-  }
-
-  async columnExists(table: string, column: string): Promise<boolean> {
-    const result = await this.query(
-      `SELECT EXISTS (
-          SELECT 1
-          FROM information_schema.columns
-          WHERE table_schema = $1
-          AND table_name = $2
-          AND column_name = $3
-      )`,
-      [this.config.schema, table, column]
-    )
-    return result.rows[0].exists
-  }
-
-  async deleteRemovedActiveEntitlements(
-    customerId: string,
-    currentActiveEntitlementIds: string[]
-  ): Promise<{ rowCount: number }> {
-    const prepared = sql(`
-      delete from "${this.config.schema}"."active_entitlements"
-      where customer = :customerId and id <> ALL(:currentActiveEntitlementIds::text[]);
-      `)({ customerId, currentActiveEntitlementIds })
-    const { rowCount } = await this.query(prepared.text, prepared.values)
-    return { rowCount: rowCount || 0 }
   }
 
   /**
@@ -315,7 +124,6 @@ export class PostgresDestinationWriter implements DestinationWriter {
 
   /**
    * Closes the database connection pool and cleans up resources.
-   * Call this when you're done using the PostgresDestinationWriter instance.
    */
   async close(): Promise<void> {
     await this.pool.end()

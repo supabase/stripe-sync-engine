@@ -49,13 +49,13 @@ describe('jsonSchemaToColumns', () => {
 })
 
 describe('buildCreateTableWithSchema', () => {
-  it('produces CREATE TABLE + ALTER TABLE ADD COLUMN + FK + index + trigger', () => {
-    const stmts = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA)
+  it('produces generic DDL without _account_id when no options', () => {
+    const stmts = buildCreateTableWithSchema('mydata', 'repos', SAMPLE_JSON_SCHEMA)
 
     // CREATE TABLE
-    expect(stmts[0]).toContain('CREATE TABLE "stripe"."customers"')
+    expect(stmts[0]).toContain('CREATE TABLE "mydata"."repos"')
     expect(stmts[0]).toContain('"_raw_data" jsonb NOT NULL')
-    expect(stmts[0]).toContain('"_account_id" text NOT NULL')
+    expect(stmts[0]).not.toContain('"_account_id"')
     expect(stmts[0]).toContain("GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED")
 
     // Generated columns in CREATE TABLE
@@ -66,35 +66,56 @@ describe('buildCreateTableWithSchema', () => {
     const alterStmts = stmts.filter((s) => s.includes('ADD COLUMN IF NOT EXISTS'))
     expect(alterStmts.length).toBe(4) // created, deleted, metadata, expires_at
 
-    // FK constraint
-    expect(stmts.some((s) => s.includes('FOREIGN KEY ("_account_id")'))).toBe(true)
-    expect(stmts.some((s) => s.includes('REFERENCES "stripe"."accounts"'))).toBe(true)
+    // No FK constraint
+    expect(stmts.some((s) => s.includes('FOREIGN KEY'))).toBe(false)
 
-    // Index
-    expect(stmts.some((s) => s.includes('CREATE INDEX'))).toBe(true)
+    // No indexes by default (no system_columns with index: true)
+    expect(stmts.some((s) => s.includes('CREATE INDEX'))).toBe(false)
 
     // Trigger
     expect(stmts.some((s) => s.includes('handle_updated_at'))).toBe(true)
     expect(stmts.some((s) => s.includes('set_updated_at()'))).toBe(true)
   })
 
-  it('uses accountSchema for FK when provided', () => {
-    const stmts = buildCreateTableWithSchema('stripe_data', 'customers', SAMPLE_JSON_SCHEMA, {
-      accountSchema: 'stripe_sync',
+  it('adds system columns and indexes when system_columns is provided', () => {
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
+      system_columns: [{ name: '_account_id', type: 'text', index: true }],
     })
-    expect(stmts[0]).toContain('CREATE TABLE "stripe_data"."customers"')
-    expect(stmts.some((s) => s.includes('REFERENCES "stripe_sync"."accounts"'))).toBe(true)
+
+    // Column present in CREATE TABLE
+    expect(stmts[0]).toContain('"_account_id" text')
+    // _account_id should be nullable (no NOT NULL)
+    expect(stmts[0]).not.toMatch(/"_account_id" text NOT NULL/)
+
+    // Index created
+    expect(stmts.some((s) => s.includes('CREATE INDEX') && s.includes('"_account_id"'))).toBe(true)
+  })
+
+  it('handles multiple system columns with mixed index settings', () => {
+    const stmts = buildCreateTableWithSchema('mydata', 'repos', SAMPLE_JSON_SCHEMA, {
+      system_columns: [
+        { name: '_account_id', type: 'text', index: true },
+        { name: '_tenant_id', type: 'uuid', index: false },
+      ],
+    })
+
+    expect(stmts[0]).toContain('"_account_id" text')
+    expect(stmts[0]).toContain('"_tenant_id" uuid')
+
+    // Only _account_id gets an index
+    expect(stmts.some((s) => s.includes('CREATE INDEX') && s.includes('"_account_id"'))).toBe(true)
+    expect(stmts.some((s) => s.includes('CREATE INDEX') && s.includes('"_tenant_id"'))).toBe(false)
   })
 
   it('handles expandable reference columns', () => {
-    const stmts = buildCreateTableWithSchema('stripe', 'charges', EXPANDABLE_REF_SCHEMA)
+    const stmts = buildCreateTableWithSchema('mydata', 'charges', EXPANDABLE_REF_SCHEMA)
     expect(stmts[0]).toContain('"customer" text GENERATED ALWAYS AS (CASE')
     expect(stmts[0]).toContain("WHEN jsonb_typeof(_raw_data->'customer') = 'object'")
   })
 
   it('produces stable output across repeated calls', () => {
-    const first = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA)
-    const second = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA)
+    const first = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
+    const second = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     expect(second).toEqual(first)
   })
 })

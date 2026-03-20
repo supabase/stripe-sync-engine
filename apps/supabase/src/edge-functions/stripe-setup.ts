@@ -1,11 +1,10 @@
-import {
-  StripeSync,
-  runMigrationsFromContent,
-  VERSION,
-  embeddedMigrations,
-} from '@stripe/sync-engine'
+import { runMigrationsFromContent, embeddedMigrations } from '@stripe/destination-postgres'
 import { parseSchemaComment } from '../schemaComment.ts'
-import postgres from 'postgres'
+import Stripe from 'stripe'
+import pg from 'pg'
+
+// Read package.json version at build time
+const VERSION = '0.1.0'
 
 // Get management API base URL from environment variable (for testing against localhost/staging)
 // Caller should provide full URL with protocol (e.g., http://localhost:54323 or https://api.supabase.com)
@@ -57,6 +56,28 @@ async function deleteSecret(
   }
 }
 
+// Helper to set secrets via Management API
+async function setSecrets(
+  projectRef: string,
+  secrets: Array<{ name: string; value: string }>,
+  accessToken: string
+): Promise<void> {
+  const url = `${MGMT_API_BASE}/v1/projects/${projectRef}/secrets`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(secrets),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Failed to set secrets: ${response.status} ${text}`)
+  }
+}
+
 Deno.serve(async (req) => {
   // Extract project ref from SUPABASE_URL (format: https://{projectRef}.{base})
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -86,20 +107,19 @@ Deno.serve(async (req) => {
       })
     }
 
-    let sql: ReturnType<typeof postgres> | undefined
+    const pool = new pg.Pool({ connectionString: dbUrl, max: 1 })
 
     try {
-      sql = postgres(dbUrl, { max: 1, prepare: false })
-
       // Query installation status from schema comment
       const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
-      const commentResult = await sql`
-        SELECT obj_description(oid, 'pg_namespace') as comment
-        FROM pg_namespace
-        WHERE nspname = ${schemaName}
-      `
+      const commentResult = await pool.query(
+        `SELECT obj_description(oid, 'pg_namespace') as comment
+         FROM pg_namespace
+         WHERE nspname = $1`,
+        [schemaName]
+      )
 
-      const comment = commentResult[0]?.comment || null
+      const comment = commentResult.rows[0]?.comment || null
 
       // Query sync runs (only if schema exists)
       let syncStatus: Array<Record<string, unknown>> = []
@@ -107,7 +127,7 @@ Deno.serve(async (req) => {
         try {
           const syncSchema = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
           const safeSchema = syncSchema.replace(/"/g, '""')
-          syncStatus = await sql.unsafe(`
+          const syncResult = await pool.query(`
             SELECT DISTINCT ON (account_id)
               account_id, started_at, closed_at, status, error_message,
               total_processed, total_objects, complete_count, error_count,
@@ -115,6 +135,7 @@ Deno.serve(async (req) => {
             FROM "${safeSchema}"."sync_runs"
             ORDER BY account_id, started_at DESC
           `)
+          syncStatus = syncResult.rows
         } catch (err) {
           // Ignore errors if sync_runs view doesn't exist yet
           console.warn('sync_runs query failed (may not exist yet):', err)
@@ -152,13 +173,13 @@ Deno.serve(async (req) => {
         }
       )
     } finally {
-      if (sql) await sql.end()
+      await pool.end()
     }
   }
 
   // Handle DELETE requests for uninstall
   if (req.method === 'DELETE') {
-    let stripeSync = null
+    let pool: pg.Pool | null = null
     try {
       // Get and validate database URL
       const dbUrl = Deno.env.get('SUPABASE_DB_URL')
@@ -172,34 +193,32 @@ Deno.serve(async (req) => {
         throw new Error('STRIPE_SECRET_KEY environment variable is required for uninstall')
       }
 
-      // Step 1: Delete Stripe webhooks and clean up database
       const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
       const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
-      stripeSync = await StripeSync.create({
-        poolConfig: { connectionString: dbUrl, max: 2 },
-        stripeSecretKey: stripeKey,
-        schemaName,
-        syncTablesSchemaName,
-      })
 
-      // Delete all managed webhooks
+      pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
+      const stripe = new Stripe(stripeKey)
+
+      // Step 1: Delete all managed webhooks via Stripe SDK
       try {
-        const webhooks = await stripeSync.webhook.listManagedWebhooks()
-        for (const webhook of webhooks) {
-          try {
-            await stripeSync.webhook.deleteManagedWebhook(webhook.id)
-            console.log(`Deleted webhook: ${webhook.id}`)
-          } catch (err) {
-            console.warn(`Could not delete webhook ${webhook.id}:`, err)
+        const endpoints = await stripe.webhookEndpoints.list({ limit: 100 })
+        for (const wh of endpoints.data) {
+          if (wh.metadata?.managed_by === 'stripe-sync') {
+            try {
+              await stripe.webhookEndpoints.del(wh.id)
+              console.log(`Deleted webhook: ${wh.id}`)
+            } catch (err) {
+              console.warn(`Could not delete webhook ${wh.id}:`, err)
+            }
           }
         }
       } catch (err) {
-        console.warn(`Could not get webooks:`, err)
+        console.warn(`Could not get webhooks:`, err)
       }
 
       // Unschedule pg_cron jobs
       try {
-        await stripeSync.postgresClient.query(`
+        await pool.query(`
           DO $$
           BEGIN
             IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'stripe-sync-worker') THEN
@@ -216,7 +235,7 @@ Deno.serve(async (req) => {
 
       // Delete vault secrets
       try {
-        await stripeSync.postgresClient.query(`
+        await pool.query(`
           DELETE FROM vault.secrets
           WHERE name IN ('stripe_sync_worker_secret', 'stripe_sigma_worker_secret')
         `)
@@ -227,16 +246,14 @@ Deno.serve(async (req) => {
       // Drop Sigma self-trigger function if present
       try {
         const dropSchema = syncTablesSchemaName.replace(/"/g, '""')
-        await stripeSync.postgresClient.query(
-          `DROP FUNCTION IF EXISTS "${dropSchema}".trigger_sigma_worker()`
-        )
+        await pool.query(`DROP FUNCTION IF EXISTS "${dropSchema}".trigger_sigma_worker()`)
       } catch (err) {
         console.warn('Could not drop sigma trigger function:', err)
       }
 
       // Terminate connections holding locks on schema
       try {
-        await stripeSync.postgresClient.query(
+        await pool.query(
           `SELECT pg_terminate_backend(pid)
            FROM pg_locks l
            JOIN pg_class c ON l.relation = c.oid
@@ -256,7 +273,7 @@ Deno.serve(async (req) => {
         try {
           for (const s of schemasToDrop) {
             const safe = s.replace(/"/g, '""')
-            await stripeSync.postgresClient.query(`DROP SCHEMA IF EXISTS "${safe}" CASCADE`)
+            await pool.query(`DROP SCHEMA IF EXISTS "${safe}" CASCADE`)
           }
           break // Success, exit loop
         } catch (err: unknown) {
@@ -274,7 +291,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      await stripeSync.postgresClient.pool.end()
+      await pool.end()
+      pool = null
 
       // Step 2: Delete Supabase secrets
       try {
@@ -293,6 +311,18 @@ Deno.serve(async (req) => {
         await deleteSecret(projectRef, 'ENABLE_SIGMA', accessToken)
       } catch (err) {
         console.warn('Could not delete ENABLE_SIGMA secret:', err)
+      }
+
+      try {
+        await deleteSecret(projectRef, 'STRIPE_ACCOUNT_ID', accessToken)
+      } catch (err) {
+        console.warn('Could not delete STRIPE_ACCOUNT_ID secret:', err)
+      }
+
+      try {
+        await deleteSecret(projectRef, 'STRIPE_WEBHOOK_SECRET', accessToken)
+      } catch (err) {
+        console.warn('Could not delete STRIPE_WEBHOOK_SECRET secret:', err)
       }
 
       // Step 3: Delete Edge Functions
@@ -334,9 +364,9 @@ Deno.serve(async (req) => {
       const err = error as Error
       console.error('Uninstall error:', error)
       // Cleanup on error
-      if (stripeSync) {
+      if (pool) {
         try {
-          await stripeSync.postgresClient.pool.end()
+          await pool.end()
         } catch (cleanupErr) {
           console.warn('Cleanup failed:', cleanupErr)
         }
@@ -353,7 +383,7 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  let stripeSync = null
+  let pool: pg.Pool | null = null
   try {
     // Get and validate database URL
     const dbUrl = Deno.env.get('SUPABASE_DB_URL')
@@ -363,42 +393,68 @@ Deno.serve(async (req) => {
 
     const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
     const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
+
+    // Step 1: Run migrations
     await runMigrationsFromContent(
       {
         databaseUrl: dbUrl,
-        stripeApiVersion: Deno.env.get('STRIPE_API_VERSION') ?? '2020-08-27',
         schemaName,
         syncTablesSchemaName,
       },
       embeddedMigrations
     )
 
-    stripeSync = await StripeSync.create({
-      poolConfig: { connectionString: dbUrl, max: 2 }, // Need 2 for advisory lock + queries
-      stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY'),
-      schemaName,
-      syncTablesSchemaName,
-    })
+    pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
 
     // Release any stale advisory locks from previous timeouts
-    await stripeSync.postgresClient.query('SELECT pg_advisory_unlock_all()')
+    await pool.query('SELECT pg_advisory_unlock_all()')
 
-    // Construct webhook URL from SUPABASE_URL (available in all Edge Functions)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    if (!supabaseUrl) {
-      throw new Error('SUPABASE_URL environment variable is not set')
-    }
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')!
+    const stripe = new Stripe(stripeKey)
+
+    // Step 2: Create managed webhook endpoint via Stripe SDK
+    // We call Stripe directly (not source.setup) so we can capture the webhook secret
     const webhookUrl = `${supabaseUrl}/functions/v1/stripe-webhook`
 
-    const webhook = await stripeSync.webhook.findOrCreateManagedWebhook(webhookUrl)
+    const existing = await stripe.webhookEndpoints.list({ limit: 100 })
+    const managed = existing.data.find(
+      (wh) => wh.url === webhookUrl && wh.metadata?.managed_by === 'stripe-sync'
+    )
 
-    await stripeSync.postgresClient.pool.end()
+    let webhookSecret = ''
+    let webhookId = managed?.id
+    if (!managed || managed.status !== 'enabled') {
+      // Delete stale managed endpoint if it exists but is disabled
+      if (managed) {
+        await stripe.webhookEndpoints.del(managed.id)
+      }
+      const endpoint = await stripe.webhookEndpoints.create({
+        url: webhookUrl,
+        enabled_events: ['*'],
+        metadata: { managed_by: 'stripe-sync' },
+      })
+      webhookSecret = endpoint.secret!
+      webhookId = endpoint.id
+    }
+
+    // Step 3: Resolve account ID and store secrets
+    const account = await stripe.accounts.retrieve()
+    const secrets: Array<{ name: string; value: string }> = [
+      { name: 'STRIPE_ACCOUNT_ID', value: account.id },
+    ]
+    if (webhookSecret) {
+      secrets.push({ name: 'STRIPE_WEBHOOK_SECRET', value: webhookSecret })
+    }
+    await setSecrets(projectRef, secrets, accessToken)
+
+    await pool.end()
+    pool = null
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Setup complete',
-        webhookId: webhook.id,
+        webhookId,
       }),
       {
         status: 200,
@@ -409,10 +465,10 @@ Deno.serve(async (req) => {
     const err = error as Error
     console.error('Setup error:', error)
     // Cleanup on error
-    if (stripeSync) {
+    if (pool) {
       try {
-        await stripeSync.postgresClient.query('SELECT pg_advisory_unlock_all()')
-        await stripeSync.postgresClient.pool.end()
+        await pool.query('SELECT pg_advisory_unlock_all()')
+        await pool.end()
       } catch (cleanupErr) {
         console.warn('Cleanup failed:', cleanupErr)
       }

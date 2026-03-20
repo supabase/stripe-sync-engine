@@ -48,6 +48,10 @@ When asked to push to GitHub, monitor CI checks until they all pass before
 reporting back. Don't just push and return — keep polling `gh pr checks` or
 `gh run watch` until all checks are green (or report failures if they occur).
 
+## Conventions
+
+- All serializable inputs/outputs (Zod schemas, JSON wire format) must use **snake_case** field names.
+
 ## Key Gotchas
 
 - `tsx` fails on this project — `?raw` imports pull in Deno-only code. Use built output.
