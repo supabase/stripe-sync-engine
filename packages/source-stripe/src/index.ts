@@ -12,7 +12,6 @@ export type {
   ProcessNextResult,
 } from './types'
 export { SUPPORTED_WEBHOOK_EVENTS } from './types'
-export type { EntitySchema } from './streams/types'
 export type { Source } from '@stripe/sync-protocol'
 
 // Source
@@ -47,11 +46,6 @@ export type {
   SyncObjectName,
   RevalidateEntityName,
 } from './resourceRegistry'
-
-// Worker
-export { StripeSyncWorker } from './stripeSyncWorker'
-export type { WorkerTaskManager, SyncTask, RunKey, WorkerConfig } from './stripeSyncWorker'
-
 // WebSocket
 export { createStripeWebSocketClient } from './websocket-client'
 export type {
@@ -87,28 +81,3 @@ export {
 export { OPENAPI_COMPATIBILITY_COLUMNS } from './openapi/runtimeMappings'
 export { resolveOpenApiSpec } from './openapi/specFetchHelper'
 export { parsedTableToJsonSchema } from './openapi/jsonSchemaConverter'
-
-// Schemas
-export { activeEntitlementSchema } from './streams/active_entitlement'
-export { chargeSchema } from './streams/charge'
-export { checkoutSessionLineItemSchema } from './streams/checkout_session_line_items'
-export { checkoutSessionSchema, checkoutSessionDeletedSchema } from './streams/checkout_sessions'
-export { creditNoteSchema } from './streams/credit_note'
-export { customerSchema, customerDeletedSchema } from './streams/customer'
-export { disputeSchema } from './streams/dispute'
-export { earlyFraudWarningSchema } from './streams/early_fraud_warning'
-export { featureSchema } from './streams/feature'
-export { invoiceSchema } from './streams/invoice'
-export { managedWebhookSchema } from './streams/managed_webhook'
-export { paymentIntentSchema } from './streams/payment_intent'
-export { paymentMethodsSchema } from './streams/payment_methods'
-export { planSchema } from './streams/plan'
-export { priceSchema } from './streams/price'
-export { productSchema } from './streams/product'
-export { refundSchema } from './streams/refund'
-export { reviewSchema } from './streams/review'
-export { setupIntentsSchema } from './streams/setup_intents'
-export { subscriptionItemSchema } from './streams/subscription_item'
-export { subscriptionScheduleSchema } from './streams/subscription_schedules'
-export { subscriptionSchema } from './streams/subscription'
-export { taxIdSchema } from './streams/tax_id'
