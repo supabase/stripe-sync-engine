@@ -149,6 +149,40 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
+  apps/sync-service:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      hono:
+        specifier: ^4
+        version: 4.12.8
+    devDependencies:
+      '@stripe/destination-postgres2':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres2
+      '@stripe/source-stdin':
+        specifier: workspace:*
+        version: link:../../packages/source-stdin
+      '@types/node':
+        specifier: ^24
+        version: 24.10.1
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.15.6
+      pg:
+        specifier: ^8.16.0
+        version: 8.16.3
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
   packages/destination-google-sheets:
     dependencies:
       '@stripe/sync-protocol':
@@ -224,6 +258,15 @@ importers:
         specifier: ^8.15.4
         version: 8.15.6
 
+  packages/destination-stdout:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
   packages/orchestrator-fs:
     dependencies:
       '@stripe/sync-protocol':
@@ -258,6 +301,15 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/source-stdin:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
   packages/source-stripe:
     dependencies:
