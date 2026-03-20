@@ -170,7 +170,9 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   it('run 2: resumes from persisted state', async () => {
     // Load state from Postgres
     const { rows } = await pool.query(`SELECT stream, data FROM "${SCHEMA}"."${STATE_TABLE}"`)
-    const loadedState = Object.fromEntries(rows.map((r: any) => [r.stream, r.data]))
+    const loadedState = Object.fromEntries(
+      rows.map((r: { stream: string; data: unknown }) => [r.stream, r.data])
+    )
 
     // New source emits 2 more records + updated state
     const { source, readSpy } = createMockSource([
