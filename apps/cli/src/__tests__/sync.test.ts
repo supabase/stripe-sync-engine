@@ -9,7 +9,7 @@ import type {
   RecordMessage,
   Source,
   StateMessage,
-  SyncParams,
+  SyncEngineParams,
 } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
@@ -130,8 +130,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       poolConfig: { connectionString },
     })
 
-    const config: SyncParams = {
-      destination: 'postgres',
+    const config: SyncEngineParams = {
       source_config: {},
       destination_config: { connectionString },
     }
@@ -187,8 +186,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       poolConfig: { connectionString },
     })
 
-    const config: SyncParams = {
-      destination: 'postgres',
+    const config: SyncEngineParams = {
       source_config: {},
       destination_config: { connectionString },
       state: loadedState,

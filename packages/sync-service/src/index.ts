@@ -3,8 +3,12 @@ export type { Credential, SyncConfig, LogEntry } from './stores'
 export type { CredentialStore, ConfigStore, StateStore, LogSink } from './stores'
 
 // Service
-export { SyncService, resolve } from './service'
+export { SyncService, resolve, SyncParams } from './service'
 export type { SyncServiceOptions } from './service'
+
+// Loader (connector resolution)
+export { resolveSpecifier, loadConnector, createConnectorResolver } from './loader'
+export type { ConnectorResolver, ConnectorResolverOptions } from './loader'
 
 // Store implementations
 export {

@@ -1,13 +1,15 @@
 import { Hono } from 'hono'
-import type { ConnectorResolver, SyncParams, Message } from '@stripe/sync-protocol'
+import type { Message } from '@stripe/sync-protocol'
 import { createEngine } from '@stripe/sync-protocol'
+import { SyncParams } from '@stripe/sync-service'
+import type { ConnectorResolver, SyncParams as SyncParamsType } from '@stripe/sync-service'
 import { parseNdjson, sseResponse } from './stream'
 
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()
 
   /** Parse X-Sync-Params header or return a 400 Response. */
-  function parseSyncParams(header: string | undefined): SyncParams | Response {
+  function parseSyncParams(header: string | undefined): SyncParamsType | Response {
     if (!header) {
       return new Response(JSON.stringify({ error: 'Missing X-Sync-Params header' }), {
         status: 400,
@@ -15,7 +17,7 @@ export function createApp(resolver: ConnectorResolver) {
       })
     }
     try {
-      return JSON.parse(header) as SyncParams
+      return SyncParams.parse(JSON.parse(header))
     } catch {
       return new Response(JSON.stringify({ error: 'Invalid JSON in X-Sync-Params header' }), {
         status: 400,
@@ -25,12 +27,13 @@ export function createApp(resolver: ConnectorResolver) {
   }
 
   /** Resolve connectors from SyncParams and create an engine. */
-  async function resolveEngine(params: SyncParams) {
+  async function resolveEngine(params: SyncParamsType) {
+    const { source: sourceName, destination: destName, ...engineParams } = params
     const [source, destination] = await Promise.all([
-      resolver.resolveSource(params.source),
-      resolver.resolveDestination(params.destination),
+      resolver.resolveSource(sourceName),
+      resolver.resolveDestination(destName),
     ])
-    return createEngine(params, { source, destination }, {})
+    return createEngine(engineParams, { source, destination }, {})
   }
 
   app.post('/setup', async (c) => {

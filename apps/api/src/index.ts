@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { serve } from '@hono/node-server'
-import { createConnectorResolver } from '@stripe/sync-protocol'
+import { createConnectorResolver } from '@stripe/sync-service'
 import { createApp } from './app'
 
 const port = Number(process.env.PORT || 3001)

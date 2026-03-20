@@ -18,14 +18,10 @@ export type {
   DestinationInput,
   DestinationOutput,
   Message,
-  SyncParams,
-  ConnectorResolver,
-  ConnectorResolverOptions,
+  SyncEngineParams,
 } from '@stripe/sync-protocol'
 
-export {
-  createEngine,
-  createConnectorResolver,
-  resolveSpecifier,
-  loadConnector,
-} from '@stripe/sync-protocol'
+export { createEngine } from '@stripe/sync-protocol'
+
+export type { SyncParams, ConnectorResolver, ConnectorResolverOptions } from '@stripe/sync-service'
+export { createConnectorResolver, resolveSpecifier, loadConnector } from '@stripe/sync-service'

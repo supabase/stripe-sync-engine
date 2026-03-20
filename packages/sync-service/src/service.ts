@@ -1,5 +1,7 @@
-import { createEngine } from '@stripe/sync-protocol'
-import type { ConnectorResolver, SyncParams, StateMessage, Message } from '@stripe/sync-protocol'
+import { z } from 'zod'
+import { createEngine, SyncEngineParams } from '@stripe/sync-protocol'
+import type { StateMessage, Message } from '@stripe/sync-protocol'
+import type { ConnectorResolver } from './loader'
 import type {
   CredentialStore,
   ConfigStore,
@@ -8,6 +10,14 @@ import type {
   SyncConfig,
   Credential,
 } from './stores'
+
+// MARK: - SyncParams (extends engine params with resolver fields)
+
+export const SyncParams = SyncEngineParams.extend({
+  source: z.string().optional().default('stripe'),
+  destination: z.string(),
+})
+export type SyncParams = z.infer<typeof SyncParams>
 
 // MARK: - Resolution
 

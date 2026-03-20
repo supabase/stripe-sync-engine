@@ -1,6 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import type {
-  ConnectorResolver,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -9,6 +8,7 @@ import type {
   Source,
   StateMessage,
 } from '@stripe/sync-protocol'
+import type { ConnectorResolver } from '@stripe/sync-service'
 import { runSync } from '../cli/run'
 
 // ---------------------------------------------------------------------------

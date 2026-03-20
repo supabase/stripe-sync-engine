@@ -20,7 +20,8 @@
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
     "pg": "^8.16.3",
-    "yesql": "^7.0.0"
+    "yesql": "^7.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@stripe/destination-postgres2": "workspace:*",

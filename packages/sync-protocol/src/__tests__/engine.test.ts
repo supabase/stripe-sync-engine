@@ -15,7 +15,7 @@ import {
   ConfiguredCatalog,
   ConnectorSpecification,
   CheckResult,
-  SyncParams,
+  SyncEngineParams,
 } from '../protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '../protocol'
 import { createEngine, buildCatalog } from '../engine'
@@ -255,22 +255,18 @@ describe('protocol schemas', () => {
     })
   })
 
-  describe('SyncParams', () => {
+  describe('SyncEngineParams', () => {
     it('parses minimal params', () => {
-      const result = SyncParams.parse({
-        destination: 'postgres',
+      const result = SyncEngineParams.parse({
         source_config: {},
         destination_config: {},
       })
-      expect(result.source).toBe('stripe') // default
-      expect(result.destination).toBe('postgres')
       expect(result.source_config).toEqual({})
+      expect(result.destination_config).toEqual({})
     })
 
     it('parses with all fields', () => {
-      const result = SyncParams.parse({
-        source: 'stripe',
-        destination: 'postgres',
+      const result = SyncEngineParams.parse({
         source_config: { api_key: 'sk_test' },
         destination_config: { url: 'pg://...' },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
@@ -280,8 +276,12 @@ describe('protocol schemas', () => {
       expect(result.state).toEqual({ customers: { cursor: 'abc' } })
     })
 
-    it('rejects missing destination', () => {
-      expect(() => SyncParams.parse({ source_config: {}, destination_config: {} })).toThrow()
+    it('rejects missing source_config', () => {
+      expect(() => SyncEngineParams.parse({ destination_config: {} })).toThrow()
+    })
+
+    it('rejects missing destination_config', () => {
+      expect(() => SyncEngineParams.parse({ source_config: {} })).toThrow()
     })
   })
 })
@@ -295,7 +295,6 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          destination: 'test',
           source_config: { streams: {} },
           destination_config: {},
         },
@@ -315,7 +314,7 @@ describe('engine config validation', () => {
     }
     expect(() =>
       createEngine(
-        { destination: 'test', source_config: {}, destination_config: {} },
+        { source_config: {}, destination_config: {} },
         { source, destination: testDestination }
       )
     ).toThrow()
@@ -337,7 +336,6 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          destination: 'test',
           source_config: { streams: {} },
           destination_config: {},
         },
@@ -361,7 +359,7 @@ describe('engine config validation', () => {
     }
 
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source, destination: testDestination }
     )
     // Trigger discover to verify the default was applied
@@ -385,7 +383,6 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.read()', async () => {
     const engine = createEngine(
       {
-        destination: 'test',
         source_config: {
           streams: { customers: { records: [{ id: 'cus_1' }] } },
         },
@@ -415,7 +412,7 @@ describe('engine message validation', () => {
       },
     }
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source: badSource, destination: testDestination }
     )
 
@@ -438,7 +435,6 @@ describe('engine message validation', () => {
 
     const engine = createEngine(
       {
-        destination: 'test',
         source_config: {
           streams: { customers: { records: [{ id: 'cus_1' }] } },
         },
@@ -459,7 +455,6 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = createEngine(
       {
-        destination: 'test',
         source_config: {
           streams: { customers: { records: [{ id: 'cus_1' }] } },
         },
@@ -492,7 +487,7 @@ describe('engine stream membership validation', () => {
     }
     const onError = vi.fn()
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source: badSource, destination: testDestination },
       { onError }
     )
@@ -524,7 +519,7 @@ describe('engine stream membership validation', () => {
     }
     const onError = vi.fn()
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source: badSource, destination: testDestination },
       { onError }
     )
@@ -557,7 +552,7 @@ describe('engine stream membership validation', () => {
       },
     }
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source, destination: testDestination }
     )
 
@@ -576,7 +571,6 @@ describe('engine.run() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = createEngine(
       {
-        destination: 'test',
         source_config: {
           streams: {
             customers: {
@@ -606,7 +600,6 @@ describe('engine.run() pipeline', () => {
   it('stream filtering: only configures requested streams', async () => {
     const engine = createEngine(
       {
-        destination: 'test',
         source_config: {
           streams: {
             customers: { records: [{ id: 'cus_1' }] },
@@ -664,7 +657,7 @@ describe('engine.run() pipeline', () => {
     }
 
     const engine = createEngine(
-      { destination: 'test', source_config: {}, destination_config: {} },
+      { source_config: {}, destination_config: {} },
       { source: mixedSource, destination: testDestination }
     )
     const results = await drain(engine.run())

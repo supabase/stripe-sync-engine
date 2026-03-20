@@ -1,15 +1,17 @@
 import { execSync } from 'child_process'
-import type { SyncParams, Message, StateMessage } from '@stripe/sync-protocol'
-import { createEngine, createConnectorResolver } from '@stripe/sync-protocol'
+import type { Message, StateMessage } from '@stripe/sync-protocol'
+import { createEngine } from '@stripe/sync-protocol'
+import { SyncParams, createConnectorResolver } from '@stripe/sync-service'
+import type { SyncParams as SyncParamsType } from '@stripe/sync-service'
 
 const resolver = createConnectorResolver({
   installFn: (pkg) => execSync(`pnpm add ${pkg}`, { stdio: 'inherit' }),
 })
 
 /** Parse --params JSON string into SyncParams. */
-export function parseParams(raw: string): SyncParams {
+export function parseParams(raw: string): SyncParamsType {
   try {
-    return JSON.parse(raw) as SyncParams
+    return SyncParams.parse(JSON.parse(raw))
   } catch {
     console.error('Invalid JSON in --params')
     process.exit(1)
@@ -17,12 +19,13 @@ export function parseParams(raw: string): SyncParams {
 }
 
 /** Resolve source + destination connectors from SyncParams and create an engine. */
-async function resolveEngine(params: SyncParams) {
+async function resolveEngine(params: SyncParamsType) {
+  const { source: sourceName, destination: destName, ...engineParams } = params
   const [source, destination] = await Promise.all([
-    resolver.resolveSource(params.source),
-    resolver.resolveDestination(params.destination),
+    resolver.resolveSource(sourceName),
+    resolver.resolveDestination(destName),
   ])
-  return createEngine(params, { source, destination })
+  return createEngine(engineParams, { source, destination })
 }
 
 /** Write a single NDJSON line to stdout. */
@@ -45,25 +48,25 @@ async function* readStdin(): AsyncIterable<unknown> {
 
 // MARK: - Commands
 
-export async function setupCommand(params: SyncParams) {
+export async function setupCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   await engine.setup()
   console.error('Setup complete.')
 }
 
-export async function teardownCommand(params: SyncParams) {
+export async function teardownCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   await engine.teardown()
   console.error('Teardown complete.')
 }
 
-export async function checkCommand(params: SyncParams) {
+export async function checkCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   const result = await engine.check()
   writeLine(result)
 }
 
-export async function readCommand(params: SyncParams) {
+export async function readCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   const input = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of engine.read(input)) {
@@ -71,7 +74,7 @@ export async function readCommand(params: SyncParams) {
   }
 }
 
-export async function writeCommand(params: SyncParams) {
+export async function writeCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   const messages = readStdin() as AsyncIterable<Message>
   for await (const msg of engine.write(messages)) {
@@ -79,7 +82,7 @@ export async function writeCommand(params: SyncParams) {
   }
 }
 
-export async function runCommand(params: SyncParams) {
+export async function runCommand(params: SyncParamsType) {
   const engine = await resolveEngine(params)
   const input = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of engine.run(input)) {
