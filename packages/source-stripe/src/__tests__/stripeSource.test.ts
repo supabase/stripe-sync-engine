@@ -1450,6 +1450,147 @@ describe('StripeSource', () => {
     })
   })
 
+  describe('read() — events polling', () => {
+    it('skips backfill when all streams are already complete', async () => {
+      const listFn = vi.fn()
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config: { ...config, poll_events: true },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { customers: { pageCursor: null, status: 'complete' } },
+        })
+      )
+
+      // listFn should NOT be called — stream is already complete
+      expect(listFn).not.toHaveBeenCalled()
+
+      // Should not emit stream_status: started for complete streams
+      const started = messages.filter(
+        (m): m is StreamStatusMessage => m.type === 'stream_status' && m.status === 'started'
+      )
+      expect(started).toHaveLength(0)
+    })
+
+    it('stamps initial events_cursor after first backfill completes', async () => {
+      const listFn = vi.fn()
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const source = createSource(registry)
+      const now = Math.floor(Date.now() / 1000)
+      const messages = await collect(
+        source.read({
+          config: { ...config, poll_events: true },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { customers: { pageCursor: null, status: 'complete' } },
+        })
+      )
+
+      // Should emit a state message with events_cursor stamped
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      expect(states).toHaveLength(1)
+      expect(states[0].stream).toBe('customers')
+      expect((states[0].data as { events_cursor: number }).events_cursor).toBeGreaterThanOrEqual(
+        now
+      )
+      expect((states[0].data as { status: string }).status).toBe('complete')
+    })
+
+    it('does not run events polling when poll_events is false/absent', async () => {
+      const listFn = vi.fn()
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config, // no poll_events
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { customers: { pageCursor: null, status: 'complete' } },
+        })
+      )
+
+      // No events_cursor should appear in output
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      const withCursor = states.filter(
+        (s) => (s.data as { events_cursor?: number }).events_cursor != null
+      )
+      expect(withCursor).toHaveLength(0)
+    })
+
+    it('does not poll when some streams are still pending', async () => {
+      const custListFn = vi.fn().mockResolvedValueOnce({
+        data: [{ id: 'cus_1', name: 'Alice' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: custListFn as ResourceConfig['listFn'],
+        }),
+        invoice: makeConfig({
+          order: 2,
+          tableName: 'invoices',
+          listFn: (() =>
+            Promise.resolve({
+              data: [{ id: 'inv_1' }],
+              has_more: false,
+            })) as ResourceConfig['listFn'],
+        }),
+      }
+
+      const source = createSource(registry)
+      const messages = await collect(
+        source.read({
+          config: { ...config, poll_events: true },
+          catalog: catalog(
+            { name: 'customers', primary_key: [['id']] },
+            { name: 'invoices', primary_key: [['id']] }
+          ),
+          // customers is complete, but invoices is pending
+          state: { customers: { pageCursor: null, status: 'complete' } },
+        })
+      )
+
+      // Invoices should be backfilled (listFn called)
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records.some((r) => r.stream === 'invoices')).toBe(true)
+
+      // customers listFn should NOT be called (already complete)
+      expect(custListFn).not.toHaveBeenCalled()
+
+      // No events_cursor should appear — not all streams were complete at start
+      // (invoices was pending, so pollEvents returns early)
+      // But after backfill, invoices is now complete. However, pollEvents checks
+      // the input state, not the post-backfill state, so it won't stamp cursors.
+      const statesWithCursor = messages
+        .filter((m): m is StateMessage => m.type === 'state')
+        .filter((s) => (s.data as { events_cursor?: number }).events_cursor != null)
+      expect(statesWithCursor).toHaveLength(0)
+    })
+  })
+
   describe('architecture purity', () => {
     it('source never imports from or references any destination module', () => {
       const srcDir = path.resolve(__dirname, '..')

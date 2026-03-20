@@ -2,6 +2,7 @@ import type {
   ConfiguredCatalog,
   ConnectorSpecification,
   ErrorMessage,
+  LogMessage,
   Message,
   RecordMessage,
   Source,
@@ -43,6 +44,10 @@ export const spec = z.object({
     .optional()
     .describe('Webhook signing secret (whsec_...) for signature verification'),
   websocket: z.boolean().optional().describe('Enable WebSocket streaming for live events'),
+  poll_events: z
+    .boolean()
+    .optional()
+    .describe('Enable events API polling for incremental sync after backfill'),
   webhook_port: z
     .number()
     .int()
@@ -64,11 +69,13 @@ export type WebhookInput = { body: string | Buffer; signature: string }
 export type StripeStreamState = {
   pageCursor: string | null
   status: 'pending' | 'complete'
+  events_cursor?: number
 }
 
 const streamStateSpec = z.object({
   pageCursor: z.string().nullable(),
   status: z.enum(['pending', 'complete']),
+  events_cursor: z.number().optional(),
 })
 
 // MARK: - Helpers
@@ -275,6 +282,100 @@ export type LiveInput = {
   reject?: (err: Error) => void
 }
 
+// MARK: - Events polling
+
+const EVENTS_MAX_AGE_DAYS = 25
+
+async function* pollEvents(opts: {
+  config: Config
+  stripe: Stripe
+  catalog: ConfiguredCatalog
+  registry: Record<string, ResourceConfig>
+  streamNames: Set<string>
+  state: Record<string, StripeStreamState> | undefined
+  startTimestamp: number
+}): AsyncGenerator<Message> {
+  const { config, stripe, catalog, registry, streamNames, state, startTimestamp } = opts
+
+  if (!config.poll_events) return
+
+  // Only poll when all streams are complete (backfill finished)
+  const allComplete = catalog.streams.every((cs) => state?.[cs.stream.name]?.status === 'complete')
+  if (!allComplete) return
+
+  // Collect events_cursor values from all streams
+  const cursors: number[] = []
+  for (const cs of catalog.streams) {
+    const cursor = state?.[cs.stream.name]?.events_cursor
+    if (cursor != null) cursors.push(cursor)
+  }
+
+  // First run after backfill: stamp initial events_cursor on all streams
+  if (cursors.length === 0) {
+    for (const cs of catalog.streams) {
+      const existing = state?.[cs.stream.name]
+      yield {
+        type: 'state',
+        stream: cs.stream.name,
+        data: {
+          pageCursor: existing?.pageCursor ?? null,
+          status: 'complete' as const,
+          events_cursor: startTimestamp,
+        },
+      } satisfies StateMessage
+    }
+    return
+  }
+
+  const cursor = Math.min(...cursors)
+
+  // Warn if cursor is too old (Stripe retains events for ~30 days)
+  const ageInDays = (startTimestamp - cursor) / 86400
+  if (ageInDays > EVENTS_MAX_AGE_DAYS) {
+    yield {
+      type: 'log',
+      level: 'warn',
+      message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
+    } satisfies LogMessage
+  }
+
+  // Fetch events since cursor (API returns newest-first)
+  const events: Stripe.Event[] = []
+  for await (const event of stripe.events.list({ created: { gt: cursor } })) {
+    events.push(event)
+  }
+
+  // Process oldest-first
+  events.reverse()
+
+  for (const event of events) {
+    for await (const msg of processWebhookInput(
+      event,
+      config,
+      stripe,
+      catalog,
+      registry,
+      streamNames
+    )) {
+      if (msg.type === 'state') {
+        // Intercept state messages to preserve complete status + update events_cursor
+        const existing = state?.[msg.stream]
+        yield {
+          type: 'state',
+          stream: msg.stream,
+          data: {
+            pageCursor: existing?.pageCursor ?? null,
+            status: 'complete' as const,
+            events_cursor: event.created,
+          },
+        } satisfies StateMessage
+      } else {
+        yield msg
+      }
+    }
+  }
+}
+
 // MARK: - Source
 
 export function createSource(
@@ -408,6 +509,8 @@ export function createSource(
         }
       }
 
+      const startTimestamp = Math.floor(Date.now() / 1000)
+
       // Backfill: paginate through each configured stream
       for (const configuredStream of catalog.streams) {
         const stream = configuredStream.stream
@@ -422,6 +525,10 @@ export function createSource(
           continue
         }
 
+        // Skip already-complete streams (e.g. resuming after full backfill for events polling)
+        const streamState = state?.[stream.name]
+        if (streamState?.status === 'complete') continue
+
         yield {
           type: 'stream_status',
           stream: stream.name,
@@ -429,7 +536,6 @@ export function createSource(
         } satisfies StreamStatusMessage
 
         // Restore cursor from combined state if available
-        const streamState = state?.[stream.name]
         let pageCursor: string | null = streamState?.pageCursor ?? null
 
         try {
@@ -481,6 +587,9 @@ export function createSource(
           } satisfies ErrorMessage
         }
       }
+
+      // Events polling: incremental sync via /v1/events after backfill
+      yield* pollEvents({ config, stripe, catalog, registry, streamNames, state, startTimestamp })
 
       // Start HTTP server for live mode if configured
       let httpServer: http.Server | null = null
