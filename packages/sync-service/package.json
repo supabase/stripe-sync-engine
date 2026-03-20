@@ -24,7 +24,6 @@
   },
   "devDependencies": {
     "@stripe/destination-postgres2": "workspace:*",
-    "@stripe/source-stdin": "workspace:*",
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
     "@types/yesql": "^4.1.4",

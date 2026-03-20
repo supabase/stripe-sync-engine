@@ -1,9 +1,8 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createConnectorResolver } from '@stripe/sync-protocol'
+import { createConnectorResolver, testSource } from '@stripe/sync-protocol'
 import type { StateMessage } from '@stripe/sync-protocol'
-import sourceStdin from '@stripe/source-stdin'
 import destPostgres from '@stripe/destination-postgres2'
 import { SyncService, resolve } from '../service'
 import {
@@ -79,7 +78,7 @@ const RECORDS = [
 ]
 
 const connectors = createConnectorResolver({
-  sources: { stdin: sourceStdin },
+  sources: { stdin: testSource },
   destinations: { postgres2: destPostgres },
 })
 

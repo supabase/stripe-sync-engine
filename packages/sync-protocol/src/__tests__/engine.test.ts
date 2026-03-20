@@ -19,16 +19,11 @@ import {
 } from '../protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '../protocol'
 import { createEngine, buildCatalog } from '../engine'
+import { testSource, testDestination } from '../test-connectors'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function* toAsync<T>(items: T[]): AsyncIterable<T> {
-  for (const item of items) {
-    yield item
-  }
-}
 
 async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []
@@ -36,34 +31,6 @@ async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
     result.push(item)
   }
   return result
-}
-
-function mockSource(messages: Message[], catalog?: CatalogMessage): Source {
-  return {
-    spec: () => ({ config: {} }),
-    check: async () => ({ status: 'succeeded' }),
-    discover: async () =>
-      catalog ?? { type: 'catalog', streams: [{ name: 'customers', primary_key: [['id']] }] },
-    read: () => toAsync(messages),
-  }
-}
-
-function mockDestination(): { destination: Destination; received: DestInput[] } {
-  const received: DestInput[] = []
-  return {
-    received,
-    destination: {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      write: (_params, $stdin) =>
-        (async function* () {
-          for await (const msg of $stdin) {
-            received.push(msg)
-            if (msg.type === 'state') yield msg
-          }
-        })(),
-    },
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +292,14 @@ describe('protocol schemas', () => {
 
 describe('engine config validation', () => {
   it('creates engine with valid configs', () => {
-    const source = mockSource([])
-    const { destination } = mockDestination()
     expect(() =>
       createEngine(
-        { destination: 'postgres', source_config: {}, destination_config: {} },
-        { source, destination }
+        {
+          destination: 'test',
+          source_config: { streams: {} },
+          destination_config: {},
+        },
+        { source: testSource, destination: testDestination }
       )
     ).not.toThrow()
   })
@@ -342,19 +311,17 @@ describe('engine config validation', () => {
       }),
       check: async () => ({ status: 'succeeded' }),
       discover: async () => ({ type: 'catalog', streams: [] }),
-      read: () => toAsync([]),
+      read: async function* () {},
     }
-    const { destination } = mockDestination()
     expect(() =>
       createEngine(
-        { destination: 'postgres', source_config: {}, destination_config: {} },
-        { source, destination }
+        { destination: 'test', source_config: {}, destination_config: {} },
+        { source, destination: testDestination }
       )
     ).toThrow()
   })
 
   it('throws on invalid destination config', () => {
-    const source = mockSource([])
     const destination: Destination = {
       spec: () => ({
         config: z.toJSONSchema(z.object({ url: z.string() })),
@@ -369,13 +336,17 @@ describe('engine config validation', () => {
     }
     expect(() =>
       createEngine(
-        { destination: 'postgres', source_config: {}, destination_config: {} },
-        { source, destination }
+        {
+          destination: 'test',
+          source_config: { streams: {} },
+          destination_config: {},
+        },
+        { source: testSource, destination }
       )
     ).toThrow()
   })
 
-  it('applies defaults from connector spec', () => {
+  it('applies defaults from connector spec', async () => {
     const source: Source = {
       spec: () => ({
         config: z.toJSONSchema(z.object({ schema: z.string().default('stripe') })),
@@ -386,13 +357,12 @@ describe('engine config validation', () => {
         expect(config).toEqual({ schema: 'stripe' })
         return { type: 'catalog', streams: [] }
       },
-      read: () => toAsync([]),
+      read: async function* () {},
     }
-    const { destination } = mockDestination()
 
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination }
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source, destination: testDestination }
     )
     // Trigger discover to verify the default was applied
     return drain(engine.run())
@@ -412,27 +382,20 @@ describe('engine config validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('engine message validation', () => {
-  it('valid messages pass through', async () => {
-    const record: RecordMessage = {
-      type: 'record',
-      stream: 'customers',
-      data: { id: 'cus_1' },
-      emitted_at: 1000,
-    }
-    const state: StateMessage = {
-      type: 'state',
-      stream: 'customers',
-      data: { cursor: 'abc' },
-    }
-
-    const source = mockSource([record, state])
-    const { destination } = mockDestination()
+  it('valid messages pass through engine.read()', async () => {
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination }
+      {
+        destination: 'test',
+        source_config: {
+          streams: { customers: { records: [{ id: 'cus_1' }] } },
+        },
+        destination_config: {},
+      },
+      { source: testSource, destination: testDestination }
     )
 
     const results = await drain(engine.read())
+    // testSource yields 1 record + 1 state for the stream
     expect(results).toHaveLength(2)
     expect(results[0]!.type).toBe('record')
     expect(results[1]!.type).toBe('state')
@@ -446,30 +409,20 @@ describe('engine message validation', () => {
         type: 'catalog',
         streams: [{ name: 'customers', primary_key: [['id']] }],
       }),
-      read: () =>
-        toAsync([
-          // Missing required fields — not a valid Message
-          { type: 'record', stream: 'customers' } as unknown as Message,
-        ]),
+      read: async function* () {
+        // Missing required fields — not a valid Message
+        yield { type: 'record', stream: 'customers' } as unknown as Message
+      },
     }
-    const { destination } = mockDestination()
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source: badSource, destination }
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source: badSource, destination: testDestination }
     )
 
     await expect(drain(engine.read())).rejects.toThrow()
   })
 
   it('destination output validation catches malformed messages', async () => {
-    const record: RecordMessage = {
-      type: 'record',
-      stream: 'customers',
-      data: { id: 'cus_1' },
-      emitted_at: 1000,
-    }
-
-    const source = mockSource([record])
     const badDest: Destination = {
       spec: () => ({ config: {} }),
       check: async () => ({ status: 'succeeded' }),
@@ -484,8 +437,14 @@ describe('engine message validation', () => {
     }
 
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination: badDest }
+      {
+        destination: 'test',
+        source_config: {
+          streams: { customers: { records: [{ id: 'cus_1' }] } },
+        },
+        destination_config: {},
+      },
+      { source: testSource, destination: badDest }
     )
 
     await expect(drain(engine.run())).rejects.toThrow()
@@ -498,37 +457,43 @@ describe('engine message validation', () => {
 
 describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
-    const record: RecordMessage = {
-      type: 'record',
-      stream: 'customers',
-      data: { id: 'cus_1' },
-      emitted_at: 1000,
-    }
-    const source = mockSource([record])
-    const { destination } = mockDestination()
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination }
+      {
+        destination: 'test',
+        source_config: {
+          streams: { customers: { records: [{ id: 'cus_1' }] } },
+        },
+        destination_config: {},
+      },
+      { source: testSource, destination: testDestination }
     )
 
     const results = await drain(engine.read())
-    expect(results).toHaveLength(1)
-    expect(results[0]!.type).toBe('record')
+    expect(results.filter((m) => m.type === 'record')).toHaveLength(1)
   })
 
   it('record with unknown stream triggers error callback and is dropped', async () => {
-    const record: RecordMessage = {
-      type: 'record',
-      stream: 'unknown_stream',
-      data: { id: '1' },
-      emitted_at: 1000,
+    // Source that emits a record for a stream not in the catalog
+    const badSource: Source = {
+      spec: () => ({ config: {} }),
+      check: async () => ({ status: 'succeeded' }),
+      discover: async () => ({
+        type: 'catalog',
+        streams: [{ name: 'customers', primary_key: [['id']] }],
+      }),
+      read: async function* () {
+        yield {
+          type: 'record' as const,
+          stream: 'unknown_stream',
+          data: { id: '1' },
+          emitted_at: 1000,
+        }
+      },
     }
-    const source = mockSource([record])
-    const { destination } = mockDestination()
     const onError = vi.fn()
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination },
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source: badSource, destination: testDestination },
       { onError }
     )
 
@@ -542,17 +507,25 @@ describe('engine stream membership validation', () => {
   })
 
   it('state with unknown stream triggers error callback and is dropped', async () => {
-    const state: StateMessage = {
-      type: 'state',
-      stream: 'nonexistent',
-      data: { cursor: 'x' },
+    const badSource: Source = {
+      spec: () => ({ config: {} }),
+      check: async () => ({ status: 'succeeded' }),
+      discover: async () => ({
+        type: 'catalog',
+        streams: [{ name: 'customers', primary_key: [['id']] }],
+      }),
+      read: async function* () {
+        yield {
+          type: 'state' as const,
+          stream: 'nonexistent',
+          data: { cursor: 'x' },
+        }
+      },
     }
-    const source = mockSource([state])
-    const { destination } = mockDestination()
     const onError = vi.fn()
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination },
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source: badSource, destination: testDestination },
       { onError }
     )
 
@@ -565,23 +538,142 @@ describe('engine stream membership validation', () => {
   })
 
   it('non-stream messages pass through regardless of stream field', async () => {
-    const log: LogMessage = { type: 'log', level: 'info', message: 'hello' }
-    const error: ErrorMessage = {
-      type: 'error',
-      failure_type: 'system_error',
-      message: 'oops',
-      stream: 'nonexistent',
+    // Source that emits log + error messages (which don't require stream membership)
+    const source: Source = {
+      spec: () => ({ config: {} }),
+      check: async () => ({ status: 'succeeded' }),
+      discover: async () => ({
+        type: 'catalog',
+        streams: [{ name: 'customers', primary_key: [['id']] }],
+      }),
+      read: async function* () {
+        yield { type: 'log' as const, level: 'info' as const, message: 'hello' }
+        yield {
+          type: 'error' as const,
+          failure_type: 'system_error' as const,
+          message: 'oops',
+          stream: 'nonexistent',
+        }
+      },
     }
-    const source = mockSource([log, error])
-    const { destination } = mockDestination()
     const engine = createEngine(
-      { destination: 'postgres', source_config: {}, destination_config: {} },
-      { source, destination }
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source, destination: testDestination }
     )
 
     const results = await drain(engine.read())
     expect(results).toHaveLength(2)
     expect(results[0]!.type).toBe('log')
     expect(results[1]!.type).toBe('error')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// engine.run() pipeline tests
+// ---------------------------------------------------------------------------
+
+describe('engine.run() pipeline', () => {
+  it('basic pipeline: yields state messages from source → destination', async () => {
+    const engine = createEngine(
+      {
+        destination: 'test',
+        source_config: {
+          streams: {
+            customers: {
+              records: [
+                { id: 'cus_1', name: 'Alice' },
+                { id: 'cus_2', name: 'Bob' },
+                { id: 'cus_3', name: 'Charlie' },
+              ],
+            },
+          },
+        },
+        destination_config: {},
+      },
+      { source: testSource, destination: testDestination }
+    )
+    const results = await drain(engine.run())
+
+    // Pipeline yields 1 state message (testDestination passes state through)
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({
+      type: 'state',
+      stream: 'customers',
+      data: { status: 'complete' },
+    })
+  })
+
+  it('stream filtering: only configures requested streams', async () => {
+    const engine = createEngine(
+      {
+        destination: 'test',
+        source_config: {
+          streams: {
+            customers: { records: [{ id: 'cus_1' }] },
+            invoices: { records: [{ id: 'inv_1' }] },
+          },
+        },
+        destination_config: {},
+        streams: [{ name: 'customers' }],
+      },
+      { source: testSource, destination: testDestination }
+    )
+    const results = await drain(engine.run())
+
+    // Only the customers stream state should come through
+    expect(results).toHaveLength(1)
+    expect(results[0]!.stream).toBe('customers')
+  })
+
+  it('non-data messages filtered: only record + state reach destination', async () => {
+    // Source that emits log, error, stream_status, record, and state —
+    // only record + state should reach the destination (non-data messages are routed to callbacks)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const mixedSource: Source = {
+      spec: () => ({ config: {} }),
+      check: async () => ({ status: 'succeeded' }),
+      discover: async () => ({
+        type: 'catalog',
+        streams: [{ name: 'customers', primary_key: [['id']] }],
+      }),
+      read: async function* () {
+        yield { type: 'log' as const, level: 'info' as const, message: 'starting' }
+        yield {
+          type: 'error' as const,
+          failure_type: 'transient_error' as const,
+          message: 'rate limited',
+        }
+        yield {
+          type: 'stream_status' as const,
+          stream: 'customers',
+          status: 'running' as const,
+        }
+        yield {
+          type: 'record' as const,
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: 1000,
+        }
+        yield {
+          type: 'state' as const,
+          stream: 'customers',
+          data: { after: 'cus_1' },
+        }
+      },
+    }
+
+    const engine = createEngine(
+      { destination: 'test', source_config: {}, destination_config: {} },
+      { source: mixedSource, destination: testDestination }
+    )
+    const results = await drain(engine.run())
+
+    // Only the state message passes through engine.run() (record goes to dest but
+    // dest only yields state back; log/error/stream_status are routed to callbacks)
+    expect(results).toHaveLength(1)
+    expect(results[0]!.type).toBe('state')
+
+    vi.restoreAllMocks()
   })
 })

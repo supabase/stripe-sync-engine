@@ -17,13 +17,6 @@ export { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } fro
 export { envCredentialStore, flagConfigStore } from './stores/env'
 export { stderrLogSink } from './stores/stderr'
 
-// Orchestrator (absorbed from packages/orchestrator-postgres)
-export type { OrchestratorCliOptions } from './orchestrator-cli'
-export { main as cliMain } from './orchestrator-cli'
-export { PostgresOrchestrator, type Sync } from './orchestrator'
-export { PostgresStateManager, type StateManagerConfig } from './stateManager'
-export { forward, collect, type RouterCallbacks } from '@stripe/sync-protocol'
-export { runPipeline, type PipelineOrchestrator } from './pipeline'
 export type {
   SyncStatus,
   StreamConfig,

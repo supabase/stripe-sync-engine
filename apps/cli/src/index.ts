@@ -25,7 +25,6 @@ export type {
 
 export {
   createEngine,
-  runSync,
   createConnectorResolver,
   resolveSpecifier,
   loadConnector,
