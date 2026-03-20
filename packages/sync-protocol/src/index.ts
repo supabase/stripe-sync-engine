@@ -1,4 +1,4 @@
-export type * from './protocol'
+export * from './protocol'
 export type { Orchestrator } from './orchestrator'
 export { toRecordMessage, fromRecordMessage } from './adapters'
 export type { Transform } from './compose'

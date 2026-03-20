@@ -1,25 +1,27 @@
 // Sync Engine — Protocol
 //
-// Types and interfaces for the sync protocol. Data shapes (messages, catalog,
-// config) followed by the Source and Destination contracts that connectors
-// implement.
+// Zod schemas and inferred types for the sync protocol. Data shapes (messages,
+// catalog, config) are runtime-validatable via Zod. Source and Destination
+// contracts remain as TS interfaces (generic, method-bearing).
+
+import { z } from 'zod'
 
 // MARK: - Data model
 
 /** A named collection of records — analogous to a table or API resource. */
-export interface Stream {
+export const Stream = z.object({
   /** Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-  name: string
+  name: z.string(),
 
   /**
    * Paths to fields that uniquely identify a record within this stream.
    * Supports composite keys and nested paths.
    * e.g. [["id"]] or [["account_id"], ["created"]]
    */
-  primary_key: string[][]
+  primary_key: z.array(z.array(z.string())),
 
   /** JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-  json_schema?: Record<string, unknown>
+  json_schema: z.record(z.string(), z.unknown()).optional(),
 
   /**
    * Source-specific metadata that applies to every record in this stream.
@@ -30,63 +32,69 @@ export interface Stream {
    *   Metronome source: { account_id: "met_456" }
    *   Postgres source:  { schema: "public", database: "mydb" }
    */
-  metadata?: Record<string, unknown>
-}
+  metadata: z.record(z.string(), z.unknown()).optional(),
+})
+export type Stream = z.infer<typeof Stream>
 
 // MARK: - Configured catalog
 
 /** A stream selected by the user with sync settings applied. */
-export interface ConfiguredStream {
-  stream: Stream
+export const ConfiguredStream = z.object({
+  stream: Stream,
 
   /** How the source reads this stream. */
-  sync_mode: 'full_refresh' | 'incremental'
+  sync_mode: z.enum(['full_refresh', 'incremental']),
 
   /** How the destination writes this stream. */
-  destination_sync_mode: 'append' | 'overwrite' | 'append_dedup'
+  destination_sync_mode: z.enum(['append', 'overwrite', 'append_dedup']),
 
   /** Field path used as the cursor for incremental syncs. */
-  cursor_field?: string[]
-}
+  cursor_field: z.array(z.string()).optional(),
+})
+export type ConfiguredStream = z.infer<typeof ConfiguredStream>
 
 /**
  * The user's selected and configured streams.
  * Persisted on the Sync resource. Passed to read() and write().
  */
-export interface ConfiguredCatalog {
-  streams: ConfiguredStream[]
-}
+export const ConfiguredCatalog = z.object({
+  streams: z.array(ConfiguredStream),
+})
+export type ConfiguredCatalog = z.infer<typeof ConfiguredCatalog>
 
 // MARK: - Connector specification
 
 /** JSON Schema describing the configuration a connector requires. */
-export interface ConnectorSpecification {
+export const ConnectorSpecification = z.object({
   /** JSON Schema for the connector's configuration object. */
-  config: Record<string, unknown>
+  config: z.record(z.string(), z.unknown()),
   /** JSON Schema for per-stream state (cursor/checkpoint shape). */
-  stream_state?: Record<string, unknown>
+  stream_state: z.record(z.string(), z.unknown()).optional(),
   /** JSON Schema for the read() input parameter (e.g. a webhook event). */
-  input?: Record<string, unknown>
-}
+  input: z.record(z.string(), z.unknown()).optional(),
+})
+export type ConnectorSpecification = z.infer<typeof ConnectorSpecification>
 
 /** Result of a connection check. */
-export interface CheckResult {
-  status: 'succeeded' | 'failed'
-  message?: string
-}
+export const CheckResult = z.object({
+  status: z.enum(['succeeded', 'failed']),
+  message: z.string().optional(),
+})
+export type CheckResult = z.infer<typeof CheckResult>
 
 // MARK: - Messages
 
 /** One record for one stream. */
-export interface RecordMessage {
-  type: 'record'
+export const RecordMessage = z.object({
+  type: z.literal('record'),
   /** The stream this record belongs to. */
-  stream: string
+  stream: z.string(),
   /** Record payload. Schema varies by stream. */
-  data: Readonly<Record<string, unknown>>
+  data: z.record(z.string(), z.unknown()),
   /** When this record was emitted by the source (epoch ms). */
-  emitted_at: number
-}
+  emitted_at: z.number(),
+})
+export type RecordMessage = z.infer<typeof RecordMessage>
 
 /**
  * Per-stream checkpoint for resumable syncs.
@@ -96,76 +104,94 @@ export interface RecordMessage {
  * The orchestrator persists state keyed by (sync_id, stream) and passes the
  * full map back to the source on resume.
  */
-export interface StateMessage {
-  type: 'state'
+export const StateMessage = z.object({
+  type: z.literal('state'),
   /** Which stream this checkpoint is for. */
-  stream: string
+  stream: z.string(),
   /** Opaque cursor data. Only the source reads/writes this. */
-  data: unknown
-}
+  data: z.unknown(),
+})
+export type StateMessage = z.infer<typeof StateMessage>
 
 /** Catalog of available streams. Emitted by a source during discover(). */
-export interface CatalogMessage {
-  type: 'catalog'
-  streams: Stream[]
-}
+export const CatalogMessage = z.object({
+  type: z.literal('catalog'),
+  streams: z.array(Stream),
+})
+export type CatalogMessage = z.infer<typeof CatalogMessage>
 
 /** Structured log output from a source or destination. */
-export interface LogMessage {
-  type: 'log'
-  level: 'debug' | 'info' | 'warn' | 'error'
-  message: string
-}
+export const LogMessage = z.object({
+  type: z.literal('log'),
+  level: z.enum(['debug', 'info', 'warn', 'error']),
+  message: z.string(),
+})
+export type LogMessage = z.infer<typeof LogMessage>
 
 /**
  * Structured error from a source or destination.
  * failure_type lets the orchestrator decide whether to retry, alert, or abort.
  */
-export interface ErrorMessage {
-  type: 'error'
-  failure_type: 'config_error' | 'system_error' | 'transient_error'
-  message: string
+export const ErrorMessage = z.object({
+  type: z.literal('error'),
+  failure_type: z.enum(['config_error', 'system_error', 'transient_error']),
+  message: z.string(),
   /** The stream this error is about, if applicable. */
-  stream?: string
-  stack_trace?: string
-}
+  stream: z.string().optional(),
+  stack_trace: z.string().optional(),
+})
+export type ErrorMessage = z.infer<typeof ErrorMessage>
 
 /**
  * Per-stream status update from a source.
  * Enables progress reporting in CLI / dashboard.
  */
-export interface StreamStatusMessage {
-  type: 'stream_status'
-  stream: string
-  status: 'started' | 'running' | 'complete' | 'incomplete'
-}
+export const StreamStatusMessage = z.object({
+  type: z.literal('stream_status'),
+  stream: z.string(),
+  status: z.enum(['started', 'running', 'complete', 'incomplete']),
+})
+export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
-// MARK: - Sync config
+// MARK: - Sync params
 
-/** Configuration for a sync run. Passed to `runSync()`. */
-export interface SyncConfig {
-  source_config: Record<string, unknown>
-  destination_config: Record<string, unknown>
-  streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
-  state?: Record<string, unknown>
-}
+/** Parameters for a sync run — config, catalog selection, and runtime state. */
+export const SyncParams = z.object({
+  source_config: z.record(z.string(), z.unknown()),
+  destination_config: z.record(z.string(), z.unknown()),
+  streams: z
+    .array(
+      z.object({ name: z.string(), sync_mode: z.enum(['incremental', 'full_refresh']).optional() })
+    )
+    .optional(),
+  state: z.record(z.string(), z.unknown()).optional(),
+})
+export type SyncParams = z.infer<typeof SyncParams>
 
 // MARK: - Message unions
 
 /** The subset of messages the destination receives. */
-export type DestinationInput = RecordMessage | StateMessage
+export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, StateMessage])
+export type DestinationInput = z.infer<typeof DestinationInput>
 
 /** Messages the destination yields back to the orchestrator. */
-export type DestinationOutput = StateMessage | ErrorMessage | LogMessage
+export const DestinationOutput = z.discriminatedUnion('type', [
+  StateMessage,
+  ErrorMessage,
+  LogMessage,
+])
+export type DestinationOutput = z.infer<typeof DestinationOutput>
 
 /** Any message flowing through the engine. One message per line (NDJSON). */
-export type Message =
-  | RecordMessage
-  | StateMessage
-  | CatalogMessage
-  | LogMessage
-  | ErrorMessage
-  | StreamStatusMessage
+export const Message = z.discriminatedUnion('type', [
+  RecordMessage,
+  StateMessage,
+  CatalogMessage,
+  LogMessage,
+  ErrorMessage,
+  StreamStatusMessage,
+])
+export type Message = z.infer<typeof Message>
 
 // MARK: - Source
 //

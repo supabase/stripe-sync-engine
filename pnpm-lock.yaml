@@ -55,6 +55,25 @@ importers:
         specifier: ^7.1.11
         version: 7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  apps/api:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1
+        version: 1.19.11(hono@4.12.8)
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      hono:
+        specifier: ^4
+        version: 4.12.8
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.10.1
+      vitest:
+        specifier: ^3.2
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
   apps/cli:
     dependencies:
       '@ngrok/ngrok':
@@ -357,6 +376,10 @@ importers:
         version: 4.3.6
 
   packages/sync-protocol:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       vitest:
         specifier: ^3.2.1

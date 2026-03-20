@@ -9,7 +9,25 @@ export type { DestinationWriter } from '@stripe/destination-postgres'
 export { getTableName } from '@stripe/source-stripe'
 
 export type * from './types'
-export type * from '@stripe/sync-protocol'
+export type {
+  Source,
+  Destination,
+  Stream,
+  ConfiguredStream,
+  ConfiguredCatalog,
+  ConnectorSpecification,
+  CheckResult,
+  RecordMessage,
+  StateMessage,
+  CatalogMessage,
+  LogMessage,
+  ErrorMessage,
+  StreamStatusMessage,
+  DestinationInput,
+  DestinationOutput,
+  Message,
+  // SyncParams excluded — name conflicts with local ./types SyncParams
+} from '@stripe/sync-protocol'
 
 export { PostgresClient } from './database/postgres'
 export { runMigrations, runMigrationsFromContent } from '@stripe/destination-postgres'

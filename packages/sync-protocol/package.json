@@ -15,6 +15,9 @@
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "test": "vitest run"
   },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
   "devDependencies": {
     "vitest": "^3.2.1"
   },

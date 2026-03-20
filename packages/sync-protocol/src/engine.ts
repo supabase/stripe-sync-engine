@@ -1,11 +1,13 @@
-import type {
-  CheckResult,
-  ConfiguredCatalog,
-  ConfiguredStream,
+import { z } from 'zod'
+import {
+  DestinationOutput,
   Message,
-  StateMessage,
+  SyncParams,
   Stream,
-  SyncConfig,
+  ConfiguredStream,
+  ConfiguredCatalog,
+  CheckResult,
+  StateMessage,
 } from './protocol'
 import type { Destination, Source } from './protocol'
 import type { RouterCallbacks } from './filters'
@@ -17,9 +19,9 @@ export interface Engine {
   setup(): Promise<void>
   teardown(): Promise<void>
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
-  read(): AsyncIterable<Message>
+  read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
   write(messages: AsyncIterable<Message>): AsyncIterable<StateMessage>
-  run(): AsyncIterable<StateMessage>
+  run(input?: AsyncIterable<unknown>): AsyncIterable<StateMessage>
 }
 
 // MARK: - Helpers
@@ -38,7 +40,7 @@ const stderrCallbacks: RouterCallbacks = {
  */
 export function buildCatalog(
   discovered: Stream[],
-  configStreams?: SyncConfig['streams']
+  configStreams?: SyncParams['streams']
 ): ConfiguredCatalog {
   let streams: ConfiguredStream[]
 
@@ -65,68 +67,117 @@ export function buildCatalog(
 // MARK: - Factory
 
 export function createEngine(
-  config: SyncConfig,
+  config: SyncParams,
   connectors: { source: Source; destination: Destination },
   callbacks?: RouterCallbacks
 ): Engine {
   const cb = callbacks ?? stderrCallbacks
 
+  // Validate configs using connector JSON Schemas (fail-fast)
+  const sourceSpec = connectors.source.spec()
+  const destSpec = connectors.destination.spec()
+  const sourceConfig = z.fromJSONSchema(sourceSpec.config).parse(config.source_config) as Record<
+    string,
+    unknown
+  >
+  const destConfig = z.fromJSONSchema(destSpec.config).parse(config.destination_config) as Record<
+    string,
+    unknown
+  >
+
   // Lazy-cached catalog — discover is called at most once per engine instance.
   let _catalog: ConfiguredCatalog | null = null
   async function getCatalog(): Promise<ConfiguredCatalog> {
     if (!_catalog) {
-      const msg = await connectors.source.discover({ config: config.source_config })
+      const msg = await connectors.source.discover({ config: sourceConfig })
       _catalog = buildCatalog(msg.streams, config.streams)
     }
     return _catalog
+  }
+
+  /** Set of stream names in the catalog, for membership validation. */
+  function catalogStreamNames(catalog: ConfiguredCatalog): Set<string> {
+    return new Set(catalog.streams.map((s) => s.stream.name))
   }
 
   return {
     async setup() {
       const catalog = await getCatalog()
       await Promise.all([
-        connectors.source.setup?.({ config: config.source_config, catalog }),
-        connectors.destination.setup?.({ config: config.destination_config, catalog }),
+        connectors.source.setup?.({ config: sourceConfig, catalog }),
+        connectors.destination.setup?.({ config: destConfig, catalog }),
       ])
     },
 
     async teardown() {
       await Promise.all([
-        connectors.source.teardown?.({ config: config.source_config }),
-        connectors.destination.teardown?.({ config: config.destination_config }),
+        connectors.source.teardown?.({ config: sourceConfig }),
+        connectors.destination.teardown?.({ config: destConfig }),
       ])
     },
 
     async check() {
       const [source, destination] = await Promise.all([
-        connectors.source.check({ config: config.source_config }),
-        connectors.destination.check({ config: config.destination_config }),
+        connectors.source.check({ config: sourceConfig }),
+        connectors.destination.check({ config: destConfig }),
       ])
       return { source, destination }
     },
 
-    async *read() {
+    async *read(input?: AsyncIterable<unknown>) {
       const catalog = await getCatalog()
-      yield* connectors.source.read({
-        config: config.source_config,
-        catalog,
-        state: config.state,
-      })
+      const knownStreams = catalogStreamNames(catalog)
+
+      const raw = input
+        ? // Event-driven: one source.read() per input item, results concatenated
+          (async function* () {
+            for await (const item of input) {
+              yield* connectors.source.read({
+                config: sourceConfig,
+                catalog,
+                state: config.state,
+                input: item,
+              })
+            }
+          })()
+        : // Pull-based: single source.read() call (backfill)
+          connectors.source.read({
+            config: sourceConfig,
+            catalog,
+            state: config.state,
+          })
+
+      for await (const msg of raw) {
+        const validated = Message.parse(msg)
+        // Stream membership check for record and state messages
+        if (
+          (validated.type === 'record' || validated.type === 'state') &&
+          !knownStreams.has(validated.stream)
+        ) {
+          cb.onError?.(`Unknown stream "${validated.stream}" not in catalog`, 'system_error')
+          continue
+        }
+        yield validated
+      }
     },
 
     async *write(messages: AsyncIterable<Message>) {
       const catalog = await getCatalog()
       const forwarded = forward(messages, cb)
-      const destOutput = connectors.destination.write(
-        { config: config.destination_config, catalog },
-        forwarded
-      )
-      yield* collect(destOutput, cb)
+      const destOutput = connectors.destination.write({ config: destConfig, catalog }, forwarded)
+      for await (const msg of destOutput) {
+        yield* collect(
+          (async function* () {
+            yield DestinationOutput.parse(msg)
+          })(),
+          cb
+        )
+      }
     },
 
-    async *run() {
+    async *run(input?: AsyncIterable<unknown>) {
       await this.setup()
-      yield* this.write(this.read())
+      yield* this.write(this.read(input))
     },
   }
 }
