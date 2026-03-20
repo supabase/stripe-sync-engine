@@ -1,5 +1,10 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
-import { setupFunctionCode, webhookFunctionCode, workerFunctionCode } from './edge-function-code'
+import {
+  setupFunctionCode,
+  webhookFunctionCode,
+  workerFunctionCode,
+  backfillWorkerFunctionCode,
+} from './edge-function-code'
 import pkg from '../package.json' with { type: 'json' }
 import { parseSchemaComment, StripeSchemaComment } from './schemaComment'
 
@@ -467,9 +472,11 @@ export class SupabaseSetupClient {
       // Now deploy the remaining edge functions -- schema is ready
       const versionedWebhook = this.injectPackageVersion(webhookFunctionCode, version)
       const versionedWorker = this.injectPackageVersion(workerFunctionCode, version)
+      const versionedBackfillWorker = this.injectPackageVersion(backfillWorkerFunctionCode, version)
 
       await this.deployFunction('stripe-webhook', versionedWebhook, false)
       await this.deployFunction('stripe-worker', versionedWorker, false)
+      await this.deployFunction('stripe-backfill-worker', versionedBackfillWorker, false)
 
       // Setup pg_cron - this is required for automatic syncing
       await this.setupPgCronJob(workerIntervalSeconds)
