@@ -2,7 +2,7 @@ import { z } from 'zod'
 import {
   DestinationOutput,
   Message,
-  SyncParams,
+  SyncEngineParams,
   Stream,
   ConfiguredStream,
   ConfiguredCatalog,
@@ -40,7 +40,7 @@ const stderrCallbacks: RouterCallbacks = {
  */
 export function buildCatalog(
   discovered: Stream[],
-  configStreams?: SyncParams['streams']
+  configStreams?: SyncEngineParams['streams']
 ): ConfiguredCatalog {
   let streams: ConfiguredStream[]
 
@@ -67,7 +67,7 @@ export function buildCatalog(
 // MARK: - Factory
 
 export function createEngine(
-  config: SyncParams,
+  config: SyncEngineParams,
   connectors: { source: Source; destination: Destination },
   callbacks?: RouterCallbacks
 ): Engine {

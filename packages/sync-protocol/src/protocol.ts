@@ -167,14 +167,10 @@ export const StreamStatusMessage = z.object({
 })
 export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
-// MARK: - Sync params
+// MARK: - Sync engine params
 
-/** Parameters for a sync run — config, catalog selection, and runtime state. */
-export const SyncParams = z.object({
-  /** Connector specifier for the source (short name, scoped package, or file path). Defaults to 'stripe'. */
-  source: z.string().optional().default('stripe'),
-  /** Connector specifier for the destination (short name, scoped package, or file path). */
-  destination: z.string(),
+/** Parameters for a sync engine run — config, catalog selection, and runtime state. */
+export const SyncEngineParams = z.object({
   source_config: z.record(z.string(), z.unknown()),
   destination_config: z.record(z.string(), z.unknown()),
   streams: z
@@ -184,7 +180,7 @@ export const SyncParams = z.object({
     .optional(),
   state: z.record(z.string(), z.unknown()).optional(),
 })
-export type SyncParams = z.infer<typeof SyncParams>
+export type SyncEngineParams = z.infer<typeof SyncEngineParams>
 
 // MARK: - Message unions
 
