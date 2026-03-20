@@ -1,5 +1,5 @@
-import type { Source, Destination } from '@stripe/sync-protocol'
-import { validateSource, validateDestination } from '@stripe/sync-protocol'
+import type { Source, Destination } from './protocol'
+import { validateSource, validateDestination } from './validate'
 
 /**
  * Resolve a short connector name to a full package specifier.

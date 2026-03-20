@@ -182,6 +182,15 @@ export const SyncEngineParams = z.object({
 })
 export type SyncEngineParams = z.infer<typeof SyncEngineParams>
 
+/** SyncParams adds connector resolution fields on top of engine params. */
+export const SyncParams = SyncEngineParams.extend({
+  /** Connector specifier for the source (short name, scoped package, or file path). Defaults to 'stripe'. */
+  source: z.string().optional().default('stripe'),
+  /** Connector specifier for the destination (short name, scoped package, or file path). */
+  destination: z.string(),
+})
+export type SyncParams = z.infer<typeof SyncParams>
+
 // MARK: - Message unions
 
 /** The subset of messages the destination receives. */

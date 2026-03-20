@@ -26,7 +26,6 @@
   ],
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
-    "@stripe/sync-service": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7"
   },

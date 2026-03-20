@@ -128,9 +128,6 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
-      '@stripe/sync-service':
-        specifier: workspace:*
-        version: link:../../packages/sync-service
       hono:
         specifier: ^4
         version: 4.12.8
@@ -153,9 +150,6 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
-      '@stripe/sync-service':
-        specifier: workspace:*
-        version: link:../../packages/sync-service
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -343,9 +337,6 @@ importers:
       yesql:
         specifier: ^7.0.0
         version: 7.0.0
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
     devDependencies:
       '@stripe/destination-postgres2':
         specifier: workspace:*

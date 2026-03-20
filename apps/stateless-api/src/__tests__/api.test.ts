@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   CatalogMessage,
   ConfiguredCatalog,
+  ConnectorResolver,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -10,7 +11,6 @@ import type {
   Source,
   StateMessage,
 } from '@stripe/sync-protocol'
-import type { ConnectorResolver } from '@stripe/sync-service'
 import { createApp } from '../app'
 
 /** Build a ConnectorResolver from mock source + destination. */
