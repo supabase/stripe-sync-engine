@@ -5,6 +5,31 @@ import { SyncParams } from '@stripe/sync-service'
 import type { ConnectorResolver, SyncParams as SyncParamsType } from '@stripe/sync-service'
 import { parseNdjson, sseResponse } from './stream'
 
+// Re-export core protocol types for consumers (e.g. stateful-api)
+export type {
+  Source,
+  Destination,
+  Stream,
+  ConfiguredStream,
+  ConfiguredCatalog,
+  ConnectorSpecification,
+  CheckResult,
+  RecordMessage,
+  StateMessage,
+  CatalogMessage,
+  LogMessage,
+  ErrorMessage,
+  StreamStatusMessage,
+  DestinationInput,
+  DestinationOutput,
+  Message,
+  SyncEngineParams,
+} from '@stripe/sync-protocol'
+
+export type { SyncParams, ConnectorResolver, ConnectorResolverOptions } from '@stripe/sync-service'
+export { createEngine } from '@stripe/sync-protocol'
+export { createConnectorResolver, resolveSpecifier, loadConnector } from '@stripe/sync-service'
+
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()
 

@@ -66,9 +66,9 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
-      '@stripe/sync-protocol':
+      '@stripe/sync-engine-stateless-api':
         specifier: workspace:*
-        version: link:../../packages/sync-protocol
+        version: link:../stateless-api
       '@stripe/sync-service':
         specifier: workspace:*
         version: link:../../packages/sync-service
@@ -94,9 +94,9 @@ importers:
 
   apps/stateful-cli:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/sync-engine-stateless-cli':
         specifier: workspace:*
-        version: link:../../packages/sync-protocol
+        version: link:../stateless-cli
       '@stripe/sync-service':
         specifier: workspace:*
         version: link:../../packages/sync-service

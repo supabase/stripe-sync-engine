@@ -1,7 +1,6 @@
-import type { StateMessage } from '@stripe/sync-protocol'
-import type { ConnectorResolver } from '@stripe/sync-service'
+import type { StateMessage, ConnectorResolver } from '@stripe/sync-engine-stateless-cli'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless-cli'
 import {
-  createConnectorResolver,
   SyncService,
   envCredentialStore,
   flagConfigStore,

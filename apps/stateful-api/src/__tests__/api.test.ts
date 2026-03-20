@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type {
+  ConnectorResolver,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -10,8 +11,7 @@ import type {
   Message,
   Source,
   StateMessage,
-} from '@stripe/sync-protocol'
-import type { ConnectorResolver } from '@stripe/sync-service'
+} from '@stripe/sync-engine-stateless-api'
 import { createApp } from '../app'
 
 // ---------------------------------------------------------------------------

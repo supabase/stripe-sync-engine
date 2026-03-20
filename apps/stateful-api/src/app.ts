@@ -1,9 +1,9 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import { streamSSE } from 'hono/streaming'
-import type { ConnectorResolver } from '@stripe/sync-service'
+import type { ConnectorResolver } from '@stripe/sync-engine-stateless-api'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless-api'
 import {
-  createConnectorResolver,
   SyncService,
   fileCredentialStore,
   fileConfigStore,
