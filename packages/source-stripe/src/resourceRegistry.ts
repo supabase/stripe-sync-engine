@@ -2,21 +2,30 @@ import Stripe from 'stripe'
 import type { ResourceConfig, StripeListResourceConfig } from './types'
 
 interface ResourceDef {
+  /** Backfill sequencing order. Lower numbers sync first, ensuring dependencies are populated before dependents. */
   readonly order: number
+  /** Destination table name (e.g. 'payment_intents'). */
   readonly tableName: string
+  /** Resource keys that must be backfilled before this one (e.g. ['customer', 'invoice']). */
   readonly dependencies?: readonly string[]
+  /** Curried list endpoint: `list(stripe)(params) → page`. */
   readonly list: (
     s: Stripe
   ) => (
     p: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam }
   ) => Promise<{ data: unknown[]; has_more: boolean }>
+  /** Curried retrieve endpoint: `retrieve(stripe)(id) → object`. */
   readonly retrieve: (s: Stripe) => (id: string) => Promise<Stripe.Response<unknown>>
+  /** Whether the list API accepts a `created` range filter for incremental backfill. */
   readonly supportsCreatedFilter: boolean
+  /** Whether this resource is included in a default full sync. */
   readonly sync: boolean
+  /** Returns true when the object has reached a terminal state and won't change again. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly isFinalState?: (entity: any) => boolean
-  // Tables created from nested data (like line items) that don't have their own top-level list API.
+  /** Tables created from nested data (like line items) that don't have their own top-level list API. */
   readonly childTables?: readonly string[]
+  /** Sub-list expansions fetched per parent object (e.g. subscription items, invoice line items). */
   readonly listExpands?: readonly Record<
     string,
     (s: Stripe) => (id: string) => Promise<Stripe.ApiList<{ id?: string }>>
