@@ -128,3 +128,13 @@ jobs:
 
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build Docker image
+        run: docker build -t sync-engine:ci .
+      - name: Smoke test
+        run: docker run --rm sync-engine:ci --version
