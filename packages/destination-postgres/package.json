@@ -24,7 +24,21 @@
     "yesql": "^7.0.0",
     "zod": "^4.3.6"
   },
+  "peerDependencies": {
+    "@aws-sdk/client-sts": "^3",
+    "@aws-sdk/rds-signer": "^3"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-sts": {
+      "optional": true
+    },
+    "@aws-sdk/rds-signer": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@aws-sdk/client-sts": "^3.1013.0",
+    "@aws-sdk/rds-signer": "^3.1013.0",
     "@types/pg": "^8.15.5",
     "@types/yesql": "^4.1.4",
     "vitest": "^3.2.4"
