@@ -77,13 +77,6 @@ export {
   type SystemColumn,
 } from './schemaProjection'
 
-// Migrations
-export { runMigrations, runMigrationsFromContent } from './database/migrate'
-export type { MigrationConfig } from './database/migrate'
-export { embeddedMigrations, genericBootstrapMigrations } from './database/migrations-embedded'
-export type { EmbeddedMigration } from './database/migrations-embedded'
-export { renderMigrationTemplate } from './database/migrationTemplate'
-
 // MARK: - Default export
 
 const destination = {

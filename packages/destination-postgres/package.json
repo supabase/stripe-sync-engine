@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts && mkdir -p dist/database && cp -r src/database/migrations dist/database/migrations",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
     "test": "vitest"
   },
   "files": [

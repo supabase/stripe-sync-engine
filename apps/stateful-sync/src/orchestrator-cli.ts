@@ -16,7 +16,7 @@ function loadJson(filePath: string): unknown {
 }
 
 /**
- * CLI entrypoint for orchestrator-postgres.
+ * CLI entrypoint for the Postgres orchestrator.
  *
  * Commands:
  *   run --config <path> --pg-url <url>  Run the full sync pipeline.

@@ -4,7 +4,7 @@ import sourceStripe, {
 } from '@stripe/source-stripe'
 import destinationPostgres, { type Config as DestConfig } from '@stripe/destination-postgres'
 import { catalogFromRegistry } from '@stripe/source-stripe'
-import Stripe from 'stripe'
+import Stripe from 'npm:stripe'
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {

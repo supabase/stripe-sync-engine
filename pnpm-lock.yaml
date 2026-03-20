@@ -130,35 +130,7 @@ importers:
         specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/supabase:
-    dependencies:
-      '@stripe/destination-postgres':
-        specifier: workspace:*
-        version: link:../../packages/destination-postgres
-      '@stripe/orchestrator-postgres':
-        specifier: workspace:*
-        version: link:../../packages/orchestrator-postgres
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../../packages/sync-protocol
-      supabase-management-js:
-        specifier: ^2.0.2
-        version: 2.0.2
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.10.1
-      esbuild:
-        specifier: ^0.27.2
-        version: 0.27.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  apps/sync-service:
+  apps/stateful-sync:
     dependencies:
       '@stripe/sync-protocol':
         specifier: workspace:*
@@ -166,6 +138,12 @@ importers:
       hono:
         specifier: ^4
         version: 4.12.8
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+      yesql:
+        specifier: ^7.0.0
+        version: 7.0.0
     devDependencies:
       '@stripe/destination-postgres2':
         specifier: workspace:*
@@ -179,15 +157,43 @@ importers:
       '@types/pg':
         specifier: ^8.15.4
         version: 8.15.6
-      pg:
-        specifier: ^8.16.0
-        version: 8.16.3
+      '@types/yesql':
+        specifier: ^4.1.4
+        version: 4.1.4
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  apps/supabase:
+    dependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/sync-protocol
+      stateful-sync:
+        specifier: workspace:*
+        version: link:../stateful-sync
+      supabase-management-js:
+        specifier: ^2.0.2
+        version: 2.0.2
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.3
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
@@ -285,28 +291,6 @@ importers:
       '@types/node':
         specifier: ^24.5.0
         version: 24.10.1
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  packages/orchestrator-postgres:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      pg:
-        specifier: ^8.16.3
-        version: 8.16.3
-      yesql:
-        specifier: ^7.0.0
-        version: 7.0.0
-    devDependencies:
-      '@types/pg':
-        specifier: ^8.15.5
-        version: 8.15.6
-      '@types/yesql':
-        specifier: ^4.1.4
-        version: 4.1.4
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)

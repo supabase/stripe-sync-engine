@@ -414,7 +414,6 @@ describe('run()', () => {
 
   it('stops gracefully when stop() is called', async () => {
     // Create a source that yields messages slowly so we can stop mid-stream
-    let yieldCount = 0
     const slowSource: Source = {
       spec: () => ({ config: {} }),
       check: async () => ({ status: 'succeeded' as const }),
@@ -427,7 +426,6 @@ describe('run()', () => {
         state?: Record<string, unknown>
       }): AsyncIterable<Message> {
         for (let i = 0; i < 100; i++) {
-          yieldCount++
           yield {
             type: 'state',
             stream: 'customers',

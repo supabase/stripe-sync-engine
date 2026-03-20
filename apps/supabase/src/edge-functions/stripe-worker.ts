@@ -5,19 +5,19 @@
  *
  * Uses v2 packages directly:
  * - @stripe/source-stripe for StripeSyncWorker + resource registry
- * - @stripe/orchestrator-postgres for PostgresStateManager (task management)
+ * - stateful-sync for PostgresStateManager (task management)
  * - @stripe/destination-postgres for PostgresDestinationWriter (upserts)
  */
 
-import Stripe from 'stripe'
-import pg from 'pg'
+import Stripe from 'npm:stripe'
+import pg from 'npm:pg@8'
 import {
   StripeSyncWorker,
   buildResourceRegistry,
   CORE_SYNC_OBJECTS,
   type WorkerTaskManager,
 } from '@stripe/source-stripe'
-import { PostgresStateManager } from '@stripe/orchestrator-postgres'
+import { PostgresStateManager } from 'stateful-sync'
 import { PostgresDestinationWriter } from '@stripe/destination-postgres'
 import { fromRecordMessage, type RecordMessage } from '@stripe/sync-protocol'
 

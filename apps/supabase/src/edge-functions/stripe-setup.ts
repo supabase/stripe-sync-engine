@@ -1,7 +1,54 @@
-import { runMigrationsFromContent, embeddedMigrations } from '@stripe/destination-postgres'
-import { parseSchemaComment } from '../schemaComment.ts'
-import Stripe from 'stripe'
-import pg from 'pg'
+import { runMigrationsFromContent, embeddedMigrations } from 'stateful-sync'
+import Stripe from 'npm:stripe'
+import pg from 'npm:pg@8'
+
+// Inlined from schemaComment.ts — edge functions must be self-contained (no relative imports)
+type SchemaInstallationStatus =
+  | 'installing'
+  | 'installed'
+  | 'install error'
+  | 'uninstalling'
+  | 'uninstalled'
+  | 'uninstall error'
+
+interface StripeSchemaComment {
+  status: SchemaInstallationStatus
+  oldVersion?: string
+  newVersion?: string
+  errorMessage?: string
+  startTime?: number
+}
+
+function parseSchemaComment(comment: string | null | undefined): StripeSchemaComment {
+  if (!comment) return { status: 'uninstalled' }
+  try {
+    const parsed = JSON.parse(comment) as StripeSchemaComment
+    if (parsed.status) return parsed
+  } catch {
+    // fall through to legacy parsing
+  }
+  if (!comment.includes('stripe-sync')) return { status: 'uninstalled' }
+  const versionMatch = comment.match(/stripe-sync\s+v?([0-9]+\.[0-9]+\.[0-9]+)/)
+  const version = versionMatch?.[1]
+  let status: SchemaInstallationStatus
+  let errorMessage: string | undefined
+  if (comment.includes('uninstallation:error')) {
+    status = 'uninstall error'
+    errorMessage = comment.match(/uninstallation:error\s*-\s*(.+)$/)?.[1]
+  } else if (comment.includes('uninstallation:started')) {
+    status = 'uninstalling'
+  } else if (comment.includes('installation:error')) {
+    status = 'install error'
+    errorMessage = comment.match(/installation:error\s*-\s*(.+)$/)?.[1]
+  } else if (comment.includes('installation:started')) {
+    status = 'installing'
+  } else if (comment.includes('installed')) {
+    status = 'installed'
+  } else {
+    return { status: 'uninstalled' }
+  }
+  return { status, oldVersion: undefined, newVersion: version, errorMessage }
+}
 
 // Read package.json version at build time
 const VERSION = '0.1.0'

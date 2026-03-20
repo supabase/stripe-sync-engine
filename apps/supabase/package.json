@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --shims",
     "lint": "eslint src --ext .ts",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "files": [
     "dist"
@@ -24,7 +25,7 @@
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
-    "@stripe/orchestrator-postgres": "workspace:*",
+    "stateful-sync": "workspace:*",
     "supabase-management-js": "^2.0.2"
   },
   "devDependencies": {

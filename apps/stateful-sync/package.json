@@ -1,5 +1,5 @@
 {
-  "name": "sync-service",
+  "name": "stateful-sync",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build": "tsup src/index.ts --format esm,cjs --dts && mkdir -p dist/database && cp -r src/database/migrations dist/database/migrations",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
@@ -19,14 +19,16 @@
   },
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
-    "hono": "^4"
+    "hono": "^4",
+    "pg": "^8.16.3",
+    "yesql": "^7.0.0"
   },
   "devDependencies": {
     "@stripe/destination-postgres2": "workspace:*",
     "@stripe/source-stdin": "workspace:*",
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
-    "pg": "^8.16.0",
+    "@types/yesql": "^4.1.4",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
