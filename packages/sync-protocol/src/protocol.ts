@@ -50,6 +50,20 @@ export const ConfiguredStream = z.object({
 
   /** Field path used as the cursor for incremental syncs. */
   cursor_field: z.array(z.string()).optional(),
+
+  /** Extra system columns the destination should add to this stream's table. */
+  system_columns: z
+    .array(
+      z.object({
+        /** Column name, e.g. "_account_id". */
+        name: z.string(),
+        /** Postgres type, e.g. "text". */
+        type: z.string().default('text'),
+        /** Whether to create an index on this column. */
+        index: z.boolean().default(false),
+      })
+    )
+    .optional(),
 })
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
 
@@ -134,7 +148,7 @@ export type LogMessage = z.infer<typeof LogMessage>
  */
 export const ErrorMessage = z.object({
   type: z.literal('error'),
-  failure_type: z.enum(['config_error', 'system_error', 'transient_error']),
+  failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
   message: z.string(),
   /** The stream this error is about, if applicable. */
   stream: z.string().optional(),
