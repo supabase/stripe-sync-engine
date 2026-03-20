@@ -126,25 +126,5 @@ jobs:
           echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/cli/.env
           echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/cli/.env
 
-      # E2E tests require packages/sync-engine which has been removed.
-      # TODO: Migrate E2E tests to the new package structure (apps/cli).
-      # - name: Run E2E Tests
-      #   run: |
-      #     cd apps/cli && npm run test:e2e
-      #   env:
-      #     STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-      #     STRIPE_API_KEY_2: ${{ secrets.STRIPE_API_KEY_2 }}
-      #     STRIPE_API_KEY_3: ${{ secrets.STRIPE_API_KEY_3 }}
-      #     NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-
-      # TODO: Figure out what to do with this test.Right now it is failing with the Supabase project inactivity failure
-      # - name: Run Deploy Integration Test
-      #   run: |
-      #     cd packages/sync-engine
-      #     chmod +x ./scripts/test-integration-deploy.sh
-      #     ./scripts/test-integration-deploy.sh
-      #   env:
-      #     SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      #     SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      #     STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-      #     NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: E2E plugin loading test
+        run: bash tests/e2e-plugin-loading.sh
