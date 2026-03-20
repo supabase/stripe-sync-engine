@@ -35,9 +35,9 @@ Target structure from `packages.md`. Status: EXISTS / MISSING / WRONG.
 
 ### Isolation: destination has no Stripe-specific knowledge
 
-`destination-postgres` contains no openapi/ directory. The Stripe OpenAPI spec-to-DDL pipeline (`SpecParser`, `PostgresAdapter`, `WritePathPlanner`, `applyStripeSchema`) lives in `source-stripe/src/openapi/`.
+The source/destination boundary follows the protocol: `source.discover()` produces a catalog with `json_schema` (derived from the Stripe OpenAPI spec via `SpecParser` + `parsedTableToJsonSchema`), and `destination-postgres` reads `json_schema` to produce Postgres DDL via `schemaProjection.ts` (`buildCreateTableWithSchema`, `applySchemaFromCatalog`).
 
-Callers (`apps/cli`, `source-stripe/server`) call `runMigrations()` for bootstrap, then `applyStripeSchema()` separately for Stripe-specific schema.
+Callers (`apps/cli`, `source-stripe/server`) call `runMigrations()` for bootstrap, then `source.discover()` + `applySchemaFromCatalog()` for Stripe-specific schema.
 
 ### Protocol interfaces
 
@@ -53,16 +53,16 @@ Shared message routing (`forward()`, `collect()`, `RouterCallbacks`) is in `sync
 
 ### source-stripe
 
-| Method                                  | Status  | Test coverage                                                         |
-| --------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `discover()`                            | REAL    | 3 tests (catalog, filtering, empty)                                   |
-| `read()` backfill mode                  | REAL    | 8 tests (pagination, resume, errors)                                  |
-| `read()` live mode (`liveReader`)       | REAL    | Async generator wrapping `fromWebhookEvent()`. No dedicated test yet. |
-| `read()` backfill→live transition       | MISSING | .todo test stub                                                       |
-| `fromWebhookEvent()`                    | REAL    | 7 tests                                                               |
-| `server/` (webhook HTTP server)         | REAL    | Fastify app with DI for writer. 4 integration test suites.            |
-| `cli.ts` (source discover, source read) | REAL    | Working argv-based entrypoint.                                        |
-| `openapi/` (Stripe schema→DDL)          | REAL    | Moved from destination-postgres. 4 test suites.                       |
+| Method                                  | Status  | Test coverage                                                                     |
+| --------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `discover()`                            | REAL    | 3 tests (catalog, filtering, empty)                                               |
+| `read()` backfill mode                  | REAL    | 8 tests (pagination, resume, errors)                                              |
+| `read(input)` webhook/live mode         | REAL    | 15 tests — full pipeline: sig verify, delete, revalidation, entitlements, sub items |
+| `read()` backfill→live transition       | MISSING | .todo test stub                                                                   |
+| `fromWebhookEvent()`                    | REAL    | 7 tests (simpler path, still used by WebSocket drain queue)                       |
+| `server/` (webhook HTTP server)         | REAL    | Fastify app with DI for writer. 4 integration test suites.                        |
+| `cli.ts` (source discover, source read) | REAL    | Working argv-based entrypoint.                                                    |
+| `openapi/` (Stripe schema→DDL)          | REAL    | Moved from destination-postgres. 4 test suites.                                   |
 
 ### destination-postgres
 
@@ -187,6 +187,10 @@ All P0 items resolved:
 2. **Fill remaining .todo test stubs**: Sync config from Postgres, backfill→live transition.
 
 3. **Add dedicated tests for `liveReader`** in source-stripe. The async generator exists but has no standalone test suite.
+
+### Known limitations
+
+- **Entitlement reconciliation gap**: `read(input)` for `entitlements.active_entitlement_summary.updated` yields the current active entitlement set but cannot delete stale entitlements — the source doesn't know what's in the destination. Stale entitlements accumulate until the next full refresh. Fix requires a new `StreamResetMessage` (or similar) that tells the destination to clear-and-replace a subset (e.g., `WHERE customer = :id`). The old `StripeSyncWebhook` handled this by calling `deleteRemovedActiveEntitlements()` directly on the writer, which violated source/destination isolation.
 
 ### P2 — Future (new packages)
 

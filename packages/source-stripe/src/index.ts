@@ -20,6 +20,7 @@ export {
   default,
   spec,
   type Config,
+  type WebhookInput,
   type StripeStreamState,
   createSource,
   fromWebhookEvent,
@@ -67,7 +68,7 @@ export type {
 } from './websocket-client'
 
 // Catalog
-export { catalogFromRegistry } from './catalog'
+export { catalogFromRegistry, catalogFromOpenApi } from './catalog'
 
 // Transforms
 export {
@@ -81,7 +82,7 @@ export {
 export { expandEntity } from './utils/expandEntity'
 export { hashApiKey } from './utils/hashApiKey'
 
-// OpenAPI spec → DDL
+// OpenAPI spec → JSON Schema
 export type * from './openapi/types'
 export {
   SpecParser,
@@ -89,12 +90,8 @@ export {
   RUNTIME_RESOURCE_ALIASES,
 } from './openapi/specParser'
 export { OPENAPI_COMPATIBILITY_COLUMNS } from './openapi/runtimeMappings'
-export { PostgresAdapter } from './openapi/postgresAdapter'
-export { WritePathPlanner } from './openapi/writePathPlanner'
 export { resolveOpenApiSpec } from './openapi/specFetchHelper'
-export type { DialectAdapter } from './openapi/dialectAdapter'
-export { applyStripeSchema } from './openapi/applyStripeSchema'
-export type { ApplyStripeSchemaConfig } from './openapi/applyStripeSchema'
+export { parsedTableToJsonSchema } from './openapi/jsonSchemaConverter'
 
 // Schemas
 export { activeEntitlementSchema } from './streams/active_entitlement'

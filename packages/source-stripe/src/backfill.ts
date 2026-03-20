@@ -11,8 +11,14 @@ import { toRecordMessage } from '@stripe/sync-protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
 import type { ResourceConfig } from './types'
-import { buildResourceRegistry } from './resourceRegistry'
-import { catalogFromRegistry } from './catalog'
+import { buildResourceRegistry, normalizeStripeObjectName } from './resourceRegistry'
+import { catalogFromRegistry, catalogFromOpenApi } from './catalog'
+import { resolveOpenApiSpec } from './openapi/specFetchHelper'
+import {
+  SpecParser,
+  RUNTIME_REQUIRED_TABLES,
+  OPENAPI_RESOURCE_TABLE_ALIASES,
+} from './openapi/specParser'
 import type { StripeWebSocketClient, StripeWebhookEvent } from './websocket-client'
 import { createStripeWebSocketClient } from './websocket-client'
 
@@ -30,10 +36,21 @@ export const spec = z.object({
     .url()
     .optional()
     .describe('URL for managed webhook endpoint registration'),
+  webhook_secret: z
+    .string()
+    .optional()
+    .describe('Webhook signing secret (whsec_...) for signature verification'),
   websocket: z.boolean().optional().describe('Enable WebSocket streaming for live events'),
+  revalidate_objects: z
+    .array(z.string())
+    .optional()
+    .describe('Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"])'),
 })
 
 export type Config = z.infer<typeof spec>
+
+/** Raw webhook payload requiring signature verification. */
+export type WebhookInput = { body: string | Buffer; signature: string }
 
 // MARK: - Stream state
 
@@ -66,6 +83,28 @@ function findConfigByTableName(
   tableName: string
 ): ResourceConfig | undefined {
   return Object.values(registry).find((cfg) => cfg.tableName === tableName)
+}
+
+// MARK: - Delete event detection
+
+const RESOURCE_DELETE_EVENTS: ReadonlySet<string> = new Set([
+  'customer.deleted',
+  'product.deleted',
+  'price.deleted',
+  'plan.deleted',
+  'invoice.deleted',
+  'coupon.deleted',
+  'customer.tax_id.deleted',
+])
+
+function isDeleteEvent(event: Stripe.Event): boolean {
+  if (
+    'deleted' in event.data.object &&
+    (event.data.object as { deleted?: boolean }).deleted === true
+  ) {
+    return true
+  }
+  return RESOURCE_DELETE_EVENTS.has(event.type)
 }
 
 // MARK: - fromWebhookEvent
@@ -113,7 +152,7 @@ export function fromWebhookEvent(
 
 export function createSource(
   _registryForTesting?: Record<string, ResourceConfig>
-): Source<Config, StripeStreamState, Stripe.Event> {
+): Source<Config, StripeStreamState, WebhookInput | Stripe.Event> {
   function getRegistry(config: Config) {
     return _registryForTesting ?? buildResourceRegistry(makeClient(config))
   }
@@ -158,7 +197,18 @@ export function createSource(
     },
 
     async discover({ config }) {
-      return catalogFromRegistry(getRegistry(config))
+      const registry = getRegistry(config)
+      try {
+        const resolved = await resolveOpenApiSpec({ apiVersion: '2020-08-27' })
+        const parser = new SpecParser()
+        const parsed = parser.parse(resolved.spec, {
+          resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
+          allowedTables: [...RUNTIME_REQUIRED_TABLES],
+        })
+        return catalogFromOpenApi(parsed.tables, registry)
+      } catch {
+        return catalogFromRegistry(registry)
+      }
     },
 
     async setup({ config, catalog }) {
@@ -210,14 +260,112 @@ export function createSource(
     async *read({ config, catalog, state, input }) {
       const registry = getRegistry(config)
 
-      // Live mode: process a single webhook event
+      // Live mode: process a single webhook event (full pipeline)
       if (input) {
-        const result = fromWebhookEvent(input, registry)
-        if (!result) return
+        const stripe = makeClient(config)
         const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
-        if (!streamNames.has(result.record.stream)) return
-        yield result.record
-        yield result.state
+
+        // 1. Verify & parse: raw webhook (body+signature) or pre-parsed event
+        let event: Stripe.Event
+        if ('body' in input && 'signature' in input) {
+          if (!config.webhook_secret) {
+            throw new Error('webhook_secret is required for raw webhook signature verification')
+          }
+          event = await stripe.webhooks.constructEvent(
+            input.body,
+            input.signature,
+            config.webhook_secret
+          )
+        } else {
+          event = input
+        }
+
+        // 2. Extract object
+        const dataObject = event.data?.object as unknown as
+          | { id?: string; object?: string; deleted?: boolean; [key: string]: unknown }
+          | undefined
+        if (!dataObject?.object) return
+
+        // 3. Entitlements special case — the summary object type doesn't map to a
+        //    registry entry, so we must handle it before the registry lookup.
+        if (event.type === 'entitlements.active_entitlement_summary.updated') {
+          if (!streamNames.has('active_entitlements')) return
+          const summary = dataObject as {
+            customer: string
+            entitlements: {
+              data: Array<{
+                id: string
+                object: string
+                feature: string | { id: string }
+                livemode: boolean
+                lookup_key: string
+              }>
+            }
+          }
+          for (const e of summary.entitlements.data) {
+            yield toRecordMessage('active_entitlements', {
+              id: e.id,
+              object: e.object,
+              feature: typeof e.feature === 'string' ? e.feature : e.feature.id,
+              customer: summary.customer,
+              livemode: e.livemode,
+              lookup_key: e.lookup_key,
+            })
+          }
+          yield {
+            type: 'state',
+            stream: 'active_entitlements',
+            data: { eventId: event.id, eventCreated: event.created },
+          } satisfies StateMessage
+          return
+        }
+
+        // 4. Filter by registry and catalog
+        const objectType = normalizeStripeObjectName(dataObject.object)
+        const resourceConfig = registry[objectType]
+        if (!resourceConfig) return
+        if (!dataObject.id) return // skip preview/draft objects
+        if (!streamNames.has(resourceConfig.tableName)) return
+
+        // 5. Delete events — yield record with deleted: true
+        if (isDeleteEvent(event)) {
+          yield toRecordMessage(resourceConfig.tableName, { ...dataObject, deleted: true })
+          yield {
+            type: 'state',
+            stream: resourceConfig.tableName,
+            data: { eventId: event.id, eventCreated: event.created },
+          } satisfies StateMessage
+          return
+        }
+
+        // 6. Revalidation — re-fetch from Stripe API if configured
+        let data: Record<string, unknown> = dataObject
+        if (
+          config.revalidate_objects?.includes(objectType) &&
+          resourceConfig.isFinalState &&
+          !resourceConfig.isFinalState(dataObject)
+        ) {
+          data = (await resourceConfig.retrieveFn(dataObject.id)) as Record<string, unknown>
+        }
+
+        // 7. Yield main record
+        yield toRecordMessage(resourceConfig.tableName, data)
+
+        // 8. Yield subscription items if applicable
+        if (
+          objectType === 'subscription' &&
+          (data as { items?: { data?: unknown[] } }).items?.data
+        ) {
+          for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
+            yield toRecordMessage('subscription_items', item)
+          }
+        }
+
+        yield {
+          type: 'state',
+          stream: resourceConfig.tableName,
+          data: { eventId: event.id, eventCreated: event.created },
+        } satisfies StateMessage
         return
       }
 

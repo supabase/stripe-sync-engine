@@ -794,6 +794,342 @@ describe('StripeSource', () => {
     })
   })
 
+  describe('read(input) — enriched webhook processing', () => {
+    it('delete event yields record with deleted: true', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({ order: 1, tableName: 'customers' }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_del_1',
+        type: 'customer.deleted',
+        created: 1700000000,
+        dataObject: { id: 'cus_1', object: 'customer', deleted: true },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers' }),
+          input: event,
+        })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1', object: 'customer', deleted: true },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'state',
+        stream: 'customers',
+        data: { eventId: 'evt_del_1', eventCreated: 1700000000 },
+      })
+    })
+
+    it('delete event detected by event type (not just deleted flag)', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        product: makeConfig({ order: 1, tableName: 'products' }),
+      }
+
+      const source = createSource(registry)
+      // product.deleted event — the object may not have deleted: true in its body
+      const event = makeEvent({
+        id: 'evt_del_2',
+        type: 'product.deleted',
+        created: 1700000000,
+        dataObject: { id: 'prod_1', object: 'product', name: 'Old Product' },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'products' }),
+          input: event,
+        })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'products',
+        data: { id: 'prod_1', object: 'product', deleted: true },
+      })
+    })
+
+    it('subscription event yields subscription_items from nested items.data', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        subscription: makeConfig({ order: 1, tableName: 'subscriptions' }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_sub_1',
+        type: 'customer.subscription.updated',
+        created: 1700000000,
+        dataObject: {
+          id: 'sub_1',
+          object: 'subscription',
+          status: 'active',
+          items: {
+            data: [
+              { id: 'si_1', object: 'subscription_item', price: 'price_1' },
+              { id: 'si_2', object: 'subscription_item', price: 'price_2' },
+            ],
+          },
+        },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'subscriptions' }),
+          input: event,
+        })
+      )
+
+      // 1 subscription record + 2 subscription_item records + 1 state
+      expect(messages).toHaveLength(4)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'subscriptions',
+        data: { id: 'sub_1' },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'record',
+        stream: 'subscription_items',
+        data: { id: 'si_1', price: 'price_1' },
+      })
+      expect(messages[2]).toMatchObject({
+        type: 'record',
+        stream: 'subscription_items',
+        data: { id: 'si_2', price: 'price_2' },
+      })
+      expect(messages[3]).toMatchObject({
+        type: 'state',
+        stream: 'subscriptions',
+        data: { eventId: 'evt_sub_1' },
+      })
+    })
+
+    it('entitlement summary event yields individual entitlement records', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        active_entitlements: makeConfig({ order: 1, tableName: 'active_entitlements' }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_ent_1',
+        type: 'entitlements.active_entitlement_summary.updated',
+        created: 1700000000,
+        dataObject: {
+          id: 'entsummary_1',
+          object: 'entitlements.active_entitlement_summary',
+          customer: 'cus_1',
+          entitlements: {
+            data: [
+              {
+                id: 'ent_1',
+                object: 'entitlements.active_entitlement',
+                feature: 'feat_premium',
+                livemode: false,
+                lookup_key: 'premium',
+              },
+              {
+                id: 'ent_2',
+                object: 'entitlements.active_entitlement',
+                feature: { id: 'feat_basic' },
+                livemode: false,
+                lookup_key: 'basic',
+              },
+            ],
+          },
+        },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'active_entitlements' }),
+          input: event,
+        })
+      )
+
+      // 2 entitlement records + 1 state
+      expect(messages).toHaveLength(3)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'active_entitlements',
+        data: {
+          id: 'ent_1',
+          feature: 'feat_premium',
+          customer: 'cus_1',
+          lookup_key: 'premium',
+        },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'record',
+        stream: 'active_entitlements',
+        data: {
+          id: 'ent_2',
+          feature: 'feat_basic',
+          customer: 'cus_1',
+          lookup_key: 'basic',
+        },
+      })
+      expect(messages[2]).toMatchObject({
+        type: 'state',
+        stream: 'active_entitlements',
+        data: { eventId: 'evt_ent_1' },
+      })
+    })
+
+    it('revalidation re-fetches from Stripe API when object is not in final state', async () => {
+      const retrieveFn = vi.fn().mockResolvedValueOnce({
+        id: 'sub_1',
+        object: 'subscription',
+        status: 'active',
+        extra: 'revalidated',
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        subscription: makeConfig({
+          order: 1,
+          tableName: 'subscriptions',
+          retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
+          isFinalState: (s: { status: string }) => s.status === 'canceled',
+        }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_reval_1',
+        type: 'customer.subscription.updated',
+        created: 1700000000,
+        dataObject: { id: 'sub_1', object: 'subscription', status: 'active' },
+      })
+
+      const messages = await collect(
+        source.read({
+          config: { ...config, revalidate_objects: ['subscription'] },
+          catalog: catalog({ name: 'subscriptions' }),
+          input: event,
+        })
+      )
+
+      expect(retrieveFn).toHaveBeenCalledWith('sub_1')
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records[0].data).toMatchObject({ id: 'sub_1', extra: 'revalidated' })
+    })
+
+    it('revalidation skips re-fetch when object is in final state', async () => {
+      const retrieveFn = vi.fn()
+
+      const registry: Record<string, ResourceConfig> = {
+        subscription: makeConfig({
+          order: 1,
+          tableName: 'subscriptions',
+          retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
+          isFinalState: (s: { status: string }) => s.status === 'canceled',
+        }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_reval_2',
+        type: 'customer.subscription.deleted',
+        created: 1700000000,
+        dataObject: { id: 'sub_1', object: 'subscription', status: 'canceled' },
+      })
+
+      const messages = await collect(
+        source.read({
+          config: { ...config, revalidate_objects: ['subscription'] },
+          catalog: catalog({ name: 'subscriptions' }),
+          input: event,
+        })
+      )
+
+      // Should NOT re-fetch because isFinalState returns true
+      expect(retrieveFn).not.toHaveBeenCalled()
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records[0].data).toMatchObject({ id: 'sub_1', status: 'canceled' })
+    })
+
+    it('preview objects (no id) produce no output', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        invoice: makeConfig({ order: 1, tableName: 'invoices' }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_preview_1',
+        type: 'invoice.upcoming',
+        dataObject: { object: 'invoice', amount_due: 5000 },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'invoices' }),
+          input: event,
+        })
+      )
+
+      expect(messages).toHaveLength(0)
+    })
+
+    it('normalizes aliased object types (checkout.session → checkout_sessions)', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        checkout_sessions: makeConfig({ order: 1, tableName: 'checkout_sessions' }),
+      }
+
+      const source = createSource(registry)
+      const event = makeEvent({
+        id: 'evt_cs_1',
+        type: 'checkout.session.completed',
+        created: 1700000000,
+        dataObject: { id: 'cs_1', object: 'checkout.session', amount_total: 1000 },
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'checkout_sessions' }),
+          input: event,
+        })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'record',
+        stream: 'checkout_sessions',
+        data: { id: 'cs_1' },
+      })
+    })
+
+    it('throws when raw webhook input is provided without webhook_secret', async () => {
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({ order: 1, tableName: 'customers' }),
+      }
+
+      const source = createSource(registry)
+      const rawInput = { body: '{"id":"evt_1"}', signature: 'sig_test' }
+
+      await expect(
+        collect(
+          source.read({
+            config, // no webhook_secret
+            catalog: catalog({ name: 'customers' }),
+            input: rawInput,
+          })
+        )
+      ).rejects.toThrow('webhook_secret is required for raw webhook signature verification')
+    })
+  })
+
   describe('read() — WebSocket streaming', () => {
     const registry: Record<string, ResourceConfig> = {
       customer: makeConfig({
