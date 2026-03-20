@@ -119,12 +119,12 @@ jobs:
 
       - name: Set up .env file
         run: |
-          touch apps/cli/.env
-          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> apps/cli/.env
-          echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> apps/cli/.env
-          echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> apps/cli/.env
-          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/cli/.env
-          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/cli/.env
+          touch apps/stateless-cli/.env
+          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> apps/stateless-cli/.env
+          echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> apps/stateless-cli/.env
+          echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> apps/stateless-cli/.env
+          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/stateless-cli/.env
+          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/stateless-cli/.env
 
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh

@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-engine-api",
+  "name": "@stripe/sync-engine-stateless-api",
   "version": "0.1.0",
   "private": false,
   "description": "Stripe Sync Engine HTTP API — stream data from sources to destinations over HTTP",

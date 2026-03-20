@@ -22,7 +22,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-sync-protocol-*.tgz
   rm -f "$REPO_ROOT"/stripe-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-destination-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-engine-cli-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-cli-*.tgz
 }
 trap cleanup EXIT
 
@@ -39,7 +39,7 @@ echo "--- Step 1: Packing packages ---"
 PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
-CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-cli pack 2>/dev/null | tail -1)
+CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless-cli pack 2>/dev/null | tail -1)
 
 for tgz in "$PROTOCOL_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ"; do
   if [ ! -f "$tgz" ]; then

@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-engine-cli",
+  "name": "@stripe/sync-engine-stateless-cli",
   "version": "0.1.0",
   "private": false,
   "description": "Stripe Sync Engine CLI — stream data from sources to destinations",
