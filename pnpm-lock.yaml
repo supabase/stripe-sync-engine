@@ -111,7 +111,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/control-plane-api:
+  apps/stateful-api:
     dependencies:
       '@hono/node-server':
         specifier: ^1
@@ -122,25 +122,6 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
-      hono:
-        specifier: ^4
-        version: 4.12.8
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.10.1
-      vitest:
-        specifier: ^3.2
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  apps/stateful-api:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1
-        version: 1.19.11(hono@4.12.8)
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
@@ -150,6 +131,9 @@ importers:
       hono:
         specifier: ^4
         version: 4.12.8
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -295,37 +279,6 @@ importers:
         specifier: ^8.15.4
         version: 8.15.6
 
-  packages/destination-stdout:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-
-  packages/orchestrator-fs:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-    devDependencies:
-      '@types/node':
-        specifier: ^24.5.0
-        version: 24.10.1
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  packages/source-stdin:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-
   packages/source-stripe:
     dependencies:
       '@stripe/sync-protocol':
@@ -388,9 +341,6 @@ importers:
       '@stripe/destination-postgres2':
         specifier: workspace:*
         version: link:../destination-postgres2
-      '@stripe/source-stdin':
-        specifier: workspace:*
-        version: link:../source-stdin
       '@types/node':
         specifier: ^24
         version: 24.10.1

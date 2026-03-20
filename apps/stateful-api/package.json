@@ -25,9 +25,12 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
+    "@hono/swagger-ui": "^0.6",
+    "@hono/zod-openapi": "^1.2",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-service": "workspace:*",
-    "hono": "^4"
+    "hono": "^4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24",

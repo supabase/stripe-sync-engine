@@ -98,154 +98,311 @@ afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true })
 })
 
-describe('credentials CRUD', () => {
-  it('creates and retrieves a credential', async () => {
-    const app = createApp({ dataDir })
-    const cred = { id: 'cred_1', fields: { api_key: 'sk_test' } }
+// ── Helpers ──────────────────────────────────────────────────────
 
-    const createRes = await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cred),
+function post(app: ReturnType<typeof createApp>, path: string, body: unknown) {
+  return app.request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function patch(app: ReturnType<typeof createApp>, path: string, body: unknown) {
+  return app.request(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function del(app: ReturnType<typeof createApp>, path: string) {
+  return app.request(path, { method: 'DELETE' })
+}
+
+// ── Credentials CRUD ─────────────────────────────────────────────
+
+describe('credentials CRUD', () => {
+  it('creates and retrieves a stripe credential', async () => {
+    const app = createApp({ dataDir })
+
+    const createRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test_123' })
+    expect(createRes.status).toBe(201)
+    const created = await createRes.json()
+    expect(created.id).toMatch(/^cred_/)
+    expect(created.type).toBe('stripe')
+    expect(created.api_key).toBe('sk_test_123')
+    expect(created.account_id).toBe('acct_default')
+
+    const getRes = await app.request(`/credentials/${created.id}`)
+    expect(getRes.status).toBe(200)
+    expect(await getRes.json()).toEqual(created)
+  })
+
+  it('creates and retrieves a postgres credential', async () => {
+    const app = createApp({ dataDir })
+
+    const createRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'sync',
+      password: 'secret',
+      database: 'mydb',
     })
     expect(createRes.status).toBe(201)
-
-    const getRes = await app.request('/credentials/cred_1')
-    expect(getRes.status).toBe(200)
-    expect(await getRes.json()).toEqual(cred)
+    const created = await createRes.json()
+    expect(created.id).toMatch(/^cred_/)
+    expect(created.type).toBe('postgres')
+    expect(created.host).toBe('localhost')
   })
 
   it('lists credentials', async () => {
     const app = createApp({ dataDir })
-    const cred = { id: 'cred_1', fields: { api_key: 'sk_test' } }
 
-    await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cred),
+    const res1 = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: id1 } = await res1.json()
+
+    const res2 = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
     })
+    const { id: id2 } = await res2.json()
 
-    const res = await app.request('/credentials')
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.data).toHaveLength(1)
-    expect(body.data[0].id).toBe('cred_1')
+    const listRes = await app.request('/credentials')
+    expect(listRes.status).toBe(200)
+    const body = await listRes.json()
+    expect(body.data).toHaveLength(2)
+    expect(body.has_more).toBe(false)
+    const ids = body.data.map((c: any) => c.id)
+    expect(ids).toContain(id1)
+    expect(ids).toContain(id2)
   })
 
   it('returns 404 for missing credential', async () => {
     const app = createApp({ dataDir })
-    const res = await app.request('/credentials/nonexistent')
+    const res = await app.request('/credentials/cred_nonexistent')
     expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toBeDefined()
   })
 
-  it('rejects credential without id', async () => {
+  it('rejects credential with invalid type', async () => {
     const app = createApp({ dataDir })
-    const res = await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: {} }),
-    })
+    const res = await post(app, '/credentials', { type: 'unknown_type' })
     expect(res.status).toBe(400)
+  })
+
+  it('patches credential fields', async () => {
+    const app = createApp({ dataDir })
+
+    const createRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'sync',
+      password: 'old_secret',
+      database: 'mydb',
+    })
+    const { id } = await createRes.json()
+
+    const patchRes = await patch(app, `/credentials/${id}`, { password: 'new_secret' })
+    expect(patchRes.status).toBe(200)
+    const patched = await patchRes.json()
+    expect(patched.id).toBe(id)
+    expect(patched.password).toBe('new_secret')
+    expect(patched.host).toBe('localhost') // unchanged fields preserved
+
+    // Re-fetch to confirm persistence
+    const getRes = await app.request(`/credentials/${id}`)
+    const fetched = await getRes.json()
+    expect(fetched.password).toBe('new_secret')
+    expect(fetched.host).toBe('localhost')
+  })
+
+  it('returns 404 on patch for missing credential', async () => {
+    const app = createApp({ dataDir })
+    const res = await patch(app, '/credentials/cred_nonexistent', { api_key: 'x' })
+    expect(res.status).toBe(404)
   })
 
   it('deletes a credential', async () => {
     const app = createApp({ dataDir })
-    await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 'cred_1', fields: {} }),
-    })
 
-    const delRes = await app.request('/credentials/cred_1', { method: 'DELETE' })
+    const createRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id } = await createRes.json()
+
+    const delRes = await del(app, `/credentials/${id}`)
     expect(delRes.status).toBe(200)
+    const delBody = await delRes.json()
+    expect(delBody.id).toBe(id)
+    expect(delBody.deleted).toBe(true)
 
-    const getRes = await app.request('/credentials/cred_1')
+    const getRes = await app.request(`/credentials/${id}`)
     expect(getRes.status).toBe(404)
   })
+
+  it('returns 404 on delete for missing credential', async () => {
+    const app = createApp({ dataDir })
+    const res = await del(app, '/credentials/cred_nonexistent')
+    expect(res.status).toBe(404)
+  })
 })
+
+// ── Syncs CRUD ───────────────────────────────────────────────────
+
+const validSyncBody = {
+  account_id: 'acct_abc',
+  status: 'backfilling' as const,
+  source: {
+    type: 'stripe-api-core' as const,
+    livemode: true,
+    api_version: '2025-04-30.basil' as const,
+    credential_id: 'cred_src',
+  },
+  destination: {
+    type: 'postgres' as const,
+    schema_name: 'stripe',
+    credential_id: 'cred_dst',
+  },
+}
 
 describe('syncs CRUD', () => {
   it('creates and retrieves a sync', async () => {
     const app = createApp({ dataDir })
-    const sync = {
-      id: 'sync_1',
-      source_credential_id: 'cred_src',
-      destination_credential_id: 'cred_dst',
-      source: { type: 'stripe' },
-      destination: { type: 'postgres' },
-    }
 
-    const createRes = await app.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sync),
-    })
+    const createRes = await post(app, '/syncs', validSyncBody)
     expect(createRes.status).toBe(201)
+    const created = await createRes.json()
+    expect(created.id).toMatch(/^sync_/)
+    expect(created.account_id).toBe('acct_abc')
+    expect(created.status).toBe('backfilling')
+    expect(created.source.type).toBe('stripe-api-core')
+    expect(created.source.credential_id).toBe('cred_src')
+    expect(created.destination.type).toBe('postgres')
+    expect(created.destination.credential_id).toBe('cred_dst')
 
-    const getRes = await app.request('/syncs/sync_1')
+    const getRes = await app.request(`/syncs/${created.id}`)
     expect(getRes.status).toBe(200)
-    expect(await getRes.json()).toEqual(sync)
+    expect(await getRes.json()).toEqual(created)
   })
 
   it('lists syncs', async () => {
     const app = createApp({ dataDir })
-    const sync = {
-      id: 'sync_1',
-      source_credential_id: 'cred_src',
-      destination_credential_id: 'cred_dst',
-      source: { type: 'stripe' },
-      destination: { type: 'postgres' },
-    }
 
-    await app.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sync),
-    })
+    const createRes = await post(app, '/syncs', validSyncBody)
+    const { id } = await createRes.json()
 
-    const res = await app.request('/syncs')
-    expect(res.status).toBe(200)
-    const body = await res.json()
+    const listRes = await app.request('/syncs')
+    expect(listRes.status).toBe(200)
+    const body = await listRes.json()
     expect(body.data).toHaveLength(1)
+    expect(body.has_more).toBe(false)
+    expect(body.data[0].id).toBe(id)
   })
 
   it('returns 404 for missing sync', async () => {
     const app = createApp({ dataDir })
-    const res = await app.request('/syncs/nonexistent')
+    const res = await app.request('/syncs/sync_nonexistent')
     expect(res.status).toBe(404)
   })
 
-  it('rejects sync without id', async () => {
+  it('rejects sync without required fields', async () => {
     const app = createApp({ dataDir })
-    const res = await app.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: { type: 'stripe' }, destination: { type: 'postgres' } }),
-    })
+    const res = await post(app, '/syncs', {})
     expect(res.status).toBe(400)
+  })
+
+  it('patches sync status', async () => {
+    const app = createApp({ dataDir })
+
+    const createRes = await post(app, '/syncs', validSyncBody)
+    const { id } = await createRes.json()
+
+    const patchRes = await patch(app, `/syncs/${id}`, { status: 'paused' })
+    expect(patchRes.status).toBe(200)
+    const patched = await patchRes.json()
+    expect(patched.status).toBe('paused')
+    expect(patched.source.type).toBe('stripe-api-core') // rest preserved
+  })
+
+  it('patches sync streams', async () => {
+    const app = createApp({ dataDir })
+
+    const createRes = await post(app, '/syncs', validSyncBody)
+    const { id } = await createRes.json()
+
+    const streams = [
+      { name: 'customers', sync_mode: 'incremental' as const },
+      { name: 'invoices', skip_backfill: true },
+    ]
+    const patchRes = await patch(app, `/syncs/${id}`, { streams })
+    expect(patchRes.status).toBe(200)
+    const patched = await patchRes.json()
+    expect(patched.streams).toHaveLength(2)
+    expect(patched.streams[0].name).toBe('customers')
+    expect(patched.streams[1].skip_backfill).toBe(true)
+  })
+
+  it('returns 404 on patch for missing sync', async () => {
+    const app = createApp({ dataDir })
+    const res = await patch(app, '/syncs/sync_nonexistent', { status: 'paused' })
+    expect(res.status).toBe(404)
   })
 
   it('deletes a sync', async () => {
     const app = createApp({ dataDir })
-    await app.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: 'sync_1',
-        source_credential_id: 'c',
-        destination_credential_id: 'd',
-        source: { type: 'stripe' },
-        destination: { type: 'postgres' },
-      }),
-    })
 
-    const delRes = await app.request('/syncs/sync_1', { method: 'DELETE' })
+    const createRes = await post(app, '/syncs', validSyncBody)
+    const { id } = await createRes.json()
+
+    const delRes = await del(app, `/syncs/${id}`)
     expect(delRes.status).toBe(200)
+    const delBody = await delRes.json()
+    expect(delBody.id).toBe(id)
+    expect(delBody.deleted).toBe(true)
 
-    const getRes = await app.request('/syncs/sync_1')
+    const getRes = await app.request(`/syncs/${id}`)
     expect(getRes.status).toBe(404)
   })
+
+  it('returns 404 on delete for missing sync', async () => {
+    const app = createApp({ dataDir })
+    const res = await del(app, '/syncs/sync_nonexistent')
+    expect(res.status).toBe(404)
+  })
 })
+
+// ── OpenAPI ──────────────────────────────────────────────────────
+
+describe('openapi', () => {
+  it('GET /openapi.json — returns valid spec', async () => {
+    const app = createApp({ dataDir })
+    const res = await app.request('/openapi.json')
+    expect(res.status).toBe(200)
+    const spec = await res.json()
+    expect(spec.openapi).toBe('3.0.0')
+    expect(spec.info.title).toBe('Sync Service API')
+    expect(spec.paths['/credentials']).toBeDefined()
+    expect(spec.paths['/syncs']).toBeDefined()
+    expect(spec.paths['/credentials/{id}']).toBeDefined()
+    expect(spec.paths['/syncs/{id}']).toBeDefined()
+  })
+
+  it('GET /docs — returns swagger UI html', async () => {
+    const app = createApp({ dataDir })
+    const res = await app.request('/docs')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html.toLowerCase()).toContain('swagger')
+  })
+})
+
+// ── POST /syncs/:id/run ───────────────────────────────────────────
 
 describe('POST /syncs/:id/run', () => {
   it('streams SSE state messages for a successful sync', async () => {
@@ -261,30 +418,39 @@ describe('POST /syncs/:id/run', () => {
 
     const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
 
-    // Seed credentials + sync config
-    await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 'src_cred', fields: { api_key: 'sk_test' } }),
-    })
-    await app.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 'dst_cred', fields: { url: 'pg://localhost/test' } }),
-    })
-    await app.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: 'test_sync',
-        source_credential_id: 'src_cred',
-        destination_credential_id: 'dst_cred',
-        source: { type: 'stripe' },
-        destination: { type: 'postgres' },
-      }),
-    })
+    // Seed credentials
+    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: srcCredId } = await srcRes.json()
 
-    const res = await app.request('/syncs/test_sync/run', { method: 'POST' })
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    // Seed sync config
+    const syncRes = await post(app, '/syncs', {
+      account_id: 'acct_test',
+      status: 'backfilling',
+      source: {
+        type: 'stripe-api-core',
+        livemode: true,
+        api_version: '2025-04-30.basil',
+        credential_id: srcCredId,
+      },
+      destination: {
+        type: 'postgres',
+        schema_name: 'stripe',
+        credential_id: dstCredId,
+      },
+    })
+    const { id: syncId } = await syncRes.json()
+
+    const res = await app.request(`/syncs/${syncId}/run`, { method: 'POST' })
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('text/event-stream')
 

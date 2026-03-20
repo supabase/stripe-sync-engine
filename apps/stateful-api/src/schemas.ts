@@ -131,7 +131,7 @@ export const DeleteResponseSchema = z.object({
 // ── Error ───────────────────────────────────────────────────────
 
 export const ErrorSchema = z.object({
-  error: z.string(),
+  error: z.unknown(),
 })
 
 // ── List Response ───────────────────────────────────────────────

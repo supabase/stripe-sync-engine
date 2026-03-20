@@ -18,6 +18,10 @@ export type Credential = {
  */
 export type SyncConfig = {
   id: string
+  /** Account identifier — optional, set by the API layer. */
+  account_id?: string
+  /** Sync status — optional, set by the API layer. */
+  status?: string
   source_credential_id: string
   destination_credential_id: string
   source: {
