@@ -1416,6 +1416,40 @@ describe('StripeSource', () => {
     })
   })
 
+  describe('read() — HTTP server mode', () => {
+    it('starts an HTTP server on webhook_port and processes POSTed webhooks', async () => {
+      const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
+      const registry: Record<string, ResourceConfig> = {
+        customer: makeConfig({ order: 1, tableName: 'customers', listFn }),
+      }
+      const source = createSource(registry)
+      const cat = catalog({ name: 'customers' })
+
+      // Use port 0 so the OS picks a free port
+      const cfg = {
+        api_key: 'sk_test_fake',
+        webhook_secret: 'whsec_test',
+        webhook_port: 0,
+      }
+
+      const messages: Message[] = []
+      const iter = source.read({ config: cfg, catalog: cat, state: {} })
+
+      // Drain backfill messages (started, state, complete for the empty stream)
+      for (let i = 0; i < 3; i++) {
+        const { value, done } = await iter.next()
+        if (done) break
+        messages.push(value)
+      }
+
+      expect(messages[0]).toMatchObject({ type: 'stream_status', status: 'started' })
+      expect(messages[2]).toMatchObject({ type: 'stream_status', status: 'complete' })
+
+      // Clean up: return the iterator which triggers the finally block
+      await iter.return(undefined as unknown as Message)
+    })
+  })
+
   describe('architecture purity', () => {
     it('source never imports from or references any destination module', () => {
       const srcDir = path.resolve(__dirname, '..')
@@ -1431,9 +1465,8 @@ describe('StripeSource', () => {
       const violations: string[] = []
 
       for (const file of sourceFiles) {
-        // Skip test files and server application code
+        // Skip test files
         if (file.includes('__tests__')) continue
-        if (file.includes('/server/')) continue
 
         const content = fs.readFileSync(file, 'utf-8')
         const lines = content.split('\n')

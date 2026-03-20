@@ -1,4 +1,5 @@
 import type {
+  ConfiguredCatalog,
   ConnectorSpecification,
   ErrorMessage,
   Message,
@@ -8,6 +9,7 @@ import type {
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
 import { toRecordMessage } from '@stripe/sync-protocol'
+import http from 'node:http'
 import Stripe from 'stripe'
 import { z } from 'zod'
 import type { ResourceConfig } from './types'
@@ -41,6 +43,11 @@ export const spec = z.object({
     .optional()
     .describe('Webhook signing secret (whsec_...) for signature verification'),
   websocket: z.boolean().optional().describe('Enable WebSocket streaming for live events'),
+  webhook_port: z
+    .number()
+    .int()
+    .optional()
+    .describe('Port for built-in webhook HTTP listener (e.g. 4242)'),
   revalidate_objects: z
     .array(z.string())
     .optional()
@@ -148,6 +155,126 @@ export function fromWebhookEvent(
   return { record, state }
 }
 
+// MARK: - processWebhookInput helper
+
+/**
+ * Process a single webhook input (raw body+signature or pre-parsed event)
+ * through the full pipeline: sig verify, entitlements, registry filter,
+ * delete detection, revalidation, subscription items.
+ */
+async function* processWebhookInput(
+  input: WebhookInput | Stripe.Event,
+  config: Config,
+  stripe: Stripe,
+  catalog: ConfiguredCatalog,
+  registry: Record<string, ResourceConfig>,
+  streamNames: Set<string>
+): AsyncGenerator<Message> {
+  // 1. Verify & parse: raw webhook (body+signature) or pre-parsed event
+  let event: Stripe.Event
+  if ('body' in input && 'signature' in input) {
+    if (!config.webhook_secret) {
+      throw new Error('webhook_secret is required for raw webhook signature verification')
+    }
+    event = await stripe.webhooks.constructEvent(input.body, input.signature, config.webhook_secret)
+  } else {
+    event = input
+  }
+
+  // 2. Extract object
+  const dataObject = event.data?.object as unknown as
+    | { id?: string; object?: string; deleted?: boolean; [key: string]: unknown }
+    | undefined
+  if (!dataObject?.object) return
+
+  // 3. Entitlements special case — the summary object type doesn't map to a
+  //    registry entry, so we must handle it before the registry lookup.
+  if (event.type === 'entitlements.active_entitlement_summary.updated') {
+    if (!streamNames.has('active_entitlements')) return
+    const summary = dataObject as {
+      customer: string
+      entitlements: {
+        data: Array<{
+          id: string
+          object: string
+          feature: string | { id: string }
+          livemode: boolean
+          lookup_key: string
+        }>
+      }
+    }
+    for (const e of summary.entitlements.data) {
+      yield toRecordMessage('active_entitlements', {
+        id: e.id,
+        object: e.object,
+        feature: typeof e.feature === 'string' ? e.feature : e.feature.id,
+        customer: summary.customer,
+        livemode: e.livemode,
+        lookup_key: e.lookup_key,
+      })
+    }
+    yield {
+      type: 'state',
+      stream: 'active_entitlements',
+      data: { eventId: event.id, eventCreated: event.created },
+    } satisfies StateMessage
+    return
+  }
+
+  // 4. Filter by registry and catalog
+  const objectType = normalizeStripeObjectName(dataObject.object)
+  const resourceConfig = registry[objectType]
+  if (!resourceConfig) return
+  if (!dataObject.id) return // skip preview/draft objects
+  if (!streamNames.has(resourceConfig.tableName)) return
+
+  // 5. Delete events — yield record with deleted: true
+  if (isDeleteEvent(event)) {
+    yield toRecordMessage(resourceConfig.tableName, { ...dataObject, deleted: true })
+    yield {
+      type: 'state',
+      stream: resourceConfig.tableName,
+      data: { eventId: event.id, eventCreated: event.created },
+    } satisfies StateMessage
+    return
+  }
+
+  // 6. Revalidation — re-fetch from Stripe API if configured
+  let data: Record<string, unknown> = dataObject
+  if (
+    config.revalidate_objects?.includes(objectType) &&
+    resourceConfig.isFinalState &&
+    !resourceConfig.isFinalState(dataObject)
+  ) {
+    data = (await resourceConfig.retrieveFn(dataObject.id)) as Record<string, unknown>
+  }
+
+  // 7. Yield main record
+  yield toRecordMessage(resourceConfig.tableName, data)
+
+  // 8. Yield subscription items if applicable
+  if (objectType === 'subscription' && (data as { items?: { data?: unknown[] } }).items?.data) {
+    for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
+      yield toRecordMessage('subscription_items', item)
+    }
+  }
+
+  yield {
+    type: 'state',
+    stream: resourceConfig.tableName,
+    data: { eventId: event.id, eventCreated: event.created },
+  } satisfies StateMessage
+}
+
+// MARK: - LiveInput queue
+
+/** An item in the live input queue. HTTP webhooks include resolve/reject for backpressure. */
+export type LiveInput = {
+  data: WebhookInput | Stripe.Event
+  resolve?: () => void
+  reject?: (err: Error) => void
+}
+
 // MARK: - Source
 
 export function createSource(
@@ -157,24 +284,24 @@ export function createSource(
     return _registryForTesting ?? buildResourceRegistry(makeClient(config))
   }
 
-  // WebSocket closure state
+  // Live mode closure state
   let wsClient: StripeWebSocketClient | null = null
-  let eventWaiter: ((event: Stripe.Event) => void) | null = null
-  const eventQueue: Stripe.Event[] = []
+  let inputWaiter: ((input: LiveInput) => void) | null = null
+  const inputQueue: LiveInput[] = []
 
-  function pushEvent(event: Stripe.Event) {
-    if (eventWaiter) {
-      const waiter = eventWaiter
-      eventWaiter = null
-      waiter(event)
+  function pushInput(input: LiveInput) {
+    if (inputWaiter) {
+      const waiter = inputWaiter
+      inputWaiter = null
+      waiter(input)
     } else {
-      eventQueue.push(event)
+      inputQueue.push(input)
     }
   }
 
-  function waitForEvent(): Promise<Stripe.Event> {
-    return new Promise<Stripe.Event>((resolve) => {
-      eventWaiter = resolve
+  function waitForInput(): Promise<LiveInput> {
+    return new Promise<LiveInput>((resolve) => {
+      inputWaiter = resolve
     })
   }
 
@@ -234,7 +361,7 @@ export function createSource(
           stripeApiKey: config.api_key,
           onEvent: (wsEvent: StripeWebhookEvent) => {
             const event = JSON.parse(wsEvent.event_payload) as Stripe.Event
-            pushEvent(event)
+            pushInput({ data: event })
           },
         })
       }
@@ -259,122 +386,20 @@ export function createSource(
 
     async *read({ config, catalog, state, input }) {
       const registry = getRegistry(config)
+      const stripe = makeClient(config)
+      const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
 
-      // Live mode: process a single webhook event (full pipeline)
+      // Single-event mode: process one webhook input and return
       if (input) {
-        const stripe = makeClient(config)
-        const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
-
-        // 1. Verify & parse: raw webhook (body+signature) or pre-parsed event
-        let event: Stripe.Event
-        if ('body' in input && 'signature' in input) {
-          if (!config.webhook_secret) {
-            throw new Error('webhook_secret is required for raw webhook signature verification')
-          }
-          event = await stripe.webhooks.constructEvent(
-            input.body,
-            input.signature,
-            config.webhook_secret
-          )
-        } else {
-          event = input
-        }
-
-        // 2. Extract object
-        const dataObject = event.data?.object as unknown as
-          | { id?: string; object?: string; deleted?: boolean; [key: string]: unknown }
-          | undefined
-        if (!dataObject?.object) return
-
-        // 3. Entitlements special case — the summary object type doesn't map to a
-        //    registry entry, so we must handle it before the registry lookup.
-        if (event.type === 'entitlements.active_entitlement_summary.updated') {
-          if (!streamNames.has('active_entitlements')) return
-          const summary = dataObject as {
-            customer: string
-            entitlements: {
-              data: Array<{
-                id: string
-                object: string
-                feature: string | { id: string }
-                livemode: boolean
-                lookup_key: string
-              }>
-            }
-          }
-          for (const e of summary.entitlements.data) {
-            yield toRecordMessage('active_entitlements', {
-              id: e.id,
-              object: e.object,
-              feature: typeof e.feature === 'string' ? e.feature : e.feature.id,
-              customer: summary.customer,
-              livemode: e.livemode,
-              lookup_key: e.lookup_key,
-            })
-          }
-          yield {
-            type: 'state',
-            stream: 'active_entitlements',
-            data: { eventId: event.id, eventCreated: event.created },
-          } satisfies StateMessage
-          return
-        }
-
-        // 4. Filter by registry and catalog
-        const objectType = normalizeStripeObjectName(dataObject.object)
-        const resourceConfig = registry[objectType]
-        if (!resourceConfig) return
-        if (!dataObject.id) return // skip preview/draft objects
-        if (!streamNames.has(resourceConfig.tableName)) return
-
-        // 5. Delete events — yield record with deleted: true
-        if (isDeleteEvent(event)) {
-          yield toRecordMessage(resourceConfig.tableName, { ...dataObject, deleted: true })
-          yield {
-            type: 'state',
-            stream: resourceConfig.tableName,
-            data: { eventId: event.id, eventCreated: event.created },
-          } satisfies StateMessage
-          return
-        }
-
-        // 6. Revalidation — re-fetch from Stripe API if configured
-        let data: Record<string, unknown> = dataObject
-        if (
-          config.revalidate_objects?.includes(objectType) &&
-          resourceConfig.isFinalState &&
-          !resourceConfig.isFinalState(dataObject)
-        ) {
-          data = (await resourceConfig.retrieveFn(dataObject.id)) as Record<string, unknown>
-        }
-
-        // 7. Yield main record
-        yield toRecordMessage(resourceConfig.tableName, data)
-
-        // 8. Yield subscription items if applicable
-        if (
-          objectType === 'subscription' &&
-          (data as { items?: { data?: unknown[] } }).items?.data
-        ) {
-          for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
-            yield toRecordMessage('subscription_items', item)
-          }
-        }
-
-        yield {
-          type: 'state',
-          stream: resourceConfig.tableName,
-          data: { eventId: event.id, eventCreated: event.created },
-        } satisfies StateMessage
+        yield* processWebhookInput(input, config, stripe, catalog, registry, streamNames)
         return
       }
 
-      const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
-
-      // Helper: yield all queued WebSocket events matching the catalog
+      // Helper: drain queued events using the simple fromWebhookEvent path
       function* drainQueue(): Generator<Message> {
-        while (eventQueue.length > 0) {
-          const event = eventQueue.shift()!
+        while (inputQueue.length > 0) {
+          const queued = inputQueue.shift()!
+          const event = queued.data as Stripe.Event
           const result = fromWebhookEvent(event, registry)
           if (!result) continue
           if (!streamNames.has(result.record.stream)) continue
@@ -410,7 +435,7 @@ export function createSource(
         try {
           let hasMore = true
           while (hasMore) {
-            // Drain any queued WebSocket events before each page
+            // Drain any queued events before each page
             if (wsClient) yield* drainQueue()
 
             const params: { limit: number; starting_after?: string } = { limit: 100 }
@@ -457,19 +482,63 @@ export function createSource(
         }
       }
 
-      // After backfill: stream WebSocket events indefinitely
-      if (wsClient) {
-        // Drain anything that arrived during the last page
-        yield* drainQueue()
+      // Start HTTP server for live mode if configured
+      let httpServer: http.Server | null = null
+      if (config.webhook_port) {
+        httpServer = http.createServer((req, res) => {
+          if (req.method !== 'POST') {
+            res.writeHead(405).end()
+            return
+          }
+          const chunks: Buffer[] = []
+          req.on('data', (chunk: Buffer) => chunks.push(chunk))
+          req.on('end', () => {
+            const body = Buffer.concat(chunks)
+            const signature = req.headers['stripe-signature'] as string
+            if (!signature) {
+              res.writeHead(400).end('Missing stripe-signature')
+              return
+            }
+            const { promise, resolve, reject } = Promise.withResolvers<void>()
+            pushInput({ data: { body, signature }, resolve, reject })
+            promise
+              .then(() => res.writeHead(200).end('{"received":true}'))
+              .catch((err) =>
+                res.writeHead(500).end(err instanceof Error ? err.message : String(err))
+              )
+          })
+        })
+        httpServer.listen(config.webhook_port)
+      }
 
-        // Block on new events (infinite loop until wsClient is closed)
-        while (wsClient) {
-          const event = await waitForEvent()
-          const result = fromWebhookEvent(event, registry)
-          if (!result) continue
-          if (!streamNames.has(result.record.stream)) continue
-          yield result.record
-          yield result.state
+      try {
+        // After backfill: stream live events from WebSocket and/or HTTP
+        if (wsClient || httpServer) {
+          // Drain anything that arrived during backfill
+          yield* drainQueue()
+
+          // Block on new events (infinite loop until all live sources close)
+          while (wsClient || httpServer) {
+            const queued = await waitForInput()
+            try {
+              yield* processWebhookInput(
+                queued.data,
+                config,
+                stripe,
+                catalog,
+                registry,
+                streamNames
+              )
+              queued.resolve?.()
+            } catch (err) {
+              queued.reject?.(err instanceof Error ? err : new Error(String(err)))
+            }
+          }
+        }
+      } finally {
+        if (httpServer) {
+          httpServer.close()
+          httpServer = null
         }
       }
     },

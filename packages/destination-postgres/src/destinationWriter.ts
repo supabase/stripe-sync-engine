@@ -1,6 +1,5 @@
 /**
- * Interface capturing the write operations that StripeSyncWebhook uses on the destination.
- * This is the destination-side counterpart to WorkerTaskManager (source-side).
+ * Interface capturing the write operations used by the destination.
  */
 export interface DestinationWriter {
   // Core data writes

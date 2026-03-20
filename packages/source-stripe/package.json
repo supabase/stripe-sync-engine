@@ -13,8 +13,6 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
-    "build:server": "tsc -p tsconfig.server.json",
-    "start": "NODE_ENV=production node dist/server/server.js",
     "test": "vitest"
   },
   "files": [
@@ -22,24 +20,12 @@
   ],
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
-    "pg": "^8.16.3",
     "stripe": "^17.7.0",
     "ws": "^8.18.0",
-    "yesql": "^7.0.0",
     "zod": "^4.3.6"
-  },
-  "optionalDependencies": {
-    "@fastify/autoload": "^6.3.1",
-    "@fastify/swagger": "^9.5.1",
-    "@fastify/swagger-ui": "^5.2.3",
-    "@stripe/destination-postgres": "workspace:*",
-    "dotenv": "^17.2.2",
-    "fastify": "^5.6.0",
-    "pino": "^9.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.0",
-    "@types/pg": "^8.15.2",
     "@types/ws": "^8.18.0",
     "vitest": "^3.2.4"
   }

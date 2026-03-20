@@ -48,11 +48,6 @@ export type {
   RevalidateEntityName,
 } from './resourceRegistry'
 
-// Webhook
-export { StripeSyncWebhook } from './stripeSyncWebhook'
-export type { StripeSyncWebhookDeps, WebhookConfig } from './stripeSyncWebhook'
-export type { WebhookWriter } from './webhookWriter'
-
 // Worker
 export { StripeSyncWorker } from './stripeSyncWorker'
 export type { WorkerTaskManager, SyncTask, RunKey, WorkerConfig } from './stripeSyncWorker'
