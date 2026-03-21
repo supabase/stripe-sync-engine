@@ -10,15 +10,15 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
-import { createSource, fromWebhookEvent } from '../index'
-import type { ResourceConfig } from '../types'
-import type { StripeWebhookEvent, StripeWebSocketClient } from '../src-websocket'
+import { createSource, fromWebhookEvent } from './index'
+import type { ResourceConfig } from './types'
+import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket'
 
 // Mock the WebSocket module
 const mockClose = vi.fn()
 let capturedOnEvent: ((event: StripeWebhookEvent) => void) | null = null
 
-vi.mock('../src-websocket', () => ({
+vi.mock('./src-websocket', () => ({
   createStripeWebSocketClient: vi.fn(
     async (opts: { onEvent: (event: StripeWebhookEvent) => void }) => {
       capturedOnEvent = opts.onEvent
@@ -1143,7 +1143,7 @@ describe('StripeSource', () => {
     })
 
     it('read() creates WebSocket client when websocket: true', async () => {
-      const { createStripeWebSocketClient } = await import('../src-websocket')
+      const { createStripeWebSocketClient } = await import('./src-websocket')
       const source = createSource(registry)
 
       const iter = source
@@ -1374,7 +1374,7 @@ describe('StripeSource', () => {
     })
 
     it('read() with websocket: true creates WebSocket client (combined config)', async () => {
-      const { createStripeWebSocketClient } = await import('../src-websocket')
+      const { createStripeWebSocketClient } = await import('./src-websocket')
       const source = createSource(registry)
 
       vi.mocked(createStripeWebSocketClient).mockClear()

@@ -1,10 +1,10 @@
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { describe, expect, it, vi } from 'vitest'
-import type { Source, Destination } from '../protocol'
-import { resolveSpecifier, loadConnector, createConnectorResolver } from '../loader'
+import type { Source, Destination } from './protocol'
+import { resolveSpecifier, loadConnector, createConnectorResolver } from './loader'
 
-const packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+const packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 // ---------------------------------------------------------------------------
 // resolveSpecifier

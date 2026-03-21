@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SpecParser } from '../specParser'
+import { SpecParser } from './specParser'
 import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
 
 describe('SpecParser', () => {

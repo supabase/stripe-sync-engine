@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parsedTableToJsonSchema } from '../jsonSchemaConverter'
-import type { ParsedResourceTable } from '../types'
+import { parsedTableToJsonSchema } from './jsonSchemaConverter'
+import type { ParsedResourceTable } from './types'
 
 describe('parsedTableToJsonSchema', () => {
   it('converts a parsed table to JSON Schema with correct type mappings', () => {

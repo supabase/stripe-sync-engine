@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { PostgresDestination } from '../postgresDestination'
-import { PostgresDestinationWriter } from '../writer'
-import type { PostgresConfig } from '../types'
+import { PostgresDestination } from './postgresDestination'
+import { PostgresDestinationWriter } from './writer'
+import type { PostgresConfig } from './types'
 import type {
   ConfiguredCatalog,
   Destination,
@@ -315,7 +315,7 @@ describe('PostgresDestination', () => {
       // Read the source file and verify no imports from source-stripe
       const fs = await import('fs')
       const path = await import('path')
-      const srcDir = path.resolve(__dirname, '..')
+      const srcDir = __dirname
       const srcFiles = fs.readdirSync(srcDir).filter((f: string) => f.endsWith('.ts'))
 
       for (const file of srcFiles) {

@@ -12,7 +12,7 @@ import type {
   Source,
   StateMessage,
 } from '@stripe/sync-engine-stateless-api'
-import { createApp } from '../app'
+import { createApp } from './app'
 
 // ---------------------------------------------------------------------------
 // Helpers

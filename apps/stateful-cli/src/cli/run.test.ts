@@ -9,7 +9,7 @@ import type {
   Source,
   StateMessage,
 } from '@stripe/sync-engine-stateless-cli'
-import { runSync } from '../cli/run'
+import { runSync } from './run'
 
 // ---------------------------------------------------------------------------
 // Helpers

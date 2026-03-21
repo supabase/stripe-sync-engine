@@ -4,14 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { testSource, createConnectorResolver } from '@stripe/sync-protocol'
 import type { StateMessage } from '@stripe/sync-protocol'
 import destPostgres from '@stripe/destination-postgres2'
-import { SyncService, resolve } from '../service'
+import { SyncService, resolve } from './service'
 import {
   memoryCredentialStore,
   memoryConfigStore,
   memoryStateStore,
   memoryLogSink,
-} from '../stores/memory'
-import type { Credential, SyncConfig } from '../stores'
+} from './stores/memory'
+import type { Credential, SyncConfig } from './stores'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle

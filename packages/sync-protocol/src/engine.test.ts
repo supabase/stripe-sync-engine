@@ -16,11 +16,11 @@ import {
   ConnectorSpecification,
   CheckResult,
   SyncEngineParams,
-} from '../protocol'
-import type { Source, Destination, DestinationInput as DestInput } from '../protocol'
-import { createEngine, buildCatalog } from '../engine'
-import { testSource } from '../source-test'
-import { testDestination } from '../destination-test'
+} from './protocol'
+import type { Source, Destination, DestinationInput as DestInput } from './protocol'
+import { createEngine, buildCatalog } from './engine'
+import { testSource } from './source-test'
+import { testDestination } from './destination-test'
 
 // ---------------------------------------------------------------------------
 // Helpers

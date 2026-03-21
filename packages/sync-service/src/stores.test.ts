@@ -2,15 +2,15 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from '../stores/file'
-import { envCredentialStore, flagConfigStore } from '../stores/env'
+import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file'
+import { envCredentialStore, flagConfigStore } from './stores/env'
 import {
   memoryCredentialStore,
   memoryConfigStore,
   memoryStateStore,
   memoryLogSink,
-} from '../stores/memory'
-import type { Credential, SyncConfig } from '../stores'
+} from './stores/memory'
+import type { Credential, SyncConfig } from './stores'
 
 // ---------------------------------------------------------------------------
 // Helpers

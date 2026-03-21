@@ -11,7 +11,7 @@ import type {
   Source,
   StateMessage,
 } from '@stripe/sync-protocol'
-import { createApp } from '../app'
+import { createApp } from './app'
 
 /** Build a ConnectorResolver from mock source + destination. */
 function mockResolver(source: Source, destination: Destination): ConnectorResolver {
