@@ -1,8 +1,7 @@
 export * from './protocol'
-export { toRecordMessage, fromRecordMessage } from './adapters'
-export type { Transform } from './compose'
-export { compose } from './compose'
 export {
+  toRecordMessage,
+  fromRecordMessage,
   isRecordMessage,
   isStateMessage,
   isCatalogMessage,
@@ -13,12 +12,12 @@ export {
   filterDataMessages,
   forward,
   collect,
-} from './filters'
-export type { RouterCallbacks } from './filters'
+} from './helpers'
+export type { RouterCallbacks } from './helpers'
 export { createEngine } from './engine'
 export type { Engine } from './engine'
 export { buildCatalog } from './engine'
-export { validateSource, validateDestination } from './validate'
+export { validateSource, validateDestination } from './loader'
 export { resolveSpecifier, loadConnector, createConnectorResolver } from './loader'
 export type { ConnectorResolver, ConnectorResolverOptions } from './loader'
 export { testSource, testSourceSpec } from './source-test'

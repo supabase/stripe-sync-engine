@@ -10,8 +10,8 @@ import {
   StateMessage,
 } from './protocol'
 import type { Destination, Source } from './protocol'
-import type { RouterCallbacks } from './filters'
-import { forward, collect } from './filters'
+import type { RouterCallbacks } from './helpers'
+import { forward, collect } from './helpers'
 
 // MARK: - Engine interface
 

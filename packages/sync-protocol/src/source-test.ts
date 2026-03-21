@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Source } from './protocol'
-import { toRecordMessage } from './adapters'
+import { toRecordMessage } from './helpers'
 
 export const spec = z.object({
   /** Stream definitions: name -> { records, primary_key? }. When provided, yields these. */
