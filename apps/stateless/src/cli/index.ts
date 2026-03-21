@@ -3,7 +3,7 @@
 import { Command } from 'commander'
 import { VERSION } from '../version'
 import {
-  parseParams,
+  resolveParams,
   setupCommand,
   teardownCommand,
   checkCommand,
@@ -19,54 +19,59 @@ program
   .description('Stripe Sync Engine — stream data from sources to destinations')
   .version(VERSION)
 
-program
-  .command('setup')
-  .description('Provision external resources (webhook endpoints, tables, etc.)')
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await setupCommand(parseParams(opts.params))
-  })
+function addSyncOptions(cmd: Command): Command {
+  return cmd
+    .option('--source <type>', 'Source connector (default: "stripe")')
+    .option('--destination <type>', 'Destination connector')
+    .option('--source-config <value>', 'Source config — inline JSON or file path')
+    .option('--destination-config <value>', 'Destination config — inline JSON or file path')
+    .option('--streams <names>', 'Comma-separated stream names')
+    .option('--config <value>', 'Full config — inline JSON or file path')
+    .option('--params <value>', 'Full SyncParams — inline JSON or file path (fallback)')
+}
 
-program
-  .command('teardown')
-  .description('Clean up external resources')
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await teardownCommand(parseParams(opts.params))
-  })
+addSyncOptions(
+  program
+    .command('setup')
+    .description('Provision external resources (webhook endpoints, tables, etc.)')
+).action(async (opts) => {
+  await setupCommand(resolveParams(opts))
+})
 
-program
-  .command('check')
-  .description('Validate source and destination connectivity')
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await checkCommand(parseParams(opts.params))
-  })
+addSyncOptions(program.command('teardown').description('Clean up external resources')).action(
+  async (opts) => {
+    await teardownCommand(resolveParams(opts))
+  }
+)
 
-program
-  .command('read')
-  .description('Read records from the source (stdout: NDJSON Messages)')
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await readCommand(parseParams(opts.params))
-  })
+addSyncOptions(
+  program.command('check').description('Validate source and destination connectivity')
+).action(async (opts) => {
+  await checkCommand(resolveParams(opts))
+})
 
-program
-  .command('write')
-  .description(
-    'Write records to the destination (stdin: NDJSON Messages, stdout: NDJSON StateMessages)'
-  )
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await writeCommand(parseParams(opts.params))
-  })
+addSyncOptions(
+  program.command('read').description('Read records from the source (stdout: NDJSON Messages)')
+).action(async (opts) => {
+  await readCommand(resolveParams(opts))
+})
 
-program
-  .command('run')
-  .description('Full pipeline: setup → read → write (stdout: NDJSON StateMessages)')
-  .requiredOption('--params <json>', 'SyncParams as JSON')
-  .action(async (opts) => {
-    await runCommand(parseParams(opts.params))
-  })
+addSyncOptions(
+  program
+    .command('write')
+    .description(
+      'Write records to the destination (stdin: NDJSON Messages, stdout: NDJSON StateMessages)'
+    )
+).action(async (opts) => {
+  await writeCommand(resolveParams(opts))
+})
+
+addSyncOptions(
+  program
+    .command('run')
+    .description('Full pipeline: setup → read → write (stdout: NDJSON StateMessages)')
+).action(async (opts) => {
+  await runCommand(resolveParams(opts))
+})
 
 program.parse()

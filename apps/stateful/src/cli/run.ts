@@ -15,6 +15,7 @@ import {
   fileStateStore,
   fileLogSink,
 } from '@stripe/stateful-sync'
+import { envPrefix } from '@stripe/ts-cli'
 
 const DEFAULT_DATA_DIR = join(homedir(), '.stripe-sync')
 
@@ -38,6 +39,8 @@ function makeService(opts: ServiceOpts) {
     states: fileStateStore(join(dataDir, 'state.json')),
     logs: fileLogSink(join(dataDir, 'logs.ndjson')),
     connectors: opts.connectors ?? createConnectorResolver({}),
+    sourceOverrides: envPrefix('SOURCE'),
+    destinationOverrides: envPrefix('DESTINATION'),
   })
 }
 

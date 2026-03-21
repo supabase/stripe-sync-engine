@@ -32,6 +32,7 @@
   "dependencies": {
     "@hono/node-server": "^1",
     "@stripe/stateless-sync": "workspace:*",
+    "@stripe/ts-cli": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
     "hono": "^4"

@@ -23,6 +23,8 @@ export function resolve(opts: {
   sourceCred: Credential
   destCred: Credential
   state?: Record<string, unknown>
+  sourceOverrides?: Record<string, unknown>
+  destinationOverrides?: Record<string, unknown>
 }): SyncParams {
   // Strip connector-selector fields — `type` and `credential_id` are not config data.
   const sourceType = opts.config.source.type
@@ -44,8 +46,8 @@ export function resolve(opts: {
   return {
     source_name: sourceType,
     destination_name: destType,
-    source_config: { ...sourceRest, ...srcCredFields },
-    destination_config: { ...destRest, ...dstCredFields },
+    source_config: { ...sourceRest, ...srcCredFields, ...opts.sourceOverrides },
+    destination_config: { ...destRest, ...dstCredFields, ...opts.destinationOverrides },
     streams: opts.config.streams,
     state: opts.state,
   }
@@ -61,6 +63,10 @@ export type StatefulSyncOptions = {
   connectors: ConnectorResolver
   /** Called on auth_error to refresh a credential. If not provided, auth_error is not retried. */
   refreshCredential?: (credentialId: string) => Promise<void>
+  /** Extra config fields merged on top of source credential (env vars, CLI flags). */
+  sourceOverrides?: Record<string, unknown>
+  /** Extra config fields merged on top of destination credential (env vars, CLI flags). */
+  destinationOverrides?: Record<string, unknown>
 }
 
 const MAX_AUTH_RETRIES = 2
@@ -72,6 +78,8 @@ export class StatefulSync {
   private logs: LogSink
   private connectors: ConnectorResolver
   private refreshCredential?: (credentialId: string) => Promise<void>
+  private sourceOverrides?: Record<string, unknown>
+  private destinationOverrides?: Record<string, unknown>
 
   constructor(opts: StatefulSyncOptions) {
     this.credentials = opts.credentials
@@ -80,6 +88,8 @@ export class StatefulSync {
     this.logs = opts.logs
     this.connectors = opts.connectors
     this.refreshCredential = opts.refreshCredential
+    this.sourceOverrides = opts.sourceOverrides
+    this.destinationOverrides = opts.destinationOverrides
   }
 
   /** Resolve config + credentials + state into an engine instance. */
@@ -90,7 +100,14 @@ export class StatefulSync {
     const sourceCred = await this.credentials.get(config.source.credential_id)
     const destCred = await this.credentials.get(config.destination.credential_id)
     const state = await this.states.get(syncId)
-    const params = resolve({ config, sourceCred, destCred, state })
+    const params = resolve({
+      config,
+      sourceCred,
+      destCred,
+      state,
+      sourceOverrides: this.sourceOverrides,
+      destinationOverrides: this.destinationOverrides,
+    })
     const engine = createEngine(params, { source, destination })
     return { engine, config }
   }
@@ -145,7 +162,14 @@ export class StatefulSync {
       const state = await this.states.get(syncId)
 
       // Resolve to SyncParams
-      const params = resolve({ config, sourceCred, destCred, state })
+      const params = resolve({
+        config,
+        sourceCred,
+        destCred,
+        state,
+        sourceOverrides: this.sourceOverrides,
+        destinationOverrides: this.destinationOverrides,
+      })
 
       // Create engine
       const engine = createEngine(params, { source, destination })

@@ -72,6 +72,9 @@ importers:
       '@stripe/sync-engine-stateless':
         specifier: workspace:*
         version: link:../stateless
+      '@stripe/ts-cli':
+        specifier: workspace:*
+        version: link:../../packages/ts-cli
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -109,6 +112,9 @@ importers:
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
+      '@stripe/ts-cli':
+        specifier: workspace:*
+        version: link:../../packages/ts-cli
       commander:
         specifier: ^12.1.0
         version: 12.1.0

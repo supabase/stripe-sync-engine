@@ -76,6 +76,21 @@ export function mergeConfig(
   return result
 }
 
+/**
+ * Parse a value as inline JSON or read it as a file path.
+ * If the string starts with `{` or `[`, parse as JSON.
+ * Otherwise, treat as a file path and read + parse.
+ * Returns {} if value is undefined.
+ */
+export function parseJsonOrFile(value: string | undefined): Record<string, unknown> {
+  if (value === undefined) return {}
+  const trimmed = value.trim()
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return JSON.parse(trimmed)
+  }
+  return configFromFile(trimmed)
+}
+
 /** Try to JSON-parse a string value. Returns the original string if parsing fails. */
 function tryJsonParse(value: string): unknown {
   try {

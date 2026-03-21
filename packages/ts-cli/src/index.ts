@@ -1,1 +1,1 @@
-export { envPrefix, configFromFile, mergeConfig } from './config'
+export { envPrefix, configFromFile, mergeConfig, parseJsonOrFile } from './config'
