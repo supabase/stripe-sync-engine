@@ -28,52 +28,49 @@ tests/
 ## Dependency graph
 
 ```
-                   ┌────────────────┐
-                   │ sync-protocol  │   ← message types, Source/Destination
-                   │    (core)      │      interfaces, engine, connector loader
-                   └───────┬────────┘
-                           │
-         ┌─────────────────┼─────────────────────┐
-         │                 │                      │
-   ┌─────┴──────┐  ┌──────┴───────┐   ┌──────────┴──────────┐
-   │  sources   │  │ destinations │   │  infrastructure      │
-   ├────────────┤  ├──────────────┤   ├─────────────────────┤
-   │ stripe     │  │ postgres     │   │ store-postgres       │
-   │            │  │ sheets       │   │ sync-service         │
-   └────────────┘  └──────────────┘   │ util-postgres        │
-         │               │            └──────────┬──────────┘
-         │    NO ARROWS BETWEEN                  │
-         │    SOURCES ↔ DESTINATIONS             │
-         │                                       │
-         └─────────────────┬─────────────────────┘
-                           │
-              ┌────────────┴────────────┐
-              │                         │
-     ┌────────┴─────────┐    ┌─────────┴──────────┐
-     │  stateless apps  │    │   stateful apps     │
-     ├──────────────────┤    ├────────────────────┤
-     │ stateless-cli    │    │ stateful-cli        │
-     │ stateless-api    │    │ stateful-api        │
-     └──────────────────┘    └────────────────────┘
-              │                        │
-              │    stateful apps       │
-              │    depend on their     │
-              └── stateless counterpart┘
-                   + sync-service
+  ┌────────────────┐       ┌──────────────┐  ┌──────────────┐
+  │ sync-protocol  │       │store-postgres │  │ util-postgres │
+  │    (core)      │       │  (pg only)    │  │  (pg only)    │
+  └───────┬────────┘       └──────────────┘  └──────────────┘
+          │                  standalone — no sync-protocol dep
+    ┌─────┼───────────┐      injected by apps at composition time
+    │     │           │
+ sources  │    destinations
+ (stripe) │    (pg, sheets)
+    │     │           │
+    │  sync-service   │       ← store interfaces + coordinator
+    │  (protocol only)│         (no pg dep — stores are injected)
+    │     │           │
+    │     │     NO ARROWS BETWEEN
+    │     │     SOURCES ↔ DESTINATIONS
+    │     │
+    │  stateless-cli  ─→ sync-protocol
+    │  stateless-api  ─→ sync-protocol
+    │     │
+    │  stateful-cli   ─→ stateless-cli + sync-service
+    │  stateful-api   ─→ stateless-api + sync-service
+    │     │
+    └─ supabase       ─→ source-stripe + destination-postgres
+                          + store-postgres + sync-service
 ```
 
 ### Canonical dependency layering
 
 | Layer          | Packages                                                             | Depends on                                                                                 |
 | -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Core           | `sync-protocol`                                                      | nothing                                                                                    |
+| Core           | `sync-protocol`                                                      | nothing (only `zod`)                                                                       |
 | Connectors     | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `sync-protocol` only                                                                       |
-| Infrastructure | `store-postgres`, `sync-service`, `util-postgres`                    | `sync-protocol` (sync-service)                                                             |
+| Pg utilities   | `store-postgres`, `util-postgres`                                    | `pg` only (no sync-protocol dep)                                                           |
+| Service        | `sync-service`                                                       | `sync-protocol` only (no `pg` dep)                                                         |
 | Stateless apps | `stateless-cli`, `stateless-api`                                     | `sync-protocol` only                                                                       |
 | Stateful apps  | `stateful-cli`, `stateful-api`                                       | stateless counterpart + `sync-service`                                                     |
 | Integration    | `apps/supabase`                                                      | `sync-protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `sync-service` |
 
-**Key rule:** Stateless apps do NOT depend on `sync-service`. Stateful apps should NOT import directly from `sync-protocol`; types flow through the stateless layer.
+**Key rules:**
+
+- Stateless apps do NOT depend on `sync-service`.
+- Stateful apps should NOT import directly from `sync-protocol`; types flow through the stateless layer.
+- `store-postgres` and `util-postgres` are standalone `pg`-only packages — they have no sync-engine workspace dependencies. Apps inject them at composition time.
 
 ## Packages
 
