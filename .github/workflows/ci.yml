@@ -60,17 +60,11 @@ jobs:
             psql -h localhost -p 55432 -U postgres -d postgres -c 'create schema if not exists "stripe";'
 
       - name: Tests
-        run: npm run test
+        run: pnpm test
         env:
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           STRIPE_MOCK_URL: 'http://localhost:12111'
-
-      - name: Warn about skipped test suites
-        if: always()
-        run: |
-          echo "::warning::Google Sheets integration tests skipped — GOOGLE_CLIENT_ID / GOOGLE_REFRESH_TOKEN not configured"
-          echo "::warning::Supabase e2e tests skipped — SUPABASE_PROJECT_ID / SUPABASE_PERSONAL_ACCESS_TOKEN not configured"
 
   e2e-test:
     name: E2E & integration tests
