@@ -114,7 +114,7 @@ class SyncWorkflow < Temporalio::Workflow::Definition
       )
 
       records = result['records']
-      break if records.empty?
+      break if records.nil? || records.empty?
 
       # Write the page to the destination
       write_result = Temporalio::Workflow.execute_activity(
