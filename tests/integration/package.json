@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test:integration": "vitest run"
   },
   "devDependencies": {
     "@stripe/protocol": "workspace:*",
@@ -11,6 +11,7 @@
     "@stripe/stateful-sync": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
+    "@stripe/store-postgres": "workspace:*",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"
