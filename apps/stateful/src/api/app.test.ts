@@ -750,6 +750,82 @@ describe('POST /syncs/:id/read', () => {
   })
 })
 
+// ── POST /webhooks/:credential_id ───────────────────────────────
+
+/** Yield to the macro-task queue so all pending async generator steps can settle. */
+function nextTick() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
+
+describe('POST /webhooks/:credential_id', () => {
+  it('returns 200 ok for any credential_id regardless of running syncs', async () => {
+    const app = createApp({ dataDir })
+    const res = await app.request('/webhooks/cred_any', {
+      method: 'POST',
+      headers: { 'stripe-signature': 't=123,v1=abc' },
+      body: 'raw body',
+    })
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('ok')
+  })
+
+  it('delivers { body, signature } to a running sync registered under that credential', async () => {
+    let capturedInput: unknown
+
+    // A source that captures the first $stdin item then terminates.
+    // Yields one state message so run() produces output and closes the stream.
+    const capturingSource: Source = {
+      spec: () => ({ config: {} }),
+      check: async () => ({ status: 'succeeded' as const }),
+      discover: async () => ({
+        type: 'catalog' as const,
+        streams: [{ name: 'customers', primary_key: [['id']] }],
+      }),
+      async *read(_params, $stdin) {
+        if (!$stdin) return
+        for await (const input of $stdin) {
+          capturedInput = input
+          yield { type: 'state' as const, stream: 'customers', data: {} }
+          return // terminate after one event
+        }
+      },
+      setup: async () => {},
+      teardown: async () => {},
+    }
+
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: connectors(capturingSource, destination) })
+
+    const { srcCredId, body: syncBody } = await seedCredentialsAndSyncBody(app)
+    const syncRes = await post(app, '/syncs', syncBody)
+    const { id: syncId } = await syncRes.json()
+
+    // Start the run — ReadableStream.start fires immediately, source blocks on $stdin.next().
+    const runRes = await app.request(`/syncs/${syncId}/run`, { method: 'POST' })
+
+    // One macro-tick lets all in-memory async steps in the generator settle
+    // (configs.get, resolveSource, credentials.get, engine.setup, etc.) so that
+    // the internal queue is registered and source.read() is waiting on $stdin.
+    await nextTick()
+
+    // POST the webhook — the route extracts stripe-signature and calls push_event.
+    const webhookBody = '{"id":"evt_test_123","type":"customer.created"}'
+    const webhookSig = 't=1234567890,v1=abc123'
+    await app.request(`/webhooks/${srcCredId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'stripe-signature': webhookSig },
+      body: webhookBody,
+    })
+
+    // Read the run response — completes once the source terminates after one event.
+    const lines = await readNdjson(runRes)
+    expect(lines.some((l: any) => l.type === 'state')).toBe(true)
+
+    // The source received exactly { body, signature }, not a full headers map.
+    expect(capturedInput).toEqual({ body: webhookBody, signature: webhookSig })
+  })
+})
+
 // ── POST /syncs/:id/write ────────────────────────────────────────
 
 describe('POST /syncs/:id/write', () => {
