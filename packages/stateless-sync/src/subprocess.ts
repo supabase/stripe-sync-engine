@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import type {
   Source,
   Destination,
@@ -111,7 +111,6 @@ export function spawnSource(bin: string): Source {
       if (!cachedSpec) {
         // spec() is synchronous in the interface but we need to spawn.
         // The CLI outputs JSON synchronously, so we use spawnSync.
-        const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
         const result = spawnSync(bin, ['spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
         if (result.status !== 0) {
           throw new Error(`${bin} spec exited with code ${result.status}: ${result.stderr}`)
@@ -200,7 +199,6 @@ export function spawnDestination(bin: string): Destination {
   return {
     spec(): ConnectorSpecification {
       if (!cachedSpec) {
-        const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
         const result = spawnSync(bin, ['spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
         if (result.status !== 0) {
           throw new Error(`${bin} spec exited with code ${result.status}: ${result.stderr}`)

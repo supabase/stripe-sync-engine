@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import type { Source, Destination } from '@stripe/protocol'
@@ -107,17 +107,42 @@ export function resolveSpecifier(name: string, role: 'source' | 'destination'): 
  * Resolve a connector name + role to a bin path.
  *
  * Search order:
- * 1. Walk up from cwd checking node_modules/.bin (covers direct dependencies)
- * 2. Scan PATH directories (covers pnpm exec/run which adds the right .bin to PATH)
+ * 1. Walk up from cwd checking node_modules/.bin (covers npm-installed packages)
+ * 2. Walk up from cwd checking node_modules/<pkg>/package.json bin field
+ *    (covers pnpm workspace links where .bin entries aren't created)
+ * 3. Scan PATH directories (covers pnpm exec/run which adds the right .bin to PATH)
  */
 export function resolveBin(name: string, role: 'source' | 'destination'): string | undefined {
   const binName = `${role}-${name}`
+  const pkgName = resolveSpecifier(name, role)
 
   // Walk up from cwd checking each node_modules/.bin
   let dir = process.cwd()
   while (true) {
     const candidate = join(dir, 'node_modules', '.bin', binName)
     if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  // Walk up from cwd checking workspace-linked package bin fields
+  // (pnpm workspace links don't always create .bin entries)
+  dir = process.cwd()
+  while (true) {
+    const pkgJsonPath = join(dir, 'node_modules', pkgName, 'package.json')
+    if (existsSync(pkgJsonPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'))
+        const binEntry = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.[binName]
+        if (binEntry) {
+          const resolved = join(dir, 'node_modules', pkgName, binEntry)
+          if (existsSync(resolved)) return resolved
+        }
+      } catch {
+        // malformed package.json — skip
+      }
+    }
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
