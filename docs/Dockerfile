@@ -6,8 +6,10 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json .
 RUN npm install --legacy-peer-deps
-COPY slides.md style.css .
-RUN ./node_modules/.bin/slidev build --base / slides.md
+ARG SLIDES=architecture.md
+COPY ${SLIDES} slides.md
+COPY style.css .
+RUN NODE_OPTIONS="--max-old-space-size=4096" ./node_modules/.bin/slidev build --base / slides.md
 
 FROM node:20-alpine
 WORKDIR /app
