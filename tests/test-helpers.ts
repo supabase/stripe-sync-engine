@@ -28,6 +28,7 @@ export function describeWithEnv<const K extends string>(
   const missing = envVars.filter((k) => !process.env[k])
 
   if (missing.length > 0) {
+    console.warn(`Skipping "${name}" -- missing env: ${missing.join(', ')}`)
     if (process.env.CI) {
       const file = callerFile()
       const loc = file ? ` file=${file},` : ''
