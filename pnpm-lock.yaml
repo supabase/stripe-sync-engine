@@ -223,18 +223,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/destination-google-sheets2:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      googleapis:
-        specifier: ^148.0.0
-        version: 148.0.0
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-
   packages/destination-postgres:
     dependencies:
       '@stripe/sync-protocol':
@@ -266,22 +254,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/destination-postgres2:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      pg:
-        specifier: ^8.16.0
-        version: 8.16.3
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      '@types/pg':
-        specifier: ^8.15.4
-        version: 8.15.6
-
   packages/source-stripe:
     dependencies:
       '@stripe/sync-protocol':
@@ -306,18 +278,6 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  packages/source-stripe2:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-      stripe:
-        specifier: ^17.7.0
-        version: 17.7.0
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
 
   packages/store-postgres:
     dependencies:
@@ -363,9 +323,9 @@ importers:
         specifier: workspace:*
         version: link:../sync-protocol
     devDependencies:
-      '@stripe/destination-postgres2':
+      '@stripe/destination-postgres':
         specifier: workspace:*
-        version: link:../destination-postgres2
+        version: link:../destination-postgres
       '@types/node':
         specifier: ^24
         version: 24.10.1
@@ -412,21 +372,12 @@ importers:
       '@stripe/destination-google-sheets':
         specifier: workspace:*
         version: link:../../packages/destination-google-sheets
-      '@stripe/destination-google-sheets2':
-        specifier: workspace:*
-        version: link:../../packages/destination-google-sheets2
       '@stripe/destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/destination-postgres2':
-        specifier: workspace:*
-        version: link:../../packages/destination-postgres2
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
-      '@stripe/source-stripe2':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe2
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol

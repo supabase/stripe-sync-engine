@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { testSource, createConnectorResolver } from '@stripe/sync-protocol'
 import type { StateMessage } from '@stripe/sync-protocol'
-import destPostgres from '@stripe/destination-postgres2'
+import destPostgres from '@stripe/destination-postgres'
 import { SyncService, resolve } from './service'
 import {
   memoryCredentialStore,
@@ -79,7 +79,7 @@ const RECORDS = [
 
 const connectors = createConnectorResolver({
   sources: { stdin: testSource },
-  destinations: { postgres2: destPostgres },
+  destinations: { postgres: destPostgres },
 })
 
 async function drain(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]> {
@@ -110,7 +110,7 @@ function makeService(
         type: 'stdin',
         streams: { customers: { records } },
       },
-      destination: { type: 'postgres2', schema: SCHEMA },
+      destination: { type: 'postgres', schema: SCHEMA },
     },
   })
   const states = memoryStateStore()
@@ -137,7 +137,7 @@ describe('resolve()', () => {
       source_credential_id: 'src',
       destination_credential_id: 'dst',
       source: { type: 'stdin', extra: 'a' },
-      destination: { type: 'postgres2', schema: 'myschema' },
+      destination: { type: 'postgres', schema: 'myschema' },
       streams: [{ name: 'customers' }],
     }
 
@@ -149,7 +149,7 @@ describe('resolve()', () => {
     })
 
     expect(params.source).toBe('stdin')
-    expect(params.destination).toBe('postgres2')
+    expect(params.destination).toBe('postgres')
     expect(params.source_config).toEqual({ extra: 'a', override: 'b' })
     expect(params.destination_config).toEqual({
       schema: 'myschema',
@@ -165,7 +165,7 @@ describe('resolve()', () => {
       source_credential_id: 'src',
       destination_credential_id: 'dst',
       source: { type: 'stdin', api_key: 'config_val' },
-      destination: { type: 'postgres2' },
+      destination: { type: 'postgres' },
     }
 
     const params = resolve({
@@ -228,7 +228,7 @@ describe('SyncService integration', () => {
           type: 'stdin',
           streams: { customers: { records: RECORDS } },
         },
-        destination: { type: 'postgres2', schema: SCHEMA },
+        destination: { type: 'postgres', schema: SCHEMA },
       },
     })
     const states = memoryStateStore()

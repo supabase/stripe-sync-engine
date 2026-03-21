@@ -33,7 +33,7 @@ function makeConfig(id: string): SyncConfig {
     source_credential_id: 'src',
     destination_credential_id: 'dst',
     source: { type: 'stdin' },
-    destination: { type: 'postgres2' },
+    destination: { type: 'postgres' },
   }
 }
 

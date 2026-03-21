@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
-import { createSource } from '../index'
+import source from '../index'
 import type { StripeStreamState } from '../index'
 
 const STRIPE_MOCK_URL = process.env.STRIPE_MOCK_URL ?? 'http://localhost:12111'
@@ -42,8 +42,6 @@ describe('events polling (integration — stripe-mock)', () => {
   }
 
   it('fetches and processes events from stripe-mock', async () => {
-    const source = createSource()
-
     // State: all streams complete with events_cursor in the past
     const state: Record<string, StripeStreamState> = {
       customers: { pageCursor: null, status: 'complete', events_cursor: 0 },
@@ -71,8 +69,6 @@ describe('events polling (integration — stripe-mock)', () => {
   })
 
   it('preserves status: complete in all state messages during polling', async () => {
-    const source = createSource()
-
     const state: Record<string, StripeStreamState> = {
       customers: { pageCursor: null, status: 'complete', events_cursor: 0 },
     }

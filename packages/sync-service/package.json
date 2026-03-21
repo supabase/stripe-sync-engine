@@ -21,7 +21,7 @@
     "@stripe/sync-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@stripe/destination-postgres2": "workspace:*",
+    "@stripe/destination-postgres": "workspace:*",
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
     "pg": "^8.16.3",
