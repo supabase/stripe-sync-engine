@@ -10,7 +10,7 @@
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
 import { buildResourceRegistry } from '@stripe/source-stripe'
-import { PostgresDestinationWriter } from '@stripe/destination-postgres'
+import { upsertMany } from '@stripe/destination-postgres'
 
 // Module-level singletons (reused across requests in Deno edge functions)
 const dbUrl = Deno.env.get('SUPABASE_DB_URL')
@@ -25,10 +25,6 @@ const safeSchema = schemaName.replace(/"/g, '""')
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
 const pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
 const registry = buildResourceRegistry(stripe)
-const writer = new PostgresDestinationWriter({
-  schema: schemaName,
-  poolConfig: { connectionString: dbUrl },
-})
 
 /** Find the resource config whose tableName matches the given stream name. */
 function findConfigByTableName(stream: string) {
@@ -128,7 +124,7 @@ Deno.serve(async (req) => {
 
       if (response.data.length > 0) {
         // Upsert records into destination table
-        await writer.upsertMany(response.data as Record<string, unknown>[], stream)
+        await upsertMany(pool, schemaName, stream, response.data as Record<string, unknown>[])
         newRecords += response.data.length
         // Update cursor to last item's ID
         const lastItem = response.data.at(-1) as { id?: string }

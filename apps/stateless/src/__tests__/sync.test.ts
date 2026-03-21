@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEngine } from '@stripe/stateless-sync'
 import { testSource } from '@stripe/stateless-sync'
-import { PostgresDestination } from '@stripe/destination-postgres'
+import destination from '@stripe/destination-postgres'
 import type { RecordMessage, StateMessage } from '@stripe/stateless-sync'
 
 // ---------------------------------------------------------------------------
@@ -92,15 +92,10 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   })
 
   it('run 1: writes records and persists state', async () => {
-    const destination = new PostgresDestination({
-      schema: SCHEMA,
-      poolConfig: { connectionString },
-    })
-
     const engine = createEngine(
       {
         source_config: { streams: { customers: {} } },
-        destination_config: { connectionString },
+        destination_config: { connection_string: connectionString, schema: SCHEMA },
       },
       { source: testSource, destination },
       {}
@@ -138,11 +133,6 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   })
 
   it('run 2: resumes from persisted state', async () => {
-    const destination = new PostgresDestination({
-      schema: SCHEMA,
-      poolConfig: { connectionString },
-    })
-
     // Load state from Postgres
     const { rows } = await pool.query(`SELECT stream, data FROM "${SCHEMA}"."${STATE_TABLE}"`)
     const loadedState = Object.fromEntries(
@@ -152,7 +142,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     const engine = createEngine(
       {
         source_config: { streams: { customers: {} } },
-        destination_config: { connectionString },
+        destination_config: { connection_string: connectionString, schema: SCHEMA },
         state: loadedState,
       },
       { source: testSource, destination },

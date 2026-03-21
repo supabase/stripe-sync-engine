@@ -21,7 +21,6 @@
   "dependencies": {
     "@stripe/protocol": "workspace:*",
     "pg": "^8.16.3",
-    "yesql": "^7.0.0",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
@@ -40,7 +39,6 @@
     "@aws-sdk/client-sts": "^3.1013.0",
     "@aws-sdk/rds-signer": "^3.1013.0",
     "@types/pg": "^8.15.5",
-    "@types/yesql": "^4.1.4",
     "vitest": "^3.2.4"
   }
 }

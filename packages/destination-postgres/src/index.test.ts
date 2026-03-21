@@ -1,49 +1,70 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { PostgresDestination } from './postgresDestination'
-import { PostgresDestinationWriter } from './writer'
-import type { PostgresConfig } from './types'
+import { execSync } from 'child_process'
+import pg from 'pg'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import destination, { upsertMany, type Config } from './index'
 import type {
   ConfiguredCatalog,
-  Destination,
   DestinationInput,
   DestinationOutput,
   RecordMessage,
   StateMessage,
 } from '@stripe/protocol'
 
-const stubConfig: PostgresConfig = {
-  schema: 'public',
-  poolConfig: { connectionString: 'postgresql://localhost/test' },
+// ---------------------------------------------------------------------------
+// Docker Postgres lifecycle
+// ---------------------------------------------------------------------------
+
+let containerId: string
+let pool: pg.Pool
+let connectionString: string
+
+const SCHEMA = 'test_dest'
+
+function makeConfig(): Config {
+  return { connection_string: connectionString, schema: SCHEMA, port: 5432, batch_size: 100 }
 }
 
-/** Create a mock PostgresDestinationWriter for dependency injection. */
-function createMockWriter() {
-  return {
-    query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-    upsertMany: vi.fn().mockResolvedValue([]),
-    close: vi.fn().mockResolvedValue(undefined),
-    pool: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    acquireAdvisoryLock: vi.fn(),
-    releaseAdvisoryLock: vi.fn(),
-    withAdvisoryLock: vi.fn(),
-  } as unknown as PostgresDestinationWriter
-}
+beforeAll(async () => {
+  containerId = execSync(
+    'docker run -d --rm -p 0:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test postgres:16-alpine',
+    { encoding: 'utf8' }
+  ).trim()
 
-const emptyCatalog: ConfiguredCatalog = { streams: [] }
+  const hostPort = execSync(`docker port ${containerId} 5432`, {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split(':')
+    .pop()
 
-const catalogWithStream: ConfiguredCatalog = {
-  streams: [
-    {
-      stream: {
-        name: 'customers',
-        primary_key: [['id']],
-        metadata: { account_id: 'acct_123' },
-      },
-      sync_mode: 'full_refresh',
-      destination_sync_mode: 'overwrite',
-    },
-  ],
-}
+  connectionString = `postgresql://postgres:test@localhost:${hostPort}/test`
+  pool = new pg.Pool({ connectionString })
+
+  for (let i = 0; i < 30; i++) {
+    try {
+      await pool.query('SELECT 1')
+      return
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+  throw new Error('Postgres did not become ready in time')
+}, 60_000)
+
+afterAll(async () => {
+  await pool?.end()
+  if (containerId) {
+    execSync(`docker rm -f ${containerId}`)
+  }
+})
+
+beforeEach(async () => {
+  await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
+})
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function makeRecord(stream: string, data: Record<string, unknown>): RecordMessage {
   return { type: 'record', stream, data, emitted_at: Date.now() }
@@ -53,14 +74,12 @@ function makeState(stream: string, data: unknown): StateMessage {
   return { type: 'state', stream, data }
 }
 
-/** Helper to create an async iterable from an array of DestinationInput messages. */
 async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterable<DestinationInput> {
   for (const msg of msgs) {
     yield msg
   }
 }
 
-/** Collect all yielded DestinationOutput messages. */
 async function collectOutputs(
   iter: AsyncIterable<DestinationOutput>
 ): Promise<DestinationOutput[]> {
@@ -71,89 +90,86 @@ async function collectOutputs(
   return results
 }
 
-describe('PostgresDestination', () => {
-  it('can be constructed with PostgresConfig', () => {
-    const mockWriter = createMockWriter()
-    const dest = new PostgresDestination(stubConfig, mockWriter)
-    expect(dest).toBeInstanceOf(PostgresDestination)
-  })
+const catalog: ConfiguredCatalog = {
+  streams: [
+    {
+      stream: { name: 'customers', primary_key: [['id']], metadata: {} },
+      sync_mode: 'full_refresh',
+      destination_sync_mode: 'overwrite',
+    },
+  ],
+}
 
-  it('satisfies the Destination interface', () => {
-    const mockWriter = createMockWriter()
-    const dest: Destination = new PostgresDestination(stubConfig, mockWriter)
-    expect(typeof dest.write).toBe('function')
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('destination default export', () => {
+  describe('check()', () => {
+    it('succeeds against a live Postgres', async () => {
+      const result = await destination.check({ config: makeConfig() })
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('fails with bad connection string', async () => {
+      const result = await destination.check({
+        config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
+      })
+      expect(result.status).toBe('failed')
+    })
   })
 
   describe('setup()', () => {
-    it('creates schema', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
+    it('creates schema and table', async () => {
+      await destination.setup({ config: makeConfig(), catalog })
 
-      await dest.setup({ config: {}, catalog: emptyCatalog })
-
-      expect(mockWriter.query).toHaveBeenCalledWith(
-        expect.stringContaining('CREATE SCHEMA IF NOT EXISTS "public"')
+      const { rows } = await pool.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = $1`,
+        [SCHEMA]
       )
-    })
-
-    it('creates tables for each configured stream', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-
-      await dest.setup({ config: {}, catalog: catalogWithStream })
-
-      const queryCalls = (mockWriter.query as ReturnType<typeof vi.fn>).mock.calls
-      const createTableCall = queryCalls.find(
-        (call: unknown[]) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('CREATE TABLE IF NOT EXISTS') &&
-          call[0].includes('"customers"')
-      )
-      expect(createTableCall).toBeDefined()
-      expect(createTableCall![0]).toContain('_raw_data')
-      expect(createTableCall![0]).toContain('jsonb')
+      expect(rows.map((r) => r.table_name)).toContain('customers')
     })
   })
 
   describe('teardown()', () => {
     it('drops schema CASCADE', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
+      await destination.setup({ config: makeConfig(), catalog })
+      await destination.teardown({ config: makeConfig() })
 
-      await dest.teardown({ config: {} })
-
-      expect(mockWriter.query).toHaveBeenCalledWith(
-        expect.stringContaining('DROP SCHEMA IF EXISTS "public" CASCADE')
+      const { rows } = await pool.query(
+        `SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`,
+        [SCHEMA]
       )
-      expect(mockWriter.close).toHaveBeenCalled()
+      expect(rows).toHaveLength(0)
     })
   })
 
-  describe('write() -- record scenarios', () => {
-    it('upserts RecordMessage data via upsertMany', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
+  describe('write()', () => {
+    beforeEach(async () => {
+      await destination.setup({ config: makeConfig(), catalog })
+    })
+
+    it('upserts records and emits log on completion', async () => {
       const messages = toAsyncIter([
         makeRecord('customers', { id: 'cus_1', name: 'Alice' }),
         makeRecord('customers', { id: 'cus_2', name: 'Bob' }),
       ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
-
-      // Records should be flushed (final flush at end of stream)
-      expect(mockWriter.upsertMany).toHaveBeenCalledWith(
-        [
-          { id: 'cus_1', name: 'Alice' },
-          { id: 'cus_2', name: 'Bob' },
-        ],
-        'customers'
+      const outputs = await collectOutputs(
+        destination.write({ config: makeConfig(), catalog }, messages)
       )
+
+      // Verify records in DB
+      const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}".customers ORDER BY id`)
+      expect(rows.map((r) => r.id)).toEqual(['cus_1', 'cus_2'])
+
+      // Should emit a log message
+      const logs = outputs.filter((m) => m.type === 'log')
+      expect(logs).toHaveLength(1)
     })
 
     it('batches inserts with configurable batch size', async () => {
-      const mockWriter = createMockWriter()
-      const config: PostgresConfig = { ...stubConfig, batchSize: 2 }
-      const dest = new PostgresDestination(config, mockWriter)
+      const config = { ...makeConfig(), batch_size: 2 }
       const messages = toAsyncIter([
         makeRecord('customers', { id: 'cus_1' }),
         makeRecord('customers', { id: 'cus_2' }),
@@ -162,38 +178,13 @@ describe('PostgresDestination', () => {
         makeRecord('customers', { id: 'cus_5' }),
       ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
+      await collectOutputs(destination.write({ config, catalog }, messages))
 
-      // Should flush at record 2, record 4, then remaining 1 at end
-      const upsertCalls = (mockWriter.upsertMany as ReturnType<typeof vi.fn>).mock.calls
-      expect(upsertCalls).toHaveLength(3)
-      expect(upsertCalls[0]![0]).toHaveLength(2) // records 1-2
-      expect(upsertCalls[1]![0]).toHaveLength(2) // records 3-4
-      expect(upsertCalls[2]![0]).toHaveLength(1) // record 5
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
+      expect(rows[0].n).toBe(5)
     })
 
-    it('defaults batch size to 100', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      // Send 50 records -- should NOT trigger a mid-stream flush (only final)
-      const records: RecordMessage[] = Array.from({ length: 50 }, (_, i) =>
-        makeRecord('customers', { id: `cus_${i}` })
-      )
-      const messages = toAsyncIter(records)
-
-      await collectOutputs(dest.write({ config: {}, catalog: catalogWithStream }, messages))
-
-      // Only one flush at the end (50 < 100)
-      const upsertCalls = (mockWriter.upsertMany as ReturnType<typeof vi.fn>).mock.calls
-      expect(upsertCalls).toHaveLength(1)
-      expect(upsertCalls[0]![0]).toHaveLength(50)
-    })
-  })
-
-  describe('write() -- checkpoint scenarios', () => {
     it('re-emits StateMessage after flushing preceding records', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
       const stateData = { cursor: 'abc123' }
       const messages = toAsyncIter([
         makeRecord('customers', { id: 'cus_1', name: 'Alice' }),
@@ -202,128 +193,79 @@ describe('PostgresDestination', () => {
       ])
 
       const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream }, messages)
+        destination.write({ config: makeConfig(), catalog }, messages)
       )
 
-      // First output should be the re-emitted StateMessage
       const stateOutputs = outputs.filter((m) => m.type === 'state')
       expect(stateOutputs).toHaveLength(1)
-      expect(stateOutputs[0]).toEqual({
-        type: 'state',
-        stream: 'customers',
-        data: stateData,
-      })
+      expect(stateOutputs[0]).toEqual({ type: 'state', stream: 'customers', data: stateData })
 
-      // upsertMany should have been called BEFORE the state was yielded
-      expect(mockWriter.upsertMany).toHaveBeenCalledWith(
-        [
-          { id: 'cus_1', name: 'Alice' },
-          { id: 'cus_2', name: 'Bob' },
-        ],
-        'customers'
+      // Records should be in DB (flushed before state was yielded)
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
+      expect(rows[0].n).toBe(2)
+    })
+
+    it('handles upsert (ON CONFLICT update)', async () => {
+      const messages1 = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
+      await collectOutputs(destination.write({ config: makeConfig(), catalog }, messages1))
+
+      const messages2 = toAsyncIter([
+        makeRecord('customers', { id: 'cus_1', name: 'Alice Updated' }),
+      ])
+      await collectOutputs(destination.write({ config: makeConfig(), catalog }, messages2))
+
+      const { rows } = await pool.query(
+        `SELECT _raw_data->>'name' AS name FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
       )
+      expect(rows[0].name).toBe('Alice Updated')
     })
   })
+})
 
-  describe('write() -- error scenarios', () => {
-    it('emits ErrorMessage on upsert connection failure', async () => {
-      const mockWriter = createMockWriter()
-      ;(mockWriter.upsertMany as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('ECONNREFUSED: connection refused')
-      )
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
-
-      const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream }, messages)
-      )
-
-      const errorOutputs = outputs.filter((m) => m.type === 'error')
-      expect(errorOutputs).toHaveLength(1)
-      expect(errorOutputs[0]).toMatchObject({
-        type: 'error',
-        failure_type: 'transient_error',
-        message: expect.stringContaining('ECONNREFUSED'),
-      })
-    })
-
-    it('emits system_error for non-transient failures', async () => {
-      const mockWriter = createMockWriter()
-      ;(mockWriter.upsertMany as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('syntax error at position 42')
-      )
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([makeRecord('customers', { id: 'cus_1', name: 'Alice' })])
-
-      const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: catalogWithStream }, messages)
-      )
-
-      const errorOutputs = outputs.filter((m) => m.type === 'error')
-      expect(errorOutputs).toHaveLength(1)
-      expect(errorOutputs[0]).toMatchObject({
-        type: 'error',
-        failure_type: 'system_error',
-        message: expect.stringContaining('syntax error'),
-      })
-    })
+describe('upsertMany standalone', () => {
+  beforeEach(async () => {
+    await destination.setup({ config: makeConfig(), catalog })
   })
 
-  describe('write() -- lifecycle', () => {
-    it('closes the writer after completion', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
+  it('inserts records directly via pool', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      await upsertMany(testPool, SCHEMA, 'customers', [
+        { id: 'cus_10', name: 'Direct' },
+        { id: 'cus_11', name: 'Insert' },
+      ])
 
-      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog }, messages))
-
-      expect(mockWriter.close).toHaveBeenCalled()
-    })
-
-    it('closes the writer even after an error', async () => {
-      const mockWriter = createMockWriter()
-      ;(mockWriter.query as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('fail'))
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
-
-      await collectOutputs(dest.write({ config: {}, catalog: emptyCatalog }, messages))
-
-      expect(mockWriter.close).toHaveBeenCalled()
-    })
-
-    it('emits a LogMessage on successful completion', async () => {
-      const mockWriter = createMockWriter()
-      const dest = new PostgresDestination(stubConfig, mockWriter)
-      const messages = toAsyncIter([])
-
-      const outputs = await collectOutputs(
-        dest.write({ config: {}, catalog: emptyCatalog }, messages)
-      )
-
-      const logOutputs = outputs.filter((m) => m.type === 'log')
-      expect(logOutputs).toHaveLength(1)
-      expect(logOutputs[0]).toMatchObject({
-        type: 'log',
-        level: 'info',
-        message: expect.stringContaining('public'),
-      })
-    })
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
+      expect(rows[0].n).toBe(2)
+    } finally {
+      await testPool.end()
+    }
   })
 
-  describe('architecture purity', () => {
-    it('destination never imports from or references any source module', async () => {
-      // Read the source file and verify no imports from source-stripe
-      const fs = await import('fs')
-      const path = await import('path')
-      const srcDir = __dirname
-      const srcFiles = fs.readdirSync(srcDir).filter((f: string) => f.endsWith('.ts'))
+  it('no-ops on empty array', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      await upsertMany(testPool, SCHEMA, 'customers', [])
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
+      expect(rows[0].n).toBe(0)
+    } finally {
+      await testPool.end()
+    }
+  })
+})
 
-      for (const file of srcFiles) {
-        const content = fs.readFileSync(path.join(srcDir, file), 'utf-8')
-        expect(content).not.toMatch(/from\s+['"].*source-stripe/)
-        expect(content).not.toMatch(/from\s+['"].*@stripe\/source-stripe/)
-        expect(content).not.toMatch(/require\(['"].*source-stripe/)
-      }
-    })
+describe('architecture purity', () => {
+  it('destination never imports from or references any source module', async () => {
+    const fs = await import('fs')
+    const path = await import('path')
+    const srcDir = __dirname
+    const srcFiles = fs.readdirSync(srcDir).filter((f: string) => f.endsWith('.ts'))
+
+    for (const file of srcFiles) {
+      const content = fs.readFileSync(path.join(srcDir, file), 'utf-8')
+      expect(content).not.toMatch(/from\s+['"].*source-stripe/)
+      expect(content).not.toMatch(/from\s+['"].*@stripe\/source-stripe/)
+      expect(content).not.toMatch(/require\(['"].*source-stripe/)
+    }
   })
 })

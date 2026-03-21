@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import readline from 'node:readline'
 import type { ConfiguredCatalog, DestinationInput } from '@stripe/protocol'
-import type { PostgresConfig } from './types'
-import { PostgresDestination } from './postgresDestination'
+import type { Config } from './index'
+import destination from './index'
 
 export interface DestinationCliOptions {
   command: 'write'
@@ -35,13 +35,12 @@ async function* readNdjsonStdin(): AsyncIterableIterator<DestinationInput> {
  *                                            Emits DestinationOutput as NDJSON to stdout.
  */
 export async function main(opts: DestinationCliOptions): Promise<void> {
-  const config = loadJson(opts.config) as PostgresConfig
+  const config = loadJson(opts.config) as Config
   const catalog = loadJson(opts.catalog) as ConfiguredCatalog
-  const destination = new PostgresDestination(config)
 
   if (opts.command === 'write') {
     const stdin = readNdjsonStdin()
-    const output = destination.write({ config: {}, catalog }, stdin)
+    const output = destination.write({ config, catalog }, stdin)
     for await (const msg of output) {
       process.stdout.write(JSON.stringify(msg) + '\n')
     }
