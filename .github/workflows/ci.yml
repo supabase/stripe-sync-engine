@@ -51,12 +51,6 @@ jobs:
       - name: Builds successfully
         run: pnpm build
 
-      - name: Check migrations-embedded.ts is up to date
-        run: |
-          pnpm format
-          git diff --exit-code packages/store-postgres/src/migrations-embedded.ts || \
-            (echo "::error::migrations-embedded.ts is out of date. Run 'pnpm build && pnpm format' locally and commit the updated file." && exit 1)
-
       - name: Initialize DB schema
         run: |
           docker run --rm \

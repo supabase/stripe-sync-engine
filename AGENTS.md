@@ -33,8 +33,8 @@ pnpm lint
 pnpm build
 ```
 
-If you edit migrations, also verify `migrations-embedded.ts` is up to date:
-`pnpm build && pnpm format` then check `git diff`.
+If you add a migration, register it in `packages/store-postgres/src/migrations/index.ts`
+(the barrel test will catch omissions).
 
 ## Monorepo Layout
 
