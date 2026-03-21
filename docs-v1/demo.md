@@ -5,90 +5,82 @@ transition: slide-left
 mdc: true
 ---
 
-# Source & Destination
+# The Protocol is Just NDJSON
 
-The simplest connectors that satisfy the sync protocol
+Any process that reads/writes NDJSON is a valid connector
 
 ---
 
 ## The Source
 
-A source is an **async generator** — it `yield`s messages.
+A source prints NDJSON to **stdout** — one message per line.
 
-```ts {monaco} {height:'300px'}
-const source = {
-  async *read(params) {
-    const items = [
-      { id: '1', name: 'Widget A', price: 100 },
-      { id: '2', name: 'Widget B', price: 200 },
-    ]
-    for (const data of items) {
-      // RecordMessage: one row for one stream
-      yield { type: 'record', stream: 'products', data, emitted_at: Date.now() }
-    }
-    // StateMessage: opaque cursor — only this source reads/writes it
-    yield { type: 'state', stream: 'products', data: { last_id: '2' } }
-  },
-}
+```bash {monaco} {height:'120px'}
+echo '{"type":"record","stream":"msgs","data":{"text":"hello"},"emitted_at":0}'
+echo '{"type":"record","stream":"msgs","data":{"text":"world"},"emitted_at":0}'
+echo '{"type":"state","stream":"msgs","data":{"cursor":2}}'
 ```
 
-No base class. No registration. No framework.
+No SDK. No framework. Just `echo`.
 
 ---
 
 ## The Destination
 
-A destination **consumes** messages and `yield`s state checkpoints back.
+A destination reads NDJSON from **stdin** — one message per line.
 
-```ts {monaco} {height:'280px'}
-const destination = {
-  async *write(params, $stdin) {
-    const store = {}
-    for await (const msg of $stdin) {
-      if (msg.type === 'record') {
-        store[msg.data.id] = msg.data // upsert by primary key
-        console.log(`  → upsert ${msg.stream}[${msg.data.id}]:`, msg.data)
-      }
-      if (msg.type === 'state') {
-        yield msg // pass checkpoint back to the orchestrator
-      }
-    }
-  },
-}
+```bash {monaco} {height:'140px'}
+while IFS= read -r line; do
+  type=$(echo "$line" | jq -r '.type')
+  if [ "$type" = "record" ]; then
+    echo "$line" | jq -r '.data.text'
+  fi
+done
 ```
 
-The destination never sees logs, errors, or status messages — the engine filters them.
+The engine pipes source stdout → destination stdin.
 
 ---
 
 ## Wire Them Together
 
-The engine is a `for await` loop. Edit and run:
+The engine is a pipe.
+
+```bash {monaco} {height:'200px'}
+# engine: pipe source stdout into destination stdin
+bash source.sh | bash dest.sh
+
+# source.sh
+echo '{"type":"record","stream":"msgs","data":{"text":"hello"},"emitted_at":0}'
+echo '{"type":"record","stream":"msgs","data":{"text":"world"},"emitted_at":0}'
+echo '{"type":"state","stream":"msgs","data":{"cursor":2}}'
+
+# dest.sh
+while IFS= read -r line; do
+  [ "$(echo "$line" | jq -r '.type')" = "record" ] && echo "$line" | jq -r '.data.text'
+done
+```
+
+---
+
+## Try It Live
+
+The engine in TypeScript is a `for await` over the same NDJSON stream:
 
 ```ts {monaco-run} {autorun:false, height:'200px'}
-const source = {
-  async *read(params) {
-    const items = [
-      { id: '1', name: 'Widget A' },
-      { id: '2', name: 'Widget B' },
-    ]
-    for (const data of items)
-      yield { type: 'record', stream: 'products', data, emitted_at: Date.now() }
-    yield { type: 'state', stream: 'products', data: { last_id: '2' } }
-  },
+async function* source() {
+  for (const line of [
+    '{"type":"record","stream":"msgs","data":{"text":"hello"},"emitted_at":0}',
+    '{"type":"record","stream":"msgs","data":{"text":"world"},"emitted_at":0}',
+    '{"type":"state","stream":"msgs","data":{"cursor":2}}',
+  ]) yield JSON.parse(line)
 }
-const destination = {
-  async *write(params, $stdin) {
-    for await (const msg of $stdin) {
-      if (msg.type === 'record')
-        console.log(`→ upsert ${msg.stream}[${msg.data.id}]: "${msg.data.name}"`)
-      if (msg.type === 'state') {
-        console.log('✓ checkpoint:', msg.data)
-        yield msg
-      }
-    }
-  },
+async function* destination($stdin) {
+  for await (const msg of $stdin) {
+    if (msg.type === 'record') console.log(msg.data.text)
+    if (msg.type === 'state') yield msg
+  }
 }
-for await (const s of destination.write({}, source.read({})))
-  console.log('state saved:', s.data)
+for await (const s of destination(source()))
+  console.log('state:', s.data)
 ```
