@@ -18,6 +18,7 @@ function addSyncOptions(cmd: Command): Command {
     .option('--sync-id <id>', 'Sync ID', 'cli_sync')
     .option('--source-type <type>', 'Source connector type', 'stripe')
     .option('--destination-type <type>', 'Destination connector type', 'postgres')
+    .option('--data-dir <path>', 'Data directory for state (default: ~/.stripe-sync)')
 }
 
 addSyncOptions(
@@ -27,6 +28,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
   })
   process.stderr.write('Setup complete.\n')
 })
@@ -38,6 +40,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
   })
   process.stderr.write('Teardown complete.\n')
 })
@@ -49,6 +52,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
   })
   process.stdout.write(JSON.stringify(result) + '\n')
 })
@@ -63,6 +67,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
     $stdin,
   })) {
     process.stdout.write(JSON.stringify(msg) + '\n')
@@ -77,6 +82,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
     $stdin,
   })) {
     process.stdout.write(JSON.stringify(msg) + '\n')
@@ -95,6 +101,7 @@ addSyncOptions(
     syncId: opts.syncId,
     sourceType: opts.sourceType,
     destinationType: opts.destinationType,
+    dataDir: opts.dataDir,
     $stdin,
   })) {
     process.stdout.write(JSON.stringify(msg) + '\n')

@@ -16,12 +16,13 @@ import {
   stderrLogSink,
 } from '@stripe/stateful-sync'
 
-const DEFAULT_STATE_FILE = join(homedir(), '.stripe-sync', 'state.json')
+const DEFAULT_DATA_DIR = join(homedir(), '.stripe-sync')
 
 type ServiceOpts = {
   syncId: string
   sourceType: string
   destinationType: string
+  dataDir?: string
   connectors?: ConnectorResolver
   credentials?: CredentialStore
   configs?: ConfigStore
@@ -29,6 +30,7 @@ type ServiceOpts = {
 }
 
 function makeService(opts: ServiceOpts) {
+  const dataDir = opts.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR
   const credentials = opts.credentials ?? envCredentialStore()
   const configs =
     opts.configs ??
@@ -41,7 +43,7 @@ function makeService(opts: ServiceOpts) {
   return new StatefulSync({
     credentials,
     configs,
-    states: fileStateStore(DEFAULT_STATE_FILE),
+    states: fileStateStore(join(dataDir, 'state.json')),
     logs: stderrLogSink(),
     connectors: opts.connectors ?? createConnectorResolver({}),
   })
