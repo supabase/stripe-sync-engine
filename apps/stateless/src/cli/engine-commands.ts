@@ -1,4 +1,3 @@
-import { execSync } from 'child_process'
 import type { Message, StateMessage } from '@stripe/stateless-sync'
 import {
   createEngineFromParams,
@@ -9,9 +8,7 @@ import {
 import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
 import { envPrefix, parseJsonOrFile, mergeConfig } from '@stripe/ts-cli'
 
-const resolver = createConnectorResolver({
-  installFn: (pkg) => execSync(`pnpm add ${pkg}`, { stdio: 'inherit' }),
-})
+const resolver = createConnectorResolver({})
 
 /** Parse comma-separated stream names into the streams array format. */
 function parseStreams(value: string | undefined): Array<{ name: string }> | undefined {

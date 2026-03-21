@@ -29,7 +29,9 @@ export {
   createEngineFromParams,
   createConnectorResolver,
   resolveSpecifier,
-  loadConnector,
+  resolveBin,
+  spawnSource,
+  spawnDestination,
   parseNdjsonStream,
 } from '@stripe/stateless-sync'
 

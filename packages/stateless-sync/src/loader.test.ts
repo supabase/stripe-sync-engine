@@ -1,11 +1,8 @@
-import { dirname, resolve } from 'path'
-import { fileURLToPath } from 'url'
-import { describe, expect, it, vi } from 'vitest'
-import { resolveSpecifier, loadConnector, createConnectorResolver } from './loader'
+import { existsSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { resolveSpecifier, resolveBin, createConnectorResolver } from './loader'
 import { testSource } from './source-test'
 import { testDestination } from './destination-test'
-
-const packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 // ---------------------------------------------------------------------------
 // resolveSpecifier
@@ -36,51 +33,20 @@ describe('resolveSpecifier', () => {
 })
 
 // ---------------------------------------------------------------------------
-// loadConnector
+// resolveBin
 // ---------------------------------------------------------------------------
 
-describe('loadConnector', () => {
-  it('loads a source connector from a file path', async () => {
-    const specifier = resolve(packagesDir, 'source-stripe/src/index.ts')
-    const connector = await loadConnector(specifier, 'source')
-    expect(connector).toBeDefined()
-    expect(typeof connector.spec).toBe('function')
-    expect(typeof connector.check).toBe('function')
+describe('resolveBin', () => {
+  it('returns a path for an installed connector bin', () => {
+    // source-stripe should be installed in this monorepo
+    const bin = resolveBin('stripe', 'source')
+    expect(bin).toBeDefined()
+    expect(existsSync(bin!)).toBe(true)
   })
 
-  it('loads a destination connector from a file path', async () => {
-    const specifier = resolve(packagesDir, 'destination-postgres/src/index.ts')
-    const connector = await loadConnector(specifier, 'destination')
-    expect(typeof connector.spec).toBe('function')
-  })
-
-  it('throws descriptive error for missing package without installFn', async () => {
-    await expect(loadConnector('@stripe/destination-nonexistent', 'destination')).rejects.toThrow(
-      /not found.*pnpm add/
-    )
-  })
-
-  it('rejects module that does not look like a connector', async () => {
-    // 'zod' exports functions but not spec/check — should fail validation
-    await expect(loadConnector('zod', 'source')).rejects.toThrow(/failed source conformance check/)
-  })
-
-  it('rejects module with only spec+check but missing discover/read as a source', async () => {
-    // A destination has spec+check+write but lacks discover+read — loading as source should fail
-    const specifier = resolve(packagesDir, 'destination-postgres/src/index.ts')
-    await expect(loadConnector(specifier, 'source')).rejects.toThrow(
-      /missing required method: discover/
-    )
-  })
-
-  it('calls installFn when module is not found and installFn is provided', async () => {
-    const installFn = vi.fn()
-    // The installFn is called but the module still won't exist after a mock install,
-    // so the retry import will also fail — we just verify installFn was invoked
-    await expect(
-      loadConnector('@stripe/destination-nonexistent', 'destination', { installFn })
-    ).rejects.toThrow()
-    expect(installFn).toHaveBeenCalledWith('@stripe/destination-nonexistent')
+  it('returns undefined for a non-existent connector', () => {
+    const bin = resolveBin('nonexistent', 'source')
+    expect(bin).toBeUndefined()
   })
 })
 
@@ -114,25 +80,28 @@ describe('createConnectorResolver', () => {
     expect(first).toBe(second)
   })
 
-  it('preloaded connectors take priority over dynamic loading', async () => {
+  it('preloaded connectors take priority over subprocess fallback', async () => {
     const resolver = createConnectorResolver({
       sources: { stripe: testSource },
     })
-    // Should return preloaded testSource, not try to dynamically load @stripe/source-stripe
+    // Should return preloaded testSource, not spawn a subprocess
     const source = await resolver.resolveSource('stripe')
     expect(source).toBe(testSource)
   })
 
-  it('throws for unknown connector without installFn', async () => {
+  it('falls back to subprocess for installed connector without preload', async () => {
     const resolver = createConnectorResolver({})
-    await expect(resolver.resolveDestination('nonexistent')).rejects.toThrow(/not found/)
+    // source-stripe bin is installed in this monorepo
+    const source = await resolver.resolveSource('stripe')
+    expect(source).toBeDefined()
+    expect(typeof source.spec).toBe('function')
+    expect(typeof source.check).toBe('function')
+    expect(typeof source.discover).toBe('function')
+    expect(typeof source.read).toBe('function')
   })
 
-  it('passes installFn through to loadConnector', async () => {
-    const installFn = vi.fn()
-    const resolver = createConnectorResolver({ installFn })
-    // Will fail because the package doesn't exist, but installFn should be called
-    await expect(resolver.resolveDestination('nonexistent')).rejects.toThrow()
-    expect(installFn).toHaveBeenCalledWith('@stripe/destination-nonexistent')
+  it('throws for unknown connector', async () => {
+    const resolver = createConnectorResolver({})
+    await expect(resolver.resolveDestination('nonexistent')).rejects.toThrow(/not found/)
   })
 })

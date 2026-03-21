@@ -1,5 +1,8 @@
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Source, Destination } from '@stripe/protocol'
 import { ConnectorSpecification } from '@stripe/protocol'
+import { spawnSource, spawnDestination } from './subprocess'
 
 // MARK: - Validation
 
@@ -97,48 +100,37 @@ export function resolveSpecifier(name: string, role: 'source' | 'destination'): 
   return `@stripe/${role}-${name}`
 }
 
+// MARK: - Subprocess bin resolution
+
 /**
- * Load a connector by specifier. Optionally auto-installs missing npm packages.
+ * Resolve a connector name + role to a bin path.
  *
- * Resolution:
- * 1. `import()` the specifier
- * 2. If MODULE_NOT_FOUND and `installFn` is provided, call it and retry
- * 3. Validate the loaded module against the Source or Destination contract
+ * Search order:
+ * 1. Walk up from cwd checking node_modules/.bin (covers direct dependencies)
+ * 2. Scan PATH directories (covers pnpm exec/run which adds the right .bin to PATH)
  */
-export async function loadConnector(
-  specifier: string,
-  role: 'source' | 'destination',
-  options?: { installFn?: (pkg: string) => void }
-): Promise<Source | Destination> {
-  let mod: Record<string, unknown>
-  try {
-    mod = (await import(specifier)) as Record<string, unknown>
-  } catch (err: unknown) {
-    const code = (err as { code?: string }).code
-    if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') {
-      if (options?.installFn) {
-        console.error(`"${specifier}" not found. Installing...`)
-        options.installFn(specifier)
-        mod = (await import(specifier)) as Record<string, unknown>
-      } else {
-        throw new Error(
-          `Connector "${specifier}" not found. Install it with: pnpm add ${specifier}`
-        )
-      }
-    } else {
-      throw err
-    }
+export function resolveBin(name: string, role: 'source' | 'destination'): string | undefined {
+  const binName = `${role}-${name}`
+
+  // Walk up from cwd checking each node_modules/.bin
+  let dir = process.cwd()
+  while (true) {
+    const candidate = join(dir, 'node_modules', '.bin', binName)
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
 
-  const connector = mod.default ?? mod
-  const validate = role === 'source' ? validateSource : validateDestination
-  const result = validate(connector)
-  if (!result.valid) {
-    throw new Error(
-      `Connector "${specifier}" failed ${role} conformance check:\n${result.errors.join('\n')}`
-    )
+  // Scan PATH directories
+  const pathDirs = (process.env['PATH'] ?? '').split(':')
+  for (const pathDir of pathDirs) {
+    if (!pathDir) continue
+    const candidate = join(pathDir, binName)
+    if (existsSync(candidate)) return candidate
   }
-  return connector as Source | Destination
+
+  return undefined
 }
 
 // MARK: - ConnectorResolver
@@ -148,8 +140,6 @@ export interface ConnectorResolverOptions {
   sources?: Record<string, Source>
   /** Preloaded connectors — skip dynamic loading for these. */
   destinations?: Record<string, Destination>
-  /** Auto-install missing connectors. Called with the package specifier. */
-  installFn?: (pkg: string) => void
 }
 
 export interface ConnectorResolver {
@@ -160,10 +150,10 @@ export interface ConnectorResolver {
 /**
  * Create a caching connector resolver.
  *
- * Three loading modes:
- * 1. **Preloaded** — passed in `options.sources` / `options.destinations`. Always available.
- * 2. **Cached auto-load** — first request calls `loadConnector()`, result is cached.
- * 3. **Auto-install** — if `installFn` is provided, missing packages are installed before loading.
+ * Resolution order:
+ * 1. **Registered** — preloaded in `options.sources` / `options.destinations`. In-process, fastest.
+ * 2. **Subprocess** — connector has a bin entrypoint installed. Spawns child processes.
+ * 3. **Error** — connector not found.
  */
 export function createConnectorResolver(options: ConnectorResolverOptions): ConnectorResolver {
   const sourceCache = new Map<string, Source>(Object.entries(options.sources ?? {}))
@@ -174,24 +164,32 @@ export function createConnectorResolver(options: ConnectorResolverOptions): Conn
       const cached = sourceCache.get(name)
       if (cached) return cached
 
-      const specifier = resolveSpecifier(name, 'source')
-      const connector = (await loadConnector(specifier, 'source', {
-        installFn: options.installFn,
-      })) as Source
-      sourceCache.set(name, connector)
-      return connector
+      const bin = resolveBin(name, 'source')
+      if (bin) {
+        const connector = spawnSource(bin)
+        sourceCache.set(name, connector)
+        return connector
+      }
+
+      throw new Error(
+        `Source connector "${name}" not found. Register it or install @stripe/source-${name}.`
+      )
     },
 
     async resolveDestination(name: string): Promise<Destination> {
       const cached = destCache.get(name)
       if (cached) return cached
 
-      const specifier = resolveSpecifier(name, 'destination')
-      const connector = (await loadConnector(specifier, 'destination', {
-        installFn: options.installFn,
-      })) as Destination
-      destCache.set(name, connector)
-      return connector
+      const bin = resolveBin(name, 'destination')
+      if (bin) {
+        const connector = spawnDestination(bin)
+        destCache.set(name, connector)
+        return connector
+      }
+
+      throw new Error(
+        `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
+      )
     },
   }
 }
