@@ -86,10 +86,6 @@ export async function upsertMany(
 
 // MARK: - Named exports
 
-// CLI
-export type { DestinationCliOptions } from './cli'
-export { main as cliMain } from './cli'
-
 // Schema projection (JSON Schema -> Postgres DDL)
 export {
   buildCreateTableWithSchema,

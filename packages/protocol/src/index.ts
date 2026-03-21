@@ -10,3 +10,4 @@ export {
   isStreamStatusMessage,
   isDataMessage,
 } from './helpers'
+export { parseNdjsonChunks, writeLine } from './ndjson'

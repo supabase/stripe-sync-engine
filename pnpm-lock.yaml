@@ -227,10 +227,16 @@ importers:
 
   packages/protocol:
     dependencies:
+      commander:
+        specifier: ^13.1.0
+        version: 13.1.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@types/node':
+        specifier: ^24.5.0
+        version: 24.10.1
       vitest:
         specifier: ^3.2.1
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
@@ -1757,6 +1763,10 @@ packages:
 
   commander@12.1.0:
     resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
+    engines: {node: '>=18'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
     engines: {node: '>=18'}
 
   commander@4.1.1:
@@ -4399,6 +4409,8 @@ snapshots:
       delayed-stream: 1.0.0
 
   commander@12.1.0: {}
+
+  commander@13.1.0: {}
 
   commander@4.1.1: {}
 

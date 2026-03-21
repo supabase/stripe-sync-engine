@@ -2,16 +2,29 @@ import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { ConnectorSpecification } from '@stripe/protocol'
+import { createConnectorCli } from '@stripe/protocol/cli'
 
 const packagesDir = resolve(import.meta.dirname, '../../packages')
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
 
-function resolvePackageName(dir: string): string {
-  const pkgJson = JSON.parse(readFileSync(resolve(packagesDir, dir, 'package.json'), 'utf-8'))
-  return pkgJson.name as string
+interface PkgJson {
+  name: string
+  bin?: Record<string, string>
 }
+
+function readPkgJson(dir: string): PkgJson {
+  return JSON.parse(readFileSync(resolve(packagesDir, dir, 'package.json'), 'utf-8')) as PkgJson
+}
+
+function resolvePackageName(dir: string): string {
+  return readPkgJson(dir).name
+}
+
+const connectorDirs = packageDirs.filter(
+  (d) => d.startsWith('source-') || d.startsWith('destination-')
+)
 
 const sources = [
   ...packageDirs
@@ -121,5 +134,44 @@ describe.each(destinations)('destination: $name', ({ name }) => {
     expect(typeof (mod.spec as { parse?: unknown }).parse, 'spec.parse should be a function').toBe(
       'function'
     )
+  })
+})
+
+// MARK: - Connector bin + CLI wrapper conformance
+
+describe.each(connectorDirs)('connector bin: %s', (dir) => {
+  const pkg = readPkgJson(dir)
+
+  it('package.json has a bin field', () => {
+    expect(pkg.bin, 'bin field should exist').toBeDefined()
+    expect(typeof pkg.bin).toBe('object')
+    const binPaths = Object.values(pkg.bin!)
+    expect(binPaths.length).toBeGreaterThan(0)
+    for (const p of binPaths) {
+      expect(p).toMatch(/\.js$/)
+    }
+  })
+
+  it('createConnectorCli registers correct commands', async () => {
+    const mod = await import(pkg.name)
+    const connector = mod.default as Record<string, unknown>
+    const program = createConnectorCli(connector as never)
+    const commandNames = program.commands.map((c) => c.name())
+
+    // Both source and destination get spec + check
+    expect(commandNames).toContain('spec')
+    expect(commandNames).toContain('check')
+
+    const isSource =
+      typeof connector.discover === 'function' && typeof connector.read === 'function'
+    const isDestination = typeof connector.write === 'function'
+
+    if (isSource) {
+      expect(commandNames).toContain('discover')
+      expect(commandNames).toContain('read')
+    }
+    if (isDestination) {
+      expect(commandNames).toContain('write')
+    }
   })
 })
