@@ -24,6 +24,11 @@ npx @stripe/sync-engine sync \
   --schema stripe
 ```
 
+## Slides
+
+- [Architecture overview](/slides/architecture/)
+- [Protocol demo — live coding](/slides/demo/)
+
 ## Links
 
 - [GitHub](https://github.com/stripe/sync-engine)

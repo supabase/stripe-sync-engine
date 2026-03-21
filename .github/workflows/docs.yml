@@ -29,6 +29,17 @@ jobs:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
+      - name: Build slides
+        run: |
+          npm install --legacy-peer-deps
+          NODE_OPTIONS="--max-old-space-size=4096" ./node_modules/.bin/slidev build \
+            --base /slides/architecture/ architecture.md \
+            --out ../.vercel/output/static/slides/architecture
+          NODE_OPTIONS="--max-old-space-size=4096" ./node_modules/.bin/slidev build \
+            --base /slides/demo/ demo.md \
+            --out ../.vercel/output/static/slides/demo
+        working-directory: docs/slides
+
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: docs

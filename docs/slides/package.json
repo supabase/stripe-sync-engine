@@ -1,0 +1,8 @@
+{
+  "name": "sync-engine-slides",
+  "private": true,
+  "dependencies": {
+    "@slidev/cli": "latest",
+    "@slidev/theme-default": "latest"
+  }
+}

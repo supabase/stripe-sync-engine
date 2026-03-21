@@ -52,13 +52,33 @@ ruby lib/webhook_bridge.rb
 ## Tests
 
 ```sh
-bundle exec rspec
+bundle exec rspec              # unit tests only (stubbed activities, no deps)
+bundle exec rspec spec/e2e/    # e2e: requires Stripe API key + local Postgres
 ```
 
-Tests use the SDK's local test server — no Docker needed. All activities are stubbed; tests verify workflow state machine logic (phase transitions, signals, queries) only.
+### Unit tests
 
-## What's not tested yet
+Use the SDK's local test server — no Docker needed. All activities are stubbed; tests verify workflow state machine logic (phase transitions, signals, queries).
 
-- Activities making real HTTP calls to the stateless API
-- Webhook bridge routing
-- End-to-end flow
+### E2E tests
+
+Full stack: Temporal workflow → stateless API → Stripe → Postgres. Requires:
+
+- `STRIPE_API_KEY` env var (test-mode key with read access)
+- Postgres at `POSTGRES_URL` (default: `postgresql://postgres:postgres@localhost:5432/postgres`)
+- `pnpm build` already run (stateless API + connector binaries)
+
+```sh
+cd temporal
+STRIPE_API_KEY=rk_test_... bundle exec rspec spec/e2e/
+```
+
+Two tests:
+1. **Backfill** — workflow reads products from Stripe, writes 100 rows to Postgres
+2. **Live event** — after backfill, updates a product via Stripe API, signals the event to the workflow, verifies processing
+
+Set `KEEP_TEST_DATA=1` to skip schema cleanup and inspect the data in Postgres after the test.
+
+### State
+
+No migrations or metadata tables — Temporal IS the state store. Workflow memory (cursors, phase, event buffer) is durably persisted via Temporal's event sourcing. Postgres only contains the synced data tables.
