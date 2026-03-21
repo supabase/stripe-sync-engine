@@ -225,19 +225,63 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
           content: { 'application/json': { schema: ErrorSchema } },
           description: 'Not found',
         },
+        409: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Credential is referenced by one or more syncs',
+        },
       },
     }),
     async (c) => {
       const { id } = c.req.valid('param')
       try {
         await credentials.get(id) // throws if not found
-        await credentials.delete(id)
-        return c.json({ id, deleted: true as const }, 200)
       } catch {
         return c.json({ error: `Credential ${id} not found` }, 404)
       }
+
+      // Check for syncs referencing this credential
+      const allSyncs = await configs.list()
+      const referencing = allSyncs.filter(
+        (s) => s.source.credential_id === id || s.destination.credential_id === id
+      )
+      if (referencing.length > 0) {
+        return c.json(
+          {
+            error: `Credential ${id} is referenced by sync(s): ${referencing.map((s) => s.id).join(', ')}`,
+          },
+          409
+        )
+      }
+
+      await credentials.delete(id)
+      return c.json({ id, deleted: true as const }, 200)
     }
   )
+
+  // ── Referential integrity helpers ───────────────────────────────
+
+  /** Collect all credential_id references from a sync body (source + destination). */
+  function collectCredentialIds(body: Record<string, unknown>): string[] {
+    const ids: string[] = []
+    const src = body.source as Record<string, unknown> | undefined
+    const dst = body.destination as Record<string, unknown> | undefined
+    if (src?.credential_id && typeof src.credential_id === 'string') ids.push(src.credential_id)
+    if (dst?.credential_id && typeof dst.credential_id === 'string') ids.push(dst.credential_id)
+    return ids
+  }
+
+  /** Validate that all referenced credential_ids exist. Returns missing IDs or empty array. */
+  async function validateCredentialRefs(credIds: string[]): Promise<string[]> {
+    const missing: string[] = []
+    for (const id of credIds) {
+      try {
+        await credentials.get(id)
+      } catch {
+        missing.push(id)
+      }
+    }
+    return missing
+  }
 
   // MARK: - Syncs
 
@@ -284,6 +328,14 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     }),
     async (c) => {
       const body = c.req.valid('json')
+
+      // Validate referenced credentials exist
+      const credIds = collectCredentialIds(body as Record<string, unknown>)
+      const missing = await validateCredentialRefs(credIds)
+      if (missing.length > 0) {
+        return c.json({ error: `Credential(s) not found: ${missing.join(', ')}` }, 400)
+      }
+
       const id = genId('sync')
       const stored = { id, ...(body as Record<string, unknown>) } as SyncConfig
       await configs.set(id, stored)
@@ -337,6 +389,10 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
           content: { 'application/json': { schema: SyncSchema } },
           description: 'Updated sync',
         },
+        400: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Invalid input',
+        },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
           description: 'Not found',
@@ -348,6 +404,14 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
       const patch = c.req.valid('json')
       try {
         const existing = await configs.get(id)
+
+        // Validate referenced credentials exist in the patch
+        const credIds = collectCredentialIds(patch as Record<string, unknown>)
+        const missing = await validateCredentialRefs(credIds)
+        if (missing.length > 0) {
+          return c.json({ error: `Credential(s) not found: ${missing.join(', ')}` }, 400)
+        }
+
         const updated = { ...existing, ...(patch as Record<string, unknown>), id } as SyncConfig
         await configs.set(id, updated)
         return c.json(updated as any, 200)

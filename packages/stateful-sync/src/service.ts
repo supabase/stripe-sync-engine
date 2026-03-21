@@ -20,8 +20,8 @@ import type {
 /** Merge stored config + credentials + state into engine-ready SyncParams. */
 export function resolve(opts: {
   config: SyncConfig
-  sourceCred: Credential
-  destCred: Credential
+  sourceCred?: Credential
+  destCred?: Credential
   state?: Record<string, unknown>
   sourceOverrides?: Record<string, unknown>
   destinationOverrides?: Record<string, unknown>
@@ -37,12 +37,16 @@ export function resolve(opts: {
   )
   // Strip credential metadata — only type-specific fields belong in config.
   const credMeta = new Set(['id', 'type', 'created_at', 'updated_at'])
-  const srcCredFields = Object.fromEntries(
-    Object.entries(opts.sourceCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
-  )
-  const dstCredFields = Object.fromEntries(
-    Object.entries(opts.destCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
-  )
+  const srcCredFields = opts.sourceCred
+    ? Object.fromEntries(
+        Object.entries(opts.sourceCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
+      )
+    : {}
+  const dstCredFields = opts.destCred
+    ? Object.fromEntries(
+        Object.entries(opts.destCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
+      )
+    : {}
   return {
     source_name: sourceType,
     destination_name: destType,
@@ -97,8 +101,12 @@ export class StatefulSync {
     const config = await this.configs.get(syncId)
     const source = await this.connectors.resolveSource(config.source.type)
     const destination = await this.connectors.resolveDestination(config.destination.type)
-    const sourceCred = await this.credentials.get(config.source.credential_id)
-    const destCred = await this.credentials.get(config.destination.credential_id)
+    const sourceCred = config.source.credential_id
+      ? await this.credentials.get(config.source.credential_id)
+      : undefined
+    const destCred = config.destination.credential_id
+      ? await this.credentials.get(config.destination.credential_id)
+      : undefined
     const state = await this.states.get(syncId)
     const params = resolve({
       config,
@@ -155,8 +163,12 @@ export class StatefulSync {
 
     while (retries <= MAX_AUTH_RETRIES) {
       // Load credentials fresh each attempt (may have been refreshed)
-      const sourceCred = await this.credentials.get(config.source.credential_id)
-      const destCred = await this.credentials.get(config.destination.credential_id)
+      const sourceCred = config.source.credential_id
+        ? await this.credentials.get(config.source.credential_id)
+        : undefined
+      const destCred = config.destination.credential_id
+        ? await this.credentials.get(config.destination.credential_id)
+        : undefined
 
       // Load state (picks up checkpoints from previous attempt)
       const state = await this.states.get(syncId)
@@ -205,6 +217,9 @@ export class StatefulSync {
       if (!authError) return // success
 
       // Attempt credential refresh
+      if (!config.source.credential_id) {
+        throw new Error(`auth_error on sync ${syncId} but source has no credential_id to refresh`)
+      }
       if (this.refreshCredential) {
         this.logs.write(syncId, {
           level: 'warn',

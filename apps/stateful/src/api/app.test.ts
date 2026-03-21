@@ -248,36 +248,64 @@ describe('credentials CRUD', () => {
 
 // ── Syncs CRUD ───────────────────────────────────────────────────
 
-const validSyncBody = {
+const baseSyncBody = {
   account_id: 'acct_abc',
   status: 'backfilling' as const,
   source: {
     type: 'stripe-api-core' as const,
     livemode: true,
     api_version: '2025-04-30.basil' as const,
-    credential_id: 'cred_src',
+    credential_id: '', // placeholder — replaced by seeded credential
   },
   destination: {
     type: 'postgres' as const,
     schema_name: 'stripe',
-    credential_id: 'cred_dst',
+    credential_id: '', // placeholder
   },
+}
+
+/** Also used by referential integrity tests. */
+const validSyncBody = baseSyncBody
+
+/** Create source + destination credentials and return a sync body with real IDs. */
+async function seedCredentialsAndSyncBody(app: ReturnType<typeof createApp>) {
+  const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+  const { id: srcCredId } = await srcRes.json()
+  const dstRes = await post(app, '/credentials', {
+    type: 'postgres',
+    host: 'localhost',
+    port: 5432,
+    user: 'u',
+    password: 'p',
+    database: 'db',
+  })
+  const { id: dstCredId } = await dstRes.json()
+  return {
+    srcCredId,
+    dstCredId,
+    body: {
+      ...baseSyncBody,
+      source: { ...baseSyncBody.source, credential_id: srcCredId },
+      destination: { ...baseSyncBody.destination, credential_id: dstCredId },
+    },
+  }
 }
 
 describe('syncs CRUD', () => {
   it('creates and retrieves a sync', async () => {
     const app = createApp({ dataDir })
+    const { body: syncBody, srcCredId, dstCredId } = await seedCredentialsAndSyncBody(app)
 
-    const createRes = await post(app, '/syncs', validSyncBody)
+    const createRes = await post(app, '/syncs', syncBody)
     expect(createRes.status).toBe(201)
     const created = await createRes.json()
     expect(created.id).toMatch(/^sync_/)
     expect(created.account_id).toBe('acct_abc')
     expect(created.status).toBe('backfilling')
     expect(created.source.type).toBe('stripe-api-core')
-    expect(created.source.credential_id).toBe('cred_src')
+    expect(created.source.credential_id).toBe(srcCredId)
     expect(created.destination.type).toBe('postgres')
-    expect(created.destination.credential_id).toBe('cred_dst')
+    expect(created.destination.credential_id).toBe(dstCredId)
 
     const getRes = await app.request(`/syncs/${created.id}`)
     expect(getRes.status).toBe(200)
@@ -286,8 +314,9 @@ describe('syncs CRUD', () => {
 
   it('lists syncs', async () => {
     const app = createApp({ dataDir })
+    const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
-    const createRes = await post(app, '/syncs', validSyncBody)
+    const createRes = await post(app, '/syncs', syncBody)
     const { id } = await createRes.json()
 
     const listRes = await app.request('/syncs')
@@ -312,8 +341,9 @@ describe('syncs CRUD', () => {
 
   it('patches sync status', async () => {
     const app = createApp({ dataDir })
+    const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
-    const createRes = await post(app, '/syncs', validSyncBody)
+    const createRes = await post(app, '/syncs', syncBody)
     const { id } = await createRes.json()
 
     const patchRes = await patch(app, `/syncs/${id}`, { status: 'paused' })
@@ -325,8 +355,9 @@ describe('syncs CRUD', () => {
 
   it('patches sync streams', async () => {
     const app = createApp({ dataDir })
+    const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
-    const createRes = await post(app, '/syncs', validSyncBody)
+    const createRes = await post(app, '/syncs', syncBody)
     const { id } = await createRes.json()
 
     const streams = [
@@ -349,8 +380,9 @@ describe('syncs CRUD', () => {
 
   it('deletes a sync', async () => {
     const app = createApp({ dataDir })
+    const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
-    const createRes = await post(app, '/syncs', validSyncBody)
+    const createRes = await post(app, '/syncs', syncBody)
     const { id } = await createRes.json()
 
     const delRes = await del(app, `/syncs/${id}`)
@@ -367,6 +399,182 @@ describe('syncs CRUD', () => {
     const app = createApp({ dataDir })
     const res = await del(app, '/syncs/sync_nonexistent')
     expect(res.status).toBe(404)
+  })
+})
+
+// ── Referential integrity ────────────────────────────────────────
+
+describe('referential integrity', () => {
+  it('rejects sync creation with nonexistent credential_id', async () => {
+    const app = createApp({ dataDir })
+    const res = await post(app, '/syncs', {
+      ...validSyncBody,
+      source: { ...validSyncBody.source, credential_id: 'cred_nonexistent' },
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('cred_nonexistent')
+  })
+
+  it('rejects sync update with nonexistent credential_id', async () => {
+    const app = createApp({ dataDir })
+
+    // Create valid credentials and sync first
+    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: srcCredId } = await srcRes.json()
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    const syncRes = await post(app, '/syncs', {
+      ...validSyncBody,
+      source: { ...validSyncBody.source, credential_id: srcCredId },
+      destination: { ...validSyncBody.destination, credential_id: dstCredId },
+    })
+    const { id: syncId } = await syncRes.json()
+
+    // Attempt to patch with nonexistent credential
+    const patchRes = await patch(app, `/syncs/${syncId}`, {
+      source: { ...validSyncBody.source, credential_id: 'cred_ghost' },
+    })
+    expect(patchRes.status).toBe(400)
+    const body = await patchRes.json()
+    expect(body.error).toContain('cred_ghost')
+  })
+
+  it('blocks credential deletion when referenced by a sync (409)', async () => {
+    const app = createApp({ dataDir })
+
+    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: srcCredId } = await srcRes.json()
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    const syncRes = await post(app, '/syncs', {
+      ...validSyncBody,
+      source: { ...validSyncBody.source, credential_id: srcCredId },
+      destination: { ...validSyncBody.destination, credential_id: dstCredId },
+    })
+    const { id: syncId } = await syncRes.json()
+
+    // Cannot delete source credential
+    const delRes = await del(app, `/credentials/${srcCredId}`)
+    expect(delRes.status).toBe(409)
+    const body = await delRes.json()
+    expect(body.error).toContain(syncId)
+
+    // Cannot delete destination credential either
+    const delRes2 = await del(app, `/credentials/${dstCredId}`)
+    expect(delRes2.status).toBe(409)
+  })
+
+  it('allows credential deletion after sync is removed', async () => {
+    const app = createApp({ dataDir })
+
+    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: srcCredId } = await srcRes.json()
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    const syncRes = await post(app, '/syncs', {
+      ...validSyncBody,
+      source: { ...validSyncBody.source, credential_id: srcCredId },
+      destination: { ...validSyncBody.destination, credential_id: dstCredId },
+    })
+    const { id: syncId } = await syncRes.json()
+
+    // Delete the sync first
+    await del(app, `/syncs/${syncId}`)
+
+    // Now credential deletion should succeed
+    const delRes = await del(app, `/credentials/${srcCredId}`)
+    expect(delRes.status).toBe(200)
+    expect((await delRes.json()).deleted).toBe(true)
+  })
+
+  it('allows multiple syncs sharing a credential', async () => {
+    const app = createApp({ dataDir })
+
+    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const { id: srcCredId } = await srcRes.json()
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    const syncBody = {
+      ...validSyncBody,
+      source: { ...validSyncBody.source, credential_id: srcCredId },
+      destination: { ...validSyncBody.destination, credential_id: dstCredId },
+    }
+
+    const res1 = await post(app, '/syncs', syncBody)
+    expect(res1.status).toBe(201)
+    const res2 = await post(app, '/syncs', syncBody)
+    expect(res2.status).toBe(201)
+
+    // Both syncs exist
+    const listRes = await app.request('/syncs')
+    const { data } = await listRes.json()
+    expect(data).toHaveLength(2)
+  })
+
+  it('allows event-bridge source with no credential_id', async () => {
+    const app = createApp({ dataDir })
+
+    const dstRes = await post(app, '/credentials', {
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: 'u',
+      password: 'p',
+      database: 'db',
+    })
+    const { id: dstCredId } = await dstRes.json()
+
+    const res = await post(app, '/syncs', {
+      account_id: 'acct_test',
+      status: 'backfilling',
+      source: {
+        type: 'stripe-event-bridge',
+        livemode: true,
+        account_id: 'acct_123',
+      },
+      destination: {
+        type: 'postgres',
+        schema_name: 'stripe',
+        credential_id: dstCredId,
+      },
+    })
+    expect(res.status).toBe(201)
+    const created = await res.json()
+    expect(created.source.type).toBe('stripe-event-bridge')
+    expect(created.source.credential_id).toBeUndefined()
   })
 })
 

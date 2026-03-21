@@ -185,6 +185,41 @@ describe('resolve()', () => {
     expect(params.state).toEqual({ customers: { cursor: 'abc' } })
   })
 
+  it('works without credentials (e.g. event-bridge source)', () => {
+    const config: SyncConfig = {
+      id: 'sync-eb',
+      source: { type: 'stripe-event-bridge', livemode: true, account_id: 'acct_123' },
+      destination: { type: 'postgres', credential_id: 'dst', schema: 'myschema' },
+    }
+
+    const params = resolve({
+      config,
+      destCred: makeCred('dst', 'postgres', { connection_string: 'pg://...' }),
+    })
+
+    expect(params.source_name).toBe('stripe-event-bridge')
+    expect(params.source_config).toEqual({ livemode: true, account_id: 'acct_123' })
+    expect(params.destination_config).toEqual({
+      schema: 'myschema',
+      connection_string: 'pg://...',
+    })
+  })
+
+  it('works without any credentials', () => {
+    const config: SyncConfig = {
+      id: 'sync-nocred',
+      source: { type: 'stdin' },
+      destination: { type: 'test' },
+    }
+
+    const params = resolve({ config })
+
+    expect(params.source_name).toBe('stdin')
+    expect(params.destination_name).toBe('test')
+    expect(params.source_config).toEqual({})
+    expect(params.destination_config).toEqual({})
+  })
+
   it('credential fields override config fields', () => {
     const config: SyncConfig = {
       id: 's',
@@ -355,6 +390,31 @@ function makeTestService() {
   })
   return service
 }
+
+describe('StatefulSync with credential-less source', () => {
+  it('resolves and runs without source credential', async () => {
+    const credentials = memoryCredentialStore({
+      'dst-cred': makeCred('dst-cred', 'test'),
+    })
+    const configs = memoryConfigStore({
+      'no-src-cred': {
+        id: 'no-src-cred',
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
+    const service = new StatefulSync({
+      credentials,
+      configs,
+      states: memoryStateStore(),
+      logs: memoryLogSink(),
+      connectors: testConnectors,
+    })
+
+    await expect(service.setup('no-src-cred')).resolves.toBeUndefined()
+    await expect(service.check('no-src-cred')).resolves.toHaveProperty('source')
+  })
+})
 
 describe('StatefulSync.setup/teardown/check', () => {
   it('setup() resolves without error', async () => {

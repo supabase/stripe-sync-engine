@@ -29,12 +29,12 @@ export type SyncConfig = {
   status?: string
   source: {
     type: string
-    credential_id: string
+    credential_id?: string
     [key: string]: unknown
   }
   destination: {
     type: string
-    credential_id: string
+    credential_id?: string
     [key: string]: unknown
   }
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
