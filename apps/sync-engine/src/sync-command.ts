@@ -1,0 +1,56 @@
+import pg from 'pg'
+import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
+import type { StateMessage } from '@stripe/stateless-sync'
+import { createPgStateStore } from '@stripe/store-postgres'
+import type { CliOptions } from './resolve-options'
+import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options'
+
+const resolver = createConnectorResolver({})
+
+export async function syncAction(opts: CliOptions) {
+  const params = resolveOptions(opts)
+  const destConfig = params.destination_config as Record<string, unknown>
+  const useState = opts.state !== false
+  const isPostgres =
+    params.destination_name === 'postgres' || params.destination_name === 'destination-postgres'
+
+  // Load state from destination Postgres if applicable
+  let stateStore: Awaited<ReturnType<typeof createPgStateStore>> | undefined
+  if (useState && isPostgres) {
+    const pgUrl = getPostgresUrl(destConfig)
+    if (pgUrl) {
+      const schema = getPostgresSchema(destConfig)
+      const pool = new pg.Pool({ connectionString: pgUrl })
+      stateStore = createPgStateStore(pool, schema)
+
+      const state = await stateStore.load()
+      if (state) {
+        console.error(`Loaded state for ${Object.keys(state).length} stream(s)`)
+        params.state = state
+      } else {
+        console.error('No prior state found — starting fresh')
+      }
+    }
+  }
+
+  // Create and run the engine
+  const engine = await createEngineFromParams(params, resolver)
+
+  let stateCount = 0
+  try {
+    for await (const msg of engine.run() as AsyncIterable<StateMessage>) {
+      // Persist state checkpoint
+      if (stateStore) {
+        await stateStore.set(msg.stream, msg.data)
+      }
+      stateCount++
+      console.error(`checkpoint: ${msg.stream}`)
+    }
+  } finally {
+    if (stateStore) {
+      await stateStore.close()
+    }
+  }
+
+  console.error(`Sync complete. ${stateCount} checkpoint(s) saved.`)
+}

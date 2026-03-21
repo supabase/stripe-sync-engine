@@ -1,0 +1,41 @@
+{
+  "name": "@stripe/sync-engine",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Stripe Sync Engine — sync Stripe data to Postgres",
+  "type": "module",
+  "bin": {
+    "sync-engine": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/cli.ts src/index.ts --format esm,cjs --dts --shims",
+    "dev": "tsup src/cli.ts src/index.ts --format esm --shims --watch",
+    "test": "vitest --passWithNoTests"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@stripe/stateless-sync": "workspace:*",
+    "@stripe/store-postgres": "workspace:*",
+    "@stripe/ts-cli": "workspace:*",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/source-stripe": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.4",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2.4"
+  }
+}

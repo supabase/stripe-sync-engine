@@ -181,6 +181,46 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  apps/sync-engine:
+    dependencies:
+      '@stripe/stateless-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
+      '@stripe/store-postgres':
+        specifier: workspace:*
+        version: link:../../packages/store-postgres
+      '@stripe/ts-cli':
+        specifier: workspace:*
+        version: link:../../packages/ts-cli
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+    devDependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.15.6
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+
   packages/destination-google-sheets:
     dependencies:
       '@stripe/protocol':
@@ -395,6 +435,9 @@ importers:
 
   tests/e2e:
     devDependencies:
+      '@hono/node-server':
+        specifier: ^1
+        version: 1.19.11(hono@4.12.8)
       '@stripe/destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
@@ -404,6 +447,36 @@ importers:
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
+      '@stripe/stateless-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
+      '@stripe/sync-engine-stateful':
+        specifier: workspace:*
+        version: link:../../apps/stateful
+      pg:
+        specifier: ^8.16.0
+        version: 8.16.3
+      stripe:
+        specifier: ^17.7.0
+        version: 17.7.0
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.4(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1)
+
+  tests/integration:
+    devDependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/stateful-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateful-sync
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync

@@ -8,6 +8,7 @@ import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'
 // MARK: - Spec
 
 export const spec = z.object({
+  url: z.string().optional().describe('Postgres connection string (alias for connection_string)'),
   connection_string: z.string().optional().describe('Postgres connection string'),
   host: z.string().optional().describe('Postgres host (required for AWS IAM)'),
   port: z.number().default(5432).describe('Postgres port'),
@@ -51,11 +52,12 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
     }
   }
 
-  if (config.connection_string) {
-    return { connectionString: config.connection_string }
+  const connStr = config.connection_string ?? config.url
+  if (connStr) {
+    return { connectionString: connStr }
   }
 
-  throw new Error('Either connection_string or aws config is required')
+  throw new Error('Either connection_string (or url) or aws config is required')
 }
 
 // MARK: - upsertMany
