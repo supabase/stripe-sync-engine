@@ -361,6 +361,9 @@ importers:
 
   packages/store-postgres:
     dependencies:
+      '@stripe/stateful-sync':
+        specifier: workspace:*
+        version: link:../stateful-sync
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -480,6 +483,9 @@ importers:
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
+      '@stripe/store-postgres':
+        specifier: workspace:*
+        version: link:../../packages/store-postgres
       pg:
         specifier: ^8.16.0
         version: 8.16.3
