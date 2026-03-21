@@ -72,7 +72,7 @@ function makeClient(config: Config): Stripe {
 }
 
 /** Raw webhook payload requiring signature verification. */
-export type WebhookInput = { body: string | Buffer; signature: string }
+export type WebhookInput = { body: string | Buffer; headers: Record<string, string | string[] | undefined> }
 
 // MARK: - Stream state
 

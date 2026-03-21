@@ -23,11 +23,8 @@ export async function* processWebhookInput(
   if (!config.webhook_secret) {
     throw new Error('webhook_secret is required for raw webhook signature verification')
   }
-  const event = await stripe.webhooks.constructEvent(
-    input.body,
-    input.signature,
-    config.webhook_secret
-  )
+  const signature = (input.headers['stripe-signature'] as string) ?? ''
+  const event = await stripe.webhooks.constructEvent(input.body, signature, config.webhook_secret)
   yield* processStripeEvent(event, config, stripe, catalog, registry, streamNames)
 }
 
@@ -96,13 +93,12 @@ export function startWebhookServer(port: number, push: (input: LiveInput) => voi
     req.on('data', (chunk: Buffer) => chunks.push(chunk))
     req.on('end', () => {
       const body = Buffer.concat(chunks)
-      const signature = req.headers['stripe-signature'] as string
-      if (!signature) {
+      if (!req.headers['stripe-signature']) {
         res.writeHead(400).end('Missing stripe-signature')
         return
       }
       const { promise, resolve, reject } = Promise.withResolvers<void>()
-      push({ data: { body, signature }, resolve, reject })
+      push({ data: { body, headers: req.headers as Record<string, string | string[] | undefined> }, resolve, reject })
       promise
         .then(() => res.writeHead(200).end('{"received":true}'))
         .catch((err) => res.writeHead(500).end(err instanceof Error ? err.message : String(err)))

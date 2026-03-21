@@ -769,7 +769,7 @@ describe('POST /webhooks/:credential_id', () => {
     expect(await res.text()).toBe('ok')
   })
 
-  it('delivers { body, signature } to a running sync registered under that credential', async () => {
+  it('delivers { body, headers } to a running sync registered under that credential', async () => {
     let capturedInput: unknown
 
     // A source that captures the first $stdin item then terminates.
@@ -808,7 +808,8 @@ describe('POST /webhooks/:credential_id', () => {
     // the internal queue is registered and source.read() is waiting on $stdin.
     await nextTick()
 
-    // POST the webhook — the route extracts stripe-signature and calls push_event.
+    // POST the webhook — the route forwards raw { body, headers } without any
+    // Stripe-specific knowledge.
     const webhookBody = '{"id":"evt_test_123","type":"customer.created"}'
     const webhookSig = 't=1234567890,v1=abc123'
     await app.request(`/webhooks/${srcCredId}`, {
@@ -821,8 +822,12 @@ describe('POST /webhooks/:credential_id', () => {
     const lines = await readNdjson(runRes)
     expect(lines.some((l: any) => l.type === 'state')).toBe(true)
 
-    // The source received exactly { body, signature }, not a full headers map.
-    expect(capturedInput).toEqual({ body: webhookBody, signature: webhookSig })
+    // The source received { body, headers } — source-agnostic envelope.
+    // Source-stripe extracts 'stripe-signature' from headers internally.
+    expect(capturedInput).toMatchObject({
+      body: webhookBody,
+      headers: expect.objectContaining({ 'stripe-signature': webhookSig }),
+    })
   })
 })
 
