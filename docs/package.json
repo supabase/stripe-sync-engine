@@ -8,5 +8,8 @@
   },
   "dependencies": {
     "@markdoc/markdoc": "^0.4"
+  },
+  "devDependencies": {
+    "vercel": "^50.34.3"
   }
 }
