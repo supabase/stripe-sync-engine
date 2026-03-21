@@ -60,7 +60,10 @@ RSpec.describe 'SyncWorkflow E2E', :e2e do
 
   # Run a workflow with a monitor thread that verifies data before signaling delete.
   # Verification happens while the workflow is in 'live' phase (after backfill),
-  # BEFORE teardown runs, since teardown drops the schema.
+  # BEFORE teardown runs, since teardown drops the Postgres schema.
+  #
+  # When KEEP_TEST_DATA is set, the workflow is cancelled instead of deleted
+  # so the schema and data remain in Postgres for inspection.
   def run_workflow_with_verification(env, handle, worker, &verify_block)
     verification_error = nil
 
@@ -77,7 +80,11 @@ RSpec.describe 'SyncWorkflow E2E', :e2e do
             rescue StandardError => e
               verification_error = e.message
             end
-            handle.signal('delete')
+            if ENV['KEEP_TEST_DATA']
+              handle.cancel
+            else
+              handle.signal('delete')
+            end
             break
           end
         rescue StandardError
@@ -86,7 +93,11 @@ RSpec.describe 'SyncWorkflow E2E', :e2e do
       end
     end
 
-    worker.run { handle.result }
+    begin
+      worker.run { handle.result }
+    rescue Temporalio::Error::WorkflowFailedError
+      # Expected when KEEP_TEST_DATA cancels the workflow
+    end
     monitor.join(5)
 
     raise verification_error if verification_error
@@ -140,7 +151,9 @@ RSpec.describe 'SyncWorkflow E2E', :e2e do
     end
   ensure
     if pg_conn
-      pg_conn.exec("DROP SCHEMA IF EXISTS \"#{schema_name}\" CASCADE") rescue nil
+      unless ENV['KEEP_TEST_DATA']
+        pg_conn.exec("DROP SCHEMA IF EXISTS \"#{schema_name}\" CASCADE") rescue nil
+      end
       pg_conn.close rescue nil
     end
     Process.kill('TERM', api_pid) rescue nil if api_pid
@@ -239,7 +252,9 @@ RSpec.describe 'SyncWorkflow E2E', :e2e do
     raise verification_error if verification_error
   ensure
     if pg_conn
-      pg_conn.exec("DROP SCHEMA IF EXISTS \"#{schema_name}\" CASCADE") rescue nil
+      unless ENV['KEEP_TEST_DATA']
+        pg_conn.exec("DROP SCHEMA IF EXISTS \"#{schema_name}\" CASCADE") rescue nil
+      end
       pg_conn.close rescue nil
     end
     Process.kill('TERM', api_pid) rescue nil if api_pid
