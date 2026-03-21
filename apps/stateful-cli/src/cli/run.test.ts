@@ -49,11 +49,13 @@ describe('runSync', () => {
       'dst-cred': makeCred('dst-cred', 'test'),
     })
 
-    const configs = memoryConfigStore({ test_sync: {
-      id: 'test_sync',
-      source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
-      destination: { type: 'test', credential_id: 'dst-cred' },
-    }})
+    const configs = memoryConfigStore({
+      test_sync: {
+        id: 'test_sync',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
 
     const messages: StateMessage[] = []
     for await (const msg of runSync({
@@ -91,15 +93,17 @@ describe('runSync', () => {
       'dst-cred': makeCred('dst-cred', 'test'),
     })
 
-    const configs = memoryConfigStore({ test_sync: {
-      id: 'test_sync',
-      source: {
-        type: 'test',
-        credential_id: 'src-cred',
-        streams: { customers: {}, invoices: {} },
+    const configs = memoryConfigStore({
+      test_sync: {
+        id: 'test_sync',
+        source: {
+          type: 'test',
+          credential_id: 'src-cred',
+          streams: { customers: {}, invoices: {} },
+        },
+        destination: { type: 'test', credential_id: 'dst-cred' },
       },
-      destination: { type: 'test', credential_id: 'dst-cred' },
-    }})
+    })
 
     const messages: StateMessage[] = []
     for await (const msg of runSync({
@@ -135,11 +139,13 @@ function makeOpts(extra: Partial<Parameters<typeof runSync>[0]> = {}) {
     'src-cred': makeCred('src-cred', 'test'),
     'dst-cred': makeCred('dst-cred', 'test'),
   })
-  const configs = memoryConfigStore({ test_sync: {
-    id: 'test_sync',
-    source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
-    destination: { type: 'test', credential_id: 'dst-cred' },
-  }})
+  const configs = memoryConfigStore({
+    test_sync: {
+      id: 'test_sync',
+      source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+      destination: { type: 'test', credential_id: 'dst-cred' },
+    },
+  })
   return {
     syncId: 'test_sync',
     connectors: resolver,

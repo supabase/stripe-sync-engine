@@ -16,7 +16,10 @@ program
 function addSyncOptions(cmd: Command): Command {
   return cmd
     .option('--sync-id <id>', 'Sync ID', 'cli_sync')
-    .option('--data-dir <path>', 'Data directory for credentials, syncs, state, and logs (default: ~/.stripe-sync)')
+    .option(
+      '--data-dir <path>',
+      'Data directory for credentials, syncs, state, and logs (default: ~/.stripe-sync)'
+    )
 }
 
 addSyncOptions(
@@ -60,9 +63,7 @@ addSyncOptions(
   }
 })
 
-addSyncOptions(
-  program.command('run').description('Run a full sync')
-).action(async (opts) => {
+addSyncOptions(program.command('run').description('Run a full sync')).action(async (opts) => {
   const $stdin = !process.stdin.isTTY
     ? (parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>)
     : undefined

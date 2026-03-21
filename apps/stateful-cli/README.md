@@ -1,7 +1,8 @@
 # sync-engine-stateful (stateful CLI)
 
-Stateful CLI for persistent syncs. Connector config is resolved from CLI flags,
-environment variables, or a config file — connector-agnostic, no hardcoded env var names.
+Stateful CLI for persistent syncs. Credentials and sync configs are stored as
+JSON files in a data directory (`~/.stripe-sync` by default). State and logs
+are persisted across runs.
 
 ## Install
 
@@ -11,107 +12,114 @@ pnpm add @stripe/sync-engine-stateful-cli
 
 The `sync-engine-stateful` binary is added to your PATH.
 
-## Config resolution
+## Data directory
 
-Config is resolved per field using: **CLI flags > env vars > config file > defaults**.
+All persistent data lives in the data directory (default `~/.stripe-sync`):
 
-### Environment variables
+| File               | Description                            |
+| ------------------ | -------------------------------------- |
+| `credentials.json` | Stored credentials (keyed by ID)       |
+| `syncs.json`       | Sync configurations (keyed by sync ID) |
+| `state.json`       | Per-stream sync state / cursors        |
+| `logs.ndjson`      | Append-only NDJSON log                 |
 
-Env vars use a role prefix (`SOURCE_*`, `DESTINATION_*`). The prefix is stripped
-and field names are lowercased:
-
-| Env var                        | Resolves to                              |
-| ------------------------------ | ---------------------------------------- |
-| `SOURCE_API_KEY=sk_test_...`   | `source_config.api_key = "sk_test_..."`  |
-| `DESTINATION_CONNECTION_STRING=pg://...` | `destination_config.connection_string = "pg://..."` |
-
-Values are JSON-parsed where possible (`"true"` → `true`, `"123"` → `123`).
-
-A `.env` file in the working directory is loaded automatically.
-
-### Config file
-
-```sh
-sync-engine-stateful run --config sync.json
-```
-
-Where `sync.json`:
-
-```json
-{
-  "source_config": { "api_key": "sk_test_..." },
-  "destination_config": { "connection_string": "postgresql://localhost/mydb" }
-}
-```
-
-### CLI flags
-
-```sh
-sync-engine-stateful run \
-  --source-config '{"api_key":"sk_test_..."}' \
-  --destination-config '{"connection_string":"postgresql://..."}'
-```
+Override with `--data-dir <path>` or `DATA_DIR` env var.
 
 ## Commands
 
+All commands accept:
+
+| Option              | Default          | Description           |
+| ------------------- | ---------------- | --------------------- |
+| `--sync-id <id>`    | `cli_sync`       | Sync ID to operate on |
+| `--data-dir <path>` | `~/.stripe-sync` | Data directory        |
+
 ### `run`
 
-Run a sync.
+Run a full sync (read from source, write to destination).
 
 ```sh
 sync-engine-stateful run [options]
 ```
 
-| Option                         | Default    | Description                          |
-| ------------------------------ | ---------- | ------------------------------------ |
-| `--sync-id <id>`               | `cli_sync` | Identifier for this sync run         |
-| `--source-type <type>`         | `stripe`   | Source connector short name          |
-| `--destination-type <type>`    | `postgres` | Destination connector short name     |
-| `--source-config <json>`       |            | Source config as inline JSON         |
-| `--destination-config <json>`  |            | Destination config as inline JSON    |
-| `--config <path>`              |            | Path to JSON config file             |
-| `--data-dir <path>`            | `~/.stripe-sync` | Data directory for state       |
+### `setup` / `teardown`
 
-Writes NDJSON `StateMessage` objects to stdout as the sync progresses.
+Set up or tear down source and destination connectors.
+
+```sh
+sync-engine-stateful setup
+sync-engine-stateful teardown
+```
+
+### `check`
+
+Check source and destination connectivity.
+
+```sh
+sync-engine-stateful check
+```
+
+### `read` / `write`
+
+Read records from source or write messages to destination. These accept NDJSON
+on stdin and emit NDJSON on stdout.
+
+```sh
+sync-engine-stateful read
+sync-engine-stateful read | sync-engine-stateful write
+```
 
 ## Examples
 
-### Stripe → Postgres with env vars
+### Quick start
 
-```sh
-SOURCE_API_KEY=sk_test_... DESTINATION_CONNECTION_STRING=postgresql://... \
-  sync-engine-stateful run
-```
-
-### Using a config file with env secrets
+1. Create credentials and a sync config in `~/.stripe-sync/`:
 
 ```json
-// sync.json (safe to commit — no secrets)
+// credentials.json
 {
-  "source_config": {},
-  "destination_config": {}
+  "stripe_cred": {
+    "id": "stripe_cred",
+    "type": "stripe",
+    "api_key": "sk_test_...",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  "pg_cred": {
+    "id": "pg_cred",
+    "type": "postgres",
+    "connection_string": "postgresql://user:pass@localhost:5432/mydb",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
 }
 ```
 
-```sh
-SOURCE_API_KEY=sk_test_... \
-DESTINATION_CONNECTION_STRING=postgresql://user:pass@localhost:5432/mydb \
-  sync-engine-stateful run --config sync.json
+```json
+// syncs.json
+{
+  "cli_sync": {
+    "id": "cli_sync",
+    "source": { "type": "stripe", "credential_id": "stripe_cred" },
+    "destination": { "type": "postgres", "credential_id": "pg_cred" }
+  }
+}
 ```
 
-### Using a .env file
-
-```sh
-# .env
-SOURCE_API_KEY=sk_test_...
-DESTINATION_CONNECTION_STRING=postgresql://user:pass@localhost:5432/mydb
-```
+2. Run:
 
 ```sh
 sync-engine-stateful run
 ```
 
+### Custom data directory
+
+```sh
+sync-engine-stateful run --data-dir ./my-sync-data
+```
+
 ## Notes
 
-- State is kept on disk at `~/.stripe-sync/state.json` by default.
+- A `.env` file in the working directory is loaded automatically.
+- State persists across runs — subsequent invocations resume from the last cursor.
 - Missing connectors are auto-installed via `pnpm add` on first use.
