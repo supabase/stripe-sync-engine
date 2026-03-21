@@ -42,6 +42,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!pool) return
+  console.log(`\n  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
   if (!process.env.KEEP_TEST_DATA) {
     await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
   }
