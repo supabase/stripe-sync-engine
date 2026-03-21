@@ -24,9 +24,9 @@ const ts = new Date()
   .toISOString()
   .replace(/[-:T.Z]/g, '')
   .slice(0, 15)
-// Two schemas: one per sync, so we can verify isolation
+// Two schemas: one per sync
 const SCHEMA_A = `e2e_wh_a_${ts}` // sync A: products only
-const SCHEMA_B = `e2e_wh_b_${ts}` // sync B: products + subscriptions
+const SCHEMA_B = `e2e_wh_b_${ts}` // sync B: products + customers
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,8 +63,7 @@ async function patchJson(url: string, body: unknown): Promise<unknown> {
   return res.json()
 }
 
-/** Drain a streaming NDJSON run response, calling onMsg for each parsed message.
- *  Returns once the stream ends (via abort or natural completion). */
+/** Drain a streaming NDJSON run response, calling onMsg for each parsed message. */
 async function drainStream(
   res: Response,
   onMsg: (msg: Record<string, unknown>) => void
@@ -120,7 +119,7 @@ beforeAll(async () => {
   const dashPrefix = isTest ? 'dashboard.stripe.com/test' : 'dashboard.stripe.com'
   console.log(`\n  Stripe:   ${account.id} → https://${dashPrefix}/developers`)
   console.log(`  Postgres: ${POSTGRES_URL}`)
-  console.log(`  Schemas:  ${SCHEMA_A} (products) | ${SCHEMA_B} (products + subscriptions)`)
+  console.log(`  Schemas:  ${SCHEMA_A} (products) | ${SCHEMA_B} (products + customers)`)
 
   dataDir = mkdtempSync(path.join(tmpdir(), 'e2e-wh-'))
   apiPort = await getFreePort()
@@ -156,7 +155,7 @@ afterAll(async () => {
 
 describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres via webhook (stateful API)', () => {
   it(
-    'fans out a webhook event to two syncs sharing one credential with different stream catalogs',
+    'fans out events to two syncs; each only writes the streams in its catalog',
     async () => {
       const base = `http://localhost:${apiPort}`
 
@@ -172,7 +171,7 @@ describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres via webhook (s
         connection_string: POSTGRES_URL,
       })) as { id: string }
 
-      // 3. Start stripe-cli — one listener forwards all events to /webhooks/:credential_id
+      // 3. Start stripe-cli — one listener, one credential_id → one fan-out target
       const forwardTo = `http://host.docker.internal:${apiPort}/webhooks/${srcCred.id}`
       const dockerArgs = [
         'run',
@@ -241,21 +240,21 @@ describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres via webhook (s
         streams: [{ name: 'products' }],
       })) as { id: string }
 
-      // 5b. Sync B — products + subscriptions → SCHEMA_B
-      //     Both syncs share srcCred.id → push_event() fans out to both.
-      //     Each processes only the streams in its own catalog.
+      // 5b. Sync B — products + customers → SCHEMA_B
+      //     Both syncs share srcCred.id so push_event() delivers to both.
+      //     Stream filtering happens inside each sync's source.read($stdin).
       const syncB = (await postJson(`${base}/syncs`, {
         account_id: 'acct_test',
         status: 'syncing',
         source: sourceConfig,
         destination: { type: 'postgres', schema: SCHEMA_B, credential_id: pgCred.id },
-        streams: [{ name: 'products' }, { name: 'subscriptions' }],
+        streams: [{ name: 'products' }, { name: 'customers' }],
       })) as { id: string }
 
-      console.log(`  Sync A (${syncA.id}): [products] → ${SCHEMA_A}`)
-      console.log(`  Sync B (${syncB.id}): [products, subscriptions] → ${SCHEMA_B}`)
+      console.log(`  Sync A (${syncA.id}): [products]            → ${SCHEMA_A}`)
+      console.log(`  Sync B (${syncB.id}): [products, customers] → ${SCHEMA_B}`)
 
-      // 6. Start both runs — registers two queues under srcCred.id
+      // 6. Start both runs — registers two input queues under srcCred.id
       const acA = new AbortController()
       const acB = new AbortController()
       const [runA, runB] = await Promise.all([
@@ -265,77 +264,99 @@ describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres via webhook (s
       expect(runA.status).toBe(200)
       expect(runB.status).toBe(200)
 
-      // 7. Watch both streams for product state checkpoints
+      // 7. Watch both response streams for state checkpoints
       const errors: string[] = []
       let productInA = false
       let productInB = false
+      let customerInB = false
 
       const doneA = drainStream(runA, (msg) => {
         if (msg.type === 'state' && msg.stream === 'products' && (msg.data as any)?.eventId)
           productInA = true
-        if (msg.type === 'error') errors.push(msg.message as string ?? JSON.stringify(msg))
+        if (msg.type === 'error') errors.push((msg.message as string) ?? JSON.stringify(msg))
       })
       const doneB = drainStream(runB, (msg) => {
         if (msg.type === 'state' && msg.stream === 'products' && (msg.data as any)?.eventId)
           productInB = true
-        if (msg.type === 'error') errors.push(msg.message as string ?? JSON.stringify(msg))
+        if (msg.type === 'state' && msg.stream === 'customers' && (msg.data as any)?.eventId)
+          customerInB = true
+        if (msg.type === 'error') errors.push((msg.message as string) ?? JSON.stringify(msg))
       })
 
-      // 8. Wait for both destination setups to complete (schema + table creation)
+      // 8. Wait for both destination setups to complete
       await new Promise((r) => setTimeout(r, 2_000))
 
-      // 9. Trigger ONE product.updated event — this single webhook POST will be
-      //    fan-out delivered to BOTH running syncs via push_event()
+      // 9. Trigger product.updated — fans out to BOTH syncs, both process it
       const products = await stripe.products.list({ limit: 1 })
       expect(products.data.length).toBeGreaterThan(0)
       const product = products.data[0]
-      const newProductName = `e2e-wh-${Date.now()}`
+      const newProductName = `e2e-wh-prod-${Date.now()}`
       await stripe.products.update(product.id, { name: newProductName })
       console.log(`  product.updated: ${product.id} → "${newProductName}"`)
 
-      // 10. Poll until both syncs have checkpointed the product event (up to 60s)
+      // 10. Trigger customer.updated — fans out to BOTH syncs, but only sync B
+      //     writes it (customers not in sync A's catalog → silently filtered)
+      const customerList = await stripe.customers.list({ limit: 1 })
+      const customer =
+        customerList.data[0] ?? (await stripe.customers.create({ name: 'e2e test' }))
+      const newCustomerName = `e2e-wh-cust-${Date.now()}`
+      await stripe.customers.update(customer.id, { name: newCustomerName })
+      console.log(`  customer.updated: ${customer.id} → "${newCustomerName}"`)
+
+      // 11. Poll until all three checkpoints arrive (up to 60s)
       const deadline = Date.now() + 60_000
-      while ((!productInA || !productInB) && Date.now() < deadline) {
+      while ((!productInA || !productInB || !customerInB) && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 200))
       }
-      console.log(`  Checkpoints: A.products=${productInA}  B.products=${productInB}`)
+      console.log(
+        `  Checkpoints: A.products=${productInA}  B.products=${productInB}  B.customers=${customerInB}`
+      )
 
-      // 11. Stop both syncs
+      // 12. Stop both syncs
       acA.abort()
       acB.abort()
       await Promise.all([doneA, doneB])
 
       if (errors.length) console.error('  sync errors:', errors)
 
-      // 12. Both syncs must have processed the event (fan-out)
+      // 13. Fan-out: both syncs must have received and processed the product event
       expect(productInA).toBe(true)
       expect(productInB).toBe(true)
 
-      // 13. Verify product landed in SCHEMA_A (sync A processed it)
-      const { rows: rowsA } = await pool.query(
+      // 14. Customer event delivered to sync B only (has customers in catalog)
+      expect(customerInB).toBe(true)
+
+      // 15. Verify product in SCHEMA_A
+      const { rows: rowsA_prod } = await pool.query(
         `SELECT _raw_data->>'name' AS name FROM "${SCHEMA_A}"."products" WHERE id = $1`,
         [product.id]
       )
-      expect(rowsA[0]?.name).toBe(newProductName)
-      console.log(`  SCHEMA_A.products ✓  ${product.id} → "${newProductName}"`)
+      expect(rowsA_prod[0]?.name).toBe(newProductName)
+      console.log(`  SCHEMA_A.products  ✓  ${product.id} → "${newProductName}"`)
 
-      // 14. Verify product landed in SCHEMA_B (sync B also processed it — fan-out works)
-      const { rows: rowsB } = await pool.query(
+      // 16. Verify product in SCHEMA_B (same event, different destination — fan-out)
+      const { rows: rowsB_prod } = await pool.query(
         `SELECT _raw_data->>'name' AS name FROM "${SCHEMA_B}"."products" WHERE id = $1`,
         [product.id]
       )
-      expect(rowsB[0]?.name).toBe(newProductName)
-      console.log(`  SCHEMA_B.products ✓  ${product.id} → "${newProductName}"`)
+      expect(rowsB_prod[0]?.name).toBe(newProductName)
+      console.log(`  SCHEMA_B.products  ✓  ${product.id} → "${newProductName}"`)
 
-      // 15. Verify stream catalog filtering: SCHEMA_A has no subscriptions table
-      //     (sync A received the same webhook events as sync B but its catalog only
-      //     includes products, so subscription events are silently ignored)
+      // 17. Verify customer in SCHEMA_B (sync B has customers in catalog)
+      const { rows: rowsB_cust } = await pool.query(
+        `SELECT _raw_data->>'name' AS name FROM "${SCHEMA_B}"."customers" WHERE id = $1`,
+        [customer.id]
+      )
+      expect(rowsB_cust[0]?.name).toBe(newCustomerName)
+      console.log(`  SCHEMA_B.customers ✓  ${customer.id} → "${newCustomerName}"`)
+
+      // 18. Verify customer NOT in SCHEMA_A (sync A filtered it — customers not in catalog)
       const { rows: tablesA } = await pool.query(
-        `SELECT tablename FROM pg_tables WHERE schemaname = $1 AND tablename = 'subscriptions'`,
+        `SELECT tablename FROM pg_tables WHERE schemaname = $1 AND tablename = 'customers'`,
         [SCHEMA_A]
       )
       expect(tablesA).toHaveLength(0)
-      console.log(`  SCHEMA_A.subscriptions ✓  (not in sync A catalog — no table created)`)
+      console.log(`  SCHEMA_A.customers ✓  (not in sync A catalog — filtered out)`)
     },
     120_000
   )
