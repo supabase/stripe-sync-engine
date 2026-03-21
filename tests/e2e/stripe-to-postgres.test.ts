@@ -37,7 +37,11 @@ beforeAll(async () => {
   pool = new pg.Pool({ connectionString: POSTGRES_URL })
   await pool.query('SELECT 1') // fail fast if Postgres is down
   stripe = new Stripe(STRIPE_API_KEY)
-  console.log(`\n  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
+  const account = await stripe.accounts.retrieve()
+  const isTest = STRIPE_API_KEY.startsWith('sk_test_')
+  const dashPrefix = isTest ? 'dashboard.stripe.com/test' : 'dashboard.stripe.com'
+  console.log(`\n  Stripe:   ${account.id} → https://${dashPrefix}/developers`)
+  console.log(`  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
 })
 
 afterAll(async () => {
