@@ -10,7 +10,8 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/protocol'
-import source, { fromWebhookEvent } from './index'
+import source from './index'
+import { fromWebhookEvent } from './process-event'
 import { buildResourceRegistry } from './resourceRegistry'
 import type { ResourceConfig } from './types'
 import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket'
