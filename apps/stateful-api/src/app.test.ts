@@ -379,7 +379,7 @@ describe('openapi', () => {
     expect(res.status).toBe(200)
     const spec = await res.json()
     expect(spec.openapi).toBe('3.0.0')
-    expect(spec.info.title).toBe('Stripe Sync API')
+    expect(spec.info.title).toBe('Stripe Sync Stateful API')
     expect(spec.paths['/credentials']).toBeDefined()
     expect(spec.paths['/syncs']).toBeDefined()
     expect(spec.paths['/credentials/{id}']).toBeDefined()

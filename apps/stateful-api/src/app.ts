@@ -1,3 +1,5 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import type { ConnectorResolver, Message } from '@stripe/sync-engine-stateless-api'
@@ -32,7 +34,7 @@ function genId(prefix: string): string {
 }
 
 export function createApp(options?: { dataDir?: string; connectors?: ConnectorResolver }) {
-  const dataDir = options?.dataDir || process.env.DATA_DIR || '.stripe-sync'
+  const dataDir = options?.dataDir || process.env.DATA_DIR || join(homedir(), '.stripe-sync')
 
   const credentials = fileCredentialStore(`${dataDir}/credentials.json`)
   const configs = fileConfigStore(`${dataDir}/syncs.json`)
@@ -435,9 +437,9 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
   app.doc('/openapi.json', {
     openapi: '3.0.0',
     info: {
-      title: 'Stripe Sync API',
+      title: 'Stripe Sync Stateful API',
       version: '1.0.0',
-      description: 'Stripe Sync — manage credentials and syncs',
+      description: 'Stripe Sync (stateful) — manage credentials and syncs',
     },
   })
 

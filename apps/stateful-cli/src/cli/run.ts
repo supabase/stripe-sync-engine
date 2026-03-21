@@ -1,3 +1,5 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type {
   StateMessage,
   ConnectorResolver,
@@ -10,9 +12,11 @@ import {
   StatefulSync,
   envCredentialStore,
   flagConfigStore,
-  memoryStateStore,
+  fileStateStore,
   stderrLogSink,
 } from '@stripe/stateful-sync'
+
+const DEFAULT_STATE_FILE = join(homedir(), '.stripe-sync', 'state.json')
 
 type ServiceOpts = {
   syncId: string
@@ -37,7 +41,7 @@ function makeService(opts: ServiceOpts) {
   return new StatefulSync({
     credentials,
     configs,
-    states: memoryStateStore(),
+    states: fileStateStore(DEFAULT_STATE_FILE),
     logs: stderrLogSink(),
     connectors: opts.connectors ?? createConnectorResolver({}),
   })
