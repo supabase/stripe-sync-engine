@@ -69,6 +69,7 @@ jobs:
         run: npm run test
         env:
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           STRIPE_MOCK_URL: 'http://localhost:12111'
 
   e2e-test:
