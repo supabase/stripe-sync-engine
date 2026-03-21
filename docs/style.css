@@ -1,0 +1,7 @@
+/* Constrain all mermaid diagrams to fit within slide bounds */
+.slidev-layout .mermaid svg {
+  max-height: 320px !important;
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+}
