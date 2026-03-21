@@ -19,7 +19,8 @@ import {
 } from '../protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '../protocol'
 import { createEngine, buildCatalog } from '../engine'
-import { testSource, testDestination } from '../test-connectors'
+import { testSource } from '../source-test'
+import { testDestination } from '../destination-test'
 
 // ---------------------------------------------------------------------------
 // Helpers

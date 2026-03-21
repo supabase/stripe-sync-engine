@@ -1,10 +1,8 @@
 import { z } from 'zod'
-import type { Source, Destination, Message } from './protocol'
+import type { Source } from './protocol'
 import { toRecordMessage } from './adapters'
 
-// MARK: - testSource
-
-export const testSourceSpec = z.object({
+export const spec = z.object({
   /** Stream definitions: name -> { records, primary_key? }. When provided, yields these. */
   streams: z
     .record(
@@ -19,11 +17,12 @@ export const testSourceSpec = z.object({
   auth_error_after: z.number().optional(),
 })
 
-export type TestSourceConfig = z.infer<typeof testSourceSpec>
+export { spec as testSourceSpec }
+export type TestSourceConfig = z.infer<typeof spec>
 
 export const testSource = {
   spec() {
-    return { config: z.toJSONSchema(testSourceSpec) }
+    return { config: z.toJSONSchema(spec) }
   },
 
   async check() {
@@ -40,7 +39,7 @@ export const testSource = {
     return { type: 'catalog' as const, streams }
   },
 
-  async *read({ config }: { config: TestSourceConfig }) {
+  async *read({ config }: { config: TestSourceConfig }, _$stdin?: AsyncIterable<unknown>) {
     if (!config.streams) return
     let totalRecords = 0
     for (const [streamName, streamDef] of Object.entries(config.streams)) {
@@ -65,29 +64,4 @@ export const testSource = {
   },
 } satisfies Source<TestSourceConfig>
 
-// MARK: - testDestination
-
-export const testDestinationSpec = z.object({})
-
-export type TestDestinationConfig = z.infer<typeof testDestinationSpec>
-
-export const testDestination = {
-  spec() {
-    return { config: z.toJSONSchema(testDestinationSpec) }
-  },
-
-  async check() {
-    return { status: 'succeeded' as const }
-  },
-
-  async *write(
-    _params: { config: TestDestinationConfig; catalog: unknown },
-    $stdin: AsyncIterable<Message>
-  ) {
-    for await (const msg of $stdin) {
-      if (msg.type === 'state') {
-        yield msg
-      }
-    }
-  },
-} satisfies Destination<TestDestinationConfig>
+export default testSource

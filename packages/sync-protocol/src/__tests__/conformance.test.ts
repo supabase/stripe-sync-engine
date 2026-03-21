@@ -10,13 +10,30 @@ const packages = readdirSync(packagesDir, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
 
-const sources = packages.filter((d) => d.startsWith('source-'))
-const destinations = packages.filter((d) => d.startsWith('destination-'))
+const srcDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+const sources = [
+  ...packages.filter((d) => d.startsWith('source-')),
+  // Built-in test connector (lives in sync-protocol/src/)
+  '__builtin:source-test',
+]
+const destinations = [
+  ...packages.filter((d) => d.startsWith('destination-')),
+  // Built-in test connector (lives in sync-protocol/src/)
+  '__builtin:destination-test',
+]
+
+function resolveModule(pkg: string): string {
+  if (pkg.startsWith('__builtin:')) {
+    return resolve(srcDir, pkg.replace('__builtin:', '') + '.ts')
+  }
+  return resolve(packagesDir, pkg, 'src/index.ts')
+}
 
 describe.each(sources)('source: %s', (pkg) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(resolve(packagesDir, pkg, 'src/index.ts'))
+    mod = await import(resolveModule(pkg))
   })
 
   it('has a default export', () => {
@@ -65,7 +82,7 @@ describe.each(sources)('source: %s', (pkg) => {
 describe.each(destinations)('destination: %s', (pkg) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(resolve(packagesDir, pkg, 'src/index.ts'))
+    mod = await import(resolveModule(pkg))
   })
 
   it('has a default export', () => {
