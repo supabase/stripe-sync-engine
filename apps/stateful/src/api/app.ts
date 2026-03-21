@@ -496,6 +496,18 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     return ndjsonResponse(service.run(syncId, input))
   })
 
+  // MARK: - Webhook ingress
+
+  // Receive a webhook event from Stripe and fan it out to all running syncs
+  // that share the given credential. Each sync verifies the signature itself.
+  app.post('/webhooks/:credential_id', async (c) => {
+    const credential_id = c.req.param('credential_id')
+    const body = await c.req.text()
+    const headers = Object.fromEntries(c.req.raw.headers.entries())
+    service.push_event(credential_id, { body, headers })
+    return c.text('ok', 200)
+  })
+
   // MARK: - OpenAPI spec + Swagger UI
 
   app.doc('/openapi.json', {

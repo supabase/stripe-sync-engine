@@ -133,17 +133,15 @@ const source = {
       if (!(managed && managed.status === 'enabled')) {
         await stripe.webhookEndpoints.create({
           url: config.webhook_url,
-          enabled_events: catalog.streams.map(
-            (s) => `${s.stream.name}.*` as Stripe.WebhookEndpointCreateParams.EnabledEvent
-          ),
+          enabled_events: ['*'],
           metadata: { managed_by: 'stripe-sync' },
         })
       }
     }
   },
 
-  async teardown({ config }) {
-    if (config.webhook_url) {
+  async teardown({ config, remove_shared_resources = true }) {
+    if (config.webhook_url && remove_shared_resources) {
       const stripe = makeClient(config)
       const existing = await stripe.webhookEndpoints.list({ limit: 100 })
       for (const wh of existing.data) {
