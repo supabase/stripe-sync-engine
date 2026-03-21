@@ -593,6 +593,45 @@ describe('openapi', () => {
     expect(spec.paths['/syncs']).toBeDefined()
     expect(spec.paths['/credentials/{id}']).toBeDefined()
     expect(spec.paths['/syncs/{id}']).toBeDefined()
+
+    // Verify that dynamic connector types appear in the schema definitions
+    const specJson = JSON.stringify(spec)
+    expect(specJson).toContain('stripe-api-core')
+    expect(specJson).toContain('stripe-event-bridge')
+    expect(specJson).toContain('postgres')
+  })
+
+  it('OpenAPI spec reflects only registered connectors', async () => {
+    // Register a minimal source + destination — different from defaultConnectors()
+    const connectors = createConnectorResolver({
+      sources: {
+        'my-source': {
+          spec: () => ({ config: { type: 'object', properties: { token: { type: 'string' } } } }),
+          discover: async () => [],
+          read: async function* () {},
+        },
+      },
+      destinations: {
+        'my-dest': {
+          spec: () => ({
+            config: { type: 'object', properties: { connection_string: { type: 'string' } } },
+          }),
+          streams: () => [],
+          setup: async () => {},
+          write: async function* () {},
+        },
+      },
+    })
+    const app = createApp({ dataDir, connectors })
+    const res = await app.request('/openapi.json')
+    const spec = await res.json()
+    const specJson = JSON.stringify(spec)
+
+    // Only registered connectors should appear
+    expect(specJson).toContain('my-source')
+    expect(specJson).toContain('my-dest')
+    expect(specJson).not.toContain('stripe-api-core')
+    expect(specJson).not.toContain('postgres')
   })
 
   it('GET /docs — returns swagger UI html', async () => {
