@@ -67,9 +67,9 @@ starts with `{` or `[`, it is parsed as JSON. Otherwise it is treated as a
 file path and read with `configFromFile`. Returns `{}` for `undefined`.
 
 ```ts
-parseJsonOrFile('{"api_key":"sk_test_..."}')  // → { api_key: "sk_test_..." }
-parseJsonOrFile('./stripe-creds.json')          // → contents of the file
-parseJsonOrFile(undefined)                      // → {}
+parseJsonOrFile('{"api_key":"sk_test_..."}') // → { api_key: "sk_test_..." }
+parseJsonOrFile('./stripe-creds.json') // → contents of the file
+parseJsonOrFile(undefined) // → {}
 ```
 
 ### Putting it together
@@ -79,8 +79,8 @@ Implements the cascade: **CLI flags > env vars > config file > defaults**.
 ```ts
 const config = mergeConfig(
   parseJsonOrFile(opts.sourceConfig), // --source-config '{"api_key":"..."}' or ./creds.json
-  envPrefix('SOURCE'),                // SOURCE_API_KEY=sk_test_...
-  configFromFile(opts.config),        // --config sync.json
-  { host: 'localhost', port: 5432 }   // defaults
+  envPrefix('SOURCE'), // SOURCE_API_KEY=sk_test_...
+  configFromFile(opts.config), // --config sync.json
+  { host: 'localhost', port: 5432 } // defaults
 )
 ```

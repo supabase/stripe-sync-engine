@@ -38,7 +38,6 @@ COPY --from=prod-deps /app/packages/protocol/node_modules /app/packages/protocol
 COPY --from=prod-deps /app/packages/stateless-sync/node_modules /app/packages/stateless-sync/node_modules
 COPY --from=prod-deps /app/packages/source-stripe/node_modules /app/packages/source-stripe/node_modules
 COPY --from=prod-deps /app/packages/destination-postgres/node_modules /app/packages/destination-postgres/node_modules
-COPY --from=prod-deps /app/packages/ts-cli/node_modules /app/packages/ts-cli/node_modules
 
 # Copy built files
 COPY --from=build /app/apps/stateless/dist /app/apps/stateless/dist
