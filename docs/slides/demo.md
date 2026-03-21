@@ -73,7 +73,8 @@ async function* source() {
     '{"type":"record","stream":"msgs","data":{"text":"hello"},"emitted_at":0}',
     '{"type":"record","stream":"msgs","data":{"text":"world"},"emitted_at":0}',
     '{"type":"state","stream":"msgs","data":{"cursor":2}}',
-  ]) yield JSON.parse(line)
+  ])
+    yield JSON.parse(line)
 }
 async function* destination($stdin) {
   for await (const msg of $stdin) {
@@ -81,6 +82,5 @@ async function* destination($stdin) {
     if (msg.type === 'state') yield msg
   }
 }
-for await (const s of destination(source()))
-  console.log('state:', s.data)
+for await (const s of destination(source())) console.log('state:', s.data)
 ```

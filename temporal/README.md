@@ -74,6 +74,7 @@ STRIPE_API_KEY=rk_test_... bundle exec rspec spec/e2e/
 ```
 
 Two tests:
+
 1. **Backfill** — workflow reads products from Stripe, writes 100 rows to Postgres
 2. **Live event** — after backfill, updates a product via Stripe API, signals the event to the workflow, verifies processing
 
