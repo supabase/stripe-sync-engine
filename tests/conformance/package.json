@@ -1,0 +1,18 @@
+{
+  "name": "@stripe/test-conformance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/source-stripe": "workspace:*",
+    "@stripe/source-stripe2": "workspace:*",
+    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/destination-postgres2": "workspace:*",
+    "@stripe/destination-google-sheets": "workspace:*",
+    "@stripe/destination-google-sheets2": "workspace:*",
+    "vitest": "^3.2.1"
+  }
+}

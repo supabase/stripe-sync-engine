@@ -1,39 +1,35 @@
-import { readdirSync } from 'fs'
-import { dirname, resolve } from 'path'
-import { fileURLToPath } from 'url'
+import { readFileSync, readdirSync } from 'fs'
+import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ConnectorSpecification } from '../protocol'
+import { ConnectorSpecification } from '@stripe/sync-protocol'
 
-// __tests__ → src → sync-protocol → packages
-const packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const packages = readdirSync(packagesDir, { withFileTypes: true })
+const packagesDir = resolve(import.meta.dirname, '../../packages')
+const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
 
-const srcDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-const sources = [
-  ...packages.filter((d) => d.startsWith('source-')),
-  // Built-in test connector (lives in sync-protocol/src/)
-  '__builtin:source-test',
-]
-const destinations = [
-  ...packages.filter((d) => d.startsWith('destination-')),
-  // Built-in test connector (lives in sync-protocol/src/)
-  '__builtin:destination-test',
-]
-
-function resolveModule(pkg: string): string {
-  if (pkg.startsWith('__builtin:')) {
-    return resolve(srcDir, pkg.replace('__builtin:', '') + '.ts')
-  }
-  return resolve(packagesDir, pkg, 'src/index.ts')
+function resolvePackageName(dir: string): string {
+  const pkgJson = JSON.parse(readFileSync(resolve(packagesDir, dir, 'package.json'), 'utf-8'))
+  return pkgJson.name as string
 }
 
-describe.each(sources)('source: %s', (pkg) => {
+const sources = [
+  ...packageDirs
+    .filter((d) => d.startsWith('source-'))
+    .map((d) => ({ name: resolvePackageName(d) })),
+  { name: '@stripe/sync-protocol/source-test' },
+]
+const destinations = [
+  ...packageDirs
+    .filter((d) => d.startsWith('destination-'))
+    .map((d) => ({ name: resolvePackageName(d) })),
+  { name: '@stripe/sync-protocol/destination-test' },
+]
+
+describe.each(sources)('source: $name', ({ name }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(resolveModule(pkg))
+    mod = await import(name)
   })
 
   it('has a default export', () => {
@@ -79,10 +75,10 @@ describe.each(sources)('source: %s', (pkg) => {
   })
 })
 
-describe.each(destinations)('destination: %s', (pkg) => {
+describe.each(destinations)('destination: $name', ({ name }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(resolveModule(pkg))
+    mod = await import(name)
   })
 
   it('has a default export', () => {
