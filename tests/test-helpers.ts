@@ -1,4 +1,10 @@
+import { appendFileSync } from 'node:fs'
 import { describe } from 'vitest'
+
+/** File where CI warning annotations are collected during test runs.
+ *  A post-test CI step cats this file so GitHub Actions parses the
+ *  `::warning` commands without pnpm's per-package output prefix. */
+const WARNINGS_FILE = '/tmp/vitest-skip-warnings.txt'
 
 /**
  * Like `describe`, but skips the suite when any of the listed env vars
@@ -25,9 +31,11 @@ export function describeWithEnv<const K extends string>(
     if (process.env.CI) {
       const file = callerFile()
       const loc = file ? ` file=${file},` : ''
-      // Write directly to stdout to bypass vitest's console interception —
-      // ANSI escapes prepended by vitest break GitHub's ::warning parsing.
-      process.stdout.write(
+      // Write to a temp file — pnpm prefixes stdout/stderr with the package
+      // name, which prevents GitHub Actions from parsing ::warning commands.
+      // A post-test CI step cats this file for clean annotation output.
+      appendFileSync(
+        WARNINGS_FILE,
         `::warning${loc} title=Tests Skipped::${name} -- missing env: ${missing.join(', ')}\n`
       )
     }

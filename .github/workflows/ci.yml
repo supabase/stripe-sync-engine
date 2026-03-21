@@ -66,6 +66,10 @@ jobs:
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           STRIPE_MOCK_URL: 'http://localhost:12111'
 
+      - name: Skipped test warnings
+        if: always()
+        run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
+
   e2e-test:
     name: E2E & integration tests
     runs-on: ubuntu-24.04
