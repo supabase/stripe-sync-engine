@@ -1,6 +1,6 @@
 # sync-engine-stateless
 
-Stateless CLI and HTTP API for running one-shot syncs. Every invocation is
+Stateless CLI and HTTP API for running one-shot syncs. Every invocation is  
 self-contained — the caller supplies all config; nothing is stored between runs.
 
 ## Install
@@ -188,4 +188,44 @@ Streaming endpoints respond with `Content-Type: application/x-ndjson`.
 curl -s http://localhost:3001/run \
   -H 'Content-Type: application/json' \
   -H 'X-Sync-Params: {"source_name":"stripe","destination_name":"postgres","source_config":{"api_key":"sk_test_..."},"destination_config":{"connection_string":"postgresql://..."}}'
+```
+
+---
+
+## FAQ
+
+### Why do `read` and `write` both require full source + destination config?
+
+The configured catalog — which streams to sync, their sync modes, and their
+schemas — is a property of the source/destination pair, not either side alone.
+`read` calls `source.discover()` to build the catalog, and `write` passes that
+same catalog to `destination.write()` so the destination can provision the right
+tables/columns. Both sides need to agree on the catalog for a sync to work.
+
+### I only care about testing my destination (or source). Do I have to configure both?
+
+Use the test connectors from `@stripe/stateless-sync`. They're in-process
+utilities intended for this exact case:
+
+- **`testSource`** — declares stream names from config and passes `$stdin`
+  through as records; always returns `{ status: 'succeeded' }` on `check`
+- **`testDestination`** — discards all records, passes state messages through;
+  empty config `{}`
+
+Pass them directly when constructing the engine in code:
+
+```ts
+import { createEngine, testSource, testDestination } from '@stripe/stateless-sync'
+
+// Test your destination with a trivial source
+const engine = createEngine(params, {
+  source: testSource,
+  destination: myDestination,
+})
+
+// Test your source with a no-op destination
+const engine = createEngine(params, {
+  source: mySource,
+  destination: testDestination,
+})
 ```
