@@ -23,7 +23,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-stateless-sync-*.tgz
   rm -f "$REPO_ROOT"/stripe-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-destination-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-cli-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-*.tgz
 }
 trap cleanup EXIT
 
@@ -41,7 +41,7 @@ PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/protocol pack 2>/dev/nul
 ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/stateless-sync pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
-CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless-cli pack 2>/dev/null | tail -1)
+CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless pack 2>/dev/null | tail -1)
 
 for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ"; do
   if [ ! -f "$tgz" ]; then
@@ -81,9 +81,9 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 3: sync-engine --help
 # ---------------------------------------------------------------------------
-echo "--- Step 3: sync-engine --help ---"
+echo "--- Step 3: sync-engine-stateless --help ---"
 
-if npx sync-engine --help > /dev/null 2>&1; then
+if npx sync-engine-stateless --help > /dev/null 2>&1; then
   echo "  PASS: --help exits 0"
 else
   echo "  FAIL: --help exited with $?"
@@ -99,7 +99,7 @@ echo "--- Step 4: check command with valid connectors ---"
 PARAMS='{"source_name":"stripe","destination_name":"postgres","source_config":{"api_key":"sk_test_fake"},"destination_config":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
 
 # check will fail (bad credentials) but should NOT fail on "not found" or "conformance check"
-CHECK_OUTPUT=$(npx sync-engine check --params "$PARAMS" 2>&1 || true)
+CHECK_OUTPUT=$(npx sync-engine-stateless check --params "$PARAMS" 2>&1 || true)
 
 if echo "$CHECK_OUTPUT" | grep -qi "not found"; then
   echo "  FAIL: check output contains 'not found' — connector loading failed"
@@ -123,7 +123,7 @@ echo "--- Step 5: unknown connector gives clear error ---"
 
 PARAMS_BAD='{"source_name":"stripe","destination_name":"nonexistent","source_config":{"api_key":"sk_test_fake"},"destination_config":{}}'
 
-BAD_OUTPUT=$(npx sync-engine check --params "$PARAMS_BAD" 2>&1 || true)
+BAD_OUTPUT=$(npx sync-engine-stateless check --params "$PARAMS_BAD" 2>&1 || true)
 
 if echo "$BAD_OUTPUT" | grep -qi "not found"; then
   echo "  PASS: unknown connector correctly reports 'not found'"

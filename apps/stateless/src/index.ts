@@ -19,16 +19,18 @@ export type {
   DestinationOutput,
   Message,
   SyncEngineParams,
-} from '@stripe/stateless-sync'
-
-export {
-  createEngine,
-  createConnectorResolver,
-  resolveSpecifier,
-  loadConnector,
-} from '@stripe/stateless-sync'
-export type {
   SyncParams,
   ConnectorResolver,
   ConnectorResolverOptions,
 } from '@stripe/stateless-sync'
+
+export {
+  createEngine,
+  createEngineFromParams,
+  createConnectorResolver,
+  resolveSpecifier,
+  loadConnector,
+  parseNdjsonStream,
+} from '@stripe/stateless-sync'
+
+export { ndjsonResponse } from './stream'

@@ -55,7 +55,7 @@ importers:
         specifier: ^7.1.11
         version: 7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/stateful-api:
+  apps/stateful:
     dependencies:
       '@hono/node-server':
         specifier: ^1
@@ -69,9 +69,15 @@ importers:
       '@stripe/stateful-sync':
         specifier: workspace:*
         version: link:../../packages/stateful-sync
-      '@stripe/sync-engine-stateless-api':
+      '@stripe/sync-engine-stateless':
         specifier: workspace:*
-        version: link:../stateless-api
+        version: link:../stateless
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       hono:
         specifier: ^4
         version: 4.12.8
@@ -79,34 +85,6 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.10.1
-      esbuild:
-        specifier: ^0.27.2
-        version: 0.27.3
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      vitest:
-        specifier: ^3.2
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  apps/stateful-cli:
-    dependencies:
-      '@stripe/stateful-sync':
-        specifier: workspace:*
-        version: link:../../packages/stateful-sync
-      '@stripe/sync-engine-stateless-cli':
-        specifier: workspace:*
-        version: link:../stateless-cli
-      commander:
-        specifier: ^12.1.0
-        version: 12.1.0
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
-    devDependencies:
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
@@ -123,7 +101,7 @@ importers:
         specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/stateless-api:
+  apps/stateless:
     dependencies:
       '@hono/node-server':
         specifier: ^1
@@ -131,34 +109,15 @@ importers:
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
-      hono:
-        specifier: ^4
-        version: 4.12.8
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.10.1
-      esbuild:
-        specifier: ^0.27.2
-        version: 0.27.3
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      vitest:
-        specifier: ^3.2
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  apps/stateless-cli:
-    dependencies:
-      '@stripe/stateless-sync':
-        specifier: workspace:*
-        version: link:../../packages/stateless-sync
       commander:
         specifier: ^12.1.0
         version: 12.1.0
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      hono:
+        specifier: ^4
+        version: 4.12.8
     devDependencies:
       '@stripe/destination-postgres':
         specifier: workspace:*
@@ -178,6 +137,9 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.16.3
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)

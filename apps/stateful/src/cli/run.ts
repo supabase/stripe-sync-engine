@@ -5,8 +5,8 @@ import type {
   ConnectorResolver,
   Message,
   CheckResult,
-} from '@stripe/sync-engine-stateless-cli'
-import { createConnectorResolver } from '@stripe/sync-engine-stateless-cli'
+} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless'
 import type { CredentialStore, ConfigStore } from '@stripe/stateful-sync'
 import {
   StatefulSync,

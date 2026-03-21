@@ -1,12 +1,13 @@
 {
-  "name": "@stripe/sync-engine-stateful-api",
+  "name": "@stripe/sync-engine-stateful",
   "version": "0.1.0",
   "private": false,
-  "description": "Stripe Sync Engine stateful HTTP API — persistent sync with credential and state management",
+  "description": "Stripe Sync Engine stateful app — CLI and HTTP API with credential and state management",
   "type": "module",
   "main": "./dist/index.cjs",
   "bin": {
-    "sync-engine-stateful-api": "./dist/index.js"
+    "sync-engine-stateful": "./dist/cli/index.js",
+    "sync-engine-stateful-api": "./dist/api/index.js"
   },
   "exports": {
     ".": {
@@ -16,8 +17,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/app.ts --format esm,cjs --dts --shims",
-    "dev": "tsup src/index.ts src/app.ts --format esm --shims --watch",
+    "build": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm,cjs --dts --shims",
+    "dev": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm --shims --watch",
     "test": "vitest run"
   },
   "files": [
@@ -27,12 +28,15 @@
     "@hono/node-server": "^1",
     "@hono/swagger-ui": "^0.6",
     "@hono/zod-openapi": "^1.2",
-    "@stripe/sync-engine-stateless-api": "workspace:*",
+    "@stripe/sync-engine-stateless": "workspace:*",
     "@stripe/stateful-sync": "workspace:*",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
     "hono": "^4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@stripe/stateless-sync": "workspace:*",
     "@types/node": "^24",
     "esbuild": "^0.27.2",
     "tsup": "^8.5.0",
@@ -50,6 +54,7 @@
     "stripe",
     "sync",
     "stateful",
+    "cli",
     "api",
     "typescript"
   ],

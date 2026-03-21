@@ -1,33 +1,40 @@
 {
-  "name": "@stripe/sync-engine-stateless-cli",
+  "name": "@stripe/sync-engine-stateless",
   "version": "0.1.0",
   "private": false,
-  "description": "Stripe Sync Engine CLI — stream data from sources to destinations",
+  "description": "Stripe Sync Engine stateless app — CLI and HTTP API for one-shot sync",
   "type": "module",
   "main": "./dist/index.cjs",
   "bin": {
-    "sync-engine": "./dist/cli/index.js"
+    "sync-engine-stateless": "./dist/cli/index.js",
+    "sync-engine-stateless-api": "./dist/api/index.js"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./app": {
+      "types": "./src/api/app.ts",
+      "import": "./dist/api/app.js",
+      "require": "./dist/api/app.cjs"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/cli/index.ts --format esm,cjs --dts --shims",
-    "lint": "eslint src --ext .ts",
-    "test": "vitest --passWithNoTests",
-    "dev": "tsup src/index.ts src/cli/index.ts --format esm --shims --watch"
+    "build": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm,cjs --dts --shims",
+    "dev": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm --shims --watch",
+    "test": "vitest --passWithNoTests"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
+    "@hono/node-server": "^1",
     "@stripe/stateless-sync": "workspace:*",
     "commander": "^12.1.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "hono": "^4"
   },
   "devDependencies": {
     "@stripe/destination-postgres": "workspace:*",
@@ -36,6 +43,7 @@
     "@vitest/ui": "^4.0.9",
     "esbuild": "^0.27.2",
     "pg": "^8.16.3",
+    "tsup": "^8.5.0",
     "vitest": "^3.2.4"
   },
   "repository": {

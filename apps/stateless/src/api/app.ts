@@ -6,42 +6,7 @@ import type {
   SyncParams as SyncParamsType,
 } from '@stripe/stateless-sync'
 import { createEngineFromParams, parseNdjsonStream, SyncParams } from '@stripe/stateless-sync'
-import { ndjsonResponse } from './stream'
-
-// Re-export core protocol types for consumers (e.g. stateful-api)
-export type {
-  Source,
-  Destination,
-  Stream,
-  ConfiguredStream,
-  ConfiguredCatalog,
-  ConnectorSpecification,
-  CheckResult,
-  RecordMessage,
-  StateMessage,
-  CatalogMessage,
-  LogMessage,
-  ErrorMessage,
-  StreamStatusMessage,
-  DestinationInput,
-  DestinationOutput,
-  Message,
-  SyncEngineParams,
-  SyncParams,
-  ConnectorResolver,
-  ConnectorResolverOptions,
-} from '@stripe/stateless-sync'
-
-export {
-  createEngine,
-  createEngineFromParams,
-  createConnectorResolver,
-  resolveSpecifier,
-  loadConnector,
-  parseNdjsonStream,
-} from '@stripe/stateless-sync'
-
-export { ndjsonResponse } from './stream'
+import { ndjsonResponse } from '../stream'
 
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()

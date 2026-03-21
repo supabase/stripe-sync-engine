@@ -13,23 +13,11 @@ jobs:
     name: Test
     runs-on: ubuntu-24.04
 
-    services:
-      postgres:
-        image: postgres:18
-        ports:
-          - 55432:5432
-        env:
-          POSTGRES_DB: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v5
+
+      - name: Start services
+        run: docker compose up -d --wait
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -52,20 +40,16 @@ jobs:
           echo API_KEY=api_key_test >> packages/source-stripe/.env
 
       - name: Install dependencies
-        run: |
-          pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Formatting checks
-        run: |
-          pnpm format:check
+        run: pnpm format:check
 
       - name: Lint
-        run: |
-          pnpm lint
+        run: pnpm lint
 
       - name: Builds successfully
-        run: |
-          pnpm build
+        run: pnpm build
 
       - name: Check migrations-embedded.ts is up to date
         run: |
@@ -78,22 +62,14 @@ jobs:
           docker run --rm \
             --network="host" \
             -e PGPASSWORD=postgres \
-            postgres:15 \
+            postgres:18 \
             psql -h localhost -p 55432 -U postgres -d postgres -c 'create schema if not exists "stripe";'
 
       - name: Tests
-        run: |
-          npm run test
+        run: npm run test
         env:
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
-
-      # Integration tests require packages/sync-engine which has been removed.
-      # TODO: Migrate integration tests to the new package structure.
-      # - name: Integration Tests
-      #   run: |
-      #     cd packages/sync-engine && npm run test:integration
-      #   env:
-      #     TEST_POSTGRES_DB_URL: 'postgresql://postgres:postgres@localhost:55432/postgres'
+          STRIPE_MOCK_URL: 'http://localhost:12111'
 
   e2e-test:
     name: CLI e2e tests
@@ -101,6 +77,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Start services
+        run: docker compose up -d --wait
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -119,12 +98,12 @@ jobs:
 
       - name: Set up .env file
         run: |
-          touch apps/stateless-cli/.env
-          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> apps/stateless-cli/.env
-          echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> apps/stateless-cli/.env
-          echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> apps/stateless-cli/.env
-          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/stateless-cli/.env
-          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/stateless-cli/.env
+          touch apps/stateless/.env
+          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> apps/stateless/.env
+          echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> apps/stateless/.env
+          echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> apps/stateless/.env
+          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/stateless/.env
+          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/stateless/.env
 
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh

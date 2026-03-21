@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type {
-  ConnectorResolver,
   Destination,
   DestinationInput,
   DestinationOutput,
@@ -11,18 +10,19 @@ import type {
   Message,
   Source,
   StateMessage,
-} from '@stripe/sync-engine-stateless-api'
+} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless'
 import { createApp } from './app'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function mockResolver(source: Source, destination: Destination): ConnectorResolver {
-  return {
-    resolveSource: async () => source,
-    resolveDestination: async () => destination,
-  }
+function connectors(source: Source, destination: Destination) {
+  return createConnectorResolver({
+    sources: { 'stripe-api-core': source },
+    destinations: { postgres: destination },
+  })
 }
 
 async function* toAsync<T>(items: T[]): AsyncIterable<T> {
@@ -448,7 +448,7 @@ describe('POST /syncs/:id/run', () => {
     }
     const source = createMockSource([record, stateMsg])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/run`, { method: 'POST' })
@@ -463,7 +463,7 @@ describe('POST /syncs/:id/run', () => {
   it('streams NDJSON error when config is missing', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
 
     const res = await app.request('/syncs/nonexistent/run', { method: 'POST' })
     expect(res.status).toBe(200) // streaming always starts 200
@@ -480,7 +480,7 @@ describe('POST /syncs/:id/setup and teardown', () => {
   it('setup returns 204', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/setup`, { method: 'POST' })
@@ -490,7 +490,7 @@ describe('POST /syncs/:id/setup and teardown', () => {
   it('teardown returns 204', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/teardown`, { method: 'POST' })
@@ -504,7 +504,7 @@ describe('GET /syncs/:id/check', () => {
   it('returns check result JSON', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/check`)
@@ -530,7 +530,7 @@ describe('POST /syncs/:id/read', () => {
     const stateMsg: StateMessage = { type: 'state', stream: 'customers', data: { cursor: 'c1' } }
     const source = createMockSource([record, stateMsg])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/read`, { method: 'POST' })
@@ -548,7 +548,7 @@ describe('POST /syncs/:id/write', () => {
   it('streams NDJSON state messages after writing', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const body =
@@ -573,7 +573,7 @@ describe('POST /syncs/:id/write', () => {
   it('returns 400 when body is missing', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
-    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const app = createApp({ dataDir, connectors: connectors(source, destination) })
     const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/write`, { method: 'POST' })

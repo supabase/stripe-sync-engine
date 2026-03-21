@@ -15,7 +15,7 @@ import {
 const program = new Command()
 
 program
-  .name('sync-engine')
+  .name('sync-engine-stateless')
   .description('Stripe Sync Engine — stream data from sources to destinations')
   .version(VERSION)
 
