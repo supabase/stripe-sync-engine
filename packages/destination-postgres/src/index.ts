@@ -131,7 +131,7 @@ const destination = {
   async setup({ config, catalog }) {
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
-      await pool.query(`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
+      await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
       // Ensure the trigger function exists in the target schema so triggers
       // can reference it without relying on search_path.
       await pool.query(sql`
@@ -179,7 +179,7 @@ const destination = {
   async teardown({ config }) {
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
-      await pool.query(`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
+      await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
       await pool.end()
     }

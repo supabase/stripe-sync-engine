@@ -51,15 +51,15 @@ async function renameMigrationsTableIfNeeded(
 
   if (oldTableExists && !newTableExists) {
     logger?.info('Renaming migrations table to _migrations')
-    await client.query(`ALTER TABLE "${schema}"."migrations" RENAME TO "_migrations"`)
+    await client.query(sql`ALTER TABLE "${schema}"."migrations" RENAME TO "_migrations"`)
     logger?.info('Successfully renamed migrations table')
   }
 }
 
 async function cleanupSchema(client: Client, schema: string, logger?: Logger): Promise<void> {
   logger?.warn(`Migrations table is empty - dropping and recreating schema "${schema}"`)
-  await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-  await client.query(`CREATE SCHEMA "${schema}"`)
+  await client.query(sql`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+  await client.query(sql`CREATE SCHEMA "${schema}"`)
   logger?.info(`Schema "${schema}" has been reset`)
 }
 
@@ -199,9 +199,9 @@ async function runMigrationsWithContent(
     )
     await client.connect()
     for (const schema of new Set([syncSchema, dataSchema])) {
-      await client.query(`CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(schema)}`)
+      await client.query(sql`CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(schema)}`)
     }
-    await client.query(`SET search_path TO ${buildSearchPath(syncSchema)}`)
+    await client.query(sql`SET search_path TO ${buildSearchPath(syncSchema)}`)
     await renameMigrationsTableIfNeeded(client, syncSchema, config.logger)
 
     const tableExists = await doesTableExist(client, syncSchema, tableName)
@@ -255,7 +255,7 @@ async function runMigrationsWithContent(
       config.logger?.info(`Successfully applied ${pendingMigrations.length} migration(s)`)
     }
 
-    await client.query(`SET search_path TO ${buildSearchPath(dataSchema, syncSchema)}`)
+    await client.query(sql`SET search_path TO ${buildSearchPath(dataSchema, syncSchema)}`)
   } catch (err) {
     config.logger?.error(err, 'Error running migrations')
     throw err
