@@ -130,7 +130,7 @@ describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres via webhook (s
 
     // 1. Create Stripe credential (webhook_secret added after stripe listen starts)
     const srcCred = (await postJson(`${base}/credentials`, {
-      type: 'stripe',
+      type: 'stripe-api-core',
       api_key: STRIPE_API_KEY,
     })) as { id: string }
 
