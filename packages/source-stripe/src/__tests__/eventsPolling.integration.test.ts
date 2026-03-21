@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
-import { createSource } from '../backfill'
-import type { StripeStreamState } from '../backfill'
+import { createSource } from '../index'
+import type { StripeStreamState } from '../index'
 
 const STRIPE_MOCK_URL = process.env.STRIPE_MOCK_URL ?? 'http://localhost:12111'
 

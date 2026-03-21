@@ -58,7 +58,7 @@ async function destinationWorkflow(config: SyncConfig) {
     await condition(() => buffer.length >= BATCH_SIZE, FLUSH_INTERVAL)
     if (buffer.length > 0) {
       const batch = buffer.splice(0, buffer.length)
-      await writeBatch(batch)  // activity: upsert to destination
+      await writeBatch(batch) // activity: upsert to destination
     }
   }
 }
@@ -90,8 +90,8 @@ async function destinationWorkflow(config: SyncConfig) {
   for (const stream of config.streams) {
     let cursor: string | undefined
     while (true) {
-      const page = await fetchPage(stream, cursor)  // activity
-      await writeBatch(page.records)                 // activity
+      const page = await fetchPage(stream, cursor) // activity
+      await writeBatch(page.records) // activity
       if (!page.hasMore) break
       cursor = page.cursor
     }
@@ -119,8 +119,8 @@ async function destinationWorkflow(config: SyncConfig) {
   // Backfill and live flush run concurrently
   // Backfill feeds into the same buffer
   await Promise.all([
-    backfillAllStreams(config),  // child workflow or loop of activities
-    flushLoop(buffer),          // periodic flush of accumulated signals
+    backfillAllStreams(config), // child workflow or loop of activities
+    flushLoop(buffer), // periodic flush of accumulated signals
   ])
 }
 ```
@@ -130,16 +130,16 @@ they'll be buffered and flushed alongside backfill pages.
 
 ## What Temporal buys over current AsyncIterable pipeline
 
-| Concern                | Current (AsyncIterable)                        | Temporal workflow                                |
-| ---------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| **Crash recovery**     | Restart from last StateMessage checkpoint       | Workflow replays from event history automatically |
-| **State persistence**  | Manual: `states.set(syncId, stream, data)`      | Implicit: workflow local state survives crashes   |
-| **Retry**              | Hand-rolled try/catch + loop                    | Declarative activity retry policies               |
-| **Backpressure**       | Async iterator pull (blocks source if dest slow)| Signal buffer (source returns immediately)        |
-| **Visibility**         | Custom status fields + logs                     | Temporal UI: workflow state, signal history, timeline |
-| **Webhook latency**    | Handler blocked until destination commits       | Handler returns immediately after signal          |
-| **Batching**           | Destination-internal (batch_size=100)           | Workflow-level: `condition()` + timer             |
-| **Multi-destination**  | Not supported (one pipeline = one destination)  | One signal fans out to N destination workflows    |
+| Concern               | Current (AsyncIterable)                          | Temporal workflow                                     |
+| --------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| **Crash recovery**    | Restart from last StateMessage checkpoint        | Workflow replays from event history automatically     |
+| **State persistence** | Manual: `states.set(syncId, stream, data)`       | Implicit: workflow local state survives crashes       |
+| **Retry**             | Hand-rolled try/catch + loop                     | Declarative activity retry policies                   |
+| **Backpressure**      | Async iterator pull (blocks source if dest slow) | Signal buffer (source returns immediately)            |
+| **Visibility**        | Custom status fields + logs                      | Temporal UI: workflow state, signal history, timeline |
+| **Webhook latency**   | Handler blocked until destination commits        | Handler returns immediately after signal              |
+| **Batching**          | Destination-internal (batch_size=100)            | Workflow-level: `condition()` + timer                 |
+| **Multi-destination** | Not supported (one pipeline = one destination)   | One signal fans out to N destination workflows        |
 
 ## What it costs
 
@@ -161,14 +161,14 @@ they'll be buffered and flushed alongside backfill pages.
 The Supabase backfill worker (`stripe-backfill-worker.ts`) is structurally the
 same idea, implemented with edge function self-reinvocation instead of Temporal:
 
-| Temporal concept        | Supabase equivalent                              |
-| ----------------------- | ------------------------------------------------ |
-| Workflow                | Chain of edge function invocations                |
-| Workflow state          | Cursor + status rows in `_sync_state` table       |
-| Activity                | One edge function invocation (fetch page + write) |
-| Continue-as-new         | Self-reinvocation via `fetch()` to own URL         |
-| Signal                  | Webhook edge function writes directly              |
-| Completion barrier      | `NOT EXISTS` query across all stream statuses      |
+| Temporal concept   | Supabase equivalent                               |
+| ------------------ | ------------------------------------------------- |
+| Workflow           | Chain of edge function invocations                |
+| Workflow state     | Cursor + status rows in `_sync_state` table       |
+| Activity           | One edge function invocation (fetch page + write) |
+| Continue-as-new    | Self-reinvocation via `fetch()` to own URL        |
+| Signal             | Webhook edge function writes directly             |
+| Completion barrier | `NOT EXISTS` query across all stream statuses     |
 
 Temporal would formalize this with durable execution instead of the
 self-reinvocation hack, but the conceptual model is the same.
