@@ -503,8 +503,10 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
   app.post('/webhooks/:credential_id', async (c) => {
     const credential_id = c.req.param('credential_id')
     const body = await c.req.text()
-    const headers = Object.fromEntries(c.req.raw.headers.entries())
-    service.push_event(credential_id, { body, headers })
+    // Extract just the signature header — source-stripe's processWebhookInput
+    // expects WebhookInput = { body, signature }, not a full headers map.
+    const signature = c.req.header('stripe-signature') ?? ''
+    service.push_event(credential_id, { body, signature })
     return c.text('ok', 200)
   })
 

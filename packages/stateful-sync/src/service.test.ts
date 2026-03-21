@@ -1,6 +1,6 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { testSource, testDestination, createConnectorResolver } from '@stripe/stateless-sync'
 import type { Message, StateMessage } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
@@ -461,5 +461,176 @@ describe('StatefulSync.read/write', () => {
     expect(stateMsgs).toHaveLength(1)
     expect(stateMsgs[0]!.stream).toBe('customers')
     expect(stateMsgs[0]!.data).toEqual({ cursor: 'xyz' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// push_event — webhook fan-out (unit — no Docker needed)
+//
+// testSource passes $stdin items straight through as Messages. testDestination
+// re-emits StateMessages. So pushing a valid StateMessage via push_event causes
+// the matching run() generator to yield it back — observable without I/O.
+// ---------------------------------------------------------------------------
+
+/** Yield to the macro-task queue so all pending microtasks/awaits can settle. */
+function nextTick() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
+
+describe('push_event', () => {
+  it('is a no-op when no syncs are running for that credential', () => {
+    const service = makeTestService()
+    // Should not throw even though nothing is registered
+    service.push_event('src-cred', { body: 'test', signature: 'sig' })
+  })
+
+  it('delivers an event to a running sync registered under that credential', async () => {
+    const service = makeTestService()
+    const iter = service.run('test-sync')[Symbol.asyncIterator]()
+
+    // Advance the generator — it creates the internal queue under 'src-cred',
+    // then blocks inside testSource.read() waiting for the first $stdin item.
+    const firstResult = iter.next()
+    await nextTick()
+
+    // Push a StateMessage for stream 'customers' (must be in the catalog).
+    // testSource passes it through → engine routes to destination → destination
+    // re-emits it as a StateMessage → run() yields it.
+    const stateMsg = { type: 'state' as const, stream: 'customers', data: { cursor: 42 } }
+    service.push_event('src-cred', stateMsg)
+
+    const result = await firstResult
+    expect(result.done).toBe(false)
+    expect(result.value).toMatchObject(stateMsg)
+
+    // Abandon the infinite generator
+    await iter.return?.(undefined)
+  })
+
+  it('fans out to multiple running syncs sharing a credential', async () => {
+    const credentials = memoryCredentialStore({
+      'src-cred': makeCred('src-cred', 'test'),
+      'dst-cred': makeCred('dst-cred', 'test'),
+    })
+    const configs = memoryConfigStore({
+      'sync-a': {
+        id: 'sync-a',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+      'sync-b': {
+        id: 'sync-b',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
+    const service = new StatefulSync({
+      credentials,
+      configs,
+      states: memoryStateStore(),
+      logs: memoryLogSink(),
+      connectors: testConnectors,
+    })
+
+    const iterA = service.run('sync-a')[Symbol.asyncIterator]()
+    const iterB = service.run('sync-b')[Symbol.asyncIterator]()
+    const promA = iterA.next()
+    const promB = iterB.next()
+    await nextTick()
+
+    const stateMsg = { type: 'state' as const, stream: 'customers', data: { cursor: 1 } }
+    service.push_event('src-cred', stateMsg)
+
+    const [a, b] = await Promise.all([promA, promB])
+    expect(a.done).toBe(false)
+    expect(a.value).toMatchObject(stateMsg)
+    expect(b.done).toBe(false)
+    expect(b.value).toMatchObject(stateMsg)
+
+    await Promise.all([iterA.return?.(undefined), iterB.return?.(undefined)])
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// teardown — remove_shared_resources logic
+// ---------------------------------------------------------------------------
+
+describe('teardown remove_shared_resources', () => {
+  function makeServiceWithTeardownSpy(syncs: Record<string, any>) {
+    const teardownSpy = vi.fn()
+    const sourceWithTeardown = {
+      ...testSource,
+      async teardown({
+        remove_shared_resources,
+      }: {
+        config: any
+        remove_shared_resources?: boolean
+      }) {
+        teardownSpy(remove_shared_resources)
+      },
+    }
+    const credentials = memoryCredentialStore({
+      'src-cred': makeCred('src-cred', 'test'),
+      'dst-cred': makeCred('dst-cred', 'test'),
+    })
+    const configs = memoryConfigStore(syncs)
+    const service = new StatefulSync({
+      credentials,
+      configs,
+      states: memoryStateStore(),
+      logs: memoryLogSink(),
+      connectors: {
+        resolveSource: async () => sourceWithTeardown as any,
+        resolveDestination: async () => testDestination as any,
+      },
+    })
+    return { service, teardownSpy }
+  }
+
+  it('passes remove_shared_resources: true when this is the only sync for the credential', async () => {
+    const { service, teardownSpy } = makeServiceWithTeardownSpy({
+      'sync-1': {
+        id: 'sync-1',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
+    await service.teardown('sync-1')
+    expect(teardownSpy).toHaveBeenCalledWith(true)
+  })
+
+  it('passes remove_shared_resources: false when sibling syncs share the credential', async () => {
+    const { service, teardownSpy } = makeServiceWithTeardownSpy({
+      'sync-a': {
+        id: 'sync-a',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+      'sync-b': {
+        id: 'sync-b',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
+    await service.teardown('sync-a')
+    expect(teardownSpy).toHaveBeenCalledWith(false)
+  })
+
+  it('passes remove_shared_resources: true when sibling uses a different credential', async () => {
+    const { service, teardownSpy } = makeServiceWithTeardownSpy({
+      'sync-a': {
+        id: 'sync-a',
+        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+      'sync-b': {
+        id: 'sync-b',
+        source: { type: 'test', credential_id: 'other-cred', streams: { customers: {} } },
+        destination: { type: 'test', credential_id: 'dst-cred' },
+      },
+    })
+    await service.teardown('sync-a')
+    expect(teardownSpy).toHaveBeenCalledWith(true)
   })
 })
