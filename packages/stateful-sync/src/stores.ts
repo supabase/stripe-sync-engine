@@ -1,47 +1,9 @@
-// Store interfaces and types for stateful sync.
-// Plain TS — no Zod, no runtime validation. These are internal contracts.
+// Store interfaces for stateful sync.
+// Types (Credential, SyncConfig, LogEntry) are defined in ./schemas.
 
-/** A stored credential — flat shape, type-specific fields at top level. */
-export type Credential = {
-  id: string
-  /** Credential type — e.g. "stripe", "postgres", "google". */
-  type: string
-  created_at: string
-  updated_at: string
-  /** Type-specific fields (api_key, connection_string, etc.) at top level. */
-  [key: string]: unknown
-}
+import type { Credential, SyncConfig, LogEntry } from './schemas'
 
-/**
- * Stored form of a sync configuration. References credentials by ID,
- * does not contain state. Resolved to SyncParams before calling the engine.
- */
-export type SyncConfig = {
-  id: string
-  /** Account identifier — optional, set by the API layer. */
-  account_id?: string
-  /** Sync status — optional, set by the API layer. */
-  status?: string
-  source: {
-    type: string
-    credential_id: string
-    [key: string]: unknown
-  }
-  destination: {
-    type: string
-    credential_id: string
-    [key: string]: unknown
-  }
-  streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
-}
-
-/** Structured log entry written by the service during sync runs. */
-export type LogEntry = {
-  level: 'debug' | 'info' | 'warn' | 'error'
-  message: string
-  stream?: string
-  timestamp: string
-}
+export type { Credential, SyncConfig, LogEntry }
 
 // MARK: - Store interfaces
 

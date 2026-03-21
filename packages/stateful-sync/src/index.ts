@@ -1,5 +1,21 @@
-// Types and interfaces
-export type { Credential, SyncConfig, LogEntry } from './stores'
+// Schemas and derived types
+export {
+  StripeApiVersionSchema,
+  CredentialConfigSchema,
+  CredentialSchema,
+  SourceConfigSchema,
+  DestinationConfigSchema,
+  StreamConfigSchema,
+  SyncStatusSchema,
+  SyncSchema,
+  CreateSyncSchema,
+  UpdateSyncSchema,
+  UpdateCredentialSchema,
+  LogEntrySchema,
+} from './schemas'
+export type { Credential, SyncConfig, LogEntry } from './schemas'
+
+// Store interfaces
 export type { CredentialStore, ConfigStore, StateStore, LogSink } from './stores'
 
 // Service
