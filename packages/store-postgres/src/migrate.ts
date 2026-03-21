@@ -1,11 +1,9 @@
 import { Client } from 'pg'
 import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { ConnectionOptions } from 'node:tls'
 import { renderMigrationTemplate } from './migrationTemplate'
-import type { EmbeddedMigration } from './migrations-embedded'
+import type { Migration } from './migrations'
+import { migrations as allMigrations } from './migrations'
 
 /**
  * Simple logger interface compatible with both pino and console
@@ -15,9 +13,6 @@ export interface Logger {
   warn(message?: unknown, ...optionalParams: unknown[]): void
   error(message?: unknown, ...optionalParams: unknown[]): void
 }
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 export type MigrationConfig = {
   databaseUrl: string
@@ -68,13 +63,7 @@ async function cleanupSchema(client: Client, schema: string, logger?: Logger): P
 }
 
 export async function runMigrations(config: MigrationConfig): Promise<void> {
-  const migrationsDirectory = path.resolve(__dirname, './migrations')
-  const migrations = loadMigrationsFromDirectory(migrationsDirectory)
-  config.logger?.info(
-    { migrationsDirectory, migrationCount: migrations.length },
-    'Loaded bootstrap migrations from directory'
-  )
-  await runMigrationsWithContent(config, migrations)
+  await runMigrationsWithContent(config, allMigrations)
 }
 
 // Helper to parse migration ID from filename (matches the historical migration filename convention)
@@ -102,7 +91,7 @@ type ParsedMigration = {
   hash: string
 }
 
-function parseMigrations(migrations: EmbeddedMigration[]): ParsedMigration[] {
+function parseMigrations(migrations: Migration[]): ParsedMigration[] {
   return migrations
     .map((migration) => ({
       id: parseMigrationId(migration.name),
@@ -114,25 +103,7 @@ function parseMigrations(migrations: EmbeddedMigration[]): ParsedMigration[] {
     .sort((a, b) => a.id - b.id)
 }
 
-function loadMigrationsFromDirectory(migrationsDirectory: string): EmbeddedMigration[] {
-  if (!fs.existsSync(migrationsDirectory)) {
-    throw new Error(`Migrations directory not found. ${migrationsDirectory} does not exist.`)
-  }
-
-  return fs
-    .readdirSync(migrationsDirectory)
-    .filter((fileName) => fileName.endsWith('.sql'))
-    .sort()
-    .map((fileName) => ({
-      name: fileName,
-      sql: fs.readFileSync(path.join(migrationsDirectory, fileName), 'utf8'),
-    }))
-}
-
-function renderBootstrapMigrations(
-  migrations: EmbeddedMigration[],
-  syncSchema: string
-): EmbeddedMigration[] {
+function renderBootstrapMigrations(migrations: Migration[], syncSchema: string): Migration[] {
   return migrations.map((migration) => ({
     ...migration,
     sql: renderMigrationTemplate(migration.sql, { syncSchema }),
@@ -199,7 +170,7 @@ async function runMigration(
 
 async function runMigrationsWithContent(
   config: MigrationConfig,
-  migrations: EmbeddedMigration[]
+  migrations: Migration[]
 ): Promise<void> {
   const client = new Client({
     connectionString: config.databaseUrl,
@@ -299,7 +270,7 @@ async function runMigrationsWithContent(
  */
 export async function runMigrationsFromContent(
   config: MigrationConfig,
-  migrations: EmbeddedMigration[]
+  migrations: Migration[]
 ): Promise<void> {
   await runMigrationsWithContent(config, migrations)
 }

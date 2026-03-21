@@ -1,4 +1,4 @@
-import { runMigrationsFromContent, embeddedMigrations } from '@stripe/store-postgres'
+import { runMigrationsFromContent, migrations } from '@stripe/store-postgres'
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
 
@@ -454,7 +454,7 @@ Deno.serve(async (req) => {
         schemaName,
         syncTablesSchemaName,
       },
-      embeddedMigrations
+      migrations
     )
 
     pool = new pg.Pool({ connectionString: dbUrl, max: 2 })

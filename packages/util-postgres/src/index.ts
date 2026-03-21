@@ -1,4 +1,4 @@
-export { ident, identList, qualifiedTable } from './sql.js'
+export { sql, ident, identList, qualifiedTable } from './sql.js'
 export { buildUpsertSql, upsert } from './upsert.js'
 export type { UpsertOptions } from './upsert.js'
 export { acquire, createRateLimiterTable } from './rateLimiter.js'

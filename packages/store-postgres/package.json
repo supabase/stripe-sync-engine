@@ -11,13 +11,14 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts && mkdir -p dist/migrations && cp -r src/migrations dist/migrations",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
+    "@stripe/util-postgres": "workspace:*",
     "pg": "^8.16.3",
     "yesql": "^7.0.0"
   },

@@ -1,3 +1,6 @@
+import { sql } from '@stripe/util-postgres'
+
+export default sql`\
 -- Stripe-specific sync metadata tables.
 -- Schema-qualified objects use the explicit {{sync_schema}} placeholder.
 -- Uses idempotent DDL so it can be safely re-run.
@@ -218,3 +221,4 @@ WHERE r.run_started_at = (
   WHERE s."_account_id" = r."_account_id"
 )
 GROUP BY r."_account_id", r.run_started_at, r.object;
+`

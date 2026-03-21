@@ -9,9 +9,9 @@ import {
   StatefulSync,
   memoryCredentialStore,
   memoryConfigStore,
-  memoryStateStore,
   stderrLogSink,
 } from '@stripe/stateful-sync'
+import { createPgStateStore, runMigrationsFromContent, migrations } from '@stripe/store-postgres'
 import type { Credential } from '@stripe/stateful-sync'
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,8 @@ let stripe: Stripe
 beforeAll(async () => {
   pool = new pg.Pool({ connectionString: POSTGRES_URL })
   await pool.query('SELECT 1') // fail fast if Postgres is down
+
+  await runMigrationsFromContent({ databaseUrl: POSTGRES_URL, schemaName: SCHEMA }, migrations)
 
   stripe = new Stripe(STRIPE_API_KEY)
   const account = await stripe.accounts.retrieve()
@@ -110,7 +112,7 @@ function makeService() {
     },
   })
 
-  const states = memoryStateStore()
+  const states = createPgStateStore(pool, SCHEMA)
   const logs = stderrLogSink()
 
   const service = new StatefulSync({

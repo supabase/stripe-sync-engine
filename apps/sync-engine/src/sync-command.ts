@@ -1,7 +1,11 @@
 import pg from 'pg'
 import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
 import type { StateMessage } from '@stripe/stateless-sync'
-import { createPgStateStore } from '@stripe/store-postgres'
+import {
+  createPgStateStore,
+  runMigrationsFromContent,
+  genericBootstrapMigrations,
+} from '@stripe/store-postgres'
 import type { CliOptions } from './resolve-options'
 import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options'
 
@@ -20,10 +24,14 @@ export async function syncAction(opts: CliOptions) {
     const pgUrl = getPostgresUrl(destConfig)
     if (pgUrl) {
       const schema = getPostgresSchema(destConfig)
+      await runMigrationsFromContent(
+        { databaseUrl: pgUrl, schemaName: schema },
+        genericBootstrapMigrations
+      )
       const pool = new pg.Pool({ connectionString: pgUrl })
       stateStore = createPgStateStore(pool, schema)
 
-      const state = await stateStore.load()
+      const state = await stateStore.get('default')
       if (state) {
         console.error(`Loaded state for ${Object.keys(state).length} stream(s)`)
         params.state = state
@@ -41,7 +49,7 @@ export async function syncAction(opts: CliOptions) {
     for await (const msg of engine.run() as AsyncIterable<StateMessage>) {
       // Persist state checkpoint
       if (stateStore) {
-        await stateStore.set(msg.stream, msg.data)
+        await stateStore.set('default', msg.stream, msg.data)
       }
       stateCount++
       console.error(`checkpoint: ${msg.stream}`)
