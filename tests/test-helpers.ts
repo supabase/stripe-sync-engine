@@ -25,8 +25,10 @@ export function describeWithEnv<const K extends string>(
     if (process.env.CI) {
       const file = callerFile()
       const loc = file ? ` file=${file},` : ''
-      console.log(
-        `::warning${loc} title=Tests Skipped::${name} — missing env: ${missing.join(', ')}`
+      // Write directly to stdout to bypass vitest's console interception —
+      // ANSI escapes prepended by vitest break GitHub's ::warning parsing.
+      process.stdout.write(
+        `::warning${loc} title=Tests Skipped::${name} -- missing env: ${missing.join(', ')}\n`
       )
     }
     describe.skip(name, () => {})
