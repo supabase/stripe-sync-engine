@@ -30,6 +30,10 @@ TODO:
   - [ ] Parsing the state properties on the sync object
 - [ ] Figure out packaging for Supbase, packaging in particular
 
+## Replit
+
+- [ ] Add skills file. Ensure package works well on Replit
+
 ##
 
 - [ ] Better rate limit
@@ -40,3 +44,5 @@ TODO:
 - [ ] Add how we allow for indexs and RLS to be possible in destination postgres
 - [ ] Inngest, how does a generic one work and does it help us?
 - [ ] Create input queue? What's up with that?
+
+- [ ] Test credential refreshing how
