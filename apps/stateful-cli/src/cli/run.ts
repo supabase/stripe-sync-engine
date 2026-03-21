@@ -16,6 +16,7 @@ export async function* runSync(opts: {
   connectors?: ConnectorResolver
   credentials?: CredentialStore
   configs?: ConfigStore
+  $stdin?: AsyncIterable<unknown>
 }): AsyncGenerator<StateMessage> {
   const credentials = opts.credentials ?? envCredentialStore()
   const configs =
@@ -36,5 +37,5 @@ export async function* runSync(opts: {
     connectors: opts.connectors ?? createConnectorResolver({}),
   })
 
-  yield* service.run(opts.syncId)
+  yield* service.run(opts.syncId, opts.$stdin)
 }

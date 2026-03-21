@@ -71,11 +71,42 @@ function makeCred(id: string, type: string, fields: Record<string, unknown> = {}
   }
 }
 
-const RECORDS = [
-  { id: 'cus_1', name: 'Alice' },
-  { id: 'cus_2', name: 'Bob' },
-  { id: 'cus_3', name: 'Charlie' },
-]
+/** Re-iterable async iterable from an array — each `for await` gets a fresh iterator. */
+function toAsync<T>(items: T[]): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let i = 0
+      return {
+        async next() {
+          if (i < items.length) return { value: items[i++], done: false as const }
+          return { value: undefined, done: true as const }
+        },
+      }
+    },
+  }
+}
+
+const MESSAGES = toAsync([
+  {
+    type: 'record' as const,
+    stream: 'customers',
+    data: { id: 'cus_1', name: 'Alice' },
+    emitted_at: 1000,
+  },
+  {
+    type: 'record' as const,
+    stream: 'customers',
+    data: { id: 'cus_2', name: 'Bob' },
+    emitted_at: 1000,
+  },
+  {
+    type: 'record' as const,
+    stream: 'customers',
+    data: { id: 'cus_3', name: 'Charlie' },
+    emitted_at: 1000,
+  },
+  { type: 'state' as const, stream: 'customers', data: { status: 'complete' } },
+])
 
 const connectors = createConnectorResolver({
   sources: { stdin: testSource },
@@ -92,11 +123,9 @@ async function drain(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]>
 function makeService(
   opts: {
     srcCredFields?: Record<string, unknown>
-    records?: Record<string, unknown>[]
     refreshCredential?: (id: string) => Promise<void>
   } = {}
 ) {
-  const records = opts.records ?? RECORDS
   const credentials = memoryCredentialStore({
     'src-cred': makeCred('src-cred', 'stdin', opts.srcCredFields ?? {}),
     'dst-cred': makeCred('dst-cred', 'postgres', { connection_string: connectionString }),
@@ -108,7 +137,7 @@ function makeService(
       destination_credential_id: 'dst-cred',
       source: {
         type: 'stdin',
-        streams: { customers: { records } },
+        streams: { customers: {} },
       },
       destination: { type: 'postgres', schema: SCHEMA },
     },
@@ -190,7 +219,7 @@ describe('SyncService integration', () => {
 
   it('happy path: records land in Postgres', async () => {
     const { service } = makeService()
-    await drain(service.run('test-sync'))
+    await drain(service.run('test-sync', MESSAGES))
 
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
     expect(rows[0].n).toBe(3)
@@ -198,7 +227,7 @@ describe('SyncService integration', () => {
 
   it('state persistence after sync', async () => {
     const { service, states } = makeService()
-    await drain(service.run('test-sync'))
+    await drain(service.run('test-sync', MESSAGES))
 
     const state = await states.get('test-sync')
     expect(state).toBeDefined()
@@ -207,7 +236,7 @@ describe('SyncService integration', () => {
 
   it('log sink receives entries', async () => {
     const { service, logs } = makeService()
-    await drain(service.run('test-sync'))
+    await drain(service.run('test-sync', MESSAGES))
 
     expect(logs.entries.length).toBeGreaterThan(0)
     expect(logs.entries.some((e) => e.message.includes('checkpoint'))).toBe(true)
@@ -226,7 +255,7 @@ describe('SyncService integration', () => {
         destination_credential_id: 'dst-cred',
         source: {
           type: 'stdin',
-          streams: { customers: { records: RECORDS } },
+          streams: { customers: {} },
         },
         destination: { type: 'postgres', schema: SCHEMA },
       },
@@ -236,14 +265,14 @@ describe('SyncService integration', () => {
 
     // Run 1
     const service1 = new SyncService({ credentials, configs, states, logs, connectors })
-    await drain(service1.run('test-sync'))
+    await drain(service1.run('test-sync', MESSAGES))
 
     const stateAfterRun1 = await states.get('test-sync')
     expect(stateAfterRun1).toBeDefined()
 
-    // Run 2 — same stores, state carries over
+    // Run 2 — same stores, state carries over (MESSAGES is re-iterable)
     const service2 = new SyncService({ credentials, configs, states, logs, connectors })
-    await drain(service2.run('test-sync'))
+    await drain(service2.run('test-sync', MESSAGES))
 
     // Records still correct (upserted, not duplicated)
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
@@ -262,7 +291,7 @@ describe('SyncService integration', () => {
       },
     })
 
-    await drain(service.run('test-sync'))
+    await drain(service.run('test-sync', MESSAGES))
 
     expect(refreshCount).toBe(1)
 
@@ -276,7 +305,7 @@ describe('SyncService integration', () => {
       srcCredFields: { auth_error_after: 1 },
     })
 
-    await expect(drain(service.run('test-sync'))).rejects.toThrow(
+    await expect(drain(service.run('test-sync', MESSAGES))).rejects.toThrow(
       'auth_error on sync test-sync but no refreshCredential handler configured'
     )
   })
@@ -291,7 +320,7 @@ describe('SyncService integration', () => {
       },
     })
 
-    await expect(drain(service.run('test-sync'))).rejects.toThrow(
+    await expect(drain(service.run('test-sync', MESSAGES))).rejects.toThrow(
       'Auth failed after 2 refresh attempts'
     )
     // 3 refresh calls: initial attempt + 2 retries (loop runs while retries <= MAX_AUTH_RETRIES)

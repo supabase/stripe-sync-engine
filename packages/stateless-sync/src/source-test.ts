@@ -1,19 +1,17 @@
 import { z } from 'zod'
 import type { Source } from '@stripe/sync-protocol'
-import { toRecordMessage } from '@stripe/sync-protocol'
 
 export const spec = z.object({
-  /** Stream definitions: name -> { records, primary_key? }. When provided, yields these. */
+  /** Stream definitions: name -> { primary_key? }. Used for catalog discovery only. */
   streams: z
     .record(
       z.string(),
       z.object({
-        records: z.array(z.record(z.string(), z.unknown())).optional().default([]),
         primary_key: z.array(z.array(z.string())).optional(),
       })
     )
     .optional(),
-  /** If set, emit auth_error after this many total records. For testing retry logic. */
+  /** If set, emit auth_error after this many records from $stdin. For testing retry logic. */
   auth_error_after: z.number().optional(),
 })
 
@@ -40,32 +38,19 @@ export const testSource = {
   },
 
   async *read({ config }: { config: TestSourceConfig }, $stdin?: AsyncIterable<unknown>) {
-    // $stdin passthrough: tests push messages in, source yields them out
-    if ($stdin) {
-      yield* $stdin as AsyncIterable<any>
-      return
-    }
-
-    if (!config.streams) return
-    let totalRecords = 0
-    for (const [streamName, streamDef] of Object.entries(config.streams)) {
-      for (const record of streamDef.records) {
-        if (config.auth_error_after != null && totalRecords >= config.auth_error_after) {
-          yield {
-            type: 'error' as const,
-            failure_type: 'auth_error' as const,
-            message: 'Simulated auth error',
-          }
-          return
+    if (!$stdin) return
+    let recordCount = 0
+    for await (const msg of $stdin as AsyncIterable<any>) {
+      if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
+        yield {
+          type: 'error' as const,
+          failure_type: 'auth_error' as const,
+          message: 'Simulated auth error',
         }
-        yield toRecordMessage(streamName, record)
-        totalRecords++
+        return
       }
-      yield {
-        type: 'state' as const,
-        stream: streamName,
-        data: { status: 'complete' },
-      }
+      yield msg
+      if (msg.type === 'record') recordCount++
     }
   },
 } satisfies Source<TestSourceConfig>

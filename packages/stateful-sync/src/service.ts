@@ -62,7 +62,7 @@ export class SyncService {
     this.refreshCredential = opts.refreshCredential
   }
 
-  async *run(syncId: string): AsyncIterable<StateMessage> {
+  async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<StateMessage> {
     const config = await this.configs.get(syncId)
     const source = await this.connectors.resolveSource(config.source.type)
     const destination = await this.connectors.resolveDestination(config.destination.type)
@@ -87,7 +87,7 @@ export class SyncService {
       let authError = false
 
       // Read from source, intercepting auth_error before it reaches the destination
-      const sourceMessages = engine.read()
+      const sourceMessages = engine.read($stdin)
       const intercepted = async function* (): AsyncIterable<Message> {
         for await (const msg of sourceMessages) {
           if (msg.type === 'error' && msg.failure_type === 'auth_error') {

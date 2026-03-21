@@ -19,6 +19,21 @@ function makeCred(id: string, type: string): Credential {
   }
 }
 
+/** Re-iterable async iterable from an array — each `for await` gets a fresh iterator. */
+function toAsync<T>(items: T[]): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let i = 0
+      return {
+        async next() {
+          if (i < items.length) return { value: items[i++], done: false as const }
+          return { value: undefined, done: true as const }
+        },
+      }
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -39,10 +54,7 @@ describe('runSync', () => {
       id: 'test_sync',
       source_credential_id: 'src-cred',
       destination_credential_id: 'dst-cred',
-      source: {
-        type: 'test',
-        streams: { customers: { records: [{ id: 'cus_1', name: 'Alice' }] } },
-      },
+      source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'test' },
     })
 
@@ -54,6 +66,15 @@ describe('runSync', () => {
       connectors: resolver,
       credentials,
       configs,
+      $stdin: toAsync([
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1', name: 'Alice' },
+          emitted_at: Date.now(),
+        },
+        { type: 'state', stream: 'customers', data: { status: 'complete' } },
+      ]),
     })) {
       messages.push(msg)
     }
@@ -81,10 +102,7 @@ describe('runSync', () => {
       destination_credential_id: 'dst-cred',
       source: {
         type: 'test',
-        streams: {
-          customers: { records: [{ id: 'cus_1' }] },
-          invoices: { records: [{ id: 'inv_1' }] },
-        },
+        streams: { customers: {}, invoices: {} },
       },
       destination: { type: 'test' },
     })
@@ -97,6 +115,12 @@ describe('runSync', () => {
       connectors: resolver,
       credentials,
       configs,
+      $stdin: toAsync([
+        { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+        { type: 'state', stream: 'customers', data: { status: 'complete' } },
+        { type: 'record', stream: 'invoices', data: { id: 'inv_1' }, emitted_at: Date.now() },
+        { type: 'state', stream: 'invoices', data: { status: 'complete' } },
+      ]),
     })) {
       messages.push(msg)
     }

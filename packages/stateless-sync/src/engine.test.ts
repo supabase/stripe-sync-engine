@@ -34,6 +34,21 @@ async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return result
 }
 
+/** Re-iterable async iterable from an array — each `for await` gets a fresh iterator. */
+function toAsync<T>(items: T[]): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let i = 0
+      return {
+        async next() {
+          if (i < items.length) return { value: items[i++], done: false as const }
+          return { value: undefined, done: true as const }
+        },
+      }
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Protocol schema tests
 // ---------------------------------------------------------------------------
@@ -384,16 +399,20 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.read()', async () => {
     const engine = createEngine(
       {
-        source_config: {
-          streams: { customers: { records: [{ id: 'cus_1' }] } },
-        },
+        source_config: { streams: { customers: {} } },
         destination_config: {},
       },
       { source: testSource, destination: testDestination }
     )
 
-    const results = await drain(engine.read())
-    // testSource yields 1 record + 1 state for the stream
+    const results = await drain(
+      engine.read(
+        toAsync([
+          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+        ])
+      )
+    )
     expect(results).toHaveLength(2)
     expect(results[0]!.type).toBe('record')
     expect(results[1]!.type).toBe('state')
@@ -436,15 +455,22 @@ describe('engine message validation', () => {
 
     const engine = createEngine(
       {
-        source_config: {
-          streams: { customers: { records: [{ id: 'cus_1' }] } },
-        },
+        source_config: { streams: { customers: {} } },
         destination_config: {},
       },
       { source: testSource, destination: badDest }
     )
 
-    await expect(drain(engine.run())).rejects.toThrow()
+    await expect(
+      drain(
+        engine.run(
+          toAsync([
+            { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+            { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          ])
+        )
+      )
+    ).rejects.toThrow()
   })
 })
 
@@ -456,15 +482,20 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = createEngine(
       {
-        source_config: {
-          streams: { customers: { records: [{ id: 'cus_1' }] } },
-        },
+        source_config: { streams: { customers: {} } },
         destination_config: {},
       },
       { source: testSource, destination: testDestination }
     )
 
-    const results = await drain(engine.read())
+    const results = await drain(
+      engine.read(
+        toAsync([
+          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+        ])
+      )
+    )
     expect(results.filter((m) => m.type === 'record')).toHaveLength(1)
   })
 
@@ -572,22 +603,36 @@ describe('engine.run() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = createEngine(
       {
-        source_config: {
-          streams: {
-            customers: {
-              records: [
-                { id: 'cus_1', name: 'Alice' },
-                { id: 'cus_2', name: 'Bob' },
-                { id: 'cus_3', name: 'Charlie' },
-              ],
-            },
-          },
-        },
+        source_config: { streams: { customers: {} } },
         destination_config: {},
       },
       { source: testSource, destination: testDestination }
     )
-    const results = await drain(engine.run())
+    const results = await drain(
+      engine.run(
+        toAsync([
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_1', name: 'Alice' },
+            emitted_at: Date.now(),
+          },
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_2', name: 'Bob' },
+            emitted_at: Date.now(),
+          },
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_3', name: 'Charlie' },
+            emitted_at: Date.now(),
+          },
+          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+        ])
+      )
+    )
 
     // Pipeline yields 1 state message (testDestination passes state through)
     expect(results).toHaveLength(1)
@@ -601,18 +646,22 @@ describe('engine.run() pipeline', () => {
   it('stream filtering: only configures requested streams', async () => {
     const engine = createEngine(
       {
-        source_config: {
-          streams: {
-            customers: { records: [{ id: 'cus_1' }] },
-            invoices: { records: [{ id: 'inv_1' }] },
-          },
-        },
+        source_config: { streams: { customers: {}, invoices: {} } },
         destination_config: {},
         streams: [{ name: 'customers' }],
       },
       { source: testSource, destination: testDestination }
     )
-    const results = await drain(engine.run())
+    const results = await drain(
+      engine.run(
+        toAsync([
+          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          { type: 'record', stream: 'invoices', data: { id: 'inv_1' }, emitted_at: Date.now() },
+          { type: 'state', stream: 'invoices', data: { status: 'complete' } },
+        ])
+      )
+    )
 
     // Only the customers stream state should come through
     expect(results).toHaveLength(1)

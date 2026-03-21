@@ -15,11 +15,7 @@ const resolver: ConnectorResolver = {
 const syncParams = JSON.stringify({
   source_name: 'test',
   destination_name: 'test',
-  source_config: {
-    streams: {
-      customers: { records: [{ id: 'cus_1', name: 'Alice' }] },
-    },
-  },
+  source_config: { streams: { customers: {} } },
   destination_config: {},
 })
 
@@ -87,14 +83,22 @@ describe('POST /read', () => {
 
     const res = await app.request('/read', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Sync-Params': syncParams, 'Content-Type': 'application/x-ndjson' },
+      body: toNdjson([
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1', name: 'Alice' },
+          emitted_at: Date.now(),
+        },
+        { type: 'state', stream: 'customers', data: { status: 'complete' } },
+      ]),
     })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('text/event-stream')
 
     const events = await readSse<Message>(res)
-    // testSource yields one record + one state per stream
     expect(events).toHaveLength(2)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('state')
@@ -157,14 +161,22 @@ describe('POST /run', () => {
 
     const res = await app.request('/run', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Sync-Params': syncParams, 'Content-Type': 'application/x-ndjson' },
+      body: toNdjson([
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1', name: 'Alice' },
+          emitted_at: Date.now(),
+        },
+        { type: 'state', stream: 'customers', data: { status: 'complete' } },
+      ]),
     })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('text/event-stream')
 
     const events = await readSse<StateMessage>(res)
-    // testSource yields 1 record + 1 state; testDestination passes state through
     expect(events).toHaveLength(1)
     expect(events[0]!.type).toBe('state')
   })
