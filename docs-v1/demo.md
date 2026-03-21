@@ -65,7 +65,7 @@ The destination never sees logs, errors, or status messages — the engine filte
 
 The engine is a `for await` loop. Edit and run:
 
-```ts {monaco-run} {autorun:false, height:'350px'}
+```ts {monaco-run} {autorun:false, height:'200px'}
 const source = {
   async *read(params) {
     const items = [
