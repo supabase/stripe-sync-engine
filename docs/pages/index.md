@@ -31,5 +31,6 @@ npx @stripe/sync-engine sync \
 
 ## Links
 
+- [Docs](https://stripe-sync-engine.dev/)
 - [GitHub](https://github.com/stripe/sync-engine)
 - [npm](https://www.npmjs.com/package/@stripe/sync-engine)
