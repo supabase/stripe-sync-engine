@@ -6,7 +6,6 @@ import type {
 } from '@stripe/sync-protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
-import { makeClient } from './client'
 import { buildResourceRegistry } from './resourceRegistry'
 import { catalogFromRegistry, catalogFromOpenApi } from './catalog'
 import { resolveOpenApiSpec } from './openapi/specFetchHelper'
@@ -15,12 +14,8 @@ import {
   RUNTIME_REQUIRED_TABLES,
   OPENAPI_RESOURCE_TABLE_ALIASES,
 } from './openapi/specParser'
-import {
-  processStripeEvent,
-  processWebhookInput,
-  createInputQueue,
-  startWebhookServer,
-} from './src-webhook'
+import { processStripeEvent } from './process-event'
+import { processWebhookInput, createInputQueue, startWebhookServer } from './src-webhook'
 import { listApiBackfill } from './src-list-api'
 import { pollEvents } from './src-events-api'
 import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket'
@@ -62,6 +57,18 @@ export const spec = z.object({
 })
 
 export type Config = z.infer<typeof spec>
+
+function makeClient(config: Config): Stripe {
+  if (config.base_url) {
+    const url = new URL(config.base_url)
+    return new Stripe(config.api_key, {
+      host: url.hostname,
+      port: parseInt(url.port) || (url.protocol === 'https:' ? 443 : 80),
+      protocol: url.protocol.replace(':', '') as 'http' | 'https',
+    })
+  }
+  return new Stripe(config.api_key)
+}
 
 /** Raw webhook payload requiring signature verification. */
 export type WebhookInput = { body: string | Buffer; signature: string }
@@ -260,15 +267,8 @@ export default source
 // MARK: - Re-exports
 
 // Source submodules
-export { fromWebhookEvent, processStripeEvent } from './src-webhook'
+export { fromWebhookEvent, processStripeEvent } from './process-event'
 export type { LiveInput } from './src-webhook'
-
-// Client
-export { makeClient } from './client'
-
-// CLI
-export type { SourceCliOptions } from './cli'
-export { main as cliMain } from './cli'
 
 // Types
 export type {
@@ -286,22 +286,7 @@ export type { Source } from '@stripe/sync-protocol'
 export {
   buildResourceRegistry,
   normalizeStripeObjectName,
-  getTableName,
-  getResourceConfigFromId,
-  getResourceFromPrefix,
-  CORE_SYNC_OBJECTS,
-  SYNC_OBJECTS,
-  REVALIDATE_ENTITIES,
-  RESOURCE_TABLE_NAME_MAP,
   RUNTIME_REQUIRED_TABLES,
-  STRIPE_OBJECT_TO_SYNC_OBJECT_ALIASES,
-  PREFIX_RESOURCE_MAP,
-} from './resourceRegistry'
-export type {
-  StripeObject,
-  CoreSyncObject,
-  SyncObjectName,
-  RevalidateEntityName,
 } from './resourceRegistry'
 
 // WebSocket
