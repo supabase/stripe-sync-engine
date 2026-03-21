@@ -44,9 +44,11 @@ export function describeWithEnv<const K extends string>(
 function callerFile(): string | undefined {
   const lines = new Error().stack?.split('\n')
   if (!lines) return undefined
-  for (const line of lines.slice(2)) {
+  for (const line of lines.slice(1)) {
     const m = line.match(/\((.+?):\d+:\d+\)/) ?? line.match(/at (.+?):\d+:\d+/)
-    if (m) return m[1].replace(process.cwd() + '/', '')
+    if (m && !m[1].includes('test-helpers')) {
+      return m[1].replace(process.cwd() + '/', '')
+    }
   }
   return undefined
 }
