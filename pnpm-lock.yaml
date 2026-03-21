@@ -202,6 +202,9 @@ importers:
       '@stripe/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@stripe/util-postgres':
+        specifier: workspace:*
+        version: link:../util-postgres
       pg:
         specifier: ^8.16.3
         version: 8.16.3

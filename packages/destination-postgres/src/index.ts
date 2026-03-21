@@ -2,6 +2,7 @@ import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/protocol'
+import { upsert } from '@stripe/util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'
 
 // MARK: - Spec
@@ -61,7 +62,8 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
 
 /**
  * Upsert records into a Postgres table using the _raw_data jsonb pattern.
- * Processes in chunks of 5 to avoid exhausting the connection pool.
+ * Delegates to util-postgres `upsert()` which batches all rows into a single
+ * multi-row INSERT ... ON CONFLICT statement.
  */
 export async function upsertMany(
   pool: pg.Pool,
@@ -71,22 +73,15 @@ export async function upsertMany(
   entries: Record<string, any>[]
 ): Promise<void> {
   if (!entries.length) return
-
-  const chunkSize = 5
-  for (let i = 0; i < entries.length; i += chunkSize) {
-    const chunk = entries.slice(i, i + chunkSize)
-    await Promise.all(
-      chunk.map((entry) =>
-        pool.query(
-          `INSERT INTO "${schema}"."${table}" ("_raw_data")
-           VALUES ($1::jsonb)
-           ON CONFLICT (id)
-           DO UPDATE SET "_raw_data" = EXCLUDED."_raw_data"`,
-          [JSON.stringify(entry)]
-        )
-      )
-    )
-  }
+  await upsert(
+    pool,
+    entries.map((e) => ({ _raw_data: e })),
+    {
+      schema,
+      table,
+      keyColumns: ['id'],
+    }
+  )
 }
 
 // MARK: - Named exports
