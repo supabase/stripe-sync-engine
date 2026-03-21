@@ -1142,40 +1142,49 @@ describe('StripeSource', () => {
       mockClose.mockClear()
     })
 
-    it('setup() creates WebSocket client when websocket: true', async () => {
+    it('read() creates WebSocket client when websocket: true', async () => {
       const { createStripeWebSocketClient } = await import('../src-websocket')
       const source = createSource(registry)
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }),
-      })
+
+      const iter = source
+        .read({
+          config: { api_key: 'sk_test_fake', websocket: true },
+          catalog: catalog({ name: 'customers' }),
+        })
+        [Symbol.asyncIterator]()
+
+      // First iter.next() triggers createStripeWebSocketClient inside read()
+      await iter.next() // stream_status started
 
       expect(createStripeWebSocketClient).toHaveBeenCalledWith(
         expect.objectContaining({ stripeApiKey: 'sk_test_fake' })
       )
       expect(capturedOnEvent).toBeTypeOf('function')
 
-      // Clean up
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      // Clean up — triggers finally block which calls wsClient.close()
+      await iter.return()
     })
 
-    it('teardown() closes WebSocket client', async () => {
+    it("read()'s finally block closes WebSocket client", async () => {
       const source = createSource(registry)
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }),
-      })
 
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      const iter = source
+        .read({
+          config: { api_key: 'sk_test_fake', websocket: true },
+          catalog: catalog({ name: 'customers' }),
+        })
+        [Symbol.asyncIterator]()
+
+      await iter.next() // stream_status started — triggers createStripeWebSocketClient
+
+      // Returning the iterator triggers the finally block, which calls wsClient.close()
+      await iter.return()
       expect(mockClose).toHaveBeenCalled()
     })
 
     it('streams WebSocket events after empty backfill', async () => {
       const source = createSource(registry)
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }),
-      })
+      // No setup() needed — WebSocket client is created inside read()
 
       const iter = source
         .read({
@@ -1185,6 +1194,7 @@ describe('StripeSource', () => {
         [Symbol.asyncIterator]()
 
       // Backfill: empty stream produces started + state(complete) + complete
+      // capturedOnEvent is set during the first iter.next() (createStripeWebSocketClient is called inside read())
       const m1 = await iter.next() // stream_status started
       const m2 = await iter.next() // state complete
       const m3 = await iter.next() // stream_status complete
@@ -1192,7 +1202,7 @@ describe('StripeSource', () => {
       expect(m2.value).toMatchObject({ type: 'state', data: { status: 'complete' } })
       expect(m3.value).toMatchObject({ type: 'stream_status', status: 'complete' })
 
-      // Now push a WebSocket event — read() should yield it
+      // Now push a WebSocket event — capturedOnEvent is set, read() should yield it
       pushWsEvent(
         makeEvent({
           id: 'evt_ws_1',
@@ -1215,8 +1225,8 @@ describe('StripeSource', () => {
         data: { eventId: 'evt_ws_1' },
       })
 
-      // Clean up: teardown closes wsClient, which breaks the while(wsClient) loop
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      // Clean up — triggers finally block which calls wsClient.close()
+      await iter.return()
     })
 
     it('interleaves queued WebSocket events during backfill', async () => {
@@ -1240,20 +1250,7 @@ describe('StripeSource', () => {
       }
 
       const source = createSource(wsRegistry)
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }),
-      })
-
-      // Queue an event BEFORE calling read() — it should be drained during backfill
-      pushWsEvent(
-        makeEvent({
-          id: 'evt_ws_queued',
-          type: 'customer.created',
-          created: 1700000000,
-          dataObject: { id: 'cus_ws_1', object: 'customer', name: 'WS Queued' },
-        })
-      )
+      // No setup() needed — WebSocket client is created inside read()
 
       const iter = source
         .read({
@@ -1262,9 +1259,20 @@ describe('StripeSource', () => {
         })
         [Symbol.asyncIterator]()
 
-      // stream_status started
+      // stream_status started — also triggers createStripeWebSocketClient, setting capturedOnEvent
       const m1 = await iter.next()
       expect(m1.value).toMatchObject({ type: 'stream_status', status: 'started' })
+
+      // Queue an event AFTER stream_status started — capturedOnEvent is now set.
+      // The generator is paused before the drain, so this event will be drained before page 1.
+      pushWsEvent(
+        makeEvent({
+          id: 'evt_ws_queued',
+          type: 'customer.created',
+          created: 1700000000,
+          dataObject: { id: 'cus_ws_1', object: 'customer', name: 'WS Queued' },
+        })
+      )
 
       // Before page 1: queued WS event is drained
       const m2 = await iter.next() // ws record
@@ -1317,15 +1325,12 @@ describe('StripeSource', () => {
         data: { eventId: 'evt_ws_live' },
       })
 
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      await iter.return()
     })
 
     it('filters out WebSocket events for streams not in catalog', async () => {
       const source = createSource(registry)
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }), // only customers, not invoices
-      })
+      // No setup() needed — WebSocket client is created inside read()
 
       const iter = source
         .read({
@@ -1365,28 +1370,26 @@ describe('StripeSource', () => {
         data: { id: 'cus_1' },
       })
 
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      await iter.return()
     })
 
-    it('setup() with both webhook_url and websocket creates both', async () => {
-      // This test just verifies setup doesn't throw with both options.
-      // Webhook setup requires a real Stripe client, so we only verify the WS part.
+    it('read() with websocket: true creates WebSocket client (combined config)', async () => {
       const { createStripeWebSocketClient } = await import('../src-websocket')
       const source = createSource(registry)
 
-      // webhook_url setup will fail (no real Stripe client), but we can verify
-      // the websocket path was reached by checking the mock
       vi.mocked(createStripeWebSocketClient).mockClear()
 
-      // Use a source with no webhook_url to avoid Stripe API calls,
-      // but with websocket: true
-      await source.setup!({
-        config: { api_key: 'sk_test_fake', websocket: true },
-        catalog: catalog({ name: 'customers' }),
-      })
+      const iter = source
+        .read({
+          config: { api_key: 'sk_test_fake', websocket: true },
+          catalog: catalog({ name: 'customers' }),
+        })
+        [Symbol.asyncIterator]()
+
+      await iter.next() // stream_status started — triggers createStripeWebSocketClient
 
       expect(createStripeWebSocketClient).toHaveBeenCalledTimes(1)
-      await source.teardown!({ config: { api_key: 'sk_test_fake', websocket: true } })
+      await iter.return()
     })
 
     it('teardown() is safe when no websocket was configured', async () => {

@@ -16,7 +16,7 @@ import {
   OPENAPI_RESOURCE_TABLE_ALIASES,
 } from './openapi/specParser'
 import {
-  fromWebhookEvent,
+  processStripeEvent,
   processWebhookInput,
   createInputQueue,
   startWebhookServer,
@@ -89,10 +89,6 @@ export function createSource(
     return _registryForTesting ?? buildResourceRegistry(makeClient(config))
   }
 
-  // Live mode closure state
-  let wsClient: StripeWebSocketClient | null = null
-  const inputQueue = createInputQueue()
-
   return {
     spec(): ConnectorSpecification {
       return {
@@ -143,16 +139,6 @@ export function createSource(
           })
         }
       }
-
-      if (config.websocket) {
-        wsClient = await createStripeWebSocketClient({
-          stripeApiKey: config.api_key,
-          onEvent: (wsEvent: StripeWebhookEvent) => {
-            const event = JSON.parse(wsEvent.event_payload) as Stripe.Event
-            inputQueue.push({ data: event })
-          },
-        })
-      }
     },
 
     async teardown({ config }) {
@@ -165,11 +151,6 @@ export function createSource(
           }
         }
       }
-
-      if (wsClient) {
-        wsClient.close()
-        wsClient = null
-      }
     },
 
     async *read({ config, catalog, state }, $stdin?) {
@@ -180,33 +161,51 @@ export function createSource(
       // Event-driven mode: iterate over incoming webhook inputs
       if ($stdin) {
         for await (const input of $stdin) {
-          yield* processWebhookInput(input, config, stripe, catalog, registry, streamNames)
+          if ('body' in input) {
+            yield* processWebhookInput(input, config, stripe, catalog, registry, streamNames)
+          } else {
+            yield* processStripeEvent(input, config, stripe, catalog, registry, streamNames)
+          }
         }
         return
       }
 
-      const startTimestamp = Math.floor(Date.now() / 1000)
+      const inputQueue = createInputQueue()
 
-      // Backfill: paginate through each configured stream
-      yield* listApiBackfill({
-        catalog,
-        state,
-        registry,
-        drainQueue: wsClient
-          ? () => inputQueue.drain(config, stripe, catalog, registry, streamNames)
-          : undefined,
-      })
-
-      // Events polling: incremental sync via /v1/events after backfill
-      yield* pollEvents({ config, stripe, catalog, registry, streamNames, state, startTimestamp })
-
-      // Start HTTP server for live mode if configured
-      let httpServer: ReturnType<typeof startWebhookServer> | null = null
-      if (config.webhook_port) {
-        httpServer = startWebhookServer(config.webhook_port, inputQueue.push)
+      let wsClient: StripeWebSocketClient | null = null
+      if (config.websocket) {
+        wsClient = await createStripeWebSocketClient({
+          stripeApiKey: config.api_key,
+          onEvent: (wsEvent: StripeWebhookEvent) => {
+            const event = JSON.parse(wsEvent.event_payload) as Stripe.Event
+            inputQueue.push({ data: event })
+          },
+        })
       }
 
+      let httpServer: ReturnType<typeof startWebhookServer> | null = null
+
       try {
+        const startTimestamp = Math.floor(Date.now() / 1000)
+
+        // Backfill: paginate through each configured stream
+        yield* listApiBackfill({
+          catalog,
+          state,
+          registry,
+          drainQueue: wsClient
+            ? () => inputQueue.drain(config, stripe, catalog, registry, streamNames)
+            : undefined,
+        })
+
+        // Events polling: incremental sync via /v1/events after backfill
+        yield* pollEvents({ config, stripe, catalog, registry, streamNames, state, startTimestamp })
+
+        // Start HTTP server for live mode if configured
+        if (config.webhook_port) {
+          httpServer = startWebhookServer(config.webhook_port, inputQueue.push)
+        }
+
         // After backfill: stream live events from WebSocket and/or HTTP
         if (wsClient || httpServer) {
           // Drain anything that arrived during backfill
@@ -216,14 +215,25 @@ export function createSource(
           while (wsClient || httpServer) {
             const queued = await inputQueue.wait()
             try {
-              yield* processWebhookInput(
-                queued.data,
-                config,
-                stripe,
-                catalog,
-                registry,
-                streamNames
-              )
+              if ('body' in queued.data) {
+                yield* processWebhookInput(
+                  queued.data,
+                  config,
+                  stripe,
+                  catalog,
+                  registry,
+                  streamNames
+                )
+              } else {
+                yield* processStripeEvent(
+                  queued.data,
+                  config,
+                  stripe,
+                  catalog,
+                  registry,
+                  streamNames
+                )
+              }
               queued.resolve?.()
             } catch (err) {
               queued.reject?.(err instanceof Error ? err : new Error(String(err)))
@@ -231,6 +241,10 @@ export function createSource(
           }
         }
       } finally {
+        if (wsClient) {
+          wsClient.close()
+          wsClient = null
+        }
         if (httpServer) {
           httpServer.close()
           httpServer = null
