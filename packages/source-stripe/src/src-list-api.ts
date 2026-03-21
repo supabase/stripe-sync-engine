@@ -13,9 +13,10 @@ export async function* listApiBackfill(opts: {
   catalog: { streams: Array<{ stream: { name: string } }> }
   state: Record<string, { pageCursor: string | null; status: string }> | undefined
   registry: Record<string, ResourceConfig>
+  backfillLimit?: number
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
-  const { catalog, state, registry, drainQueue } = opts
+  const { catalog, state, registry, backfillLimit, drainQueue } = opts
 
   for (const configuredStream of catalog.streams) {
     const stream = configuredStream.stream
@@ -45,6 +46,7 @@ export async function* listApiBackfill(opts: {
 
     try {
       let hasMore = true
+      let totalEmitted = 0
       while (hasMore) {
         // Drain any queued events before each page
         if (drainQueue) yield* drainQueue()
@@ -58,11 +60,17 @@ export async function* listApiBackfill(opts: {
 
         for (const item of response.data) {
           yield toRecordMessage(stream.name, item as Record<string, unknown>)
+          totalEmitted++
         }
 
         hasMore = response.has_more
         if (response.data.length > 0) {
           pageCursor = (response.data[response.data.length - 1] as { id: string }).id
+        }
+
+        // Stop early if backfill limit reached
+        if (backfillLimit && totalEmitted >= backfillLimit) {
+          hasMore = false
         }
 
         // Emit state checkpoint after each page

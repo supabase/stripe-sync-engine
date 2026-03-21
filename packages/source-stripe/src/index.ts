@@ -49,6 +49,12 @@ export const spec = z.object({
     .array(z.string())
     .optional()
     .describe('Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"])'),
+  backfill_limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Max objects to backfill per stream (useful for testing)'),
 })
 
 export type Config = z.infer<typeof spec>
@@ -188,6 +194,7 @@ const source = {
         catalog,
         state,
         registry,
+        backfillLimit: config.backfill_limit,
         drainQueue: wsClient
           ? () => inputQueue.drain(config, stripe, catalog, registry, streamNames)
           : undefined,
