@@ -21,14 +21,6 @@ let pool: pg.Pool
 let connectionString: string
 
 beforeAll(async () => {
-  // Guard: skip if stripe-mock is not reachable
-  try {
-    execSync(`curl -sf ${STRIPE_MOCK_URL}`, { timeout: 5_000 })
-  } catch {
-    console.warn(`stripe-mock not reachable at ${STRIPE_MOCK_URL} — skipping`)
-    return
-  }
-
   containerId = execSync(
     'docker run -d --rm -p 0:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test postgres:16-alpine',
     { encoding: 'utf8' }
@@ -64,7 +56,6 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  if (!pool) return
   await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
 })
 
@@ -105,7 +96,6 @@ function makeParams(
 let targetStream: string
 
 beforeAll(async () => {
-  if (!pool) return
   const discovered = await source.discover({
     config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
     catalog: { streams: [] },
@@ -120,8 +110,6 @@ beforeAll(async () => {
 
 describe('selective sync', () => {
   it('syncs only the requested stream — other tables not created', async () => {
-    if (!pool) return
-
     cli('run', makeParams({ streams: [{ name: targetStream }] }))
 
     // Only target table exists
@@ -142,8 +130,6 @@ describe('selective sync', () => {
 
 describe('selective backfill', () => {
   it('creates table but skips backfill when state is pre-seeded as complete', async () => {
-    if (!pool) return
-
     cli(
       'run',
       makeParams({
@@ -169,8 +155,6 @@ describe('selective backfill', () => {
 
 describe('cli stdin/stdout', () => {
   it('read command outputs valid NDJSON to stdout', async () => {
-    if (!pool) return
-
     const output = cli('read', makeParams({ streams: [{ name: targetStream }] }))
 
     // Each line is valid JSON
@@ -193,8 +177,6 @@ describe('cli stdin/stdout', () => {
   })
 
   it('read | write pipe: read output feeds into write stdin', async () => {
-    if (!pool) return
-
     const params = makeParams({ streams: [{ name: targetStream }] })
     const paramsJson = JSON.stringify(params)
 
