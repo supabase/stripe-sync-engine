@@ -1,8 +1,6 @@
-// NOTE: This test is intentionally NOT run in GitHub CI.
-// SUPABASE_PERSONAL_ACCESS_TOKEN is a user-scoped PAT with broad management API access
-// (deploy, delete, run SQL on any project under the account). Using it in CI would
-// require storing a high-privilege secret in the repo. To enable CI, create a dedicated
-// Supabase service account with a scoped PAT and store that as a CI secret instead.
+// TODO: Not yet running in GitHub CI.
+// To enable: create a dedicated Supabase service account with a scoped PAT
+// and store SUPABASE_PROJECT_ID + SUPABASE_PERSONAL_ACCESS_TOKEN as CI secrets.
 import { describe, it, expect } from 'vitest'
 import { SupabaseSetupClient } from '../supabase'
 

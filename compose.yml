@@ -1,16 +1,38 @@
 services:
-  stripe-mock:
-    image: stripe/stripe-mock:latest
-    ports:
-      - '12111:12111' # HTTP
-      - '12112:12112' # HTTPS
-
   postgres:
-    container_name: stripe-db
+    image: postgres:18
+    ports:
+      - '55432:5432'
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  supabase-db:
     image: supabase/postgres:15.1.1.4
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
-    restart: unless-stopped
     ports:
       - '54320:5432'
     environment:
       POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    ports:
+      - '12111:12111'
+      - '12112:12112'
+    healthcheck:
+      test: ['CMD-SHELL', 'echo | nc -z localhost 12111']
+      interval: 5s
+      timeout: 3s
+      retries: 5
