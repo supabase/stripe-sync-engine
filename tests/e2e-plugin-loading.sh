@@ -19,7 +19,8 @@ TMPDIR_BASE=$(mktemp -d)
 cleanup() {
   rm -rf "$TMPDIR_BASE"
   # Clean up tarballs created by pnpm pack (they go to repo root)
-  rm -f "$REPO_ROOT"/stripe-sync-protocol-*.tgz
+  rm -f "$REPO_ROOT"/stripe-protocol-*.tgz
+  rm -f "$REPO_ROOT"/stripe-stateless-sync-*.tgz
   rm -f "$REPO_ROOT"/stripe-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-destination-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-cli-*.tgz
@@ -37,11 +38,12 @@ echo "--- Step 1: Packing packages ---"
 
 # pnpm pack outputs the absolute tarball path as the last line
 PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/protocol pack 2>/dev/null | tail -1)
+ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/stateless-sync pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
 CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless-cli pack 2>/dev/null | tail -1)
 
-for tgz in "$PROTOCOL_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ"; do
+for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -66,13 +68,14 @@ cat > package.json <<EOF
   "version": "1.0.0",
   "pnpm": {
     "overrides": {
-      "@stripe/protocol": "$PROTOCOL_TGZ"
+      "@stripe/protocol": "$PROTOCOL_TGZ",
+      "@stripe/stateless-sync": "$ENGINE_TGZ"
     }
   }
 }
 EOF
 
-pnpm add "$PROTOCOL_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ" 2>&1 | tail -5
+pnpm add "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$CLI_TGZ" 2>&1 | tail -5
 echo ""
 
 # ---------------------------------------------------------------------------

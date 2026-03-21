@@ -26,6 +26,7 @@ COPY --from=base /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml*
 # Copy package.json files for required packages
 COPY --from=base /app/apps/stateless-cli/package.json /app/apps/stateless-cli/
 COPY --from=base /app/packages/protocol/package.json /app/packages/protocol/
+COPY --from=base /app/packages/stateless-sync/package.json /app/packages/stateless-sync/
 COPY --from=base /app/packages/source-stripe/package.json /app/packages/source-stripe/
 COPY --from=base /app/packages/destination-postgres/package.json /app/packages/destination-postgres/
 
@@ -33,12 +34,14 @@ COPY --from=base /app/packages/destination-postgres/package.json /app/packages/d
 COPY --from=prod-deps /app/node_modules /app/node_modules
 COPY --from=prod-deps /app/apps/stateless-cli/node_modules /app/apps/stateless-cli/node_modules
 COPY --from=prod-deps /app/packages/protocol/node_modules /app/packages/protocol/node_modules
+COPY --from=prod-deps /app/packages/stateless-sync/node_modules /app/packages/stateless-sync/node_modules
 COPY --from=prod-deps /app/packages/source-stripe/node_modules /app/packages/source-stripe/node_modules
 COPY --from=prod-deps /app/packages/destination-postgres/node_modules /app/packages/destination-postgres/node_modules
 
 # Copy built files
 COPY --from=build /app/apps/stateless-cli/dist /app/apps/stateless-cli/dist
 COPY --from=build /app/packages/protocol/dist /app/packages/protocol/dist
+COPY --from=build /app/packages/stateless-sync/dist /app/packages/stateless-sync/dist
 COPY --from=build /app/packages/source-stripe/dist /app/packages/source-stripe/dist
 COPY --from=build /app/packages/destination-postgres/dist /app/packages/destination-postgres/dist
 
