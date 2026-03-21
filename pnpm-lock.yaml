@@ -163,6 +163,9 @@ importers:
       '@stripe/destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
       '@types/node':
         specifier: ^24.10.1
         version: 24.10.1
