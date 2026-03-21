@@ -1,8 +1,8 @@
 import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
 import { describe, expect, it } from 'vitest'
-import { SheetsDestination } from '../src/sheets-destination'
-import { readSheet } from '../src/writer'
-import { createMemorySheets } from './memory-sheets'
+import { SheetsDestination } from './sheets-destination'
+import { readSheet } from './writer'
+import { createMemorySheets } from '../__tests__/memory-sheets'
 
 /** Collect all output from the destination's write() generator. */
 async function collect(iter: AsyncIterable<DestinationOutput>): Promise<DestinationOutput[]> {
