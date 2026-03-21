@@ -23,6 +23,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-stateless-sync-*.tgz
   rm -f "$REPO_ROOT"/stripe-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-destination-postgres-*.tgz
+  rm -f "$REPO_ROOT"/stripe-util-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-ts-cli-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-*.tgz
 }
@@ -42,10 +43,11 @@ PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/protocol pack 2>/dev/nul
 ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/stateless-sync pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
+UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/util-postgres pack 2>/dev/null | tail -1)
 TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/ts-cli pack 2>/dev/null | tail -1)
 CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless pack 2>/dev/null | tail -1)
 
-for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$TSCLI_TGZ" "$CLI_TGZ"; do
+for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$CLI_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -72,13 +74,14 @@ cat > package.json <<EOF
     "overrides": {
       "@stripe/protocol": "$PROTOCOL_TGZ",
       "@stripe/stateless-sync": "$ENGINE_TGZ",
+      "@stripe/util-postgres": "$UTIL_PG_TGZ",
       "@stripe/ts-cli": "$TSCLI_TGZ"
     }
   }
 }
 EOF
 
-pnpm add "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$TSCLI_TGZ" "$CLI_TGZ" 2>&1 | tail -5
+pnpm add "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$CLI_TGZ" 2>&1 | tail -5
 echo ""
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, lstatSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { resolveSpecifier, resolveBin, createConnectorResolver } from './loader'
 import { testSource } from './source-test'
@@ -38,9 +39,30 @@ describe('resolveSpecifier', () => {
 
 describe('resolveBin', () => {
   it('returns a path for an installed connector bin', () => {
-    // source-stripe should be installed in this monorepo
+    // source-stripe should be installed as a devDependency of this package
+    const binDir = join(process.cwd(), 'node_modules', '.bin')
+    const binDirExists = existsSync(binDir)
+    const binContents = binDirExists ? readdirSync(binDir).filter((f) => f.includes('source')) : []
+    const sourceStripePath = join(binDir, 'source-stripe')
+    let symlinkInfo = 'n/a'
+    try {
+      const stat = lstatSync(sourceStripePath)
+      symlinkInfo = `isSymlink=${stat.isSymbolicLink()}, isFile=${stat.isFile()}`
+    } catch {
+      symlinkInfo = 'lstat failed (not found)'
+    }
+
     const bin = resolveBin('stripe', 'source')
-    expect(bin).toBeDefined()
+    expect(
+      bin,
+      [
+        `cwd=${process.cwd()}`,
+        `.bin exists=${binDirExists}`,
+        `.bin source entries=${JSON.stringify(binContents)}`,
+        `source-stripe: ${symlinkInfo}`,
+        `existsSync(source-stripe)=${existsSync(sourceStripePath)}`,
+      ].join(', ')
+    ).toBeDefined()
     expect(existsSync(bin!)).toBe(true)
   })
 
