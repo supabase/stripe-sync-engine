@@ -6,7 +6,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/protocol": "workspace:*",
     "@stripe/stateless-sync": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",

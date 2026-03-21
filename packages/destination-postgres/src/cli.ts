@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import readline from 'node:readline'
-import type { ConfiguredCatalog, DestinationInput } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, DestinationInput } from '@stripe/protocol'
 import type { PostgresConfig } from './types'
 import { PostgresDestination } from './postgresDestination'
 

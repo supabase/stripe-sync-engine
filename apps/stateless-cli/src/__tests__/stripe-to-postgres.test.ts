@@ -10,6 +10,7 @@ import source from '@stripe/source-stripe'
 
 const STRIPE_MOCK_URL = process.env.STRIPE_MOCK_URL ?? 'http://localhost:12111'
 const CLI_PATH = resolve(import.meta.dirname, '../../dist/cli/index.js')
+const PKG_ROOT = resolve(import.meta.dirname, '../..')
 const SCHEMA = 'test_stripe_pg'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ function cli(command: string, params: Record<string, unknown>): string {
   return execSync(`node ${CLI_PATH} ${command} --params '${JSON.stringify(params)}'`, {
     encoding: 'utf8',
     timeout: 120_000,
+    env: { ...process.env, NODE_PATH: resolve(PKG_ROOT, 'node_modules') },
   })
 }
 
@@ -101,7 +103,7 @@ beforeAll(async () => {
     catalog: { streams: [] },
     state: {},
   })
-  targetStream = discovered.streams[0]!.stream.name
+  targetStream = discovered.streams[0]!.name
 }, 30_000)
 
 // ---------------------------------------------------------------------------
@@ -184,8 +186,9 @@ describe('cli stdin/stdout', () => {
     cli('setup', params)
 
     // Pipe: read → write
+    const nodePathEnv = resolve(PKG_ROOT, 'node_modules')
     const output = execSync(
-      `node ${CLI_PATH} read --params '${paramsJson}' | node ${CLI_PATH} write --params '${paramsJson}'`,
+      `NODE_PATH='${nodePathEnv}' node ${CLI_PATH} read --params '${paramsJson}' | NODE_PATH='${nodePathEnv}' node ${CLI_PATH} write --params '${paramsJson}'`,
       { encoding: 'utf8', timeout: 120_000, shell: '/bin/bash' }
     )
 

@@ -187,6 +187,9 @@ importers:
       '@stripe/destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
+      '@stripe/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
@@ -196,9 +199,6 @@ importers:
       '@stripe/store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../../packages/sync-protocol
       supabase-management-js:
         specifier: ^2.0.2
         version: 2.0.2
@@ -215,9 +215,9 @@ importers:
 
   packages/destination-google-sheets:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/protocol':
         specifier: workspace:*
-        version: link:../sync-protocol
+        version: link:../protocol
       googleapis:
         specifier: ^148.0.0
         version: 148.0.0
@@ -231,9 +231,9 @@ importers:
 
   packages/destination-postgres:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/protocol':
         specifier: workspace:*
-        version: link:../sync-protocol
+        version: link:../protocol
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -260,11 +260,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
+  packages/protocol:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
   packages/source-stripe:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/protocol':
         specifier: workspace:*
-        version: link:../sync-protocol
+        version: link:../protocol
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
@@ -315,9 +325,9 @@ importers:
 
   packages/stateless-sync:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/protocol':
         specifier: workspace:*
-        version: link:../sync-protocol
+        version: link:../protocol
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -354,25 +364,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/sync-protocol:
-    dependencies:
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
-    devDependencies:
-      vitest:
-        specifier: ^3.2.1
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
-  packages/ts-cli:
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.10.1
-      vitest:
-        specifier: ^3.2.1
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
   packages/util-postgres:
     dependencies:
       pg:
@@ -394,15 +385,15 @@ importers:
       '@stripe/destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
+      '@stripe/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../../packages/sync-protocol
       vitest:
         specifier: ^3.2.1
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)

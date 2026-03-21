@@ -28,9 +28,7 @@ object. Same schema as the CLI `--params` flag:
   "destination_name": "postgres",
   "source_config": { "api_key": "sk_test_..." },
   "destination_config": { "connection_string": "postgresql://user:pass@localhost/mydb" },
-  "streams": [
-    { "name": "customers", "sync_mode": "incremental" }
-  ],
+  "streams": [{ "name": "customers", "sync_mode": "incremental" }],
   "state": {}
 }
 ```
@@ -133,7 +131,7 @@ Parse with any SSE client library, or consume with `curl --no-buffer` and split 
 import { createApp, createConnectorResolver } from '@stripe/sync-engine-stateless-api'
 
 const resolver = createConnectorResolver({
-  sources:      { stripe:   myStripeConnector },
+  sources: { stripe: myStripeConnector },
   destinations: { postgres: myPostgresConnector },
 })
 

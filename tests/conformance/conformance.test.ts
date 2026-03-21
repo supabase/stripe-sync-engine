@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ConnectorSpecification } from '@stripe/sync-protocol'
+import { ConnectorSpecification } from '@stripe/protocol'
 
 const packagesDir = resolve(import.meta.dirname, '../../packages')
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })

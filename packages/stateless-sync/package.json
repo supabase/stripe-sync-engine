@@ -24,7 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/protocol": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

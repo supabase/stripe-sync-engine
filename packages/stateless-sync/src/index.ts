@@ -1,4 +1,6 @@
-export * from '@stripe/sync-protocol'
+export * from '@stripe/protocol'
+export { forward, collect, filterDataMessages } from './pipeline'
+export type { RouterCallbacks } from './pipeline'
 export { createEngine, createEngineFromParams, buildCatalog } from './engine'
 export type { Engine } from './engine'
 export { parseNdjson, parseNdjsonChunks, parseNdjsonStream } from './ndjson'

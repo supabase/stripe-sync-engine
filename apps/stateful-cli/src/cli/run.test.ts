@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { testSource, testDestination } from '@stripe/stateless-sync'
 import type { ConnectorResolver, StateMessage, Message } from '@stripe/sync-engine-stateless-cli'
-import { memoryCredentialStore, flagConfigStore } from '@stripe/stateful-sync'
+import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
 import type { Credential } from '@stripe/stateful-sync'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
 
@@ -49,17 +49,15 @@ describe('runSync', () => {
       'dst-cred': makeCred('dst-cred', 'test'),
     })
 
-    const configs = flagConfigStore({
+    const configs = memoryConfigStore({ test_sync: {
       id: 'test_sync',
       source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
       destination: { type: 'test', credential_id: 'dst-cred' },
-    })
+    }})
 
     const messages: StateMessage[] = []
     for await (const msg of runSync({
       syncId: 'test_sync',
-      sourceType: 'test',
-      destinationType: 'test',
       connectors: resolver,
       credentials,
       configs,
@@ -93,7 +91,7 @@ describe('runSync', () => {
       'dst-cred': makeCred('dst-cred', 'test'),
     })
 
-    const configs = flagConfigStore({
+    const configs = memoryConfigStore({ test_sync: {
       id: 'test_sync',
       source: {
         type: 'test',
@@ -101,13 +99,11 @@ describe('runSync', () => {
         streams: { customers: {}, invoices: {} },
       },
       destination: { type: 'test', credential_id: 'dst-cred' },
-    })
+    }})
 
     const messages: StateMessage[] = []
     for await (const msg of runSync({
       syncId: 'test_sync',
-      sourceType: 'test',
-      destinationType: 'test',
       connectors: resolver,
       credentials,
       configs,
@@ -139,15 +135,13 @@ function makeOpts(extra: Partial<Parameters<typeof runSync>[0]> = {}) {
     'src-cred': makeCred('src-cred', 'test'),
     'dst-cred': makeCred('dst-cred', 'test'),
   })
-  const configs = flagConfigStore({
+  const configs = memoryConfigStore({ test_sync: {
     id: 'test_sync',
     source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
     destination: { type: 'test', credential_id: 'dst-cred' },
-  })
+  }})
   return {
     syncId: 'test_sync',
-    sourceType: 'test',
-    destinationType: 'test',
     connectors: resolver,
     credentials,
     configs,

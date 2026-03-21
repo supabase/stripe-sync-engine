@@ -78,4 +78,4 @@ After confirming sync-engine's migrate.ts imports from source-stripe, delete the
 2. `pnpm test` in `packages/destination-postgres` — no openapi references
 3. `pnpm test` in `packages/source-stripe` — openapi tests pass
 4. `pnpm test` in `packages/sync-engine` — migrate tests still pass
-5. `grep -r "stripe" packages/destination-postgres/src/` — only `@stripe/sync-protocol` and schema name refs remain
+5. `grep -r "stripe" packages/destination-postgres/src/` — only `@stripe/protocol` and schema name refs remain

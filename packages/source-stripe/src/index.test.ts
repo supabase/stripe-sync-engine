@@ -9,7 +9,7 @@ import type {
   RecordMessage,
   StateMessage,
   StreamStatusMessage,
-} from '@stripe/sync-protocol'
+} from '@stripe/protocol'
 import source, { fromWebhookEvent } from './index'
 import { buildResourceRegistry } from './resourceRegistry'
 import type { ResourceConfig } from './types'

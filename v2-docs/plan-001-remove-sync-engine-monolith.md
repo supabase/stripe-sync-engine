@@ -37,7 +37,7 @@ apps/
 | Component                | LoC     | Reason                                                           |
 | ------------------------ | ------- | ---------------------------------------------------------------- |
 | `sigma/`                 | ~44,775 | User decision: remove entirely                                   |
-| `protocol/index.ts`      | 34      | Redundant re-export of `@stripe/sync-protocol`                   |
+| `protocol/index.ts`      | 34      | Redundant re-export of `@stripe/protocol`                        |
 | `database/QueryUtils.ts` | 70      | Byte-identical duplicate of `destination-postgres/QueryUtils.ts` |
 
 ### → `packages/source-stripe`

@@ -1,9 +1,7 @@
 # sync-engine-stateful (stateful CLI)
 
-Stateful CLI for persistent syncs. Credentials are read from environment variables;
-sync state is kept in memory per invocation (no external store needed).
-
-Useful for quick local runs or scripted pipelines where you control the environment.
+Stateful CLI for persistent syncs. Connector config is resolved from CLI flags,
+environment variables, or a config file — connector-agnostic, no hardcoded env var names.
 
 ## Install
 
@@ -13,63 +11,107 @@ pnpm add @stripe/sync-engine-stateful-cli
 
 The `sync-engine-stateful` binary is added to your PATH.
 
-## Environment variables
+## Config resolution
 
-| Variable | Required | Description |
-|---|---|---|
-| `STRIPE_API_KEY` | yes (source) | Stripe secret key (`sk_test_...` or `sk_live_...`) |
-| `DATABASE_URL` | yes (destination) | Postgres connection string (`postgresql://user:pass@host/db`) |
+Config is resolved per field using: **CLI flags > env vars > config file > defaults**.
+
+### Environment variables
+
+Env vars use a role prefix (`SOURCE_*`, `DESTINATION_*`). The prefix is stripped
+and field names are lowercased:
+
+| Env var                        | Resolves to                              |
+| ------------------------------ | ---------------------------------------- |
+| `SOURCE_API_KEY=sk_test_...`   | `source_config.api_key = "sk_test_..."`  |
+| `DESTINATION_CONNECTION_STRING=pg://...` | `destination_config.connection_string = "pg://..."` |
+
+Values are JSON-parsed where possible (`"true"` → `true`, `"123"` → `123`).
 
 A `.env` file in the working directory is loaded automatically.
+
+### Config file
+
+```sh
+sync-engine-stateful run --config sync.json
+```
+
+Where `sync.json`:
+
+```json
+{
+  "source_config": { "api_key": "sk_test_..." },
+  "destination_config": { "connection_string": "postgresql://localhost/mydb" }
+}
+```
+
+### CLI flags
+
+```sh
+sync-engine-stateful run \
+  --source-config '{"api_key":"sk_test_..."}' \
+  --destination-config '{"connection_string":"postgresql://..."}'
+```
 
 ## Commands
 
 ### `run`
 
-Run a sync using environment credentials and in-memory state.
+Run a sync.
 
 ```sh
 sync-engine-stateful run [options]
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `--sync-id <id>` | `cli_sync` | Identifier for this sync run (used in log output) |
-| `--source-type <type>` | `stripe` | Source connector short name |
-| `--destination-type <type>` | `postgres` | Destination connector short name |
+| Option                         | Default    | Description                          |
+| ------------------------------ | ---------- | ------------------------------------ |
+| `--sync-id <id>`               | `cli_sync` | Identifier for this sync run         |
+| `--source-type <type>`         | `stripe`   | Source connector short name          |
+| `--destination-type <type>`    | `postgres` | Destination connector short name     |
+| `--source-config <json>`       |            | Source config as inline JSON         |
+| `--destination-config <json>`  |            | Destination config as inline JSON    |
+| `--config <path>`              |            | Path to JSON config file             |
+| `--data-dir <path>`            | `~/.stripe-sync` | Data directory for state       |
 
 Writes NDJSON `StateMessage` objects to stdout as the sync progresses.
 
 ## Examples
 
-### Stripe → Postgres with defaults
+### Stripe → Postgres with env vars
 
 ```sh
-STRIPE_API_KEY=sk_test_... DATABASE_URL=postgresql://... sync-engine-stateful run
+SOURCE_API_KEY=sk_test_... DESTINATION_CONNECTION_STRING=postgresql://... \
+  sync-engine-stateful run
 ```
 
-### Named run with custom sync ID
+### Using a config file with env secrets
+
+```json
+// sync.json (safe to commit — no secrets)
+{
+  "source_config": {},
+  "destination_config": {}
+}
+```
 
 ```sh
-STRIPE_API_KEY=sk_test_... \
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb \
-sync-engine-stateful run --sync-id nightly_sync
+SOURCE_API_KEY=sk_test_... \
+DESTINATION_CONNECTION_STRING=postgresql://user:pass@localhost:5432/mydb \
+  sync-engine-stateful run --config sync.json
 ```
 
 ### Using a .env file
 
 ```sh
 # .env
-STRIPE_API_KEY=sk_test_...
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
+SOURCE_API_KEY=sk_test_...
+DESTINATION_CONNECTION_STRING=postgresql://user:pass@localhost:5432/mydb
 ```
 
 ```sh
-sync-engine-stateful run --sync-id my_sync
+sync-engine-stateful run
 ```
 
 ## Notes
 
-- State is held in memory only — each `run` starts a fresh full sync. Use the
-  [stateful API](../stateful-api/README.md) if you need incremental resumption across runs.
+- State is kept on disk at `~/.stripe-sync/state.json` by default.
 - Missing connectors are auto-installed via `pnpm add` on first use.

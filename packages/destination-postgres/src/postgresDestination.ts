@@ -7,7 +7,7 @@ import type {
   DestinationOutput,
   ErrorMessage,
   LogMessage,
-} from '@stripe/sync-protocol'
+} from '@stripe/protocol'
 import type { PostgresConfig } from './types'
 import { PostgresDestinationWriter } from './writer'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'

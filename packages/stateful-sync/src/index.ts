@@ -14,5 +14,4 @@ export {
   memoryLogSink,
 } from './stores/memory'
 export { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file'
-export { envCredentialStore, flagConfigStore } from './stores/env'
 export { stderrLogSink } from './stores/stderr'

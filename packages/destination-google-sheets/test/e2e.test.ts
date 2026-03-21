@@ -6,7 +6,7 @@ import type {
   DestinationOutput,
   RecordMessage,
   StateMessage,
-} from '@stripe/sync-protocol'
+} from '@stripe/protocol'
 import { google } from 'googleapis'
 import { describe, expect, it } from 'vitest'
 import { SheetsDestination } from '../src/sheets-destination'

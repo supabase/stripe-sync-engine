@@ -1,9 +1,8 @@
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file'
-import { envCredentialStore, flagConfigStore } from './stores/env'
 import {
   memoryCredentialStore,
   memoryConfigStore,
@@ -174,94 +173,6 @@ describe('fileLogSink', () => {
 
     const entry2 = JSON.parse(lines[1]!)
     expect(entry2.stream).toBe('customers')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Env credential store
-// ---------------------------------------------------------------------------
-
-describe('envCredentialStore', () => {
-  const saved: Record<string, string | undefined> = {}
-
-  beforeEach(() => {
-    saved.STRIPE_API_KEY = process.env.STRIPE_API_KEY
-    saved.DATABASE_URL = process.env.DATABASE_URL
-  })
-
-  afterEach(() => {
-    // Restore original env
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k]
-      else process.env[k] = v
-    }
-  })
-
-  it('reads from process.env', async () => {
-    process.env.STRIPE_API_KEY = 'sk_test_123'
-    process.env.DATABASE_URL = 'postgres://localhost/test'
-
-    const store = envCredentialStore()
-
-    const src = await store.get('source')
-    expect(src.api_key).toBe('sk_test_123')
-
-    const dst = await store.get('destination')
-    expect(dst.connection_string).toBe('postgres://localhost/test')
-  })
-
-  it('throws when env var is unset', async () => {
-    delete process.env.STRIPE_API_KEY
-    const store = envCredentialStore()
-    await expect(store.get('source')).rejects.toThrow('STRIPE_API_KEY not set')
-  })
-
-  it('custom var names', async () => {
-    process.env.MY_KEY = 'custom_key'
-    process.env.MY_DB = 'custom_db'
-
-    const store = envCredentialStore({ sourceEnvVar: 'MY_KEY', destEnvVar: 'MY_DB' })
-
-    const src = await store.get('source')
-    expect(src.api_key).toBe('custom_key')
-
-    const dst = await store.get('destination')
-    expect(dst.connection_string).toBe('custom_db')
-  })
-
-  afterEach(() => {
-    delete process.env.MY_KEY
-    delete process.env.MY_DB
-  })
-
-  it('is read-only', async () => {
-    const store = envCredentialStore()
-    await expect(store.set('x', makeCredential('x'))).rejects.toThrow('read-only')
-    await expect(store.delete('x')).rejects.toThrow('read-only')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Flag config store
-// ---------------------------------------------------------------------------
-
-describe('flagConfigStore', () => {
-  const config = makeConfig('sync-1')
-
-  it('returns matching config', async () => {
-    const store = flagConfigStore(config)
-    expect(await store.get('sync-1')).toEqual(config)
-  })
-
-  it('throws for wrong id', async () => {
-    const store = flagConfigStore(config)
-    await expect(store.get('wrong-id')).rejects.toThrow('only has config "sync-1"')
-  })
-
-  it('is read-only', async () => {
-    const store = flagConfigStore(config)
-    await expect(store.set('x', config)).rejects.toThrow('read-only')
-    await expect(store.delete('x')).rejects.toThrow('read-only')
   })
 })
 

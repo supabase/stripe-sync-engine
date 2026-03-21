@@ -22,7 +22,7 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/protocol": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
     "@stripe/store-postgres": "workspace:*",

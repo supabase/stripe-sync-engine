@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
-import type { Destination } from '@stripe/sync-protocol'
+import type { Destination } from '@stripe/protocol'
 import { PostgresDestination } from './postgresDestination'
 
 // MARK: - Spec

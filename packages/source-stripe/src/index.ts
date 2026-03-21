@@ -1,9 +1,4 @@
-import type {
-  ConfiguredCatalog,
-  ConnectorSpecification,
-  Message,
-  Source,
-} from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, ConnectorSpecification, Message, Source } from '@stripe/protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
 import { buildResourceRegistry } from './resourceRegistry'
@@ -263,7 +258,7 @@ export type {
   RevalidateEntity,
 } from './types'
 export { SUPPORTED_WEBHOOK_EVENTS } from './types'
-export type { Source } from '@stripe/sync-protocol'
+export type { Source } from '@stripe/protocol'
 
 // Resource Registry
 export {

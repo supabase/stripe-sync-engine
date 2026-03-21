@@ -9,7 +9,7 @@ import type {
   DestinationOutput,
   RecordMessage,
   StateMessage,
-} from '@stripe/sync-protocol'
+} from '@stripe/protocol'
 
 const stubConfig: PostgresConfig = {
   schema: 'public',

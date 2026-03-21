@@ -7,7 +7,7 @@ import type {
   DestinationOutput,
   ErrorMessage,
   LogMessage,
-} from '@stripe/sync-protocol'
+} from '@stripe/protocol'
 import type { sheets_v4 } from 'googleapis'
 import { appendRows, ensureSheet, ensureSpreadsheet } from './writer'
 

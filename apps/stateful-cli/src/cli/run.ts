@@ -10,18 +10,16 @@ import { createConnectorResolver } from '@stripe/sync-engine-stateless-cli'
 import type { CredentialStore, ConfigStore } from '@stripe/stateful-sync'
 import {
   StatefulSync,
-  envCredentialStore,
-  flagConfigStore,
+  fileCredentialStore,
+  fileConfigStore,
   fileStateStore,
-  stderrLogSink,
+  fileLogSink,
 } from '@stripe/stateful-sync'
 
 const DEFAULT_DATA_DIR = join(homedir(), '.stripe-sync')
 
 type ServiceOpts = {
   syncId: string
-  sourceType: string
-  destinationType: string
   dataDir?: string
   connectors?: ConnectorResolver
   credentials?: CredentialStore
@@ -31,20 +29,14 @@ type ServiceOpts = {
 
 function makeService(opts: ServiceOpts) {
   const dataDir = opts.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR
-  const credentials = opts.credentials ?? envCredentialStore()
-  const configs =
-    opts.configs ??
-    flagConfigStore({
-      id: opts.syncId,
-      source: { type: opts.sourceType, credential_id: 'env_source' },
-      destination: { type: opts.destinationType, credential_id: 'env_destination' },
-    })
+  const credentials = opts.credentials ?? fileCredentialStore(join(dataDir, 'credentials.json'))
+  const configs = opts.configs ?? fileConfigStore(join(dataDir, 'syncs.json'))
 
   return new StatefulSync({
     credentials,
     configs,
     states: fileStateStore(join(dataDir, 'state.json')),
-    logs: stderrLogSink(),
+    logs: fileLogSink(join(dataDir, 'logs.ndjson')),
     connectors: opts.connectors ?? createConnectorResolver({}),
   })
 }

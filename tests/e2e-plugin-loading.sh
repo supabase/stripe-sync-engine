@@ -36,7 +36,7 @@ echo ""
 echo "--- Step 1: Packing packages ---"
 
 # pnpm pack outputs the absolute tarball path as the last line
-PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/dev/null | tail -1)
+PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/protocol pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
 CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless-cli pack 2>/dev/null | tail -1)
@@ -58,7 +58,7 @@ echo "--- Step 2: Installing tarballs into temp project ---"
 cd "$TMPDIR_BASE"
 pnpm init > /dev/null 2>&1
 
-# Override @stripe/sync-protocol resolution to use the local tarball.
+# Override @stripe/protocol resolution to use the local tarball.
 # Without this, pnpm tries to resolve the rewritten "0.1.0" from the npm registry.
 cat > package.json <<EOF
 {
@@ -66,7 +66,7 @@ cat > package.json <<EOF
   "version": "1.0.0",
   "pnpm": {
     "overrides": {
-      "@stripe/sync-protocol": "$PROTOCOL_TGZ"
+      "@stripe/protocol": "$PROTOCOL_TGZ"
     }
   }
 }

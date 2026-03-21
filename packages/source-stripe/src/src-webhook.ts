@@ -1,4 +1,4 @@
-import type { ConfiguredCatalog, Message } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, Message } from '@stripe/protocol'
 import http from 'node:http'
 import type Stripe from 'stripe'
 import type { Config, WebhookInput } from './index'

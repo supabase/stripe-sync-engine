@@ -1,4 +1,4 @@
-import type { ConfiguredCatalog, LogMessage, Message, StateMessage } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, LogMessage, Message, StateMessage } from '@stripe/protocol'
 import type Stripe from 'stripe'
 import type { Config, StripeStreamState } from './index'
 import type { ResourceConfig } from './types'

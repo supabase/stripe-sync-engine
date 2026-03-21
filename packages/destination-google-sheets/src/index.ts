@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { google } from 'googleapis'
-import type { Destination } from '@stripe/sync-protocol'
+import type { Destination } from '@stripe/protocol'
 import { SheetsDestination } from './sheets-destination'
 
 export { SheetsDestination, type SheetsDestinationConfig } from './sheets-destination'

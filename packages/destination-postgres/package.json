@@ -19,7 +19,7 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/protocol": "workspace:*",
     "pg": "^8.16.3",
     "yesql": "^7.0.0",
     "zod": "^4.3.6"

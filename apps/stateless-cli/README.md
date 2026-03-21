@@ -23,20 +23,20 @@ Every command takes a `--params` flag with a JSON `SyncParams` object:
   "destination_config": { "connection_string": "postgresql://user:pass@localhost/mydb" },
   "streams": [
     { "name": "customers", "sync_mode": "incremental" },
-    { "name": "charges",   "sync_mode": "full_refresh" }
+    { "name": "charges", "sync_mode": "full_refresh" }
   ],
   "state": {}
 }
 ```
 
-| Field | Required | Description |
-|---|---|---|
-| `destination_name` | yes | Short name (`postgres`), scoped package (`@stripe/destination-postgres`), or file path |
-| `source_name` | no, default `stripe` | Same format as `destination_name` |
-| `source_config` | yes | Connector-specific config (e.g. `{ "api_key": "sk_..." }`) |
-| `destination_config` | yes | Connector-specific config (e.g. `{ "connection_string": "..." }`) |
-| `streams` | no | Stream selection. Omit to sync all discovered streams. `sync_mode` defaults to `full_refresh`. |
-| `state` | no | Cursor state from a previous run, used for incremental syncs |
+| Field                | Required             | Description                                                                                    |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------- |
+| `destination_name`   | yes                  | Short name (`postgres`), scoped package (`@stripe/destination-postgres`), or file path         |
+| `source_name`        | no, default `stripe` | Same format as `destination_name`                                                              |
+| `source_config`      | yes                  | Connector-specific config (e.g. `{ "api_key": "sk_..." }`)                                     |
+| `destination_config` | yes                  | Connector-specific config (e.g. `{ "connection_string": "..." }`)                              |
+| `streams`            | no                   | Stream selection. Omit to sync all discovered streams. `sync_mode` defaults to `full_refresh`. |
+| `state`              | no                   | Cursor state from a previous run, used for incremental syncs                                   |
 
 ## Commands
 

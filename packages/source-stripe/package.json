@@ -19,7 +19,7 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/protocol": "workspace:*",
     "stripe": "^17.7.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
