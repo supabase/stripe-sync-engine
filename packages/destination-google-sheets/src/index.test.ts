@@ -1,6 +1,6 @@
 import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
 import { describe, expect, it } from 'vitest'
-import { SheetsDestination } from './sheets-destination'
+import { createDestination, type Config } from './index'
 import { readSheet } from './writer'
 import { createMemorySheets } from '../__tests__/memory-sheets'
 
@@ -26,18 +26,32 @@ function state(stream: string, data: unknown): DestinationInput {
   return { type: 'state', stream, data }
 }
 
-const catalog = { streams: [] } as never // catalog is accepted but unused by SheetsDestination
+const catalog = { streams: [] } as never
 
-describe('SheetsDestination', () => {
+/** Minimal config for tests — credentials are unused since we inject a fake client. */
+function cfg(overrides: Partial<Config> = {}): Config {
+  return {
+    client_id: '',
+    client_secret: '',
+    access_token: '',
+    refresh_token: '',
+    spreadsheet_id: '',
+    spreadsheet_title: 'Test',
+    batch_size: 50,
+    ...overrides,
+  }
+}
+
+describe('destination-google-sheets', () => {
   it('header discovery — first record keys become header row', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('users', { id: 'u1', name: 'Alice', email: 'alice@test.invalid' }),
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
     const rows = getData(id, 'users')!
@@ -47,7 +61,7 @@ describe('SheetsDestination', () => {
 
   it('batching — flushes when batch_size is reached', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test', batch_size: 3 }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('items', { id: '1' }),
@@ -57,7 +71,7 @@ describe('SheetsDestination', () => {
       record('items', { id: '5' }),
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg({ batch_size: 3 }), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
     const rows = getData(id, 'items')!
@@ -69,7 +83,7 @@ describe('SheetsDestination', () => {
 
   it('state passthrough — flushes buffer then re-emits state', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test', batch_size: 100 }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('orders', { id: 'o1', total: 42 }),
@@ -78,7 +92,9 @@ describe('SheetsDestination', () => {
       record('orders', { id: 'o3', total: 10 }),
     ]
 
-    const output = await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    const output = await collect(
+      dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages))
+    )
 
     // State should be re-emitted
     const states = output.filter((m) => m.type === 'state')
@@ -93,7 +109,7 @@ describe('SheetsDestination', () => {
 
   it('multi-stream — two streams get independent tabs and headers', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('customers', { id: 'c1', name: 'Alice' }),
@@ -102,7 +118,7 @@ describe('SheetsDestination', () => {
       record('invoices', { id: 'inv_2', amount: 200, customer: 'c2' }),
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
 
@@ -117,11 +133,13 @@ describe('SheetsDestination', () => {
 
   it('spreadsheet creation — auto-creates when no spreadsheet_id given', async () => {
     const { sheets } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Auto Created' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('data', { x: 1 })]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(
+      dest.write({ config: cfg({ spreadsheet_id: '' }), catalog }, toAsyncIter(messages))
+    )
 
     expect(dest.spreadsheetId).toBeTruthy()
     expect(dest.spreadsheetId).toMatch(/^mem_ss_/)
@@ -136,24 +154,23 @@ describe('SheetsDestination', () => {
     })
     const existingId = res.data.spreadsheetId!
 
-    const dest = new SheetsDestination(
-      { spreadsheet_title: 'Ignored', spreadsheet_id: existingId },
-      sheets
-    )
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('data', { x: 1 })]
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(
+      dest.write({ config: cfg({ spreadsheet_id: existingId }), catalog }, toAsyncIter(messages))
+    )
 
     expect(dest.spreadsheetId).toBe(existingId)
   })
 
   it('Sheet1 rename — first stream renames the default tab', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('my_stream', { a: 1 })]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
     // Default "Sheet1" should have been renamed to "my_stream"
@@ -163,7 +180,7 @@ describe('SheetsDestination', () => {
 
   it('end-of-stream flush — remaining buffered rows written when input ends', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test', batch_size: 100 }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('events', { id: 'e1' }),
@@ -171,7 +188,7 @@ describe('SheetsDestination', () => {
       // batch_size=100, so these won't trigger a mid-stream flush
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
     const rows = getData(id, 'events')!
@@ -180,7 +197,7 @@ describe('SheetsDestination', () => {
 
   it('value stringification — null, numbers, booleans, objects', async () => {
     const { sheets, getData } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('types', {
@@ -192,7 +209,7 @@ describe('SheetsDestination', () => {
       }),
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = dest.spreadsheetId!
     const rows = getData(id, 'types')!
@@ -201,14 +218,14 @@ describe('SheetsDestination', () => {
 
   it('readSheet helper — reads back data through the fake client', async () => {
     const { sheets } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
       record('test', { a: '1', b: '2' }),
       record('test', { a: '3', b: '4' }),
     ]
 
-    await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const rows = await readSheet(sheets, dest.spreadsheetId!, 'test')
     expect(rows).toEqual([
@@ -220,11 +237,11 @@ describe('SheetsDestination', () => {
 
   it('final log message — always yields a log message at the end', async () => {
     const { sheets } = createMemorySheets()
-    const dest = new SheetsDestination({ spreadsheet_title: 'Test' }, sheets)
+    const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('x', { id: '1' })]
 
-    const output = await collect(dest.write({ config: {}, catalog }, toAsyncIter(messages)))
+    const output = await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const logs = output.filter((m) => m.type === 'log')
     expect(logs).toHaveLength(1)

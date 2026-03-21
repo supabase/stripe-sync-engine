@@ -9,8 +9,7 @@ import type {
 } from '@stripe/protocol'
 import { google } from 'googleapis'
 import { describe, expect, it } from 'vitest'
-import { SheetsDestination } from '../src/sheets-destination'
-import { readSheet } from '../src/writer'
+import { createDestination, type Config, readSheet } from '../src/index'
 
 // Credential paths — relative to monorepo root
 const MONOREPO_ROOT = resolve(import.meta.dirname, '..', '..', '..')
@@ -39,12 +38,12 @@ async function* toAsyncIter<T>(items: T[]): AsyncIterableIterator<T> {
   }
 }
 
-describe.skipIf(!credentialsExist)('SheetsDestination E2E', () => {
+describe.skipIf(!credentialsExist)('destination-google-sheets E2E', () => {
   it('creates a spreadsheet, writes records, and verifies content', async () => {
     const sheets = loadSheetsClient()
+    const dest = createDestination(sheets)
 
     const title = `sync-engine-test-${Date.now()}`
-    const dest = new SheetsDestination({ spreadsheet_title: title }, sheets)
 
     // Build catalog
     const catalog: CatalogMessage = {
@@ -109,9 +108,19 @@ describe.skipIf(!credentialsExist)('SheetsDestination E2E', () => {
 
     const messages: DestinationInput[] = [...records, stateMsg]
 
+    const config = {
+      client_id: '',
+      client_secret: '',
+      access_token: '',
+      refresh_token: '',
+      spreadsheet_id: '',
+      spreadsheet_title: title,
+      batch_size: 50,
+    } satisfies Config
+
     // Run the destination
     const output: DestinationOutput[] = []
-    for await (const msg of dest.write(catalog, toAsyncIter(messages))) {
+    for await (const msg of dest.write({ config, catalog }, toAsyncIter(messages))) {
       output.push(msg)
     }
 
