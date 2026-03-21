@@ -5,8 +5,8 @@ import type {
   ConnectorResolver,
   SyncParams as SyncParamsType,
 } from '@stripe/stateless-sync'
-import { createEngineFromParams, parseNdjson, SyncParams } from '@stripe/stateless-sync'
-import { sseResponse } from './stream'
+import { createEngineFromParams, parseNdjsonStream, SyncParams } from '@stripe/stateless-sync'
+import { ndjsonResponse } from './stream'
 
 // Re-export core protocol types for consumers (e.g. stateful-api)
 export type {
@@ -38,7 +38,10 @@ export {
   createConnectorResolver,
   resolveSpecifier,
   loadConnector,
+  parseNdjsonStream,
 } from '@stripe/stateless-sync'
+
+export { ndjsonResponse } from './stream'
 
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()
@@ -87,30 +90,30 @@ export function createApp(resolver: ConnectorResolver) {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const text = await c.req.text()
-    const input = text ? parseNdjson(text) : undefined
-    return sseResponse(engine.read(input))
+    const body = c.req.raw.body
+    const input = body ? parseNdjsonStream(body) : undefined
+    return ndjsonResponse(engine.read(input))
   })
 
   app.post('/write', async (c) => {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const text = await c.req.text()
-    if (!text) {
+    const body = c.req.raw.body
+    if (!body) {
       return c.json({ error: 'Request body required for /write' }, 400)
     }
-    const messages = parseNdjson<Message>(text)
-    return sseResponse(engine.write(messages))
+    const messages = parseNdjsonStream<Message>(body)
+    return ndjsonResponse(engine.write(messages))
   })
 
   app.post('/run', async (c) => {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const text = await c.req.text()
-    const input = text ? parseNdjson(text) : undefined
-    return sseResponse(engine.run(input))
+    const body = c.req.raw.body
+    const input = body ? parseNdjsonStream(body) : undefined
+    return ndjsonResponse(engine.run(input))
   })
 
   return app

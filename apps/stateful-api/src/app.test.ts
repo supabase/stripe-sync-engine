@@ -31,20 +31,13 @@ async function* toAsync<T>(items: T[]): AsyncIterable<T> {
   }
 }
 
-/** Read an SSE response body, returning parsed data payloads keyed by event name. */
-async function readSseEvents(res: Response): Promise<Array<{ event?: string; data: unknown }>> {
+/** Read an NDJSON response body, returning all parsed objects. */
+async function readNdjson(res: Response): Promise<unknown[]> {
   const text = await res.text()
-  const events: Array<{ event?: string; data: unknown }> = []
-  let currentEvent: string | undefined
-  for (const line of text.split('\n')) {
-    if (line.startsWith('event: ')) {
-      currentEvent = line.slice(7).trim()
-    } else if (line.startsWith('data: ')) {
-      events.push({ event: currentEvent, data: JSON.parse(line.slice(6)) })
-      currentEvent = undefined
-    }
-  }
-  return events
+  return text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line))
 }
 
 function createMockSource(messages: Message[]): Source {
@@ -402,10 +395,50 @@ describe('openapi', () => {
   })
 })
 
+// ── Sync engine operation helpers ────────────────────────────────
+
+/** Seed credentials and a sync config, return syncId. */
+async function seedSync(
+  app: ReturnType<typeof createApp>,
+  source: Source,
+  destination: Destination
+): Promise<string> {
+  const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+  const { id: srcCredId } = await srcRes.json()
+
+  const dstRes = await post(app, '/credentials', {
+    type: 'postgres',
+    host: 'localhost',
+    port: 5432,
+    user: 'u',
+    password: 'p',
+    database: 'db',
+  })
+  const { id: dstCredId } = await dstRes.json()
+
+  const syncRes = await post(app, '/syncs', {
+    account_id: 'acct_test',
+    status: 'backfilling',
+    source: {
+      type: 'stripe-api-core',
+      livemode: true,
+      api_version: '2025-04-30.basil',
+      credential_id: srcCredId,
+    },
+    destination: {
+      type: 'postgres',
+      schema_name: 'stripe',
+      credential_id: dstCredId,
+    },
+  })
+  const { id: syncId } = await syncRes.json()
+  return syncId
+}
+
 // ── POST /syncs/:id/run ───────────────────────────────────────────
 
 describe('POST /syncs/:id/run', () => {
-  it('streams SSE state messages for a successful sync', async () => {
+  it('streams NDJSON state messages for a successful sync', async () => {
     const stateMsg: StateMessage = { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } }
     const record: Message = {
       type: 'record',
@@ -415,62 +448,135 @@ describe('POST /syncs/:id/run', () => {
     }
     const source = createMockSource([record, stateMsg])
     const { destination } = createMockDestination()
-
     const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
-
-    // Seed credentials
-    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
-    const { id: srcCredId } = await srcRes.json()
-
-    const dstRes = await post(app, '/credentials', {
-      type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
-    })
-    const { id: dstCredId } = await dstRes.json()
-
-    // Seed sync config
-    const syncRes = await post(app, '/syncs', {
-      account_id: 'acct_test',
-      status: 'backfilling',
-      source: {
-        type: 'stripe-api-core',
-        livemode: true,
-        api_version: '2025-04-30.basil',
-        credential_id: srcCredId,
-      },
-      destination: {
-        type: 'postgres',
-        schema_name: 'stripe',
-        credential_id: dstCredId,
-      },
-    })
-    const { id: syncId } = await syncRes.json()
+    const syncId = await seedSync(app, source, destination)
 
     const res = await app.request(`/syncs/${syncId}/run`, { method: 'POST' })
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toContain('text/event-stream')
+    expect(res.headers.get('Content-Type')).toContain('application/x-ndjson')
 
-    const events = await readSseEvents(res)
-    const stateEvents = events.filter((e) => e.event === 'state')
-    const doneEvents = events.filter((e) => e.event === 'done')
-    expect(stateEvents.length).toBeGreaterThanOrEqual(1)
-    expect(doneEvents).toHaveLength(1)
+    const lines = await readNdjson(res)
+    const stateMsgs = lines.filter((l: any) => l.type === 'state')
+    expect(stateMsgs.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('streams SSE error when config is missing', async () => {
+  it('streams NDJSON error when config is missing', async () => {
     const source = createMockSource([])
     const { destination } = createMockDestination()
     const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
 
     const res = await app.request('/syncs/nonexistent/run', { method: 'POST' })
-    expect(res.status).toBe(200) // SSE always starts 200
+    expect(res.status).toBe(200) // streaming always starts 200
 
-    const events = await readSseEvents(res)
-    const errorEvents = events.filter((e) => e.event === 'error')
-    expect(errorEvents).toHaveLength(1)
+    const lines = await readNdjson(res)
+    const errorLines = lines.filter((l: any) => l.type === 'error')
+    expect(errorLines).toHaveLength(1)
+  })
+})
+
+// ── /syncs/:id/setup + teardown ──────────────────────────────────
+
+describe('POST /syncs/:id/setup and teardown', () => {
+  it('setup returns 204', async () => {
+    const source = createMockSource([])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const res = await app.request(`/syncs/${syncId}/setup`, { method: 'POST' })
+    expect(res.status).toBe(204)
+  })
+
+  it('teardown returns 204', async () => {
+    const source = createMockSource([])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const res = await app.request(`/syncs/${syncId}/teardown`, { method: 'POST' })
+    expect(res.status).toBe(204)
+  })
+})
+
+// ── GET /syncs/:id/check ─────────────────────────────────────────
+
+describe('GET /syncs/:id/check', () => {
+  it('returns check result JSON', async () => {
+    const source = createMockSource([])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const res = await app.request(`/syncs/${syncId}/check`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.source).toBeDefined()
+    expect(body.destination).toBeDefined()
+    expect(body.source.status).toBe('succeeded')
+    expect(body.destination.status).toBe('succeeded')
+  })
+})
+
+// ── POST /syncs/:id/read ─────────────────────────────────────────
+
+describe('POST /syncs/:id/read', () => {
+  it('streams NDJSON messages from source', async () => {
+    const record: Message = {
+      type: 'record',
+      stream: 'customers',
+      data: { id: 'cus_1' },
+      emitted_at: 1000,
+    }
+    const stateMsg: StateMessage = { type: 'state', stream: 'customers', data: { cursor: 'c1' } }
+    const source = createMockSource([record, stateMsg])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const res = await app.request(`/syncs/${syncId}/read`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('application/x-ndjson')
+
+    const lines = await readNdjson(res)
+    expect(lines.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// ── POST /syncs/:id/write ────────────────────────────────────────
+
+describe('POST /syncs/:id/write', () => {
+  it('streams NDJSON state messages after writing', async () => {
+    const source = createMockSource([])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const body =
+      JSON.stringify({ type: 'record', stream: 'customers', data: { id: 'c1' }, emitted_at: 0 }) +
+      '\n' +
+      JSON.stringify({ type: 'state', stream: 'customers', data: { cursor: 'x' } }) +
+      '\n'
+
+    const res = await app.request(`/syncs/${syncId}/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body,
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('application/x-ndjson')
+
+    const lines = await readNdjson(res)
+    const stateMsgs = lines.filter((l: any) => l.type === 'state')
+    expect(stateMsgs).toHaveLength(1)
+  })
+
+  it('returns 400 when body is missing', async () => {
+    const source = createMockSource([])
+    const { destination } = createMockDestination()
+    const app = createApp({ dataDir, connectors: mockResolver(source, destination) })
+    const syncId = await seedSync(app, source, destination)
+
+    const res = await app.request(`/syncs/${syncId}/write`, { method: 'POST' })
+    expect(res.status).toBe(400)
   })
 })

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { testSource, testDestination } from '@stripe/stateless-sync'
-import type { ConnectorResolver, StateMessage } from '@stripe/sync-engine-stateless-cli'
+import type { ConnectorResolver, StateMessage, Message } from '@stripe/sync-engine-stateless-cli'
 import { memoryCredentialStore, flagConfigStore } from '@stripe/stateful-sync'
 import type { Credential } from '@stripe/stateful-sync'
-import { runSync } from './run'
+import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -123,5 +123,92 @@ describe('runSync', () => {
 
     expect(messages).toHaveLength(2)
     expect(messages.map((m) => m.stream).sort()).toEqual(['customers', 'invoices'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// setupSync / teardownSync / checkSync / readSync / writeSync
+// ---------------------------------------------------------------------------
+
+function makeOpts(extra: Partial<Parameters<typeof runSync>[0]> = {}) {
+  const resolver: ConnectorResolver = {
+    resolveSource: async () => testSource,
+    resolveDestination: async () => testDestination,
+  }
+  const credentials = memoryCredentialStore({
+    'src-cred': makeCred('src-cred', 'test'),
+    'dst-cred': makeCred('dst-cred', 'test'),
+  })
+  const configs = flagConfigStore({
+    id: 'test_sync',
+    source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+    destination: { type: 'test', credential_id: 'dst-cred' },
+  })
+  return {
+    syncId: 'test_sync',
+    sourceType: 'test',
+    destinationType: 'test',
+    connectors: resolver,
+    credentials,
+    configs,
+    ...extra,
+  }
+}
+
+describe('setupSync', () => {
+  it('resolves without error', async () => {
+    await expect(setupSync(makeOpts())).resolves.toBeUndefined()
+  })
+})
+
+describe('teardownSync', () => {
+  it('resolves without error', async () => {
+    await expect(teardownSync(makeOpts())).resolves.toBeUndefined()
+  })
+})
+
+describe('checkSync', () => {
+  it('returns source and destination check results', async () => {
+    const result = await checkSync(makeOpts())
+    expect(result.source.status).toBe('succeeded')
+    expect(result.destination.status).toBe('succeeded')
+  })
+})
+
+describe('readSync', () => {
+  it('yields messages from source', async () => {
+    const $stdin = toAsync([
+      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
+      { type: 'state' as const, stream: 'customers', data: { cursor: 'abc' } },
+    ])
+    const msgs: Message[] = []
+    for await (const msg of readSync(makeOpts({ $stdin }))) {
+      msgs.push(msg)
+    }
+    expect(msgs.length).toBeGreaterThan(0)
+  })
+})
+
+describe('writeSync', () => {
+  it('yields state messages after writing records', async () => {
+    const $stdin = toAsync([
+      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
+      { type: 'state' as const, stream: 'customers', data: { cursor: 'z' } },
+    ] as Message[])
+    const msgs: StateMessage[] = []
+    for await (const msg of writeSync(makeOpts({ $stdin }))) {
+      msgs.push(msg)
+    }
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0]!.type).toBe('state')
+    expect(msgs[0]!.stream).toBe('customers')
+  })
+
+  it('throws when $stdin is not provided', async () => {
+    await expect(async () => {
+      for await (const _ of writeSync(makeOpts())) {
+        // nothing
+      }
+    }).rejects.toThrow('$stdin required')
   })
 })

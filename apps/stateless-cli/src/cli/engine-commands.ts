@@ -2,7 +2,7 @@ import { execSync } from 'child_process'
 import type { Message, StateMessage } from '@stripe/stateless-sync'
 import {
   createEngineFromParams,
-  parseNdjson,
+  parseNdjsonChunks,
   createConnectorResolver,
   SyncParams,
 } from '@stripe/stateless-sync'
@@ -28,14 +28,8 @@ function writeLine(obj: unknown) {
 }
 
 /** Read NDJSON lines from stdin. */
-async function* readStdin(): AsyncIterable<unknown> {
-  const chunks: Buffer[] = []
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer)
-  }
-  const text = Buffer.concat(chunks).toString('utf8').trim()
-  if (!text) return
-  yield* parseNdjson(text)
+function readStdin(): AsyncIterable<unknown> {
+  return parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>)
 }
 
 // MARK: - Commands

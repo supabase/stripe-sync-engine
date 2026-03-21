@@ -1,8 +1,11 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { streamSSE } from 'hono/streaming'
-import type { ConnectorResolver } from '@stripe/sync-engine-stateless-api'
-import { createConnectorResolver } from '@stripe/sync-engine-stateless-api'
+import type { ConnectorResolver, Message } from '@stripe/sync-engine-stateless-api'
+import {
+  createConnectorResolver,
+  ndjsonResponse,
+  parseNdjsonStream,
+} from '@stripe/sync-engine-stateless-api'
 import {
   SyncService,
   fileCredentialStore,
@@ -383,34 +386,48 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     }
   )
 
-  // MARK: - Run sync (SSE) — plain Hono route, SSE doesn't fit OpenAPI
+  // MARK: - Sync engine operations — plain Hono routes (streaming, not OpenAPI)
+
+  app.post('/syncs/:id/setup', async (c) => {
+    const syncId = c.req.param('id')
+    await service.setup(syncId)
+    return c.body(null, 204)
+  })
+
+  app.post('/syncs/:id/teardown', async (c) => {
+    const syncId = c.req.param('id')
+    await service.teardown(syncId)
+    return c.body(null, 204)
+  })
+
+  app.get('/syncs/:id/check', async (c) => {
+    const syncId = c.req.param('id')
+    const result = await service.check(syncId)
+    return c.json(result)
+  })
+
+  app.post('/syncs/:id/read', async (c) => {
+    const syncId = c.req.param('id')
+    const body = c.req.raw.body
+    const input = body ? parseNdjsonStream(body) : undefined
+    return ndjsonResponse(service.read(syncId, input))
+  })
+
+  app.post('/syncs/:id/write', async (c) => {
+    const syncId = c.req.param('id')
+    const body = c.req.raw.body
+    if (!body) {
+      return c.json({ error: 'Request body required for /write' }, 400)
+    }
+    const messages = parseNdjsonStream<Message>(body)
+    return ndjsonResponse(service.write(syncId, messages))
+  })
 
   app.post('/syncs/:id/run', async (c) => {
     const syncId = c.req.param('id')
-    return streamSSE(c, async (stream) => {
-      try {
-        let eventId = 0
-        for await (const msg of service.run(syncId)) {
-          await stream.writeSSE({
-            id: String(eventId++),
-            event: 'state',
-            data: JSON.stringify(msg),
-          })
-        }
-        await stream.writeSSE({
-          id: String(eventId++),
-          event: 'done',
-          data: JSON.stringify({ status: 'completed' }),
-        })
-      } catch (err) {
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        })
-      }
-    })
+    const body = c.req.raw.body
+    const input = body ? parseNdjsonStream(body) : undefined
+    return ndjsonResponse(service.run(syncId, input))
   })
 
   // MARK: - OpenAPI spec + Swagger UI

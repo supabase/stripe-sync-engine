@@ -1,7 +1,7 @@
 export * from '@stripe/sync-protocol'
 export { createEngine, createEngineFromParams, buildCatalog } from './engine'
 export type { Engine } from './engine'
-export { parseNdjson } from './ndjson'
+export { parseNdjson, parseNdjsonChunks, parseNdjsonStream } from './ndjson'
 export {
   validateSource,
   validateDestination,

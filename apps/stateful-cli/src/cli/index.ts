@@ -2,7 +2,8 @@
 
 import 'dotenv/config'
 import { Command } from 'commander'
-import { runSync } from './run'
+import { parseNdjsonChunks } from '@stripe/stateless-sync'
+import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
 
 const program = new Command()
 
@@ -11,20 +12,93 @@ program
   .description('Stripe Sync Engine — stateful sync with credential and state management')
   .version('0.1.0')
 
-program
-  .command('run')
-  .description('Run a sync using environment credentials (STRIPE_API_KEY, DATABASE_URL)')
-  .option('--sync-id <id>', 'Sync ID', 'cli_sync')
-  .option('--source-type <type>', 'Source connector type', 'stripe')
-  .option('--destination-type <type>', 'Destination connector type', 'postgres')
-  .action(async (opts) => {
-    for await (const msg of runSync({
-      syncId: opts.syncId,
-      sourceType: opts.sourceType,
-      destinationType: opts.destinationType,
-    })) {
-      process.stdout.write(JSON.stringify(msg) + '\n')
-    }
+/** Shared options for all sync commands. */
+function addSyncOptions(cmd: Command): Command {
+  return cmd
+    .option('--sync-id <id>', 'Sync ID', 'cli_sync')
+    .option('--source-type <type>', 'Source connector type', 'stripe')
+    .option('--destination-type <type>', 'Destination connector type', 'postgres')
+}
+
+addSyncOptions(
+  program.command('setup').description('Set up source and destination connectors')
+).action(async (opts) => {
+  await setupSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
   })
+  process.stderr.write('Setup complete.\n')
+})
+
+addSyncOptions(
+  program.command('teardown').description('Tear down source and destination connectors')
+).action(async (opts) => {
+  await teardownSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
+  })
+  process.stderr.write('Teardown complete.\n')
+})
+
+addSyncOptions(
+  program.command('check').description('Check source and destination connectivity')
+).action(async (opts) => {
+  const result = await checkSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
+  })
+  process.stdout.write(JSON.stringify(result) + '\n')
+})
+
+addSyncOptions(
+  program.command('read').description('Read records from the source connector')
+).action(async (opts) => {
+  const $stdin = !process.stdin.isTTY
+    ? (parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>)
+    : undefined
+  for await (const msg of readSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
+    $stdin,
+  })) {
+    process.stdout.write(JSON.stringify(msg) + '\n')
+  }
+})
+
+addSyncOptions(
+  program.command('write').description('Write messages to the destination connector')
+).action(async (opts) => {
+  const $stdin = parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>
+  for await (const msg of writeSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
+    $stdin,
+  })) {
+    process.stdout.write(JSON.stringify(msg) + '\n')
+  }
+})
+
+addSyncOptions(
+  program
+    .command('run')
+    .description('Run a sync using environment credentials (STRIPE_API_KEY, DATABASE_URL)')
+).action(async (opts) => {
+  const $stdin = !process.stdin.isTTY
+    ? (parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>)
+    : undefined
+  for await (const msg of runSync({
+    syncId: opts.syncId,
+    sourceType: opts.sourceType,
+    destinationType: opts.destinationType,
+    $stdin,
+  })) {
+    process.stdout.write(JSON.stringify(msg) + '\n')
+  }
+})
 
 program.parse()

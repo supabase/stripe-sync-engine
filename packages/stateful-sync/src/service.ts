@@ -1,5 +1,11 @@
 import { createEngine } from '@stripe/stateless-sync'
-import type { SyncParams, StateMessage, Message, ConnectorResolver } from '@stripe/stateless-sync'
+import type {
+  SyncParams,
+  StateMessage,
+  Message,
+  ConnectorResolver,
+  CheckResult,
+} from '@stripe/stateless-sync'
 import type {
   CredentialStore,
   ConfigStore,
@@ -74,6 +80,53 @@ export class SyncService {
     this.logs = opts.logs
     this.connectors = opts.connectors
     this.refreshCredential = opts.refreshCredential
+  }
+
+  /** Resolve config + credentials + state into an engine instance. */
+  private async resolveEngine(syncId: string) {
+    const config = await this.configs.get(syncId)
+    const source = await this.connectors.resolveSource(config.source.type)
+    const destination = await this.connectors.resolveDestination(config.destination.type)
+    const sourceCred = await this.credentials.get(config.source.credential_id)
+    const destCred = await this.credentials.get(config.destination.credential_id)
+    const state = await this.states.get(syncId)
+    const params = resolve({ config, sourceCred, destCred, state })
+    const engine = createEngine(params, { source, destination })
+    return { engine, config }
+  }
+
+  async setup(syncId: string): Promise<void> {
+    const { engine } = await this.resolveEngine(syncId)
+    await engine.setup()
+  }
+
+  async teardown(syncId: string): Promise<void> {
+    const { engine } = await this.resolveEngine(syncId)
+    await engine.teardown()
+  }
+
+  async check(syncId: string): Promise<{ source: CheckResult; destination: CheckResult }> {
+    const { engine } = await this.resolveEngine(syncId)
+    return engine.check()
+  }
+
+  async *read(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<Message> {
+    const { engine } = await this.resolveEngine(syncId)
+    yield* engine.read($stdin)
+  }
+
+  async *write(syncId: string, messages: AsyncIterable<Message>): AsyncIterable<StateMessage> {
+    const { engine } = await this.resolveEngine(syncId)
+    for await (const msg of engine.write(messages)) {
+      await this.states.set(syncId, msg.stream, msg.data)
+      this.logs.write(syncId, {
+        level: 'debug',
+        message: `checkpoint: ${msg.stream}`,
+        stream: msg.stream,
+        timestamp: new Date().toISOString(),
+      })
+      yield msg
+    }
   }
 
   async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<StateMessage> {

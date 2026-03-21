@@ -1,8 +1,8 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { testSource, createConnectorResolver } from '@stripe/stateless-sync'
-import type { StateMessage } from '@stripe/stateless-sync'
+import { testSource, testDestination, createConnectorResolver } from '@stripe/stateless-sync'
+import type { Message, StateMessage } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
 import { SyncService, resolve } from './service'
 import {
@@ -322,5 +322,84 @@ describe('SyncService integration', () => {
     )
     // 3 refresh calls: initial attempt + 2 retries (loop runs while retries <= MAX_AUTH_RETRIES)
     expect(refreshCount).toBe(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SyncService new methods (unit — no Docker needed)
+// ---------------------------------------------------------------------------
+
+const testConnectors = createConnectorResolver({
+  sources: { test: testSource },
+  destinations: { test: testDestination },
+})
+
+function makeTestService() {
+  const credentials = memoryCredentialStore({
+    'src-cred': makeCred('src-cred', 'test'),
+    'dst-cred': makeCred('dst-cred', 'test'),
+  })
+  const configs = memoryConfigStore({
+    'test-sync': {
+      id: 'test-sync',
+      source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+      destination: { type: 'test', credential_id: 'dst-cred' },
+    },
+  })
+  const service = new SyncService({
+    credentials,
+    configs,
+    states: memoryStateStore(),
+    logs: memoryLogSink(),
+    connectors: testConnectors,
+  })
+  return service
+}
+
+describe('SyncService.setup/teardown/check', () => {
+  it('setup() resolves without error', async () => {
+    const service = makeTestService()
+    await expect(service.setup('test-sync')).resolves.toBeUndefined()
+  })
+
+  it('teardown() resolves without error', async () => {
+    const service = makeTestService()
+    await expect(service.teardown('test-sync')).resolves.toBeUndefined()
+  })
+
+  it('check() returns source and destination CheckResult', async () => {
+    const service = makeTestService()
+    const result = await service.check('test-sync')
+    expect(result).toHaveProperty('source')
+    expect(result).toHaveProperty('destination')
+    expect(result.source.status).toBe('succeeded')
+    expect(result.destination.status).toBe('succeeded')
+  })
+})
+
+describe('SyncService.read/write', () => {
+  it('read() yields messages from source', async () => {
+    const service = makeTestService()
+    const input = toAsync([
+      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
+      { type: 'state' as const, stream: 'customers', data: { cursor: 'abc' } },
+    ])
+    const msgs: Message[] = []
+    for await (const msg of service.read('test-sync', input)) {
+      msgs.push(msg)
+    }
+    expect(msgs.length).toBeGreaterThan(0)
+  })
+
+  it('write() persists state and yields StateMessages', async () => {
+    const service = makeTestService()
+    const messages = toAsync([
+      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
+      { type: 'state' as const, stream: 'customers', data: { cursor: 'xyz' } },
+    ] as Message[])
+    const stateMsgs = await drain(service.write('test-sync', messages))
+    expect(stateMsgs).toHaveLength(1)
+    expect(stateMsgs[0]!.stream).toBe('customers')
+    expect(stateMsgs[0]!.data).toEqual({ cursor: 'xyz' })
   })
 })

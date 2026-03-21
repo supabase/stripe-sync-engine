@@ -1,18 +1,16 @@
-/** Wrap an AsyncIterable into an SSE Response (text/event-stream). */
-export function sseResponse<T>(iterable: AsyncIterable<T>): Response {
+/** Wrap an AsyncIterable into an NDJSON streaming Response (application/x-ndjson). */
+export function ndjsonResponse<T>(iterable: AsyncIterable<T>): Response {
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
         for await (const item of iterable) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(item)}\n\n`))
+          controller.enqueue(encoder.encode(JSON.stringify(item) + '\n'))
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
-        controller.enqueue(
-          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`)
-        )
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', message }) + '\n'))
       } finally {
         controller.close()
       }
@@ -21,9 +19,8 @@ export function sseResponse<T>(iterable: AsyncIterable<T>): Response {
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'application/x-ndjson',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
     },
   })
 }
