@@ -131,6 +131,15 @@ const source = {
         (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
       )
       if (!(managed && managed.status === 'enabled')) {
+        // Tradeoff: we subscribe to all events ('*') rather than only the
+        // events needed by this sync's catalog. This is not ideal — Stripe
+        // will send events we don't need, adding unnecessary network traffic.
+        // However, Stripe accounts have a hard limit on webhook endpoints
+        // (~16 per account), and scoping events per-sync would require one
+        // endpoint per sync. By sharing a single endpoint across all syncs
+        // for the same account, each sync filters events by its own catalog
+        // inside processStripeEvent(), keeping endpoint usage constant
+        // regardless of how many syncs are configured.
         await stripe.webhookEndpoints.create({
           url: config.webhook_url,
           enabled_events: ['*'],
