@@ -7,7 +7,7 @@ export type {
   ConfigStore,
   StateStore,
   LogSink,
-  SyncServiceOptions,
+  StatefulSyncOptions,
 } from '@stripe/stateful-sync'
 
-export { SyncService, resolve } from '@stripe/stateful-sync'
+export { StatefulSync, resolve } from '@stripe/stateful-sync'

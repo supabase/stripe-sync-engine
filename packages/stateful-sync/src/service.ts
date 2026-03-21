@@ -51,9 +51,9 @@ export function resolve(opts: {
   }
 }
 
-// MARK: - SyncService
+// MARK: - StatefulSync
 
-export type SyncServiceOptions = {
+export type StatefulSyncOptions = {
   credentials: CredentialStore
   configs: ConfigStore
   states: StateStore
@@ -65,7 +65,7 @@ export type SyncServiceOptions = {
 
 const MAX_AUTH_RETRIES = 2
 
-export class SyncService {
+export class StatefulSync {
   private credentials: CredentialStore
   private configs: ConfigStore
   private states: StateStore
@@ -73,7 +73,7 @@ export class SyncService {
   private connectors: ConnectorResolver
   private refreshCredential?: (credentialId: string) => Promise<void>
 
-  constructor(opts: SyncServiceOptions) {
+  constructor(opts: StatefulSyncOptions) {
     this.credentials = opts.credentials
     this.configs = opts.configs
     this.states = opts.states

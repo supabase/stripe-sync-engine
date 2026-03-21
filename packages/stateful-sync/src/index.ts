@@ -3,8 +3,8 @@ export type { Credential, SyncConfig, LogEntry } from './stores'
 export type { CredentialStore, ConfigStore, StateStore, LogSink } from './stores'
 
 // Service
-export { SyncService, resolve } from './service'
-export type { SyncServiceOptions } from './service'
+export { StatefulSync, resolve } from './service'
+export type { StatefulSyncOptions } from './service'
 
 // Store implementations
 export {

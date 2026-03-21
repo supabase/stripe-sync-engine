@@ -7,7 +7,7 @@ import {
   parseNdjsonStream,
 } from '@stripe/sync-engine-stateless-api'
 import {
-  SyncService,
+  StatefulSync,
   fileCredentialStore,
   fileConfigStore,
   fileStateStore,
@@ -32,14 +32,14 @@ function genId(prefix: string): string {
 }
 
 export function createApp(options?: { dataDir?: string; connectors?: ConnectorResolver }) {
-  const dataDir = options?.dataDir || process.env.DATA_DIR || '.sync-service'
+  const dataDir = options?.dataDir || process.env.DATA_DIR || '.stripe-sync'
 
   const credentials = fileCredentialStore(`${dataDir}/credentials.json`)
   const configs = fileConfigStore(`${dataDir}/syncs.json`)
   const states = fileStateStore(`${dataDir}/state.json`)
   const logs = fileLogSink(`${dataDir}/logs.ndjson`)
 
-  const service = new SyncService({
+  const service = new StatefulSync({
     credentials,
     configs,
     states,
@@ -435,9 +435,9 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
   app.doc('/openapi.json', {
     openapi: '3.0.0',
     info: {
-      title: 'Sync Service API',
+      title: 'Stripe Sync API',
       version: '1.0.0',
-      description: 'Stripe Sync Service — manage credentials and syncs',
+      description: 'Stripe Sync — manage credentials and syncs',
     },
   })
 

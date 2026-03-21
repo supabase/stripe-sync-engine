@@ -7,7 +7,7 @@ import type {
 import { createConnectorResolver } from '@stripe/sync-engine-stateless-cli'
 import type { CredentialStore, ConfigStore } from '@stripe/stateful-sync'
 import {
-  SyncService,
+  StatefulSync,
   envCredentialStore,
   flagConfigStore,
   memoryStateStore,
@@ -34,7 +34,7 @@ function makeService(opts: ServiceOpts) {
       destination: { type: opts.destinationType, credential_id: 'env_destination' },
     })
 
-  return new SyncService({
+  return new StatefulSync({
     credentials,
     configs,
     states: memoryStateStore(),

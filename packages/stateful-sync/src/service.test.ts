@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { testSource, testDestination, createConnectorResolver } from '@stripe/stateless-sync'
 import type { Message, StateMessage } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
-import { SyncService, resolve } from './service'
+import { StatefulSync, resolve } from './service'
 import {
   memoryCredentialStore,
   memoryConfigStore,
@@ -119,7 +119,7 @@ async function drain(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]>
   return msgs
 }
 
-/** Build a SyncService with memory stores for a given test scenario. */
+/** Build a StatefulSync with memory stores for a given test scenario. */
 function makeService(
   opts: {
     srcCredFields?: Record<string, unknown>
@@ -143,7 +143,7 @@ function makeService(
   })
   const states = memoryStateStore()
   const logs = memoryLogSink()
-  const service = new SyncService({
+  const service = new StatefulSync({
     credentials,
     configs,
     states,
@@ -203,10 +203,10 @@ describe('resolve()', () => {
 })
 
 // ---------------------------------------------------------------------------
-// SyncService integration (Docker Postgres)
+// StatefulSync integration (Docker Postgres)
 // ---------------------------------------------------------------------------
 
-describe('SyncService integration', () => {
+describe('StatefulSync integration', () => {
   beforeEach(async () => {
     await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
     await pool.query(`CREATE SCHEMA "${SCHEMA}"`)
@@ -258,14 +258,14 @@ describe('SyncService integration', () => {
     const logs = memoryLogSink()
 
     // Run 1
-    const service1 = new SyncService({ credentials, configs, states, logs, connectors })
+    const service1 = new StatefulSync({ credentials, configs, states, logs, connectors })
     await drain(service1.run('test-sync', MESSAGES))
 
     const stateAfterRun1 = await states.get('test-sync')
     expect(stateAfterRun1).toBeDefined()
 
     // Run 2 — same stores, state carries over (MESSAGES is re-iterable)
-    const service2 = new SyncService({ credentials, configs, states, logs, connectors })
+    const service2 = new StatefulSync({ credentials, configs, states, logs, connectors })
     await drain(service2.run('test-sync', MESSAGES))
 
     // Records still correct (upserted, not duplicated)
@@ -326,7 +326,7 @@ describe('SyncService integration', () => {
 })
 
 // ---------------------------------------------------------------------------
-// SyncService new methods (unit — no Docker needed)
+// StatefulSync new methods (unit — no Docker needed)
 // ---------------------------------------------------------------------------
 
 const testConnectors = createConnectorResolver({
@@ -346,7 +346,7 @@ function makeTestService() {
       destination: { type: 'test', credential_id: 'dst-cred' },
     },
   })
-  const service = new SyncService({
+  const service = new StatefulSync({
     credentials,
     configs,
     states: memoryStateStore(),
@@ -356,7 +356,7 @@ function makeTestService() {
   return service
 }
 
-describe('SyncService.setup/teardown/check', () => {
+describe('StatefulSync.setup/teardown/check', () => {
   it('setup() resolves without error', async () => {
     const service = makeTestService()
     await expect(service.setup('test-sync')).resolves.toBeUndefined()
@@ -377,7 +377,7 @@ describe('SyncService.setup/teardown/check', () => {
   })
 })
 
-describe('SyncService.read/write', () => {
+describe('StatefulSync.read/write', () => {
   it('read() yields messages from source', async () => {
     const service = makeTestService()
     const input = toAsync([

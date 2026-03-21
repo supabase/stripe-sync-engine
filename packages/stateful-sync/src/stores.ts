@@ -1,4 +1,4 @@
-// Store interfaces and types for the sync service.
+// Store interfaces and types for stateful sync.
 // Plain TS — no Zod, no runtime validation. These are internal contracts.
 
 /** A stored credential — flat shape, type-specific fields at top level. */

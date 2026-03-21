@@ -14,10 +14,10 @@ PORT=3002 node dist/index.js
 
 Default port: `3002`.
 
-Data is stored under `.sync-service/` in the working directory (override with `DATA_DIR`):
+Data is stored under `.stripe-sync/` in the working directory (override with `DATA_DIR`):
 
 ```
-.sync-service/
+.stripe-sync/
   credentials.json
   syncs.json
   state.json
@@ -52,6 +52,7 @@ curl http://localhost:3002/credentials
 Create a credential. The `type` field determines the shape.
 
 **Stripe:**
+
 ```sh
 curl -X POST http://localhost:3002/credentials \
   -H 'Content-Type: application/json' \
@@ -60,6 +61,7 @@ curl -X POST http://localhost:3002/credentials \
 ```
 
 **Postgres:**
+
 ```sh
 curl -X POST http://localhost:3002/credentials \
   -H 'Content-Type: application/json' \
@@ -67,6 +69,7 @@ curl -X POST http://localhost:3002/credentials \
 ```
 
 **Google (OAuth):**
+
 ```sh
 curl -X POST http://localhost:3002/credentials \
   -H 'Content-Type: application/json' \
@@ -161,11 +164,11 @@ curl -X POST http://localhost:3002/syncs/sync_abc123/run --no-buffer
 
 SSE events:
 
-| Event | Data | Description |
-|---|---|---|
-| *(default)* | `StateMessage` JSON | Emitted after each batch is written to the destination |
-| `done` | `{ "status": "completed" }` | Emitted when the sync finishes cleanly |
-| `error` | `{ "error": "..." }` | Emitted if the run throws |
+| Event       | Data                        | Description                                            |
+| ----------- | --------------------------- | ------------------------------------------------------ |
+| _(default)_ | `StateMessage` JSON         | Emitted after each batch is written to the destination |
+| `done`      | `{ "status": "completed" }` | Emitted when the sync finishes cleanly                 |
+| `error`     | `{ "error": "..." }`        | Emitted if the run throws                              |
 
 Example output:
 
