@@ -6,4 +6,5 @@ docker*
 Pulumi.*.yaml
 LICENSE.md
 dist/
+docs/out/
 .claude/

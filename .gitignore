@@ -18,6 +18,7 @@ private/
 scripts/*.svg
 .prose/
 docs/sync2-architecture/
+docs/out/
 private/
 
 # Local cred storage

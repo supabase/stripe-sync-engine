@@ -1,8 +1,12 @@
 {
-  "name": "sync-engine-slides",
+  "name": "sync-engine-docs",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && npx serve out"
+  },
   "dependencies": {
-    "@slidev/cli": "latest",
-    "@slidev/theme-default": "latest"
+    "@markdoc/markdoc": "^0.4"
   }
 }
