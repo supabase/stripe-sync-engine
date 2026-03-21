@@ -57,3 +57,4 @@ reporting back. Don't just push and return — keep polling `gh pr checks` or
 - `tsx` fails on this project — `?raw` imports pull in Deno-only code. Use built output.
 - `packages/sync-engine/src/supabase` is Deno, not Node. Don't try to run those files with Node/tsx.
 - E2E tests need Stripe keys with **write** permissions (they create real objects).
+- Do not add `esbuild` as a dependency — its native binaries fail on this machine. Use `tsup` (already in the repo) for bundling.
