@@ -9,19 +9,11 @@
       "types": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./source-test": {
-      "types": "./src/source-test.ts",
-      "import": "./dist/source-test.js"
-    },
-    "./destination-test": {
-      "types": "./src/destination-test.ts",
-      "import": "./dist/destination-test.js"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/source-test.ts src/destination-test.ts --format esm,cjs --dts",
-    "test": "vitest run"
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "test": "vitest --passWithNoTests"
   },
   "dependencies": {
     "zod": "^4.3.6"

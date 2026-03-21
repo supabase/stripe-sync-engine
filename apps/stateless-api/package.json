@@ -25,7 +25,7 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
-    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/stateless-sync": "workspace:*",
     "hono": "^4"
   },
   "devDependencies": {

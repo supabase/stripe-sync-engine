@@ -4,7 +4,9 @@ The sync engine decomposes into packages along the architecture's isolation boun
 
 ```
 packages/
-├── sync-protocol/            ← core protocol (message types, interfaces, engine)
+├── sync-protocol/            ← core protocol (message types, interfaces, Zod schemas)
+├── stateless-sync/           ← engine, connector loader, test connectors
+├── stateful-sync/            ← store interfaces + SyncService coordinator
 ├── source-stripe/            ← Stripe API source connector
 ├── source-stripe2/           ← thin conformance wrapper (default export + spec)
 ├── destination-postgres/     ← Postgres destination connector
@@ -12,7 +14,6 @@ packages/
 ├── destination-google-sheets/← Google Sheets destination connector
 ├── destination-google-sheets2/ ← thin conformance wrapper
 ├── store-postgres/           ← Postgres migration runner + embedded migrations
-├── sync-service/             ← store interfaces + SyncService coordinator
 ├── util-postgres/            ← shared Postgres utilities (upsert, rate limiter)
 └── ts-cli/                   ← generic TypeScript module CLI runner
 apps/
@@ -30,7 +31,7 @@ tests/
 ```
   ┌────────────────┐       ┌──────────────┐  ┌──────────────┐
   │ sync-protocol  │       │store-postgres │  │ util-postgres │
-  │    (core)      │       │  (pg only)    │  │  (pg only)    │
+  │  (types only)  │       │  (pg only)    │  │  (pg only)    │
   └───────┬────────┘       └──────────────┘  └──────────────┘
           │                  standalone — no sync-protocol dep
     ┌─────┼───────────┐      injected by apps at composition time
@@ -38,37 +39,41 @@ tests/
  sources  │    destinations
  (stripe) │    (pg, sheets)
     │     │           │
-    │  sync-service   │       ← store interfaces + coordinator
-    │  (protocol only)│         (no pg dep — stores are injected)
+    │ stateless-sync  │       ← engine + connector loader + test connectors
+    │ (protocol only) │         (depends on sync-protocol)
+    │     │           │
+    │ stateful-sync   │       ← store interfaces + coordinator
+    │(stateless-sync) │         (no pg dep — stores are injected)
     │     │           │
     │     │     NO ARROWS BETWEEN
     │     │     SOURCES ↔ DESTINATIONS
     │     │
-    │  stateless-cli  ─→ sync-protocol
-    │  stateless-api  ─→ sync-protocol
+    │  stateless-cli  ─→ stateless-sync
+    │  stateless-api  ─→ stateless-sync
     │     │
-    │  stateful-cli   ─→ stateless-cli + sync-service
-    │  stateful-api   ─→ stateless-api + sync-service
+    │  stateful-cli   ─→ stateless-cli + stateful-sync
+    │  stateful-api   ─→ stateless-api + stateful-sync
     │     │
     └─ supabase       ─→ source-stripe + destination-postgres
-                          + store-postgres + sync-service
+                          + store-postgres + stateful-sync
 ```
 
 ### Canonical dependency layering
 
-| Layer          | Packages                                                             | Depends on                                                                                 |
-| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Core           | `sync-protocol`                                                      | nothing (only `zod`)                                                                       |
-| Connectors     | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `sync-protocol` only                                                                       |
-| Pg utilities   | `store-postgres`, `util-postgres`                                    | `pg` only (no sync-protocol dep)                                                           |
-| Service        | `sync-service`                                                       | `sync-protocol` only (no `pg` dep)                                                         |
-| Stateless apps | `stateless-cli`, `stateless-api`                                     | `sync-protocol` only                                                                       |
-| Stateful apps  | `stateful-cli`, `stateful-api`                                       | stateless counterpart + `sync-service`                                                     |
-| Integration    | `apps/supabase`                                                      | `sync-protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `sync-service` |
+| Layer          | Packages                                                             | Depends on                                                                                  |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Core           | `sync-protocol`                                                      | nothing (only `zod`)                                                                        |
+| Connectors     | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `sync-protocol` only                                                                        |
+| Stateless sync | `stateless-sync`                                                     | `sync-protocol` only                                                                        |
+| Pg utilities   | `store-postgres`, `util-postgres`                                    | `pg` only (no sync-protocol dep)                                                            |
+| Stateful sync  | `stateful-sync`                                                      | `stateless-sync` only (no `pg` dep)                                                         |
+| Stateless apps | `stateless-cli`, `stateless-api`                                     | `stateless-sync` only                                                                       |
+| Stateful apps  | `stateful-cli`, `stateful-api`                                       | stateless counterpart + `stateful-sync`                                                     |
+| Integration    | `apps/supabase`                                                      | `sync-protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `stateful-sync` |
 
 **Key rules:**
 
-- Stateless apps do NOT depend on `sync-service`.
+- Stateless apps do NOT depend on `stateful-sync`.
 - Stateful apps should NOT import directly from `sync-protocol`; types flow through the stateless layer.
 - `store-postgres` and `util-postgres` are standalone `pg`-only packages — they have no sync-engine workspace dependencies. Apps inject them at composition time.
 
@@ -76,13 +81,21 @@ tests/
 
 ### `sync-protocol` — core protocol
 
-The shared foundation. Every connector depends on this. It has **zero** dependencies on any source, destination, or infrastructure implementation.
+The shared foundation. Every connector depends on this. It has **zero** dependencies on any source, destination, or infrastructure implementation. Contains only types, interfaces, and Zod schemas.
 
-Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `Source`/`Destination` interfaces, the sync `engine` (wires source → destination), the connector `loader` (dynamic import + resolution), and built-in test connectors (`testSource`, `testDestination`).
+Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `Source`/`Destination` interfaces, Zod schemas (`SyncEngineParams`, `SyncParams`, `ConnectorSpecification`), and message helper functions.
 
-**Exports:** Message types, Source/Destination interfaces, `createEngine`, `createConnectorResolver`, `SyncParams`, test connectors.
+**Exports:** Message types, Source/Destination interfaces, Zod schemas, message helpers.
 
 **Dependencies:** `zod` (for schema validation).
+
+### `stateless-sync` — engine + connector loader
+
+Runtime code for executing syncs: the engine (wires source → destination), the connector loader (dynamic import + resolution), and built-in test connectors. Re-exports everything from `sync-protocol` so consumers only need one import.
+
+**Exports:** Everything from `sync-protocol` + `createEngine`, `createConnectorResolver`, `SyncParams`, `testSource`, `testDestination`.
+
+**Dependencies:** `sync-protocol`, `zod`.
 
 ### `source-stripe` — Stripe API source
 
@@ -122,13 +135,13 @@ Postgres-specific migration infrastructure extracted from sync-service. Runs boo
 
 **Dependencies:** `pg`.
 
-### `sync-service` — store interfaces + SyncService
+### `stateful-sync` — store interfaces + SyncService
 
 Defines store interfaces (`CredentialStore`, `ConfigStore`, `StateStore`, `LogSink`) with lightweight implementations (memory, file, env, stderr). The `SyncService` coordinator loads config → credentials → state, resolves connectors, creates the engine, runs the sync, persists state, and handles auth_error with credential refresh + retry.
 
 **Exports:** Store interfaces + implementations, `SyncService`, `resolve`.
 
-**Dependencies:** `sync-protocol`.
+**Dependencies:** `stateless-sync`.
 
 ### `util-postgres` — shared Postgres utilities
 
@@ -148,33 +161,33 @@ Generic CLI tool that can call any exported function/method from a TypeScript mo
 
 ### `stateless-cli` — one-shot CLI
 
-Runs a single sync from command-line flags. No persistence between runs — caller provides all inputs (source type, destination type, config via env vars). Thin wrapper around `sync-protocol`'s engine.
+Runs a single sync from command-line flags. No persistence between runs — caller provides all inputs (source type, destination type, config via env vars). Thin wrapper around `stateless-sync`'s engine.
 
-**Dependencies:** `sync-protocol`.
+**Dependencies:** `stateless-sync`.
 
 ### `stateless-api` — one-shot HTTP API
 
 HTTP API that runs a single sync via SSE streaming. Same one-shot semantics as stateless-cli but over HTTP.
 
-**Dependencies:** `sync-protocol`, `hono`.
+**Dependencies:** `stateless-sync`, `hono`.
 
 ### `stateful-cli` — persistent CLI
 
 Wraps stateless-cli with `SyncService` for credential, config, and state persistence. Reads credentials from env, config from flags, state from memory.
 
-**Dependencies:** `stateless-cli`, `sync-service`.
+**Dependencies:** `stateless-cli`, `stateful-sync`.
 
 ### `stateful-api` — persistent HTTP API
 
 Wraps stateless-api with `SyncService`. CRUD endpoints for credentials and syncs, plus SSE sync execution. The management plane (REST CRUD) and execution plane (running syncs) coexist in one app.
 
-**Dependencies:** `stateless-api`, `sync-service`, `hono`, `@hono/zod-openapi`.
+**Dependencies:** `stateless-api`, `stateful-sync`, `hono`, `@hono/zod-openapi`.
 
 ### `apps/supabase` — Supabase integration
 
 Deployment target for the Supabase dashboard installation flow. Bundles edge functions (Deno runtime) for webhook ingestion, backfill workers, and setup/teardown. Uses `?raw` imports + esbuild to bundle edge function code at build time.
 
-**Dependencies:** `sync-protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `sync-service`.
+**Dependencies:** `sync-protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `stateful-sync`.
 
 ## `*2` wrapper packages
 
@@ -182,14 +195,14 @@ Deployment target for the Supabase dashboard installation flow. Bundles edge fun
 
 ## Isolation rules
 
-| Rule                                                                 | Enforced by                      |
-| -------------------------------------------------------------------- | -------------------------------- |
-| `source-*` packages never import from `destination-*` packages       | CI lint: disallowed import paths |
-| `destination-*` packages never import from `source-*` packages       | CI lint: disallowed import paths |
-| `source-*` and `destination-*` only depend on `sync-protocol`        | package.json audit               |
-| `sync-protocol` has zero runtime deps beyond `zod`                   | package.json audit               |
-| Stateless apps depend on `sync-protocol` only, never `sync-service`  | package.json audit               |
-| Stateful apps depend on their stateless counterpart + `sync-service` | package.json audit               |
+| Rule                                                                  | Enforced by                      |
+| --------------------------------------------------------------------- | -------------------------------- |
+| `source-*` packages never import from `destination-*` packages        | CI lint: disallowed import paths |
+| `destination-*` packages never import from `source-*` packages        | CI lint: disallowed import paths |
+| `source-*` and `destination-*` only depend on `sync-protocol`         | package.json audit               |
+| `sync-protocol` has zero runtime deps beyond `zod`                    | package.json audit               |
+| Stateless apps depend on `stateless-sync` only, never `stateful-sync` | package.json audit               |
+| Stateful apps depend on their stateless counterpart + `stateful-sync` | package.json audit               |
 
 ## pnpm workspace
 

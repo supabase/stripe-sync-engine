@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import type { Source } from './protocol'
-import { toRecordMessage } from './helpers'
+import type { Source } from '@stripe/sync-protocol'
+import { toRecordMessage } from '@stripe/sync-protocol'
 
 export const spec = z.object({
   /** Stream definitions: name -> { records, primary_key? }. When provided, yields these. */
@@ -8,7 +8,7 @@ export const spec = z.object({
     .record(
       z.string(),
       z.object({
-        records: z.array(z.record(z.string(), z.unknown())),
+        records: z.array(z.record(z.string(), z.unknown())).optional().default([]),
         primary_key: z.array(z.array(z.string())).optional(),
       })
     )
@@ -39,7 +39,13 @@ export const testSource = {
     return { type: 'catalog' as const, streams }
   },
 
-  async *read({ config }: { config: TestSourceConfig }, _$stdin?: AsyncIterable<unknown>) {
+  async *read({ config }: { config: TestSourceConfig }, $stdin?: AsyncIterable<unknown>) {
+    // $stdin passthrough: tests push messages in, source yields them out
+    if ($stdin) {
+      yield* $stdin as AsyncIterable<any>
+      return
+    }
+
     if (!config.streams) return
     let totalRecords = 0
     for (const [streamName, streamDef] of Object.entries(config.streams)) {

@@ -8,6 +8,6 @@ export type {
   StateStore,
   LogSink,
   SyncServiceOptions,
-} from '@stripe/sync-service'
+} from '@stripe/stateful-sync'
 
-export { SyncService, resolve } from '@stripe/sync-service'
+export { SyncService, resolve } from '@stripe/stateful-sync'

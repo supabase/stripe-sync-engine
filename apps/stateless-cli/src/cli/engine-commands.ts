@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
-import type { Message, StateMessage } from '@stripe/sync-protocol'
-import { createEngine, createConnectorResolver, SyncParams } from '@stripe/sync-protocol'
-import type { SyncParams as SyncParamsType } from '@stripe/sync-protocol'
+import type { Message, StateMessage } from '@stripe/stateless-sync'
+import { createEngine, createConnectorResolver, SyncParams } from '@stripe/stateless-sync'
+import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
 
 const resolver = createConnectorResolver({
   installFn: (pkg) => execSync(`pnpm add ${pkg}`, { stdio: 'inherit' }),

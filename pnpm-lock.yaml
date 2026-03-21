@@ -66,12 +66,12 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
+      '@stripe/stateful-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateful-sync
       '@stripe/sync-engine-stateless-api':
         specifier: workspace:*
         version: link:../stateless-api
-      '@stripe/sync-service':
-        specifier: workspace:*
-        version: link:../../packages/sync-service
       hono:
         specifier: ^4
         version: 4.12.8
@@ -94,12 +94,12 @@ importers:
 
   apps/stateful-cli:
     dependencies:
+      '@stripe/stateful-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateful-sync
       '@stripe/sync-engine-stateless-cli':
         specifier: workspace:*
         version: link:../stateless-cli
-      '@stripe/sync-service':
-        specifier: workspace:*
-        version: link:../../packages/sync-service
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -107,6 +107,9 @@ importers:
         specifier: ^16.4.7
         version: 16.6.1
     devDependencies:
+      '@stripe/stateless-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
       '@types/node':
         specifier: ^24
         version: 24.10.1
@@ -125,9 +128,9 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
-      '@stripe/sync-protocol':
+      '@stripe/stateless-sync':
         specifier: workspace:*
-        version: link:../../packages/sync-protocol
+        version: link:../../packages/stateless-sync
       hono:
         specifier: ^4
         version: 4.12.8
@@ -147,9 +150,9 @@ importers:
 
   apps/stateless-cli:
     dependencies:
-      '@stripe/sync-protocol':
+      '@stripe/stateless-sync':
         specifier: workspace:*
-        version: link:../../packages/sync-protocol
+        version: link:../../packages/stateless-sync
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -184,15 +187,15 @@ importers:
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
+      '@stripe/stateful-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateful-sync
       '@stripe/store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol
-      '@stripe/sync-service':
-        specifier: workspace:*
-        version: link:../../packages/sync-service
       supabase-management-js:
         specifier: ^2.0.2
         version: 2.0.2
@@ -279,6 +282,47 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
+  packages/stateful-sync:
+    dependencies:
+      '@stripe/stateless-sync':
+        specifier: workspace:*
+        version: link:../stateless-sync
+    devDependencies:
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../destination-postgres
+      '@types/node':
+        specifier: ^24
+        version: 24.10.1
+      '@types/pg':
+        specifier: ^8.15.4
+        version: 8.15.6
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
+  packages/stateless-sync:
+    dependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../sync-protocol
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
+
   packages/store-postgres:
     dependencies:
       pg:
@@ -317,34 +361,6 @@ importers:
         specifier: ^3.2.1
         version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/sync-service:
-    dependencies:
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../sync-protocol
-    devDependencies:
-      '@stripe/destination-postgres':
-        specifier: workspace:*
-        version: link:../destination-postgres
-      '@types/node':
-        specifier: ^24
-        version: 24.10.1
-      '@types/pg':
-        specifier: ^8.15.4
-        version: 8.15.6
-      pg:
-        specifier: ^8.16.3
-        version: 8.16.3
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.10.1)(@vitest/ui@4.0.9)(tsx@4.21.0)(yaml@2.8.1)
-
   packages/ts-cli:
     devDependencies:
       '@types/node':
@@ -378,6 +394,9 @@ importers:
       '@stripe/source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
+      '@stripe/stateless-sync':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/sync-protocol

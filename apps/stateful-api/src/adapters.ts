@@ -1,4 +1,4 @@
-import type { Credential, SyncConfig } from '@stripe/sync-service'
+import type { Credential, SyncConfig } from '@stripe/stateful-sync'
 
 // ── ID generation ────────────────────────────────────────────────
 

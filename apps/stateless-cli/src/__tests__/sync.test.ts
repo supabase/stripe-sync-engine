@@ -1,16 +1,10 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createEngine } from '@stripe/sync-protocol'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createEngine } from '@stripe/stateless-sync'
+import { testSource } from '@stripe/stateless-sync'
 import { PostgresDestination } from '@stripe/destination-postgres'
-import type {
-  CatalogMessage,
-  Message,
-  RecordMessage,
-  Source,
-  StateMessage,
-  SyncEngineParams,
-} from '@stripe/sync-protocol'
+import type { RecordMessage, StateMessage } from '@stripe/stateless-sync'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle
@@ -81,26 +75,6 @@ function state(stream: string, data: unknown): StateMessage {
   return { type: 'state', stream, data }
 }
 
-function createMockSource(messages: Message[]): {
-  source: Source
-  readSpy: ReturnType<typeof vi.fn>
-} {
-  const catalog: CatalogMessage = {
-    type: 'catalog',
-    streams: [{ name: 'customers', primary_key: [['id']] }],
-  }
-  const readSpy = vi.fn((): AsyncIterable<Message> => toAsync(messages))
-  return {
-    source: {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' as const }),
-      discover: async () => catalog,
-      read: readSpy,
-    },
-    readSpy,
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -118,28 +92,29 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   })
 
   it('run 1: writes records and persists state', async () => {
-    const { source, readSpy } = createMockSource([
-      record('customers', 'cus_1', { name: 'Alice' }),
-      record('customers', 'cus_2', { name: 'Bob' }),
-      record('customers', 'cus_3', { name: 'Charlie' }),
-      state('customers', { after: 'cus_3' }),
-    ])
-
     const destination = new PostgresDestination({
       schema: SCHEMA,
       poolConfig: { connectionString },
     })
 
-    const config: SyncEngineParams = {
-      source_config: {},
-      destination_config: { connectionString },
-    }
+    const engine = createEngine(
+      {
+        source_config: { streams: { customers: {} } },
+        destination_config: { connectionString },
+      },
+      { source: testSource, destination },
+      {}
+    )
 
-    // Suppress engine stderr logging during test
-    const engine = createEngine(config, { source, destination }, {})
+    const input = [
+      record('customers', 'cus_1', { name: 'Alice' }),
+      record('customers', 'cus_2', { name: 'Bob' }),
+      record('customers', 'cus_3', { name: 'Charlie' }),
+      state('customers', { after: 'cus_3' }),
+    ]
 
-    // Run pipeline, persist each state checkpoint to Postgres
-    for await (const msg of engine.run()) {
+    // Run pipeline with $stdin passthrough, persist each state checkpoint
+    for await (const msg of engine.run(toAsync(input))) {
       await pool.query(
         `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
          VALUES ($1, $2)
@@ -160,41 +135,37 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     )
     expect(stateRows).toHaveLength(1)
     expect(stateRows[0].data).toEqual({ after: 'cus_3' })
-
-    // Verify source.read() was called without state (first run)
-    expect(readSpy).toHaveBeenCalledOnce()
-    const callArgs = readSpy.mock.calls[0]![0]
-    expect(callArgs.state).toBeUndefined()
   })
 
   it('run 2: resumes from persisted state', async () => {
+    const destination = new PostgresDestination({
+      schema: SCHEMA,
+      poolConfig: { connectionString },
+    })
+
     // Load state from Postgres
     const { rows } = await pool.query(`SELECT stream, data FROM "${SCHEMA}"."${STATE_TABLE}"`)
     const loadedState = Object.fromEntries(
       rows.map((r: { stream: string; data: unknown }) => [r.stream, r.data])
     )
 
-    // New source emits 2 more records + updated state
-    const { source, readSpy } = createMockSource([
+    const engine = createEngine(
+      {
+        source_config: { streams: { customers: {} } },
+        destination_config: { connectionString },
+        state: loadedState,
+      },
+      { source: testSource, destination },
+      {}
+    )
+
+    const input = [
       record('customers', 'cus_4', { name: 'Diana' }),
       record('customers', 'cus_5', { name: 'Eve' }),
       state('customers', { after: 'cus_5' }),
-    ])
+    ]
 
-    const destination = new PostgresDestination({
-      schema: SCHEMA,
-      poolConfig: { connectionString },
-    })
-
-    const config: SyncEngineParams = {
-      source_config: {},
-      destination_config: { connectionString },
-      state: loadedState,
-    }
-
-    const engine = createEngine(config, { source, destination }, {})
-
-    for await (const msg of engine.run()) {
+    for await (const msg of engine.run(toAsync(input))) {
       await pool.query(
         `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
          VALUES ($1, $2)
@@ -202,11 +173,6 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         [msg.stream, JSON.stringify(msg.data)]
       )
     }
-
-    // Verify source.read() was called with the loaded state
-    expect(readSpy).toHaveBeenCalledOnce()
-    const callArgs = readSpy.mock.calls[0]![0]
-    expect(callArgs.state).toEqual({ customers: { after: 'cus_3' } })
 
     // Verify table now has 5 rows total (3 from run 1 + 2 from run 2)
     const { rows: customers } = await pool.query(

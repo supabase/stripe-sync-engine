@@ -8,10 +8,10 @@ import {
   ConfiguredCatalog,
   CheckResult,
   StateMessage,
-} from './protocol'
-import type { Destination, Source } from './protocol'
-import type { RouterCallbacks } from './helpers'
-import { forward, collect } from './helpers'
+} from '@stripe/sync-protocol'
+import type { Destination, Source } from '@stripe/sync-protocol'
+import type { RouterCallbacks } from '@stripe/sync-protocol'
+import { forward, collect } from '@stripe/sync-protocol'
 
 // MARK: - Engine interface
 

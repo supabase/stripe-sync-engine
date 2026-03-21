@@ -3,8 +3,8 @@ import type {
   Message,
   ConnectorResolver,
   SyncParams as SyncParamsType,
-} from '@stripe/sync-protocol'
-import { createEngine, SyncParams } from '@stripe/sync-protocol'
+} from '@stripe/stateless-sync'
+import { createEngine, SyncParams } from '@stripe/stateless-sync'
 import { parseNdjson, sseResponse } from './stream'
 
 // Re-export core protocol types for consumers (e.g. stateful-api)
@@ -29,14 +29,14 @@ export type {
   SyncParams,
   ConnectorResolver,
   ConnectorResolverOptions,
-} from '@stripe/sync-protocol'
+} from '@stripe/stateless-sync'
 
 export {
   createEngine,
   createConnectorResolver,
   resolveSpecifier,
   loadConnector,
-} from '@stripe/sync-protocol'
+} from '@stripe/stateless-sync'
 
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()

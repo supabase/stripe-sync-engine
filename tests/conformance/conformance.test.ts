@@ -17,13 +17,13 @@ const sources = [
   ...packageDirs
     .filter((d) => d.startsWith('source-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-protocol/source-test' },
+  { name: '@stripe/stateless-sync/source-test' },
 ]
 const destinations = [
   ...packageDirs
     .filter((d) => d.startsWith('destination-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-protocol/destination-test' },
+  { name: '@stripe/stateless-sync/destination-test' },
 ]
 
 describe.each(sources)('source: $name', ({ name }) => {

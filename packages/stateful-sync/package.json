@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-service",
+  "name": "@stripe/stateful-sync",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stripe/sync-protocol": "workspace:*"
+    "@stripe/stateless-sync": "workspace:*"
   },
   "devDependencies": {
     "@stripe/destination-postgres": "workspace:*",

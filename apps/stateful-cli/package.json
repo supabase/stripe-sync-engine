@@ -25,11 +25,12 @@
   ],
   "dependencies": {
     "@stripe/sync-engine-stateless-cli": "workspace:*",
-    "@stripe/sync-service": "workspace:*",
+    "@stripe/stateful-sync": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
+    "@stripe/stateless-sync": "workspace:*",
     "@types/node": "^24",
     "esbuild": "^0.27.2",
     "tsup": "^8.5.0",

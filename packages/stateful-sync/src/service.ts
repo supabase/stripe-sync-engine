@@ -1,5 +1,5 @@
-import { createEngine } from '@stripe/sync-protocol'
-import type { SyncParams, StateMessage, Message, ConnectorResolver } from '@stripe/sync-protocol'
+import { createEngine } from '@stripe/stateless-sync'
+import type { SyncParams, StateMessage, Message, ConnectorResolver } from '@stripe/stateless-sync'
 import type {
   CredentialStore,
   ConfigStore,

@@ -1,5 +1,5 @@
-import type { Source, Destination } from './protocol'
-import { ConnectorSpecification } from './protocol'
+import type { Source, Destination } from '@stripe/sync-protocol'
+import { ConnectorSpecification } from '@stripe/sync-protocol'
 
 // MARK: - Validation
 

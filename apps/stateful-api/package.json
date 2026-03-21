@@ -28,7 +28,7 @@
     "@hono/swagger-ui": "^0.6",
     "@hono/zod-openapi": "^1.2",
     "@stripe/sync-engine-stateless-api": "workspace:*",
-    "@stripe/sync-service": "workspace:*",
+    "@stripe/stateful-sync": "workspace:*",
     "hono": "^4",
     "zod": "^4.3.6"
   },

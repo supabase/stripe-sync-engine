@@ -1,0 +1,36 @@
+{
+  "name": "@stripe/stateless-sync",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./source-test": {
+      "types": "./src/source-test.ts",
+      "import": "./dist/source-test.js"
+    },
+    "./destination-test": {
+      "types": "./src/destination-test.ts",
+      "import": "./dist/destination-test.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/source-test.ts src/destination-test.ts --format esm,cjs --dts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.1"
+  },
+  "files": [
+    "dist"
+  ]
+}

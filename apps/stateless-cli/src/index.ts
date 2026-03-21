@@ -19,12 +19,16 @@ export type {
   DestinationOutput,
   Message,
   SyncEngineParams,
-} from '@stripe/sync-protocol'
+} from '@stripe/stateless-sync'
 
 export {
   createEngine,
   createConnectorResolver,
   resolveSpecifier,
   loadConnector,
-} from '@stripe/sync-protocol'
-export type { SyncParams, ConnectorResolver, ConnectorResolverOptions } from '@stripe/sync-protocol'
+} from '@stripe/stateless-sync'
+export type {
+  SyncParams,
+  ConnectorResolver,
+  ConnectorResolverOptions,
+} from '@stripe/stateless-sync'

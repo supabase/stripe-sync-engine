@@ -9,7 +9,7 @@ import {
   fileConfigStore,
   fileStateStore,
   fileLogSink,
-} from '@stripe/sync-service'
+} from '@stripe/stateful-sync'
 import {
   CredentialConfigSchema,
   CredentialSchema,

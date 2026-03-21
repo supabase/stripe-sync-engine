@@ -7,6 +7,7 @@
   },
   "devDependencies": {
     "@stripe/sync-protocol": "workspace:*",
+    "@stripe/stateless-sync": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
     "@stripe/destination-google-sheets": "workspace:*",
