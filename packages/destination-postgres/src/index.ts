@@ -2,7 +2,7 @@ import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/protocol'
-import { upsert } from '@stripe/util-postgres'
+import { sql, upsert } from '@stripe/util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'
 
 // MARK: - Spec
@@ -134,7 +134,7 @@ const destination = {
       await pool.query(`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
       // Ensure the trigger function exists in the target schema so triggers
       // can reference it without relying on search_path.
-      await pool.query(`
+      await pool.query(sql`
         CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
             LANGUAGE plpgsql
         AS $$
@@ -160,7 +160,7 @@ const destination = {
             await runSqlAdditive(pool, stmt)
           }
         } else {
-          await pool.query(`
+          await pool.query(sql`
             CREATE TABLE IF NOT EXISTS "${config.schema}"."${cs.stream.name}" (
               "_raw_data" jsonb NOT NULL,
               "_last_synced_at" timestamptz,

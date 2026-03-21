@@ -1,6 +1,7 @@
 import { Client } from 'pg'
 import crypto from 'node:crypto'
 import type { ConnectionOptions } from 'node:tls'
+import { sql } from '@stripe/util-postgres'
 import { renderMigrationTemplate } from './migrationTemplate'
 import type { Migration } from './migrations'
 import { migrations as allMigrations } from './migrations'
@@ -29,7 +30,7 @@ function quoteIdentifier(identifier: string): string {
 
 async function doesTableExist(client: Client, schema: string, tableName: string): Promise<boolean> {
   const result = await client.query(
-    `SELECT EXISTS (
+    sql`SELECT EXISTS (
       SELECT 1
       FROM information_schema.tables
       WHERE table_schema = $1
@@ -120,7 +121,7 @@ async function ensureMigrationsTable(
   schema: string,
   tableName: string
 ): Promise<void> {
-  await client.query(`
+  await client.query(sql`
     CREATE TABLE IF NOT EXISTS "${schema}"."${tableName}" (
       id integer PRIMARY KEY,
       name varchar(100) UNIQUE NOT NULL,

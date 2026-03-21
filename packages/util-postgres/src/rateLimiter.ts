@@ -1,4 +1,5 @@
 import type pg from 'pg'
+import { sql } from './sql.js'
 
 export type RateLimiterOptions = {
   /** Unique key identifying this rate limit bucket (e.g. "stripe:sk_live_xxx"). */
@@ -26,7 +27,7 @@ function qualifiedTable(schema: string | undefined): string {
  */
 export async function createRateLimiterTable(client: Queryable, schema?: string): Promise<void> {
   const tbl = qualifiedTable(schema)
-  await client.query(`
+  await client.query(sql`
     CREATE TABLE IF NOT EXISTS ${tbl} (
       key         TEXT PRIMARY KEY,
       tokens      DOUBLE PRECISION NOT NULL,
@@ -94,7 +95,7 @@ export async function acquire(
   // RETURNING gives us `tokens` (post-deduct). Adding cost back yields the
   // pre-deduct level, which we use to compute the wait time.
   const { rows } = await client.query(
-    `
+    sql`
     WITH lock AS (
       SELECT pg_advisory_xact_lock(hashtext($1))
     )
