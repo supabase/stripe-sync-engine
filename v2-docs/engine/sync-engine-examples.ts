@@ -3,7 +3,7 @@
 // Exports source, destination, and transforms as named objects.
 // Each can be invoked via the CLI wrapper and composed with Unix pipes:
 //
-//   CLI="npx tsx ../../scripts/ts-cli.ts ./sync-engine-examples"
+//   CLI="npx tsx ../../packages/ts-cli/src/index.ts ./sync-engine-examples"
 //   $CLI source read | $CLI filterAdmins | $CLI destination write
 
 import { existsSync, readFileSync, writeFileSync } from 'fs'

@@ -11,7 +11,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
-SVC="npx tsx $ROOT/scripts/ts-cli.ts $DIR/sync-examples"
+SVC="npx tsx $ROOT/packages/ts-cli/src/index.ts $DIR/sync-examples"
 STORE="$ROOT/sync-store.json"
 
 PASS=0
@@ -51,7 +51,7 @@ Sync API Examples
 =================
 
 Setup:
-  alias svc='npx tsx ./scripts/ts-cli.ts ./docs-architecture/sync/sync-examples'
+  alias svc='npx tsx ./packages/ts-cli/src/index.ts ./docs-architecture/sync/sync-examples'
 
 ┌───┬──────────────────────┬──────────────────────────────────────────────────────────────┐
 │ # │ What it demonstrates │ Command                                                      │

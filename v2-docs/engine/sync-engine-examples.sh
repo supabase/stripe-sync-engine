@@ -16,7 +16,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
 
 # Full path for execution
-CLI="npx tsx $ROOT/scripts/ts-cli.ts $DIR/sync-engine-examples"
+CLI="npx tsx $ROOT/packages/ts-cli/src/index.ts $DIR/sync-engine-examples"
 
 # Short names for display — match the aliases users set up
 SRC="source"
@@ -70,7 +70,7 @@ echo "Sync Engine Examples"
 echo "===================="
 echo ""
 echo "Setup:"
-echo "  T='npx tsx scripts/ts-cli.ts ./docs-architecture/sync-engine/sync-engine-examples'"
+echo "  T='npx tsx packages/ts-cli/src/index.ts ./docs-architecture/sync-engine/sync-engine-examples'"
 echo "  alias source=\"\$T source\""
 echo "  alias dest=\"\$T destination\""
 echo "  alias orch=\"\$T orchestrator\""

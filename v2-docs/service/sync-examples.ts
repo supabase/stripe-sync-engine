@@ -70,7 +70,7 @@ export const sync_stripe_to_sheets = {
 // In-memory store backed by a JSON file. No database, no HTTP server.
 //
 // Usage:
-//   alias svc='npx tsx scripts/ts-cli.ts ./docs-architecture/sync/sync-examples'
+//   alias svc='npx tsx packages/ts-cli/src/index.ts ./docs-architecture/sync/sync-examples'
 //   svc credentials list
 //   svc credentials create '{"type":"stripe","api_key":"sk_test_123"}'
 //   svc syncs list

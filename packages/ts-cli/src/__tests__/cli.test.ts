@@ -1,14 +1,14 @@
-// Tests for ts-cli.ts — the generic TypeScript-to-NDJSON CLI bridge.
+// Tests for ts-cli — the generic TypeScript-to-NDJSON CLI bridge.
 //
 // Runs ts-cli as a subprocess against a test fixture module.
-// Run with: npx vitest run scripts/ts-cli.test.ts
+// Run with: pnpm --filter @stripe/ts-cli test
 
 import { execFile } from 'child_process'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 
-const CLI = resolve(__dirname, 'ts-cli.ts')
-const FIXTURE = resolve(__dirname, 'ts-cli.fixture.ts')
+const CLI = resolve(__dirname, '../index.ts')
+const FIXTURE = resolve(__dirname, './cli.fixture.ts')
 
 /** Run ts-cli with args, optionally piping stdin. Returns stdout lines parsed as JSON. */
 function run(

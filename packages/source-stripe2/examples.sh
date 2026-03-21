@@ -8,7 +8,7 @@
 # All commands run from the monorepo root.
 #
 # Setup:
-#   alias source-stripe='bun scripts/ts-cli.ts ./packages/source-stripe2/src/index.ts'
+#   alias source-stripe='bun packages/ts-cli/src/index.ts ./packages/source-stripe2/src/index.ts'
 #
 # Then:
 #   source-stripe spec
@@ -31,8 +31,8 @@ else
 fi
 
 # The alias you'd put in your shell profile:
-#   alias source-stripe='bun scripts/ts-cli.ts ./packages/source-stripe2/src/index.ts'
-source_stripe="$TS $ROOT/scripts/ts-cli.ts $ROOT/packages/source-stripe2/src/index.ts"
+#   alias source-stripe='bun packages/ts-cli/src/index.ts ./packages/source-stripe2/src/index.ts'
+source_stripe="$TS $ROOT/packages/ts-cli/src/index.ts $ROOT/packages/source-stripe2/src/index.ts"
 
 # Always use stripe-mock defaults. To test against real Stripe API:
 #   STRIPE_MOCK_KEY=sk_test_... STRIPE_BASE_URL="" bash examples.sh

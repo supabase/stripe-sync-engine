@@ -135,8 +135,8 @@ Pipe mode bypasses routing entirely — you pick the destination binary.
 Individual connector commands via `ts-cli.ts` for Unix composition.
 
 ```sh
-alias source-stripe='bun scripts/ts-cli.ts ./packages/source-stripe2/src/index.ts'
-alias dest-postgres='bun scripts/ts-cli.ts ./packages/destination-postgres2/src/index.ts'
+alias source-stripe='bun packages/ts-cli/src/index.ts ./packages/source-stripe2/src/index.ts'
+alias dest-postgres='bun packages/ts-cli/src/index.ts ./packages/destination-postgres2/src/index.ts'
 ```
 
 ### Source commands

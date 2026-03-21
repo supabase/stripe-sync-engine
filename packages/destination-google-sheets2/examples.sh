@@ -16,7 +16,7 @@ else
   TS="npx tsx"
 fi
 
-dest_sheets="$TS $ROOT/scripts/ts-cli.ts $ROOT/packages/destination-google-sheets2/src/index.ts"
+dest_sheets="$TS $ROOT/packages/ts-cli/src/index.ts $ROOT/packages/destination-google-sheets2/src/index.ts"
 
 # ── Config ────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ CATALOG='{"streams":[{"stream":{"name":"users","primary_key":[["id"]]},"sync_mod
 
 echo "To use interactively, add this alias:"
 echo ""
-echo "  alias dest-sheets='$TS scripts/ts-cli.ts ./packages/destination-google-sheets2/src/index.ts'"
+echo "  alias dest-sheets='$TS packages/ts-cli/src/index.ts ./packages/destination-google-sheets2/src/index.ts'"
 echo ""
 echo "CONFIG=$CONFIG"
 echo "CATALOG=$CATALOG"

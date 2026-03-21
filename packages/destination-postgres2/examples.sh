@@ -17,7 +17,7 @@ else
   TS="npx tsx"
 fi
 
-dest_postgres="$TS $ROOT/scripts/ts-cli.ts $ROOT/packages/destination-postgres2/src/index.ts"
+dest_postgres="$TS $ROOT/packages/ts-cli/src/index.ts $ROOT/packages/destination-postgres2/src/index.ts"
 
 # Postgres config
 PG_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:54320/postgres}"
@@ -28,7 +28,7 @@ CATALOG='{"streams":[{"stream":{"name":"customers","primary_key":[["id"]]},"sync
 # ─────────────────────────────────────────────────────────────────
 echo "To use interactively, add this alias:"
 echo ""
-echo "  alias dest-postgres='$TS scripts/ts-cli.ts ./packages/destination-postgres2/src/index.ts'"
+echo "  alias dest-postgres='$TS packages/ts-cli/src/index.ts ./packages/destination-postgres2/src/index.ts'"
 echo ""
 
 # ── spec ─────────────────────────────────────────────────────────
