@@ -65,33 +65,19 @@ The destination never sees logs, errors, or status messages — the engine filte
 
 The engine is a `for await` loop. Edit and run:
 
-```ts {monaco-run} {autorun:false}
-const source = {
-  async *read(params) {
-    const items = [
-      { id: '1', name: 'Widget A' },
-      { id: '2', name: 'Widget B' },
-    ]
-    for (const data of items)
-      yield { type: 'record', stream: 'products', data, emitted_at: Date.now() }
-    yield { type: 'state', stream: 'products', data: { last_id: '2' } }
-  },
-}
-const destination = {
-  async *write(params, $stdin) {
-    for await (const msg of $stdin) {
-      if (msg.type === 'record')
-        console.log(`  → upsert ${msg.stream}[${msg.data.id}]: "${msg.data.name}"`)
-      if (msg.type === 'state') {
-        console.log(`  ✓ checkpoint:`, msg.data)
-        yield msg
-      }
-    }
-  },
-}
-const params = { config: {}, catalog: {}, state: {} }
-console.log('sync started')
-for await (const s of destination.write(params, source.read(params)))
-  console.log('  state saved:', JSON.stringify(s.data))
-console.log('sync complete')
+```ts {monaco-run} {autorun:false, height:'300px'}
+const source = { async *read(_) {
+  yield { type: 'record', stream: 'products', data: { id: '1', name: 'Widget A' }, emitted_at: 0 }
+  yield { type: 'record', stream: 'products', data: { id: '2', name: 'Widget B' }, emitted_at: 0 }
+  yield { type: 'state', stream: 'products', data: { cursor: '2' } }
+}}
+const destination = { async *write(_, $stdin) {
+  for await (const msg of $stdin) {
+    if (msg.type === 'record')
+      console.log(`→ upsert ${msg.stream}[${msg.data.id}] "${msg.data.name}"`)
+    if (msg.type === 'state') { console.log('✓ checkpoint', msg.data); yield msg }
+  }
+}}
+for await (const s of destination.write({}, source.read({})))
+  console.log('state saved:', s.data)
 ```
