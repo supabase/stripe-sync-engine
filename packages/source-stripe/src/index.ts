@@ -21,6 +21,8 @@ import type { ResourceConfig } from './types'
 
 export const spec = z.object({
   api_key: z.string().describe('Stripe API key (sk_test_... or sk_live_...)'),
+  livemode: z.boolean().optional().describe('Whether this is a live mode sync'),
+  api_version: z.string().optional().describe('Stripe API version (e.g. 2025-04-30.basil)'),
   base_url: z
     .string()
     .url()
@@ -72,7 +74,10 @@ function makeClient(config: Config): Stripe {
 }
 
 /** Raw webhook payload requiring signature verification. */
-export type WebhookInput = { body: string | Buffer; headers: Record<string, string | string[] | undefined> }
+export type WebhookInput = {
+  body: string | Buffer
+  headers: Record<string, string | string[] | undefined>
+}
 
 // MARK: - Stream state
 
@@ -169,10 +174,24 @@ const source = {
     // Event-driven mode: iterate over incoming webhook inputs
     if ($stdin) {
       for await (const input of $stdin) {
-        if ('body' in input) {
-          yield* processWebhookInput(input, config, stripe, catalog, registry, streamNames)
+        if ('body' in (input as object)) {
+          yield* processWebhookInput(
+            input as WebhookInput,
+            config,
+            stripe,
+            catalog,
+            registry,
+            streamNames
+          )
         } else {
-          yield* processStripeEvent(input, config, stripe, catalog, registry, streamNames)
+          yield* processStripeEvent(
+            input as Stripe.Event,
+            config,
+            stripe,
+            catalog,
+            registry,
+            streamNames
+          )
         }
       }
       return

@@ -1,17 +1,10 @@
 // Schemas and derived types
 export {
-  StripeApiVersionSchema,
-  CredentialConfigSchema,
-  CredentialSchema,
-  SourceConfigSchema,
-  DestinationConfigSchema,
   StreamConfigSchema,
   SyncStatusSchema,
-  SyncSchema,
-  CreateSyncSchema,
-  UpdateSyncSchema,
   UpdateCredentialSchema,
   LogEntrySchema,
+  buildSchemas,
 } from './schemas'
 export type { Credential, SyncConfig, LogEntry } from './schemas'
 

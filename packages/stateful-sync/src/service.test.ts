@@ -549,7 +549,6 @@ describe('push_event', () => {
 
     await Promise.all([iterA.return?.(undefined), iterB.return?.(undefined)])
   })
-
 })
 
 // ---------------------------------------------------------------------------
@@ -583,6 +582,8 @@ describe('teardown remove_shared_resources', () => {
       connectors: {
         resolveSource: async () => sourceWithTeardown as any,
         resolveDestination: async () => testDestination as any,
+        sources: () => new Map(),
+        destinations: () => new Map(),
       },
     })
     return { service, teardownSpy }

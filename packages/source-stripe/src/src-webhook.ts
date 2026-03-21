@@ -98,7 +98,11 @@ export function startWebhookServer(port: number, push: (input: LiveInput) => voi
         return
       }
       const { promise, resolve, reject } = Promise.withResolvers<void>()
-      push({ data: { body, headers: req.headers as Record<string, string | string[] | undefined> }, resolve, reject })
+      push({
+        data: { body, headers: req.headers as Record<string, string | string[] | undefined> },
+        resolve,
+        reject,
+      })
       promise
         .then(() => res.writeHead(200).end('{"received":true}'))
         .catch((err) => res.writeHead(500).end(err instanceof Error ? err.message : String(err)))

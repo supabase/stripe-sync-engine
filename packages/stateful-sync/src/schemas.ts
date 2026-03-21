@@ -48,107 +48,7 @@ export type LogEntry = {
   timestamp: string
 }
 
-// ── Zod validation schemas ──────────────────────────────────────
-// Strict schemas for validating API/CLI input. Used at the boundary
-// where untrusted data enters the system.
-
-// ── Stripe API Version ──────────────────────────────────────────
-
-export const StripeApiVersionSchema = z.enum([
-  '2025-04-30.basil',
-  '2025-03-31.basil',
-  '2024-12-18.acacia',
-  '2024-11-20.acacia',
-  '2024-10-28.acacia',
-  '2024-09-30.acacia',
-])
-
-// ── Credential Config ───────────────────────────────────────────
-
-const PostgresCredConfig = z
-  .object({
-    type: z.literal('postgres'),
-    host: z.string(),
-    port: z.number(),
-    user: z.string(),
-    password: z.string(),
-    database: z.string(),
-  })
-  .passthrough()
-
-const GoogleCredConfig = z
-  .object({
-    type: z.literal('google'),
-    client_id: z.string(),
-    client_secret: z.string(),
-    refresh_token: z.string().optional(),
-  })
-  .passthrough()
-
-const StripeCredConfig = z
-  .object({
-    type: z.literal('stripe'),
-    api_key: z.string(),
-  })
-  .passthrough()
-
-export const CredentialConfigSchema = z.discriminatedUnion('type', [
-  PostgresCredConfig,
-  GoogleCredConfig,
-  StripeCredConfig,
-])
-
-// ── Credential (full resource with id + account_id) ─────────────
-
-const credBase = {
-  id: z.string(),
-  account_id: z.string(),
-}
-
-export const CredentialSchema = z.discriminatedUnion('type', [
-  PostgresCredConfig.extend(credBase),
-  GoogleCredConfig.extend(credBase),
-  StripeCredConfig.extend(credBase),
-])
-
-// ── Source Config ────────────────────────────────────────────────
-
-export const SourceConfigSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('stripe-api-core'),
-    livemode: z.boolean(),
-    api_version: StripeApiVersionSchema,
-    credential_id: z.string(),
-  }),
-  z.object({
-    type: z.literal('stripe-api-reporting'),
-    livemode: z.boolean(),
-    api_version: StripeApiVersionSchema,
-    credential_id: z.string(),
-  }),
-  z.object({
-    type: z.literal('stripe-event-bridge'),
-    livemode: z.boolean(),
-    account_id: z.string(),
-  }),
-])
-
-// ── Destination Config ──────────────────────────────────────────
-
-export const DestinationConfigSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('postgres'),
-    schema_name: z.string(),
-    credential_id: z.string(),
-  }),
-  z.object({
-    type: z.literal('google-sheets'),
-    google_sheet_id: z.string(),
-    credential_id: z.string(),
-  }),
-])
-
-// ── Stream Config ───────────────────────────────────────────────
+// ── Shared schemas (not connector-specific) ─────────────────────
 
 export const StreamConfigSchema = z.object({
   name: z.string(),
@@ -156,29 +56,9 @@ export const StreamConfigSchema = z.object({
   skip_backfill: z.boolean().optional(),
 })
 
-// ── Sync Status ─────────────────────────────────────────────────
-
 export const SyncStatusSchema = z.enum(['backfilling', 'syncing', 'paused', 'error'])
 
-// ── Sync ────────────────────────────────────────────────────────
-
-export const SyncSchema = z.object({
-  id: z.string(),
-  account_id: z.string(),
-  status: SyncStatusSchema,
-  source: SourceConfigSchema,
-  destination: DestinationConfigSchema,
-  streams: z.array(StreamConfigSchema).optional(),
-})
-
-export const CreateSyncSchema = SyncSchema.omit({ id: true })
-export const UpdateSyncSchema = SyncSchema.omit({ id: true }).partial()
-
-// ── Update Credential (loose for PATCH) ─────────────────────────
-
 export const UpdateCredentialSchema = z.record(z.string(), z.unknown())
-
-// ── Log Entry ───────────────────────────────────────────────────
 
 export const LogEntrySchema = z.object({
   level: z.enum(['debug', 'info', 'warn', 'error']),
@@ -186,3 +66,106 @@ export const LogEntrySchema = z.object({
   stream: z.string().optional(),
   timestamp: z.string(),
 })
+
+// ── Dynamic schema builder ──────────────────────────────────────
+
+/**
+ * Build all Zod validation schemas dynamically from connector config schemas.
+ *
+ * Each connector's `spec().config` (JSON Schema) is converted to a Zod schema
+ * via `z.fromJSONSchema()` by the resolver. This function composes those into
+ * the discriminated unions used at the API boundary.
+ *
+ * For each connector, all config fields become **optional** — any field can
+ * come from either the credential or the sync config. `resolve()` merges them
+ * at runtime.
+ */
+export function buildSchemas(opts: {
+  sources: ReadonlyMap<string, z.ZodType>
+  destinations: ReadonlyMap<string, z.ZodType>
+}) {
+  // Helper: ensure schema is a ZodObject for .partial()/.merge() composability
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function toObject(schema: z.ZodType): z.ZodObject<Record<string, any>> {
+    if (schema instanceof z.ZodObject) return schema
+    return z.object({})
+  }
+
+  // ── Source config variants ──────────────────────────────────────
+  const sourceVariants = [...opts.sources.entries()].map(([name, configSchema]) =>
+    z
+      .object({ type: z.literal(name), credential_id: z.string().optional() })
+      .merge(toObject(configSchema).partial())
+      .passthrough()
+  )
+
+  // ── Destination config variants ────────────────────────────────
+  const destVariants = [...opts.destinations.entries()].map(([name, configSchema]) =>
+    z
+      .object({ type: z.literal(name), credential_id: z.string().optional() })
+      .merge(toObject(configSchema).partial())
+      .passthrough()
+  )
+
+  // ── Credential config variants (sources + destinations) ────────
+  const credVariants = [
+    ...[...opts.sources.entries()].map(([name, configSchema]) =>
+      z
+        .object({ type: z.literal(name) })
+        .merge(toObject(configSchema).partial())
+        .passthrough()
+    ),
+    ...[...opts.destinations.entries()].map(([name, configSchema]) =>
+      z
+        .object({ type: z.literal(name) })
+        .merge(toObject(configSchema).partial())
+        .passthrough()
+    ),
+  ]
+
+  // ── Assemble discriminated unions ──────────────────────────────
+  // discriminatedUnion requires a specific tuple type but we build arrays
+  // dynamically — the `as` casts are unavoidable here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const asDU = (variants: z.ZodObject<Record<string, any>>[]) =>
+    z.discriminatedUnion('type', variants as [z.ZodObject, ...z.ZodObject[]])
+
+  const SourceConfigSchema =
+    sourceVariants.length > 0 ? asDU(sourceVariants) : (z.never() as z.ZodType)
+
+  const DestinationConfigSchema =
+    destVariants.length > 0 ? asDU(destVariants) : (z.never() as z.ZodType)
+
+  const CredentialConfigSchema =
+    credVariants.length > 0 ? asDU(credVariants) : (z.never() as z.ZodType)
+
+  // ── Credential (full resource with id + account_id) ────────────
+  const credResourceVariants = credVariants.map((v) =>
+    v.extend({ id: z.string(), account_id: z.string() })
+  )
+  const CredentialSchema =
+    credResourceVariants.length > 0 ? asDU(credResourceVariants) : (z.never() as z.ZodType)
+
+  // ── Sync ───────────────────────────────────────────────────────
+  const SyncSchema = z.object({
+    id: z.string(),
+    account_id: z.string(),
+    status: SyncStatusSchema,
+    source: SourceConfigSchema,
+    destination: DestinationConfigSchema,
+    streams: z.array(StreamConfigSchema).optional(),
+  })
+
+  const CreateSyncSchema = SyncSchema.omit({ id: true })
+  const UpdateSyncSchema = SyncSchema.omit({ id: true }).partial()
+
+  return {
+    SourceConfigSchema,
+    DestinationConfigSchema,
+    CredentialConfigSchema,
+    CredentialSchema,
+    SyncSchema,
+    CreateSyncSchema,
+    UpdateSyncSchema,
+  }
+}

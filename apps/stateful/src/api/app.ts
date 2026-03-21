@@ -10,31 +10,46 @@ import {
 } from '@stripe/sync-engine-stateless'
 import {
   StatefulSync,
+  buildSchemas,
   fileCredentialStore,
   fileConfigStore,
   fileStateStore,
   fileLogSink,
 } from '@stripe/stateful-sync'
 import type { Credential, SyncConfig } from '@stripe/stateful-sync'
-import {
-  CredentialConfigSchema,
-  CredentialSchema,
-  CreateSyncSchema,
-  DeleteResponseSchema,
-  ErrorSchema,
-  ListResponse,
-  SyncSchema,
-  UpdateCredentialSchema,
-  UpdateSyncSchema,
-} from './schemas'
+import { DeleteResponseSchema, ErrorSchema, ListResponse, UpdateCredentialSchema } from './schemas'
 
 let _idCounter = Date.now()
 function genId(prefix: string): string {
   return `${prefix}_${(_idCounter++).toString(36)}`
 }
 
-export function createApp(options?: { dataDir?: string; connectors?: ConnectorResolver }) {
+export interface AppOptions {
+  dataDir?: string
+  /** Pre-built connector resolver (for tests with mocks). */
+  connectors?: ConnectorResolver
+}
+
+export function createApp(options?: AppOptions) {
   const dataDir = options?.dataDir || process.env.DATA_DIR || join(homedir(), '.stripe-sync')
+  const connectors = options?.connectors ?? createConnectorResolver({})
+
+  // ── Build dynamic schemas from connector specs ──────────────────
+  const sourceSchemas = new Map<string, z.ZodType>()
+  for (const [name, { configSchema }] of connectors.sources()) {
+    sourceSchemas.set(name, configSchema)
+  }
+  const destSchemas = new Map<string, z.ZodType>()
+  for (const [name, { configSchema }] of connectors.destinations()) {
+    destSchemas.set(name, configSchema)
+  }
+  const {
+    CredentialConfigSchema,
+    CredentialSchema,
+    SyncSchema,
+    CreateSyncSchema,
+    UpdateSyncSchema,
+  } = buildSchemas({ sources: sourceSchemas, destinations: destSchemas })
 
   const credentials = fileCredentialStore(`${dataDir}/credentials.json`)
   const configs = fileConfigStore(`${dataDir}/syncs.json`)
@@ -46,7 +61,7 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     configs,
     states,
     logs,
-    connectors: options?.connectors ?? createConnectorResolver({}),
+    connectors,
   })
 
   const app = new OpenAPIHono({
@@ -492,7 +507,10 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
   app.post('/syncs/:id/run', async (c) => {
     const syncId = c.req.param('id')
     const body = c.req.raw.body
-    const input = body ? parseNdjsonStream(body) : undefined
+    // Only parse body when the client explicitly sends one (content-type present).
+    // A bare POST with no body still has a non-null ReadableStream in Node.js 24,
+    // so we must gate on content-type to distinguish "no body" from "empty NDJSON".
+    const input = body && c.req.header('content-type') ? parseNdjsonStream(body) : undefined
     return ndjsonResponse(service.run(syncId, input))
   })
 

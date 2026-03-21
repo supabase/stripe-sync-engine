@@ -18,28 +18,6 @@ import { createApp } from './app'
 // Helpers
 // ---------------------------------------------------------------------------
 
-function connectors(source: Source, destination: Destination) {
-  return createConnectorResolver({
-    sources: { 'stripe-api-core': source },
-    destinations: { postgres: destination },
-  })
-}
-
-async function* toAsync<T>(items: T[]): AsyncIterable<T> {
-  for (const item of items) {
-    yield item
-  }
-}
-
-/** Read an NDJSON response body, returning all parsed objects. */
-async function readNdjson(res: Response): Promise<unknown[]> {
-  const text = await res.text()
-  return text
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line))
-}
-
 function createMockSource(messages: Message[]): Source {
   return {
     spec: () => ({ config: {} }),
@@ -75,6 +53,47 @@ function createMockDestination(): { destination: Destination; received: Destinat
     },
     received,
   }
+}
+
+/** Default mock sources for schema generation. */
+const defaultMockSource = createMockSource([])
+const defaultMockEventBridgeSource: Source = {
+  ...defaultMockSource,
+  spec: () => ({ config: {} }),
+}
+
+/** Default connectors for tests — defines valid type names for schemas. */
+function defaultConnectors() {
+  return createConnectorResolver({
+    sources: {
+      'stripe-api-core': defaultMockSource,
+      'stripe-event-bridge': defaultMockEventBridgeSource,
+    },
+    destinations: { postgres: createMockDestination().destination },
+  })
+}
+
+/** Connectors for engine operation tests that use custom source/destination. */
+function connectors(source: Source, destination: Destination) {
+  return createConnectorResolver({
+    sources: { 'stripe-api-core': source, 'stripe-event-bridge': defaultMockEventBridgeSource },
+    destinations: { postgres: destination },
+  })
+}
+
+async function* toAsync<T>(items: T[]): AsyncIterable<T> {
+  for (const item of items) {
+    yield item
+  }
+}
+
+/** Read an NDJSON response body, returning all parsed objects. */
+async function readNdjson(res: Response): Promise<unknown[]> {
+  const text = await res.text()
+  return text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line))
 }
 
 // ---------------------------------------------------------------------------
@@ -116,14 +135,17 @@ function del(app: ReturnType<typeof createApp>, path: string) {
 // ── Credentials CRUD ─────────────────────────────────────────────
 
 describe('credentials CRUD', () => {
-  it('creates and retrieves a stripe credential', async () => {
-    const app = createApp({ dataDir })
+  it('creates and retrieves a source credential', async () => {
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const createRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test_123' })
+    const createRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test_123',
+    })
     expect(createRes.status).toBe(201)
     const created = await createRes.json()
     expect(created.id).toMatch(/^cred_/)
-    expect(created.type).toBe('stripe')
+    expect(created.type).toBe('stripe-api-core')
     expect(created.api_key).toBe('sk_test_123')
     expect(created.account_id).toBe('acct_default')
 
@@ -133,36 +155,31 @@ describe('credentials CRUD', () => {
   })
 
   it('creates and retrieves a postgres credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
     const createRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'sync',
-      password: 'secret',
-      database: 'mydb',
+      connection_string: 'postgresql://sync:secret@localhost:5432/mydb',
     })
     expect(createRes.status).toBe(201)
     const created = await createRes.json()
     expect(created.id).toMatch(/^cred_/)
     expect(created.type).toBe('postgres')
-    expect(created.host).toBe('localhost')
+    expect(created.connection_string).toBe('postgresql://sync:secret@localhost:5432/mydb')
   })
 
   it('lists credentials', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const res1 = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const res1 = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id: id1 } = await res1.json()
 
     const res2 = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: id2 } = await res2.json()
 
@@ -177,7 +194,7 @@ describe('credentials CRUD', () => {
   })
 
   it('returns 404 for missing credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await app.request('/credentials/cred_nonexistent')
     expect(res.status).toBe(404)
     const body = await res.json()
@@ -185,48 +202,47 @@ describe('credentials CRUD', () => {
   })
 
   it('rejects credential with invalid type', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await post(app, '/credentials', { type: 'unknown_type' })
     expect(res.status).toBe(400)
   })
 
   it('patches credential fields', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
     const createRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'sync',
-      password: 'old_secret',
-      database: 'mydb',
+      connection_string: 'postgresql://sync:old_secret@localhost:5432/mydb',
     })
     const { id } = await createRes.json()
 
-    const patchRes = await patch(app, `/credentials/${id}`, { password: 'new_secret' })
+    const patchRes = await patch(app, `/credentials/${id}`, {
+      connection_string: 'postgresql://sync:new_secret@localhost:5432/mydb',
+    })
     expect(patchRes.status).toBe(200)
     const patched = await patchRes.json()
     expect(patched.id).toBe(id)
-    expect(patched.password).toBe('new_secret')
-    expect(patched.host).toBe('localhost') // unchanged fields preserved
+    expect(patched.connection_string).toBe('postgresql://sync:new_secret@localhost:5432/mydb')
 
     // Re-fetch to confirm persistence
     const getRes = await app.request(`/credentials/${id}`)
     const fetched = await getRes.json()
-    expect(fetched.password).toBe('new_secret')
-    expect(fetched.host).toBe('localhost')
+    expect(fetched.connection_string).toBe('postgresql://sync:new_secret@localhost:5432/mydb')
   })
 
   it('returns 404 on patch for missing credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await patch(app, '/credentials/cred_nonexistent', { api_key: 'x' })
     expect(res.status).toBe(404)
   })
 
   it('deletes a credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const createRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const createRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id } = await createRes.json()
 
     const delRes = await del(app, `/credentials/${id}`)
@@ -240,7 +256,7 @@ describe('credentials CRUD', () => {
   })
 
   it('returns 404 on delete for missing credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await del(app, '/credentials/cred_nonexistent')
     expect(res.status).toBe(404)
   })
@@ -253,13 +269,10 @@ const baseSyncBody = {
   status: 'backfilling' as const,
   source: {
     type: 'stripe-api-core' as const,
-    livemode: true,
-    api_version: '2025-04-30.basil' as const,
     credential_id: '', // placeholder — replaced by seeded credential
   },
   destination: {
     type: 'postgres' as const,
-    schema_name: 'stripe',
     credential_id: '', // placeholder
   },
 }
@@ -269,15 +282,14 @@ const validSyncBody = baseSyncBody
 
 /** Create source + destination credentials and return a sync body with real IDs. */
 async function seedCredentialsAndSyncBody(app: ReturnType<typeof createApp>) {
-  const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+  const srcRes = await post(app, '/credentials', {
+    type: 'stripe-api-core',
+    api_key: 'sk_test',
+  })
   const { id: srcCredId } = await srcRes.json()
   const dstRes = await post(app, '/credentials', {
     type: 'postgres',
-    host: 'localhost',
-    port: 5432,
-    user: 'u',
-    password: 'p',
-    database: 'db',
+    connection_string: 'postgresql://u:p@localhost:5432/db',
   })
   const { id: dstCredId } = await dstRes.json()
   return {
@@ -293,7 +305,7 @@ async function seedCredentialsAndSyncBody(app: ReturnType<typeof createApp>) {
 
 describe('syncs CRUD', () => {
   it('creates and retrieves a sync', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const { body: syncBody, srcCredId, dstCredId } = await seedCredentialsAndSyncBody(app)
 
     const createRes = await post(app, '/syncs', syncBody)
@@ -313,7 +325,7 @@ describe('syncs CRUD', () => {
   })
 
   it('lists syncs', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
     const createRes = await post(app, '/syncs', syncBody)
@@ -328,19 +340,19 @@ describe('syncs CRUD', () => {
   })
 
   it('returns 404 for missing sync', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await app.request('/syncs/sync_nonexistent')
     expect(res.status).toBe(404)
   })
 
   it('rejects sync without required fields', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await post(app, '/syncs', {})
     expect(res.status).toBe(400)
   })
 
   it('patches sync status', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
     const createRes = await post(app, '/syncs', syncBody)
@@ -354,7 +366,7 @@ describe('syncs CRUD', () => {
   })
 
   it('patches sync streams', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
     const createRes = await post(app, '/syncs', syncBody)
@@ -373,13 +385,13 @@ describe('syncs CRUD', () => {
   })
 
   it('returns 404 on patch for missing sync', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await patch(app, '/syncs/sync_nonexistent', { status: 'paused' })
     expect(res.status).toBe(404)
   })
 
   it('deletes a sync', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const { body: syncBody } = await seedCredentialsAndSyncBody(app)
 
     const createRes = await post(app, '/syncs', syncBody)
@@ -396,7 +408,7 @@ describe('syncs CRUD', () => {
   })
 
   it('returns 404 on delete for missing sync', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await del(app, '/syncs/sync_nonexistent')
     expect(res.status).toBe(404)
   })
@@ -406,7 +418,7 @@ describe('syncs CRUD', () => {
 
 describe('referential integrity', () => {
   it('rejects sync creation with nonexistent credential_id', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await post(app, '/syncs', {
       ...validSyncBody,
       source: { ...validSyncBody.source, credential_id: 'cred_nonexistent' },
@@ -417,18 +429,17 @@ describe('referential integrity', () => {
   })
 
   it('rejects sync update with nonexistent credential_id', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
     // Create valid credentials and sync first
-    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const srcRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id: srcCredId } = await srcRes.json()
     const dstRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: dstCredId } = await dstRes.json()
 
@@ -449,17 +460,16 @@ describe('referential integrity', () => {
   })
 
   it('blocks credential deletion when referenced by a sync (409)', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const srcRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id: srcCredId } = await srcRes.json()
     const dstRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: dstCredId } = await dstRes.json()
 
@@ -482,17 +492,16 @@ describe('referential integrity', () => {
   })
 
   it('allows credential deletion after sync is removed', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const srcRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id: srcCredId } = await srcRes.json()
     const dstRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: dstCredId } = await dstRes.json()
 
@@ -513,17 +522,16 @@ describe('referential integrity', () => {
   })
 
   it('allows multiple syncs sharing a credential', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
-    const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+    const srcRes = await post(app, '/credentials', {
+      type: 'stripe-api-core',
+      api_key: 'sk_test',
+    })
     const { id: srcCredId } = await srcRes.json()
     const dstRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: dstCredId } = await dstRes.json()
 
@@ -545,15 +553,11 @@ describe('referential integrity', () => {
   })
 
   it('allows event-bridge source with no credential_id', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
 
     const dstRes = await post(app, '/credentials', {
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      user: 'u',
-      password: 'p',
-      database: 'db',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
     })
     const { id: dstCredId } = await dstRes.json()
 
@@ -562,12 +566,9 @@ describe('referential integrity', () => {
       status: 'backfilling',
       source: {
         type: 'stripe-event-bridge',
-        livemode: true,
-        account_id: 'acct_123',
       },
       destination: {
         type: 'postgres',
-        schema_name: 'stripe',
         credential_id: dstCredId,
       },
     })
@@ -581,8 +582,8 @@ describe('referential integrity', () => {
 // ── OpenAPI ──────────────────────────────────────────────────────
 
 describe('openapi', () => {
-  it('GET /openapi.json — returns valid spec', async () => {
-    const app = createApp({ dataDir })
+  it('GET /openapi.json — returns valid spec with dynamic connector types', async () => {
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await app.request('/openapi.json')
     expect(res.status).toBe(200)
     const spec = await res.json()
@@ -595,7 +596,7 @@ describe('openapi', () => {
   })
 
   it('GET /docs — returns swagger UI html', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await app.request('/docs')
     expect(res.status).toBe(200)
     const html = await res.text()
@@ -611,16 +612,15 @@ async function seedSync(
   source: Source,
   destination: Destination
 ): Promise<string> {
-  const srcRes = await post(app, '/credentials', { type: 'stripe', api_key: 'sk_test' })
+  const srcRes = await post(app, '/credentials', {
+    type: 'stripe-api-core',
+    api_key: 'sk_test',
+  })
   const { id: srcCredId } = await srcRes.json()
 
   const dstRes = await post(app, '/credentials', {
     type: 'postgres',
-    host: 'localhost',
-    port: 5432,
-    user: 'u',
-    password: 'p',
-    database: 'db',
+    connection_string: 'postgresql://u:p@localhost:5432/db',
   })
   const { id: dstCredId } = await dstRes.json()
 
@@ -629,13 +629,10 @@ async function seedSync(
     status: 'backfilling',
     source: {
       type: 'stripe-api-core',
-      livemode: true,
-      api_version: '2025-04-30.basil',
       credential_id: srcCredId,
     },
     destination: {
       type: 'postgres',
-      schema_name: 'stripe',
       credential_id: dstCredId,
     },
   })
@@ -759,7 +756,7 @@ function nextTick() {
 
 describe('POST /webhooks/:credential_id', () => {
   it('returns 200 ok for any credential_id regardless of running syncs', async () => {
-    const app = createApp({ dataDir })
+    const app = createApp({ dataDir, connectors: defaultConnectors() })
     const res = await app.request('/webhooks/cred_any', {
       method: 'POST',
       headers: { 'stripe-signature': 't=123,v1=abc' },

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { z } from 'zod'
 import type { Source, Destination } from '@stripe/protocol'
 import { ConnectorSpecification } from '@stripe/protocol'
 import { spawnSource, spawnDestination } from './subprocess'
@@ -140,11 +141,31 @@ export interface ConnectorResolverOptions {
   sources?: Record<string, Source>
   /** Preloaded connectors — skip dynamic loading for these. */
   destinations?: Record<string, Destination>
+  /** Source connector names to eagerly resolve at startup. */
+  sourceNames?: string[]
+  /** Destination connector names to eagerly resolve at startup. */
+  destinationNames?: string[]
 }
+
+export type ResolvedConnector<T> = { connector: T; configSchema: z.ZodType }
 
 export interface ConnectorResolver {
   resolveSource(name: string): Promise<Source>
   resolveDestination(name: string): Promise<Destination>
+  /** Eagerly resolved source connectors with their config schemas. */
+  sources(): ReadonlyMap<string, ResolvedConnector<Source>>
+  /** Eagerly resolved destination connectors with their config schemas. */
+  destinations(): ReadonlyMap<string, ResolvedConnector<Destination>>
+}
+
+/** Convert a connector's spec().config JSON Schema to a Zod object schema. */
+function configSchemaFromSpec(connector: {
+  spec(): { config: Record<string, unknown> }
+}): z.ZodType {
+  const schema = z.fromJSONSchema(connector.spec().config)
+  // fromJSONSchema({}) returns ZodAny — fall back to empty object for composability
+  if (schema instanceof z.ZodObject) return schema
+  return z.object({})
 }
 
 /**
@@ -154,10 +175,50 @@ export interface ConnectorResolver {
  * 1. **Registered** — preloaded in `options.sources` / `options.destinations`. In-process, fastest.
  * 2. **Subprocess** — connector has a bin entrypoint installed. Spawns child processes.
  * 3. **Error** — connector not found.
+ *
+ * When `sourceNames` / `destinationNames` are provided, those connectors are
+ * eagerly resolved at creation time and their config schemas (from `spec()`)
+ * are available via `sources()` / `destinations()`.
  */
 export function createConnectorResolver(options: ConnectorResolverOptions): ConnectorResolver {
   const sourceCache = new Map<string, Source>(Object.entries(options.sources ?? {}))
   const destCache = new Map<string, Destination>(Object.entries(options.destinations ?? {}))
+
+  // Eagerly resolve named connectors
+  for (const name of options.sourceNames ?? []) {
+    if (!sourceCache.has(name)) {
+      const bin = resolveBin(name, 'source')
+      if (bin) {
+        sourceCache.set(name, spawnSource(bin))
+      } else {
+        throw new Error(
+          `Source connector "${name}" not found. Register it or install @stripe/source-${name}.`
+        )
+      }
+    }
+  }
+  for (const name of options.destinationNames ?? []) {
+    if (!destCache.has(name)) {
+      const bin = resolveBin(name, 'destination')
+      if (bin) {
+        destCache.set(name, spawnDestination(bin))
+      } else {
+        throw new Error(
+          `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
+        )
+      }
+    }
+  }
+
+  // Build schema maps from all known connectors
+  const _sources = new Map<string, ResolvedConnector<Source>>()
+  for (const [name, connector] of sourceCache) {
+    _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+  }
+  const _destinations = new Map<string, ResolvedConnector<Destination>>()
+  for (const [name, connector] of destCache) {
+    _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+  }
 
   return {
     async resolveSource(name: string): Promise<Source> {
@@ -168,6 +229,7 @@ export function createConnectorResolver(options: ConnectorResolverOptions): Conn
       if (bin) {
         const connector = spawnSource(bin)
         sourceCache.set(name, connector)
+        _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector
       }
 
@@ -184,12 +246,20 @@ export function createConnectorResolver(options: ConnectorResolverOptions): Conn
       if (bin) {
         const connector = spawnDestination(bin)
         destCache.set(name, connector)
+        _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector
       }
 
       throw new Error(
         `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
       )
+    },
+
+    sources() {
+      return _sources
+    },
+    destinations() {
+      return _destinations
     },
   }
 }

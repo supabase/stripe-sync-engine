@@ -141,7 +141,7 @@ describe('buildPoolConfig', () => {
     }
 
     await expect(buildPoolConfig(config)).rejects.toThrow(
-      'Either connection_string or aws config is required'
+      'Either connection_string (or url) or aws config is required'
     )
   })
 })

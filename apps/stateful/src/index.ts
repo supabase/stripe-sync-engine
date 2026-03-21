@@ -11,3 +11,5 @@ export type {
 } from '@stripe/stateful-sync'
 
 export { StatefulSync, resolve } from '@stripe/stateful-sync'
+export { createApp } from './api/app'
+export type { AppOptions } from './api/app'

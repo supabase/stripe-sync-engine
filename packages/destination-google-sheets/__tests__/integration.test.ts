@@ -32,7 +32,14 @@ describe.skipIf(!hasEnv)('destination-google-sheets integration', () => {
     const sheets = makeSheetsClient()
     const dest = createDestination(sheets)
 
-    const streamName = `test_${Date.now()}`
+    const iso = new Date().toISOString() // 2026-03-21T06:20:09.552Z
+    const ts =
+      iso.slice(0, 10).replace(/-/g, '') +
+      '_' +
+      iso.slice(11, 19).replace(/:/g, '') +
+      '_' +
+      iso.slice(20, 23)
+    const streamName = `test_${ts}`
     const now = Date.now()
 
     const records: RecordMessage[] = [
@@ -105,5 +112,26 @@ describe.skipIf(!hasEnv)('destination-google-sheets integration', () => {
     expect(rows).toHaveLength(4) // header + 3 rows
     expect(rows[1]).toEqual(['cus_1', 'Alice', '100'])
     expect(rows[3]).toEqual(['cus_3', 'Charlie', '0'])
+
+    const url = `https://docs.google.com/spreadsheets/d/${env.spreadsheetId}/`
+
+    // Clean up test tab unless KEEP_TEST_DATA is set
+    if (!process.env.KEEP_TEST_DATA) {
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId: env.spreadsheetId!,
+        fields: 'sheets.properties',
+      })
+      const tab = meta.data.sheets?.find((s) => s.properties?.title === streamName)
+      if (tab?.properties?.sheetId != null) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: env.spreadsheetId!,
+          requestBody: {
+            requests: [{ deleteSheet: { sheetId: tab.properties.sheetId } }],
+          },
+        })
+      }
+    }
+
+    console.log(`\n  Spreadsheet: ${url}`)
   }, 30_000)
 })

@@ -1,15 +1,14 @@
 {
-  "name": "@stripe/test-e2e",
+  "name": "@stripe/test-integration",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
-    "@hono/node-server": "^1",
     "@stripe/protocol": "workspace:*",
     "@stripe/stateless-sync": "workspace:*",
-    "@stripe/sync-engine-stateful": "workspace:*",
+    "@stripe/stateful-sync": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
     "pg": "^8.16.0",

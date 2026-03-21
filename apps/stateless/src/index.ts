@@ -22,6 +22,7 @@ export type {
   SyncParams,
   ConnectorResolver,
   ConnectorResolverOptions,
+  ResolvedConnector,
 } from '@stripe/stateless-sync'
 
 export {

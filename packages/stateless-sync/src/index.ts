@@ -11,7 +11,7 @@ export {
   resolveBin,
   createConnectorResolver,
 } from './loader'
-export type { ConnectorResolver, ConnectorResolverOptions } from './loader'
+export type { ConnectorResolver, ConnectorResolverOptions, ResolvedConnector } from './loader'
 export { spawnSource, spawnDestination } from './subprocess'
 export { testSource, testSourceSpec } from './source-test'
 export type { TestSourceConfig } from './source-test'

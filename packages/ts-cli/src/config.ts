@@ -1,3 +1,7 @@
+// Viper-inspired hierarchical config (Go's github.com/spf13/viper).
+// Same priority model: flags > env vars > config file > defaults.
+// Aim to be as similar as possible to Viper's semantics in a Node context.
+
 import { readFileSync } from 'node:fs'
 
 /**
