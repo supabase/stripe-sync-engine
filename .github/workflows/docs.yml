@@ -46,3 +46,6 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+      # TODO: set up a proper custom domain.
+      # Currently deployed to: https://stripe-sync-engine-pages.vercel.app/

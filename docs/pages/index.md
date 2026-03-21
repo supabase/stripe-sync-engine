@@ -33,9 +33,3 @@ npx @stripe/sync-engine sync \
 
 - [GitHub](https://github.com/stripe/sync-engine)
 - [npm](https://www.npmjs.com/package/@stripe/sync-engine)
-
----
-
-> **Note:** This site is temporarily hosted at
-> [stripe-sync-engine-pages.vercel.app](https://stripe-sync-engine-pages.vercel.app/).
-> A proper custom domain will be set up later.
