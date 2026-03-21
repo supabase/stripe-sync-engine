@@ -1,8 +1,9 @@
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { describe, expect, it, vi } from 'vitest'
-import type { Source, Destination } from './protocol'
 import { resolveSpecifier, loadConnector, createConnectorResolver } from './loader'
+import { testSource } from './source-test'
+import { testDestination } from './destination-test'
 
 const packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -87,39 +88,26 @@ describe('loadConnector', () => {
 // createConnectorResolver
 // ---------------------------------------------------------------------------
 
-const mockSource: Source = {
-  spec: () => ({ config: {} }),
-  check: async () => ({ status: 'succeeded' }),
-  discover: async () => ({ type: 'catalog', streams: [] }),
-  read: async function* () {},
-}
-
-const mockDestination: Destination = {
-  spec: () => ({ config: {} }),
-  check: async () => ({ status: 'succeeded' }),
-  write: async function* () {},
-}
-
 describe('createConnectorResolver', () => {
   it('returns preloaded source immediately', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: mockSource },
+      sources: { stripe: testSource },
     })
     const source = await resolver.resolveSource('stripe')
-    expect(source).toBe(mockSource)
+    expect(source).toBe(testSource)
   })
 
   it('returns preloaded destination immediately', async () => {
     const resolver = createConnectorResolver({
-      destinations: { postgres: mockDestination },
+      destinations: { postgres: testDestination },
     })
     const dest = await resolver.resolveDestination('postgres')
-    expect(dest).toBe(mockDestination)
+    expect(dest).toBe(testDestination)
   })
 
   it('caches resolved connectors — same instance on second call', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: mockSource },
+      sources: { stripe: testSource },
     })
     const first = await resolver.resolveSource('stripe')
     const second = await resolver.resolveSource('stripe')
@@ -128,11 +116,11 @@ describe('createConnectorResolver', () => {
 
   it('preloaded connectors take priority over dynamic loading', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: mockSource },
+      sources: { stripe: testSource },
     })
-    // Should return preloaded mock, not try to dynamically load @stripe/source-stripe
+    // Should return preloaded testSource, not try to dynamically load @stripe/source-stripe
     const source = await resolver.resolveSource('stripe')
-    expect(source).toBe(mockSource)
+    expect(source).toBe(testSource)
   })
 
   it('throws for unknown connector without installFn', async () => {

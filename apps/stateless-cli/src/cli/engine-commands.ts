@@ -19,7 +19,7 @@ export function parseParams(raw: string): SyncParamsType {
 
 /** Resolve source + destination connectors from SyncParams and create an engine. */
 async function resolveEngine(params: SyncParamsType) {
-  const { source: sourceName, destination: destName, ...engineParams } = params
+  const { source_name: sourceName, destination_name: destName, ...engineParams } = params
   const [source, destination] = await Promise.all([
     resolver.resolveSource(sourceName),
     resolver.resolveDestination(destName),

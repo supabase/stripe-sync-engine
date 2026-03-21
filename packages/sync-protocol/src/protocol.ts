@@ -185,9 +185,9 @@ export type SyncEngineParams = z.infer<typeof SyncEngineParams>
 /** SyncParams adds connector resolution fields on top of engine params. */
 export const SyncParams = SyncEngineParams.extend({
   /** Connector specifier for the source (short name, scoped package, or file path). Defaults to 'stripe'. */
-  source: z.string().optional().default('stripe'),
+  source_name: z.string().optional().default('stripe'),
   /** Connector specifier for the destination (short name, scoped package, or file path). */
-  destination: z.string(),
+  destination_name: z.string(),
 })
 export type SyncParams = z.infer<typeof SyncParams>
 

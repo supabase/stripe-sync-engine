@@ -148,8 +148,8 @@ describe('resolve()', () => {
       state: { customers: { cursor: 'abc' } },
     })
 
-    expect(params.source).toBe('stdin')
-    expect(params.destination).toBe('postgres')
+    expect(params.source_name).toBe('stdin')
+    expect(params.destination_name).toBe('postgres')
     expect(params.source_config).toEqual({ extra: 'a', override: 'b' })
     expect(params.destination_config).toEqual({
       schema: 'myschema',

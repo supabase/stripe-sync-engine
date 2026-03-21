@@ -22,8 +22,8 @@ export function resolve(opts: {
   const { type: sourceType, ...sourceRest } = opts.config.source
   const { type: destType, ...destRest } = opts.config.destination
   return {
-    source: sourceType,
-    destination: destType,
+    source_name: sourceType,
+    destination_name: destType,
     source_config: { ...sourceRest, ...opts.sourceCred.fields },
     destination_config: { ...destRest, ...opts.destCred.fields },
     streams: opts.config.streams,

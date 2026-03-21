@@ -140,15 +140,3 @@ export const SUPPORTED_WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.Enable
   'review.opened',
   'entitlements.active_entitlement_summary.updated',
 ]
-
-/**
- * Result of processing a single page of items via processNext()
- */
-export interface ProcessNextResult {
-  /** Number of items processed in this page */
-  processed: number
-  /** Whether there are more items to process */
-  hasMore: boolean
-  /** The sync run this processing belongs to */
-  runStartedAt: Date
-}
