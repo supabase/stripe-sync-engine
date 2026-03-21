@@ -10,15 +10,15 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
-import { createSource, fromWebhookEvent } from '../backfill'
+import { createSource, fromWebhookEvent } from '../index'
 import type { ResourceConfig } from '../types'
-import type { StripeWebhookEvent, StripeWebSocketClient } from '../websocket-client'
+import type { StripeWebhookEvent, StripeWebSocketClient } from '../src-websocket'
 
-// Mock the websocket-client module
+// Mock the WebSocket module
 const mockClose = vi.fn()
 let capturedOnEvent: ((event: StripeWebhookEvent) => void) | null = null
 
-vi.mock('../websocket-client', () => ({
+vi.mock('../src-websocket', () => ({
   createStripeWebSocketClient: vi.fn(
     async (opts: { onEvent: (event: StripeWebhookEvent) => void }) => {
       capturedOnEvent = opts.onEvent
@@ -26,6 +26,11 @@ vi.mock('../websocket-client', () => ({
     }
   ),
 }))
+
+/** Wrap a single item as an AsyncIterable for source.read()'s $stdin param. */
+async function* toIter<T>(item: T): AsyncIterable<T> {
+  yield item
+}
 
 function makeConfig(
   overrides: Partial<ResourceConfig> & { order: number; tableName: string }
@@ -655,11 +660,10 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          input: event,
-        })
+        source.read(
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
+          toIter(event)
+        )
       )
 
       // Live mode: exactly 1 record + 1 state
@@ -691,11 +695,10 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          input: event,
-        })
+        source.read(
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
+          toIter(event)
+        )
       )
 
       expect(messages).toHaveLength(2)
@@ -722,11 +725,10 @@ describe('StripeSource', () => {
 
       // Catalog only has customers, but event is for invoices
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          input: event,
-        })
+        source.read(
+          { config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) },
+          toIter(event)
+        )
       )
 
       // Event is for a stream not in catalog → no output
@@ -809,11 +811,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'customers' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'customers' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
@@ -844,11 +842,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'products' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'products' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
@@ -883,11 +877,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'subscriptions' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'subscriptions' }) }, toIter(event))
       )
 
       // 1 subscription record + 2 subscription_item records + 1 state
@@ -950,11 +940,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'active_entitlements' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'active_entitlements' }) }, toIter(event))
       )
 
       // 2 entitlement records + 1 state
@@ -1012,11 +998,13 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config: { ...config, revalidate_objects: ['subscription'] },
-          catalog: catalog({ name: 'subscriptions' }),
-          input: event,
-        })
+        source.read(
+          {
+            config: { ...config, revalidate_objects: ['subscription'] },
+            catalog: catalog({ name: 'subscriptions' }),
+          },
+          toIter(event)
+        )
       )
 
       expect(retrieveFn).toHaveBeenCalledWith('sub_1')
@@ -1045,11 +1033,13 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config: { ...config, revalidate_objects: ['subscription'] },
-          catalog: catalog({ name: 'subscriptions' }),
-          input: event,
-        })
+        source.read(
+          {
+            config: { ...config, revalidate_objects: ['subscription'] },
+            catalog: catalog({ name: 'subscriptions' }),
+          },
+          toIter(event)
+        )
       )
 
       // Should NOT re-fetch because isFinalState returns true
@@ -1071,11 +1061,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'invoices' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'invoices' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(0)
@@ -1095,11 +1081,7 @@ describe('StripeSource', () => {
       })
 
       const messages = await collect(
-        source.read({
-          config,
-          catalog: catalog({ name: 'checkout_sessions' }),
-          input: event,
-        })
+        source.read({ config, catalog: catalog({ name: 'checkout_sessions' }) }, toIter(event))
       )
 
       expect(messages).toHaveLength(2)
@@ -1120,11 +1102,10 @@ describe('StripeSource', () => {
 
       await expect(
         collect(
-          source.read({
-            config, // no webhook_secret
-            catalog: catalog({ name: 'customers' }),
-            input: rawInput,
-          })
+          source.read(
+            { config, catalog: catalog({ name: 'customers' }) }, // no webhook_secret
+            toIter(rawInput)
+          )
         )
       ).rejects.toThrow('webhook_secret is required for raw webhook signature verification')
     })
@@ -1162,7 +1143,7 @@ describe('StripeSource', () => {
     })
 
     it('setup() creates WebSocket client when websocket: true', async () => {
-      const { createStripeWebSocketClient } = await import('../websocket-client')
+      const { createStripeWebSocketClient } = await import('../src-websocket')
       const source = createSource(registry)
       await source.setup!({
         config: { api_key: 'sk_test_fake', websocket: true },
@@ -1390,7 +1371,7 @@ describe('StripeSource', () => {
     it('setup() with both webhook_url and websocket creates both', async () => {
       // This test just verifies setup doesn't throw with both options.
       // Webhook setup requires a real Stripe client, so we only verify the WS part.
-      const { createStripeWebSocketClient } = await import('../websocket-client')
+      const { createStripeWebSocketClient } = await import('../src-websocket')
       const source = createSource(registry)
 
       // webhook_url setup will fail (no real Stripe client), but we can verify

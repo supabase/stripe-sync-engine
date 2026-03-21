@@ -42,12 +42,13 @@ Deno.serve(async (req) => {
 
   try {
     const rawBody = new Uint8Array(await req.arrayBuffer())
-    // source.read with input processes a single webhook event through the full pipeline
-    const messages = sourceStripe.read({
-      config: sourceConfig,
-      catalog,
-      input: { body: rawBody, signature: sig },
-    })
+    // source.read with $stdin processes webhook events through the full pipeline
+    const messages = sourceStripe.read(
+      { config: sourceConfig, catalog },
+      (async function* () {
+        yield { body: rawBody, signature: sig }
+      })()
+    )
     // Pipe records into destination.write
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     for await (const _stateMsg of destinationPostgres.write(

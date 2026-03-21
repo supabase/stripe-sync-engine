@@ -65,12 +65,14 @@ function createMockSource(
     streams: [{ name: 'customers', primary_key: [['id']] }],
   }
   const readSpy = vi.fn(
-    (_params: {
-      config: Record<string, unknown>
-      catalog: ConfiguredCatalog
-      state?: Record<string, unknown>
-      input?: unknown
-    }): AsyncIterable<Message> => toAsync(messages)
+    (
+      _params: {
+        config: Record<string, unknown>
+        catalog: ConfiguredCatalog
+        state?: Record<string, unknown>
+      },
+      _$stdin?: AsyncIterable<unknown>
+    ): AsyncIterable<Message> => toAsync(messages)
   )
   return {
     source: {
@@ -224,9 +226,13 @@ describe('POST /read', () => {
     expect(res.status).toBe(200)
     await readSse(res)
 
-    // source.read() should have been called with input
+    // source.read() should have been called with $stdin (second arg)
     expect(readSpy).toHaveBeenCalledOnce()
-    expect(readSpy.mock.calls[0]![0].input).toEqual(events[0])
+    const $stdin = readSpy.mock.calls[0]![1] as AsyncIterable<unknown>
+    expect($stdin).toBeDefined()
+    const items: unknown[] = []
+    for await (const item of $stdin) items.push(item)
+    expect(items).toEqual(events)
   })
 })
 

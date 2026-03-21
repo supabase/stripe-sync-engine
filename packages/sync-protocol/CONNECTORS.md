@@ -87,12 +87,14 @@ interface Source<TConfig, TStreamState = unknown, TInput = unknown> {
   spec(): ConnectorSpecification
   check(params: { config: TConfig }): Promise<CheckResult>
   discover(params: { config: TConfig }): Promise<CatalogMessage>
-  read(params: {
-    config: TConfig
-    catalog: ConfiguredCatalog
-    state?: Record<string, TStreamState>
-    input?: TInput
-  }): AsyncIterable<Message>
+  read(
+    params: {
+      config: TConfig
+      catalog: ConfiguredCatalog
+      state?: Record<string, TStreamState>
+    },
+    $stdin?: AsyncIterable<TInput>
+  ): AsyncIterable<Message>
 }
 ```
 

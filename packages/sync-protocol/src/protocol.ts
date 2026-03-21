@@ -255,12 +255,14 @@ export interface Source<
   discover(params: { config: TConfig }): Promise<CatalogMessage>
 
   /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
-  read(params: {
-    config: TConfig
-    catalog: ConfiguredCatalog
-    state?: Record<string, TStreamState>
-    input?: TInput
-  }): AsyncIterable<Message>
+  read(
+    params: {
+      config: TConfig
+      catalog: ConfiguredCatalog
+      state?: Record<string, TStreamState>
+    },
+    $stdin?: AsyncIterable<TInput>
+  ): AsyncIterable<Message>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). Called before first read(). */
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>

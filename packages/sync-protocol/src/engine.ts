@@ -128,24 +128,10 @@ export function createEngine(
       const catalog = await getCatalog()
       const knownStreams = catalogStreamNames(catalog)
 
-      const raw = input
-        ? // Event-driven: one source.read() per input item, results concatenated
-          (async function* () {
-            for await (const item of input) {
-              yield* connectors.source.read({
-                config: sourceConfig,
-                catalog,
-                state: config.state,
-                input: item,
-              })
-            }
-          })()
-        : // Pull-based: single source.read() call (backfill)
-          connectors.source.read({
-            config: sourceConfig,
-            catalog,
-            state: config.state,
-          })
+      const raw = connectors.source.read(
+        { config: sourceConfig, catalog, state: config.state },
+        input
+      )
 
       for await (const msg of raw) {
         const validated = Message.parse(msg)
