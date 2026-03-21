@@ -10,6 +10,7 @@ import {
   fileStateStore,
   fileLogSink,
 } from '@stripe/stateful-sync'
+import type { Credential, SyncConfig } from '@stripe/stateful-sync'
 import {
   CredentialConfigSchema,
   CredentialSchema,
@@ -21,13 +22,11 @@ import {
   UpdateCredentialSchema,
   UpdateSyncSchema,
 } from './schemas'
-import {
-  genId,
-  credentialToStore,
-  credentialToApi,
-  syncToStoreConfig,
-  storeConfigToSync,
-} from './adapters'
+
+let _idCounter = Date.now()
+function genId(prefix: string): string {
+  return `${prefix}_${(_idCounter++).toString(36)}`
+}
 
 export function createApp(options?: { dataDir?: string; connectors?: ConnectorResolver }) {
   const dataDir = options?.dataDir || process.env.DATA_DIR || '.sync-service'
@@ -81,7 +80,13 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     }),
     async (c) => {
       const list = await credentials.list()
-      return c.json({ data: list.map(credentialToApi), has_more: false } as any, 200)
+      return c.json(
+        {
+          data: list.map((cred) => ({ ...cred, account_id: 'acct_default' })),
+          has_more: false,
+        } as any,
+        200
+      )
     }
   )
 
@@ -109,9 +114,15 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     async (c) => {
       const body = c.req.valid('json')
       const id = genId('cred')
-      const stored = credentialToStore(id, body as Record<string, unknown>)
+      const now = new Date().toISOString()
+      const stored = {
+        id,
+        ...(body as Record<string, unknown>),
+        created_at: now,
+        updated_at: now,
+      } as Credential
       await credentials.set(id, stored)
-      return c.json(credentialToApi(stored) as any, 201)
+      return c.json({ ...stored, account_id: 'acct_default' } as any, 201)
     }
   )
 
@@ -138,7 +149,7 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
       const { id } = c.req.valid('param')
       try {
         const cred = await credentials.get(id)
-        return c.json(credentialToApi(cred) as any, 200)
+        return c.json({ ...cred, account_id: 'acct_default' } as any, 200)
       } catch {
         return c.json({ error: `Credential ${id} not found` }, 404)
       }
@@ -172,14 +183,20 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
       const patch = c.req.valid('json')
       try {
         const existing = await credentials.get(id)
-        const currentApi = credentialToApi(existing) as Record<string, unknown>
-        const merged = { ...currentApi, ...patch }
-        // Strip id and account_id — not stored in fields
-        const { id: _id, account_id: _acct, ...credFields } = merged as any
-        const updated = credentialToStore(id, credFields)
-        updated.created_at = existing.created_at
+        // Strip id and account_id from patch — they're not writable fields
+        const cleanPatch = Object.fromEntries(
+          Object.entries(patch as Record<string, unknown>).filter(
+            ([k]) => k !== 'id' && k !== 'account_id'
+          )
+        )
+        const updated = {
+          ...existing,
+          ...cleanPatch,
+          id,
+          updated_at: new Date().toISOString(),
+        } as Credential
         await credentials.set(id, updated)
-        return c.json(credentialToApi(updated) as any, 200)
+        return c.json({ ...updated, account_id: 'acct_default' } as any, 200)
       } catch {
         return c.json({ error: `Credential ${id} not found` }, 404)
       }
@@ -235,7 +252,7 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     }),
     async (c) => {
       const list = await configs.list()
-      return c.json({ data: list.map(storeConfigToSync), has_more: false } as any, 200)
+      return c.json({ data: list, has_more: false } as any, 200)
     }
   )
 
@@ -263,9 +280,9 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
     async (c) => {
       const body = c.req.valid('json')
       const id = genId('sync')
-      const stored = syncToStoreConfig(id, body as Record<string, unknown>)
+      const stored = { id, ...(body as Record<string, unknown>) } as SyncConfig
       await configs.set(id, stored)
-      return c.json(storeConfigToSync(stored) as any, 201)
+      return c.json(stored as any, 201)
     }
   )
 
@@ -292,7 +309,7 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
       const { id } = c.req.valid('param')
       try {
         const config = await configs.get(id)
-        return c.json(storeConfigToSync(config) as any, 200)
+        return c.json(config as any, 200)
       } catch {
         return c.json({ error: `Sync ${id} not found` }, 404)
       }
@@ -326,11 +343,9 @@ export function createApp(options?: { dataDir?: string; connectors?: ConnectorRe
       const patch = c.req.valid('json')
       try {
         const existing = await configs.get(id)
-        const currentApi = storeConfigToSync(existing)
-        const merged = { ...currentApi, ...patch }
-        const updatedConfig = syncToStoreConfig(id, merged)
-        await configs.set(id, updatedConfig)
-        return c.json(storeConfigToSync(updatedConfig) as any, 200)
+        const updated = { ...existing, ...(patch as Record<string, unknown>), id } as SyncConfig
+        await configs.set(id, updated)
+        return c.json(updated as any, 200)
       } catch {
         return c.json({ error: `Sync ${id} not found` }, 404)
       }

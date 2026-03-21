@@ -23,10 +23,8 @@ export async function* runSync(opts: {
     opts.configs ??
     flagConfigStore({
       id: opts.syncId,
-      source_credential_id: 'env_source',
-      destination_credential_id: 'env_destination',
-      source: { type: opts.sourceType },
-      destination: { type: opts.destinationType },
+      source: { type: opts.sourceType, credential_id: 'env_source' },
+      destination: { type: opts.destinationType, credential_id: 'env_destination' },
     })
 
   const service = new SyncService({

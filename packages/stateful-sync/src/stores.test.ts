@@ -20,7 +20,7 @@ function makeCredential(id: string, overrides?: Partial<Credential>): Credential
   return {
     id,
     type: 'test',
-    fields: { key: 'value' },
+    key: 'value',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -30,10 +30,8 @@ function makeCredential(id: string, overrides?: Partial<Credential>): Credential
 function makeConfig(id: string): SyncConfig {
   return {
     id,
-    source_credential_id: 'src',
-    destination_credential_id: 'dst',
-    source: { type: 'stdin' },
-    destination: { type: 'postgres' },
+    source: { type: 'stdin', credential_id: 'src' },
+    destination: { type: 'postgres', credential_id: 'dst' },
   }
 }
 
@@ -206,10 +204,10 @@ describe('envCredentialStore', () => {
     const store = envCredentialStore()
 
     const src = await store.get('source')
-    expect(src.fields.api_key).toBe('sk_test_123')
+    expect(src.api_key).toBe('sk_test_123')
 
     const dst = await store.get('destination')
-    expect(dst.fields.connection_string).toBe('postgres://localhost/test')
+    expect(dst.connection_string).toBe('postgres://localhost/test')
   })
 
   it('throws when env var is unset', async () => {
@@ -225,10 +223,10 @@ describe('envCredentialStore', () => {
     const store = envCredentialStore({ sourceEnvVar: 'MY_KEY', destEnvVar: 'MY_DB' })
 
     const src = await store.get('source')
-    expect(src.fields.api_key).toBe('custom_key')
+    expect(src.api_key).toBe('custom_key')
 
     const dst = await store.get('destination')
-    expect(dst.fields.connection_string).toBe('custom_db')
+    expect(dst.connection_string).toBe('custom_db')
   })
 
   afterEach(() => {

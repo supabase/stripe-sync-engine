@@ -19,7 +19,7 @@ export function envCredentialStore(opts?: {
       return {
         id: 'env_source',
         type: 'stripe',
-        fields: { api_key: value },
+        api_key: value,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -30,7 +30,7 @@ export function envCredentialStore(opts?: {
       return {
         id: 'env_destination',
         type: 'postgres',
-        fields: { connection_string: value },
+        connection_string: value,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

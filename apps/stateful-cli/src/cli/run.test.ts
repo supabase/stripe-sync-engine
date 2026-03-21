@@ -13,7 +13,6 @@ function makeCred(id: string, type: string): Credential {
   return {
     id,
     type,
-    fields: {},
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
@@ -52,10 +51,8 @@ describe('runSync', () => {
 
     const configs = flagConfigStore({
       id: 'test_sync',
-      source_credential_id: 'src-cred',
-      destination_credential_id: 'dst-cred',
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
+      destination: { type: 'test', credential_id: 'dst-cred' },
     })
 
     const messages: StateMessage[] = []
@@ -98,13 +95,12 @@ describe('runSync', () => {
 
     const configs = flagConfigStore({
       id: 'test_sync',
-      source_credential_id: 'src-cred',
-      destination_credential_id: 'dst-cred',
       source: {
         type: 'test',
+        credential_id: 'src-cred',
         streams: { customers: {}, invoices: {} },
       },
-      destination: { type: 'test' },
+      destination: { type: 'test', credential_id: 'dst-cred' },
     })
 
     const messages: StateMessage[] = []

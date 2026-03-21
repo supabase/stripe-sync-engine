@@ -1,15 +1,15 @@
 // Store interfaces and types for the sync service.
 // Plain TS — no Zod, no runtime validation. These are internal contracts.
 
-/** A stored credential with type-specific fields. */
+/** A stored credential — flat shape, type-specific fields at top level. */
 export type Credential = {
   id: string
   /** Credential type — e.g. "stripe", "postgres", "google". */
   type: string
-  /** Type-specific fields (api_key, access_token, refresh_token, connection_string, etc.). */
-  fields: Record<string, unknown>
   created_at: string
   updated_at: string
+  /** Type-specific fields (api_key, connection_string, etc.) at top level. */
+  [key: string]: unknown
 }
 
 /**
@@ -22,14 +22,14 @@ export type SyncConfig = {
   account_id?: string
   /** Sync status — optional, set by the API layer. */
   status?: string
-  source_credential_id: string
-  destination_credential_id: string
   source: {
     type: string
+    credential_id: string
     [key: string]: unknown
   }
   destination: {
     type: string
+    credential_id: string
     [key: string]: unknown
   }
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>

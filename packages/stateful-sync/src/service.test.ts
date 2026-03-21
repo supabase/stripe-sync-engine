@@ -61,11 +61,11 @@ afterAll(async () => {
 
 const SCHEMA = 'test_service'
 
-function makeCred(id: string, type: string, fields: Record<string, unknown> = {}): Credential {
+function makeCred(id: string, type: string, extraFields: Record<string, unknown> = {}): Credential {
   return {
     id,
     type,
-    fields,
+    ...extraFields,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   }
@@ -133,13 +133,12 @@ function makeService(
   const configs = memoryConfigStore({
     'test-sync': {
       id: 'test-sync',
-      source_credential_id: 'src-cred',
-      destination_credential_id: 'dst-cred',
       source: {
         type: 'stdin',
+        credential_id: 'src-cred',
         streams: { customers: {} },
       },
-      destination: { type: 'postgres', schema: SCHEMA },
+      destination: { type: 'postgres', credential_id: 'dst-cred', schema: SCHEMA },
     },
   })
   const states = memoryStateStore()
@@ -163,10 +162,8 @@ describe('resolve()', () => {
   it('merges config + credentials into SyncParams', () => {
     const config: SyncConfig = {
       id: 'sync-1',
-      source_credential_id: 'src',
-      destination_credential_id: 'dst',
-      source: { type: 'stdin', extra: 'a' },
-      destination: { type: 'postgres', schema: 'myschema' },
+      source: { type: 'stdin', credential_id: 'src', extra: 'a' },
+      destination: { type: 'postgres', credential_id: 'dst', schema: 'myschema' },
       streams: [{ name: 'customers' }],
     }
 
@@ -191,10 +188,8 @@ describe('resolve()', () => {
   it('credential fields override config fields', () => {
     const config: SyncConfig = {
       id: 's',
-      source_credential_id: 'src',
-      destination_credential_id: 'dst',
-      source: { type: 'stdin', api_key: 'config_val' },
-      destination: { type: 'postgres' },
+      source: { type: 'stdin', credential_id: 'src', api_key: 'config_val' },
+      destination: { type: 'postgres', credential_id: 'dst' },
     }
 
     const params = resolve({
@@ -251,13 +246,12 @@ describe('SyncService integration', () => {
     const configs = memoryConfigStore({
       'test-sync': {
         id: 'test-sync',
-        source_credential_id: 'src-cred',
-        destination_credential_id: 'dst-cred',
         source: {
           type: 'stdin',
+          credential_id: 'src-cred',
           streams: { customers: {} },
         },
-        destination: { type: 'postgres', schema: SCHEMA },
+        destination: { type: 'postgres', credential_id: 'dst-cred', schema: SCHEMA },
       },
     })
     const states = memoryStateStore()
@@ -287,7 +281,10 @@ describe('SyncService integration', () => {
         refreshCount++
         // Fix the credential by removing auth_error_after
         const c = await credentials.get(credId)
-        await credentials.set(credId, { ...c, fields: {} })
+        const fixed = Object.fromEntries(
+          Object.entries(c as Record<string, unknown>).filter(([k]) => k !== 'auth_error_after')
+        )
+        await credentials.set(credId, fixed as Credential)
       },
     })
 

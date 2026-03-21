@@ -18,14 +18,28 @@ export function resolve(opts: {
   destCred: Credential
   state?: Record<string, unknown>
 }): SyncParams {
-  // Strip `type` — it's a connector selector, not config data.
-  const { type: sourceType, ...sourceRest } = opts.config.source
-  const { type: destType, ...destRest } = opts.config.destination
+  // Strip connector-selector fields — `type` and `credential_id` are not config data.
+  const sourceType = opts.config.source.type
+  const destType = opts.config.destination.type
+  const sourceRest = Object.fromEntries(
+    Object.entries(opts.config.source).filter(([k]) => k !== 'type' && k !== 'credential_id')
+  )
+  const destRest = Object.fromEntries(
+    Object.entries(opts.config.destination).filter(([k]) => k !== 'type' && k !== 'credential_id')
+  )
+  // Strip credential metadata — only type-specific fields belong in config.
+  const credMeta = new Set(['id', 'type', 'created_at', 'updated_at'])
+  const srcCredFields = Object.fromEntries(
+    Object.entries(opts.sourceCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
+  )
+  const dstCredFields = Object.fromEntries(
+    Object.entries(opts.destCred as Record<string, unknown>).filter(([k]) => !credMeta.has(k))
+  )
   return {
     source_name: sourceType,
     destination_name: destType,
-    source_config: { ...sourceRest, ...opts.sourceCred.fields },
-    destination_config: { ...destRest, ...opts.destCred.fields },
+    source_config: { ...sourceRest, ...srcCredFields },
+    destination_config: { ...destRest, ...dstCredFields },
     streams: opts.config.streams,
     state: opts.state,
   }
@@ -71,8 +85,8 @@ export class SyncService {
 
     while (retries <= MAX_AUTH_RETRIES) {
       // Load credentials fresh each attempt (may have been refreshed)
-      const sourceCred = await this.credentials.get(config.source_credential_id)
-      const destCred = await this.credentials.get(config.destination_credential_id)
+      const sourceCred = await this.credentials.get(config.source.credential_id)
+      const destCred = await this.credentials.get(config.destination.credential_id)
 
       // Load state (picks up checkpoints from previous attempt)
       const state = await this.states.get(syncId)
@@ -117,10 +131,10 @@ export class SyncService {
       if (this.refreshCredential) {
         this.logs.write(syncId, {
           level: 'warn',
-          message: `auth_error — refreshing credential ${config.source_credential_id} (attempt ${retries + 1}/${MAX_AUTH_RETRIES})`,
+          message: `auth_error — refreshing credential ${config.source.credential_id} (attempt ${retries + 1}/${MAX_AUTH_RETRIES})`,
           timestamp: new Date().toISOString(),
         })
-        await this.refreshCredential(config.source_credential_id)
+        await this.refreshCredential(config.source.credential_id)
       } else {
         throw new Error(`auth_error on sync ${syncId} but no refreshCredential handler configured`)
       }
