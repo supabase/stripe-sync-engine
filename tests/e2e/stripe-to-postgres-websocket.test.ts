@@ -1,16 +1,16 @@
 import pg from 'pg'
 import Stripe from 'stripe'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it } from 'vitest'
 import source from '@stripe/source-stripe'
 import destination from '@stripe/destination-postgres'
 import { createEngine } from '@stripe/stateless-sync'
 import type { StateMessage } from '@stripe/protocol'
+import { describeWithEnv } from '../test-helpers'
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const STRIPE_API_KEY = process.env.STRIPE_API_KEY!
 const POSTGRES_URL =
   process.env.POSTGRES_URL ?? 'postgresql://postgres:postgres@localhost:5432/postgres'
 const ts = new Date()
@@ -22,55 +22,8 @@ const STREAMS = ['products', 'prices']
 const BACKFILL_LIMIT = 200
 
 // ---------------------------------------------------------------------------
-// Shared state
-// ---------------------------------------------------------------------------
-
-let pool: pg.Pool
-let stripe: Stripe
-
-// ---------------------------------------------------------------------------
-// Lifecycle
-// ---------------------------------------------------------------------------
-
-beforeAll(async () => {
-  if (!process.env.STRIPE_API_KEY) return
-  pool = new pg.Pool({ connectionString: POSTGRES_URL })
-  await pool.query('SELECT 1') // fail fast if Postgres is down
-  stripe = new Stripe(STRIPE_API_KEY)
-  const account = await stripe.accounts.retrieve()
-  const isTest = STRIPE_API_KEY.startsWith('sk_test_')
-  const dashPrefix = isTest ? 'dashboard.stripe.com/test' : 'dashboard.stripe.com'
-  console.log(`\n  Stripe:   ${account.id} → https://${dashPrefix}/developers`)
-  console.log(`  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
-})
-
-afterAll(async () => {
-  if (!pool) return
-  console.log(`\n  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
-  if (!process.env.KEEP_TEST_DATA) {
-    await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
-  }
-  await pool.end()
-})
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function makeEngine(opts: { websocket?: boolean } = {}) {
-  return createEngine(
-    {
-      source_config: {
-        api_key: STRIPE_API_KEY,
-        backfill_limit: BACKFILL_LIMIT,
-        ...(opts.websocket && { websocket: true }),
-      },
-      destination_config: { connection_string: POSTGRES_URL, schema: SCHEMA },
-      streams: STREAMS.map((name) => ({ name })),
-    },
-    { source, destination }
-  )
-}
 
 async function collectStates(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]> {
   const states: StateMessage[] = []
@@ -82,7 +35,44 @@ async function collectStates(iter: AsyncIterable<StateMessage>): Promise<StateMe
 // Tests
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!process.env.STRIPE_API_KEY)('stripe → postgres e2e', () => {
+describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
+  let pool: pg.Pool
+  let stripe: Stripe
+
+  function makeEngine(opts: { websocket?: boolean } = {}) {
+    return createEngine(
+      {
+        source_config: {
+          api_key: STRIPE_API_KEY,
+          backfill_limit: BACKFILL_LIMIT,
+          ...(opts.websocket && { websocket: true }),
+        },
+        destination_config: { connection_string: POSTGRES_URL, schema: SCHEMA },
+        streams: STREAMS.map((name) => ({ name })),
+      },
+      { source, destination }
+    )
+  }
+
+  beforeAll(async () => {
+    pool = new pg.Pool({ connectionString: POSTGRES_URL })
+    await pool.query('SELECT 1')
+    stripe = new Stripe(STRIPE_API_KEY)
+    const account = await stripe.accounts.retrieve()
+    const isTest = STRIPE_API_KEY.startsWith('sk_test_')
+    const dashPrefix = isTest ? 'dashboard.stripe.com/test' : 'dashboard.stripe.com'
+    console.log(`\n  Stripe:   ${account.id} → https://${dashPrefix}/developers`)
+    console.log(`  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
+  })
+
+  afterAll(async () => {
+    if (!pool) return
+    console.log(`\n  Postgres: ${POSTGRES_URL} (schema: ${SCHEMA})`)
+    if (!process.env.KEEP_TEST_DATA) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
+    }
+    await pool.end()
+  })
   // -- Backfill (no websocket — runs to natural completion) -----------------
 
   it('backfills product and price data to postgres', async () => {

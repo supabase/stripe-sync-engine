@@ -1,27 +1,32 @@
 // TODO: Not yet running in GitHub CI.
 // To enable: create a dedicated Supabase service account with a scoped PAT
 // and store SUPABASE_PROJECT_ID + SUPABASE_PERSONAL_ACCESS_TOKEN as CI secrets.
-import { describe, it, expect } from 'vitest'
+import { it, expect } from 'vitest'
 import { SupabaseSetupClient } from '../supabase'
+import { describeWithEnv } from '../../../../tests/test-helpers'
 
-const projectRef = process.env.SUPABASE_PROJECT_ID
-const accessToken = process.env.SUPABASE_PERSONAL_ACCESS_TOKEN
+describeWithEnv(
+  'Supabase deploy',
+  ['SUPABASE_PROJECT_ID', 'SUPABASE_PERSONAL_ACCESS_TOKEN'],
+  ({ SUPABASE_PROJECT_ID, SUPABASE_PERSONAL_ACCESS_TOKEN }) => {
+    const client = new SupabaseSetupClient({
+      accessToken: SUPABASE_PERSONAL_ACCESS_TOKEN,
+      projectRef: SUPABASE_PROJECT_ID,
+    })
+    const slug = `test-hello-${Date.now()}`
 
-describe.skipIf(!projectRef || !accessToken)('Supabase deploy', () => {
-  const client = new SupabaseSetupClient({ accessToken: accessToken!, projectRef: projectRef! })
-  const slug = `test-hello-${Date.now()}`
+    it('deploys, invokes, and deletes an edge function', async () => {
+      // Deploy
+      await client.deployFunction(slug, `Deno.serve(() => new Response("ok"))`)
 
-  it('deploys, invokes, and deletes an edge function', async () => {
-    // Deploy
-    await client.deployFunction(slug, `Deno.serve(() => new Response("ok"))`)
+      // Invoke
+      const url = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/${slug}`
+      const res = await fetch(url)
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe('ok')
 
-    // Invoke
-    const url = `https://${projectRef}.supabase.co/functions/v1/${slug}`
-    const res = await fetch(url)
-    expect(res.status).toBe(200)
-    expect(await res.text()).toBe('ok')
-
-    // Cleanup
-    await client.api.deleteAFunction(projectRef!, slug)
-  }, 30_000)
-})
+      // Cleanup
+      await client.api.deleteAFunction(SUPABASE_PROJECT_ID, slug)
+    }, 30_000)
+  }
+)
