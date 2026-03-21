@@ -111,7 +111,6 @@ export const SyncSchema = z.object({
   source: SourceConfigSchema,
   destination: DestinationConfigSchema,
   streams: z.array(StreamConfigSchema).optional(),
-  state: z.record(z.string(), z.unknown()).optional(),
 })
 
 export const CreateSyncSchema = SyncSchema.omit({ id: true })
