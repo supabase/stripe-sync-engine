@@ -1,6 +1,6 @@
 import { sql } from '@stripe/util-postgres'
 
-export default sql`\
+export default sql`
 -- Generic sync state: per-stream cursor state keyed by sync_id.
 
 CREATE TABLE IF NOT EXISTS {{sync_schema}}."_sync_state" (

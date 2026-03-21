@@ -1,6 +1,6 @@
 import { sql } from '@stripe/util-postgres'
 
-export default sql`\
+export default sql`
 -- Stripe-specific sync metadata tables.
 -- Schema-qualified objects use the explicit {{sync_schema}} placeholder.
 -- Uses idempotent DDL so it can be safely re-run.

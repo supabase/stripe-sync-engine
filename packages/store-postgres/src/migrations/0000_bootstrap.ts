@@ -1,6 +1,6 @@
 import { sql } from '@stripe/util-postgres'
 
-export default sql`\
+export default sql`
 -- Generic bootstrap: trigger functions for any data destination.
 -- Uses idempotent DDL so it can be safely re-run.
 

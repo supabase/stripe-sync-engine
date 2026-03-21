@@ -1,6 +1,6 @@
 import { sql } from '@stripe/util-postgres'
 
-export default sql`\
+export default sql`
 -- Drop unused Stripe metadata objects.
 -- Keeps: _sync_runs table, sync_runs view (used by Supabase edge functions).
 

@@ -5,7 +5,7 @@ export function sql(strings: TemplateStringsArray, ...values: unknown[]): string
     result += str
     if (i < values.length) result += String(values[i])
   })
-  return result
+  return result.trim()
 }
 
 /** Double-quote a SQL identifier (table name, column name). */
