@@ -97,6 +97,11 @@ export class PostgresDestination implements Destination {
     }
   }
 
+  /** Close the underlying connection pool without dropping schema. */
+  async close(): Promise<void> {
+    await this.writer.close()
+  }
+
   async teardown(_params: { config: Record<string, unknown> }): Promise<void> {
     await this.writer.query(`DROP SCHEMA IF EXISTS "${this.config.schema}" CASCADE`)
     await this.writer.close()

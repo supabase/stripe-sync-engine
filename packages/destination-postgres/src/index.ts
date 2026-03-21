@@ -90,7 +90,11 @@ const destination = {
       schema: config.schema,
       poolConfig,
     })
-    return dest.check({ config })
+    try {
+      return await dest.check({ config })
+    } finally {
+      await dest.close()
+    }
   },
 
   async setup({ config, catalog }) {
@@ -99,7 +103,11 @@ const destination = {
       schema: config.schema,
       poolConfig,
     })
-    await dest.setup({ config, catalog })
+    try {
+      await dest.setup({ config, catalog })
+    } finally {
+      await dest.close()
+    }
   },
 
   async teardown({ config }) {
