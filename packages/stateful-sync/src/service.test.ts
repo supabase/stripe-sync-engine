@@ -2,7 +2,7 @@ import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { testSource, testDestination, createConnectorResolver } from '@stripe/stateless-sync'
-import type { Message, StateMessage } from '@stripe/stateless-sync'
+import type { Message, StateMessage, Source, Destination } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
 import { StatefulSync, resolve } from './service'
 import {
@@ -556,14 +556,14 @@ describe('push_event', () => {
 // ---------------------------------------------------------------------------
 
 describe('teardown remove_shared_resources', () => {
-  function makeServiceWithTeardownSpy(syncs: Record<string, any>) {
+  function makeServiceWithTeardownSpy(syncs: Record<string, SyncConfig>) {
     const teardownSpy = vi.fn()
     const sourceWithTeardown = {
       ...testSource,
       async teardown({
         remove_shared_resources,
       }: {
-        config: any
+        config: Record<string, unknown>
         remove_shared_resources?: boolean
       }) {
         teardownSpy(remove_shared_resources)
@@ -580,8 +580,8 @@ describe('teardown remove_shared_resources', () => {
       states: memoryStateStore(),
       logs: memoryLogSink(),
       connectors: {
-        resolveSource: async () => sourceWithTeardown as any,
-        resolveDestination: async () => testDestination as any,
+        resolveSource: async () => sourceWithTeardown as Source,
+        resolveDestination: async () => testDestination as Destination,
         sources: () => new Map(),
         destinations: () => new Map(),
       },
