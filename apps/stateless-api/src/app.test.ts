@@ -19,13 +19,13 @@ const syncParams = JSON.stringify({
   destination_config: {},
 })
 
-/** Read an SSE response body into an array of parsed data lines. */
-async function readSse<T>(res: Response): Promise<T[]> {
+/** Read an NDJSON response body into an array of parsed lines. */
+async function readNdjson<T>(res: Response): Promise<T[]> {
   const text = await res.text()
   return text
     .split('\n')
-    .filter((line) => line.startsWith('data: '))
-    .map((line) => JSON.parse(line.slice(6)) as T)
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as T)
 }
 
 /** Build NDJSON string from array of objects. */
@@ -78,7 +78,7 @@ describe('GET /check', () => {
 })
 
 describe('POST /read', () => {
-  it('streams messages as SSE', async () => {
+  it('streams messages as NDJSON', async () => {
     const app = createApp(resolver)
 
     const res = await app.request('/read', {
@@ -96,9 +96,9 @@ describe('POST /read', () => {
     })
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toBe('text/event-stream')
+    expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readSse<Message>(res)
+    const events = await readNdjson<Message>(res)
     expect(events).toHaveLength(2)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('state')
@@ -106,7 +106,7 @@ describe('POST /read', () => {
 })
 
 describe('POST /write', () => {
-  it('accepts NDJSON records, streams SSE state back', async () => {
+  it('accepts NDJSON records, streams NDJSON state back', async () => {
     const app = createApp(resolver)
 
     const records: Message[] = [
@@ -133,9 +133,9 @@ describe('POST /write', () => {
     })
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toBe('text/event-stream')
+    expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readSse<StateMessage>(res)
+    const events = await readNdjson<StateMessage>(res)
     // testDestination passes through state messages only
     expect(events).toHaveLength(1)
     expect(events[0]!.type).toBe('state')
@@ -156,7 +156,7 @@ describe('POST /write', () => {
 })
 
 describe('POST /run', () => {
-  it('runs full pipeline, streams SSE state', async () => {
+  it('runs full pipeline, streams NDJSON state', async () => {
     const app = createApp(resolver)
 
     const res = await app.request('/run', {
@@ -174,9 +174,9 @@ describe('POST /run', () => {
     })
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toBe('text/event-stream')
+    expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readSse<StateMessage>(res)
+    const events = await readNdjson<StateMessage>(res)
     expect(events).toHaveLength(1)
     expect(events[0]!.type).toBe('state')
   })

@@ -96,7 +96,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 4: check command with valid connectors ---"
 
-PARAMS='{"source":"stripe","destination":"postgres","source_config":{"api_key":"sk_test_fake"},"destination_config":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
+PARAMS='{"source_name":"stripe","destination_name":"postgres","source_config":{"api_key":"sk_test_fake"},"destination_config":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
 
 # check will fail (bad credentials) but should NOT fail on "not found" or "conformance check"
 CHECK_OUTPUT=$(npx sync-engine check --params "$PARAMS" 2>&1 || true)
@@ -121,7 +121,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 5: unknown connector gives clear error ---"
 
-PARAMS_BAD='{"source":"stripe","destination":"nonexistent","source_config":{"api_key":"sk_test_fake"},"destination_config":{}}'
+PARAMS_BAD='{"source_name":"stripe","destination_name":"nonexistent","source_config":{"api_key":"sk_test_fake"},"destination_config":{}}'
 
 BAD_OUTPUT=$(npx sync-engine check --params "$PARAMS_BAD" 2>&1 || true)
 
