@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import type {
   Message,
   ConnectorResolver,
@@ -42,51 +43,48 @@ export {
 export function createApp(resolver: ConnectorResolver) {
   const app = new Hono()
 
-  /** Parse X-Sync-Params header or return a 400 Response. */
-  function parseSyncParams(header: string | undefined): SyncParamsType | Response {
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) {
+      return c.json({ error: err.message }, err.status as any)
+    }
+    return c.json({ error: 'Internal server error' }, 500)
+  })
+
+  /** Parse and validate X-Sync-Params header, or throw 400. */
+  function requireSyncParams(header: string | undefined): SyncParamsType {
     if (!header) {
-      return new Response(JSON.stringify({ error: 'Missing X-Sync-Params header' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      throw new HTTPException(400, { message: 'Missing X-Sync-Params header' })
     }
     try {
       return SyncParams.parse(JSON.parse(header))
     } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON in X-Sync-Params header' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      throw new HTTPException(400, { message: 'Invalid JSON in X-Sync-Params header' })
     }
   }
 
   app.post('/setup', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
     await engine.setup()
     return c.body(null, 204)
   })
 
   app.post('/teardown', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
     await engine.teardown()
     return c.body(null, 204)
   })
 
   app.get('/check', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
     const result = await engine.check()
     return c.json(result)
   })
 
   app.post('/read', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
@@ -95,8 +93,7 @@ export function createApp(resolver: ConnectorResolver) {
   })
 
   app.post('/write', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
@@ -108,8 +105,7 @@ export function createApp(resolver: ConnectorResolver) {
   })
 
   app.post('/run', async (c) => {
-    const params = parseSyncParams(c.req.header('X-Sync-Params'))
-    if (params instanceof Response) return params
+    const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
