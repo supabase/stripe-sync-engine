@@ -154,7 +154,7 @@ export function buildCreateTableWithSchema(
 
   stmts.push(
     `DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`,
-    `CREATE TRIGGER handle_updated_at BEFORE UPDATE ON ${quotedSchema}.${quotedTable} FOR EACH ROW EXECUTE FUNCTION set_updated_at();`
+    `CREATE TRIGGER handle_updated_at BEFORE UPDATE ON ${quotedSchema}.${quotedTable} FOR EACH ROW EXECUTE FUNCTION ${quotedSchema}.set_updated_at();`
   )
 
   return stmts

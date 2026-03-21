@@ -132,6 +132,21 @@ const destination = {
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
       await pool.query(`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
+      // Ensure the trigger function exists in the target schema so triggers
+      // can reference it without relying on search_path.
+      await pool.query(`
+        CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
+            LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          NEW := jsonb_populate_record(
+            NEW,
+            jsonb_build_object('updated_at', now(), '_updated_at', now())
+          );
+          RETURN NEW;
+        END;
+        $$;
+      `)
       for (const cs of catalog.streams) {
         if (cs.stream.json_schema) {
           for (const stmt of buildCreateTableWithSchema(
