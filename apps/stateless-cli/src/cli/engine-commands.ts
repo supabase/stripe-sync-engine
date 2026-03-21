@@ -1,6 +1,11 @@
 import { execSync } from 'child_process'
 import type { Message, StateMessage } from '@stripe/stateless-sync'
-import { createEngine, createConnectorResolver, SyncParams } from '@stripe/stateless-sync'
+import {
+  createEngineFromParams,
+  parseNdjson,
+  createConnectorResolver,
+  SyncParams,
+} from '@stripe/stateless-sync'
 import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
 
 const resolver = createConnectorResolver({
@@ -17,16 +22,6 @@ export function parseParams(raw: string): SyncParamsType {
   }
 }
 
-/** Resolve source + destination connectors from SyncParams and create an engine. */
-async function resolveEngine(params: SyncParamsType) {
-  const { source_name: sourceName, destination_name: destName, ...engineParams } = params
-  const [source, destination] = await Promise.all([
-    resolver.resolveSource(sourceName),
-    resolver.resolveDestination(destName),
-  ])
-  return createEngine(engineParams, { source, destination })
-}
-
 /** Write a single NDJSON line to stdout. */
 function writeLine(obj: unknown) {
   process.stdout.write(JSON.stringify(obj) + '\n')
@@ -40,33 +35,31 @@ async function* readStdin(): AsyncIterable<unknown> {
   }
   const text = Buffer.concat(chunks).toString('utf8').trim()
   if (!text) return
-  for (const line of text.split('\n')) {
-    if (line.trim()) yield JSON.parse(line)
-  }
+  yield* parseNdjson(text)
 }
 
 // MARK: - Commands
 
 export async function setupCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   await engine.setup()
   console.error('Setup complete.')
 }
 
 export async function teardownCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   await engine.teardown()
   console.error('Teardown complete.')
 }
 
 export async function checkCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   const result = await engine.check()
   writeLine(result)
 }
 
 export async function readCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   const input = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of engine.read(input)) {
     writeLine(msg)
@@ -74,7 +67,7 @@ export async function readCommand(params: SyncParamsType) {
 }
 
 export async function writeCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   const messages = readStdin() as AsyncIterable<Message>
   for await (const msg of engine.write(messages)) {
     writeLine(msg)
@@ -82,7 +75,7 @@ export async function writeCommand(params: SyncParamsType) {
 }
 
 export async function runCommand(params: SyncParamsType) {
-  const engine = await resolveEngine(params)
+  const engine = await createEngineFromParams(params, resolver)
   const input = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of engine.run(input)) {
     writeLine(msg as StateMessage)

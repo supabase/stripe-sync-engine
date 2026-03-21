@@ -3,6 +3,7 @@ import {
   DestinationOutput,
   Message,
   SyncEngineParams,
+  SyncParams,
   Stream,
   ConfiguredStream,
   ConfiguredCatalog,
@@ -12,6 +13,7 @@ import {
 import type { Destination, Source } from '@stripe/sync-protocol'
 import type { RouterCallbacks } from '@stripe/sync-protocol'
 import { forward, collect } from '@stripe/sync-protocol'
+import type { ConnectorResolver } from './loader'
 
 // MARK: - Engine interface
 
@@ -166,4 +168,17 @@ export function createEngine(
       yield* this.write(this.read(input))
     },
   }
+}
+
+export async function createEngineFromParams(
+  params: SyncParams,
+  resolver: ConnectorResolver,
+  callbacks?: RouterCallbacks
+): Promise<Engine> {
+  const { source_name: sourceName, destination_name: destName, ...engineParams } = params
+  const [source, destination] = await Promise.all([
+    resolver.resolveSource(sourceName),
+    resolver.resolveDestination(destName),
+  ])
+  return createEngine(engineParams, { source, destination }, callbacks)
 }

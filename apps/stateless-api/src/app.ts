@@ -4,8 +4,8 @@ import type {
   ConnectorResolver,
   SyncParams as SyncParamsType,
 } from '@stripe/stateless-sync'
-import { createEngine, SyncParams } from '@stripe/stateless-sync'
-import { parseNdjson, sseResponse } from './stream'
+import { createEngineFromParams, parseNdjson, SyncParams } from '@stripe/stateless-sync'
+import { sseResponse } from './stream'
 
 // Re-export core protocol types for consumers (e.g. stateful-api)
 export type {
@@ -33,6 +33,7 @@ export type {
 
 export {
   createEngine,
+  createEngineFromParams,
   createConnectorResolver,
   resolveSpecifier,
   loadConnector,
@@ -59,20 +60,10 @@ export function createApp(resolver: ConnectorResolver) {
     }
   }
 
-  /** Resolve connectors from SyncParams and create an engine. */
-  async function resolveEngine(params: SyncParamsType) {
-    const { source_name: sourceName, destination_name: destName, ...engineParams } = params
-    const [source, destination] = await Promise.all([
-      resolver.resolveSource(sourceName),
-      resolver.resolveDestination(destName),
-    ])
-    return createEngine(engineParams, { source, destination }, {})
-  }
-
   app.post('/setup', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
     await engine.setup()
     return c.body(null, 204)
   })
@@ -80,7 +71,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.post('/teardown', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
     await engine.teardown()
     return c.body(null, 204)
   })
@@ -88,7 +79,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.get('/check', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
     const result = await engine.check()
     return c.json(result)
   })
@@ -96,7 +87,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.post('/read', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
     const input = text ? parseNdjson(text) : undefined
@@ -106,7 +97,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.post('/write', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
     if (!text) {
@@ -119,7 +110,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.post('/run', async (c) => {
     const params = parseSyncParams(c.req.header('X-Sync-Params'))
     if (params instanceof Response) return params
-    const engine = await resolveEngine(params)
+    const engine = await createEngineFromParams(params, resolver, {})
 
     const text = await c.req.text()
     const input = text ? parseNdjson(text) : undefined
