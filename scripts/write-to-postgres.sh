@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Pipe NDJSON records into Postgres via the connector CLI.
+# Write NDJSON records to Postgres via the connector CLI.
+# Reads from stdin, or uses sample data if stdin is a terminal.
+#
+# Usage:
+#   ./scripts/write-to-postgres.sh                              # sample data
+#   ./scripts/read-from-stripe.sh | ./scripts/write-to-postgres.sh  # piped
 #
 # Env: DATABASE_URL
 set -euo pipefail
@@ -14,8 +19,13 @@ CATALOG='{"streams":[{"stream":{"name":"demo","primary_key":[["id"]]},"sync_mode
 # Setup (creates the table if needed)
 $DEST setup --config "$CONFIG" --catalog "$CATALOG"
 
-# Write
-printf '%s\n' \
-  '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":0}' \
-  '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":0}' \
-| $DEST write --config "$CONFIG" --catalog "$CATALOG"
+if [ -t 0 ]; then
+  # No pipe — use sample data
+  printf '%s\n' \
+    '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":0}' \
+    '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":0}' \
+  | $DEST write --config "$CONFIG" --catalog "$CATALOG"
+else
+  # Piped — read from stdin
+  $DEST write --config "$CONFIG" --catalog "$CATALOG"
+fi

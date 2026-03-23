@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ACCT=$(curl -su "$STRIPE_API_KEY:" https://api.stripe.com/v1/account 2>/dev/null \
-  | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).id))")
+  | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).id))")
 echo "Stripe: $ACCT" >&2
 
 node packages/source-stripe/dist/bin.js read \

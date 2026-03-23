@@ -3,6 +3,8 @@ import {
   createEngineFromParams,
   parseNdjsonChunks,
   createConnectorResolver,
+  forward,
+  collect,
   SyncParams,
 } from '@stripe/stateless-sync'
 import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
@@ -93,9 +95,32 @@ export async function readCommand(params: SyncParamsType) {
 }
 
 export async function writeCommand(params: SyncParamsType) {
-  const engine = await createEngineFromParams(params, resolver)
+  // write only needs the destination — don't resolve the source
+  const destination = await resolver.resolveDestination(params.destination_name)
+  const destConfig = (params.destination_config ?? {}) as Record<string, unknown>
+
+  // Build a synthetic catalog from --streams (or empty if not provided)
+  const catalog = {
+    streams: (params.streams ?? []).map((s) => ({
+      stream: { name: s.name, primary_key: [['id']] },
+      sync_mode: 'full_refresh' as const,
+      destination_sync_mode: 'append' as const,
+    })),
+  }
+
+  const callbacks = {
+    onLog: (message: string, level: string) => console.error(`[${level}] ${message}`),
+    onError: (message: string, failureType: string) =>
+      console.error(`[error:${failureType}] ${message}`),
+    onStreamStatus: (stream: string, status: string) =>
+      console.error(`[status] ${stream}: ${status}`),
+  }
+
   const messages = readStdin() as AsyncIterable<Message>
-  for await (const msg of engine.write(messages)) {
+  const forwarded = forward(messages, callbacks)
+  const output = destination.write({ config: destConfig, catalog }, forwarded)
+
+  for await (const msg of collect(output, callbacks)) {
     writeLine(msg)
   }
 }

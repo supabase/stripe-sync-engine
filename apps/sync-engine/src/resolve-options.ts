@@ -67,14 +67,18 @@ function buildSourceConfig(opts: CliOptions): Record<string, unknown> {
 }
 
 /** Build destination config from connector-prefixed flags + env shortcuts + generic env. */
-function buildDestinationConfig(opts: CliOptions): Record<string, unknown> {
+function buildDestinationConfig(opts: CliOptions, isPostgres: boolean): Record<string, unknown> {
   const fromFlags: Record<string, unknown> = {}
-  if (opts.postgresUrl) fromFlags['url'] = opts.postgresUrl
-  if (opts.postgresSchema) fromFlags['schema'] = opts.postgresSchema
+  if (isPostgres) {
+    if (opts.postgresUrl) fromFlags['url'] = opts.postgresUrl
+    if (opts.postgresSchema) fromFlags['schema'] = opts.postgresSchema
+  }
 
   const fromEnvShortcuts: Record<string, unknown> = {}
-  const envUrl = process.env['POSTGRES_URL'] ?? process.env['DATABASE_URL']
-  if (envUrl) fromEnvShortcuts['url'] = envUrl
+  if (isPostgres) {
+    const envUrl = process.env['POSTGRES_URL'] ?? process.env['DATABASE_URL']
+    if (envUrl) fromEnvShortcuts['url'] = envUrl
+  }
 
   return mergeConfig(
     fromFlags,
@@ -103,10 +107,12 @@ export function resolveOptions(opts: CliOptions): SyncParamsType {
     fileConfig.source_config as Record<string, unknown> | undefined
   )
 
+  const isPostgres = destinationName === 'postgres' || destinationName === 'destination-postgres'
+
   const destinationConfig = mergeConfig(
-    buildDestinationConfig(opts),
+    buildDestinationConfig(opts, isPostgres),
     fileConfig.destination_config as Record<string, unknown> | undefined,
-    { schema: 'stripe' } // default schema
+    isPostgres ? { schema: 'stripe' } : {} // default schema for postgres only
   )
 
   try {
