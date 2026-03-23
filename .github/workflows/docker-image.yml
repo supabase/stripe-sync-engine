@@ -1,4 +1,4 @@
-name: Stripe Build Image
+name: Build Docker Image
 
 on:
   # Manual trigger
@@ -37,7 +37,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: stripe/sdb
+          images: stripe/sync-engine
           tags: |
             type=sha,format=long,prefix=
             type=ref,event=branch
