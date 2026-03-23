@@ -1,3 +1,5 @@
+import { heartbeat } from '@temporalio/activity'
+import { parseNdjsonStream } from './ndjson'
 import type { SyncConfig, SyncActivities, CategorizedMessages } from './types'
 
 function buildSyncParamsHeader(
@@ -13,13 +15,6 @@ function buildSyncParamsHeader(
   }
   if (opts?.state) params.state = opts.state
   return JSON.stringify(params)
-}
-
-function parseNdjson(body: string): unknown[] {
-  return body
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
 }
 
 function categorizeMessages(messages: unknown[]): CategorizedMessages {
@@ -43,6 +38,21 @@ function extractCursors(messages: unknown[]): Record<string, unknown> {
     }
   }
   return cursors
+}
+
+/** Stream NDJSON from a fetch response, collecting messages and heartbeating periodically. */
+async function streamMessages(resp: Response): Promise<unknown[]> {
+  const messages: unknown[] = []
+  for await (const msg of parseNdjsonStream(resp.body!)) {
+    messages.push(msg)
+    if (messages.length % 100 === 0) {
+      heartbeat({ records: messages.length })
+    }
+  }
+  if (messages.length % 100 !== 0) {
+    heartbeat({ records: messages.length })
+  }
+  return messages
 }
 
 export function createActivities(engineUrl: string): SyncActivities {
@@ -84,8 +94,7 @@ export function createActivities(engineUrl: string): SyncActivities {
         },
       })
       if (!resp.ok) throw new Error(`Backfill page failed: ${resp.status}`)
-      const body = await resp.text()
-      return categorizeMessages(parseNdjson(body))
+      return categorizeMessages(await streamMessages(resp))
     },
 
     async writeBatch(config, records) {
@@ -99,8 +108,7 @@ export function createActivities(engineUrl: string): SyncActivities {
         body: ndjsonBody,
       })
       if (!resp.ok) throw new Error(`Write batch failed: ${resp.status}`)
-      const body = await resp.text()
-      return categorizeMessages(parseNdjson(body))
+      return categorizeMessages(await streamMessages(resp))
     },
 
     async processEvent(config, event) {
@@ -115,9 +123,8 @@ export function createActivities(engineUrl: string): SyncActivities {
       })
       if (!readResp.ok) throw new Error(`Process event read failed: ${readResp.status}`)
 
-      const readBody = await readResp.text()
-      const messages = parseNdjson(readBody)
-      const records = messages.filter((m: any) => m.type === 'record')
+      const readMessages = await streamMessages(readResp)
+      const records = readMessages.filter((m: any) => m.type === 'record')
 
       if (records.length === 0) {
         return { records_written: 0, state: {} }
@@ -135,8 +142,7 @@ export function createActivities(engineUrl: string): SyncActivities {
       })
       if (!writeResp.ok) throw new Error(`Process event write failed: ${writeResp.status}`)
 
-      const writeBody = await writeResp.text()
-      const writeMessages = parseNdjson(writeBody)
+      const writeMessages = await streamMessages(writeResp)
       return {
         records_written: records.length,
         state: extractCursors(writeMessages),
