@@ -1,12 +1,8 @@
-import type {
-  SyncConfig,
-  SyncActivities,
-  CategorizedMessages,
-} from './types'
+import type { SyncConfig, SyncActivities, CategorizedMessages } from './types'
 
 function buildSyncParamsHeader(
   config: SyncConfig,
-  opts?: {state?: Record<string, unknown>; streams?: Array<{name: string}>},
+  opts?: { state?: Record<string, unknown>; streams?: Array<{ name: string }> }
 ): string {
   const params: Record<string, unknown> = {
     source_name: config.source_name,
@@ -29,12 +25,10 @@ function parseNdjson(body: string): unknown[] {
 function categorizeMessages(messages: unknown[]): CategorizedMessages {
   return {
     records: messages.filter((m: any) => m.type === 'record'),
-    states: messages.filter(
-      (m: any) => m.type === 'state',
-    ) as CategorizedMessages['states'],
+    states: messages.filter((m: any) => m.type === 'state') as CategorizedMessages['states'],
     errors: messages.filter((m: any) => m.type === 'error'),
     stream_statuses: messages.filter(
-      (m: any) => m.type === 'stream_status',
+      (m: any) => m.type === 'stream_status'
     ) as CategorizedMessages['stream_statuses'],
     messages,
   }
@@ -55,7 +49,7 @@ export function createActivities(engineUrl: string): SyncActivities {
   return {
     async healthCheck(config) {
       const resp = await fetch(`${engineUrl}/check`, {
-        headers: {'X-Sync-Params': buildSyncParamsHeader(config)},
+        headers: { 'X-Sync-Params': buildSyncParamsHeader(config) },
       })
       if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)
       return resp.json()
@@ -64,7 +58,7 @@ export function createActivities(engineUrl: string): SyncActivities {
     async sourceSetup(config) {
       const resp = await fetch(`${engineUrl}/setup`, {
         method: 'POST',
-        headers: {'X-Sync-Params': buildSyncParamsHeader(config)},
+        headers: { 'X-Sync-Params': buildSyncParamsHeader(config) },
       })
       if (!resp.ok) throw new Error(`Source setup failed: ${resp.status}`)
     },
@@ -72,20 +66,19 @@ export function createActivities(engineUrl: string): SyncActivities {
     async destinationSetup(config) {
       const resp = await fetch(`${engineUrl}/setup`, {
         method: 'POST',
-        headers: {'X-Sync-Params': buildSyncParamsHeader(config)},
+        headers: { 'X-Sync-Params': buildSyncParamsHeader(config) },
       })
-      if (!resp.ok)
-        throw new Error(`Destination setup failed: ${resp.status}`)
+      if (!resp.ok) throw new Error(`Destination setup failed: ${resp.status}`)
     },
 
     async backfillPage(config, stream, cursor) {
-      const state = cursor ? {[stream]: cursor} : {}
+      const state = cursor ? { [stream]: cursor } : {}
       const resp = await fetch(`${engineUrl}/read`, {
         method: 'POST',
         headers: {
           'X-Sync-Params': buildSyncParamsHeader(config, {
             state,
-            streams: [{name: stream}],
+            streams: [{ name: stream }],
           }),
           'Content-Type': 'application/x-ndjson',
         },
@@ -96,8 +89,7 @@ export function createActivities(engineUrl: string): SyncActivities {
     },
 
     async writeBatch(config, records) {
-      const ndjsonBody =
-        records.map((r) => JSON.stringify(r)).join('\n') + '\n'
+      const ndjsonBody = records.map((r) => JSON.stringify(r)).join('\n') + '\n'
       const resp = await fetch(`${engineUrl}/write`, {
         method: 'POST',
         headers: {
@@ -121,20 +113,18 @@ export function createActivities(engineUrl: string): SyncActivities {
         },
         body: JSON.stringify(event) + '\n',
       })
-      if (!readResp.ok)
-        throw new Error(`Process event read failed: ${readResp.status}`)
+      if (!readResp.ok) throw new Error(`Process event read failed: ${readResp.status}`)
 
       const readBody = await readResp.text()
       const messages = parseNdjson(readBody)
       const records = messages.filter((m: any) => m.type === 'record')
 
       if (records.length === 0) {
-        return {records_written: 0, state: {}}
+        return { records_written: 0, state: {} }
       }
 
       // Forward records to destination (write)
-      const ndjsonBody =
-        records.map((r) => JSON.stringify(r)).join('\n') + '\n'
+      const ndjsonBody = records.map((r) => JSON.stringify(r)).join('\n') + '\n'
       const writeResp = await fetch(`${engineUrl}/write`, {
         method: 'POST',
         headers: {
@@ -143,8 +133,7 @@ export function createActivities(engineUrl: string): SyncActivities {
         },
         body: ndjsonBody,
       })
-      if (!writeResp.ok)
-        throw new Error(`Process event write failed: ${writeResp.status}`)
+      if (!writeResp.ok) throw new Error(`Process event write failed: ${writeResp.status}`)
 
       const writeBody = await writeResp.text()
       const writeMessages = parseNdjson(writeBody)
@@ -157,7 +146,7 @@ export function createActivities(engineUrl: string): SyncActivities {
     async sourceTeardown(config) {
       const resp = await fetch(`${engineUrl}/teardown`, {
         method: 'POST',
-        headers: {'X-Sync-Params': buildSyncParamsHeader(config)},
+        headers: { 'X-Sync-Params': buildSyncParamsHeader(config) },
       })
       if (!resp.ok) throw new Error(`Source teardown failed: ${resp.status}`)
     },
@@ -165,10 +154,9 @@ export function createActivities(engineUrl: string): SyncActivities {
     async destinationTeardown(config) {
       const resp = await fetch(`${engineUrl}/teardown`, {
         method: 'POST',
-        headers: {'X-Sync-Params': buildSyncParamsHeader(config)},
+        headers: { 'X-Sync-Params': buildSyncParamsHeader(config) },
       })
-      if (!resp.ok)
-        throw new Error(`Destination teardown failed: ${resp.status}`)
+      if (!resp.ok) throw new Error(`Destination teardown failed: ${resp.status}`)
     },
   }
 }

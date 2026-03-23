@@ -7,11 +7,7 @@ import {
   continueAsNew,
 } from '@temporalio/workflow'
 
-import type {
-  SyncActivities,
-  SyncConfig,
-  WorkflowStatus,
-} from './types'
+import type { SyncActivities, SyncConfig, WorkflowStatus } from './types'
 
 const CONTINUE_AS_NEW_THRESHOLD = 500
 const EVENT_BATCH_SIZE = 50
@@ -24,24 +20,19 @@ const retryPolicy = {
 } as const
 
 // Health check: 30s, no retry
-const {healthCheck} = proxyActivities<SyncActivities>({
+const { healthCheck } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '30s',
 })
 
 // Setup/teardown/process event: 2m with retry
-const {
-  sourceSetup,
-  destinationSetup,
-  processEvent,
-  sourceTeardown,
-  destinationTeardown,
-} = proxyActivities<SyncActivities>({
-  startToCloseTimeout: '2m',
-  retry: retryPolicy,
-})
+const { sourceSetup, destinationSetup, processEvent, sourceTeardown, destinationTeardown } =
+  proxyActivities<SyncActivities>({
+    startToCloseTimeout: '2m',
+    retry: retryPolicy,
+  })
 
 // Data activities: 5m with retry and heartbeat
-const {backfillPage, writeBatch} = proxyActivities<SyncActivities>({
+const { backfillPage, writeBatch } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '5m',
   heartbeatTimeout: '1m',
   retry: retryPolicy,
@@ -51,8 +42,7 @@ const {backfillPage, writeBatch} = proxyActivities<SyncActivities>({
 export const stripeEventSignal = defineSignal<[unknown]>('stripe_event')
 export const pauseSignal = defineSignal('pause')
 export const resumeSignal = defineSignal('resume')
-export const updateConfigSignal =
-  defineSignal<[Partial<SyncConfig>]>('update_config')
+export const updateConfigSignal = defineSignal<[Partial<SyncConfig>]>('update_config')
 export const deleteSignal = defineSignal('delete')
 
 // Query
@@ -77,19 +67,22 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     paused = false
   })
   setHandler(updateConfigSignal, (newConfig: Partial<SyncConfig>) => {
-    config = {...config, ...newConfig}
+    config = { ...config, ...newConfig }
   })
   setHandler(deleteSignal, () => {
     deleted = true
   })
 
   // Register query handler
-  setHandler(statusQuery, (): WorkflowStatus => ({
-    phase,
-    paused,
-    cursors,
-    iteration,
-  }))
+  setHandler(
+    statusQuery,
+    (): WorkflowStatus => ({
+      phase,
+      paused,
+      cursors,
+      iteration,
+    })
+  )
 
   // --- Helpers ---
 
@@ -97,9 +90,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     await condition(() => !paused || deleted)
   }
 
-  function updateCursors(
-    stateMessages: Array<{stream?: string; data?: unknown}> | undefined,
-  ) {
+  function updateCursors(stateMessages: Array<{ stream?: string; data?: unknown }> | undefined) {
     if (!stateMessages) return
     for (const msg of stateMessages) {
       if (msg.stream) {
@@ -163,9 +154,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
 
       await tickIteration()
 
-      const complete = result.stream_statuses?.some(
-        (s) => s.status === 'complete',
-      )
+      const complete = result.stream_statuses?.some((s) => s.status === 'complete')
       if (complete) break
     }
   }
@@ -192,10 +181,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
       }
 
       // Wait for events or 60s timeout
-      await condition(
-        () => eventBuffer.length > 0 || deleted,
-        60_000,
-      )
+      await condition(() => eventBuffer.length > 0 || deleted, 60_000)
 
       if (eventBuffer.length === 0 && !deleted) continue
       if (deleted) {

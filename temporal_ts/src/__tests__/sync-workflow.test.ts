@@ -1,8 +1,8 @@
-import {describe, it, expect, beforeAll, afterAll} from 'vitest'
-import {TestWorkflowEnvironment} from '@temporalio/testing'
-import {Worker} from '@temporalio/worker'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { TestWorkflowEnvironment } from '@temporalio/testing'
+import { Worker } from '@temporalio/worker'
 import path from 'node:path'
-import type {SyncActivities, CategorizedMessages} from '../types'
+import type { SyncActivities, CategorizedMessages } from '../types'
 
 // workflowsPath must point to compiled JS (Temporal bundles it for V8 sandbox)
 const workflowsPath = path.resolve(process.cwd(), 'dist/workflows.js')
@@ -10,9 +10,9 @@ const workflowsPath = path.resolve(process.cwd(), 'dist/workflows.js')
 const config = {
   source_name: 'stripe',
   destination_name: 'postgres',
-  source_config: {api_key: 'sk_test_xxx'},
-  destination_config: {connection_string: 'postgres://localhost/test'},
-  streams: [{name: 'customers'}, {name: 'products'}],
+  source_config: { api_key: 'sk_test_xxx' },
+  destination_config: { connection_string: 'postgres://localhost/test' },
+  streams: [{ name: 'customers' }, { name: 'products' }],
 }
 
 const emptyResult: CategorizedMessages = {
@@ -23,13 +23,11 @@ const emptyResult: CategorizedMessages = {
   messages: [],
 }
 
-function stubActivities(
-  overrides: Partial<SyncActivities> = {},
-): SyncActivities {
+function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities {
   return {
     healthCheck: async () => ({
-      source: {status: 'succeeded'},
-      destination: {status: 'succeeded'},
+      source: { status: 'succeeded' },
+      destination: { status: 'succeeded' },
     }),
     sourceSetup: async () => {},
     destinationSetup: async () => {},
@@ -37,7 +35,7 @@ function stubActivities(
     destinationTeardown: async () => {},
     backfillPage: async () => emptyResult,
     writeBatch: async () => emptyResult,
-    processEvent: async () => ({records_written: 0, state: {}}),
+    processEvent: async () => ({ records_written: 0, state: {} }),
     ...overrides,
   }
 }
@@ -91,7 +89,7 @@ describe('SyncWorkflow', () => {
                 {
                   type: 'record',
                   stream,
-                  data: {id: `obj_${backfillCallCount}`},
+                  data: { id: `obj_${backfillCallCount}` },
                   emitted_at: Date.now(),
                 },
               ],
@@ -109,14 +107,12 @@ describe('SyncWorkflow', () => {
             {
               type: 'state' as const,
               stream: 'customers',
-              data: {cursor: 'abc'},
+              data: { cursor: 'abc' },
             },
           ],
           errors: [],
           stream_statuses: [],
-          messages: [
-            {type: 'state', stream: 'customers', data: {cursor: 'abc'}},
-          ],
+          messages: [{ type: 'state', stream: 'customers', data: { cursor: 'abc' } }],
         }),
       }),
     })

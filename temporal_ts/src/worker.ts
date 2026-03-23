@@ -1,5 +1,5 @@
-import {NativeConnection, Worker} from '@temporalio/worker'
-import {createActivities} from './activities'
+import { NativeConnection, Worker } from '@temporalio/worker'
+import { createActivities } from './activities'
 
 async function main() {
   const temporalAddress = process.env.TEMPORAL_ADDRESS || 'localhost:7233'

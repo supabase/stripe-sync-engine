@@ -1,9 +1,9 @@
-import {describe, it, expect} from 'vitest'
-import {TestWorkflowEnvironment} from '@temporalio/testing'
-import {Worker} from '@temporalio/worker'
-import {createActivities} from '../../activities'
-import type {SyncConfig} from '../../types'
-import {spawn, ChildProcess} from 'node:child_process'
+import { describe, it, expect } from 'vitest'
+import { TestWorkflowEnvironment } from '@temporalio/testing'
+import { Worker } from '@temporalio/worker'
+import { createActivities } from '../../activities'
+import type { SyncConfig } from '../../types'
+import { spawn, ChildProcess } from 'node:child_process'
 import net from 'node:net'
 import path from 'node:path'
 import pg from 'pg'
@@ -11,8 +11,7 @@ import Stripe from 'stripe'
 
 const STRIPE_API_KEY = process.env.STRIPE_API_KEY!
 const POSTGRES_URL =
-  process.env.POSTGRES_URL ||
-  'postgresql://postgres:postgres@localhost:5432/postgres'
+  process.env.POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/postgres'
 const repoRoot = path.resolve(process.cwd(), '..')
 
 function findFreePort(): Promise<number> {
@@ -38,7 +37,7 @@ function startStatelessApi(port: number): Promise<ChildProcess> {
 
     const proc = spawn('node', [apiEntry], {
       cwd: statelessDir,
-      env: {...process.env, PORT: String(port)},
+      env: { ...process.env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
@@ -61,8 +60,8 @@ function startStatelessApi(port: number): Promise<ChildProcess> {
             proc.kill('SIGTERM')
             reject(
               new Error(
-                `Stateless API failed to start on port ${port} after ${maxAttempts} attempts`,
-              ),
+                `Stateless API failed to start on port ${port} after ${maxAttempts} attempts`
+              )
             )
           }
         })
@@ -76,10 +75,7 @@ function startStatelessApi(port: number): Promise<ChildProcess> {
 }
 
 function schemaName(): string {
-  const ts = new Date()
-    .toISOString()
-    .replace(/[-:T]/g, '')
-    .slice(0, 14)
+  const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
   const rand = Math.floor(Math.random() * 1000)
   return `temporal_e2e_${ts}_${rand}`
 }
@@ -112,19 +108,16 @@ describe(
             connection_string: POSTGRES_URL,
             schema,
           },
-          streams: [{name: 'products'}],
+          streams: [{ name: 'products' }],
         }
 
         testEnv = await TestWorkflowEnvironment.createLocal()
 
-        const handle = await testEnv.client.workflow.start(
-          'syncWorkflow',
-          {
-            args: [config],
-            workflowId: `temporal-e2e-${schema}`,
-            taskQueue: 'e2e-queue',
-          },
-        )
+        const handle = await testEnv.client.workflow.start('syncWorkflow', {
+          args: [config],
+          workflowId: `temporal-e2e-${schema}`,
+          taskQueue: 'e2e-queue',
+        })
 
         const worker = await Worker.create({
           connection: testEnv.nativeConnection,
@@ -153,22 +146,17 @@ describe(
           // Verify data before teardown
           try {
             const result = await pgClient!.query(
-              `SELECT count(*) AS cnt FROM "${schema}"."products"`,
+              `SELECT count(*) AS cnt FROM "${schema}"."products"`
             )
             const count = parseInt(result.rows[0].cnt, 10)
-            console.log(
-              `  Postgres: ${schema}.products has ${count} rows`,
-            )
-            if (count === 0)
-              verificationError = `Expected > 0 products, got ${count}`
+            console.log(`  Postgres: ${schema}.products has ${count} rows`)
+            if (count === 0) verificationError = `Expected > 0 products, got ${count}`
 
             const row = await pgClient!.query(
-              `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."products" LIMIT 1`,
+              `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."products" LIMIT 1`
             )
             const sample = row.rows[0]
-            console.log(
-              `  Sample: ${sample.id} → ${sample.name}`,
-            )
+            console.log(`  Sample: ${sample.id} → ${sample.name}`)
             if (!sample.id.startsWith('prod_'))
               verificationError = `Expected prod_ prefix, got ${sample.id}`
           } catch (e: any) {
@@ -192,9 +180,7 @@ describe(
       } finally {
         if (pgClient) {
           if (!process.env.KEEP_TEST_DATA) {
-            await pgClient
-              .query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-              .catch(() => {})
+            await pgClient.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {})
           }
           await pgClient.end().catch(() => {})
         }
@@ -232,19 +218,16 @@ describe(
             connection_string: POSTGRES_URL,
             schema,
           },
-          streams: [{name: 'products'}],
+          streams: [{ name: 'products' }],
         }
 
         testEnv = await TestWorkflowEnvironment.createLocal()
 
-        const handle = await testEnv.client.workflow.start(
-          'syncWorkflow',
-          {
-            args: [config],
-            workflowId: `temporal-e2e-live-${schema}`,
-            taskQueue: 'e2e-queue',
-          },
-        )
+        const handle = await testEnv.client.workflow.start('syncWorkflow', {
+          args: [config],
+          workflowId: `temporal-e2e-live-${schema}`,
+          taskQueue: 'e2e-queue',
+        })
 
         const worker = await Worker.create({
           connection: testEnv.nativeConnection,
@@ -268,13 +251,11 @@ describe(
           }
 
           // Trigger a product update via Stripe API
-          const products = await stripe.products.list({limit: 1})
+          const products = await stripe.products.list({ limit: 1 })
           const product = products.data[0]
           const newName = `temporal-e2e-${Date.now()}`
-          await stripe.products.update(product.id, {name: newName})
-          console.log(
-            `  Updated product ${product.id} → ${newName}`,
-          )
+          await stripe.products.update(product.id, { name: newName })
+          console.log(`  Updated product ${product.id} → ${newName}`)
 
           // Fetch the event from Stripe events API
           await new Promise((r) => setTimeout(r, 2000))
@@ -293,14 +274,11 @@ describe(
 
           try {
             const result = await pgClient!.query(
-              `SELECT count(*) AS cnt FROM "${schema}"."products"`,
+              `SELECT count(*) AS cnt FROM "${schema}"."products"`
             )
             const count = parseInt(result.rows[0].cnt, 10)
-            console.log(
-              `  Postgres: ${schema}.products has ${count} rows`,
-            )
-            if (count === 0)
-              verificationError = `Expected > 0 products, got ${count}`
+            console.log(`  Postgres: ${schema}.products has ${count} rows`)
+            if (count === 0) verificationError = `Expected > 0 products, got ${count}`
           } catch (e: any) {
             verificationError = `DB verification failed: ${e.message}`
           }
@@ -318,9 +296,7 @@ describe(
       } finally {
         if (pgClient) {
           if (!process.env.KEEP_TEST_DATA) {
-            await pgClient
-              .query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-              .catch(() => {})
+            await pgClient.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {})
           }
           await pgClient.end().catch(() => {})
         }
@@ -331,5 +307,5 @@ describe(
       }
     })
   },
-  {timeout: 120_000},
+  { timeout: 120_000 }
 )
