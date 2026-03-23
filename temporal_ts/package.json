@@ -1,0 +1,23 @@
+{
+  "name": "temporal-ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run src/__tests__/sync-workflow.test.ts",
+    "test:e2e": "vitest run src/__tests__/e2e/"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0"
+  },
+  "devDependencies": {
+    "@temporalio/testing": "^1.11.0",
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0",
+    "stripe": "^17.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

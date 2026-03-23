@@ -1,0 +1,9 @@
+services:
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports: ['7233:7233']
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports: ['8080:8080']
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
