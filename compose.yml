@@ -1,4 +1,6 @@
 services:
+  # --- Core services (used by unit + integration + e2e tests) ---
+
   postgres:
     image: postgres:18
     ports:
@@ -36,3 +38,37 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # --- Temporal (used by temporal_ts and temporal_ruby e2e tests) ---
+
+  temporal-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    healthcheck:
+      test: pg_isready -U temporal
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - '7233:7233'
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-db
+      - BIND_ON_IP=0.0.0.0
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'tctl', 'cluster', 'health']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s

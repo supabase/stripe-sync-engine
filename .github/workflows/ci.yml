@@ -129,6 +129,46 @@ jobs:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
 
+  temporal-ts-test:
+    name: Temporal TS tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start services
+        run: docker compose up -d --wait
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install monorepo dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Install temporal_ts dependencies & build
+        run: cd temporal_ts && npm install && npm run build
+
+      - name: Unit tests
+        run: cd temporal_ts && npm test
+
+      - name: E2E tests (Docker Temporal)
+        run: |
+          if [ -z "$STRIPE_API_KEY" ]; then
+            echo "::warning::Temporal e2e tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
+            exit 0
+          fi
+          cd temporal_ts && npx vitest run src/__tests__/e2e/docker-e2e.test.ts
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          TEMPORAL_ADDRESS: 'localhost:7233'
+
   docker-build:
     name: Docker build
     runs-on: ubuntu-24.04
