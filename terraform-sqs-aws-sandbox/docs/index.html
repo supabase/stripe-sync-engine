@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sync-engine-infra-sandbox</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --purple: #bc8cff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+    h1 code { color: var(--accent); font-size: 1.8rem; }
+    .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 1.1rem; }
+    h2 {
+      font-size: 1.3rem;
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    p { margin-bottom: 1rem; color: var(--muted); }
+    strong, b { color: var(--text); }
+    .diagram-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .mermaid { text-align: center; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    th {
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      border-bottom: 2px solid var(--border);
+      color: var(--text);
+      font-weight: 600;
+    }
+    td {
+      padding: 0.5rem 0.8rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+    }
+    td code {
+      background: var(--surface);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--green);
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin: 1rem 0;
+    }
+    code { font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace; }
+    ul { margin: 0.5rem 0 1rem 1.5rem; }
+    li { margin-bottom: 0.3rem; color: var(--muted); }
+    li strong { color: var(--text); }
+    .tree { color: var(--muted); }
+    .note {
+      background: rgba(88, 166, 255, 0.1);
+      border-left: 3px solid var(--accent);
+      padding: 0.8rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .note strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<h1><code>sync-engine-infra-sandbox</code></h1>
+<p class="subtitle">End-to-end streaming pipeline: webhook ingestion through to PostgreSQL, with full lifecycle observability.</p>
+
+<h2>Architecture</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+flowchart TD
+    W([webhook POST]) --> WR
+
+    WR["<b>sync-message-producer</b><br/>Ruby Lambda + Function URL<br/><i>receives webhook, calls /read, queues to SQS</i>"]
+
+    WR -- "POST /read (NDJSON streaming)" --> SE
+    WR -- "SQS send_message" --> SQS
+
+    SE["<b>sync-engine</b><br/>Node.js on ECS Fargate (behind ALB)<br/><br/>GET /health · POST /read · POST /write<br/>POST /log · GET /events"]
+
+    SQS[["SQS Queue"]]
+
+    SQS -- "trigger" --> C
+
+    C["<b>sync-message-consumer</b><br/>Ruby Lambda (SQS trigger)<br/><i>dequeues events, POSTs to /write</i>"]
+
+    C -- "POST /write (NDJSON streaming)" --> SE
+    SE -- "INSERT" --> PG
+
+    PG[("PostgreSQL<br/>RDS")]
+  </pre>
+</div>
+
+<div class="note">
+  <strong>Design constraint:</strong> Node.js is the <strong>only</strong> component that talks to PostgreSQL. Ruby handles SQS and HTTP transport.
+</div>
+
+<h2>Sequence Diagram</h2>
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    participant W as Webhook Sender
+    participant R as sync-message-producer<br/>(Ruby Lambda)
+    participant S as sync-engine<br/>(Node.js ECS)
+    participant Q as SQS Queue
+    participant C as sync-message-consumer<br/>(Ruby Lambda)
+    participant P as PostgreSQL<br/>(RDS)
+
+    W->>R: POST webhook (webhook.received)
+    R->>S: POST /read
+
+    loop repeats 3x, 10s apart
+        S-->>R: NDJSON streaming (message.read)
+        R->>Q: SQS send_message (sqs.enqueued)
+        Q->>C: trigger Lambda (sqs.dequeued)
+        C->>S: POST /write NDJSON
+        S->>P: INSERT (message.written)
+        S-->>C: NDJSON confirm (sync_status.received)
+    end
+
+    R->>W: {events_queued: 3}
+  </pre>
+</div>
+
+<h2>Event Lifecycle</h2>
+<p>Each event passes through 6 observable stages, logged to the <code>event_log</code> table:</p>
+<table>
+  <thead>
+    <tr><th>Stage</th><th>Where</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>webhook.received</code></td><td>Ruby producer → /log</td><td>Webhook payload arrived</td></tr>
+    <tr><td><code>message.read</code></td><td>Node.js /read</td><td>Event generated and streamed to caller</td></tr>
+    <tr><td><code>sqs.enqueued</code></td><td>Ruby producer → /log</td><td>Event sent to SQS</td></tr>
+    <tr><td><code>sqs.dequeued</code></td><td>Ruby consumer → /log</td><td>Consumer picked up event from SQS</td></tr>
+    <tr><td><code>message.written</code></td><td>Node.js /write</td><td>Event inserted into PostgreSQL</td></tr>
+    <tr><td><code>sync_status.received</code></td><td>Ruby consumer → /log</td><td>Consumer received write confirmation</td></tr>
+  </tbody>
+</table>
+
+<p>With 3 events per webhook (10s apart), the e2e test proves streaming — each event's full lifecycle completes in ~150ms before the next event is emitted:</p>
+
+<pre><code>  +   0.00s            test_xxx  webhook.received
+  +   0.02s      evt_test_xxx_0  message.read
+  +   0.08s      evt_test_xxx_0  sqs.enqueued
+  +   0.13s      evt_test_xxx_0  sqs.dequeued
+  +   0.15s      evt_test_xxx_0  message.written
+  +   0.16s      evt_test_xxx_0  sync_status.received
+  +  10.02s      evt_test_xxx_1  message.read
+  ...
+  +  20.13s      evt_test_xxx_2  sync_status.received</code></pre>
+
+<h2>Infrastructure</h2>
+<p>All managed by Terraform (<code>main.tf</code>):</p>
+<ul>
+  <li><strong>RDS PostgreSQL</strong> — db.t4g.micro, public, PostgreSQL 16</li>
+  <li><strong>SQS queue</strong> — sync-engine-events, 120s visibility timeout</li>
+  <li><strong>ECR</strong> — Docker image registry for sync-engine</li>
+  <li><strong>ECS Fargate</strong> — 256 CPU / 512 MiB, single task, public subnet</li>
+  <li><strong>ALB</strong> — Internet-facing, 120s idle timeout (important for streaming)</li>
+  <li><strong>Lambda: sync-message-producer</strong> — Ruby 3.3, arm64, Function URL (no auth)</li>
+  <li><strong>Lambda: sync-message-consumer</strong> — Ruby 3.3, arm64, SQS event source (batch size 10)</li>
+</ul>
+
+<h2>Project Structure</h2>
+<pre class="tree"><code>├── main.tf                          # Terraform: all AWS resources
+├── variables.tf                     # Terraform: region, db credentials
+├── outputs.tf                       # Terraform: URLs, connection strings
+├── build.sh                         # Build Lambda zips + Docker image, push to ECR
+├── test_e2e.sh                      # End-to-end streaming pipeline test
+├── lambda/
+│   ├── producer/
+│   │   └── lambda_function.rb       # Receives webhooks, calls /read, queues to SQS
+│   ├── sync-engine/
+│   │   ├── server.mjs               # Node.js HTTP server (ECS Fargate)
+│   │   ├── package.json             # Dependencies (pg)
+│   │   └── Dockerfile               # node:20-slim container
+│   └── consumer/
+│       ├── lambda_function.rb       # SQS consumer, POSTs to /write via sync-engine
+│       └── Gemfile                  # No external gems (stdlib only)</code></pre>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#161b22',
+      primaryColor: '#1f6feb',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#30363d',
+      lineColor: '#8b949e',
+      secondaryColor: '#21262d',
+      tertiaryColor: '#161b22',
+    }
+  });
+</script>
+
+</body>
+</html>

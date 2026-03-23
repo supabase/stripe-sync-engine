@@ -1,0 +1,23 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.tfplan
+tfplan
+.terraform.lock.hcl
+
+# Environment
+.env
+.envrc
+*.auto.tfvars
+
+# Lambda build artifacts
+lambda/**/*.zip
+lambda/consumer/vendor/
+lambda/consumer/.bundle/
+lambda/consumer/Gemfile.lock
+
+# Node.js
+lambda/sync-engine/node_modules/
+lambda/sync-engine/package-lock.json

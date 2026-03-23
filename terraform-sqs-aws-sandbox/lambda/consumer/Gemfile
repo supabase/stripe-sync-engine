@@ -1,0 +1,2 @@
+# No external gems — only stdlib (net/http, json, uri)
+source 'https://rubygems.org'
