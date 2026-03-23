@@ -3,15 +3,16 @@
 require 'temporalio/activity'
 require 'faraday'
 require 'json'
+require_relative '../ndjson'
 
 module SyncActivities
   # Shared HTTP client behavior for all activities
   module EngineClient
+    HEARTBEAT_INTERVAL = 100
+
     def initialize(engine_url:)
       @engine_url = engine_url
-      @conn = Faraday.new(url: engine_url) do |f|
-        f.response :raise_error
-      end
+      @conn = Faraday.new(url: engine_url)
     end
 
     private
@@ -26,10 +27,6 @@ module SyncActivities
       }
       params['state'] = state if state
       params.to_json
-    end
-
-    def parse_ndjson(body)
-      body.to_s.split("\n").reject(&:empty?).map { |line| JSON.parse(line) }
     end
 
     def categorize_messages(messages)
@@ -49,6 +46,17 @@ module SyncActivities
       end
       cursors
     end
+
+    # Stream NDJSON from a Faraday request, heartbeating every HEARTBEAT_INTERVAL records.
+    def stream_messages(method, path, &block)
+      ctx = Temporalio::Activity::Context.current
+      on_msg = proc do |_msg, count|
+        ctx.heartbeat({ 'records' => count }) if (count % HEARTBEAT_INTERVAL).zero?
+      end
+      messages = Ndjson.stream_response(@conn, method, path, on_message: on_msg, &block)
+      ctx.heartbeat({ 'records' => messages.length }) unless (messages.length % HEARTBEAT_INTERVAL).zero?
+      messages
+    end
   end
 
   # GET /check — validate source + destination connectivity
@@ -59,6 +67,8 @@ module SyncActivities
       resp = @conn.get('/check') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
       end
+      raise Faraday::Error, "HTTP #{resp.status}" unless resp.success?
+
       JSON.parse(resp.body)
     end
   end
@@ -68,9 +78,11 @@ module SyncActivities
     include EngineClient
 
     def execute(config)
-      @conn.post('/setup') do |req|
+      resp = @conn.post('/setup') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
       end
+      raise Faraday::Error, "HTTP #{resp.status}" unless resp.success?
+
       nil
     end
   end
@@ -80,9 +92,11 @@ module SyncActivities
     include EngineClient
 
     def execute(config)
-      @conn.post('/setup') do |req|
+      resp = @conn.post('/setup') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
       end
+      raise Faraday::Error, "HTTP #{resp.status}" unless resp.success?
+
       nil
     end
   end
@@ -94,14 +108,14 @@ module SyncActivities
     def execute(config, stream, cursor)
       state = cursor ? { stream => cursor } : {}
 
-      resp = @conn.post('/read') do |req|
+      messages = stream_messages(:post, '/read') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(
           config, state: state, streams: [{ 'name' => stream }]
         )
         req.headers['Content-Type'] = 'application/x-ndjson'
       end
 
-      categorize_messages(parse_ndjson(resp.body))
+      categorize_messages(messages)
     end
   end
 
@@ -112,13 +126,13 @@ module SyncActivities
     def execute(config, records)
       ndjson_body = records.map { |r| JSON.generate(r) }.join("\n") + "\n"
 
-      resp = @conn.post('/write') do |req|
+      messages = stream_messages(:post, '/write') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
         req.headers['Content-Type'] = 'application/x-ndjson'
         req.body = ndjson_body
       end
 
-      categorize_messages(parse_ndjson(resp.body))
+      categorize_messages(messages)
     end
   end
 
@@ -128,27 +142,24 @@ module SyncActivities
 
     def execute(config, event)
       # Pass event through source
-      read_resp = @conn.post('/read') do |req|
+      read_messages = stream_messages(:post, '/read') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
         req.headers['Content-Type'] = 'application/x-ndjson'
         req.body = JSON.generate(event) + "\n"
       end
 
-      messages = parse_ndjson(read_resp.body)
-      records = messages.select { |m| m['type'] == 'record' }
-
+      records = read_messages.select { |m| m['type'] == 'record' }
       return { 'records_written' => 0, 'state' => {} } if records.empty?
 
       # Forward records to destination
       ndjson_body = records.map { |r| JSON.generate(r) }.join("\n") + "\n"
 
-      write_resp = @conn.post('/write') do |req|
+      write_messages = stream_messages(:post, '/write') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
         req.headers['Content-Type'] = 'application/x-ndjson'
         req.body = ndjson_body
       end
 
-      write_messages = parse_ndjson(write_resp.body)
       {
         'records_written' => records.length,
         'state' => extract_cursors(write_messages)
@@ -161,9 +172,11 @@ module SyncActivities
     include EngineClient
 
     def execute(config)
-      @conn.post('/teardown') do |req|
+      resp = @conn.post('/teardown') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
       end
+      raise Faraday::Error, "HTTP #{resp.status}" unless resp.success?
+
       nil
     end
   end
@@ -173,9 +186,11 @@ module SyncActivities
     include EngineClient
 
     def execute(config)
-      @conn.post('/teardown') do |req|
+      resp = @conn.post('/teardown') do |req|
         req.headers['X-Sync-Params'] = sync_params_header(config)
       end
+      raise Faraday::Error, "HTTP #{resp.status}" unless resp.success?
+
       nil
     end
   end
