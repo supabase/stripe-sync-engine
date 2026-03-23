@@ -19,8 +19,22 @@ if (fs.existsSync(PUBLIC_DIR)) {
   }
 }
 
-// Build pages
-const pages = fs.readdirSync(PAGES_DIR).filter((f) => f.endsWith('.md'))
+// Collect all .md files recursively under PAGES_DIR
+function collectPages(dir, base = '') {
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  const pages = []
+  for (const entry of entries) {
+    const rel = base ? `${base}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      pages.push(...collectPages(path.join(dir, entry.name), rel))
+    } else if (entry.name.endsWith('.md')) {
+      pages.push(rel)
+    }
+  }
+  return pages
+}
+
+const pages = collectPages(PAGES_DIR)
 
 for (const page of pages) {
   const source = fs.readFileSync(path.join(PAGES_DIR, page), 'utf8')
@@ -41,6 +55,7 @@ for (const page of pages) {
   const output = LAYOUT.replace('{{title}}', title).replace('{{content}}', html)
 
   const outName = page.replace(/\.md$/, '.html')
+  fs.mkdirSync(path.join(OUT_DIR, path.dirname(outName)), { recursive: true })
   fs.writeFileSync(path.join(OUT_DIR, outName), output)
   console.log(`  ${page} → ${outName}`)
 }
