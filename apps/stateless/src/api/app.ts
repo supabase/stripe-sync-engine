@@ -18,6 +18,8 @@ export function createApp(resolver: ConnectorResolver) {
     return c.json({ error: 'Internal server error' }, 500)
   })
 
+  app.get('/health', (c) => c.json({ ok: true }))
+
   /** Parse and validate X-Sync-Params header, or throw 400. */
   function requireSyncParams(header: string | undefined): SyncParamsType {
     if (!header) {

@@ -72,6 +72,8 @@ export function createApp(options?: AppOptions) {
     },
   })
 
+  app.get('/health', (c) => c.json({ ok: true }))
+
   // ── Path param schemas ──────────────────────────────────────────
 
   const CredIdParam = z.object({
