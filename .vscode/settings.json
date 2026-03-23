@@ -1,5 +1,9 @@
 {
   "deno.enable": true,
   "deno.enablePaths": ["./packages/sync-engine/src/supabase/edge-functions"],
-  "explorer.sortOrder": "type"
+  "explorer.sortOrder": "type",
+  "rubyLsp.rubyVersionManager": {
+    "identifier": "rbenv"
+  },
+  "rubyLsp.bundleGemfile": "temporal/Gemfile"
 }
