@@ -761,8 +761,7 @@ export class PostgresClient {
   }
 
   /**
-   * Find a run that completed successfully (closed with no object errors)
-   * within the given time window.
+   * Find a run that completed (closed) within the given time window.
    *
    * @param intervalSeconds - How far back to look, in seconds.
    */
@@ -776,12 +775,6 @@ export class PostgresClient {
        WHERE r."_account_id" = $1
          AND r.closed_at IS NOT NULL
          AND r.closed_at >= now() - make_interval(secs => $2)
-         AND NOT EXISTS (
-           SELECT 1 FROM "${this.syncSchema}"."_sync_obj_runs" o
-           WHERE o."_account_id" = r."_account_id"
-             AND o.run_started_at = r.started_at
-             AND o.status = 'error'
-         )
        LIMIT 1`,
       [accountId, intervalSeconds]
     )
