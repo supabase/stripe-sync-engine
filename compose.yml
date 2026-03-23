@@ -39,7 +39,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # --- Temporal (used by temporal_ts and temporal_ruby e2e tests) ---
+  # --- Temporal (used by infra/temporal_ts and infra/temporal_ruby e2e tests) ---
 
   temporal-db:
     image: postgres:16-alpine

@@ -367,7 +367,7 @@ Stripe ──webhook──▶ Webhook Bridge ──signal──▶ SyncWorkflow
 ## File map
 
 ```
-temporal_ruby/
+infra/temporal_ruby/
 ├── .ruby-version                   # Ruby 3.3.4
 ├── Gemfile                         # temporalio, faraday, rspec, pg, stripe
 ├── lib/

@@ -5,5 +5,5 @@
   "rubyLsp.rubyVersionManager": {
     "identifier": "rbenv"
   },
-  "rubyLsp.bundleGemfile": "temporal_ruby/Gemfile"
+  "rubyLsp.bundleGemfile": "infra/temporal_ruby/Gemfile"
 }
