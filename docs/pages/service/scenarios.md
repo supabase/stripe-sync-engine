@@ -10,7 +10,7 @@ Scenarios that validate the Sync API layer — credential management, sync lifec
 POST /credentials  { type: "postgres", host: "...", port: 5432, ... }
   → cred_pg_abc123
 
-POST /syncs  { source: { type: "stripe-api-core", ... }, destination: { type: "postgres", credential_id: "cred_pg_abc123", ... } }
+POST /syncs  { source: { type: "stripe", ... }, destination: { type: "postgres", credential_id: "cred_pg_abc123", ... } }
   → sync starts, destination connects using the credential
 ```
 
@@ -45,7 +45,7 @@ The standard flow: sync Stripe data into the user's own Postgres.
 ```
 POST /credentials  { type: "stripe", api_key: "sk_test_..." }
 POST /credentials  { type: "postgres", host: "user-db.example.com", ... }
-POST /syncs        { source: { type: "stripe-api-core", credential_id: "cred_stripe_..." },
+POST /syncs        { source: { type: "stripe", credential_id: "cred_stripe_..." },
                      destination: { type: "postgres", schema_name: "stripe", credential_id: "cred_pg_..." } }
 ```
 
@@ -63,7 +63,7 @@ POST /syncs        { source: { type: "stripe-api-core", credential_id: "cred_str
 ### Stripe → Google Sheets
 
 ```
-POST /syncs  { source: { type: "stripe-api-core", credential_id: "cred_stripe_..." },
+POST /syncs  { source: { type: "stripe", credential_id: "cred_stripe_..." },
                destination: { type: "google-sheets", google_sheet_id: "1abc...", credential_id: "cred_goog_..." } }
 ```
 
@@ -78,8 +78,8 @@ POST /syncs  { source: { type: "stripe-api-core", credential_id: "cred_stripe_..
 ### Two syncs targeting one Postgres database
 
 ```
-Sync A: stripe-api-core      → postgres (schema: "stripe")
-Sync B: stripe-api-reporting  → postgres (schema: "reporting")
+Sync A: stripe  → postgres (schema: "stripe")
+Sync B: stripe  → postgres (schema: "reporting")
 Both target the same Postgres host with different schemas.
 ```
 
@@ -92,9 +92,9 @@ Both target the same Postgres host with different schemas.
 
 ## Files
 
-| File              | Description                                                      |
-| ----------------- | ---------------------------------------------------------------- |
-| `scenarios.md`    | This document                                                    |
-| `ARCHITECTURE.md` | Sync resource, source types, destination types, status lifecycle |
-| `sync-types.ts`   | Credential, Sync, SourceConfig, DestinationConfig                |
-| `sync-api.ts`     | API route map                                                    |
+| File                                    | Description                                          |
+| --------------------------------------- | ---------------------------------------------------- |
+| `scenarios.md`                          | This document                                        |
+| `ARCHITECTURE.md`                       | System layers, core model, source/destination types  |
+| `packages/protocol/src/protocol.ts`     | Source, Destination interfaces; message types        |
+| `packages/stateful-sync/src/service.ts` | `StatefulSync` class — credential + state management |

@@ -2,7 +2,7 @@
 
 ## Context
 
-The sync engine is a pure function: `runSync(params, source, destination) → AsyncIterable<StateMessage>`. It deliberately ignores four concerns that any real deployment needs: **credentials**, **config**, **state**, and **logs**. The sync service is the stateful layer that manages these concerns and calls the engine.
+The sync engine is a pure function: `createEngine(params, { source, destination })`. It deliberately ignores four concerns that any real deployment needs: **credentials**, **config**, **state**, and **logs**. The sync service (`StatefulSync` in `packages/stateful-sync`) is the stateful layer that manages these concerns and calls the engine.
 
 ---
 
@@ -30,19 +30,19 @@ Two distinct shapes exist for a sync:
 
 ### SyncConfig (stored form)
 
-What lives in the config store. Has credential **references**, no state:
+What lives in the config store. Has credential **references**, no embedded state:
 
 ```ts
 type SyncConfig = {
   id: string
-  source_credential_id: string // reference → CredentialStore
-  destination_credential_id: string // reference → CredentialStore
   source: {
     type: string // e.g. "stripe"
+    credential_id?: string // reference → CredentialStore
     [key: string]: unknown // non-sensitive source config
   }
   destination: {
     type: string // e.g. "postgres"
+    credential_id?: string // reference → CredentialStore
     [key: string]: unknown // non-sensitive destination config
   }
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
@@ -51,7 +51,7 @@ type SyncConfig = {
 
 ### SyncParams (resolved form)
 
-What the engine receives. Credentials inlined, state included. This is the existing `SyncParams` type from `packages/sync-protocol/src/protocol.ts`:
+What the engine receives. Credentials inlined, state passed separately. This is the `SyncParams` type from `@stripe/stateless-sync`:
 
 ```ts
 type SyncParams = {
@@ -71,15 +71,15 @@ The service resolves stored → resolved before calling the engine:
 ```ts
 function resolve(opts: {
   config: SyncConfig
-  sourceCred: Credential
-  destCred: Credential
+  sourceCred?: Credential
+  destCred?: Credential
   state?: Record<string, unknown>
 }): SyncParams {
   return {
     source: opts.config.source.type,
     destination: opts.config.destination.type,
-    source_config: { ...opts.config.source, ...opts.sourceCred.fields },
-    destination_config: { ...opts.config.destination, ...opts.destCred.fields },
+    source_config: { ...opts.config.source, ...opts.sourceCred?.fields },
+    destination_config: { ...opts.config.destination, ...opts.destCred?.fields },
     streams: opts.config.streams,
     state: opts.state,
   }
@@ -92,7 +92,7 @@ The engine never sees credential IDs, never knows where config came from, never 
 
 ## Four Store Interfaces
 
-Each concern gets a minimal generic interface. The sync service depends on these interfaces, not implementations.
+Each concern gets a minimal generic interface. `StatefulSync` depends on these interfaces, not implementations.
 
 ### CredentialStore
 
@@ -113,7 +113,7 @@ type Credential = {
 }
 ```
 
-Implementations: encrypted Postgres table, Vault, env vars (CLI), file (dev).
+Implementations: file-backed JSON (dev/CLI), encrypted Postgres table (cloud), Vault.
 
 ### ConfigStore
 
@@ -126,7 +126,7 @@ interface ConfigStore {
 }
 ```
 
-Implementations: Postgres table, JSON file (dev).
+Implementations: file-backed JSON (dev/CLI), Postgres table (cloud).
 
 ### StateStore
 
@@ -138,7 +138,7 @@ interface StateStore {
 }
 ```
 
-Implementations: Postgres `_sync_state` table, destination-embedded, JSON files (dev).
+Implementations: file-backed JSON (dev/CLI), Postgres `_sync_state` table (cloud).
 
 ### LogSink
 
@@ -155,7 +155,7 @@ type LogEntry = {
 }
 ```
 
-Implementations: stderr (CLI), Postgres table, CloudWatch, file.
+Implementations: stderr (CLI), NDJSON file (dev), Postgres table (cloud).
 
 ---
 
@@ -176,22 +176,22 @@ An alternative is injecting a `credentialProvider` into the source for per-reque
 
 ```
 1. Service resolves credentials → SyncParams (access_token inlined)
-2. runSync() runs, source paginates normally
+2. engine.run() runs, source paginates normally
 3. On page N, source gets 401 → yields ErrorMessage { failure_type: 'auth_error' }
 4. Service detects auth_error in the output stream
 5. Service refreshes:
    a. refreshToken(cred.fields.refresh_token) → new access_token
    b. credentialStore.set(credId, { ...cred, fields: { ...fields, access_token } })
 6. Service re-resolves SyncParams with fresh token
-7. Service re-runs runSync() — resumes from last checkpoint (near page N)
+7. Service re-runs engine — resumes from last checkpoint (near page N)
 ```
 
 ### Protocol change
 
-The `ErrorMessage.failure_type` enum gains `'auth_error'`:
+The `ErrorMessage.failure_type` enum includes `'auth_error'`:
 
 ```ts
-// packages/sync-protocol/src/protocol.ts — ErrorMessage
+// packages/protocol/src/protocol.ts — ErrorMessage
 failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
 ```
 
@@ -199,12 +199,12 @@ Sources yield `auth_error` on HTTP 401 or equivalent credential failures.
 
 ---
 
-## SyncService — The Composition Root
+## StatefulSync — The Composition Root
 
-The sync service wires everything together. It's not an abstraction — it's the caller code.
+`StatefulSync` wires everything together. It's not an abstraction — it's the caller code.
 
 ```ts
-class SyncService {
+class StatefulSync {
   private credentials: CredentialStore
   private configs: ConfigStore
   private states: StateStore
@@ -231,8 +231,12 @@ class SyncService {
 
     while (retries <= MAX_AUTH_RETRIES) {
       // Load credentials (fresh on each attempt — may have been refreshed)
-      const sourceCred = await this.credentials.get(config.source_credential_id)
-      const destCred = await this.credentials.get(config.destination_credential_id)
+      const sourceCred = config.source.credential_id
+        ? await this.credentials.get(config.source.credential_id)
+        : undefined
+      const destCred = config.destination.credential_id
+        ? await this.credentials.get(config.destination.credential_id)
+        : undefined
 
       // Load state (picks up checkpoints from previous attempt)
       const state = await this.states.get(syncId)
@@ -260,7 +264,7 @@ class SyncService {
       if (!authError) return // success — all streams completed
 
       // Refresh the failed credential and retry
-      await this.refreshCredential(config.source_credential_id)
+      await this.refreshCredential(config.source.credential_id!)
       retries++
     }
 
@@ -271,83 +275,51 @@ class SyncService {
 
 The four stores are injected via a named options object — the service doesn't know if they're Postgres, files, or in-memory.
 
-> **Note on `runSync()` vs `createEngine()`**: The service uses `createEngine()` directly (from `packages/sync-protocol/src/engine.ts`). The `runSync()` wrapper in `runSync.ts` is just `yield* createEngine(config, { source, destination }).run()` — a one-liner convenience. The engine is the real interface.
+> **Note on `createEngine()`**: `StatefulSync` uses `createEngine()` directly (from `@stripe/stateless-sync`). The engine is the real interface — `StatefulSync` adds only the store-loading and state-persistence wrapper around it.
 
 ---
 
 ## Deployment Configurations
 
-The same `SyncService` class works across all deployment modes by swapping store implementations:
+The same `StatefulSync` class works across all deployment modes by swapping store implementations. Both CLI and API use 4 file-based stores under `--data-dir` / `DATA_DIR` / `~/.stripe-sync`:
 
-### CLI (stateless)
-
-```ts
-const service = new SyncService({
-  credentials: envCredentialStore(), // reads from env vars / flags
-  configs: flagConfigStore(cliFlags), // builds config from CLI flags
-  states: pgStateStore(postgresUrl), // reads _sync_state from destination
-  logs: stderrLogSink(), // logs to stderr
-  connectors: preloadedConnectors({ source, destination }),
-})
-```
-
-### Local dev (file-backed)
+### Local dev / CLI / API (file-backed)
 
 ```ts
-const service = new SyncService({
-  credentials: fileCredentialStore('~/.sync-engine/credentials.json'),
-  configs: fileConfigStore('~/.sync-engine/syncs.json'),
-  states: fileStateStore('~/.sync-engine/state/'),
-  logs: fileLogSink('~/.sync-engine/logs/'),
-  connectors: autoInstallConnectors(),
+const service = new StatefulSync({
+  credentials: fileCredentialStore(path.join(dataDir, 'credentials.json')),
+  configs: fileConfigStore(path.join(dataDir, 'syncs.json')),
+  states: fileStateStore(path.join(dataDir, 'state.json')),
+  logs: fileLogSink(path.join(dataDir, 'logs.ndjson')),
+  connectors: createConnectorResolver(),
 })
 ```
 
 ### Cloud (Postgres + encrypted)
 
 ```ts
-const service = new SyncService({
+const service = new StatefulSync({
   credentials: pgCredentialStore({ pool, encryptionKey }), // encrypted at rest
   configs: pgConfigStore({ pool }),
   states: pgStateStore({ pool }),
-  logs: kafkaLogSink({ producer: kafkaProducer }),
+  logs: pgLogSink({ pool }),
   connectors: cachedConnectorResolver(),
 })
 ```
 
 ### What doesn't change
 
-The engine (`createEngine`, `runSync`), the source/destination connectors, the `SyncParams` shape, and the `SyncService.run()` method are identical across all deployment modes. Only the four store implementations vary.
-
----
-
-## How This Relates to Existing Code
-
-### Replaces
-
-- **`apps/control-plane-api/src/store.ts`** — current file store mixes credentials and config in one flat JSON file. Replaced by separate CredentialStore + ConfigStore.
-- **`packages/orchestrator-fs`** — FsOrchestrator's `run()` is essentially `SyncService.run()` with file-backed state. The orchestrator interface becomes unnecessary — it's just caller code.
-- **`packages/orchestrator-postgres`** — PostgresOrchestrator + PostgresStateManager. The 1000-line state manager covers v1 concerns (sync runs, object runs, task claiming). The v2 StateStore is much simpler — just per-stream cursors.
-
-### Keeps unchanged
-
-- **`packages/sync-protocol`** — `SyncParams`, `runSync()`, `createEngine()`, Source/Destination interfaces. The engine boundary is exactly right.
-- **`packages/source-stripe`** — source connector. Receives config with credentials already resolved.
-- **`packages/destination-postgres`** — destination connector. No changes needed.
-- **`v2-docs/cli-spec.md`** — the CLI spec. The CLI is just a specific wiring of the four stores.
-
-### Evolves
-
-- **`apps/control-plane-api`** — currently does CRUD for credentials and syncs in one store. Should be refactored to use separate CredentialStore + ConfigStore interfaces. The API routes stay the same.
+The engine (`createEngine`), the source/destination connectors, the `SyncParams` shape, and the `StatefulSync.run()` method are identical across all deployment modes. Only the four store implementations vary.
 
 ---
 
 ## Key Files
 
-| File                                     | Role                                                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `packages/sync-protocol/src/protocol.ts` | `SyncParams` (resolved form), `ErrorMessage` (needs `auth_error`), Source/Destination interfaces |
-| `packages/sync-protocol/src/engine.ts`   | `createEngine()` — the engine factory the service calls                                          |
-| `packages/sync-protocol/src/runSync.ts`  | `runSync()` — convenience wrapper over `createEngine().run()`                                    |
-| `apps/control-plane-api/src/store.ts`    | Current file store — to be replaced by separate stores                                           |
-| `apps/control-plane-api/src/schemas.ts`  | Credential/sync schemas (SyncConfig stored form)                                                 |
+| File                                    | Role                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/protocol/src/protocol.ts`     | `Source`/`Destination` interfaces, `ErrorMessage` (with `auth_error`), message types |
+| `packages/stateless-sync/src/engine.ts` | `createEngine()` — the engine factory the service calls                              |
+| `packages/stateful-sync/src/service.ts` | `StatefulSync` class, `resolve()` function                                           |
+| `packages/stateful-sync/src/stores.ts`  | Store interfaces: `CredentialStore`, `ConfigStore`, `StateStore`, `LogSink`          |
+| `apps/stateful/src/cli/index.ts`        | Stateful CLI entrypoint (wires file stores + StatefulSync)                           |
+| `apps/stateful/src/api/app.ts`          | Stateful HTTP API (CRUD + SSE sync execution)                                        |

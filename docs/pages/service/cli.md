@@ -1,31 +1,28 @@
 # CLI Specification
 
-Engine-layer CLI wrapping `runSync()` from sync-protocol.
+Engine-layer CLI wrapping `createEngine()` from `@stripe/stateless-sync`.
 No credentials store, no syncs CRUD, no service mode.
 
-## `stripe-sync` — run the pipeline
+## `sync-engine` — run the pipeline
 
 The default command. Discovers streams, builds the catalog, runs
-`source.read() → forward() → destination.write() → collect()`.
+`source.read() → engine → destination.write()`.
 
 ```sh
 # Minimal — Stripe → Postgres, all streams, full_refresh
-stripe-sync --api-key sk_test_... --database-url postgres://localhost/mydb
+sync-engine --api-key sk_test_... --database-url postgres://localhost/mydb
 
 # Filter streams
-stripe-sync --api-key sk_test_... --database-url postgres://... --streams customers,invoices
-
-# Incremental with state resume
-stripe-sync --api-key sk_test_... --database-url postgres://... --state state.jsonl
+sync-engine --api-key sk_test_... --database-url postgres://... --streams customers,invoices
 
 # Google Sheets destination (inferred from --sheets-id)
-stripe-sync --api-key sk_test_... --sheets-id 1abc...xyz --streams customers
+sync-engine --api-key sk_test_... --sheets-id 1abc...xyz --streams customers
 
-# From a JSON config file (SyncConfig shape)
-stripe-sync --config sync.json
+# From a JSON config file (SyncParams shape)
+sync-engine --config sync.json
 
-# Pipe SyncConfig via stdin
-cat sync.json | stripe-sync --config -
+# Pipe SyncParams via stdin
+cat sync.json | sync-engine --config -
 ```
 
 **Env var alternatives:**
@@ -33,7 +30,7 @@ cat sync.json | stripe-sync --config -
 ```sh
 export STRIPE_API_KEY=sk_test_...
 export DATABASE_URL=postgres://localhost/mydb
-stripe-sync   # picks up from env
+sync-engine   # picks up from env
 ```
 
 **Output contract:**
@@ -42,65 +39,52 @@ stripe-sync   # picks up from env
 - stderr → logs, errors, stream status
 - Exit 0 on success, non-zero on failure
 
-Capture state for resume:
-
-```sh
-stripe-sync ... > state.jsonl
-stripe-sync ... | tee state.jsonl
-```
-
-Then resume from where you left off:
-
-```sh
-stripe-sync --api-key sk_test_... --database-url postgres://... --state state.jsonl
-```
-
-## `stripe-sync discover`
+## `sync-engine discover`
 
 Maps to `source.discover({ config })`. Lists available streams.
 
 ```sh
 # Stream names, one per line
-stripe-sync discover --api-key sk_test_...
+sync-engine discover --api-key sk_test_...
 
 # Full CatalogMessage as JSON (with primary_key, json_schema)
-stripe-sync discover --api-key sk_test_... --json
+sync-engine discover --api-key sk_test_... --json
 ```
 
-## `stripe-sync check`
+## `sync-engine check`
 
 Maps to `source.check({ config })` + `destination.check({ config })`.
 Validates connectivity on both ends.
 
 ```sh
-stripe-sync check --api-key sk_test_... --database-url postgres://...
+sync-engine check --api-key sk_test_... --database-url postgres://...
 # ✓ Source: connected
 # ✓ Destination: connected
 
 # Only checks source when no destination flags are present
-stripe-sync check --api-key sk_test_...
+sync-engine check --api-key sk_test_...
 # ✓ Source: connected
 ```
 
-## `stripe-sync spec`
+## `sync-engine spec`
 
 Maps to `source.spec()` / `destination.spec()`. Prints the connector's
 config JSON Schema.
 
 ```sh
-stripe-sync spec --source
+sync-engine spec --source
 # { "connection_specification": { ... api_key, base_url ... } }
 
-stripe-sync spec --destination
+sync-engine spec --destination
 # { "connection_specification": { ... connection_string, schema ... } }
 ```
 
-## `stripe-sync migrate`
+## `sync-engine migrate`
 
 Destination-specific. Creates/updates tables before first sync.
 
 ```sh
-stripe-sync migrate --database-url postgres://...
+sync-engine migrate --database-url postgres://...
 # Creates stream tables (e.g. customers, invoices) with (_pk, data) schema
 ```
 
@@ -116,27 +100,26 @@ The CLI infers which destination from the flags present:
 
 Pipe mode bypasses routing entirely — you pick the destination binary.
 
-## Flag → SyncConfig mapping
+## Flag → SyncParams mapping
 
-| Flag             | SyncConfig field                       | Env var           |
+| Flag             | SyncParams field                       | Env var           |
 | ---------------- | -------------------------------------- | ----------------- |
 | `--api-key`      | `source_config.api_key`                | `STRIPE_API_KEY`  |
 | `--base-url`     | `source_config.base_url`               | `STRIPE_BASE_URL` |
 | `--database-url` | `destination_config.connection_string` | `DATABASE_URL`    |
 | `--sheets-id`    | `destination_config.spreadsheet_id`    | —                 |
 | `--streams`      | `streams[].name` (comma-separated)     | —                 |
-| `--state`        | `state` (loaded from JSONL file)       | —                 |
-| `--config`       | entire `SyncConfig` from JSON file     | —                 |
+| `--config`       | entire `SyncParams` from JSON file     | —                 |
 
 `--config` overrides all other flags. When `--config -`, reads from stdin.
 
 ## Pipe mode
 
-Individual connector commands via `ts-cli.ts` for Unix composition.
+Individual connector commands via `ts-cli` for Unix composition.
 
 ```sh
-alias source-stripe='bun packages/ts-cli/src/index.ts ./packages/source-stripe2/src/index.ts'
-alias dest-postgres='bun packages/ts-cli/src/index.ts ./packages/destination-postgres2/src/index.ts'
+alias source-stripe='node packages/ts-cli/dist/index.js ./packages/source-stripe/dist/index.js'
+alias dest-postgres='node packages/ts-cli/dist/index.js ./packages/destination-postgres/dist/index.js'
 ```
 
 ### Source commands
@@ -187,7 +170,7 @@ source-stripe read --config '...' --catalog '...' \
   | jq -c '{type, stream, id: .data.id}'
 ```
 
-## SyncConfig JSON shape
+## SyncParams JSON shape
 
 For `--config sync.json`:
 
@@ -199,17 +182,14 @@ For `--config sync.json`:
   "destination_config": {
     "connection_string": "postgres://localhost/mydb"
   },
-  "streams": [{ "name": "customers", "sync_mode": "incremental" }, { "name": "invoices" }],
-  "state": {
-    "customers": { "pageCursor": "cus_abc123", "status": "pending" }
-  }
+  "streams": [{ "name": "customers", "sync_mode": "incremental" }, { "name": "invoices" }]
 }
 ```
 
-Fields match the `SyncConfig` type in `sync-protocol/src/types.ts`:
+Fields match the `SyncParams` type in `@stripe/stateless-sync`:
 
 ```ts
-interface SyncConfig {
+interface SyncParams {
   source_config: Record<string, unknown>
   destination_config: Record<string, unknown>
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>

@@ -4,7 +4,7 @@
 
 Design a product-quality CLI for the sync engine with a dead-simple one-liner experience that progressively discloses power. The CLI is stateless — sync state lives in the destination. Config is JSON-first (agentic-friendly). The CLI is a thin composition root over the existing `sync-protocol`, `source-stripe`, and `destination-postgres` packages.
 
-**Deliverable:** Commit as `v2-docs/cli-spec.md`. New package `apps/sync-engine-cli` (alongside existing `apps/cli`).
+**Package:** `apps/sync-engine` (`@stripe/sync-engine`).
 
 ---
 
@@ -310,7 +310,7 @@ sync-engine -c sync.json
 sync-engine -c '{"source_config":{"api_key":"sk_test_abc"},"destination_config":{"connection_string":"postgres://localhost/mydb"}}'
 
 # Level 6: programmatic (library, not CLI)
-import { runSync } from '@stripe/protocol'
+import { createEngine } from '@stripe/stateless-sync'
 ```
 
 ---
@@ -334,12 +334,11 @@ All sync logic stays in `sync-protocol`. All connector logic stays in source/des
 
 ### Package placement
 
-New package `apps/sync-engine-cli`. Binary name `sync-engine` in `package.json` `bin` field. Existing `apps/cli` remains untouched.
+Package `apps/sync-engine` (`@stripe/sync-engine`). Binary name `sync-engine` in `package.json` `bin` field.
 
 ### Key files
 
-- `packages/sync-protocol/src/protocol.ts` — SyncParams, Source, Destination interfaces
-- `packages/sync-protocol/src/runSync.ts` — `runSync()` pure function
-- `packages/sync-protocol/src/engine.ts` — `createEngine()`, `buildCatalog()`
-- `packages/source-stripe/src/backfill.ts` — Source spec, config schema, read()
-- `packages/destination-postgres/src/index.ts` — Destination spec, config schema, write()
+- `packages/protocol/src/protocol.ts` — `SyncParams`, `Source`, `Destination` interfaces
+- `packages/stateless-sync/src/engine.ts` — `createEngine()`
+- `packages/source-stripe/src/index.ts` — Source spec, config schema, `read()`
+- `packages/destination-postgres/src/index.ts` — Destination spec, config schema, `write()`

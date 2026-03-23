@@ -14,7 +14,6 @@ A sync run needs these values:
 | `source_config`      | `{"api_key":"sk_test_..."}`     | yes      |
 | `destination_config` | `{"connection_string":"pg://"}` | yes      |
 | `streams`            | `["customers","invoices"]`      | no       |
-| `state`              | `{"customers":{"cursor":"c1"}}` | no       |
 
 ## Config sources (highest priority first)
 
@@ -23,7 +22,7 @@ A sync run needs these values:
 Individual flags for each field:
 
 ```sh
-stripe-sync run \
+sync-engine \
   --source stripe \
   --destination postgres \
   --source-config '{"api_key":"sk_test_..."}' \
@@ -34,7 +33,7 @@ stripe-sync run \
 Or a single JSON blob:
 
 ```sh
-stripe-sync run --params '{
+sync-engine --params '{
   "source": "stripe",
   "destination": "postgres",
   "source_config": {"api_key": "sk_test_..."},
@@ -46,7 +45,7 @@ stripe-sync run --params '{
 
 ```sh
 # params.json has streams=["customers"], but CLI overrides to invoices
-stripe-sync run --params params.json --streams invoices
+sync-engine --params params.json --streams invoices
 ```
 
 ### 2. Environment variables
@@ -54,7 +53,7 @@ stripe-sync run --params params.json --streams invoices
 ```sh
 export SOURCE_CONFIG='{"api_key":"sk_test_..."}'
 export DESTINATION_CONFIG='{"connection_string":"postgresql://..."}'
-stripe-sync run --source stripe --destination postgres
+sync-engine --source stripe --destination postgres
 ```
 
 | Env var              | Populates            |
@@ -71,7 +70,7 @@ A `.env` file in the working directory is loaded automatically.
 ### 3. Config file
 
 ```sh
-stripe-sync run --config sync.json
+sync-engine --config sync.json
 ```
 
 Where `sync.json`:
@@ -99,7 +98,6 @@ Where `sync.json`:
 | `source`      | `stripe`                     |
 | `destination` | (none)                       |
 | `streams`     | all (discovered from source) |
-| `state`       | (none — full refresh)        |
 
 ## Resolution order
 
@@ -123,7 +121,7 @@ DESTINATION_CONFIG={"connection_string":"postgresql://localhost/mydb"}
 ```
 
 ```sh
-stripe-sync run --destination postgres
+sync-engine --destination postgres
 # source defaults to stripe
 # source_config from SOURCE_CONFIG env var
 # destination_config from DESTINATION_CONFIG env var
@@ -144,13 +142,13 @@ stripe-sync run --destination postgres
 ```sh
 SOURCE_CONFIG='{"api_key":"sk_test_..."}' \
 DESTINATION_CONFIG='{"connection_string":"postgresql://..."}' \
-stripe-sync run --config sync.json
+sync-engine --config sync.json
 ```
 
 ### One-liner (inline everything)
 
 ```sh
-stripe-sync run \
+sync-engine \
   --source stripe \
   --destination postgres \
   --source-config '{"api_key":"sk_test_..."}' \
@@ -161,14 +159,14 @@ stripe-sync run \
 ### Single JSON blob (pipe-friendly)
 
 ```sh
-cat sync-params.json | stripe-sync run --config -
+cat sync-params.json | sync-engine --config -
 ```
 
 ### Override a config file field
 
 ```sh
 # sync.json says streams=["customers"], but we want all streams
-stripe-sync run --config sync.json --streams '*'
+sync-engine --config sync.json --streams '*'
 ```
 
 ## Error messages

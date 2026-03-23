@@ -8,7 +8,7 @@
 
 3. **Subprocess-ready.** The protocol is designed so that any source or destination can be extracted into a standalone process that reads/writes NDJSON on stdin/stdout. A thin adapter bridges subprocess sources and destinations to the in-process TypeScript interfaces.
 
-4. **Resumable by default.** Sources emit `StateMessage` checkpoints between records. The orchestrator persists these and passes them back on restart, so syncs resume where they left off rather than starting over.
+4. **Resumable by default.** Sources emit `StateMessage` checkpoints between records. The engine persists these and passes them back on restart, so syncs resume where they left off rather than starting over.
 
 5. **Schema is discovered, not hardcoded.** Sources advertise available streams and their JSON Schemas via `CatalogMessage`. The destination uses this to create tables, validate records, and plan migrations.
 
@@ -16,14 +16,14 @@
 
 Every unit flowing through the engine is a `Message`, discriminated by `type`:
 
-| Type            | Direction                            | Purpose                                                      |
-| --------------- | ------------------------------------ | ------------------------------------------------------------ |
-| `record`        | source → destination                 | One data record for one stream                               |
-| `state`         | source → destination → orchestrator  | Checkpoint for resumable syncs                               |
-| `catalog`       | source → orchestrator                | Stream discovery (names, schemas, keys)                      |
-| `log`           | source or destination → orchestrator | Structured log output                                        |
-| `error`         | source or destination → orchestrator | Structured error with failure type                           |
-| `stream_status` | source → orchestrator                | Per-stream progress (started, running, complete, incomplete) |
+| Type            | Direction                      | Purpose                                                      |
+| --------------- | ------------------------------ | ------------------------------------------------------------ |
+| `record`        | source → destination           | One data record for one stream                               |
+| `state`         | source → destination → engine  | Checkpoint for resumable syncs                               |
+| `catalog`       | source → engine                | Stream discovery (names, schemas, keys)                      |
+| `log`           | source or destination → engine | Structured log output                                        |
+| `error`         | source or destination → engine | Structured error with failure type                           |
+| `stream_status` | source → engine                | Per-stream progress (started, running, complete, incomplete) |
 
 Messages are serialized as NDJSON — one JSON line per message. This format works for both in-process async iterators and subprocess stdin/stdout pipes.
 
@@ -34,9 +34,16 @@ A source reads data from an upstream system by emitting messages. It can be fini
 ### In-process
 
 ```typescript
-interface Source {
-  discover(): Promise<CatalogMessage>
-  read(streams: Stream[], state?: StateMessage): AsyncIterableIterator<Message>
+interface Source<TConfig, TStreamState, TInput> {
+  spec(): ConnectorSpecification
+  check(params: { config: TConfig }): Promise<CheckResult>
+  discover(params: { config: TConfig }): Promise<CatalogMessage>
+  read(
+    params: { config: TConfig; catalog: ConfiguredCatalog; state?: Record<string, TStreamState> },
+    $stdin?: AsyncIterable<TInput>
+  ): AsyncIterable<Message>
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
 }
 ```
 
@@ -58,11 +65,15 @@ The destination receives a catalog (to set up streams/tables/schemas) and a stre
 ### In-process
 
 ```typescript
-interface Destination {
+interface Destination<TConfig> {
+  spec(): ConnectorSpecification
+  check(params: { config: TConfig }): Promise<CheckResult>
   write(
-    catalog: CatalogMessage,
-    messages: AsyncIterableIterator<Message>
-  ): AsyncIterableIterator<StateMessage>
+    params: { config: TConfig; catalog: ConfiguredCatalog },
+    $stdin: AsyncIterable<DestinationInput>
+  ): AsyncIterable<DestinationOutput>
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
 }
 ```
 
@@ -76,15 +87,15 @@ destination write --config config.json \
 
 ### What the destination receives
 
-The destination only sees `RecordMessage` and `StateMessage`. The orchestrator filters out everything else before it reaches the destination.
+The destination only sees `RecordMessage` and `StateMessage`. The engine filters out everything else before it reaches the destination.
 
 | Message               | Reaches destination?                              |
 | --------------------- | ------------------------------------------------- |
 | `RecordMessage`       | Yes — write it                                    |
 | `StateMessage`        | Yes — re-emit after committing preceding records  |
-| `ErrorMessage`        | No — orchestrator handles (retry, abort, alert)   |
-| `LogMessage`          | No — orchestrator routes to observability         |
-| `StreamStatusMessage` | No — orchestrator updates progress UI             |
+| `ErrorMessage`        | No — engine handles (retry, abort, alert)         |
+| `LogMessage`          | No — engine routes to observability               |
+| `StreamStatusMessage` | No — engine updates progress UI                   |
 | `CatalogMessage`      | No — used during discover, before the pipe starts |
 
 ## Data Model
@@ -113,11 +124,11 @@ A single data record. The primary key is not a top-level field — it is extract
 
 ### StateMessage
 
-A per-stream checkpoint used as a **commit fence**. Each `StateMessage` carries a `stream` field so the orchestrator knows which stream is being checkpointed, and an opaque `data` field only the source understands.
+A per-stream checkpoint used as a **commit fence**. Each `StateMessage` carries a `stream` field so the engine knows which stream is being checkpointed, and an opaque `data` field only the source understands.
 
 Properties:
 
-1. **Per-stream.** Each `StateMessage` checkpoints one stream. The orchestrator maintains a state map keyed by `(sync_id, stream)` and merges checkpoints as they arrive.
+1. **Per-stream.** Each `StateMessage` checkpoints one stream. The engine maintains a state map keyed by `(sync_id, stream)` and merges checkpoints as they arrive.
 
 2. **Opaque to the destination.** The destination must not read, modify, or interpret the `data` field. Only the source understands its contents.
 
@@ -132,7 +143,7 @@ Properties:
 
 ### ErrorMessage
 
-A structured error from a source or destination. The `failure_type` field lets the orchestrator decide how to respond:
+A structured error from a source or destination. The `failure_type` field lets the engine decide how to respond:
 
 - `config_error` — bad credentials, missing permissions. Don't retry, alert the user.
 - `system_error` — bug in the source or destination. Don't retry, alert the developer.
@@ -155,19 +166,19 @@ Per-stream progress updates from a source. Enables progress reporting in the CLI
 { "type": "stream_status", "stream": "customers", "status": "running" }
 ```
 
-## Orchestrator
+## Engine
 
-The orchestrator reads from both the source and the destination:
+The engine wires source to destination and handles message routing:
 
 ```
-Source → Orchestrator → Destination
-              ↑               │
-              └───────────────┘
+Source → Engine → Destination
+           ↑          │
+           └──────────┘
 ```
 
-**From the source**, the orchestrator receives all message types:
+**From the source**, the engine receives all message types:
 
-| Source message        | Orchestrator action                   |
+| Source message        | Engine action                         |
 | --------------------- | ------------------------------------- |
 | `RecordMessage`       | Forward to destination                |
 | `StateMessage`        | Forward to destination                |
@@ -175,9 +186,9 @@ Source → Orchestrator → Destination
 | `LogMessage`          | Route to observability                |
 | `StreamStatusMessage` | Update progress UI                    |
 
-**From the destination**, the orchestrator receives:
+**From the destination**, the engine receives:
 
-| Destination message | Orchestrator action                        |
+| Destination message | Engine action                              |
 | ------------------- | ------------------------------------------ |
 | `StateMessage`      | Persist committed checkpoint for resume    |
 | `ErrorMessage`      | Handle write failure (retry, abort, alert) |
@@ -186,43 +197,42 @@ Source → Orchestrator → Destination
 ### Minimal sync
 
 ```typescript
-const catalog = await source.discover()
-const messages = source.read(catalog.streams)
+import { createEngine } from '@stripe/stateless-sync'
 
-// orchestrator filters: only RecordMessage and StateMessage reach the destination
-const data = filter_data_messages(messages)
-const output = destination.write(catalog, data)
+const engine = createEngine(params, { source, destination })
 
-for await (const msg of output) {
+for await (const msg of engine.run()) {
   if (msg.type === 'state') persist(msg)
-  if (msg.type === 'error') handle_error(msg)
+  if (msg.type === 'error') handleError(msg)
 }
 ```
+
+`createEngine` lives in `@stripe/stateless-sync`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
 
 ### State flow
 
 The `StateMessage` flows through the entire pipeline before being persisted. It is the destination's re-emission that confirms records are committed — not just read from the source.
 
 ```
-Source                    Orchestrator                    Destination
-  │                            │                              │
-  ├─ RecordMessage ───────────►├─ RecordMessage ─────────────►│
-  ├─ RecordMessage ───────────►├─ RecordMessage ─────────────►│
-  ├─ State{customers,cur:50} ─►├─ State{customers,cur:50} ──►│
-  ├─ LogMessage ──────────────►├── (route to logs)            │
-  │                            │                              ├── (upsert + commit)
-  │                            │◄─ State{customers,cur:50} ──┤
-  │                            ├── (persist checkpoint)       │
-  ├─ RecordMessage ───────────►├─ RecordMessage ─────────────►│
-  ├─ ErrorMessage ────────────►├── (handle error)             │
-  ├─ State{invoices,cur:99} ──►├─ State{invoices,cur:99} ───►│
-  │                            │                              ├── (upsert + commit)
-  │                            │◄─ State{invoices,cur:99} ───┤
-  │                            ├── (persist checkpoint)       │
-  │                            │                              │
+Source                    Engine                          Destination
+  │                          │                              │
+  ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
+  ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
+  ├─ State{customers,cur:50} ►├─ State{customers,cur:50} ───►│
+  ├─ LogMessage ─────────────►├── (route to logs)            │
+  │                           │                              ├── (upsert + commit)
+  │                           │◄─ State{customers,cur:50} ───┤
+  │                           ├── (persist checkpoint)       │
+  ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
+  ├─ ErrorMessage ───────────►├── (handle error)             │
+  ├─ State{invoices,cur:99} ─►├─ State{invoices,cur:99} ────►│
+  │                           │                              ├── (upsert + commit)
+  │                           │◄─ State{invoices,cur:99} ────┤
+  │                           ├── (persist checkpoint)       │
+  │                           │                              │
 ```
 
-On the next run, the orchestrator passes the last persisted `StateMessage` back to `source.read(streams, state)`, and the source resumes from that checkpoint.
+On the next run, the engine passes the last persisted `StateMessage` back to `source.read()`, and the source resumes from that checkpoint.
 
 ### Flushing vs checkpointing
 
@@ -232,9 +242,9 @@ These are two different things:
 
 - **Checkpoint** — re-emit a `StateMessage` to confirm a resume point. The destination can only do this after it has flushed all records preceding that `StateMessage`.
 
-A `StateMessage` does not mean "flush now." It means "once you have flushed everything up to here, tell the orchestrator it is safe to resume from this point."
+A `StateMessage` does not mean "flush now." It means "once you have flushed everything up to here, tell the engine it is safe to resume from this point."
 
-If the source never emits a `StateMessage`, the destination still flushes normally — it just never confirms a checkpoint. If the sync crashes, it restarts from the beginning because the orchestrator has no saved state.
+If the source never emits a `StateMessage`, the destination still flushes normally — it just never confirms a checkpoint. If the sync crashes, it restarts from the beginning because the engine has no saved state.
 
 ### Source controls checkpoint granularity
 
@@ -248,10 +258,10 @@ No phase hint or mode switch is needed. The source naturally adjusts checkpoint 
 
 ### Backfill → live transition
 
-The source handles the transition internally. From the orchestrator's perspective, there is one `read()` call that starts finite (backfill) and becomes infinite (live). The source notes the timestamp when backfill started and ensures the live phase picks up from that point with overlap. Duplicates are deduped at the destination via `primary_key`.
+The source handles the transition internally. From the engine's perspective, there is one `read()` call that starts finite (backfill) and becomes infinite (live). The source notes the timestamp when backfill started and ensures the live phase picks up from that point with overlap. Duplicates are deduped at the destination via `primary_key`.
 
 ```
-source.read(streams)
+source.read(params)
   → RecordMessage  (backfill)
   → RecordMessage  (backfill)
   → ...
@@ -263,7 +273,7 @@ source.read(streams)
 
 ### Beyond the pipe
 
-The orchestrator is also responsible for:
+The engine is also responsible for:
 
 - **Reconciliation** — periodically re-scan to fill gaps from missed events
 - **Scheduling** — manage multiple syncs in the platform runtime
@@ -273,24 +283,31 @@ The orchestrator is also responsible for:
 
 The engine has two storage concerns:
 
-| What                                                      | Storage                                      | Why                                                    |
-| --------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
-| **Config** (Sync, SourceConfig, DestinationConfig, state) | Database                                     | Relational, queried frequently, needs transactions     |
-| **Secrets** (API keys, passwords, OAuth tokens)           | Secret store (referenced by `credential_id`) | Security isolation — deployment access ≠ secret access |
+| What                                              | Storage                                      | Why                                                    |
+| ------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
+| **Config** (SyncConfig, SourceConfig, DestConfig) | Database or files                            | Relational, queried frequently, needs transactions     |
+| **Secrets** (API keys, passwords, OAuth tokens)   | Secret store (referenced by `credential_id`) | Security isolation — deployment access ≠ secret access |
 
-State is stored on the Sync resource itself (`Sync.state`) — a per-stream checkpoint map managed by the orchestrator. On each confirmed `StateMessage` from the destination, the orchestrator merges the checkpoint into `Sync.state[stream]` and persists the Sync. On resume, it passes the full map to the source:
+State is kept in a separate store (not embedded in sync config). The four stores are:
+
+- **credentials.json** — auth material (API keys, OAuth tokens)
+- **syncs.json** — sync intent (source/destination types, stream selection)
+- **state.json** — stream cursors (per-stream checkpoint map, updated continuously)
+- **logs.ndjson** — run history (append-only)
+
+On resume, the engine loads the state map and passes it to `source.read()`:
 
 ```typescript
-const messages = source.read(catalog.streams, sync.state)
-// sync.state = { customers: {"after":"cus_999"}, invoices: {"after":"inv_500"}, ... }
+// state = { customers: {"after":"cus_999"}, invoices: {"after":"inv_500"}, ... }
+source.read({ config, catalog, state })
 ```
 
 The source uses the map to resume each stream from its last checkpoint.
 
 ## Files
 
-| File                   | Description                                               |
-| ---------------------- | --------------------------------------------------------- |
-| `sync-engine-types.ts` | Message protocol — Stream, Record, State, etc.            |
-| `sync-engine-api.ts`   | Interfaces — Source, Destination, Transform, Orchestrator |
-| `ARCHITECTURE.md`      | This document                                             |
+| File                                    | Description                                      |
+| --------------------------------------- | ------------------------------------------------ |
+| `packages/protocol/src/protocol.ts`     | Message protocol + Source/Destination interfaces |
+| `packages/stateless-sync/src/engine.ts` | `createEngine()` — wires source → destination    |
+| `ARCHITECTURE.md`                       | This document                                    |

@@ -1,5 +1,9 @@
 # Cloud Deployment Architecture
 
+> **ARCHIVED — PLANNED ARCHITECTURE, NEVER DEPLOYED**
+>
+> This document describes a cloud architecture (Temporal + Kafka + destination workers) that was designed but never built. The current system uses direct async iterator pipes: `source.read() → engine → destination.write()`, running in a single process. There is no Kafka, no Temporal, no separate destination workers. The `apps/control-plane-api` reference below does not exist in the current codebase.
+
 ## Overview
 
 ```
