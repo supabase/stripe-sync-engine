@@ -11,16 +11,19 @@ const workflowsPath = path.resolve(process.cwd(), 'dist/workflows.js')
  * Spin up a mock HTTP server that streams NDJSON lines with configurable delay.
  * Each line is a JSON object like {"type":"record","stream":"test","data":{"id":N}}.
  */
-function createMockServer(opts: {
-  lineCount: number
-  delayMs: number
-}): { server: http.Server; url: string; start: () => Promise<string> } {
+function createMockServer(opts: { lineCount: number; delayMs: number }): {
+  server: http.Server
+  url: string
+  start: () => Promise<string>
+} {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url!, `http://localhost`)
 
     if (url.pathname === '/check') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ source: { status: 'succeeded' }, destination: { status: 'succeeded' } }))
+      res.end(
+        JSON.stringify({ source: { status: 'succeeded' }, destination: { status: 'succeeded' } })
+      )
       return
     }
 
@@ -91,7 +94,10 @@ describe('Streaming activities with heartbeats', () => {
     const activities: SyncActivities = {
       ...realActivities,
       // Override non-streaming activities to avoid issues
-      healthCheck: async () => ({ source: { status: 'succeeded' }, destination: { status: 'succeeded' } }),
+      healthCheck: async () => ({
+        source: { status: 'succeeded' },
+        destination: { status: 'succeeded' },
+      }),
       sourceSetup: async () => {},
       destinationSetup: async () => {},
       sourceTeardown: async () => {},
@@ -148,16 +154,17 @@ describe('Streaming activities with heartbeats', () => {
 
     const activities: SyncActivities = {
       ...realActivities,
-      healthCheck: async () => ({ source: { status: 'succeeded' }, destination: { status: 'succeeded' } }),
+      healthCheck: async () => ({
+        source: { status: 'succeeded' },
+        destination: { status: 'succeeded' },
+      }),
       sourceSetup: async () => {},
       destinationSetup: async () => {},
       sourceTeardown: async () => {},
       destinationTeardown: async () => {},
       // Replace backfillPage to return records that writeBatch will process
       backfillPage: async () => ({
-        records: [
-          { type: 'record', stream: 'test', data: { id: 1 }, emitted_at: Date.now() },
-        ],
+        records: [{ type: 'record', stream: 'test', data: { id: 1 }, emitted_at: Date.now() }],
         states: [],
         errors: [],
         stream_statuses: [{ type: 'stream_status' as const, stream: 'test', status: 'complete' }],
