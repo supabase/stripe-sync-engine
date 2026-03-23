@@ -28,7 +28,7 @@ const STRIPE_API_KEY = process.env.STRIPE_API_KEY!
 const POSTGRES_URL =
   process.env.POSTGRES_URL ||
   'postgresql://postgres:postgres@localhost:5432/postgres'
-const repoRoot = path.resolve(process.cwd(), '..')
+const repoRoot = path.resolve(process.cwd(), '../..')
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {

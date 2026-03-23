@@ -49,12 +49,12 @@ source.discover({ config }) → CatalogMessage
 
 Each **Stream** has:
 
-| Field          | Description                                                        |
-| -------------- | ------------------------------------------------------------------ |
-| `name`         | Table/resource name (e.g. `customers`, `invoices`)                 |
-| `primary_key`  | Paths to fields that uniquely identify a record (e.g. `[["id"]]`) |
-| `json_schema`  | JSON Schema describing the record shape (from OpenAPI or runtime)  |
-| `metadata`     | Source-specific context (e.g. `api_version`, `account_id`)         |
+| Field         | Description                                                       |
+| ------------- | ----------------------------------------------------------------- |
+| `name`        | Table/resource name (e.g. `customers`, `invoices`)                |
+| `primary_key` | Paths to fields that uniquely identify a record (e.g. `[["id"]]`) |
+| `json_schema` | JSON Schema describing the record shape (from OpenAPI or runtime) |
+| `metadata`    | Source-specific context (e.g. `api_version`, `account_id`)        |
 
 For the Stripe source, `discover()` walks the OpenAPI spec and the resource registry to produce one stream per syncable Stripe resource.
 
@@ -64,11 +64,11 @@ The user (or application) selects which streams to sync and how. This is where *
 
 For each selected stream, the user decides:
 
-| Setting                  | Options                                       | Description                                |
-| ------------------------ | --------------------------------------------- | ------------------------------------------ |
-| `sync_mode`              | `full_refresh` · `incremental`                | Pull everything each time, or only changes |
-| `destination_sync_mode`  | `append` · `overwrite` · `append_dedup`       | How records land in the destination        |
-| `cursor_field`           | field path (optional)                          | Which field tracks changes for incremental |
+| Setting                 | Options                                 | Description                                |
+| ----------------------- | --------------------------------------- | ------------------------------------------ |
+| `sync_mode`             | `full_refresh` · `incremental`          | Pull everything each time, or only changes |
+| `destination_sync_mode` | `append` · `overwrite` · `append_dedup` | How records land in the destination        |
+| `cursor_field`          | field path (optional)                   | Which field tracks changes for incremental |
 
 This produces a **Configured Stream** — the original stream data plus the user's sync settings:
 
@@ -109,6 +109,7 @@ destination.setup({ config, catalog })    → creates schemas, tables, indexes
 ```
 
 The destination uses the configured catalog to know:
+
 - Which tables to create (from `stream.name`)
 - What columns each table has (from `stream.json_schema`)
 - What primary key to use (from `stream.primary_key`)

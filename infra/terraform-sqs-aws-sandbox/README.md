@@ -59,14 +59,14 @@ sequenceDiagram
 
 Each event passes through 6 observable stages, logged to the `event_log` table:
 
-| Stage | Where | Description |
-|---|---|---|
-| `webhook.received` | Ruby producer → `/log` | Webhook payload arrived |
-| `message.read` | Node.js `/read` | Event generated and streamed to caller |
-| `sqs.enqueued` | Ruby producer → `/log` | Event sent to SQS |
-| `sqs.dequeued` | Ruby consumer → `/log` | Consumer picked up event from SQS |
-| `message.written` | Node.js `/write` | Event inserted into PostgreSQL |
-| `sync_status.received` | Ruby consumer → `/log` | Consumer received write confirmation |
+| Stage                  | Where                  | Description                            |
+| ---------------------- | ---------------------- | -------------------------------------- |
+| `webhook.received`     | Ruby producer → `/log` | Webhook payload arrived                |
+| `message.read`         | Node.js `/read`        | Event generated and streamed to caller |
+| `sqs.enqueued`         | Ruby producer → `/log` | Event sent to SQS                      |
+| `sqs.dequeued`         | Ruby consumer → `/log` | Consumer picked up event from SQS      |
+| `message.written`      | Node.js `/write`       | Event inserted into PostgreSQL         |
+| `sync_status.received` | Ruby consumer → `/log` | Consumer received write confirmation   |
 
 With 3 events per webhook (10s apart), the e2e test proves streaming — each event's full lifecycle completes in ~150ms before the next event is emitted:
 
