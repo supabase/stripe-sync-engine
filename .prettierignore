@@ -8,3 +8,4 @@ LICENSE.md
 dist/
 docs/out/
 .claude/
+**/.terraform/

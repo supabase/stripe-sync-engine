@@ -109,6 +109,12 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
+      '@hono/swagger-ui':
+        specifier: ^0.6
+        version: 0.6.1(hono@4.12.8)
+      '@hono/zod-openapi':
+        specifier: ^1.2
+        version: 1.2.2(hono@4.12.8)(zod@4.3.6)
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync

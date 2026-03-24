@@ -17,7 +17,14 @@ import {
   fileLogSink,
 } from '@stripe/stateful-sync'
 import type { Credential, SyncConfig } from '@stripe/stateful-sync'
-import { DeleteResponseSchema, ErrorSchema, ListResponse, UpdateCredentialSchema } from './schemas'
+import {
+  CheckResultSchema,
+  DeleteResponseSchema,
+  ErrorSchema,
+  ListResponse,
+  NdjsonSchema,
+  UpdateCredentialSchema,
+} from './schemas'
 
 let _idCounter = Date.now()
 function genId(prefix: string): string {
@@ -72,7 +79,21 @@ export function createApp(options?: AppOptions) {
     },
   })
 
-  app.get('/health', (c) => c.json({ ok: true }))
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/health',
+      tags: ['Status'],
+      summary: 'Health check',
+      responses: {
+        200: {
+          content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+          description: 'Server is healthy',
+        },
+      },
+    }),
+    (c) => c.json({ ok: true as const }, 200)
+  )
 
   // ── Path param schemas ──────────────────────────────────────────
 
@@ -469,64 +490,216 @@ export function createApp(options?: AppOptions) {
     }
   )
 
-  // MARK: - Sync engine operations — plain Hono routes (streaming, not OpenAPI)
+  // MARK: - Sync engine operations
 
-  app.post('/syncs/:id/setup', async (c) => {
-    const syncId = c.req.param('id')
-    await service.setup(syncId)
-    return c.body(null, 204)
+  const WebhookParam = z.object({
+    credential_id: z.string().openapi({
+      param: { name: 'credential_id', in: 'path' },
+      example: 'cred_abc123',
+    }),
   })
 
-  app.post('/syncs/:id/teardown', async (c) => {
-    const syncId = c.req.param('id')
-    await service.teardown(syncId)
-    return c.body(null, 204)
-  })
-
-  app.get('/syncs/:id/check', async (c) => {
-    const syncId = c.req.param('id')
-    const result = await service.check(syncId)
-    return c.json(result)
-  })
-
-  app.post('/syncs/:id/read', async (c) => {
-    const syncId = c.req.param('id')
-    const body = c.req.raw.body
-    const input = body ? parseNdjsonStream(body) : undefined
-    return ndjsonResponse(service.read(syncId, input))
-  })
-
-  app.post('/syncs/:id/write', async (c) => {
-    const syncId = c.req.param('id')
-    const body = c.req.raw.body
-    if (!body) {
-      return c.json({ error: 'Request body required for /write' }, 400)
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/syncs/{id}/setup',
+      tags: ['Sync Operations'],
+      summary: 'Set up destination schema for a sync',
+      description:
+        'Creates destination tables and applies migrations. Safe to call multiple times.',
+      request: { params: SyncIdParam },
+      responses: {
+        204: { description: 'Setup complete' },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      await service.setup(id)
+      return c.body(null, 204) as any
     }
-    const messages = parseNdjsonStream<Message>(body)
-    return ndjsonResponse(service.write(syncId, messages))
-  })
+  )
 
-  app.post('/syncs/:id/run', async (c) => {
-    const syncId = c.req.param('id')
-    const body = c.req.raw.body
-    // Only parse body when the client explicitly sends one (content-type present).
-    // A bare POST with no body still has a non-null ReadableStream in Node.js 24,
-    // so we must gate on content-type to distinguish "no body" from "empty NDJSON".
-    const input = body && c.req.header('content-type') ? parseNdjsonStream(body) : undefined
-    return ndjsonResponse(service.run(syncId, input))
-  })
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/syncs/{id}/teardown',
+      tags: ['Sync Operations'],
+      summary: 'Tear down destination schema for a sync',
+      description: 'Drops destination tables. Irreversible.',
+      request: { params: SyncIdParam },
+      responses: {
+        204: { description: 'Teardown complete' },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      await service.teardown(id)
+      return c.body(null, 204) as any
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/syncs/{id}/check',
+      tags: ['Sync Operations'],
+      summary: 'Check connector connection for a sync',
+      description: 'Validates the source/destination config and tests connectivity.',
+      request: { params: SyncIdParam },
+      responses: {
+        200: {
+          content: { 'application/json': { schema: CheckResultSchema } },
+          description: 'Connection check result',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const result = await service.check(id)
+      return c.json(result, 200)
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/syncs/{id}/read',
+      tags: ['Sync Operations'],
+      summary: 'Read records from the sync source',
+      description:
+        'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.',
+      request: { params: SyncIdParam },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          description: 'NDJSON stream of sync messages',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const body = c.req.raw.body
+      const input = body ? parseNdjsonStream(body) : undefined
+      return ndjsonResponse(service.read(id, input)) as any
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/syncs/{id}/write',
+      tags: ['Sync Operations'],
+      summary: 'Write records to the sync destination',
+      description:
+        'Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.',
+      request: {
+        params: SyncIdParam,
+        body: {
+          required: true,
+          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+        },
+      },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          description: 'NDJSON stream of write result messages',
+        },
+        400: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Missing request body',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const body = c.req.raw.body
+      if (!body) {
+        return c.json({ error: 'Request body required for /write' }, 400)
+      }
+      const messages = parseNdjsonStream<Message>(body)
+      return ndjsonResponse(service.write(id, messages)) as any
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/syncs/{id}/run',
+      tags: ['Sync Operations'],
+      summary: 'Run full sync (read → write pipeline)',
+      description:
+        'Executes a complete source→destination sync. Streams NDJSON messages. Optional NDJSON body provides catalog/state/event input.',
+      request: { params: SyncIdParam },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          description: 'NDJSON stream of sync messages',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const body = c.req.raw.body
+      // Only parse body when the client explicitly sends one (content-type present).
+      // A bare POST with no body still has a non-null ReadableStream in Node.js 24,
+      // so we must gate on content-type to distinguish "no body" from "empty NDJSON".
+      const input = body && c.req.header('content-type') ? parseNdjsonStream(body) : undefined
+      return ndjsonResponse(service.run(id, input)) as any
+    }
+  )
 
   // MARK: - Webhook ingress
 
   // Receive a webhook event from Stripe and fan it out to all running syncs
   // that share the given credential. Each sync verifies the signature itself.
-  app.post('/webhooks/:credential_id', async (c) => {
-    const credential_id = c.req.param('credential_id')
-    const body = await c.req.text()
-    const headers = Object.fromEntries(c.req.raw.headers.entries())
-    service.push_event(credential_id, { body, headers })
-    return c.text('ok', 200)
-  })
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/webhooks/{credential_id}',
+      tags: ['Webhooks'],
+      summary: 'Ingest a Stripe webhook event',
+      description:
+        'Receives a raw Stripe webhook and fans it out to all active syncs sharing the credential. Each sync verifies the signature independently.',
+      request: { params: WebhookParam },
+      responses: {
+        200: {
+          content: { 'text/plain': { schema: z.literal('ok') } },
+          description: 'Event accepted',
+        },
+      },
+    }),
+    async (c) => {
+      const { credential_id } = c.req.valid('param')
+      const body = await c.req.text()
+      const headers = Object.fromEntries(c.req.raw.headers.entries())
+      service.push_event(credential_id, { body, headers })
+      return c.text('ok', 200)
+    }
+  )
 
   // MARK: - OpenAPI spec + Swagger UI
 

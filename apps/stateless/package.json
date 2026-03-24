@@ -31,6 +31,8 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
+    "@hono/swagger-ui": "^0.6",
+    "@hono/zod-openapi": "^1.2",
     "@stripe/stateless-sync": "workspace:*",
     "@stripe/ts-cli": "workspace:*",
     "commander": "^12.1.0",
