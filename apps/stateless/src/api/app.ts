@@ -12,17 +12,20 @@ import { ndjsonResponse } from '../stream'
 // ── Shared schemas ──────────────────────────────────────────────
 
 const XSyncParamsHeader = z.object({
-  'x-sync-params': z.string().openapi({
-    description:
-      'JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }',
-    example: JSON.stringify({
-      source_name: 'stripe',
-      source_config: { api_key: 'sk_test_...' },
-      destination_name: 'postgres',
-      destination_config: { connection_string: 'postgres://localhost/db' },
-      streams: [{ name: 'products' }],
+  'x-sync-params': z
+    .string()
+    .optional()
+    .openapi({
+      description:
+        'JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }',
+      example: JSON.stringify({
+        source_name: 'stripe',
+        source_config: { api_key: 'sk_test_...' },
+        destination_name: 'postgres',
+        destination_config: { connection_string: 'postgres://localhost/db' },
+        streams: [{ name: 'products' }],
+      }),
     }),
-  }),
 })
 
 const ConnectorCheckSchema = z.object({
@@ -62,11 +65,16 @@ export function createApp(resolver: ConnectorResolver) {
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
-  function hasBody(c: { req: { header: (name: string) => string | undefined } }): boolean {
+  function hasBody(c: {
+    req: { header: (name: string) => string | undefined; raw: { body: ReadableStream | null } }
+  }): boolean {
     const cl = c.req.header('Content-Length')
-    if (cl && Number(cl) > 0) return true
+    if (cl !== undefined) return Number(cl) > 0
     if (c.req.header('Transfer-Encoding')) return true
-    return false
+    // In tests (app.request()), body is null for bodyless requests.
+    // In Node.js 24 HTTP server, bodyless POSTs always arrive with Content-Length: 0,
+    // so we never reach this line for real bodyless requests.
+    return c.req.raw.body !== null
   }
 
   /** Parse and validate X-Sync-Params header, or throw 400. */
