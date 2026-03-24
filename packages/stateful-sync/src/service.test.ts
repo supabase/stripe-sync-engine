@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { testSource, testDestination, createConnectorResolver } from '@stripe/stateless-sync'
+import { sourceTest, destinationTest, createConnectorResolver } from '@stripe/stateless-sync'
 import type { Message, StateMessage, Source, Destination } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
 import { StatefulSync, resolve } from './service'
@@ -109,7 +109,7 @@ const MESSAGES = toAsync([
 ])
 
 const connectors = createConnectorResolver({
-  sources: { stdin: testSource },
+  sources: { stdin: sourceTest },
   destinations: { postgres: destPostgres },
 })
 
@@ -365,8 +365,8 @@ describe('StatefulSync integration', () => {
 // ---------------------------------------------------------------------------
 
 const testConnectors = createConnectorResolver({
-  sources: { test: testSource },
-  destinations: { test: testDestination },
+  sources: { test: sourceTest },
+  destinations: { test: destinationTest },
 })
 
 function makeTestService() {
@@ -467,7 +467,7 @@ describe('StatefulSync.read/write', () => {
 // ---------------------------------------------------------------------------
 // push_event — webhook fan-out (unit — no Docker needed)
 //
-// testSource passes $stdin items straight through as Messages. testDestination
+// sourceTest passes $stdin items straight through as Messages. destinationTest
 // re-emits StateMessages. So pushing a valid StateMessage via push_event causes
 // the matching run() generator to yield it back — observable without I/O.
 // ---------------------------------------------------------------------------
@@ -489,12 +489,12 @@ describe('push_event', () => {
     const iter = service.run('test-sync')[Symbol.asyncIterator]()
 
     // Advance the generator — it creates the internal queue under 'src-cred',
-    // then blocks inside testSource.read() waiting for the first $stdin item.
+    // then blocks inside sourceTest.read() waiting for the first $stdin item.
     const firstResult = iter.next()
     await nextTick()
 
     // Push a StateMessage for stream 'customers' (must be in the catalog).
-    // testSource passes it through → engine routes to destination → destination
+    // sourceTest passes it through → engine routes to destination → destination
     // re-emits it as a StateMessage → run() yields it.
     const stateMsg = { type: 'state' as const, stream: 'customers', data: { cursor: 42 } }
     service.push_event('src-cred', stateMsg)
@@ -559,7 +559,7 @@ describe('teardown remove_shared_resources', () => {
   function makeServiceWithTeardownSpy(syncs: Record<string, SyncConfig>) {
     const teardownSpy = vi.fn()
     const sourceWithTeardown = {
-      ...testSource,
+      ...sourceTest,
       async teardown({
         remove_shared_resources,
       }: {
@@ -581,7 +581,7 @@ describe('teardown remove_shared_resources', () => {
       logs: memoryLogSink(),
       connectors: {
         resolveSource: async () => sourceWithTeardown as Source,
-        resolveDestination: async () => testDestination as Destination,
+        resolveDestination: async () => destinationTest as Destination,
         sources: () => new Map(),
         destinations: () => new Map(),
       },

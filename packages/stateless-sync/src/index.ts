@@ -17,8 +17,9 @@ export type {
   ConnectorsFrom,
   ResolvedConnector,
 } from './loader'
-export { spawnSource, spawnDestination } from './subprocess'
-export { testSource, testSourceSpec } from './source-test'
-export type { TestSourceConfig } from './source-test'
-export { testDestination, testDestinationSpec } from './destination-test'
-export type { TestDestinationConfig } from './destination-test'
+export { sourceExec } from './source-exec'
+export { destinationExec } from './destination-exec'
+export { sourceTest, sourceTestSpec } from './source-test'
+export type { SourceTestConfig } from './source-test'
+export { destinationTest, destinationTestSpec } from './destination-test'
+export type { DestinationTestConfig } from './destination-test'

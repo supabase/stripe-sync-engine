@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { resolveBin } from './loader'
-import { spawnSource, spawnDestination } from './subprocess'
+import { sourceExec } from './source-exec'
+import { destinationExec } from './destination-exec'
 
 // These tests use real connector binaries (built by `pnpm build`).
 
-describe('spawnSource', () => {
+describe('sourceExec', () => {
   const bin = resolveBin('stripe', 'source')
   if (!bin) throw new Error('source-stripe bin not found — run pnpm build first')
 
-  const source = spawnSource(bin)
+  const source = sourceExec(bin)
 
   it('has all required Source methods', () => {
     expect(typeof source.spec).toBe('function')
@@ -28,13 +29,18 @@ describe('spawnSource', () => {
     expect(spec.config).toBeDefined()
     expect(typeof spec.config).toBe('object')
   })
+
+  it('read() accepts $stdin parameter', () => {
+    // Just check it accepts the parameter signature — no actual subprocess invocation
+    expect(source.read.length).toBe(2)
+  })
 })
 
-describe('spawnDestination', () => {
+describe('destinationExec', () => {
   const bin = resolveBin('postgres', 'destination')
   if (!bin) throw new Error('destination-postgres bin not found — run pnpm build first')
 
-  const dest = spawnDestination(bin)
+  const dest = destinationExec(bin)
 
   it('has all required Destination methods', () => {
     expect(typeof dest.spec).toBe('function')
@@ -57,11 +63,10 @@ describe('spawnDestination', () => {
 
 describe('error propagation', () => {
   it('throws on non-zero exit code with stderr message', async () => {
-    // Use a bin that will exit non-zero — pass a bad command
     const bin = resolveBin('stripe', 'source')
     if (!bin) throw new Error('source-stripe bin not found')
 
-    const source = spawnSource(bin)
+    const source = sourceExec(bin)
     // check with invalid config should fail
     await expect(source.check({ config: {} })).rejects.toThrow()
   })

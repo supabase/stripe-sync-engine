@@ -2,11 +2,11 @@ import { z } from 'zod'
 import type { Destination, Message } from '@stripe/protocol'
 
 export const spec = z.object({})
-export { spec as testDestinationSpec }
+export { spec as destinationTestSpec }
 
-export type TestDestinationConfig = z.infer<typeof spec>
+export type DestinationTestConfig = z.infer<typeof spec>
 
-export const testDestination = {
+export const destinationTest = {
   spec() {
     return { config: z.toJSONSchema(spec) }
   },
@@ -16,7 +16,7 @@ export const testDestination = {
   },
 
   async *write(
-    _params: { config: TestDestinationConfig; catalog: unknown },
+    _params: { config: DestinationTestConfig; catalog: unknown },
     $stdin: AsyncIterable<Message>
   ) {
     for await (const msg of $stdin) {
@@ -25,6 +25,6 @@ export const testDestination = {
       }
     }
   },
-} satisfies Destination<TestDestinationConfig>
+} satisfies Destination<DestinationTestConfig>
 
-export default testDestination
+export default destinationTest

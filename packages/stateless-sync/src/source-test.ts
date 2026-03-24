@@ -15,10 +15,10 @@ export const spec = z.object({
   auth_error_after: z.number().optional(),
 })
 
-export { spec as testSourceSpec }
-export type TestSourceConfig = z.infer<typeof spec>
+export { spec as sourceTestSpec }
+export type SourceTestConfig = z.infer<typeof spec>
 
-export const testSource = {
+export const sourceTest = {
   spec() {
     return { config: z.toJSONSchema(spec) }
   },
@@ -27,7 +27,7 @@ export const testSource = {
     return { status: 'succeeded' as const }
   },
 
-  async discover({ config }: { config: TestSourceConfig }) {
+  async discover({ config }: { config: SourceTestConfig }) {
     const streams = config.streams
       ? Object.entries(config.streams).map(([name, def]) => ({
           name,
@@ -37,7 +37,7 @@ export const testSource = {
     return { type: 'catalog' as const, streams }
   },
 
-  async *read({ config }: { config: TestSourceConfig }, $stdin?: AsyncIterable<unknown>) {
+  async *read({ config }: { config: SourceTestConfig }, $stdin?: AsyncIterable<unknown>) {
     if (!$stdin) return
     let recordCount = 0
     for await (const msg of $stdin as AsyncIterable<any>) {
@@ -53,6 +53,6 @@ export const testSource = {
       if (msg.type === 'record') recordCount++
     }
   },
-} satisfies Source<TestSourceConfig>
+} satisfies Source<SourceTestConfig>
 
-export default testSource
+export default sourceTest

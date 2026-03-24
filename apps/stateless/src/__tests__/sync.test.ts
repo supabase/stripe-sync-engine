@@ -2,7 +2,7 @@ import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEngine } from '@stripe/stateless-sync'
-import { testSource } from '@stripe/stateless-sync'
+import { sourceTest } from '@stripe/stateless-sync'
 import destination from '@stripe/destination-postgres'
 import type { RecordMessage, StateMessage } from '@stripe/stateless-sync'
 
@@ -97,7 +97,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         source_config: { streams: { customers: {} } },
         destination_config: { connection_string: connectionString, schema: SCHEMA },
       },
-      { source: testSource, destination },
+      { source: sourceTest, destination },
       {}
     )
 
@@ -145,7 +145,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         destination_config: { connection_string: connectionString, schema: SCHEMA },
         state: loadedState,
       },
-      { source: testSource, destination },
+      { source: sourceTest, destination },
       {}
     )
 

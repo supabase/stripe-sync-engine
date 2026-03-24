@@ -19,8 +19,8 @@ import {
 } from '@stripe/protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '@stripe/protocol'
 import { createEngine, buildCatalog } from './engine'
-import { testSource } from './source-test'
-import { testDestination } from './destination-test'
+import { sourceTest } from './source-test'
+import { destinationTest } from './destination-test'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -314,7 +314,7 @@ describe('engine config validation', () => {
           source_config: { streams: {} },
           destination_config: {},
         },
-        { source: testSource, destination: testDestination }
+        { source: sourceTest, destination: destinationTest }
       )
     ).not.toThrow()
   })
@@ -331,7 +331,7 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         { source_config: {}, destination_config: {} },
-        { source, destination: testDestination }
+        { source, destination: destinationTest }
       )
     ).toThrow()
   })
@@ -355,7 +355,7 @@ describe('engine config validation', () => {
           source_config: { streams: {} },
           destination_config: {},
         },
-        { source: testSource, destination }
+        { source: sourceTest, destination }
       )
     ).toThrow()
   })
@@ -376,7 +376,7 @@ describe('engine config validation', () => {
 
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source, destination: testDestination }
+      { source, destination: destinationTest }
     )
     // Trigger discover to verify the default was applied
     return drain(engine.run())
@@ -402,7 +402,7 @@ describe('engine message validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: testSource, destination: testDestination }
+      { source: sourceTest, destination: destinationTest }
     )
 
     const results = await drain(
@@ -433,7 +433,7 @@ describe('engine message validation', () => {
     }
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: badSource, destination: testDestination }
+      { source: badSource, destination: destinationTest }
     )
 
     await expect(drain(engine.read())).rejects.toThrow()
@@ -458,7 +458,7 @@ describe('engine message validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: testSource, destination: badDest }
+      { source: sourceTest, destination: badDest }
     )
 
     await expect(
@@ -485,7 +485,7 @@ describe('engine stream membership validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: testSource, destination: testDestination }
+      { source: sourceTest, destination: destinationTest }
     )
 
     const results = await drain(
@@ -520,7 +520,7 @@ describe('engine stream membership validation', () => {
     const onError = vi.fn()
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: badSource, destination: testDestination },
+      { source: badSource, destination: destinationTest },
       { onError }
     )
 
@@ -552,7 +552,7 @@ describe('engine stream membership validation', () => {
     const onError = vi.fn()
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: badSource, destination: testDestination },
+      { source: badSource, destination: destinationTest },
       { onError }
     )
 
@@ -585,7 +585,7 @@ describe('engine stream membership validation', () => {
     }
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source, destination: testDestination }
+      { source, destination: destinationTest }
     )
 
     const results = await drain(engine.read())
@@ -606,7 +606,7 @@ describe('engine.run() pipeline', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: testSource, destination: testDestination }
+      { source: sourceTest, destination: destinationTest }
     )
     const results = await drain(
       engine.run(
@@ -634,7 +634,7 @@ describe('engine.run() pipeline', () => {
       )
     )
 
-    // Pipeline yields 1 state message (testDestination passes state through)
+    // Pipeline yields 1 state message (destinationTest passes state through)
     expect(results).toHaveLength(1)
     expect(results[0]).toMatchObject({
       type: 'state',
@@ -650,7 +650,7 @@ describe('engine.run() pipeline', () => {
         destination_config: {},
         streams: [{ name: 'customers' }],
       },
-      { source: testSource, destination: testDestination }
+      { source: sourceTest, destination: destinationTest }
     )
     const results = await drain(
       engine.run(
@@ -708,7 +708,7 @@ describe('engine.run() pipeline', () => {
 
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: mixedSource, destination: testDestination }
+      { source: mixedSource, destination: destinationTest }
     )
     const results = await drain(engine.run())
 

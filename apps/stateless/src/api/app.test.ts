@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ConnectorResolver, Message, StateMessage } from '@stripe/stateless-sync'
-import { testSource, testDestination } from '@stripe/stateless-sync'
+import { sourceTest, destinationTest } from '@stripe/stateless-sync'
 import { createApp } from './app'
 
 // ---------------------------------------------------------------------------
@@ -8,8 +8,8 @@ import { createApp } from './app'
 // ---------------------------------------------------------------------------
 
 const resolver: ConnectorResolver = {
-  resolveSource: async () => testSource,
-  resolveDestination: async () => testDestination,
+  resolveSource: async () => sourceTest,
+  resolveDestination: async () => destinationTest,
 }
 
 const syncParams = JSON.stringify({
@@ -143,7 +143,7 @@ describe('POST /write', () => {
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
     const events = await readNdjson<StateMessage>(res)
-    // testDestination passes through state messages only
+    // destinationTest passes through state messages only
     expect(events).toHaveLength(1)
     expect(events[0]!.type).toBe('state')
     expect(events[0]!.stream).toBe('customers')

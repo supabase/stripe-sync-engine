@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { testSource, testDestination } from '@stripe/stateless-sync'
+import { sourceTest, destinationTest } from '@stripe/stateless-sync'
 import type { ConnectorResolver, StateMessage, Message } from '@stripe/sync-engine-stateless'
 import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
 import type { Credential } from '@stripe/stateful-sync'
@@ -40,8 +40,8 @@ function toAsync<T>(items: T[]): AsyncIterable<T> {
 describe('runSync', () => {
   it('yields state messages from a successful sync', async () => {
     const resolver: ConnectorResolver = {
-      resolveSource: async () => testSource,
-      resolveDestination: async () => testDestination,
+      resolveSource: async () => sourceTest,
+      resolveDestination: async () => destinationTest,
     }
 
     const credentials = memoryCredentialStore({
@@ -84,8 +84,8 @@ describe('runSync', () => {
 
   it('pipeline produces state for each stream', async () => {
     const resolver: ConnectorResolver = {
-      resolveSource: async () => testSource,
-      resolveDestination: async () => testDestination,
+      resolveSource: async () => sourceTest,
+      resolveDestination: async () => destinationTest,
     }
 
     const credentials = memoryCredentialStore({
@@ -132,8 +132,8 @@ describe('runSync', () => {
 
 function makeOpts(extra: Partial<Parameters<typeof runSync>[0]> = {}) {
   const resolver: ConnectorResolver = {
-    resolveSource: async () => testSource,
-    resolveDestination: async () => testDestination,
+    resolveSource: async () => sourceTest,
+    resolveDestination: async () => destinationTest,
   }
   const credentials = memoryCredentialStore({
     'src-cred': makeCred('src-cred', 'test'),

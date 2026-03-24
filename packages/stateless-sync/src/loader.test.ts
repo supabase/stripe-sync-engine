@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { resolveSpecifier, resolveBin, createConnectorResolver } from './loader'
-import { testSource } from './source-test'
-import { testDestination } from './destination-test'
+import { sourceTest } from './source-test'
+import { destinationTest } from './destination-test'
 
 // ---------------------------------------------------------------------------
 // resolveSpecifier
@@ -57,23 +57,23 @@ describe('resolveBin', () => {
 describe('createConnectorResolver', () => {
   it('returns preloaded source immediately', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: testSource },
+      sources: { stripe: sourceTest },
     })
     const source = await resolver.resolveSource('stripe')
-    expect(source).toBe(testSource)
+    expect(source).toBe(sourceTest)
   })
 
   it('returns preloaded destination immediately', async () => {
     const resolver = createConnectorResolver({
-      destinations: { postgres: testDestination },
+      destinations: { postgres: destinationTest },
     })
     const dest = await resolver.resolveDestination('postgres')
-    expect(dest).toBe(testDestination)
+    expect(dest).toBe(destinationTest)
   })
 
   it('caches resolved connectors — same instance on second call', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: testSource },
+      sources: { stripe: sourceTest },
     })
     const first = await resolver.resolveSource('stripe')
     const second = await resolver.resolveSource('stripe')
@@ -82,11 +82,11 @@ describe('createConnectorResolver', () => {
 
   it('preloaded connectors take priority over subprocess fallback', async () => {
     const resolver = createConnectorResolver({
-      sources: { stripe: testSource },
+      sources: { stripe: sourceTest },
     })
-    // Should return preloaded testSource, not spawn a subprocess
+    // Should return preloaded sourceTest, not spawn a subprocess
     const source = await resolver.resolveSource('stripe')
-    expect(source).toBe(testSource)
+    expect(source).toBe(sourceTest)
   })
 
   it('falls back to subprocess for installed connector without preload', async () => {
