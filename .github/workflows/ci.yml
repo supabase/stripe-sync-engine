@@ -197,7 +197,7 @@ jobs:
             docker run --rm sync-engine:test --version
             exit 0
           fi
-          bash scripts/docker-test.sh
+          bash tests/docker-test.sh
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

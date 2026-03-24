@@ -15,8 +15,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/cli.ts src/index.ts src/serve-command.ts --format esm,cjs --dts --shims",
-    "dev": "tsup src/cli.ts src/index.ts src/serve-command.ts --format esm --shims --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "test": "vitest --passWithNoTests"
   },
   "files": [
@@ -24,6 +24,8 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
+    "@hono/swagger-ui": "^0.6",
+    "@hono/zod-openapi": "^1.2",
     "@stripe/destination-google-sheets": "workspace:*",
     "@stripe/destination-postgres": "workspace:*",
     "@stripe/source-stripe": "workspace:*",
@@ -33,8 +35,12 @@
     "@stripe/ts-cli": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
+    "googleapis": "^148.0.0",
     "hono": "^4",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "stripe": "^17.7.0",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -192,6 +192,12 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
+      '@hono/swagger-ui':
+        specifier: ^0.6
+        version: 0.6.1(hono@4.12.8)
+      '@hono/zod-openapi':
+        specifier: ^1.2
+        version: 1.2.2(hono@4.12.8)(zod@4.3.6)
       '@stripe/destination-google-sheets':
         specifier: workspace:*
         version: link:../../packages/destination-google-sheets
@@ -219,12 +225,24 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      googleapis:
+        specifier: ^148.0.0
+        version: 148.0.0
       hono:
         specifier: ^4
         version: 4.12.8
       pg:
         specifier: ^8.16.3
         version: 8.16.3
+      stripe:
+        specifier: ^17.7.0
+        version: 17.7.0
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
