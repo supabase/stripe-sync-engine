@@ -15,7 +15,7 @@ describe('Docker image', { timeout: 180_000 }, () => {
       stdio: 'inherit',
       timeout: 150_000,
     })
-  })
+  }, 180_000)
 
   afterAll(() => {
     try {

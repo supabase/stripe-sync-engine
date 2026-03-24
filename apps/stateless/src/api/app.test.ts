@@ -33,6 +33,14 @@ function toNdjson(items: unknown[]): string {
   return items.map((item) => JSON.stringify(item)).join('\n')
 }
 
+/** Headers for a request body: Content-Type + Content-Length (required for hasBody()). */
+function bodyHeaders(body: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/x-ndjson',
+    'Content-Length': String(new TextEncoder().encode(body).length),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -81,18 +89,19 @@ describe('POST /read', () => {
   it('streams messages as NDJSON', async () => {
     const app = createApp(resolver)
 
+    const body = toNdjson([
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1', name: 'Alice' },
+        emitted_at: Date.now(),
+      },
+      { type: 'state', stream: 'customers', data: { status: 'complete' } },
+    ])
     const res = await app.request('/read', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, 'Content-Type': 'application/x-ndjson' },
-      body: toNdjson([
-        {
-          type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1', name: 'Alice' },
-          emitted_at: Date.now(),
-        },
-        { type: 'state', stream: 'customers', data: { status: 'complete' } },
-      ]),
+      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(body) },
+      body,
     })
 
     expect(res.status).toBe(200)
@@ -123,13 +132,11 @@ describe('POST /write', () => {
       },
     ]
 
+    const writeBody = toNdjson(records)
     const res = await app.request('/write', {
       method: 'POST',
-      headers: {
-        'X-Sync-Params': syncParams,
-        'Content-Type': 'application/x-ndjson',
-      },
-      body: toNdjson(records),
+      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(writeBody) },
+      body: writeBody,
     })
 
     expect(res.status).toBe(200)
@@ -159,18 +166,19 @@ describe('POST /run', () => {
   it('runs full pipeline, streams NDJSON state', async () => {
     const app = createApp(resolver)
 
+    const runBody = toNdjson([
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1', name: 'Alice' },
+        emitted_at: Date.now(),
+      },
+      { type: 'state', stream: 'customers', data: { status: 'complete' } },
+    ])
     const res = await app.request('/run', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, 'Content-Type': 'application/x-ndjson' },
-      body: toNdjson([
-        {
-          type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1', name: 'Alice' },
-          emitted_at: Date.now(),
-        },
-        { type: 'state', stream: 'customers', data: { status: 'complete' } },
-      ]),
+      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(runBody) },
+      body: runBody,
     })
 
     expect(res.status).toBe(200)

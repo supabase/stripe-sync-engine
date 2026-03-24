@@ -65,16 +65,11 @@ export function createApp(resolver: ConnectorResolver) {
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
-  function hasBody(c: {
-    req: { header: (name: string) => string | undefined; raw: { body: ReadableStream | null } }
-  }): boolean {
+  function hasBody(c: { req: { header: (name: string) => string | undefined } }): boolean {
     const cl = c.req.header('Content-Length')
     if (cl !== undefined) return Number(cl) > 0
     if (c.req.header('Transfer-Encoding')) return true
-    // In tests (app.request()), body is null for bodyless requests.
-    // In Node.js 24 HTTP server, bodyless POSTs always arrive with Content-Length: 0,
-    // so we never reach this line for real bodyless requests.
-    return c.req.raw.body !== null
+    return false
   }
 
   /** Parse and validate X-Sync-Params header, or throw 400. */
