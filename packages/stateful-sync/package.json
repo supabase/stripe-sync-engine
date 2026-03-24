@@ -1,6 +1,6 @@
 {
   "name": "@stripe/stateful-sync",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
