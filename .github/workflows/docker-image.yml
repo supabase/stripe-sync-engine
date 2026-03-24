@@ -37,7 +37,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: stripe/sync-engine
+          images: stripe/sdb
           tags: |
             type=sha,format=long,prefix=
             type=ref,event=branch
