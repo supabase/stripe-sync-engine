@@ -10,11 +10,11 @@ import { destinationTest } from './destination-test'
 
 describe('resolveSpecifier', () => {
   it('resolves bare source name to scoped package', () => {
-    expect(resolveSpecifier('stripe', 'source')).toBe('@tx-stripe/source-stripe')
+    expect(resolveSpecifier('stripe', 'source')).toBe('@stripe/source-stripe')
   })
 
   it('resolves bare destination name to scoped package', () => {
-    expect(resolveSpecifier('postgres', 'destination')).toBe('@tx-stripe/destination-postgres')
+    expect(resolveSpecifier('postgres', 'destination')).toBe('@stripe/destination-postgres')
   })
 
   it('passes through scoped packages (contains /)', () => {

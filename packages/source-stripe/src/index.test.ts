@@ -9,7 +9,7 @@ import type {
   RecordMessage,
   StateMessage,
   StreamStatusMessage,
-} from '@tx-stripe/protocol'
+} from '@stripe/protocol'
 import source from './index'
 import { fromWebhookEvent } from './process-event'
 import { buildResourceRegistry } from './resourceRegistry'

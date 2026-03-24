@@ -1,6 +1,6 @@
 # CLI Specification
 
-Engine-layer CLI wrapping `createEngine()` from `@tx-stripe/stateless-sync`.
+Engine-layer CLI wrapping `createEngine()` from `@stripe/stateless-sync`.
 No credentials store, no syncs CRUD, no service mode.
 
 ## `sync-engine` — run the pipeline
@@ -186,7 +186,7 @@ For `--config sync.json`:
 }
 ```
 
-Fields match the `SyncParams` type in `@tx-stripe/stateless-sync`:
+Fields match the `SyncParams` type in `@stripe/stateless-sync`:
 
 ```ts
 interface SyncParams {

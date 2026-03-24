@@ -9,7 +9,7 @@
 
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
-import { buildResourceRegistry, catalogFromRegistry } from '@tx-stripe/source-stripe'
+import { buildResourceRegistry, catalogFromRegistry } from '@stripe/source-stripe'
 
 // Module-level singletons (reused across requests in Deno edge functions)
 const dbUrl = Deno.env.get('SUPABASE_DB_URL')

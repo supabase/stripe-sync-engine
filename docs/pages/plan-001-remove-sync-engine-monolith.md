@@ -37,7 +37,7 @@ apps/
 | Component                | LoC     | Reason                                                           |
 | ------------------------ | ------- | ---------------------------------------------------------------- |
 | `sigma/`                 | ~44,775 | User decision: remove entirely                                   |
-| `protocol/index.ts`      | 34      | Redundant re-export of `@tx-stripe/protocol`                     |
+| `protocol/index.ts`      | 34      | Redundant re-export of `@stripe/protocol`                        |
 | `database/QueryUtils.ts` | 70      | Byte-identical duplicate of `destination-postgres/QueryUtils.ts` |
 
 ### → `packages/source-stripe`
@@ -51,7 +51,7 @@ apps/
 | `utils/hashApiKey.ts`  | ~20  | SHA256 hash for API key storage                                                                                                                              |
 | Types from `types.ts`  | ~200 | `SUPPORTED_WEBHOOK_EVENTS`, `RevalidateEntity`, `StripeObject`, `SyncObjectName`, source-related types                                                       |
 
-**Refactor `src/server/`**: Replace `@tx-stripe/sync-engine` imports with direct imports from `destination-postgres` (PostgresClient, runMigrations) and local source-stripe modules (StripeSyncWebhook, resource registry). Remove the StripeSync intermediary — server directly composes webhook handler + DB client.
+**Refactor `src/server/`**: Replace `@stripe/sync-engine` imports with direct imports from `destination-postgres` (PostgresClient, runMigrations) and local source-stripe modules (StripeSyncWebhook, resource registry). Remove the StripeSync intermediary — server directly composes webhook handler + DB client.
 
 ### → `packages/destination-postgres`
 
@@ -84,7 +84,7 @@ apps/
 | `cli/ngrok.ts`                        | ~200   | Ngrok tunnel integration                                                                                                                             |
 | `version.ts`                          | ~5     | VERSION constant                                                                                                                                     |
 | Application types from `types.ts`     | ~150   | `StripeSyncConfig`, `SyncResult`, `SyncParams`, etc.                                                                                                 |
-| `index.ts`                            | ~60    | Re-exports public API for backward compat (`@tx-stripe/sync-engine` npm name)                                                                        |
+| `index.ts`                            | ~60    | Re-exports public API for backward compat (`@stripe/sync-engine` npm name)                                                                           |
 | `tests/`                              | ~6,873 | Unit, integration, and e2e tests (move with code they test)                                                                                          |
 
 ### → `apps/supabase` (NEW)
@@ -181,6 +181,6 @@ No StripeSync intermediary needed. No circular dependency.
 2. `pnpm test -- --run` — all unit tests pass
 3. `pnpm lint && pnpm format:check` — clean
 4. `packages/sync-engine/` does not exist
-5. No import of `@tx-stripe/sync-engine` remains in any package (only in apps/cli's re-exports)
-6. `apps/supabase-dashboard` imports `parseSchemaComment` from `@tx-stripe/integration-supabase` (or `apps/supabase`)
+5. No import of `@stripe/sync-engine` remains in any package (only in apps/cli's re-exports)
+6. `apps/supabase-dashboard` imports `parseSchemaComment` from `@stripe/integration-supabase` (or `apps/supabase`)
 7. Dependency graph has no cycles: source-stripe and destination-postgres depend only on sync-protocol

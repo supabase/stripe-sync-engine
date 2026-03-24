@@ -1,10 +1,10 @@
 import { serve } from '@hono/node-server'
-import { createConnectorResolver } from '@tx-stripe/stateless-sync'
-import { createApp } from '@tx-stripe/sync-engine-stateless/app'
-import { parseJsonOrFile } from '@tx-stripe/ts-cli'
-import sourceStripe from '@tx-stripe/source-stripe'
-import destinationPostgres from '@tx-stripe/destination-postgres'
-import destinationGoogleSheets from '@tx-stripe/destination-google-sheets'
+import { createConnectorResolver } from '@stripe/stateless-sync'
+import { createApp } from '@stripe/sync-engine-stateless/app'
+import { parseJsonOrFile } from '@stripe/ts-cli'
+import sourceStripe from '@stripe/source-stripe'
+import destinationPostgres from '@stripe/destination-postgres'
+import destinationGoogleSheets from '@stripe/destination-google-sheets'
 
 export function serveAction(opts: {
   port?: number

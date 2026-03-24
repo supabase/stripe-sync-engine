@@ -3,7 +3,7 @@ import type {
   DestinationOutput,
   RecordMessage,
   StateMessage,
-} from '@tx-stripe/protocol'
+} from '@stripe/protocol'
 import { google } from 'googleapis'
 import { expect, it } from 'vitest'
 import { createDestination, type Config, readSheet } from '../src/index'

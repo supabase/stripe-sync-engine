@@ -1,5 +1,5 @@
 {
-  "name": "@tx-stripe/sync-engine-stateless",
+  "name": "@stripe/sync-engine-stateless",
   "version": "0.1.0",
   "private": false,
   "description": "Stripe Sync Engine stateless app — CLI and HTTP API for one-shot sync",
@@ -33,15 +33,15 @@
     "@hono/node-server": "^1",
     "@hono/swagger-ui": "^0.6",
     "@hono/zod-openapi": "^1.2",
-    "@tx-stripe/stateless-sync": "workspace:*",
-    "@tx-stripe/ts-cli": "workspace:*",
+    "@stripe/stateless-sync": "workspace:*",
+    "@stripe/ts-cli": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
     "hono": "^4"
   },
   "devDependencies": {
-    "@tx-stripe/destination-postgres": "workspace:*",
-    "@tx-stripe/source-stripe": "workspace:*",
+    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/source-stripe": "workspace:*",
     "@types/node": "^24.10.1",
     "@vitest/ui": "^4.0.9",
     "esbuild": "^0.27.2",

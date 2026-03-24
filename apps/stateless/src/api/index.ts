@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { serve } from '@hono/node-server'
-import { createConnectorResolver } from '@tx-stripe/stateless-sync'
+import { createConnectorResolver } from '@stripe/stateless-sync'
 import { createApp } from './app'
 
 const port = Number(process.env.PORT || 3001)

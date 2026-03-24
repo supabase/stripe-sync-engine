@@ -1,5 +1,5 @@
-import type { ErrorMessage, Message, StateMessage, StreamStatusMessage } from '@tx-stripe/protocol'
-import { toRecordMessage } from '@tx-stripe/protocol'
+import type { ErrorMessage, Message, StateMessage, StreamStatusMessage } from '@stripe/protocol'
+import { toRecordMessage } from '@stripe/protocol'
 import type { ResourceConfig } from './types'
 
 function findConfigByTableName(

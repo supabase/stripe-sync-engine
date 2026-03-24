@@ -10,8 +10,8 @@ import type {
   Message,
   Source,
   StateMessage,
-} from '@tx-stripe/sync-engine-stateless'
-import { createConnectorResolver } from '@tx-stripe/sync-engine-stateless'
+} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless'
 import { createApp } from './app'
 
 // ---------------------------------------------------------------------------

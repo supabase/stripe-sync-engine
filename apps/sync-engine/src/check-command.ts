@@ -1,5 +1,5 @@
-import { createEngineFromParams, createConnectorResolver } from '@tx-stripe/stateless-sync'
-import { parseJsonOrFile } from '@tx-stripe/ts-cli'
+import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
+import { parseJsonOrFile } from '@stripe/ts-cli'
 import type { CliOptions } from './resolve-options'
 import { resolveOptions } from './resolve-options'
 

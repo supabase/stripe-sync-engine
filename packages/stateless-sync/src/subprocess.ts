@@ -91,7 +91,7 @@ export async function* spawnWithStdin<TIn, TOut>(
 
 /**
  * Split a command string into [bin, ...baseArgs].
- * e.g. "npx @tx-stripe/source-stripe" → ["npx", "@tx-stripe/source-stripe"]
+ * e.g. "npx @stripe/source-stripe" → ["npx", "@stripe/source-stripe"]
  * e.g. "/path/to/source-stripe"    → ["/path/to/source-stripe"]
  */
 export function splitCmd(cmd: string): [string, string[]] {

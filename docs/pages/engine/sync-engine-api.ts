@@ -16,7 +16,7 @@ import type {
   Stream,
 } from './sync-engine-types'
 import type { Sync } from '../3-sync/sync-types'
-import { SyncConfig } from '@tx-stripe/protocol'
+import { SyncConfig } from '@stripe/protocol'
 
 // MARK: - Source
 //

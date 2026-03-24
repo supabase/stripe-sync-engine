@@ -1,10 +1,10 @@
 import pg from 'pg'
 import Stripe from 'stripe'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import source from '@tx-stripe/source-stripe'
-import destination from '@tx-stripe/destination-postgres'
-import { createEngine } from '@tx-stripe/stateless-sync'
-import type { StateMessage } from '@tx-stripe/protocol'
+import source from '@stripe/source-stripe'
+import destination from '@stripe/destination-postgres'
+import { createEngine } from '@stripe/stateless-sync'
+import type { StateMessage } from '@stripe/protocol'
 import { describeWithEnv } from '../test-helpers'
 
 // ---------------------------------------------------------------------------

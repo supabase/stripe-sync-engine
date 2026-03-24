@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@tx-stripe/protocol'
+import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/protocol'
 import source from '../index'
 import type { StripeStreamState } from '../index'
 

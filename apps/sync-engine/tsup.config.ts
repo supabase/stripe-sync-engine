@@ -5,5 +5,5 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   dts: true,
   shims: true,
-  noExternal: [/^@tx-stripe\//],
+  noExternal: [/^@stripe\//],
 })

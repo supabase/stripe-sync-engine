@@ -43,7 +43,7 @@ If you add a migration, register it in `packages/store-postgres/src/migrations/i
 
 ## Monorepo Layout
 
-- `packages/sync-engine` — core sync engine + CLI (published as `@tx-stripe/sync-engine`)
+- `packages/sync-engine` — core sync engine + CLI (published as `@stripe/sync-engine`)
 - `packages/source-stripe` — Stripe source connector + webhook ingress server (Fastify)
 - `packages/sync-engine/src/supabase` — Supabase edge functions (Deno runtime, not Node)
 

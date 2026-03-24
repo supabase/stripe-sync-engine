@@ -1,10 +1,10 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createEngine } from '@tx-stripe/stateless-sync'
-import { sourceTest } from '@tx-stripe/stateless-sync'
-import destination from '@tx-stripe/destination-postgres'
-import type { RecordMessage, StateMessage } from '@tx-stripe/stateless-sync'
+import { createEngine } from '@stripe/stateless-sync'
+import { sourceTest } from '@stripe/stateless-sync'
+import destination from '@stripe/destination-postgres'
+import type { RecordMessage, StateMessage } from '@stripe/stateless-sync'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle

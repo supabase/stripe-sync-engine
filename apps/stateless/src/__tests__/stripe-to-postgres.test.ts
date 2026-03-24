@@ -1,10 +1,10 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import source from '@tx-stripe/source-stripe'
-import destination from '@tx-stripe/destination-postgres'
-import { createEngine } from '@tx-stripe/stateless-sync'
-import type { Message, StateMessage } from '@tx-stripe/stateless-sync'
+import source from '@stripe/source-stripe'
+import destination from '@stripe/destination-postgres'
+import { createEngine } from '@stripe/stateless-sync'
+import type { Message, StateMessage } from '@stripe/stateless-sync'
 
 // ---------------------------------------------------------------------------
 // Config

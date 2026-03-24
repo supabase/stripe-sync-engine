@@ -1,9 +1,9 @@
 import sourceStripe, {
   type Config as SourceConfig,
   buildResourceRegistry,
-} from '@tx-stripe/source-stripe'
-import destinationPostgres, { type Config as DestConfig } from '@tx-stripe/destination-postgres'
-import { catalogFromRegistry } from '@tx-stripe/source-stripe'
+} from '@stripe/source-stripe'
+import destinationPostgres, { type Config as DestConfig } from '@stripe/destination-postgres'
+import { catalogFromRegistry } from '@stripe/source-stripe'
 import Stripe from 'npm:stripe'
 
 Deno.serve(async (req) => {

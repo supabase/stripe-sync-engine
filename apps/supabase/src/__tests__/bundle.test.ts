@@ -35,6 +35,6 @@ describe.concurrent('Bundled edge function code', () => {
 
   it.todo(
     'bundled code does not reference private workspace packages — ' +
-      'npm:@tx-stripe/* must be inlined, not left as external imports'
+      'npm:@stripe/* must be inlined, not left as external imports'
   )
 })

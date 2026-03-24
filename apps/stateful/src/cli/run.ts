@@ -5,17 +5,17 @@ import type {
   ConnectorResolver,
   Message,
   CheckResult,
-} from '@tx-stripe/sync-engine-stateless'
-import { createConnectorResolver } from '@tx-stripe/sync-engine-stateless'
-import type { CredentialStore, ConfigStore } from '@tx-stripe/stateful-sync'
+} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless'
+import type { CredentialStore, ConfigStore } from '@stripe/stateful-sync'
 import {
   StatefulSync,
   fileCredentialStore,
   fileConfigStore,
   fileStateStore,
   fileLogSink,
-} from '@tx-stripe/stateful-sync'
-import { envPrefix } from '@tx-stripe/ts-cli'
+} from '@stripe/stateful-sync'
+import { envPrefix } from '@stripe/ts-cli'
 
 const DEFAULT_DATA_DIR = join(homedir(), '.stripe-sync')
 

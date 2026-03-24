@@ -1,18 +1,18 @@
 import pg from 'pg'
 import Stripe from 'stripe'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import source from '@tx-stripe/source-stripe'
-import destination from '@tx-stripe/destination-postgres'
-import { createConnectorResolver } from '@tx-stripe/stateless-sync'
-import type { StateMessage } from '@tx-stripe/protocol'
+import source from '@stripe/source-stripe'
+import destination from '@stripe/destination-postgres'
+import { createConnectorResolver } from '@stripe/stateless-sync'
+import type { StateMessage } from '@stripe/protocol'
 import {
   StatefulSync,
   memoryCredentialStore,
   memoryConfigStore,
   stderrLogSink,
-} from '@tx-stripe/stateful-sync'
-import { createPgStateStore, runMigrationsFromContent, migrations } from '@tx-stripe/store-postgres'
-import type { Credential } from '@tx-stripe/stateful-sync'
+} from '@stripe/stateful-sync'
+import { createPgStateStore, runMigrationsFromContent, migrations } from '@stripe/store-postgres'
+import type { Credential } from '@stripe/stateful-sync'
 
 // ---------------------------------------------------------------------------
 // Config

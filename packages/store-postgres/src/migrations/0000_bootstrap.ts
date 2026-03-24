@@ -1,4 +1,4 @@
-import { sql } from '@tx-stripe/util-postgres'
+import { sql } from '@stripe/util-postgres'
 
 export default sql`
 -- Generic bootstrap: trigger functions for any data destination.

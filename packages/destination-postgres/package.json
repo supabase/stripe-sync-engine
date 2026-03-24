@@ -1,5 +1,5 @@
 {
-  "name": "@tx-stripe/destination-postgres",
+  "name": "@stripe/destination-postgres",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -22,8 +22,8 @@
     "dist"
   ],
   "dependencies": {
-    "@tx-stripe/protocol": "workspace:*",
-    "@tx-stripe/util-postgres": "workspace:*",
+    "@stripe/protocol": "workspace:*",
+    "@stripe/util-postgres": "workspace:*",
     "pg": "^8.16.3",
     "zod": "^4.3.6"
   },

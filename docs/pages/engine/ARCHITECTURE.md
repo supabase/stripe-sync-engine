@@ -197,7 +197,7 @@ Source → Engine → Destination
 ### Minimal sync
 
 ```typescript
-import { createEngine } from '@tx-stripe/stateless-sync'
+import { createEngine } from '@stripe/stateless-sync'
 
 const engine = createEngine(params, { source, destination })
 
@@ -207,11 +207,11 @@ for await (const msg of engine.run()) {
 }
 ```
 
-`createEngine` lives in `@tx-stripe/stateless-sync`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
+`createEngine` lives in `@stripe/stateless-sync`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
 
 ### Validation boundary
 
-The engine is the validation boundary between connectors. Connectors are untrusted — they can be third-party code, subprocess binaries, or in-process modules. The engine validates messages in both directions using Zod schemas from `@tx-stripe/protocol`.
+The engine is the validation boundary between connectors. Connectors are untrusted — they can be third-party code, subprocess binaries, or in-process modules. The engine validates messages in both directions using Zod schemas from `@stripe/protocol`.
 
 **On read** — every message from `source.read()` is validated with `Message.parse(msg)` (the 6-type discriminated union). Invalid messages throw. Records and states referencing streams not in the catalog are dropped with an error callback.
 

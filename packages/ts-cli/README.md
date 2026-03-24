@@ -5,13 +5,13 @@ Generic CLI infrastructure utilities. Not tied to any specific connector or sync
 ## Install
 
 ```sh
-pnpm add @tx-stripe/ts-cli
+pnpm add @stripe/ts-cli
 ```
 
 ## Config resolution
 
 ```ts
-import { envPrefix, configFromFile, mergeConfig, parseJsonOrFile } from '@tx-stripe/ts-cli'
+import { envPrefix, configFromFile, mergeConfig, parseJsonOrFile } from '@stripe/ts-cli'
 ```
 
 ### `envPrefix(prefix)`

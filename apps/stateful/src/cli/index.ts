@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { Command } from 'commander'
-import { parseNdjsonChunks } from '@tx-stripe/stateless-sync'
+import { parseNdjsonChunks } from '@stripe/stateless-sync'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
 
 const program = new Command()

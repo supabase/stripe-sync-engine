@@ -113,7 +113,7 @@ jobs:
             echo "::warning::Integration tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
             exit 0
           fi
-          pnpm --filter @tx-stripe/test-integration run test:integration
+          pnpm --filter @stripe/test-integration run test:integration
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
@@ -124,7 +124,7 @@ jobs:
             echo "::warning::E2E tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
             exit 0
           fi
-          pnpm --filter @tx-stripe/test-e2e run test
+          pnpm --filter @stripe/test-e2e run test
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

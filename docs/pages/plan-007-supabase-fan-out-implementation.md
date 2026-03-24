@@ -2,7 +2,7 @@
 
 ## Context
 
-The current `stripe-worker.ts` is dead code — it imports `StripeSyncWorker` and `WorkerTaskManager` from `@tx-stripe/source-stripe`, but both were deleted in the v2 protocol refactor. The old design ran N workers in-memory within a single edge function invocation, all claiming tasks from a shared Postgres queue.
+The current `stripe-worker.ts` is dead code — it imports `StripeSyncWorker` and `WorkerTaskManager` from `@stripe/source-stripe`, but both were deleted in the v2 protocol refactor. The old design ran N workers in-memory within a single edge function invocation, all claiming tasks from a shared Postgres queue.
 
 The new design fans out at the **stream level**: a coordinator discovers streams and dispatches one HTTP call per stream to a backfill worker. Each worker paginates its stream with bounded page counts, saves cursor state to Postgres, and self-reinvokes if there are more pages. When the last worker finishes, a barrier query atomically detects completion.
 
@@ -121,7 +121,7 @@ In `uninstall()` (inside `stripe-setup.ts` DELETE handler), add cleanup for the 
 pnpm build
 pnpm format
 pnpm lint
-pnpm --filter @tx-stripe/integration-supabase test
+pnpm --filter @stripe/integration-supabase test
 ```
 
 Manual: read coordinator and worker code, trace the fan-out → self-reinvoke → barrier flow.
