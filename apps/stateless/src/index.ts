@@ -31,8 +31,8 @@ export {
   createConnectorResolver,
   resolveSpecifier,
   resolveBin,
-  sourceExec,
-  destinationExec,
+  createSourceFromExec,
+  createDestinationFromExec,
   parseNdjsonStream,
 } from '@stripe/stateless-sync'
 

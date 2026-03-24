@@ -16,7 +16,7 @@ import { splitCmd, spawnAndCollect, spawnWithStdin } from './subprocess'
  * e.g. `"npx @stripe/destination-postgres"` or `"/path/to/destination-postgres"`.
  * The connector protocol subcommands (spec, check, write, etc.) are appended.
  */
-export function destinationExec(cmd: string): Destination {
+export function createDestinationFromExec(cmd: string): Destination {
   const [bin, baseArgs] = splitCmd(cmd)
   let cachedSpec: ConnectorSpecification | undefined
 

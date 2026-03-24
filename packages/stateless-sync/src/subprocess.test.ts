@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { resolveBin } from './loader'
-import { sourceExec } from './source-exec'
-import { destinationExec } from './destination-exec'
+import { createSourceFromExec } from './source-exec'
+import { createDestinationFromExec } from './destination-exec'
 
 // These tests use real connector binaries (built by `pnpm build`).
 
-describe('sourceExec', () => {
+describe('createSourceFromExec', () => {
   const bin = resolveBin('stripe', 'source')
   if (!bin) throw new Error('source-stripe bin not found — run pnpm build first')
 
-  const source = sourceExec(bin)
+  const source = createSourceFromExec(bin)
 
   it('has all required Source methods', () => {
     expect(typeof source.spec).toBe('function')
@@ -36,11 +36,11 @@ describe('sourceExec', () => {
   })
 })
 
-describe('destinationExec', () => {
+describe('createDestinationFromExec', () => {
   const bin = resolveBin('postgres', 'destination')
   if (!bin) throw new Error('destination-postgres bin not found — run pnpm build first')
 
-  const dest = destinationExec(bin)
+  const dest = createDestinationFromExec(bin)
 
   it('has all required Destination methods', () => {
     expect(typeof dest.spec).toBe('function')
@@ -66,7 +66,7 @@ describe('error propagation', () => {
     const bin = resolveBin('stripe', 'source')
     if (!bin) throw new Error('source-stripe bin not found')
 
-    const source = sourceExec(bin)
+    const source = createSourceFromExec(bin)
     // check with invalid config should fail
     await expect(source.check({ config: {} })).rejects.toThrow()
   })

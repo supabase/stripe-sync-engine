@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import type { Source, Destination } from '@stripe/protocol'
 import { ConnectorSpecification } from '@stripe/protocol'
-import { sourceExec } from './source-exec'
-import { destinationExec } from './destination-exec'
+import { createSourceFromExec } from './source-exec'
+import { createDestinationFromExec } from './destination-exec'
 
 // MARK: - Validation
 
@@ -246,7 +246,7 @@ export function createConnectorResolver(
   /**
    * Get the command string for a connector via dynamic resolution strategies.
    * All three strategies (commandMap, path, npm) produce the same output: a command
-   * string passed directly to sourceExec/destinationExec. Multi-word commands
+   * string passed directly to createSourceFromExec/createDestinationFromExec. Multi-word commands
    * (e.g. "npx @stripe/source-stripe") are split by subprocess.ts at spawn time.
    */
   function resolveVia(name: string, role: 'source' | 'destination'): string | undefined {
@@ -277,7 +277,7 @@ export function createConnectorResolver(
 
       const cmd = resolveVia(name, 'source')
       if (cmd) {
-        const connector = sourceExec(cmd)
+        const connector = createSourceFromExec(cmd)
         sourceCache.set(name, connector)
         _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector
@@ -294,7 +294,7 @@ export function createConnectorResolver(
 
       const cmd = resolveVia(name, 'destination')
       if (cmd) {
-        const connector = destinationExec(cmd)
+        const connector = createDestinationFromExec(cmd)
         destCache.set(name, connector)
         _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector

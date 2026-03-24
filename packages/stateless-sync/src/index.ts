@@ -17,8 +17,8 @@ export type {
   ConnectorsFrom,
   ResolvedConnector,
 } from './loader'
-export { sourceExec } from './source-exec'
-export { destinationExec } from './destination-exec'
+export { createSourceFromExec } from './source-exec'
+export { createDestinationFromExec } from './destination-exec'
 export { sourceTest, sourceTestSpec } from './source-test'
 export type { SourceTestConfig } from './source-test'
 export { destinationTest, destinationTestSpec } from './destination-test'

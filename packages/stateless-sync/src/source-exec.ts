@@ -19,7 +19,7 @@ import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './sub
  * If `$stdin` is passed to `read()`, it is piped to the subprocess stdin as
  * NDJSON — enabling live event delivery to subprocess sources.
  */
-export function sourceExec(cmd: string): Source {
+export function createSourceFromExec(cmd: string): Source {
   const [bin, baseArgs] = splitCmd(cmd)
   let cachedSpec: ConnectorSpecification | undefined
 
