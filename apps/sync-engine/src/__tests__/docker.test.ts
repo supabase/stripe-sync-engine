@@ -58,8 +58,9 @@ describe('Docker image', { timeout: 180_000 }, () => {
     }
     expect(healthy).toBe(true)
 
-    // Cleanup
-    docker('stop', CONTAINER)
+    // Cleanup — use -t 0 so docker stop sends SIGKILL immediately instead of
+    // waiting 10 s for graceful shutdown (which races our execFileSync timeout).
+    docker('stop', '-t', '0', CONTAINER)
   })
 
   it('check exits non-zero without valid config', () => {
