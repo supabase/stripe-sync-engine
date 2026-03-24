@@ -209,6 +209,36 @@ for await (const msg of engine.run()) {
 
 `createEngine` lives in `@stripe/stateless-sync`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
 
+### Validation boundary
+
+The engine is the validation boundary between connectors. Connectors are untrusted — they can be third-party code, subprocess binaries, or in-process modules. The engine validates messages in both directions using Zod schemas from `@stripe/protocol`.
+
+**On read** — every message from `source.read()` is validated with `Message.parse(msg)` (the 6-type discriminated union). Invalid messages throw. Records and states referencing streams not in the catalog are dropped with an error callback.
+
+**On write** — every message from `destination.write()` is validated with `DestinationOutput.parse(msg)` (state, error, or log). Invalid output throws.
+
+**On creation** — `source_config` and `destination_config` are validated against each connector's JSON Schema (from `spec().config`) via `z.fromJSONSchema(spec.config).parse(config)`. Bad config fails fast before any I/O.
+
+**Not validated** — the `forward()` pipeline stage between engine and destination uses TypeScript type guards (`isDataMessage`), not Zod runtime parsing. This is intentional: by the time messages reach `forward()`, they have already been validated by `Message.parse()` in the read stage.
+
+```
+source.read()                    engine                         destination.write()
+     │                              │                                │
+     ├── raw message ──────────────►│                                │
+     │                     Message.parse(msg)                        │
+     │                     stream membership check                   │
+     │                              │                                │
+     │                              ├── RecordMessage ──────────────►│
+     │                              ├── StateMessage ───────────────►│
+     │                              │   (forward: type guard only)   │
+     │                              │                                │
+     │                              │                                ├── raw output
+     │                              │◄───────────────────────────────┤
+     │                              │  DestinationOutput.parse(msg)  │
+     │                              │                                │
+     │                              ├── StateMessage ──► caller      │
+```
+
 ### State flow
 
 The `StateMessage` flows through the entire pipeline before being persisted. It is the destination's re-emission that confirms records are committed — not just read from the source.

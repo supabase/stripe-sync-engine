@@ -176,5 +176,21 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build Docker image
         run: docker build -t sync-engine:ci .
-      - name: Smoke test
+      - name: Smoke test — version
         run: docker run --rm sync-engine:ci --version
+      - name: Smoke test — health check
+        run: |
+          docker run -d --name se-smoke -p 3000:3000 sync-engine:ci
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3000/health; then
+              echo ""
+              echo "Health check passed"
+              docker rm -f se-smoke
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Health check failed"
+          docker logs se-smoke
+          docker rm -f se-smoke
+          exit 1

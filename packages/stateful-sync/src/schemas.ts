@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
 // ── Store types ─────────────────────────────────────────────────
-// Loose types for internal storage. Decoupled from the strict Zod
-// schemas below so that stores, service code, and tests remain
-// flexible. The Zod schemas are the validation contract at the API
-// boundary; these types are the storage contract.
+// Loose TypeScript types for internal storage. Intentionally separate
+// from the strict Zod schemas below — collapsing these into z.infer<>
+// breaks code that accesses fields across discriminated union variants
+// (e.g. config.source.credential_id fails when one variant lacks it).
+//
+// Zod schemas = API boundary validation (strict, dynamic, per-connector).
+// These types = storage & service contract (loose, index-signed, universal).
 
 /** A stored credential — flat shape, type-specific fields at top level. */
 export type Credential = {
@@ -20,6 +23,12 @@ export type Credential = {
 /**
  * Stored form of a sync configuration. References credentials by ID,
  * does not contain state. Resolved to SyncParams before calling the engine.
+ *
+ * This is a loose type — not derived from Zod. The strict Zod-based
+ * SyncSchema (built dynamically per-connector in buildSchemas()) is used
+ * for API validation. This type is used by stores and service internals
+ * where the index signature lets code access connector-specific fields
+ * without narrowing the discriminated union first.
  */
 export type SyncConfig = {
   id: string

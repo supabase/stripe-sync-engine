@@ -183,12 +183,18 @@ importers:
 
   apps/sync-engine:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1
+        version: 1.19.11(hono@4.12.8)
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
       '@stripe/store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
+      '@stripe/sync-engine-stateless':
+        specifier: workspace:*
+        version: link:../stateless
       '@stripe/ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
@@ -198,6 +204,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      hono:
+        specifier: ^4
+        version: 4.12.8
       pg:
         specifier: ^8.16.3
         version: 8.16.3

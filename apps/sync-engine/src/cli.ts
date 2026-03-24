@@ -4,6 +4,7 @@ import 'dotenv/config'
 import { Command } from 'commander'
 import { syncAction } from './sync-command'
 import { checkAction } from './check-command'
+import { serveAction } from './serve-command'
 
 const program = new Command()
 
@@ -38,17 +39,19 @@ function addOptions(cmd: Command): Command {
   )
 }
 
-// Default command: `sync-engine` with no subcommand runs sync
-addOptions(program).action(async (opts) => {
+// Serve command — HTTP API server (default when no subcommand)
+program
+  .command('serve', { isDefault: true })
+  .description('Start the HTTP API server (default command)')
+  .option('-p, --port <port>', 'Port to listen on (or PORT env)', parseInt)
+  .action(async (opts) => {
+    serveAction(opts)
+  })
+
+// Sync command
+addOptions(program.command('sync').description('Run sync pipeline')).action(async (opts) => {
   await syncAction(opts)
 })
-
-// Explicit `sync` subcommand — alias for default
-addOptions(program.command('sync').description('Run sync pipeline (default command)')).action(
-  async (opts) => {
-    await syncAction(opts)
-  }
-)
 
 // Check command
 addOptions(
