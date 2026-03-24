@@ -161,15 +161,37 @@ export function resolveBin(name: string, role: 'source' | 'destination'): string
 
 // MARK: - ConnectorResolver
 
+/**
+ * Controls which dynamic resolution strategies are enabled beyond the registered
+ * (in-process) connectors. Maps 1:1 to CLI flags and JSON config fields.
+ *
+ * CLI:   --connectors-from-path    --connectors-from-npm    --connectors-from-command-map
+ * TS:    connectorsFromPath         connectorsFromNpm         connectorsFromCommandMap
+ * JSON:  connectors_from_path      connectors_from_npm       connectors_from_command_map
+ */
+export interface ConnectorsFrom {
+  /**
+   * Find binaries matching `source-*` / `destination-*` in `node_modules/.bin` and `PATH`.
+   * Default: `true`.
+   */
+  path?: boolean
+  /**
+   * Download `@stripe/source-*` / `@stripe/destination-*` from npm.
+   * Default: `false`.
+   */
+  npm?: boolean
+  /**
+   * Explicit name→command mappings. Keys: `"source-<name>"` or `"destination-<name>"`.
+   * The command is spawned as a subprocess speaking the connector NDJSON protocol.
+   */
+  commandMap?: Record<string, string>
+}
+
 export interface ConnectorResolverOptions {
   /** Preloaded connectors — skip dynamic loading for these. */
   sources?: Record<string, Source>
   /** Preloaded connectors — skip dynamic loading for these. */
   destinations?: Record<string, Destination>
-  /** Source connector names to eagerly resolve at startup. */
-  sourceNames?: string[]
-  /** Destination connector names to eagerly resolve at startup. */
-  destinationNames?: string[]
 }
 
 export type ResolvedConnector<T> = { connector: T; configSchema: z.ZodType }
@@ -197,43 +219,18 @@ function configSchemaFromSpec(connector: {
  * Create a caching connector resolver.
  *
  * Resolution order:
- * 1. **Registered** — preloaded in `options.sources` / `options.destinations`. In-process, fastest.
- * 2. **Subprocess** — connector has a bin entrypoint installed. Spawns child processes.
- * 3. **Error** — connector not found.
- *
- * When `sourceNames` / `destinationNames` are provided, those connectors are
- * eagerly resolved at creation time and their config schemas (from `spec()`)
- * are available via `sources()` / `destinations()`.
+ * 1. **Registered** — in-process connectors passed in `registered`. Always checked first.
+ * 2. **commandMap** — explicit name→command mappings in `connectorsFrom.commandMap`.
+ * 3. **path** — `node_modules/.bin` / PATH scan (enabled unless `connectorsFrom.path === false`).
+ * 4. **npm** — `npx @stripe/source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
+ * 5. **Error** — connector not found.
  */
-export function createConnectorResolver(options: ConnectorResolverOptions): ConnectorResolver {
-  const sourceCache = new Map<string, Source>(Object.entries(options.sources ?? {}))
-  const destCache = new Map<string, Destination>(Object.entries(options.destinations ?? {}))
-
-  // Eagerly resolve named connectors
-  for (const name of options.sourceNames ?? []) {
-    if (!sourceCache.has(name)) {
-      const bin = resolveBin(name, 'source')
-      if (bin) {
-        sourceCache.set(name, spawnSource(bin))
-      } else {
-        throw new Error(
-          `Source connector "${name}" not found. Register it or install @stripe/source-${name}.`
-        )
-      }
-    }
-  }
-  for (const name of options.destinationNames ?? []) {
-    if (!destCache.has(name)) {
-      const bin = resolveBin(name, 'destination')
-      if (bin) {
-        destCache.set(name, spawnDestination(bin))
-      } else {
-        throw new Error(
-          `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
-        )
-      }
-    }
-  }
+export function createConnectorResolver(
+  registered: ConnectorResolverOptions,
+  connectorsFrom?: ConnectorsFrom
+): ConnectorResolver {
+  const sourceCache = new Map<string, Source>(Object.entries(registered.sources ?? {}))
+  const destCache = new Map<string, Destination>(Object.entries(registered.destinations ?? {}))
 
   // Build schema maps from all known connectors
   const _sources = new Map<string, ResolvedConnector<Source>>()
@@ -245,14 +242,41 @@ export function createConnectorResolver(options: ConnectorResolverOptions): Conn
     _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
   }
 
+  /**
+   * Get the command string for a connector via dynamic resolution strategies.
+   * All three strategies (commandMap, path, npm) produce the same output: a command
+   * string passed directly to spawnSource/spawnDestination. Multi-word commands
+   * (e.g. "npx @stripe/source-stripe") are split by subprocess.ts at spawn time.
+   */
+  function resolveVia(name: string, role: 'source' | 'destination'): string | undefined {
+    const key = `${role}-${name}`
+
+    // commandMap: explicit name→command mapping
+    const mapped = connectorsFrom?.commandMap?.[key]
+    if (mapped) return mapped
+
+    // path: find binary in node_modules/.bin or PATH
+    if (connectorsFrom?.path !== false) {
+      const bin = resolveBin(name, role)
+      if (bin) return bin
+    }
+
+    // npm: download from @stripe scope via npx
+    if (connectorsFrom?.npm) {
+      return `npx @stripe/${role}-${name}`
+    }
+
+    return undefined
+  }
+
   return {
     async resolveSource(name: string): Promise<Source> {
       const cached = sourceCache.get(name)
       if (cached) return cached
 
-      const bin = resolveBin(name, 'source')
-      if (bin) {
-        const connector = spawnSource(bin)
+      const cmd = resolveVia(name, 'source')
+      if (cmd) {
+        const connector = spawnSource(cmd)
         sourceCache.set(name, connector)
         _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector
@@ -267,9 +291,9 @@ export function createConnectorResolver(options: ConnectorResolverOptions): Conn
       const cached = destCache.get(name)
       if (cached) return cached
 
-      const bin = resolveBin(name, 'destination')
-      if (bin) {
-        const connector = spawnDestination(bin)
+      const cmd = resolveVia(name, 'destination')
+      if (cmd) {
+        const connector = spawnDestination(cmd)
         destCache.set(name, connector)
         _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
         return connector

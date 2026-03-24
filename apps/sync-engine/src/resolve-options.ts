@@ -20,6 +20,10 @@ export interface CliOptions {
   sourceConfig?: string
   destinationConfig?: string
   config?: string
+  // Connector discovery flags
+  connectorsFromCommandMap?: string
+  connectorsFromPath?: boolean // Commander inverts --no-connectors-from-path → false
+  connectorsFromNpm?: boolean
 }
 
 /** Parse comma-separated stream names into the streams array format. */

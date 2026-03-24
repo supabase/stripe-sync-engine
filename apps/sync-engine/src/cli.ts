@@ -36,6 +36,13 @@ function addOptions(cmd: Command): Command {
       .option('--source-config <json>', 'Raw source config JSON or @file')
       .option('--destination-config <json>', 'Raw destination config JSON or @file')
       .option('--config <file>', 'Config file with full SyncParams')
+      // Connector discovery
+      .option(
+        '--connectors-from-command-map <json>',
+        'Explicit connector command mappings (JSON object or @file)'
+      )
+      .option('--no-connectors-from-path', 'Disable PATH-based connector discovery')
+      .option('--connectors-from-npm', 'Enable npm auto-download of connectors')
   )
 }
 
@@ -44,6 +51,12 @@ program
   .command('serve', { isDefault: true })
   .description('Start the HTTP API server (default command)')
   .option('-p, --port <port>', 'Port to listen on (or PORT env)', parseInt)
+  .option(
+    '--connectors-from-command-map <json>',
+    'Explicit connector command mappings (JSON object or @file)'
+  )
+  .option('--no-connectors-from-path', 'Disable PATH-based connector discovery')
+  .option('--connectors-from-npm', 'Enable npm auto-download of connectors (disabled by default)')
   .action(async (opts) => {
     serveAction(opts)
   })

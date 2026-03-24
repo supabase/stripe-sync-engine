@@ -34,35 +34,42 @@ The child process resolves imports from its own package's `node_modules` — pnp
 
 ## Resolution strategy
 
-The resolver uses a simple fallback chain:
+The resolver uses a fallback chain with configurable dynamic strategies:
 
 ```
-1. Check registered connectors  →  in-process (fast path)
-2. Subprocess available?        →  spawn binary (fallback)
-3. Neither                      →  error
+1. Registered connectors       →  in-process (fast path)
+2. connectorsFrom.commandMap   →  explicit name→command mapping
+3. connectorsFrom.path (on)    →  binary in node_modules/.bin / PATH
+4. connectorsFrom.npm (off)    →  npx @stripe/source-<name>
+5. None found                  →  error
 ```
 
 ```ts
-const resolver = createConnectorResolver({
-  // Registered: always available, any runtime
-  sources: { stripe: sourceStripe },
-  destinations: { postgres: destPostgres },
-  // Unregistered connectors: resolved via subprocess if available
-})
+const resolver = createConnectorResolver(
+  {
+    // Registered: always in-process, highest priority
+    sources: { stripe: sourceStripe },
+    destinations: { postgres: destPostgres },
+  },
+  {
+    // Dynamic resolution (optional)
+    commandMap: { 'source-salesforce': 'npx @acme/source-salesforce' },
+    path: true, // default: on
+    npm: false, // default: off
+  }
+)
 
 // Registered → in-process
 await resolver.resolveSource('stripe')
 
-// Not registered → spawn 'source-custom read ...'
+// Not registered → spawn 'source-custom' from PATH
 await resolver.resolveSource('custom')
 ```
 
-Subprocess availability is auto-detected:
+All dynamic strategies produce command strings that get spawned as subprocesses.
+Multi-word commands (`"npx @stripe/source-stripe"`) are split on whitespace at spawn time.
 
-- Can we `import('node:child_process')`? (fails in Deno edge functions, Workers)
-- Does the binary exist in PATH / `node_modules/.bin/`?
-
-No config flags. No deployment-aware code. The resolver just falls through.
+See [Connector Discovery](./engine/connector-discovery.md) for the full strategy reference.
 
 ## The subprocess adapter
 

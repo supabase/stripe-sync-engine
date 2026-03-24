@@ -1,10 +1,19 @@
 import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
+import { parseJsonOrFile } from '@stripe/ts-cli'
 import type { CliOptions } from './resolve-options'
 import { resolveOptions } from './resolve-options'
 
-const resolver = createConnectorResolver({})
-
 export async function checkAction(opts: CliOptions) {
+  const resolver = createConnectorResolver(
+    {},
+    {
+      commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
+        | Record<string, string>
+        | undefined,
+      path: opts.connectorsFromPath,
+      npm: opts.connectorsFromNpm ?? true,
+    }
+  )
   const params = resolveOptions(opts)
   const engine = await createEngineFromParams(params, resolver)
   const result = await engine.check()

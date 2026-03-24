@@ -102,8 +102,26 @@ async function* spawnWithStdin<TIn, TOut>(
 
 // MARK: - Factory functions
 
-/** Wrap a connector CLI binary as a Source. */
-export function spawnSource(bin: string): Source {
+/**
+ * Split a command string into [bin, ...baseArgs].
+ * e.g. "npx @stripe/source-stripe" → ["npx", "@stripe/source-stripe"]
+ * e.g. "/path/to/source-stripe"    → ["/path/to/source-stripe"]
+ */
+function splitCmd(cmd: string): [string, string[]] {
+  const parts = cmd.trim().split(/\s+/)
+  const [bin = cmd, ...baseArgs] = parts
+  return [bin, baseArgs]
+}
+
+/**
+ * Wrap a connector CLI command as a Source.
+ *
+ * `cmd` may be a binary path or a space-separated command with base args,
+ * e.g. `"npx @stripe/source-stripe"` or `"/path/to/source-stripe"`.
+ * The connector protocol subcommands (spec, check, read, etc.) are appended.
+ */
+export function spawnSource(cmd: string): Source {
+  const [bin, baseArgs] = splitCmd(cmd)
   let cachedSpec: ConnectorSpecification | undefined
 
   return {
@@ -111,9 +129,9 @@ export function spawnSource(bin: string): Source {
       if (!cachedSpec) {
         // spec() is synchronous in the interface but we need to spawn.
         // The CLI outputs JSON synchronously, so we use spawnSync.
-        const result = spawnSync(bin, ['spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
+        const result = spawnSync(bin, [...baseArgs, 'spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
         if (result.status !== 0) {
-          throw new Error(`${bin} spec exited with code ${result.status}: ${result.stderr}`)
+          throw new Error(`${cmd} spec exited with code ${result.status}: ${result.stderr}`)
         }
         cachedSpec = JSON.parse(result.stdout.toString()) as ConnectorSpecification
       }
@@ -122,6 +140,7 @@ export function spawnSource(bin: string): Source {
 
     async check(params: { config: Record<string, unknown> }): Promise<CheckResult> {
       const stdout = await spawnAndCollect(bin, [
+        ...baseArgs,
         'check',
         '--config',
         JSON.stringify(params.config),
@@ -131,6 +150,7 @@ export function spawnSource(bin: string): Source {
 
     async discover(params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
       const stdout = await spawnAndCollect(bin, [
+        ...baseArgs,
         'discover',
         '--config',
         JSON.stringify(params.config),
@@ -144,6 +164,7 @@ export function spawnSource(bin: string): Source {
       state?: Record<string, unknown>
     }): AsyncIterable<Message> {
       const args = [
+        ...baseArgs,
         'read',
         '--config',
         JSON.stringify(params.config),
@@ -162,6 +183,7 @@ export function spawnSource(bin: string): Source {
     }): Promise<void> {
       try {
         await spawnAndCollect(bin, [
+          ...baseArgs,
           'setup',
           '--config',
           JSON.stringify(params.config),
@@ -180,7 +202,12 @@ export function spawnSource(bin: string): Source {
 
     async teardown(params: { config: Record<string, unknown> }): Promise<void> {
       try {
-        await spawnAndCollect(bin, ['teardown', '--config', JSON.stringify(params.config)])
+        await spawnAndCollect(bin, [
+          ...baseArgs,
+          'teardown',
+          '--config',
+          JSON.stringify(params.config),
+        ])
       } catch (err) {
         if (String(err).includes("unknown command 'teardown'")) {
           console.error('teardown: not applicable')
@@ -192,16 +219,22 @@ export function spawnSource(bin: string): Source {
   }
 }
 
-/** Wrap a connector CLI binary as a Destination. */
-export function spawnDestination(bin: string): Destination {
+/**
+ * Wrap a connector CLI command as a Destination.
+ *
+ * `cmd` may be a binary path or a space-separated command with base args,
+ * e.g. `"npx @stripe/destination-postgres"` or `"/path/to/destination-postgres"`.
+ */
+export function spawnDestination(cmd: string): Destination {
+  const [bin, baseArgs] = splitCmd(cmd)
   let cachedSpec: ConnectorSpecification | undefined
 
   return {
     spec(): ConnectorSpecification {
       if (!cachedSpec) {
-        const result = spawnSync(bin, ['spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
+        const result = spawnSync(bin, [...baseArgs, 'spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
         if (result.status !== 0) {
-          throw new Error(`${bin} spec exited with code ${result.status}: ${result.stderr}`)
+          throw new Error(`${cmd} spec exited with code ${result.status}: ${result.stderr}`)
         }
         cachedSpec = JSON.parse(result.stdout.toString()) as ConnectorSpecification
       }
@@ -210,6 +243,7 @@ export function spawnDestination(bin: string): Destination {
 
     async check(params: { config: Record<string, unknown> }): Promise<CheckResult> {
       const stdout = await spawnAndCollect(bin, [
+        ...baseArgs,
         'check',
         '--config',
         JSON.stringify(params.config),
@@ -224,6 +258,7 @@ export function spawnDestination(bin: string): Destination {
       return spawnWithStdin<DestinationInput, DestinationOutput>(
         bin,
         [
+          ...baseArgs,
           'write',
           '--config',
           JSON.stringify(params.config),
@@ -240,6 +275,7 @@ export function spawnDestination(bin: string): Destination {
     }): Promise<void> {
       try {
         await spawnAndCollect(bin, [
+          ...baseArgs,
           'setup',
           '--config',
           JSON.stringify(params.config),
@@ -257,7 +293,12 @@ export function spawnDestination(bin: string): Destination {
 
     async teardown(params: { config: Record<string, unknown> }): Promise<void> {
       try {
-        await spawnAndCollect(bin, ['teardown', '--config', JSON.stringify(params.config)])
+        await spawnAndCollect(bin, [
+          ...baseArgs,
+          'teardown',
+          '--config',
+          JSON.stringify(params.config),
+        ])
       } catch (err) {
         if (String(err).includes("unknown command 'teardown'")) {
           console.error('teardown: not applicable')

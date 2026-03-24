@@ -1,128 +1,139 @@
 # Connector Discovery
 
-The engine supports four levels of connector discovery, each with different trust and convenience tradeoffs. Levels are tried in order — the first match wins.
+The engine supports three dynamic resolution strategies for connectors that aren't registered in-process. Each strategy is controlled by a dedicated flag, and all three share the same resolution mechanism: they produce a command string that gets spawned as a subprocess.
 
-## Discovery Levels
+## Resolution order
 
-### Level 1: In-process import
+When the engine needs a connector (e.g., `source "stripe"`):
 
-The engine imports the connector as a JavaScript module. The connector runs in the same process as the engine — no subprocess, no serialization overhead.
+1. **Registered** (always) — in-process connector passed at startup. Fastest, no subprocess.
+2. **commandMap** — explicit name→command entry in `connectors_from.command_map`.
+3. **path** (default: on) — binary matching `source-<name>` found in `node_modules/.bin` or `PATH`.
+4. **npm** (default: off) — auto-download via `npx @stripe/source-<name>`.
+
+The first match wins. Registered connectors always take priority.
+
+## Strategies
+
+### In-process (registered)
+
+Connectors passed directly at startup. Not configurable via flags — set in code:
 
 ```ts
-import sourceStripe from '@stripe/source-stripe'
-import destinationPostgres from '@stripe/destination-postgres'
-
-engine.register('stripe', sourceStripe)
-engine.register('postgres', destinationPostgres)
+const resolver = createConnectorResolver({
+  sources: { stripe: sourceStripe },
+  destinations: { postgres: destinationPostgres },
+})
 ```
 
 **Trust boundary:** Code review. Only connectors compiled into the build can run.
 
-**Use case:** Bundled first-party connectors, serverless deployments (Lambda, Cloud Run) where subprocess overhead is wasteful.
+**Use case:** Bundled first-party connectors, serverless deployments.
 
-### Level 2: `@stripe/*` from npm
+### `connectors-from-command-map`
 
-The engine downloads the connector package from npm at runtime, scoped to a trusted namespace.
+Explicit name→command mappings. The command can be anything — an npm package, a local binary, a script in any language. The engine spawns it and communicates via NDJSON on stdin/stdout.
 
 ```sh
-# User asks for a connector that isn't bundled
-sync-engine sync --source stripe --destination bigquery
-
-# Engine resolves: npx @stripe/destination-bigquery
+--connectors-from-command-map '{"source-salesforce":"npx @acme/source-salesforce","destination-snowflake":"/opt/bin/dest-snowflake"}'
 ```
 
-The engine only downloads packages matching a configured scope (default: `@stripe`). This prevents arbitrary code execution — only the scope owner can publish packages.
-
-**Trust boundary:** npm scope ownership. The `@stripe` scope is controlled by Stripe.
-
-**Use case:** CLI tool where zero-setup UX matters. Users don't pre-install connector packages — the engine pulls what it needs.
-
-**Tradeoffs:**
-
-- Requires network access at sync time
-- No version pinning (gets latest unless configured)
-- Not reproducible — the same command may run different code tomorrow
-- Adds startup latency (npm resolution)
-
-### Level 3: Explicit config
-
-The admin maps connector names to commands. The command can be anything — an npm package, a local binary, a script in any language. The engine spawns it as a subprocess and communicates via NDJSON on stdin/stdout.
+JSON config equivalent:
 
 ```json
 {
-  "connectors": {
-    "source-salesforce": "npx @acme/source-salesforce",
-    "source-internal": "/opt/bin/source-internal",
-    "source-legacy": "python3 /path/to/source.py",
-    "destination-snowflake": "docker run --rm snowflake-connector"
+  "connectors_from": {
+    "command_map": {
+      "source-salesforce": "npx @acme/source-salesforce",
+      "destination-snowflake": "/opt/bin/dest-snowflake"
+    }
   }
 }
 ```
 
 **Trust boundary:** Admin at deploy time. Only commands the admin explicitly declared can run.
 
-**Use case:** Third-party connectors, connectors written in other languages, locked-down production deployments where the admin controls exactly what runs.
+**Use case:** Third-party connectors, connectors in other languages, locked-down deployments.
 
-**Protocol requirement:** The command must implement the connector CLI protocol — `spec`, `check`, `discover` (sources), `read` (sources), `write` (destinations), `setup`, `teardown` subcommands, communicating via NDJSON on stdin/stdout.
+**Protocol requirement:** The command must implement the connector CLI protocol (`spec`, `check`, `discover`, `read`, `write`, `setup`, `teardown` subcommands via NDJSON on stdin/stdout).
 
-### Level 4: Auto-discover from PATH
+### `connectors-from-path`
 
-The engine scans `$PATH` for binaries matching a naming convention (e.g., `source-*`, `destination-*`) and registers them as connectors.
-
-```sh
-# Engine finds these on PATH:
-#   source-stripe       → registered as source "stripe"
-#   source-salesforce   → registered as source "salesforce"
-#   destination-postgres → registered as destination "postgres"
-```
-
-At startup, the engine runs `<binary> spec` on each discovered binary to get connector metadata and config schemas.
-
-**Trust boundary:** Machine configuration. Anything on PATH that matches the pattern can run.
-
-**Use case:** Development machines, environments where connectors are installed globally via `npm install -g`.
-
-## Configuration
-
-The `--connector-discovery` flag (or `CONNECTOR_DISCOVERY` env) controls which levels are enabled:
-
-| Mode    | Levels enabled | Description                                           |
-| ------- | -------------- | ----------------------------------------------------- |
-| `local` | 1, 3, 4        | No network downloads. For Docker, production servers. |
-| `all`   | 1, 2, 3, 4     | Full discovery including npm download. For CLI.       |
-
-Default: `all` for CLI, `local` for `serve`.
+Scans `node_modules/.bin` and `PATH` for binaries matching `source-<name>` / `destination-<name>`.
 
 ```sh
-# CLI — downloads @stripe/destination-bigquery if needed
-sync-engine sync --source stripe --destination bigquery
-
-# Server — only uses bundled, configured, or PATH connectors
-sync-engine serve --connector-discovery=local
-
-# Docker — hermetic, no npm at runtime
-ENV CONNECTOR_DISCOVERY=local
+# Enabled by default — disable with:
+--no-connectors-from-path
 ```
 
-## Resolution order
+**Trust boundary:** Machine configuration. Anything on PATH matching the naming pattern can run.
 
-When the engine needs a connector (e.g., `source "stripe"`):
+**Use case:** Development machines, Docker images with connectors pre-installed.
 
-1. **In-process registry** — check if it was registered via `engine.register()` at startup
-2. **Explicit config** — check if the config maps `source-stripe` to a command
-3. **PATH discovery** — check if `source-stripe` is on PATH
-4. **npm download** (if enabled) — try `npx @stripe/source-stripe`
+### `connectors-from-npm`
 
-The first match wins. This means in-process connectors always take priority over subprocess, and explicit config always beats auto-discovery.
+Downloads `@stripe/source-<name>` / `@stripe/destination-<name>` from npm at runtime via `npx`.
+
+```sh
+--connectors-from-npm
+```
+
+**Trust boundary:** npm scope ownership. Only packages in the `@stripe` scope can be auto-downloaded.
+
+**Use case:** CLI tool where zero-setup UX matters — users don't pre-install connector packages.
+
+**Tradeoffs:**
+
+- Requires network access at sync time
+- No version pinning (gets latest unless `npx` cache is pinned)
+- Not reproducible — same command may run different code tomorrow
+
+## All three strategies are command strings
+
+Under the hood, all three strategies produce a command string that gets spawned the same way:
+
+| Strategy     | Example command                              |
+| ------------ | -------------------------------------------- |
+| `commandMap` | `"npx @acme/source-salesforce"`              |
+| `path`       | `"/path/to/node_modules/.bin/source-stripe"` |
+| `npm`        | `"npx @stripe/source-stripe"`                |
+
+Multi-word commands are split on whitespace at spawn time — `"npx @stripe/source-stripe"` becomes `spawn("npx", ["@stripe/source-stripe", "spec", ...])`.
+
+## CLI flags
+
+### `sync` / `check` commands
+
+| Flag                                   | Default  | Description                               |
+| -------------------------------------- | -------- | ----------------------------------------- |
+| `--connectors-from-command-map <json>` | —        | Explicit command map (JSON or `@file`)    |
+| `--no-connectors-from-path`            | path: on | Disable PATH-based discovery              |
+| `--connectors-from-npm`                | npm: on  | npm auto-download (on by default for CLI) |
+
+### `serve` command
+
+| Flag                                   | Default  | Description                                         |
+| -------------------------------------- | -------- | --------------------------------------------------- |
+| `--connectors-from-command-map <json>` | —        | Explicit command map (JSON or `@file`)              |
+| `--no-connectors-from-path`            | path: on | Disable PATH-based discovery                        |
+| `--connectors-from-npm`                | npm: off | Enable npm auto-download (off by default for serve) |
+
+### Defaults by deployment
+
+| Context        | commandMap  | path | npm |
+| -------------- | ----------- | ---- | --- |
+| `sync`/`check` | from flags  | on   | on  |
+| `serve`        | from config | on   | off |
+| Serverless     | —           | off  | off |
+| Tests          | —           | on   | off |
 
 ## Security summary
 
-| Level               | What can run                      | Who controls it         | Network required |
-| ------------------- | --------------------------------- | ----------------------- | ---------------- |
-| 1 — In-process      | Compiled-in modules               | Developer (code review) | No               |
-| 2 — npm scope       | Packages in `@stripe/*`           | Scope owner (npm)       | Yes              |
-| 3 — Explicit config | Admin-declared commands           | Admin (deploy config)   | No\*             |
-| 4 — PATH discovery  | Anything matching pattern on PATH | Machine config          | No               |
+| Strategy   | What can run                      | Who controls it         | Network |
+| ---------- | --------------------------------- | ----------------------- | ------- |
+| Registered | Compiled-in modules               | Developer (code review) | No      |
+| commandMap | Admin-declared commands           | Admin (deploy config)   | No\*    |
+| path       | Anything on PATH matching pattern | Machine config          | No      |
+| npm        | Packages in `@stripe/*`           | Scope owner (npm)       | Yes     |
 
-\*Level 3 commands can themselves require network (e.g., `npx @acme/source-salesforce`), but the engine doesn't initiate the download — the command does.
-
+\* commandMap entries can themselves require network (e.g., `npx @acme/source-salesforce`), but the engine doesn't initiate the download — the command does.

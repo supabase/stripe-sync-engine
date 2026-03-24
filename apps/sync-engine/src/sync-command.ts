@@ -6,12 +6,21 @@ import {
   runMigrationsFromContent,
   genericBootstrapMigrations,
 } from '@stripe/store-postgres'
+import { parseJsonOrFile } from '@stripe/ts-cli'
 import type { CliOptions } from './resolve-options'
 import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options'
 
-const resolver = createConnectorResolver({})
-
 export async function syncAction(opts: CliOptions) {
+  const resolver = createConnectorResolver(
+    {},
+    {
+      commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
+        | Record<string, string>
+        | undefined,
+      path: opts.connectorsFromPath,
+      npm: opts.connectorsFromNpm ?? true,
+    }
+  )
   const params = resolveOptions(opts)
   const destConfig = params.destination_config as Record<string, unknown>
   const useState = opts.state !== false
