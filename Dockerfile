@@ -13,27 +13,17 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm build
 
-# Install only external npm deps (workspace @stripe/* deps are bundled by tsup)
-FROM node:24-alpine AS deps
-WORKDIR /app
-COPY --from=build /app/apps/sync-engine/package.json ./
-RUN node -e " \
-  const p = JSON.parse(require('fs').readFileSync('package.json','utf8')); \
-  p.dependencies = Object.fromEntries( \
-    Object.entries(p.dependencies || {}).filter(([k]) => !k.startsWith('@stripe/')) \
-  ); \
-  delete p.devDependencies; \
-  require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2)); \
-"
-RUN npm install --omit=dev
+# Create standalone deployment with lockfile-pinned deps
+FROM build AS deploy
+RUN pnpm --filter @stripe/sync-engine deploy --prod --legacy /deploy
 
 # Final image — just the bundle + external node_modules
 FROM node:24-alpine
 WORKDIR /app
 
-COPY --from=build /app/apps/sync-engine/package.json ./
-COPY --from=build /app/apps/sync-engine/dist ./dist
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deploy /deploy/package.json ./
+COPY --from=deploy /deploy/dist ./dist
+COPY --from=deploy /deploy/node_modules ./node_modules
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
