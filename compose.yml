@@ -43,12 +43,13 @@ services:
 
   verdaccio:
     image: verdaccio/verdaccio
+    profiles: [verdaccio]
     ports:
       - '4873:4873'
     volumes:
       - ./.verdaccio/config.yaml:/verdaccio/conf/config.yaml
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:4873/-/ping || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://0.0.0.0:4873/-/ping || exit 1']
       interval: 5s
       timeout: 3s
       retries: 5
