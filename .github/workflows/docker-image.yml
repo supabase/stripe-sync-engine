@@ -56,3 +56,4 @@ jobs:
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}

@@ -37,8 +37,10 @@ COPY --from=deps /app/node_modules ./node_modules
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG COMMIT_URL=unknown
 ENV NODE_ENV=production
 ENV GIT_COMMIT=$GIT_COMMIT
 ENV BUILD_DATE=$BUILD_DATE
+ENV COMMIT_URL=$COMMIT_URL
 ENTRYPOINT ["node", "dist/cli.js"]
 CMD ["serve"]
