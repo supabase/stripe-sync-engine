@@ -14,7 +14,16 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-l
 
 FROM base AS build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-RUN pnpm run -r build
+RUN pnpm --filter @stripe/protocol \
+    --filter @stripe/util-postgres \
+    --filter @stripe/ts-cli \
+    --filter @stripe/stateless-sync \
+    --filter @stripe/store-postgres \
+    --filter @stripe/destination-postgres \
+    --filter @stripe/source-stripe \
+    --filter @stripe/sync-engine-stateless \
+    --filter @stripe/sync-engine \
+    run build
 
 ## Build step complete, copy to working image
 FROM node:24-alpine
@@ -43,6 +52,7 @@ COPY --from=prod-deps /app/packages/stateless-sync/node_modules /app/packages/st
 COPY --from=prod-deps /app/packages/source-stripe/node_modules /app/packages/source-stripe/node_modules
 COPY --from=prod-deps /app/packages/destination-postgres/node_modules /app/packages/destination-postgres/node_modules
 COPY --from=prod-deps /app/packages/store-postgres/node_modules /app/packages/store-postgres/node_modules
+COPY --from=prod-deps /app/packages/util-postgres/node_modules /app/packages/util-postgres/node_modules
 
 # Copy built files
 COPY --from=build /app/apps/sync-engine/dist /app/apps/sync-engine/dist
