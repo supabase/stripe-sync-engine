@@ -385,9 +385,6 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.16.3
-      yesql:
-        specifier: ^7.0.0
-        version: 7.0.0
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -395,9 +392,6 @@ importers:
       '@types/pg':
         specifier: ^8.15.4
         version: 8.15.6
-      '@types/yesql':
-        specifier: ^4.1.4
-        version: 4.1.4
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -1664,9 +1658,6 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
-
-  '@types/yesql@4.1.4':
-    resolution: {integrity: sha512-/wxLvTBMdLQwyAsS2MdVXDbyEU5uATw41ZOMRP39yGnEsrfIFPHV2MA1r9Y3yJFH42pER/212XQxtb+mQlioYA==}
 
   '@typescript-eslint/eslint-plugin@8.46.3':
     resolution: {integrity: sha512-sbaQ27XBUopBkRiuY/P9sWGOWUW4rl8fDoHIUmLpZd8uldsTyB4/Zg6bWTegPoTLnKj9Hqgn3QD6cjPNB32Odw==}
@@ -3035,9 +3026,6 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  yesql@7.0.0:
-    resolution: {integrity: sha512-sosfr7agy4ibLM7BvXBkM6BpBmKMGuBO8DUYQEuey+QqaqrgW+2bsSg6D050ocBYIz0PuHxUyehyzEztZTU4pw==}
-
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
@@ -4276,8 +4264,6 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 24.10.1
-
-  '@types/yesql@4.1.4': {}
 
   '@typescript-eslint/eslint-plugin@8.46.3(@typescript-eslint/parser@8.46.3(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)':
     dependencies:
@@ -5880,8 +5866,6 @@ snapshots:
   xtend@4.0.2: {}
 
   yaml@2.8.1: {}
-
-  yesql@7.0.0: {}
 
   yocto-queue@0.1.0: {}
 

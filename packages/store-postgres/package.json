@@ -19,13 +19,11 @@
   },
   "dependencies": {
     "@stripe/util-postgres": "workspace:*",
-    "pg": "^8.16.3",
-    "yesql": "^7.0.0"
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
-    "@types/yesql": "^4.1.4",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
