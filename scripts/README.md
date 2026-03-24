@@ -1,6 +1,17 @@
 # Scripts
 
-Demo and utility scripts. All `.sh` scripts require `pnpm build` first.
+Demo and utility scripts. Scripts run TypeScript source directly via `npx tsx` — no build step required (`pnpm install` is enough).
+
+### TypeScript runner
+
+Scripts default to `npx tsx`. Override with the `TS_RUNNER` env var:
+
+```sh
+TS_RUNNER="bun" ./scripts/read-from-stripe.sh
+TS_RUNNER="node --import tsx" ./scripts/read-from-stripe.sh
+```
+
+Why not `node --strip-types`? Our codebase uses `moduleResolution: "bundler"` with extensionless imports (`from './index'` not `from './index.ts'`). Node's built-in type stripping doesn't resolve `.ts` extensions — it only strips type annotations from files it already found.
 
 ## Connector demos
 
@@ -40,11 +51,12 @@ These use the sync-engine CLI which handles discover → read → write in one s
 
 Set in `.envrc` (via direnv):
 
-| Variable                | Used by          |
-| ----------------------- | ---------------- |
-| `STRIPE_API_KEY`        | Stripe scripts   |
-| `DATABASE_URL`          | Postgres scripts |
-| `GOOGLE_CLIENT_ID`      | Sheets scripts   |
-| `GOOGLE_CLIENT_SECRET`  | Sheets scripts   |
-| `GOOGLE_REFRESH_TOKEN`  | Sheets scripts   |
-| `GOOGLE_SPREADSHEET_ID` | Sheets scripts   |
+| Variable                | Used by                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `STRIPE_API_KEY`        | Stripe scripts                                        |
+| `DATABASE_URL`          | Postgres scripts                                      |
+| `GOOGLE_CLIENT_ID`      | Sheets scripts                                        |
+| `GOOGLE_CLIENT_SECRET`  | Sheets scripts                                        |
+| `GOOGLE_REFRESH_TOKEN`  | Sheets scripts                                        |
+| `GOOGLE_SPREADSHEET_ID` | Sheets scripts                                        |
+| `TS_RUNNER`             | Override TypeScript runner (default: `npx tsx`)        |

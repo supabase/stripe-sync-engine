@@ -170,27 +170,34 @@ jobs:
           TEMPORAL_ADDRESS: 'localhost:7233'
 
   docker-build:
-    name: Docker build
+    name: Docker build & test
     runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v5
-      - name: Build Docker image
-        run: docker build -t sync-engine:ci .
-      - name: Smoke test — version
-        run: docker run --rm sync-engine:ci --version
-      - name: Smoke test — health check
+
+      - name: Docker build + smoke tests
         run: |
-          docker run -d --name se-smoke -p 3000:3000 sync-engine:ci
-          for i in $(seq 1 20); do
-            if curl -sf http://localhost:3000/health; then
-              echo ""
-              echo "Health check passed"
-              docker rm -f se-smoke
-              exit 0
-            fi
-            sleep 0.5
-          done
-          echo "Health check failed"
-          docker logs se-smoke
-          docker rm -f se-smoke
-          exit 1
+          if [ -z "$STRIPE_API_KEY" ]; then
+            echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available (fork PR?). Running build-only."
+            docker build -t sync-engine:test .
+            docker run --rm sync-engine:test --version
+            exit 0
+          fi
+          bash scripts/docker-test.sh
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

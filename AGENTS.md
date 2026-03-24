@@ -9,9 +9,13 @@ pnpm install
 pnpm build          # required before running CLI or e2e tests
 ```
 
-**You must build before running the CLI.** `tsx` and `node --experimental-strip-types`
-do not work because the codebase uses `?raw` imports (bundler feature) and
-`import ... with { type: 'json' }` (import attributes).
+Most packages run directly from source via `npx tsx` — no build needed.
+`node --strip-types` does not work because the codebase uses `moduleResolution: "bundler"`
+with extensionless imports (`from './index'` not `from './index.ts'`).
+
+Exceptions that require `pnpm build`:
+- `apps/supabase` — uses `?raw` imports (bundler feature)
+- `apps/stateless` — uses `import ... with { type: 'json' }` (import attributes)
 
 For dev with auto-rebuild: `cd packages/sync-engine && pnpm dev`
 
@@ -54,7 +58,7 @@ reporting back. Don't just push and return — keep polling `gh pr checks` or
 
 ## Key Gotchas
 
-- `tsx` fails on this project — `?raw` imports pull in Deno-only code. Use built output.
+- `tsx` fails on `apps/supabase` — `?raw` imports pull in Deno-only code. Other packages work fine with `npx tsx`.
 - `packages/sync-engine/src/supabase` is Deno, not Node. Don't try to run those files with Node/tsx.
 - E2E tests need Stripe keys with **write** permissions (they create real objects).
 - Do not add `esbuild` as a dependency — its native binaries fail on this machine. Use `tsup` (already in the repo) for bundling.

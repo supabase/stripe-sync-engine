@@ -7,12 +7,14 @@
 #   ./scripts/read-from-stripe.sh | ./scripts/write-to-postgres.sh    # piped
 #
 # Env: DATABASE_URL
+# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
+RUN="${TS_RUNNER:-npx tsx}"
 
 echo "Postgres: $DATABASE_URL" >&2
 
-DEST="node packages/destination-postgres/dist/bin.js"
+DEST="$RUN packages/destination-postgres/src/bin.ts"
 CONFIG="{\"connection_string\": \"$DATABASE_URL\", \"schema\": \"public\"}"
 
 if [ -t 0 ]; then
