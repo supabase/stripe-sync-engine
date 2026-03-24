@@ -4,7 +4,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import source from '@stripe/source-stripe'
 import destination from '@stripe/destination-postgres'
 import { createEngine } from '@stripe/stateless-sync'
-import type { StateMessage } from '@stripe/protocol'
+import type { StateMessage, DestinationOutput } from '@stripe/protocol'
 import { describeWithEnv } from '../test-helpers'
 
 // ---------------------------------------------------------------------------
@@ -25,9 +25,11 @@ const BACKFILL_LIMIT = 200
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function collectStates(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]> {
+async function collectStates(iter: AsyncIterable<DestinationOutput>): Promise<StateMessage[]> {
   const states: StateMessage[] = []
-  for await (const msg of iter) states.push(msg)
+  for await (const msg of iter) {
+    if (msg.type === 'state') states.push(msg)
+  }
   return states
 }
 
@@ -124,9 +126,10 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
           ),
         ])
         if ('timeout' in result) break
-        const { value, done } = result as IteratorResult<StateMessage>
+        const { value, done } = result as IteratorResult<DestinationOutput>
         if (done) break
-        if (value.stream === 'products' && (value.data as any)?.eventId) break
+        if (value.type === 'state' && value.stream === 'products' && (value.data as any)?.eventId)
+          break
       }
 
       // Phase 4: verify the update landed in Postgres

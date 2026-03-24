@@ -1,7 +1,7 @@
 import { createEngine } from '@stripe/stateless-sync'
 import type {
   SyncParams,
-  StateMessage,
+  DestinationOutput,
   Message,
   ConnectorResolver,
   CheckResult,
@@ -198,21 +198,23 @@ export class StatefulSync {
     yield* engine.read($stdin)
   }
 
-  async *write(syncId: string, messages: AsyncIterable<Message>): AsyncIterable<StateMessage> {
+  async *write(syncId: string, messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput> {
     const { engine } = await this.resolveEngine(syncId)
     for await (const msg of engine.write(messages)) {
-      await this.states.set(syncId, msg.stream, msg.data)
-      this.logs.write(syncId, {
-        level: 'debug',
-        message: `checkpoint: ${msg.stream}`,
-        stream: msg.stream,
-        timestamp: new Date().toISOString(),
-      })
+      if (msg.type === 'state') {
+        await this.states.set(syncId, msg.stream, msg.data)
+        this.logs.write(syncId, {
+          level: 'debug',
+          message: `checkpoint: ${msg.stream}`,
+          stream: msg.stream,
+          timestamp: new Date().toISOString(),
+        })
+      }
       yield msg
     }
   }
 
-  async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<StateMessage> {
+  async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput> {
     const config = await this.configs.get(syncId)
     const source = await this.connectors.resolveSource(config.source.type)
     const destination = await this.connectors.resolveDestination(config.destination.type)
@@ -278,14 +280,15 @@ export class StatefulSync {
 
         // Write intercepted messages through the destination
         for await (const msg of engine.write(intercepted())) {
-          // Persist state checkpoint
-          await this.states.set(syncId, msg.stream, msg.data)
-          this.logs.write(syncId, {
-            level: 'debug',
-            message: `checkpoint: ${msg.stream}`,
-            stream: msg.stream,
-            timestamp: new Date().toISOString(),
-          })
+          if (msg.type === 'state') {
+            await this.states.set(syncId, msg.stream, msg.data)
+            this.logs.write(syncId, {
+              level: 'debug',
+              message: `checkpoint: ${msg.stream}`,
+              stream: msg.stream,
+              timestamp: new Date().toISOString(),
+            })
+          }
           yield msg
         }
 

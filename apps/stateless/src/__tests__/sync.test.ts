@@ -110,12 +110,14 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     // Run pipeline with $stdin passthrough, persist each state checkpoint
     for await (const msg of engine.run(toAsync(input))) {
-      await pool.query(
-        `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
-         VALUES ($1, $2)
-         ON CONFLICT (stream) DO UPDATE SET data = $2`,
-        [msg.stream, JSON.stringify(msg.data)]
-      )
+      if (msg.type === 'state') {
+        await pool.query(
+          `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
+           VALUES ($1, $2)
+           ON CONFLICT (stream) DO UPDATE SET data = $2`,
+          [msg.stream, JSON.stringify(msg.data)]
+        )
+      }
     }
 
     // Verify records were written
@@ -156,12 +158,14 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     ]
 
     for await (const msg of engine.run(toAsync(input))) {
-      await pool.query(
-        `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
-         VALUES ($1, $2)
-         ON CONFLICT (stream) DO UPDATE SET data = $2`,
-        [msg.stream, JSON.stringify(msg.data)]
-      )
+      if (msg.type === 'state') {
+        await pool.query(
+          `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
+           VALUES ($1, $2)
+           ON CONFLICT (stream) DO UPDATE SET data = $2`,
+          [msg.stream, JSON.stringify(msg.data)]
+        )
+      }
     }
 
     // Verify table now has 5 rows total (3 from run 1 + 2 from run 2)

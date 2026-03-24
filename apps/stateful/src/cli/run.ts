@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
-  StateMessage,
+  DestinationOutput,
   ConnectorResolver,
   Message,
   CheckResult,
@@ -62,11 +62,11 @@ export async function* readSync(opts: ServiceOpts): AsyncGenerator<Message> {
   yield* makeService(opts).read(opts.syncId, opts.$stdin) as AsyncIterable<Message>
 }
 
-export async function* writeSync(opts: ServiceOpts): AsyncGenerator<StateMessage> {
+export async function* writeSync(opts: ServiceOpts): AsyncGenerator<DestinationOutput> {
   if (!opts.$stdin) throw new Error('$stdin required for write')
   yield* makeService(opts).write(opts.syncId, opts.$stdin as AsyncIterable<Message>)
 }
 
-export async function* runSync(opts: ServiceOpts): AsyncGenerator<StateMessage> {
+export async function* runSync(opts: ServiceOpts): AsyncGenerator<DestinationOutput> {
   yield* makeService(opts).run(opts.syncId, opts.$stdin)
 }

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import source from '@stripe/source-stripe'
 import destination from '@stripe/destination-postgres'
 import { createConnectorResolver } from '@stripe/stateless-sync'
-import type { StateMessage } from '@stripe/protocol'
+import type { StateMessage, DestinationOutput } from '@stripe/protocol'
 import {
   StatefulSync,
   memoryCredentialStore,
@@ -126,9 +126,11 @@ function makeService() {
   return { service, states }
 }
 
-async function collectStates(iter: AsyncIterable<StateMessage>): Promise<StateMessage[]> {
+async function collectStates(iter: AsyncIterable<DestinationOutput>): Promise<StateMessage[]> {
   const states: StateMessage[] = []
-  for await (const msg of iter) states.push(msg)
+  for await (const msg of iter) {
+    if (msg.type === 'state') states.push(msg)
+  }
   return states
 }
 

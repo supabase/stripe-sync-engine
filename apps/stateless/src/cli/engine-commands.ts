@@ -1,4 +1,4 @@
-import type { Message, StateMessage } from '@stripe/stateless-sync'
+import type { Message } from '@stripe/stateless-sync'
 import {
   createEngineFromParams,
   parseNdjsonChunks,
@@ -120,7 +120,7 @@ export async function writeCommand(params: SyncParamsType) {
   const forwarded = forward(messages, callbacks)
   const output = destination.write({ config: destConfig, catalog }, forwarded)
 
-  for await (const msg of collect(output, callbacks)) {
+  for await (const msg of collect(output)) {
     writeLine(msg)
   }
 }
@@ -129,6 +129,6 @@ export async function runCommand(params: SyncParamsType) {
   const engine = await createEngineFromParams(params, resolver)
   const input = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of engine.run(input)) {
-    writeLine(msg as StateMessage)
+    writeLine(msg)
   }
 }

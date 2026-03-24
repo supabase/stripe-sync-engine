@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
-import type { StateMessage } from '@stripe/stateless-sync'
+import type { DestinationOutput } from '@stripe/stateless-sync'
 import {
   createPgStateStore,
   runMigrationsFromContent,
@@ -55,13 +55,19 @@ export async function syncAction(opts: CliOptions) {
 
   let stateCount = 0
   try {
-    for await (const msg of engine.run() as AsyncIterable<StateMessage>) {
-      // Persist state checkpoint
-      if (stateStore) {
-        await stateStore.set('default', msg.stream, msg.data)
+    for await (const msg of engine.run()) {
+      if (msg.type === 'state') {
+        // Persist state checkpoint
+        if (stateStore) {
+          await stateStore.set('default', msg.stream, msg.data)
+        }
+        stateCount++
+        console.error(`checkpoint: ${msg.stream}`)
+      } else if (msg.type === 'log') {
+        console.error(`[${msg.level}] ${msg.message}`)
+      } else if (msg.type === 'error') {
+        console.error(`[error:${msg.failure_type}] ${msg.message}`)
       }
-      stateCount++
-      console.error(`checkpoint: ${msg.stream}`)
     }
   } finally {
     if (stateStore) {

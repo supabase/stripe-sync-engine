@@ -1,4 +1,4 @@
-import type { DestinationInput, DestinationOutput, Message, StateMessage } from '@stripe/protocol'
+import type { DestinationInput, DestinationOutput, Message } from '@stripe/protocol'
 import {
   isDataMessage,
   isLogMessage,
@@ -56,20 +56,12 @@ export async function* forward(
 
 /**
  * Sits after destination in a pipe.
- * Reads destination output, yields StateMessage checkpoints.
- * Routes ErrorMessage and LogMessage to callbacks.
+ * Yields all destination output (state, log, error) to the caller.
  */
 export async function* collect(
-  output: AsyncIterable<DestinationOutput>,
-  callbacks?: RouterCallbacks
-): AsyncIterable<StateMessage> {
+  output: AsyncIterable<DestinationOutput>
+): AsyncIterable<DestinationOutput> {
   for await (const msg of output) {
-    if (msg.type === 'state') {
-      yield msg
-    } else if (msg.type === 'log') {
-      callbacks?.onLog?.(msg.message, msg.level)
-    } else if (msg.type === 'error') {
-      callbacks?.onError?.(msg.message, msg.failure_type)
-    }
+    yield msg
   }
 }

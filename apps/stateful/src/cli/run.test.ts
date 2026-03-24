@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sourceTest, destinationTest } from '@stripe/stateless-sync'
-import type { ConnectorResolver, StateMessage, Message } from '@stripe/sync-engine-stateless'
+import type { ConnectorResolver, DestinationOutput, Message } from '@stripe/sync-engine-stateless'
 import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
 import type { Credential } from '@stripe/stateful-sync'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
@@ -57,7 +57,7 @@ describe('runSync', () => {
       },
     })
 
-    const messages: StateMessage[] = []
+    const messages: DestinationOutput[] = []
     for await (const msg of runSync({
       syncId: 'test_sync',
       connectors: resolver,
@@ -76,10 +76,10 @@ describe('runSync', () => {
       messages.push(msg)
     }
 
-    expect(messages).toHaveLength(1)
-    expect(messages[0]!.type).toBe('state')
-    expect(messages[0]!.stream).toBe('customers')
-    expect(messages[0]!.data).toEqual({ status: 'complete' })
+    const states = messages.filter((m) => m.type === 'state')
+    expect(states).toHaveLength(1)
+    expect(states[0]!.stream).toBe('customers')
+    expect(states[0]!.data).toEqual({ status: 'complete' })
   })
 
   it('pipeline produces state for each stream', async () => {
@@ -105,7 +105,7 @@ describe('runSync', () => {
       },
     })
 
-    const messages: StateMessage[] = []
+    const messages: DestinationOutput[] = []
     for await (const msg of runSync({
       syncId: 'test_sync',
       connectors: resolver,
@@ -121,8 +121,9 @@ describe('runSync', () => {
       messages.push(msg)
     }
 
-    expect(messages).toHaveLength(2)
-    expect(messages.map((m) => m.stream).sort()).toEqual(['customers', 'invoices'])
+    const states = messages.filter((m) => m.type === 'state')
+    expect(states).toHaveLength(2)
+    expect(states.map((m) => m.stream).sort()).toEqual(['customers', 'invoices'])
   })
 })
 
@@ -195,13 +196,13 @@ describe('writeSync', () => {
       { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
       { type: 'state' as const, stream: 'customers', data: { cursor: 'z' } },
     ] as Message[])
-    const msgs: StateMessage[] = []
+    const msgs: DestinationOutput[] = []
     for await (const msg of writeSync(makeOpts({ $stdin }))) {
       msgs.push(msg)
     }
-    expect(msgs).toHaveLength(1)
-    expect(msgs[0]!.type).toBe('state')
-    expect(msgs[0]!.stream).toBe('customers')
+    const states = msgs.filter((m) => m.type === 'state')
+    expect(states).toHaveLength(1)
+    expect(states[0]!.stream).toBe('customers')
   })
 
   it('throws when $stdin is not provided', async () => {

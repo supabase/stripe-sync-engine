@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/source-stripe'
 import destination from '@stripe/destination-postgres'
 import { createEngine } from '@stripe/stateless-sync'
-import type { Message, StateMessage } from '@stripe/stateless-sync'
+import type { Message, DestinationOutput } from '@stripe/stateless-sync'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -188,10 +188,10 @@ describe('engine read → write', () => {
     async function* toAsync<T>(arr: T[]): AsyncGenerator<T> {
       for (const item of arr) yield item
     }
-    const stateMessages = await collect<StateMessage>(engine.write(toAsync(readMessages)))
+    const writeOutput = await collect<DestinationOutput>(engine.write(toAsync(readMessages)))
+    const stateMessages = writeOutput.filter((s) => s.type === 'state')
 
     expect(stateMessages.length).toBeGreaterThan(0)
-    expect(stateMessages.every((s) => s.type === 'state')).toBe(true)
 
     // Records landed in Postgres
     const { rows } = await pool.query(

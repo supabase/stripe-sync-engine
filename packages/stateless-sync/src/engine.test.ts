@@ -664,8 +664,9 @@ describe('engine.run() pipeline', () => {
     )
 
     // Only the customers stream state should come through
-    expect(results).toHaveLength(1)
-    expect(results[0]!.stream).toBe('customers')
+    const states = results.filter((r) => r.type === 'state')
+    expect(states).toHaveLength(1)
+    expect(states[0]!.stream).toBe('customers')
   })
 
   it('non-data messages filtered: only record + state reach destination', async () => {

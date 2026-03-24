@@ -8,11 +8,10 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   CheckResult,
-  StateMessage,
 } from '@stripe/protocol'
 import type { Destination, Source } from '@stripe/protocol'
 import type { RouterCallbacks } from './pipeline'
-import { forward, collect } from './pipeline'
+import { forward } from './pipeline'
 import type { ConnectorResolver } from './loader'
 
 // MARK: - Engine interface
@@ -22,8 +21,8 @@ export interface Engine {
   teardown(opts?: { remove_shared_resources?: boolean }): Promise<void>
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
   read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
-  write(messages: AsyncIterable<Message>): AsyncIterable<StateMessage>
-  run(input?: AsyncIterable<unknown>): AsyncIterable<StateMessage>
+  write(messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput>
+  run(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
 }
 
 // MARK: - Helpers
@@ -154,12 +153,7 @@ export function createEngine(
       const forwarded = forward(messages, cb)
       const destOutput = connectors.destination.write({ config: destConfig, catalog }, forwarded)
       for await (const msg of destOutput) {
-        yield* collect(
-          (async function* () {
-            yield DestinationOutput.parse(msg)
-          })(),
-          cb
-        )
+        yield DestinationOutput.parse(msg)
       }
     },
 

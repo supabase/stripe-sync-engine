@@ -121,7 +121,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       await engine.setup()
       return c.body(null, 204) as any
     }
@@ -145,7 +145,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       await engine.teardown()
       return c.body(null, 204) as any
     }
@@ -172,7 +172,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       const result = await engine.check()
       return c.json(result, 200)
     }
@@ -200,7 +200,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
       return ndjsonResponse(engine.read(input)) as any
     }
@@ -234,7 +234,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       if (!hasBody(c)) {
         return c.json({ error: 'Request body required for /write' }, 400)
       }
@@ -265,7 +265,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, {})
+      const engine = await createEngineFromParams(params, resolver)
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
       return ndjsonResponse(engine.run(input)) as any
     }
