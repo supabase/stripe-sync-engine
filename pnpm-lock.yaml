@@ -186,6 +186,15 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
+      '@stripe/destination-google-sheets':
+        specifier: workspace:*
+        version: link:../../packages/destination-google-sheets
+      '@stripe/destination-postgres':
+        specifier: workspace:*
+        version: link:../../packages/destination-postgres
+      '@stripe/source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
       '@stripe/stateless-sync':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
@@ -211,15 +220,6 @@ importers:
         specifier: ^8.16.3
         version: 8.16.3
     devDependencies:
-      '@stripe/destination-google-sheets':
-        specifier: workspace:*
-        version: link:../../packages/destination-google-sheets
-      '@stripe/destination-postgres':
-        specifier: workspace:*
-        version: link:../../packages/destination-postgres
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
       '@types/node':
         specifier: ^24.10.1
         version: 24.10.1

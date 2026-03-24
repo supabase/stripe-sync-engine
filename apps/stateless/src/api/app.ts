@@ -15,8 +15,17 @@ export function createApp(resolver: ConnectorResolver) {
     if (err instanceof HTTPException) {
       return c.json({ error: err.message }, err.status as any)
     }
+    console.error(err)
     return c.json({ error: 'Internal server error' }, 500)
   })
+
+  /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
+  function hasBody(c: { req: { header: (name: string) => string | undefined } }): boolean {
+    const cl = c.req.header('Content-Length')
+    if (cl && Number(cl) > 0) return true
+    if (c.req.header('Transfer-Encoding')) return true
+    return false
+  }
 
   app.get('/health', (c) => c.json({ ok: true }))
 
@@ -57,8 +66,7 @@ export function createApp(resolver: ConnectorResolver) {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const body = c.req.raw.body
-    const input = body ? parseNdjsonStream(body) : undefined
+    const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
     return ndjsonResponse(engine.read(input))
   })
 
@@ -66,11 +74,10 @@ export function createApp(resolver: ConnectorResolver) {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const body = c.req.raw.body
-    if (!body) {
+    if (!hasBody(c)) {
       return c.json({ error: 'Request body required for /write' }, 400)
     }
-    const messages = parseNdjsonStream<Message>(body)
+    const messages = parseNdjsonStream<Message>(c.req.raw.body!)
     return ndjsonResponse(engine.write(messages))
   })
 
@@ -78,8 +85,7 @@ export function createApp(resolver: ConnectorResolver) {
     const params = requireSyncParams(c.req.header('X-Sync-Params'))
     const engine = await createEngineFromParams(params, resolver, {})
 
-    const body = c.req.raw.body
-    const input = body ? parseNdjsonStream(body) : undefined
+    const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
     return ndjsonResponse(engine.run(input))
   })
 

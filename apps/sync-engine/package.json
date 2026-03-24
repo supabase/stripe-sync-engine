@@ -24,6 +24,9 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
+    "@stripe/destination-google-sheets": "workspace:*",
+    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/source-stripe": "workspace:*",
     "@stripe/stateless-sync": "workspace:*",
     "@stripe/store-postgres": "workspace:*",
     "@stripe/sync-engine-stateless": "workspace:*",
@@ -34,9 +37,6 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "@stripe/destination-google-sheets": "workspace:*",
-    "@stripe/destination-postgres": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
     "tsup": "^8.5.0",

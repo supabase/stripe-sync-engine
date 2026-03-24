@@ -30,23 +30,9 @@ done
 
 # --- 1) Read from Stripe ---
 echo "==> Reading from Stripe (/read)"
-READ_PARAMS=$(cat <<'JSON'
-{
-  "source_name": "stripe",
-  "source_config": {
-    "api_key": "$STRIPE_API_KEY",
-    "backfill_limit": 5
-  },
-  "destination_name": "printer",
-  "destination_config": {},
-  "streams": [{"name": "products"}]
-}
-JSON
-)
-# Substitute env var (jq not required — simple envsubst)
-READ_PARAMS=$(echo "$READ_PARAMS" | sed "s/\$STRIPE_API_KEY/$STRIPE_API_KEY/")
+READ_PARAMS=$(printf '{"source_name":"stripe","source_config":{"api_key":"%s","backfill_limit":5},"destination_name":"postgres","destination_config":{"url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
 
-STRIPE_OUTPUT=$(curl -sf -X POST "http://localhost:$PORT/read" \
+STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/read" \
   -H "X-Sync-Params: $READ_PARAMS")
 
 RECORD_COUNT=$(echo "$STRIPE_OUTPUT" | grep -c '"type":"record"' || true)
@@ -56,24 +42,11 @@ echo "$STRIPE_OUTPUT" | head -3
 
 # --- 2) Write to Google Sheets ---
 echo "==> Writing to Google Sheets (/write)"
-WRITE_PARAMS=$(cat <<JSON
-{
-  "source_name": "stripe",
-  "source_config": {},
-  "destination_name": "google-sheets",
-  "destination_config": {
-    "client_id": "$GOOGLE_CLIENT_ID",
-    "client_secret": "$GOOGLE_CLIENT_SECRET",
-    "access_token": "unused",
-    "refresh_token": "$GOOGLE_REFRESH_TOKEN",
-    "spreadsheet_id": "$GOOGLE_SPREADSHEET_ID"
-  }
-}
-JSON
-)
+WRITE_PARAMS=$(printf '{"source_name":"stripe","source_config":{"api_key":"%s"},"destination_name":"google-sheets","destination_config":{"client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}' \
+  "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
-# Pipe the Stripe output into /write
-WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -sf -X POST "http://localhost:$PORT/write" \
+# Pipe the Stripe NDJSON output into /write
+WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
   -H "X-Sync-Params: $WRITE_PARAMS" \
   -H "Content-Type: application/x-ndjson" \
   --data-binary @-)
