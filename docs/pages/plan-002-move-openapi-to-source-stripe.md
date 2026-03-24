@@ -48,7 +48,7 @@ export type { DialectAdapter } from './openapi/dialectAdapter'
 
 ### 5. Update `packages/sync-engine/src/database/migrate.ts`
 
-Change the openapi import from `../openapi` to `@stripe/source-stripe`:
+Change the openapi import from `../openapi` to `@tx-stripe/source-stripe`:
 
 ```ts
 import {
@@ -58,10 +58,10 @@ import {
   SpecParser,
   WritePathPlanner,
   resolveOpenApiSpec,
-} from '@stripe/source-stripe'
+} from '@tx-stripe/source-stripe'
 ```
 
-sync-engine already depends on `@stripe/source-stripe` (package.json line 46).
+sync-engine already depends on `@tx-stripe/source-stripe` (package.json line 46).
 
 ### 6. Delete `packages/sync-engine/src/openapi/` directory
 
@@ -69,7 +69,7 @@ After confirming sync-engine's migrate.ts imports from source-stripe, delete the
 
 ### 7. Update sync-engine's openapi test imports
 
-- `packages/sync-engine/src/database/__tests__/migrate.openapi.test.ts` — change fixture import from `../../openapi/__tests__/fixtures/minimalSpec` to `@stripe/source-stripe` (or a test util)
+- `packages/sync-engine/src/database/__tests__/migrate.openapi.test.ts` — change fixture import from `../../openapi/__tests__/fixtures/minimalSpec` to `@tx-stripe/source-stripe` (or a test util)
 - `packages/sync-engine/src/database/__tests__/migrate.custom-schema-name.test.ts` — same
 
 ## Verification
@@ -78,4 +78,4 @@ After confirming sync-engine's migrate.ts imports from source-stripe, delete the
 2. `pnpm test` in `packages/destination-postgres` — no openapi references
 3. `pnpm test` in `packages/source-stripe` — openapi tests pass
 4. `pnpm test` in `packages/sync-engine` — migrate tests still pass
-5. `grep -r "stripe" packages/destination-postgres/src/` — only `@stripe/protocol` and schema name refs remain
+5. `grep -r "stripe" packages/destination-postgres/src/` — only `@tx-stripe/protocol` and schema name refs remain

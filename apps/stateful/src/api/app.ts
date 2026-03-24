@@ -2,12 +2,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import type { ConnectorResolver, Message } from '@stripe/sync-engine-stateless'
+import type { ConnectorResolver, Message } from '@tx-stripe/sync-engine-stateless'
 import {
   createConnectorResolver,
   ndjsonResponse,
   parseNdjsonStream,
-} from '@stripe/sync-engine-stateless'
+} from '@tx-stripe/sync-engine-stateless'
 import {
   StatefulSync,
   buildSchemas,
@@ -15,8 +15,8 @@ import {
   fileConfigStore,
   fileStateStore,
   fileLogSink,
-} from '@stripe/stateful-sync'
-import type { Credential, SyncConfig } from '@stripe/stateful-sync'
+} from '@tx-stripe/stateful-sync'
+import type { Credential, SyncConfig } from '@tx-stripe/stateful-sync'
 import {
   CheckResultSchema,
   DeleteResponseSchema,

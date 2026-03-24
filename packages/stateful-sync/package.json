@@ -1,5 +1,6 @@
 {
-  "name": "@stripe/stateful-sync",
+  "name": "@tx-stripe/stateful-sync",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,11 +19,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stripe/stateless-sync": "workspace:*",
+    "@tx-stripe/stateless-sync": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@stripe/destination-postgres": "workspace:*",
+    "@tx-stripe/destination-postgres": "workspace:*",
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
     "pg": "^8.16.3",

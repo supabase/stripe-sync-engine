@@ -4,7 +4,7 @@
 
 Design a product-quality CLI for the sync engine with a dead-simple one-liner experience that progressively discloses power. The CLI is stateless — sync state lives in the destination. Config is JSON-first (agentic-friendly). The CLI is a thin composition root over the existing `sync-protocol`, `source-stripe`, and `destination-postgres` packages.
 
-**Package:** `apps/sync-engine` (`@stripe/sync-engine`).
+**Package:** `apps/sync-engine` (`@tx-stripe/sync-engine`).
 
 ---
 
@@ -310,7 +310,7 @@ sync-engine -c sync.json
 sync-engine -c '{"source_config":{"api_key":"sk_test_abc"},"destination_config":{"connection_string":"postgres://localhost/mydb"}}'
 
 # Level 6: programmatic (library, not CLI)
-import { createEngine } from '@stripe/stateless-sync'
+import { createEngine } from '@tx-stripe/stateless-sync'
 ```
 
 ---
@@ -322,8 +322,8 @@ The CLI is a **thin composition root**:
 ```
 sync-engine CLI
   ├─ resolves config (flags + env + config file → SyncParams)
-  ├─ imports @stripe/source-stripe
-  ├─ imports @stripe/destination-postgres
+  ├─ imports @tx-stripe/source-stripe
+  ├─ imports @tx-stripe/destination-postgres
   ├─ loads state from {schema}._sync_state
   ├─ calls runSync(config, source, destination)
   ├─ persists yielded StateMessages to _sync_state
@@ -334,7 +334,7 @@ All sync logic stays in `sync-protocol`. All connector logic stays in source/des
 
 ### Package placement
 
-Package `apps/sync-engine` (`@stripe/sync-engine`). Binary name `sync-engine` in `package.json` `bin` field.
+Package `apps/sync-engine` (`@tx-stripe/sync-engine`). Binary name `sync-engine` in `package.json` `bin` field.
 
 ### Key files
 

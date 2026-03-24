@@ -1,4 +1,4 @@
-import type { CatalogMessage, Stream } from '@stripe/protocol'
+import type { CatalogMessage, Stream } from '@tx-stripe/protocol'
 import type { ResourceConfig } from './types'
 import type { ParsedResourceTable } from './openapi/types'
 import { parsedTableToJsonSchema } from './openapi/jsonSchemaConverter'

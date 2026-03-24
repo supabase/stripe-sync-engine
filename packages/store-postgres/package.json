@@ -1,5 +1,6 @@
 {
-  "name": "@stripe/store-postgres",
+  "name": "@tx-stripe/store-postgres",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +19,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@stripe/util-postgres": "workspace:*",
+    "@tx-stripe/util-postgres": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {

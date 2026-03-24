@@ -9,8 +9,8 @@ import {
   ConfiguredCatalog,
   CheckResult,
   StateMessage,
-} from '@stripe/protocol'
-import type { Destination, Source } from '@stripe/protocol'
+} from '@tx-stripe/protocol'
+import type { Destination, Source } from '@tx-stripe/protocol'
 import type { RouterCallbacks } from './pipeline'
 import { forward, collect } from './pipeline'
 import type { ConnectorResolver } from './loader'

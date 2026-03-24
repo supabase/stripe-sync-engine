@@ -1,11 +1,11 @@
-import { createEngine } from '@stripe/stateless-sync'
+import { createEngine } from '@tx-stripe/stateless-sync'
 import type {
   SyncParams,
   StateMessage,
   Message,
   ConnectorResolver,
   CheckResult,
-} from '@stripe/stateless-sync'
+} from '@tx-stripe/stateless-sync'
 import type {
   CredentialStore,
   ConfigStore,

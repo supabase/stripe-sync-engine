@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { sourceTest, destinationTest } from '@stripe/stateless-sync'
-import type { ConnectorResolver, StateMessage, Message } from '@stripe/sync-engine-stateless'
-import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
-import type { Credential } from '@stripe/stateful-sync'
+import { sourceTest, destinationTest } from '@tx-stripe/stateless-sync'
+import type { ConnectorResolver, StateMessage, Message } from '@tx-stripe/sync-engine-stateless'
+import { memoryCredentialStore, memoryConfigStore } from '@tx-stripe/stateful-sync'
+import type { Credential } from '@tx-stripe/stateful-sync'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
 
 // ---------------------------------------------------------------------------

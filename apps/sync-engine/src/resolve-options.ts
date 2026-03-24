@@ -1,6 +1,6 @@
-import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
-import { SyncParams } from '@stripe/stateless-sync'
-import { envPrefix, mergeConfig, parseJsonOrFile } from '@stripe/ts-cli'
+import type { SyncParams as SyncParamsType } from '@tx-stripe/stateless-sync'
+import { SyncParams } from '@tx-stripe/stateless-sync'
+import { envPrefix, mergeConfig, parseJsonOrFile } from '@tx-stripe/ts-cli'
 
 export interface CliOptions {
   // Stripe flags

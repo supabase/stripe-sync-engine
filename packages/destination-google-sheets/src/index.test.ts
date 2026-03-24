@@ -1,4 +1,4 @@
-import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
+import type { DestinationInput, DestinationOutput } from '@tx-stripe/protocol'
 import { describe, expect, it } from 'vitest'
 import { createDestination, type Config } from './index'
 import { readSheet } from './writer'

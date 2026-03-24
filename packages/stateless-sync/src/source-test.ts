@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Source } from '@stripe/protocol'
+import type { Source } from '@tx-stripe/protocol'
 
 export const spec = z.object({
   /** Stream definitions: name -> { primary_key? }. Used for catalog discovery only. */

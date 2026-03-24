@@ -15,7 +15,7 @@ RUN pnpm build
 
 # Create standalone deployment with lockfile-pinned deps
 FROM build AS deploy
-RUN pnpm --filter @stripe/sync-engine deploy --prod /deploy
+RUN pnpm --filter @tx-stripe/sync-engine deploy --prod /deploy
 
 # Final image — just the bundle + external node_modules
 FROM node:24-alpine

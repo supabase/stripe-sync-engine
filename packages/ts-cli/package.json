@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/ts-cli",
+  "name": "@tx-stripe/ts-cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",

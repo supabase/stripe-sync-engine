@@ -1,16 +1,16 @@
 {
-  "name": "@stripe/test-conformance",
+  "name": "@tx-stripe/test-conformance",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
-    "@stripe/protocol": "workspace:*",
-    "@stripe/stateless-sync": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
-    "@stripe/destination-postgres": "workspace:*",
-    "@stripe/destination-google-sheets": "workspace:*",
+    "@tx-stripe/protocol": "workspace:*",
+    "@tx-stripe/stateless-sync": "workspace:*",
+    "@tx-stripe/source-stripe": "workspace:*",
+    "@tx-stripe/destination-postgres": "workspace:*",
+    "@tx-stripe/destination-google-sheets": "workspace:*",
     "vitest": "^3.2.1"
   }
 }

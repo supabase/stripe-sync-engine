@@ -131,8 +131,8 @@ Airbyte has no transform concept — all transformation happens inside the desti
 Airbyte connectors are Docker containers communicating via stdin/stdout. Our connectors are TypeScript modules with typed interfaces:
 
 ```ts
-import source from '@stripe/source-stripe'
-import destination from '@stripe/destination-postgres'
+import source from '@tx-stripe/source-stripe'
+import destination from '@tx-stripe/destination-postgres'
 
 for await (const state of runSync(config, source, destination)) {
   persist(state)

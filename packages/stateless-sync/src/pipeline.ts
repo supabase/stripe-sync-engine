@@ -1,10 +1,15 @@
-import type { DestinationInput, DestinationOutput, Message, StateMessage } from '@stripe/protocol'
+import type {
+  DestinationInput,
+  DestinationOutput,
+  Message,
+  StateMessage,
+} from '@tx-stripe/protocol'
 import {
   isDataMessage,
   isLogMessage,
   isErrorMessage,
   isStreamStatusMessage,
-} from '@stripe/protocol'
+} from '@tx-stripe/protocol'
 
 // MARK: - Filter helpers
 

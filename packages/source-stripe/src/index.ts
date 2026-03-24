@@ -1,4 +1,9 @@
-import type { ConfiguredCatalog, ConnectorSpecification, Message, Source } from '@stripe/protocol'
+import type {
+  ConfiguredCatalog,
+  ConnectorSpecification,
+  Message,
+  Source,
+} from '@tx-stripe/protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
 import { buildResourceRegistry } from './resourceRegistry'

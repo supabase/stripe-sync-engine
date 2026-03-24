@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import type { Source, Destination } from '@stripe/protocol'
-import { ConnectorSpecification } from '@stripe/protocol'
+import type { Source, Destination } from '@tx-stripe/protocol'
+import { ConnectorSpecification } from '@tx-stripe/protocol'
 import { sourceExec } from './source-exec'
 import { destinationExec } from './destination-exec'
 
@@ -95,11 +95,11 @@ function validateSpec(specFn: () => unknown, errors: string[]) {
  * Resolve a short connector name to a full package specifier.
  *
  * - File paths (starting with `.` or `/`) and scoped packages (containing `/`) pass through.
- * - Bare names resolve to `@stripe/source-<name>` or `@stripe/destination-<name>`.
+ * - Bare names resolve to `@tx-stripe/source-<name>` or `@tx-stripe/destination-<name>`.
  */
 export function resolveSpecifier(name: string, role: 'source' | 'destination'): string {
   if (name.startsWith('.') || name.startsWith('/') || name.includes('/')) return name
-  return `@stripe/${role}-${name}`
+  return `@tx-stripe/${role}-${name}`
 }
 
 // MARK: - Subprocess bin resolution
@@ -177,7 +177,7 @@ export interface ConnectorsFrom {
    */
   path?: boolean
   /**
-   * Download `@stripe/source-*` / `@stripe/destination-*` from npm.
+   * Download `@tx-stripe/source-*` / `@tx-stripe/destination-*` from npm.
    * Default: `false`.
    */
   npm?: boolean
@@ -223,7 +223,7 @@ function configSchemaFromSpec(connector: {
  * 1. **Registered** — in-process connectors passed in `registered`. Always checked first.
  * 2. **commandMap** — explicit name→command mappings in `connectorsFrom.commandMap`.
  * 3. **path** — `node_modules/.bin` / PATH scan (enabled unless `connectorsFrom.path === false`).
- * 4. **npm** — `npx @stripe/source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
+ * 4. **npm** — `npx @tx-stripe/source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
  * 5. **Error** — connector not found.
  */
 export function createConnectorResolver(
@@ -247,7 +247,7 @@ export function createConnectorResolver(
    * Get the command string for a connector via dynamic resolution strategies.
    * All three strategies (commandMap, path, npm) produce the same output: a command
    * string passed directly to sourceExec/destinationExec. Multi-word commands
-   * (e.g. "npx @stripe/source-stripe") are split by subprocess.ts at spawn time.
+   * (e.g. "npx @tx-stripe/source-stripe") are split by subprocess.ts at spawn time.
    */
   function resolveVia(name: string, role: 'source' | 'destination'): string | undefined {
     const key = `${role}-${name}`
@@ -264,7 +264,7 @@ export function createConnectorResolver(
 
     // npm: download from @stripe scope via npx
     if (connectorsFrom?.npm) {
-      return `npx @stripe/${role}-${name}`
+      return `npx @tx-stripe/${role}-${name}`
     }
 
     return undefined
@@ -284,7 +284,7 @@ export function createConnectorResolver(
       }
 
       throw new Error(
-        `Source connector "${name}" not found. Register it or install @stripe/source-${name}.`
+        `Source connector "${name}" not found. Register it or install @tx-stripe/source-${name}.`
       )
     },
 
@@ -301,7 +301,7 @@ export function createConnectorResolver(
       }
 
       throw new Error(
-        `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
+        `Destination connector "${name}" not found. Register it or install @tx-stripe/destination-${name}.`
       )
     },
 

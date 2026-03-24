@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/test-e2e",
+  "name": "@tx-stripe/test-e2e",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,11 +7,11 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1",
-    "@stripe/protocol": "workspace:*",
-    "@stripe/stateless-sync": "workspace:*",
-    "@stripe/sync-engine-stateful": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
-    "@stripe/destination-postgres": "workspace:*",
+    "@tx-stripe/protocol": "workspace:*",
+    "@tx-stripe/stateless-sync": "workspace:*",
+    "@tx-stripe/sync-engine-stateful": "workspace:*",
+    "@tx-stripe/source-stripe": "workspace:*",
+    "@tx-stripe/destination-postgres": "workspace:*",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"

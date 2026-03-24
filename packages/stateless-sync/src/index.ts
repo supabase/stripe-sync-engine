@@ -1,4 +1,4 @@
-export * from '@stripe/protocol'
+export * from '@tx-stripe/protocol'
 export { forward, collect, filterDataMessages } from './pipeline'
 export type { RouterCallbacks } from './pipeline'
 export { createEngine, createEngineFromParams, buildCatalog } from './engine'

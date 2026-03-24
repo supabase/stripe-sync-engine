@@ -1,4 +1,4 @@
-import type { Message, StateMessage } from '@stripe/stateless-sync'
+import type { Message, StateMessage } from '@tx-stripe/stateless-sync'
 import {
   createEngineFromParams,
   parseNdjsonChunks,
@@ -6,9 +6,9 @@ import {
   forward,
   collect,
   SyncParams,
-} from '@stripe/stateless-sync'
-import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
-import { envPrefix, parseJsonOrFile, mergeConfig } from '@stripe/ts-cli'
+} from '@tx-stripe/stateless-sync'
+import type { SyncParams as SyncParamsType } from '@tx-stripe/stateless-sync'
+import { envPrefix, parseJsonOrFile, mergeConfig } from '@tx-stripe/ts-cli'
 
 const resolver = createConnectorResolver({})
 

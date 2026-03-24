@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ConnectorResolver, Message, StateMessage } from '@stripe/stateless-sync'
-import { sourceTest, destinationTest } from '@stripe/stateless-sync'
+import type { ConnectorResolver, Message, StateMessage } from '@tx-stripe/stateless-sync'
+import { sourceTest, destinationTest } from '@tx-stripe/stateless-sync'
 import { createApp } from './app'
 
 // ---------------------------------------------------------------------------

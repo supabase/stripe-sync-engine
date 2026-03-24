@@ -23,7 +23,7 @@ export type {
   ConnectorResolver,
   ConnectorResolverOptions,
   ResolvedConnector,
-} from '@stripe/stateless-sync'
+} from '@tx-stripe/stateless-sync'
 
 export {
   createEngine,
@@ -34,6 +34,6 @@ export {
   sourceExec,
   destinationExec,
   parseNdjsonStream,
-} from '@stripe/stateless-sync'
+} from '@tx-stripe/stateless-sync'
 
 export { ndjsonResponse } from './stream'

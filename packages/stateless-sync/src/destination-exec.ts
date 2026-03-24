@@ -6,14 +6,14 @@ import type {
   ConfiguredCatalog,
   DestinationInput,
   DestinationOutput,
-} from '@stripe/protocol'
+} from '@tx-stripe/protocol'
 import { splitCmd, spawnAndCollect, spawnWithStdin } from './subprocess'
 
 /**
  * Wrap a connector CLI command as a Destination.
  *
  * `cmd` may be a binary path or a space-separated command with base args,
- * e.g. `"npx @stripe/destination-postgres"` or `"/path/to/destination-postgres"`.
+ * e.g. `"npx @tx-stripe/destination-postgres"` or `"/path/to/destination-postgres"`.
  * The connector protocol subcommands (spec, check, write, etc.) are appended.
  */
 export function destinationExec(cmd: string): Destination {

@@ -9,7 +9,7 @@ When the engine needs a connector (e.g., `source "stripe"`):
 1. **Registered** (always) — in-process connector passed at startup. Fastest, no subprocess.
 2. **commandMap** — explicit name→command entry in `connectors_from.command_map`.
 3. **path** (default: on) — binary matching `source-<name>` found in `node_modules/.bin` or `PATH`.
-4. **npm** (default: off) — auto-download via `npx @stripe/source-<name>`.
+4. **npm** (default: off) — auto-download via `npx @tx-stripe/source-<name>`.
 
 The first match wins. Registered connectors always take priority.
 
@@ -72,7 +72,7 @@ Scans `node_modules/.bin` and `PATH` for binaries matching `source-<name>` / `de
 
 ### `connectors-from-npm`
 
-Downloads `@stripe/source-<name>` / `@stripe/destination-<name>` from npm at runtime via `npx`.
+Downloads `@tx-stripe/source-<name>` / `@tx-stripe/destination-<name>` from npm at runtime via `npx`.
 
 ```sh
 --connectors-from-npm
@@ -96,9 +96,9 @@ Under the hood, all three strategies produce a command string that gets spawned 
 | ------------ | -------------------------------------------- |
 | `commandMap` | `"npx @acme/source-salesforce"`              |
 | `path`       | `"/path/to/node_modules/.bin/source-stripe"` |
-| `npm`        | `"npx @stripe/source-stripe"`                |
+| `npm`        | `"npx @tx-stripe/source-stripe"`             |
 
-Multi-word commands are split on whitespace at spawn time — `"npx @stripe/source-stripe"` becomes `spawn("npx", ["@stripe/source-stripe", "spec", ...])`.
+Multi-word commands are split on whitespace at spawn time — `"npx @tx-stripe/source-stripe"` becomes `spawn("npx", ["@tx-stripe/source-stripe", "spec", ...])`.
 
 ## CLI flags
 
@@ -134,6 +134,6 @@ Multi-word commands are split on whitespace at spawn time — `"npx @stripe/sour
 | Registered | Compiled-in modules               | Developer (code review) | No      |
 | commandMap | Admin-declared commands           | Admin (deploy config)   | No\*    |
 | path       | Anything on PATH matching pattern | Machine config          | No      |
-| npm        | Packages in `@stripe/*`           | Scope owner (npm)       | Yes     |
+| npm        | Packages in `@tx-stripe/*`        | Scope owner (npm)       | Yes     |
 
 \* commandMap entries can themselves require network (e.g., `npx @acme/source-salesforce`), but the engine doesn't initiate the download — the command does.

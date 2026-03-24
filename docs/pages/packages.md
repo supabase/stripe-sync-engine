@@ -16,7 +16,7 @@ packages/
 apps/
 ├── stateless/                ← one-shot CLI + HTTP API (no persistence between runs)
 ├── stateful/                 ← persistent CLI + HTTP API (credentials, config, state on disk)
-├── sync-engine/              ← published CLI (npm: @stripe/sync-engine, binary: sync-engine)
+├── sync-engine/              ← published CLI (npm: @tx-stripe/sync-engine, binary: sync-engine)
 └── supabase/                 ← Supabase integration (edge functions + deployment)
 ```
 
@@ -78,7 +78,7 @@ The shared foundation. Every connector depends on this. It has **zero** dependen
 
 Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `Source`/`Destination` interfaces, Zod schemas (`ConnectorSpecification`, `ConfiguredCatalog`), and message helper functions.
 
-**Package name:** `@stripe/protocol`
+**Package name:** `@tx-stripe/protocol`
 
 **Exports:** Message types, Source/Destination interfaces, Zod schemas, message helpers.
 
@@ -88,21 +88,21 @@ Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `So
 
 Runtime code for executing syncs: the engine (wires source → destination), the connector loader (subprocess adapter + resolution), and pipeline utilities. Re-exports everything from `protocol` so consumers only need one import.
 
-**Package name:** `@stripe/stateless-sync`
+**Package name:** `@tx-stripe/stateless-sync`
 
 **Exports:** Everything from `protocol` + `createEngine`, `createConnectorResolver`, `SyncParams`, `forward`, `collect`, `filterDataMessages`.
 
-**Dependencies:** `@stripe/protocol`, `zod`.
+**Dependencies:** `@tx-stripe/protocol`, `zod`.
 
 ### `source-stripe` — Stripe API source
 
 Reads from the Stripe REST API via list endpoints (backfill), events API (incremental pull), webhooks (push), and WebSocket (live dev). Includes OpenAPI spec parsing for automatic catalog discovery.
 
-**Package name:** `@stripe/source-stripe`
+**Package name:** `@tx-stripe/source-stripe`
 
 **Exports:** `StripeSource` (implements `Source`), `spec` (Zod config schema), default export.
 
-**Dependencies:** `@stripe/protocol`, `stripe` (Stripe SDK).
+**Dependencies:** `@tx-stripe/protocol`, `stripe` (Stripe SDK).
 
 **Must NOT depend on:** Any destination or infrastructure package.
 
@@ -110,11 +110,11 @@ Reads from the Stripe REST API via list endpoints (backfill), events API (increm
 
 Writes records into a Postgres database. Creates tables from catalog, upserts records with timestamp protection, handles schema projection (column mapping from JSON schema).
 
-**Package name:** `@stripe/destination-postgres`
+**Package name:** `@tx-stripe/destination-postgres`
 
 **Exports:** `PostgresDestination` (implements `Destination`), `PostgresDestinationWriter`, `spec`, default export.
 
-**Dependencies:** `@stripe/protocol`, `pg`, `yesql`.
+**Dependencies:** `@tx-stripe/protocol`, `pg`, `yesql`.
 
 **Must NOT depend on:** Any source or infrastructure package.
 
@@ -122,11 +122,11 @@ Writes records into a Postgres database. Creates tables from catalog, upserts re
 
 Writes records into a Google Sheets spreadsheet.
 
-**Package name:** `@stripe/destination-google-sheets`
+**Package name:** `@tx-stripe/destination-google-sheets`
 
 **Exports:** `SheetsDestination` (implements `Destination`), `spec`, default export.
 
-**Dependencies:** `@stripe/protocol`, `googleapis`.
+**Dependencies:** `@tx-stripe/protocol`, `googleapis`.
 
 **Must NOT depend on:** Any source or infrastructure package.
 
@@ -134,7 +134,7 @@ Writes records into a Google Sheets spreadsheet.
 
 Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific SQL migrations, handles schema creation, migration tracking, and template rendering.
 
-**Package name:** `@stripe/store-postgres`
+**Package name:** `@tx-stripe/store-postgres`
 
 **Exports:** `runMigrations`, `runMigrationsFromContent`, `embeddedMigrations`, `genericBootstrapMigrations`, `renderMigrationTemplate`.
 
@@ -144,17 +144,17 @@ Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific S
 
 Defines store interfaces (`CredentialStore`, `ConfigStore`, `StateStore`, `LogSink`) with lightweight implementations (memory, file, stderr). The `StatefulSync` coordinator loads config → credentials → state, resolves connectors, creates the engine, runs the sync, persists state, and handles auth_error with credential refresh + retry.
 
-**Package name:** `@stripe/stateful-sync`
+**Package name:** `@tx-stripe/stateful-sync`
 
 **Exports:** Store interfaces + implementations, `StatefulSync`, `resolve`.
 
-**Dependencies:** `@stripe/stateless-sync`.
+**Dependencies:** `@tx-stripe/stateless-sync`.
 
 ### `util-postgres` — shared Postgres utilities
 
 Shared Postgres helpers used by multiple packages. Batched upsert with timestamp protection, SQL-based token bucket rate limiter.
 
-**Package name:** `@stripe/util-postgres`
+**Package name:** `@tx-stripe/util-postgres`
 
 **Exports:** `upsertMany`, `createRateLimiter`.
 
@@ -164,7 +164,7 @@ Shared Postgres helpers used by multiple packages. Batched upsert with timestamp
 
 Generic CLI tool that can call any exported function/method from a TypeScript module, with support for stdin piping, positional args, and named args. Used for ad-hoc testing and scripting.
 
-**Package name:** `@stripe/ts-cli`
+**Package name:** `@tx-stripe/ts-cli`
 
 **Exports:** `run` (CLI entrypoint).
 
@@ -172,41 +172,41 @@ Generic CLI tool that can call any exported function/method from a TypeScript mo
 
 ### `apps/stateless` — one-shot CLI + API
 
-Runs a single sync from command-line flags or HTTP. No persistence between runs — caller provides all inputs. Thin wrapper around `@stripe/stateless-sync`.
+Runs a single sync from command-line flags or HTTP. No persistence between runs — caller provides all inputs. Thin wrapper around `@tx-stripe/stateless-sync`.
 
-**Package name:** `@stripe/sync-engine-stateless`
+**Package name:** `@tx-stripe/sync-engine-stateless`
 
 **Binaries:** `sync-engine-stateless` (CLI), `sync-engine-stateless-api` (HTTP server)
 
-**Dependencies:** `@stripe/stateless-sync`.
+**Dependencies:** `@tx-stripe/stateless-sync`.
 
 ### `apps/stateful` — persistent CLI + API
 
 Wraps the stateless app with `StatefulSync` for credential, config, and state persistence. CRUD endpoints for credentials and syncs, plus streaming sync execution. Uses 4 file-based stores under `--data-dir`.
 
-**Package name:** `@stripe/sync-engine-stateful`
+**Package name:** `@tx-stripe/sync-engine-stateful`
 
 **Binaries:** `sync-engine-stateful` (CLI), `sync-engine-stateful-api` (HTTP server)
 
-**Dependencies:** `@stripe/sync-engine-stateless`, `@stripe/stateful-sync`.
+**Dependencies:** `@tx-stripe/sync-engine-stateless`, `@tx-stripe/stateful-sync`.
 
 ### `apps/sync-engine` — published CLI
 
 The user-facing published CLI. Simple one-shot sync: reads Stripe API key + Postgres URL from flags/env, runs the full pipeline, persists state to `_sync_state` table in Postgres.
 
-**Package name:** `@stripe/sync-engine`
+**Package name:** `@tx-stripe/sync-engine`
 
 **Binary:** `sync-engine`
 
-**Dependencies:** `@stripe/stateless-sync`, `@stripe/store-postgres`.
+**Dependencies:** `@tx-stripe/stateless-sync`, `@tx-stripe/store-postgres`.
 
 ### `apps/supabase` — Supabase integration
 
 Deployment target for the Supabase installation flow. Bundles edge functions (Deno runtime) for webhook ingestion, backfill workers, and setup/teardown. Uses `?raw` imports + tsup to bundle edge function code at build time.
 
-**Package name:** `@stripe/integration-supabase`
+**Package name:** `@tx-stripe/integration-supabase`
 
-**Dependencies:** `@stripe/protocol`, `@stripe/source-stripe`, `@stripe/destination-postgres`, `@stripe/store-postgres`, `@stripe/stateful-sync`.
+**Dependencies:** `@tx-stripe/protocol`, `@tx-stripe/source-stripe`, `@tx-stripe/destination-postgres`, `@tx-stripe/store-postgres`, `@tx-stripe/stateful-sync`.
 
 ## Isolation rules
 

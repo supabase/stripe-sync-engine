@@ -139,7 +139,7 @@ The reconciler also manages webhook lifecycle:
 
 ```
 packages/queue/
-  package.json            # @stripe/sync-queue
+  package.json            # @tx-stripe/sync-queue
   tsconfig.json
   vitest.config.ts
   src/
@@ -192,7 +192,7 @@ const [, checkpoints] = await Promise.all([
 
 ## Dependencies
 
-- `@stripe/protocol` — `forward()`, `collect()`, `Source`, `Destination`, message types
+- `@tx-stripe/protocol` — `forward()`, `collect()`, `Source`, `Destination`, message types
 - `pg` — Postgres connection
 
 ## Existing code to reuse

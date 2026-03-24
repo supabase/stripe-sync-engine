@@ -9,8 +9,8 @@ How the engine finds, loads, and communicates with connectors across runtimes.
 The app imports connectors statically and registers them with the resolver:
 
 ```ts
-import source from '@stripe/source-stripe'
-import destination from '@stripe/destination-postgres'
+import source from '@tx-stripe/source-stripe'
+import destination from '@tx-stripe/destination-postgres'
 
 const resolver = createConnectorResolver({
   sources: { stripe: source },
@@ -40,7 +40,7 @@ The resolver uses a fallback chain with configurable dynamic strategies:
 1. Registered connectors       →  in-process (fast path)
 2. connectorsFrom.commandMap   →  explicit name→command mapping
 3. connectorsFrom.path (on)    →  binary in node_modules/.bin / PATH
-4. connectorsFrom.npm (off)    →  npx @stripe/source-<name>
+4. connectorsFrom.npm (off)    →  npx @tx-stripe/source-<name>
 5. None found                  →  error
 ```
 
@@ -67,7 +67,7 @@ await resolver.resolveSource('custom')
 ```
 
 All dynamic strategies produce command strings that get spawned as subprocesses.
-Multi-word commands (`"npx @stripe/source-stripe"`) are split on whitespace at spawn time.
+Multi-word commands (`"npx @tx-stripe/source-stripe"`) are split on whitespace at spawn time.
 
 See [Connector Discovery](./engine/connector-discovery.md) for the full strategy reference.
 

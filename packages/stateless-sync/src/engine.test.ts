@@ -16,8 +16,8 @@ import {
   ConnectorSpecification,
   CheckResult,
   SyncEngineParams,
-} from '@stripe/protocol'
-import type { Source, Destination, DestinationInput as DestInput } from '@stripe/protocol'
+} from '@tx-stripe/protocol'
+import type { Source, Destination, DestinationInput as DestInput } from '@tx-stripe/protocol'
 import { createEngine, buildCatalog } from './engine'
 import { sourceTest } from './source-test'
 import { destinationTest } from './destination-test'

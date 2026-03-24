@@ -18,7 +18,7 @@ up to date with live events via webhooks or WebSocket.
 ## Quick start
 
 ```sh
-npx @stripe/sync-engine sync \
+npx @tx-stripe/sync-engine sync \
   --stripe-api-key sk_live_... \
   --database-url postgresql://localhost:5432/mydb \
   --schema stripe
@@ -33,4 +33,4 @@ npx @stripe/sync-engine sync \
 
 - [Docs](https://stripe-sync-engine.dev/)
 - [GitHub](https://github.com/stripe/sync-engine)
-- [npm](https://www.npmjs.com/package/@stripe/sync-engine)
+- [npm](https://www.npmjs.com/package/@tx-stripe/sync-engine)
