@@ -7,16 +7,35 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./source-test": {
       "types": "./src/source-test.ts",
-      "import": "./dist/source-test.js"
+      "import": "./src/source-test.ts",
+      "default": "./src/source-test.ts"
     },
     "./destination-test": {
       "types": "./src/destination-test.ts",
-      "import": "./dist/destination-test.js"
+      "import": "./src/destination-test.ts",
+      "default": "./src/destination-test.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./source-test": {
+        "types": "./dist/source-test.d.ts",
+        "import": "./dist/source-test.js"
+      },
+      "./destination-test": {
+        "types": "./dist/destination-test.d.ts",
+        "import": "./dist/destination-test.js"
+      }
     }
   },
   "scripts": {
