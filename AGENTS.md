@@ -14,6 +14,7 @@ Most packages run directly from source via `npx tsx` — no build needed.
 with extensionless imports (`from './index'` not `from './index.ts'`).
 
 Exceptions that require `pnpm build`:
+
 - `apps/supabase` — uses `?raw` imports (bundler feature)
 - `apps/stateless` — uses `import ... with { type: 'json' }` (import attributes)
 
