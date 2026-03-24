@@ -169,6 +169,51 @@ jobs:
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           TEMPORAL_ADDRESS: 'localhost:7233'
 
+  publish-test:
+    name: Verdaccio publish & npx test
+    runs-on: ubuntu-24.04
+
+    services:
+      verdaccio:
+        image: verdaccio/verdaccio
+        ports:
+          - 4873:4873
+        options: >-
+          --health-cmd "wget -qO- http://localhost:4873/-/ping || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure Verdaccio for @stripe scope
+        run: |
+          # The GH Actions service container uses default config which proxies
+          # @stripe/* to npmjs (returns 502). Restart with our custom config.
+          docker cp .verdaccio/config.yaml ${{ job.services.verdaccio.id }}:/verdaccio/conf/config.yaml
+          docker restart ${{ job.services.verdaccio.id }}
+          # Wait for Verdaccio to come back
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:4873/-/ping > /dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Publish & test npx
+        run: bash tests/e2e-verdaccio-publish.sh
+
   docker-build:
     name: Docker build & test
     runs-on: ubuntu-24.04
