@@ -17,9 +17,17 @@ export { ensureSpreadsheet, ensureSheet, appendRows, readSheet } from './writer'
 
 // MARK: - Spec
 
+export const envVars = {
+  client_id: 'GOOGLE_CLIENT_ID',
+  client_secret: 'GOOGLE_CLIENT_SECRET',
+} as const
+
 export const spec = z.object({
-  client_id: z.string().describe('Google OAuth2 client ID'),
-  client_secret: z.string().describe('Google OAuth2 client secret'),
+  client_id: z.string().optional().describe('Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)'),
+  client_secret: z
+    .string()
+    .optional()
+    .describe('Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)'),
   access_token: z.string().describe('OAuth2 access token'),
   refresh_token: z.string().describe('OAuth2 refresh token'),
   spreadsheet_id: z.string().describe('Target spreadsheet ID'),
@@ -35,7 +43,12 @@ export type Config = z.infer<typeof spec>
 // MARK: - Helpers
 
 function makeSheetsClient(config: Config) {
-  const auth = new google.auth.OAuth2(config.client_id, config.client_secret)
+  const clientId = config.client_id || process.env['GOOGLE_CLIENT_ID']
+  const clientSecret = config.client_secret || process.env['GOOGLE_CLIENT_SECRET']
+  if (!clientId) throw new Error('client_id required (provide in config or set GOOGLE_CLIENT_ID)')
+  if (!clientSecret)
+    throw new Error('client_secret required (provide in config or set GOOGLE_CLIENT_SECRET)')
+  const auth = new google.auth.OAuth2(clientId, clientSecret)
   auth.setCredentials({
     access_token: config.access_token,
     refresh_token: config.refresh_token,

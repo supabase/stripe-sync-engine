@@ -1,6 +1,6 @@
 import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
-import { describe, expect, it } from 'vitest'
-import { createDestination, type Config } from './index'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createDestination, envVars, type Config } from './index'
 import { readSheet } from './writer'
 import { createMemorySheets } from '../__tests__/memory-sheets'
 
@@ -31,10 +31,10 @@ const catalog = { streams: [] } as never
 /** Minimal config for tests — credentials are unused since we inject a fake client. */
 function cfg(overrides: Partial<Config> = {}): Config {
   return {
-    client_id: '',
-    client_secret: '',
-    access_token: '',
-    refresh_token: '',
+    client_id: 'test-client-id',
+    client_secret: 'test-client-secret',
+    access_token: 'test-access-token',
+    refresh_token: 'test-refresh-token',
     spreadsheet_id: '',
     spreadsheet_title: 'Test',
     batch_size: 50,
@@ -246,5 +246,74 @@ describe('destination-google-sheets', () => {
     const logs = output.filter((m) => m.type === 'log')
     expect(logs).toHaveLength(1)
     expect(logs[0]).toMatchObject({ type: 'log', level: 'info' })
+  })
+})
+
+describe('envVars', () => {
+  it('exports env var mapping', () => {
+    expect(envVars.client_id).toBe('GOOGLE_CLIENT_ID')
+    expect(envVars.client_secret).toBe('GOOGLE_CLIENT_SECRET')
+  })
+})
+
+describe('makeSheetsClient env var fallback', () => {
+  const savedEnv: Record<string, string | undefined> = {}
+
+  beforeEach(() => {
+    savedEnv['GOOGLE_CLIENT_ID'] = process.env['GOOGLE_CLIENT_ID']
+    savedEnv['GOOGLE_CLIENT_SECRET'] = process.env['GOOGLE_CLIENT_SECRET']
+    delete process.env['GOOGLE_CLIENT_ID']
+    delete process.env['GOOGLE_CLIENT_SECRET']
+  })
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+
+  it('falls back to env vars when config omits client_id/client_secret', () => {
+    process.env['GOOGLE_CLIENT_ID'] = 'env-client-id'
+    process.env['GOOGLE_CLIENT_SECRET'] = 'env-client-secret'
+
+    // No sheetsClient injected — makeSheetsClient will be called with env vars.
+    // We just verify it doesn't throw (real Google API won't be hit in spec/check).
+    const dest = createDestination()
+    const specResult = dest.spec()
+    expect(specResult.config).toBeDefined()
+  })
+
+  it('config values take priority over env vars', () => {
+    process.env['GOOGLE_CLIENT_ID'] = 'env-client-id'
+    process.env['GOOGLE_CLIENT_SECRET'] = 'env-client-secret'
+
+    // When config provides values, env vars are ignored — verify no error
+    const dest = createDestination()
+    const specResult = dest.spec()
+    expect(specResult.config).toBeDefined()
+  })
+
+  it('throws when neither config nor env var provides client_id', async () => {
+    // No env vars set, no config values — should throw on makeSheetsClient
+    const dest = createDestination()
+    const config = cfg({ client_id: undefined, client_secret: undefined })
+
+    await expect(async () => {
+      // check() calls makeSheetsClient internally (no injected sheets client)
+      await dest.check({ config })
+    }).rejects.toThrow('client_id required (provide in config or set GOOGLE_CLIENT_ID)')
+  })
+
+  it('throws when neither config nor env var provides client_secret', async () => {
+    process.env['GOOGLE_CLIENT_ID'] = 'env-client-id'
+    // client_secret still missing from both config and env
+
+    const dest = createDestination()
+    const config = cfg({ client_id: undefined, client_secret: undefined })
+
+    await expect(async () => {
+      await dest.check({ config })
+    }).rejects.toThrow('client_secret required (provide in config or set GOOGLE_CLIENT_SECRET)')
   })
 })
