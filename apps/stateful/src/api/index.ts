@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 import { serve } from '@hono/node-server'
 import { createApp } from './app'

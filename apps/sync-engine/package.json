@@ -5,7 +5,7 @@
   "description": "Stripe Sync Engine — sync Stripe data to Postgres",
   "type": "module",
   "bin": {
-    "sync-engine": "./dist/cli.js"
+    "sync-engine": "./src/cli.ts"
   },
   "exports": {
     ".": {
@@ -21,10 +21,13 @@
         "import": "./dist/index.js",
         "require": "./dist/index.cjs"
       }
+    },
+    "bin": {
+      "sync-engine": "./dist/cli.js"
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && sed -i '' 's|#!/usr/bin/env tsx|#!/usr/bin/env node|' dist/cli.js",
     "dev": "tsup --watch",
     "test": "vitest --passWithNoTests"
   },

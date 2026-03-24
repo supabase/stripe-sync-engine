@@ -6,8 +6,8 @@
   "type": "module",
   "main": "./dist/index.cjs",
   "bin": {
-    "sync-engine-stateful": "./dist/cli/index.js",
-    "sync-engine-stateful-api": "./dist/api/index.js"
+    "sync-engine-stateful": "./src/cli/index.ts",
+    "sync-engine-stateful-api": "./src/api/index.ts"
   },
   "exports": {
     ".": {
@@ -23,10 +23,14 @@
         "import": "./dist/index.js",
         "require": "./dist/index.cjs"
       }
+    },
+    "bin": {
+      "sync-engine-stateful": "./dist/cli/index.js",
+      "sync-engine-stateful-api": "./dist/api/index.js"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm,cjs --dts --shims",
+    "build": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm,cjs --dts --shims && sed -i '' 's|#!/usr/bin/env tsx|#!/usr/bin/env node|' dist/cli/index.js dist/api/index.js",
     "dev": "tsup src/index.ts src/cli/index.ts src/api/index.ts src/api/app.ts --format esm --shims --watch",
     "test": "vitest run"
   },

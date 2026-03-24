@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 import { Command } from 'commander'
 import { VERSION } from '../version'
