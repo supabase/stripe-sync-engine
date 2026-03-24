@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'child_process'
+import { execFileSync, spawn } from 'child_process'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
 const IMAGE = 'sync-engine:docker-test'
@@ -9,11 +9,19 @@ function docker(...args: string[]): string {
 }
 
 describe('Docker image', { timeout: 180_000 }, () => {
-  beforeAll(() => {
-    execSync(`docker build -t ${IMAGE} .`, {
-      cwd: process.cwd().replace(/apps\/sync-engine.*/, ''),
-      stdio: 'inherit',
-      timeout: 150_000,
+  beforeAll(async () => {
+    // Use spawn (non-blocking) instead of execSync so the event loop stays
+    // responsive during the ~90 s build, preventing Vitest worker RPC timeouts.
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('docker', ['build', '-t', IMAGE, '.'], {
+        cwd: process.cwd().replace(/apps\/sync-engine.*/, ''),
+        stdio: 'inherit',
+      })
+      child.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`docker build exited with code ${code}`))
+      })
+      child.on('error', reject)
     })
   }, 180_000)
 
