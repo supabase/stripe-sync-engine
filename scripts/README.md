@@ -51,12 +51,12 @@ These use the sync-engine CLI which handles discover → read → write in one s
 
 Set in `.envrc` (via direnv):
 
-| Variable                | Used by                                               |
-| ----------------------- | ----------------------------------------------------- |
-| `STRIPE_API_KEY`        | Stripe scripts                                        |
-| `DATABASE_URL`          | Postgres scripts                                      |
-| `GOOGLE_CLIENT_ID`      | Sheets scripts                                        |
-| `GOOGLE_CLIENT_SECRET`  | Sheets scripts                                        |
-| `GOOGLE_REFRESH_TOKEN`  | Sheets scripts                                        |
-| `GOOGLE_SPREADSHEET_ID` | Sheets scripts                                        |
-| `TS_RUNNER`             | Override TypeScript runner (default: `npx tsx`)        |
+| Variable                | Used by                                         |
+| ----------------------- | ----------------------------------------------- |
+| `STRIPE_API_KEY`        | Stripe scripts                                  |
+| `DATABASE_URL`          | Postgres scripts                                |
+| `GOOGLE_CLIENT_ID`      | Sheets scripts                                  |
+| `GOOGLE_CLIENT_SECRET`  | Sheets scripts                                  |
+| `GOOGLE_REFRESH_TOKEN`  | Sheets scripts                                  |
+| `GOOGLE_SPREADSHEET_ID` | Sheets scripts                                  |
+| `TS_RUNNER`             | Override TypeScript runner (default: `npx tsx`) |

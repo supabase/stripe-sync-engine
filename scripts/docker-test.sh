@@ -83,7 +83,7 @@ STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/read" \
 
 RECORD_COUNT=$(echo "$STRIPE_OUTPUT" | grep -c '"type":"record"' || true)
 echo "    Got $RECORD_COUNT record(s)"
-echo "$STRIPE_OUTPUT" | head -3
+echo "$STRIPE_OUTPUT" | head -3 || true
 [ "$RECORD_COUNT" -gt 0 ] || { echo "FAIL: no records from Stripe"; exit 1; }
 
 # --- 2) Write to Google Sheets ---
@@ -97,7 +97,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
 
-  echo "$SHEETS_OUTPUT" | head -3
+  echo "$SHEETS_OUTPUT" | head -3 || true
   echo "    Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID"
 else
   echo "==> Skipping Google Sheets write (GOOGLE_CLIENT_ID not set)"
@@ -119,7 +119,7 @@ if [ -n "${DATABASE_URL:-}" ]; then
     -H "X-Sync-Params: $PG_PARAMS" \
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
-  echo "$PG_WRITE_OUTPUT" | head -3
+  echo "$PG_WRITE_OUTPUT" | head -3 || true
   echo "    Database: $DATABASE_URL schema=stripe_docker_test"
 else
   echo "==> Skipping Postgres write (DATABASE_URL not set)"
