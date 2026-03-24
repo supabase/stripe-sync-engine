@@ -11,7 +11,8 @@ COPY . ./
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN pnpm --filter @stripe/sync-engine run build
+# Build sync-engine and all its workspace dependencies (required for tsup bundling)
+RUN pnpm --filter "@stripe/sync-engine..." run build
 
 # Install only external npm deps (workspace @stripe/* deps are bundled by tsup)
 FROM node:24-alpine AS deps
