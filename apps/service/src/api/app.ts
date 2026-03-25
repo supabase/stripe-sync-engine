@@ -15,7 +15,7 @@ import {
 } from '../lib/schemas.js'
 import type { Credential, SyncConfig } from '../lib/schemas.js'
 import { SyncService } from '../lib/service.js'
-import type { TemporalOptions } from '../lib/temporal.js'
+import type { TemporalOptions } from '../temporal/bridge.js'
 import {
   fileCredentialStore,
   fileConfigStore,
@@ -24,6 +24,16 @@ import {
 } from '../lib/stores-fs.js'
 
 // MARK: - Helpers
+
+function endpointTable(spec: { paths?: Record<string, unknown> }) {
+  const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
+  const rows = Object.entries(spec.paths ?? {}).flatMap(([path, methods]) =>
+    Object.entries(methods as Record<string, { summary?: string }>)
+      .filter(([m]) => HTTP_METHODS.has(m))
+      .map(([method, op]) => `| ${method.toUpperCase()} | ${path} | ${op.summary ?? ''} |`)
+  )
+  return ['| Method | Path | Summary |', '|--------|------|---------|', ...rows].join('\n')
+}
 
 let _idCounter = Date.now()
 function genId(prefix: string): string {
@@ -404,7 +414,7 @@ export function createApp(options?: AppOptions) {
       const id = genId('sync')
       const stored = { id, ...(body as Record<string, unknown>) } as SyncConfig
       await configs.set(id, stored)
-      await service.temporal?.start(id, stored)
+      await service.temporal?.start(id)
       return c.json(stored as any, 201)
     }
   )
@@ -485,7 +495,7 @@ export function createApp(options?: AppOptions) {
           id,
         } as SyncConfig
         await configs.set(id, updated)
-        await service.temporal?.updateConfig(id, updated)
+        // No need to signal the workflow — activities re-read config from the service on each call
         return c.json(updated as any, 200)
       } catch {
         return c.json({ error: `Sync ${id} not found` }, 404)
@@ -790,7 +800,7 @@ export function createApp(options?: AppOptions) {
       tags: ['Webhooks'],
       summary: 'Ingest a Stripe webhook event',
       description:
-        'Receives a raw Stripe webhook and fans it out to all active syncs sharing the credential.',
+        "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
       request: { params: WebhookParam },
       responses: {
         200: {
@@ -810,13 +820,17 @@ export function createApp(options?: AppOptions) {
 
   // MARK: - OpenAPI spec + Swagger UI
 
-  app.doc('/openapi.json', {
-    openapi: '3.0.0',
-    info: {
-      title: 'Stripe Sync Service API',
-      version: '1.0.0',
-      description: 'Stripe Sync Service — manage credentials, syncs, and webhook ingress',
-    },
+  app.get('/openapi.json', (c) => {
+    const spec = app.getOpenAPIDocument({
+      openapi: '3.0.0',
+      info: {
+        title: 'Stripe Sync Service',
+        version: '1.0.0',
+        description: 'Stripe Sync Service — manage credentials, syncs, and webhook ingress.',
+      },
+    })
+    spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)
+    return c.json(spec)
   })
 
   app.get('/docs', apiReference({ url: '/openapi.json' }))

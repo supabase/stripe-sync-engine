@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Stripe Sync Service API",
+    "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress"
+    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /credentials | List credentials |\n| POST | /credentials | Create credential |\n| GET | /credentials/{id} | Retrieve credential |\n| PATCH | /credentials/{id} | Update credential |\n| DELETE | /credentials/{id} | Delete credential |\n| GET | /syncs | List syncs |\n| POST | /syncs | Create sync |\n| GET | /syncs/{id} | Retrieve sync |\n| PATCH | /syncs/{id} | Update sync |\n| DELETE | /syncs/{id} | Delete sync |\n| POST | /syncs/{id}/setup | Set up destination schema for a sync |\n| POST | /syncs/{id}/teardown | Tear down destination schema for a sync |\n| GET | /syncs/{id}/check | Check connector connection for a sync |\n| POST | /syncs/{id}/read | Read records from the sync source |\n| POST | /syncs/{id}/write | Write records to the sync destination |\n| POST | /syncs/{id}/run | Run sync pipeline (read → write) |\n| POST | /syncs/{id}/pause | Pause a running sync (Temporal mode only) |\n| POST | /syncs/{id}/resume | Resume a paused sync (Temporal mode only) |\n| POST | /webhooks/{credential_id} | Ingest a Stripe webhook event |"
   },
   "components": {
     "schemas": {},
@@ -13,7 +13,9 @@
     "/health": {
       "get": {
         "operationId": "health",
-        "tags": ["Status"],
+        "tags": [
+          "Status"
+        ],
         "summary": "Health check",
         "responses": {
           "200": {
@@ -25,10 +27,14 @@
                   "properties": {
                     "ok": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     }
                   },
-                  "required": ["ok"]
+                  "required": [
+                    "ok"
+                  ]
                 }
               }
             }
@@ -39,7 +45,9 @@
     "/credentials": {
       "get": {
         "operationId": "listCredentials",
-        "tags": ["Credentials"],
+        "tags": [
+          "Credentials"
+        ],
         "summary": "List credentials",
         "responses": {
           "200": {
@@ -67,7 +75,12 @@
                             "type": "string"
                           }
                         },
-                        "required": ["id", "type", "created_at", "updated_at"],
+                        "required": [
+                          "id",
+                          "type",
+                          "created_at",
+                          "updated_at"
+                        ],
                         "additionalProperties": {
                           "nullable": true
                         }
@@ -77,7 +90,10 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["data", "has_more"]
+                  "required": [
+                    "data",
+                    "has_more"
+                  ]
                 }
               }
             }
@@ -86,7 +102,9 @@
       },
       "post": {
         "operationId": "createCredential",
-        "tags": ["Credentials"],
+        "tags": [
+          "Credentials"
+        ],
         "summary": "Create credential",
         "requestBody": {
           "content": {
@@ -98,7 +116,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["type"],
+                "required": [
+                  "type"
+                ],
                 "additionalProperties": {
                   "nullable": true
                 }
@@ -127,7 +147,12 @@
                       "type": "string"
                     }
                   },
-                  "required": ["id", "type", "created_at", "updated_at"],
+                  "required": [
+                    "id",
+                    "type",
+                    "created_at",
+                    "updated_at"
+                  ],
                   "additionalProperties": {
                     "nullable": true
                   }
@@ -156,7 +181,9 @@
     "/credentials/{id}": {
       "get": {
         "operationId": "getCredential",
-        "tags": ["Credentials"],
+        "tags": [
+          "Credentials"
+        ],
         "summary": "Retrieve credential",
         "parameters": [
           {
@@ -190,7 +217,12 @@
                       "type": "string"
                     }
                   },
-                  "required": ["id", "type", "created_at", "updated_at"],
+                  "required": [
+                    "id",
+                    "type",
+                    "created_at",
+                    "updated_at"
+                  ],
                   "additionalProperties": {
                     "nullable": true
                   }
@@ -217,7 +249,9 @@
       },
       "patch": {
         "operationId": "updateCredential",
-        "tags": ["Credentials"],
+        "tags": [
+          "Credentials"
+        ],
         "summary": "Update credential",
         "parameters": [
           {
@@ -263,7 +297,12 @@
                       "type": "string"
                     }
                   },
-                  "required": ["id", "type", "created_at", "updated_at"],
+                  "required": [
+                    "id",
+                    "type",
+                    "created_at",
+                    "updated_at"
+                  ],
                   "additionalProperties": {
                     "nullable": true
                   }
@@ -290,7 +329,9 @@
       },
       "delete": {
         "operationId": "deleteCredential",
-        "tags": ["Credentials"],
+        "tags": [
+          "Credentials"
+        ],
         "summary": "Delete credential",
         "parameters": [
           {
@@ -316,10 +357,15 @@
                     },
                     "deleted": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     }
                   },
-                  "required": ["id", "deleted"]
+                  "required": [
+                    "id",
+                    "deleted"
+                  ]
                 }
               }
             }
@@ -360,7 +406,9 @@
     "/syncs": {
       "get": {
         "operationId": "listSyncs",
-        "tags": ["Syncs"],
+        "tags": [
+          "Syncs"
+        ],
         "summary": "List syncs",
         "responses": {
           "200": {
@@ -388,7 +436,9 @@
                                 "type": "string"
                               }
                             },
-                            "required": ["type"],
+                            "required": [
+                              "type"
+                            ],
                             "additionalProperties": {
                               "nullable": true
                             }
@@ -403,7 +453,9 @@
                                 "type": "string"
                               }
                             },
-                            "required": ["type"],
+                            "required": [
+                              "type"
+                            ],
                             "additionalProperties": {
                               "nullable": true
                             }
@@ -418,21 +470,33 @@
                                 },
                                 "sync_mode": {
                                   "type": "string",
-                                  "enum": ["incremental", "full_refresh"]
+                                  "enum": [
+                                    "incremental",
+                                    "full_refresh"
+                                  ]
                                 }
                               },
-                              "required": ["name"]
+                              "required": [
+                                "name"
+                              ]
                             }
                           }
                         },
-                        "required": ["id", "source", "destination"]
+                        "required": [
+                          "id",
+                          "source",
+                          "destination"
+                        ]
                       }
                     },
                     "has_more": {
                       "type": "boolean"
                     }
                   },
-                  "required": ["data", "has_more"]
+                  "required": [
+                    "data",
+                    "has_more"
+                  ]
                 }
               }
             }
@@ -441,7 +505,9 @@
       },
       "post": {
         "operationId": "createSync",
-        "tags": ["Syncs"],
+        "tags": [
+          "Syncs"
+        ],
         "summary": "Create sync",
         "requestBody": {
           "content": {
@@ -459,7 +525,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": [
+                      "type"
+                    ],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -474,7 +542,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": [
+                      "type"
+                    ],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -489,14 +559,22 @@
                         },
                         "sync_mode": {
                           "type": "string",
-                          "enum": ["incremental", "full_refresh"]
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
                         }
                       },
-                      "required": ["name"]
+                      "required": [
+                        "name"
+                      ]
                     }
                   }
                 },
-                "required": ["source", "destination"]
+                "required": [
+                  "source",
+                  "destination"
+                ]
               }
             }
           }
@@ -522,7 +600,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -537,7 +617,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -552,14 +634,23 @@
                           },
                           "sync_mode": {
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           }
                         },
-                        "required": ["name"]
+                        "required": [
+                          "name"
+                        ]
                       }
                     }
                   },
-                  "required": ["id", "source", "destination"]
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ]
                 }
               }
             }
@@ -585,7 +676,9 @@
     "/syncs/{id}": {
       "get": {
         "operationId": "getSync",
-        "tags": ["Syncs"],
+        "tags": [
+          "Syncs"
+        ],
         "summary": "Retrieve sync",
         "parameters": [
           {
@@ -619,7 +712,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -634,7 +729,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -649,14 +746,23 @@
                           },
                           "sync_mode": {
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           }
                         },
-                        "required": ["name"]
+                        "required": [
+                          "name"
+                        ]
                       }
                     }
                   },
-                  "required": ["id", "source", "destination"]
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ]
                 }
               }
             }
@@ -680,7 +786,9 @@
       },
       "patch": {
         "operationId": "updateSync",
-        "tags": ["Syncs"],
+        "tags": [
+          "Syncs"
+        ],
         "summary": "Update sync",
         "parameters": [
           {
@@ -709,7 +817,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": [
+                      "type"
+                    ],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -724,7 +834,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": [
+                      "type"
+                    ],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -739,10 +851,15 @@
                         },
                         "sync_mode": {
                           "type": "string",
-                          "enum": ["incremental", "full_refresh"]
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
                         }
                       },
-                      "required": ["name"]
+                      "required": [
+                        "name"
+                      ]
                     }
                   }
                 }
@@ -771,7 +888,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -786,7 +905,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": [
+                        "type"
+                      ],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -801,14 +922,23 @@
                           },
                           "sync_mode": {
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           }
                         },
-                        "required": ["name"]
+                        "required": [
+                          "name"
+                        ]
                       }
                     }
                   },
-                  "required": ["id", "source", "destination"]
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ]
                 }
               }
             }
@@ -847,7 +977,9 @@
       },
       "delete": {
         "operationId": "deleteSync",
-        "tags": ["Syncs"],
+        "tags": [
+          "Syncs"
+        ],
         "summary": "Delete sync",
         "parameters": [
           {
@@ -873,10 +1005,15 @@
                     },
                     "deleted": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     }
                   },
-                  "required": ["id", "deleted"]
+                  "required": [
+                    "id",
+                    "deleted"
+                  ]
                 }
               }
             }
@@ -902,7 +1039,9 @@
     "/syncs/{id}/setup": {
       "post": {
         "operationId": "setupSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Set up destination schema for a sync",
         "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
         "parameters": [
@@ -941,7 +1080,9 @@
     "/syncs/{id}/teardown": {
       "post": {
         "operationId": "teardownSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Tear down destination schema for a sync",
         "description": "Drops destination tables. Irreversible.",
         "parameters": [
@@ -980,7 +1121,9 @@
     "/syncs/{id}/check": {
       "get": {
         "operationId": "checkSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Check connector connection for a sync",
         "description": "Validates the source/destination config and tests connectivity.",
         "parameters": [
@@ -1007,29 +1150,42 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": ["succeeded", "failed"]
+                          "enum": [
+                            "succeeded",
+                            "failed"
+                          ]
                         },
                         "message": {
                           "type": "string"
                         }
                       },
-                      "required": ["status"]
+                      "required": [
+                        "status"
+                      ]
                     },
                     "destination": {
                       "type": "object",
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": ["succeeded", "failed"]
+                          "enum": [
+                            "succeeded",
+                            "failed"
+                          ]
                         },
                         "message": {
                           "type": "string"
                         }
                       },
-                      "required": ["status"]
+                      "required": [
+                        "status"
+                      ]
                     }
                   },
-                  "required": ["source", "destination"]
+                  "required": [
+                    "source",
+                    "destination"
+                  ]
                 }
               }
             }
@@ -1055,7 +1211,9 @@
     "/syncs/{id}/read": {
       "post": {
         "operationId": "readSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Read records from the sync source",
         "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides input.",
         "parameters": [
@@ -1103,7 +1261,9 @@
     "/syncs/{id}/write": {
       "post": {
         "operationId": "writeSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Write records to the sync destination",
         "description": "Reads NDJSON messages from the request body and writes them to the destination.",
         "parameters": [
@@ -1178,7 +1338,9 @@
     "/syncs/{id}/run": {
       "post": {
         "operationId": "runSync",
-        "tags": ["Sync Operations"],
+        "tags": [
+          "Sync Operations"
+        ],
         "summary": "Run sync pipeline (read → write)",
         "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
         "parameters": [
@@ -1223,12 +1385,126 @@
         }
       }
     },
+    "/syncs/{id}/pause": {
+      "post": {
+        "operationId": "pauseSync",
+        "tags": [
+          "Sync Operations"
+        ],
+        "summary": "Pause a running sync (Temporal mode only)",
+        "description": "Signals the Temporal workflow to pause. The sync will stop processing after the current batch completes. Requires --temporal-address.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Pause signal sent"
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pause requires Temporal mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/resume": {
+      "post": {
+        "operationId": "resumeSync",
+        "tags": [
+          "Sync Operations"
+        ],
+        "summary": "Resume a paused sync (Temporal mode only)",
+        "description": "Signals the Temporal workflow to resume. Requires --temporal-address.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resume signal sent"
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Resume requires Temporal mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/webhooks/{credential_id}": {
       "post": {
         "operationId": "pushWebhook",
-        "tags": ["Webhooks"],
+        "tags": [
+          "Webhooks"
+        ],
         "summary": "Ingest a Stripe webhook event",
-        "description": "Receives a raw Stripe webhook and fans it out to all active syncs sharing the credential.",
+        "description": "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
         "parameters": [
           {
             "schema": {
@@ -1247,7 +1523,9 @@
               "text/plain": {
                 "schema": {
                   "type": "string",
-                  "enum": ["ok"]
+                  "enum": [
+                    "ok"
+                  ]
                 }
               }
             }

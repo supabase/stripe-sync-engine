@@ -11,6 +11,18 @@ import {
 } from '../lib/index.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 
+// ── Helpers ─────────────────────────────────────────────────────
+
+function endpointTable(spec: { paths?: Record<string, unknown> }) {
+  const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
+  const rows = Object.entries(spec.paths ?? {}).flatMap(([path, methods]) =>
+    Object.entries(methods as Record<string, { summary?: string }>)
+      .filter(([m]) => HTTP_METHODS.has(m))
+      .map(([method, op]) => `| ${method.toUpperCase()} | ${path} | ${op.summary ?? ''} |`)
+  )
+  return ['| Method | Path | Summary |', '|--------|------|---------|', ...rows].join('\n')
+}
+
 // ── Shared schemas ──────────────────────────────────────────────
 
 const XSyncParamsHeader = z.object({
@@ -297,15 +309,17 @@ export function createApp(resolver: ConnectorResolver) {
 
   // ── OpenAPI spec + Swagger UI ───────────────────────────────────
 
-  app.doc('/openapi.json', {
-    openapi: '3.0.0',
-    info: {
-      title: 'Stripe Sync Engine',
-      version: '1.0.0',
-      description:
-        'Stripe Sync Engine stateless API — one-shot source/destination sync over HTTP. ' +
-        'All sync endpoints accept configuration via the X-Sync-Params header (JSON-encoded SyncParams).',
-    },
+  app.get('/openapi.json', (c) => {
+    const spec = app.getOpenAPIDocument({
+      openapi: '3.0.0',
+      info: {
+        title: 'Stripe Sync Engine',
+        version: '1.0.0',
+        description: 'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).',
+      },
+    })
+    spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)
+    return c.json(spec)
   })
 
   app.get('/docs', apiReference({ url: '/openapi.json' }))
