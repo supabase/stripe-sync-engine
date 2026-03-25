@@ -105,14 +105,16 @@ echo ""
 # Helpers
 # ---------------------------------------------------------------------------
 
+# JSON-encoded X-Sync-Params header value for check requests.
+SYNC_PARAMS='{"source_name":"stripe","source_config":{"api_key":"sk_test_fake"},"destination_name":"postgres","destination_config":{"connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
+
 # Run `sync-engine check` with fake credentials and given extra flags.
 # Exits non-zero (bad credentials) but must NOT output "not found".
 # Usage: check_loads [extra flags...]
 check_loads() {
   local output
   output=$(npx sync-engine check \
-    --stripe-api-key sk_test_fake \
-    --postgres-url "postgresql://fake:fake@localhost/fake" \
+    --x-sync-params "$SYNC_PARAMS" \
     "$@" 2>&1 || true)
   if echo "$output" | grep -qi "not found"; then
     echo "  FAIL: got 'not found' — connector loading failed"
@@ -125,8 +127,7 @@ check_loads() {
 check_not_found() {
   local output
   output=$(npx sync-engine check \
-    --stripe-api-key sk_test_fake \
-    --postgres-url "postgresql://fake:fake@localhost/fake" \
+    --x-sync-params "$SYNC_PARAMS" \
     "$@" 2>&1 || true)
   if echo "$output" | grep -qi "not found"; then
     return 0
