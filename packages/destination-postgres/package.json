@@ -11,12 +11,7 @@
     }
   },
   "bin": {
-    "destination-postgres": "./src/bin.ts"
-  },
-  "publishConfig": {
-    "bin": {
-      "destination-postgres": "./dist/bin.js"
-    }
+    "destination-postgres": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",

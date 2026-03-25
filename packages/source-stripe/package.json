@@ -11,12 +11,7 @@
     }
   },
   "bin": {
-    "source-stripe": "./src/bin.ts"
-  },
-  "publishConfig": {
-    "bin": {
-      "source-stripe": "./dist/bin.js"
-    }
+    "source-stripe": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",

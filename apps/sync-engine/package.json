@@ -5,12 +5,7 @@
   "description": "Stripe Sync Engine — sync Stripe data to Postgres",
   "type": "module",
   "bin": {
-    "sync-engine": "./src/cli.ts"
-  },
-  "publishConfig": {
-    "bin": {
-      "sync-engine": "./dist/cli.js"
-    }
+    "sync-engine": "./dist/cli.js"
   },
   "exports": {
     ".": {

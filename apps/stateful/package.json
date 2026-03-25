@@ -5,14 +5,8 @@
   "description": "Stripe Sync Engine stateful app — CLI and HTTP API with credential and state management",
   "type": "module",
   "bin": {
-    "sync-engine-stateful": "./src/cli/index.ts",
-    "sync-engine-stateful-api": "./src/api/index.ts"
-  },
-  "publishConfig": {
-    "bin": {
-      "sync-engine-stateful": "./dist/cli/index.js",
-      "sync-engine-stateful-api": "./dist/api/index.js"
-    }
+    "sync-engine-stateful": "./dist/cli/index.js",
+    "sync-engine-stateful-api": "./dist/api/index.js"
   },
   "exports": {
     ".": {
