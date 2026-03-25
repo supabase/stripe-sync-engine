@@ -1,5 +1,4 @@
-import type { ConfigStore } from './stores.js'
-import type { SyncConfig } from './schemas.js'
+import type { ConfigStore } from '../lib/stores.js'
 
 // MARK: - Types
 
@@ -31,22 +30,16 @@ export class TemporalBridge {
   }
 
   /**
-   * Start a `syncWorkflow` for the given sync config.
+   * Start a `syncWorkflow` for the given sync.
    * Uses deterministic workflow ID so one workflow per sync.
+   * The workflow receives only the syncId — it calls the service API
+   * which resolves config, credentials, and state on each activity call.
    */
-  async start(syncId: string, config: SyncConfig): Promise<void> {
+  async start(syncId: string): Promise<void> {
     await this.client.start('syncWorkflow', {
       workflowId: this.workflowId(syncId),
       taskQueue: this.taskQueue,
-      args: [
-        {
-          source_name: config.source.type,
-          destination_name: config.destination.type,
-          source_config: config.source,
-          destination_config: config.destination,
-          streams: config.streams,
-        },
-      ],
+      args: [syncId],
     })
   }
 
@@ -70,18 +63,6 @@ export class TemporalBridge {
   async resume(syncId: string): Promise<void> {
     const handle = this.client.getHandle(this.workflowId(syncId))
     await handle.signal('resume')
-  }
-
-  /** Signal the workflow to update its config (e.g. after PATCH /syncs/{id}). */
-  async updateConfig(syncId: string, config: Partial<SyncConfig>): Promise<void> {
-    const handle = this.client.getHandle(this.workflowId(syncId))
-    await handle.signal('update_config', {
-      source_name: config.source?.type,
-      destination_name: config.destination?.type,
-      source_config: config.source,
-      destination_config: config.destination,
-      streams: config.streams,
-    })
   }
 
   /** Fan out a webhook event to all workflow syncs sharing the credential. */

@@ -34,9 +34,15 @@ export { SyncService } from './lib/service.js'
 export type { SyncServiceOptions } from './lib/service.js'
 
 // Temporal bridge
-export { TemporalBridge } from './lib/temporal.js'
-export type { TemporalOptions } from './lib/temporal.js'
+export { TemporalBridge } from './temporal/bridge.js'
+export type { TemporalOptions } from './temporal/bridge.js'
 
 // API app factory
 export { createApp } from './api/app.js'
 export type { AppOptions } from './api/app.js'
+
+// Temporal workflow types (for consumers that need to reference them)
+export type { RunResult, SyncActivities, WorkflowStatus } from './temporal/types.js'
+export { createActivities } from './temporal/activities.js'
+export { createWorker } from './temporal/worker.js'
+export type { WorkerOptions } from './temporal/worker.js'

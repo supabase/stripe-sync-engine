@@ -9,10 +9,10 @@ import type {
 import type { CredentialStore, ConfigStore, LogSink, StateStore } from './stores.js'
 import type { SyncConfig } from './schemas.js'
 import { resolve } from './resolve.js'
-import { TemporalBridge } from './temporal.js'
-import type { TemporalOptions } from './temporal.js'
+import { TemporalBridge } from '../temporal/bridge.js'
+import type { TemporalOptions } from '../temporal/bridge.js'
 
-export type { TemporalOptions } from './temporal.js'
+export type { TemporalOptions } from '../temporal/bridge.js'
 
 // MARK: - Async queue
 

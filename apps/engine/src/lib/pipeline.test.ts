@@ -233,6 +233,7 @@ describe('persistState()', () => {
   it('calls store.set for state messages', async () => {
     const calls: Array<{ stream: string; data: unknown }> = []
     const store: StateStore = {
+      get: async () => undefined,
       set: async (stream, data) => {
         calls.push({ stream, data })
       },
@@ -245,7 +246,7 @@ describe('persistState()', () => {
   })
 
   it('yields all messages through unchanged', async () => {
-    const store: StateStore = { set: async () => {} }
+    const store: StateStore = { get: async () => undefined, set: async () => {} }
     const msgs: DestinationOutput[] = [
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
       { type: 'log', level: 'info', message: 'done' },
@@ -259,6 +260,7 @@ describe('persistState()', () => {
   it('does not call store.set for non-state messages', async () => {
     const calls: Array<unknown> = []
     const store: StateStore = {
+      get: async () => undefined,
       set: async (...args) => {
         calls.push(args)
       },
@@ -274,6 +276,7 @@ describe('persistState()', () => {
   it('persists multiple state messages in order', async () => {
     const calls: Array<{ stream: string; data: unknown }> = []
     const store: StateStore = {
+      get: async () => undefined,
       set: async (stream, data) => {
         calls.push({ stream, data })
       },
