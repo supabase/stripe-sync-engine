@@ -6,8 +6,8 @@ import type {
 } from '@stripe/protocol'
 import { google } from 'googleapis'
 import { expect, it } from 'vitest'
-import { createDestination, type Config, readSheet } from '../src/index'
-import { describeWithEnv } from '../../tests/test-helpers'
+import { createDestination, type Config, readSheet } from '../src/index.js'
+import { describeWithEnv } from '../../../tests/test-helpers.js'
 
 async function* toAsyncIter<T>(items: T[]): AsyncIterableIterator<T> {
   for (const item of items) yield item

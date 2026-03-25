@@ -1,4 +1,4 @@
-import type { ParsedColumn } from './types'
+import type { ParsedColumn } from './types.js'
 
 /**
  * Canonical mapping of resource registry object keys to Postgres table names.

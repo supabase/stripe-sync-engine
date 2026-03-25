@@ -7,7 +7,7 @@ import type {
   ConfigStore,
   StateStore,
   LogSink,
-} from '../stores'
+} from '../stores.js'
 
 // MARK: - Helpers
 

@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { expandEntity } from '../utils/expandEntity'
+import { expandEntity } from '../utils/expandEntity.js'
 
 export async function expandLists(opts: {
   items: Record<string, any>[] // eslint-disable-line @typescript-eslint/no-explicit-any

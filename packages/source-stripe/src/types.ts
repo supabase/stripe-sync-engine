@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import type { RevalidateEntityName } from './resourceRegistry'
+import type { RevalidateEntityName } from './resourceRegistry.js'
 
 /**
  * Simple logger interface compatible with both pino and console

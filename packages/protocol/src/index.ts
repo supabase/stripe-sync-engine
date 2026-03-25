@@ -1,4 +1,4 @@
-export * from './protocol'
+export * from './protocol.js'
 export {
   toRecordMessage,
   fromRecordMessage,
@@ -9,5 +9,5 @@ export {
   isErrorMessage,
   isStreamStatusMessage,
   isDataMessage,
-} from './helpers'
-export { parseNdjsonChunks, writeLine } from './ndjson'
+} from './helpers.js'
+export { parseNdjsonChunks, writeLine } from './ndjson.js'

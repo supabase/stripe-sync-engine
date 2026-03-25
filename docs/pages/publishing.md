@@ -4,11 +4,11 @@ How workspace packages get from source to published npm tarballs and Docker imag
 
 ## Three patterns for monorepo packaging
 
-| Pattern | What it does | Who uses it |
-|---------|-------------|-------------|
-| Publish each package | Every workspace package → npm with its own version | tRPC, Drizzle, Effect-TS |
-| Bundle workspace deps | tsup/esbuild inlines workspace code into one dist/ | Turborepo CLI, sync-engine apps |
-| `pnpm deploy` | Copies one package + resolved node_modules | Niche — Docker builds without full monorepo |
+| Pattern               | What it does                                       | Who uses it                                 |
+| --------------------- | -------------------------------------------------- | ------------------------------------------- |
+| Publish each package  | Every workspace package → npm with its own version | tRPC, Drizzle, Effect-TS                    |
+| Bundle workspace deps | tsup/esbuild inlines workspace code into one dist/ | Turborepo CLI, sync-engine apps             |
+| `pnpm deploy`         | Copies one package + resolved node_modules         | Niche — Docker builds without full monorepo |
 
 We use **bundle** for apps and **publish independently** for libraries.
 
@@ -113,28 +113,31 @@ CMD ["node", "dist/cli.js"]
 
 What each piece provides:
 
-| Layer | Source | Why |
-|-------|--------|-----|
-| `dist/` | tsup build | Workspace code bundled, no `@stripe/*` imports at runtime |
-| `node_modules/` | `pnpm deploy --prod` | Third-party deps at exact lockfile versions |
-| `package.json` | `pnpm deploy` | Metadata only (no workspace refs) |
+| Layer           | Source               | Why                                                       |
+| --------------- | -------------------- | --------------------------------------------------------- |
+| `dist/`         | tsup build           | Workspace code bundled, no `@stripe/*` imports at runtime |
+| `node_modules/` | `pnpm deploy --prod` | Third-party deps at exact lockfile versions               |
+| `package.json`  | `pnpm deploy`        | Metadata only (no workspace refs)                         |
 
 What's **not** in the image: source files, pnpm, workspace structure, devDependencies, `@stripe/*` packages.
 
 ### Why not the alternatives?
 
 **Copy whole monorepo + `pnpm install --frozen-lockfile`:**
+
 - Must enumerate every workspace `package.json` in Dockerfile for layer caching
 - Every new package = Dockerfile edit
 - Any `package.json` change in any package busts the install cache
 - Needs pnpm in the runtime image
 
 **`pnpm deploy` alone (without tsup bundling):**
+
 - Copies workspace packages into `node_modules/@stripe/*` with source files
 - `publishConfig` not applied → exports point to `src/`, needs tsx in production
 - 173MB artifact vs ~5MB for bundled dist/
 
 **`npm install` with pinned versions (no lockfile):**
+
 - Works for apps but breaks library deduplication
 - Libraries need ranges (`^4.3.6`), apps could pin, but mixing is confusing
 
@@ -143,6 +146,7 @@ What's **not** in the image: source files, pnpm, workspace structure, devDepende
 The full publish → install → run loop is tested locally using Verdaccio. See [local-registries](./local-registries.md) for setup.
 
 The publish test verifies:
+
 - `publishConfig` is applied (exports → dist/, bin → dist/)
 - `workspace:*` rewritten to real versions
 - `npx @stripe/sync-engine --help` works from a clean install

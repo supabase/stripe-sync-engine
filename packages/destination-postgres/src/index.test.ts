@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import destination, { upsertMany, type Config } from './index'
+import destination, { upsertMany, type Config } from './index.js'
 import type {
   ConfiguredCatalog,
   DestinationInput,
@@ -258,7 +258,7 @@ describe('architecture purity', () => {
   it('destination never imports from or references any source module', async () => {
     const fs = await import('fs')
     const path = await import('path')
-    const srcDir = __dirname
+    const srcDir = import.meta.dirname
     const srcFiles = fs.readdirSync(srcDir).filter((f: string) => f.endsWith('.ts'))
 
     for (const file of srcFiles) {

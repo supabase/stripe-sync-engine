@@ -18,8 +18,7 @@
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
-        "import": "./dist/index.js",
-        "require": "./dist/index.cjs"
+        "import": "./dist/index.js"
       }
     },
     "bin": {
@@ -27,8 +26,8 @@
     }
   },
   "scripts": {
-    "build": "tsup && sed -i '' 's|#!/usr/bin/env tsx|#!/usr/bin/env node|' dist/cli.js",
-    "dev": "tsup --watch",
+    "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/cli.js",
+    "dev": "tsc --watch",
     "test": "vitest --passWithNoTests"
   },
   "files": [
@@ -57,7 +56,6 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
-    "tsup": "^8.5.0",
     "vitest": "^3.2.4"
   }
 }

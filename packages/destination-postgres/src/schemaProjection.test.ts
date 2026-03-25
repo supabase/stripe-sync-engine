@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { jsonSchemaToColumns, buildCreateTableWithSchema } from './schemaProjection'
+import { jsonSchemaToColumns, buildCreateTableWithSchema } from './schemaProjection.js'
 
 const SAMPLE_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',

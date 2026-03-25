@@ -1,21 +1,21 @@
 import type { ConfiguredCatalog, ConnectorSpecification, Message, Source } from '@stripe/protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
-import { buildResourceRegistry } from './resourceRegistry'
-import { catalogFromRegistry, catalogFromOpenApi } from './catalog'
-import { resolveOpenApiSpec } from './openapi/specFetchHelper'
+import { buildResourceRegistry } from './resourceRegistry.js'
+import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
+import { resolveOpenApiSpec } from './openapi/specFetchHelper.js'
 import {
   SpecParser,
   RUNTIME_REQUIRED_TABLES,
   OPENAPI_RESOURCE_TABLE_ALIASES,
-} from './openapi/specParser'
-import { processStripeEvent } from './process-event'
-import { processWebhookInput, createInputQueue, startWebhookServer } from './src-webhook'
-import { listApiBackfill } from './src-list-api'
-import { pollEvents } from './src-events-api'
-import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket'
-import { createStripeWebSocketClient } from './src-websocket'
-import type { ResourceConfig } from './types'
+} from './openapi/specParser.js'
+import { processStripeEvent } from './process-event.js'
+import { processWebhookInput, createInputQueue, startWebhookServer } from './src-webhook.js'
+import { listApiBackfill } from './src-list-api.js'
+import { pollEvents } from './src-events-api.js'
+import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket.js'
+import { createStripeWebSocketClient } from './src-websocket.js'
+import type { ResourceConfig } from './types.js'
 
 // MARK: - Spec
 
@@ -278,5 +278,5 @@ export default source
 
 // MARK: - Re-exports
 
-export { buildResourceRegistry } from './resourceRegistry'
-export { catalogFromRegistry } from './catalog'
+export { buildResourceRegistry } from './resourceRegistry.js'
+export { catalogFromRegistry } from './catalog.js'

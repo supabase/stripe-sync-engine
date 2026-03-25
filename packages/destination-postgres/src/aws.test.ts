@@ -12,7 +12,7 @@ vi.mock('@aws-sdk/rds-signer', () => ({
   Signer: vi.fn(() => ({ getAuthToken: mockGetAuthToken })),
 }))
 
-import { buildRdsIamPasswordFn, _resetCredentialCache } from './aws'
+import { buildRdsIamPasswordFn, _resetCredentialCache } from './aws.js'
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts'
 import { Signer } from '@aws-sdk/rds-signer'
 

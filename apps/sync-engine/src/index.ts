@@ -1,2 +1,2 @@
-export { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options'
-export type { CliOptions } from './resolve-options'
+export { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options.js'
+export type { CliOptions } from './resolve-options.js'

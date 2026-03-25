@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ConnectorResolver, Message, StateMessage } from '@stripe/stateless-sync'
 import { sourceTest, destinationTest } from '@stripe/stateless-sync'
-import { createApp } from './app'
+import { createApp } from './app.js'
 
 // ---------------------------------------------------------------------------
 // Helpers

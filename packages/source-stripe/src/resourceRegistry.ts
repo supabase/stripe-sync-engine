@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import type { ResourceConfig, StripeListResourceConfig } from './types'
+import type { ResourceConfig, StripeListResourceConfig } from './types.js'
 
 interface ResourceDef {
   /** Backfill sequencing order. Lower numbers sync first, ensuring dependencies are populated before dependents. */

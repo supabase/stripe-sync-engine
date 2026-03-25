@@ -1,8 +1,8 @@
 import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createDestination, envVars, type Config } from './index'
-import { readSheet } from './writer'
-import { createMemorySheets } from '../__tests__/memory-sheets'
+import { createDestination, envVars, type Config } from './index.js'
+import { readSheet } from './writer.js'
+import { createMemorySheets } from '../__tests__/memory-sheets.js'
 
 /** Collect all output from the destination's write() generator. */
 async function collect(iter: AsyncIterable<DestinationOutput>): Promise<DestinationOutput[]> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseNdjson, parseNdjsonChunks, parseNdjsonStream } from './ndjson'
+import { parseNdjson, parseNdjsonChunks, parseNdjsonStream } from './ndjson.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = []

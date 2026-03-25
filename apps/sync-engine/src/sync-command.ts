@@ -7,8 +7,8 @@ import {
   genericBootstrapMigrations,
 } from '@stripe/store-postgres'
 import { parseJsonOrFile } from '@stripe/ts-cli'
-import type { CliOptions } from './resolve-options'
-import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options'
+import type { CliOptions } from './resolve-options.js'
+import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options.js'
 
 export async function syncAction(opts: CliOptions) {
   const resolver = createConnectorResolver(

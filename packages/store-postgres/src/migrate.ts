@@ -2,9 +2,9 @@ import { Client } from 'pg'
 import crypto from 'node:crypto'
 import type { ConnectionOptions } from 'node:tls'
 import { sql } from '@stripe/util-postgres'
-import { renderMigrationTemplate } from './migrationTemplate'
-import type { Migration } from './migrations'
-import { migrations as allMigrations } from './migrations'
+import { renderMigrationTemplate } from './migrationTemplate.js'
+import type { Migration } from './migrations/index.js'
+import { migrations as allMigrations } from './migrations/index.js'
 
 /**
  * Simple logger interface compatible with both pino and console

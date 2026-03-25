@@ -120,11 +120,11 @@ Multi-word commands are split on whitespace at spawn time — `"npx @stripe/sour
 
 ## CLI flags
 
-| Flag                                   | Description                           |
-| -------------------------------------- | ------------------------------------- |
+| Flag                                   | Description                            |
+| -------------------------------------- | -------------------------------------- |
 | `--connectors-from-command-map <json>` | Explicit command map (JSON or `@file`) |
-| `--no-connectors-from-path`            | Disable PATH-based discovery          |
-| `--connectors-from-npm`                | Enable npm auto-download              |
+| `--no-connectors-from-path`            | Disable PATH-based discovery           |
+| `--connectors-from-npm`                | Enable npm auto-download               |
 
 ## When to use which
 

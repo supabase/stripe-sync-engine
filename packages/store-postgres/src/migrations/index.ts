@@ -5,10 +5,10 @@ export type Migration = {
 
 // Each migration file exports a raw SQL string.
 // The name is derived from the filename here — single source of truth.
-import m0000 from './0000_bootstrap'
-import m0001 from './0001_stripe_metadata'
-import m0002 from './0002_sync_state'
-import m0003 from './0003_drop_unused_metadata'
+import m0000 from './0000_bootstrap.js'
+import m0001 from './0001_stripe_metadata.js'
+import m0002 from './0002_sync_state.js'
+import m0003 from './0003_drop_unused_metadata.js'
 
 function m(name: string, sql: string): Migration {
   return { name: `${name}.sql`, sql }

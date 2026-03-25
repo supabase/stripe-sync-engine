@@ -3,7 +3,7 @@ import { sourceTest, destinationTest } from '@stripe/stateless-sync'
 import type { ConnectorResolver, DestinationOutput, Message } from '@stripe/sync-engine-stateless'
 import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
 import type { Credential } from '@stripe/stateful-sync'
-import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run'
+import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run.js'
 
 // ---------------------------------------------------------------------------
 // Helpers

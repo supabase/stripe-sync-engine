@@ -12,7 +12,7 @@ import type {
   StateMessage,
 } from '@stripe/sync-engine-stateless'
 import { createConnectorResolver } from '@stripe/sync-engine-stateless'
-import { createApp } from './app'
+import { createApp } from './app.js'
 
 // ---------------------------------------------------------------------------
 // Helpers

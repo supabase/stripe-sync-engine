@@ -2,7 +2,7 @@
 
 import { serve } from '@hono/node-server'
 import { createConnectorResolver } from '@stripe/stateless-sync'
-import { createApp } from './app'
+import { createApp } from './app.js'
 
 const port = Number(process.env.PORT || 3001)
 const resolver = createConnectorResolver({})

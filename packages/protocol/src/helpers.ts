@@ -7,7 +7,7 @@ import type {
   RecordMessage,
   StateMessage,
   StreamStatusMessage,
-} from './protocol'
+} from './protocol.js'
 
 // MARK: - Message constructors
 

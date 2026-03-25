@@ -1,4 +1,4 @@
-import type { LogSink } from '../stores'
+import type { LogSink } from '../stores.js'
 
 /** Log sink that writes to stderr. Suitable for CLI usage. */
 export function stderrLogSink(): LogSink {

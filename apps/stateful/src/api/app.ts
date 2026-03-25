@@ -24,7 +24,7 @@ import {
   ListResponse,
   NdjsonSchema,
   UpdateCredentialSchema,
-} from './schemas'
+} from './schemas.js'
 
 let _idCounter = Date.now()
 function genId(prefix: string): string {

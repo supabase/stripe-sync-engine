@@ -1,4 +1,4 @@
-import type { ParsedResourceTable, ScalarType } from './types'
+import type { ParsedResourceTable, ScalarType } from './types.js'
 
 function scalarTypeToJsonSchema(type: ScalarType): Record<string, unknown> {
   switch (type) {

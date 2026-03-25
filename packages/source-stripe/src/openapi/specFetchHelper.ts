@@ -1,7 +1,7 @@
 import os from 'node:os'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types'
+import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types.js'
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 

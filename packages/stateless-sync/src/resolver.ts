@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import type { Source, Destination } from '@stripe/protocol'
 import { ConnectorSpecification } from '@stripe/protocol'
-import { createSourceFromExec } from './source-exec'
-import { createDestinationFromExec } from './destination-exec'
+import { createSourceFromExec } from './source-exec.js'
+import { createDestinationFromExec } from './destination-exec.js'
 
 // MARK: - Validation
 

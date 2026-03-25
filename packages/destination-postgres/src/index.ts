@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/protocol'
 import { sql, upsert } from '@stripe/util-postgres'
-import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection'
+import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 
 // MARK: - Spec
 
@@ -33,7 +33,7 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
     if (!config.host || !config.database || !config.user) {
       throw new Error('host, database, and user are required when using AWS IAM auth')
     }
-    const { buildRdsIamPasswordFn } = await import('./aws')
+    const { buildRdsIamPasswordFn } = await import('./aws.js')
     const passwordFn = await buildRdsIamPasswordFn({
       host: config.host,
       port: config.port,
@@ -97,7 +97,7 @@ export {
   type ApplySchemaFromCatalogConfig,
   type BuildTableOptions,
   type SystemColumn,
-} from './schemaProjection'
+} from './schemaProjection.js'
 
 // MARK: - Default export
 

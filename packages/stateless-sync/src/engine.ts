@@ -10,9 +10,9 @@ import {
   CheckResult,
 } from '@stripe/protocol'
 import type { Destination, Source } from '@stripe/protocol'
-import type { RouterCallbacks } from './pipeline'
-import { forward } from './pipeline'
-import type { ConnectorResolver } from './resolver'
+import type { RouterCallbacks } from './pipeline.js'
+import { forward } from './pipeline.js'
+import type { ConnectorResolver } from './resolver.js'
 
 // MARK: - Engine interface
 

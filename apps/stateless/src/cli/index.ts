@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { Command } from 'commander'
-import { VERSION } from '../version'
+import { VERSION } from '../version.js'
 import {
   resolveParams,
   setupCommand,
@@ -10,7 +10,7 @@ import {
   readCommand,
   writeCommand,
   runCommand,
-} from './engine-commands'
+} from './engine-commands.js'
 
 const program = new Command()
 

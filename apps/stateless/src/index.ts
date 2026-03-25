@@ -1,4 +1,4 @@
-export { VERSION } from './version'
+export { VERSION } from './version.js'
 
 // Re-export core protocol types for consumers
 export type {
@@ -36,4 +36,4 @@ export {
   parseNdjsonStream,
 } from '@stripe/stateless-sync'
 
-export { ndjsonResponse } from './stream'
+export { ndjsonResponse } from './stream.js'

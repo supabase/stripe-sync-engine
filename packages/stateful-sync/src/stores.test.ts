@@ -2,14 +2,14 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file'
+import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file.js'
 import {
   memoryCredentialStore,
   memoryConfigStore,
   memoryStateStore,
   memoryLogSink,
-} from './stores/memory'
-import type { Credential, SyncConfig } from './stores'
+} from './stores/memory.js'
+import type { Credential, SyncConfig } from './stores.js'
 
 // ---------------------------------------------------------------------------
 // Helpers

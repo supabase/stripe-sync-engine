@@ -1,16 +1,14 @@
-import { defineConfig } from 'tsup'
 import path from 'node:path'
+import { builtinModules } from 'node:module'
 import * as esbuild from 'esbuild'
 
-import { builtinModules } from 'node:module'
-
-function nodePrefixBuiltinsPlugin(): esbuild.Plugin {
+function nodePrefixBuiltinsPlugin() {
   const builtins = new Set(builtinModules.map((m) => (m.startsWith('node:') ? m.slice(5) : m)))
 
-  const isBare = (spec: string) =>
+  const isBare = (spec) =>
     !spec.startsWith('.') && !spec.startsWith('/') && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(spec)
 
-  const isBuiltin = (spec: string) => {
+  const isBuiltin = (spec) => {
     if (spec.startsWith('node:')) return true
     const root = spec.split('/')[0]
     return builtins.has(root)
@@ -50,7 +48,7 @@ function nodePrefixBuiltinsPlugin(): esbuild.Plugin {
   }
 }
 
-const rawTsBundledPlugin: esbuild.Plugin = {
+const rawTsBundledPlugin = {
   name: 'raw-ts-bundled',
   setup(build) {
     build.onResolve({ filter: /\.tsx?\?raw$/ }, (args) => {
@@ -87,11 +85,17 @@ const rawTsBundledPlugin: esbuild.Plugin = {
   },
 }
 
-export default defineConfig({
-  esbuildPlugins: [rawTsBundledPlugin],
-
-  esbuildOptions(options) {
-    options.external = options.external || []
-    options.external.push('npm:*', 'esbuild')
-  },
+await esbuild.build({
+  entryPoints: ['src/index.ts'],
+  outdir: 'dist',
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'node22',
+  external: ['npm:*', 'esbuild'],
+  plugins: [rawTsBundledPlugin],
 })
+
+// Generate declarations
+const { execSync } = await import('node:child_process')
+execSync('tsc --emitDeclarationOnly', { stdio: 'inherit' })

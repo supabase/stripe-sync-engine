@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { SpecParser } from './specParser'
-import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
+import { SpecParser } from './specParser.js'
+import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec.js'
 
 describe('SpecParser', () => {
   it('parses aliased resources into deterministic tables and column types', () => {

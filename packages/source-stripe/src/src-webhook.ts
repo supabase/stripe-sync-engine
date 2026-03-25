@@ -1,9 +1,9 @@
 import type { ConfiguredCatalog, Message } from '@stripe/protocol'
 import http from 'node:http'
 import type Stripe from 'stripe'
-import type { Config, WebhookInput } from './index'
-import type { ResourceConfig } from './types'
-import { processStripeEvent } from './process-event'
+import type { Config, WebhookInput } from './index.js'
+import type { ResourceConfig } from './types.js'
+import { processStripeEvent } from './process-event.js'
 
 // MARK: - processWebhookInput
 

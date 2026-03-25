@@ -1,4 +1,4 @@
-import type { ResourceConfig } from '../types'
+import type { ResourceConfig } from '../types.js'
 
 function getUniqueIds<T>(entries: T[], key: keyof T & string): string[] {
   const set = new Set(

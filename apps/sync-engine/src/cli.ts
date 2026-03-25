@@ -2,9 +2,9 @@
 
 import 'dotenv/config'
 import { Command } from 'commander'
-import { syncAction } from './sync-command'
-import { checkAction } from './check-command'
-import { serveAction } from './serve-command'
+import { syncAction } from './sync-command.js'
+import { checkAction } from './check-command.js'
+import { serveAction } from './serve-command.js'
 
 const program = new Command()
 

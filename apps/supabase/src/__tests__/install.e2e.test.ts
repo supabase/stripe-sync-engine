@@ -2,8 +2,8 @@
 // To enable: create a dedicated Supabase service account with a scoped PAT
 // and store SUPABASE_PROJECT_ID + SUPABASE_PERSONAL_ACCESS_TOKEN + STRIPE_API_KEY as CI secrets.
 import { afterAll, expect, it } from 'vitest'
-import { SupabaseSetupClient } from '../supabase'
-import { describeWithEnv } from '../../../../tests/test-helpers'
+import { SupabaseSetupClient } from '../supabase.js'
+import { describeWithEnv } from '../../../../tests/test-helpers.js'
 
 describeWithEnv(
   'Supabase install / uninstall',

@@ -1,8 +1,8 @@
 import type { ConfiguredCatalog, LogMessage, Message, StateMessage } from '@stripe/protocol'
 import type Stripe from 'stripe'
-import type { Config, StripeStreamState } from './index'
-import type { ResourceConfig } from './types'
-import { processStripeEvent } from './process-event'
+import type { Config, StripeStreamState } from './index.js'
+import type { ResourceConfig } from './types.js'
+import { processStripeEvent } from './process-event.js'
 
 // MARK: - Events polling
 

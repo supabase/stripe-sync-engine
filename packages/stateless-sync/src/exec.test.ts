@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { resolveBin } from './resolver'
-import { createSourceFromExec } from './source-exec'
-import { createDestinationFromExec } from './destination-exec'
+import { resolveBin } from './resolver.js'
+import { createSourceFromExec } from './source-exec.js'
+import { createDestinationFromExec } from './destination-exec.js'
 
 // These tests use real connector binaries (built by `pnpm build`).
 

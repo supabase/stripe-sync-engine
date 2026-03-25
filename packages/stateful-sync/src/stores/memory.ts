@@ -6,7 +6,7 @@ import type {
   StateStore,
   LogSink,
   LogEntry,
-} from '../stores'
+} from '../stores.js'
 
 // MARK: - In-memory credential store
 

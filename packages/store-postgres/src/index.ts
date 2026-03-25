@@ -1,10 +1,10 @@
 // State store
-export { createPgStateStore } from './state-store'
-export type { StateStore } from './state-store'
+export { createPgStateStore } from './state-store.js'
+export type { StateStore } from './state-store.js'
 
 // Migrations
-export { runMigrations, runMigrationsFromContent } from './migrate'
-export type { MigrationConfig } from './migrate'
-export { migrations, genericBootstrapMigrations } from './migrations'
-export type { Migration } from './migrations'
-export { renderMigrationTemplate } from './migrationTemplate'
+export { runMigrations, runMigrationsFromContent } from './migrate.js'
+export type { MigrationConfig } from './migrate.js'
+export { migrations, genericBootstrapMigrations } from './migrations/index.js'
+export type { Migration } from './migrations/index.js'
+export { renderMigrationTemplate } from './migrationTemplate.js'

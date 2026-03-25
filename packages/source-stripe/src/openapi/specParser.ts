@@ -6,11 +6,11 @@ import type {
   ParsedColumn,
   ParsedOpenApiSpec,
   ScalarType,
-} from './types'
+} from './types.js'
 import {
   OPENAPI_COMPATIBILITY_COLUMNS,
   OPENAPI_RESOURCE_TABLE_ALIASES as DEFAULT_OPENAPI_RESOURCE_TABLE_ALIASES,
-} from './runtimeMappings'
+} from './runtimeMappings.js'
 
 const RESERVED_COLUMNS = new Set([
   'id',

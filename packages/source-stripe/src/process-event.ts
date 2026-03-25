@@ -1,9 +1,9 @@
 import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/protocol'
 import { toRecordMessage } from '@stripe/protocol'
 import type Stripe from 'stripe'
-import type { Config } from './index'
-import type { ResourceConfig } from './types'
-import { normalizeStripeObjectName } from './resourceRegistry'
+import type { Config } from './index.js'
+import type { ResourceConfig } from './types.js'
+import { normalizeStripeObjectName } from './resourceRegistry.js'
 
 // MARK: - Delete event detection
 

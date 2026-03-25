@@ -4,8 +4,8 @@ vi.mock('./aws', () => ({
   buildRdsIamPasswordFn: vi.fn(),
 }))
 
-import { buildPoolConfig, type Config } from './index'
-import { buildRdsIamPasswordFn } from './aws'
+import { buildPoolConfig, type Config } from './index.js'
+import { buildRdsIamPasswordFn } from './aws.js'
 
 const mockPasswordFn = vi.fn().mockResolvedValue('rds-token')
 const mockBuild = vi.mocked(buildRdsIamPasswordFn)

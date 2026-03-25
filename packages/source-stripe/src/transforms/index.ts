@@ -1,3 +1,3 @@
-export { backfillDependencies } from './backfillDependencies'
-export { expandLists } from './expandLists'
-export { syncSubscriptionItems, upsertSubscriptionItems } from './subscriptionItems'
+export { backfillDependencies } from './backfillDependencies.js'
+export { expandLists } from './expandLists.js'
+export { syncSubscriptionItems, upsertSubscriptionItems } from './subscriptionItems.js'

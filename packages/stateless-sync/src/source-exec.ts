@@ -7,7 +7,7 @@ import type {
   ConfiguredCatalog,
   Message,
 } from '@stripe/protocol'
-import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './lib/exec-helpers'
+import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './lib/exec-helpers.js'
 
 /**
  * Wrap a connector CLI command as a Source.

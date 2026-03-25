@@ -4,9 +4,9 @@ import {
   webhookFunctionCode,
   workerFunctionCode,
   backfillWorkerFunctionCode,
-} from './edge-function-code'
+} from './edge-function-code.js'
 import pkg from '../package.json' with { type: 'json' }
-import { parseSchemaComment, StripeSchemaComment } from './schemaComment'
+import { parseSchemaComment, StripeSchemaComment } from './schemaComment.js'
 
 export interface DeployClientOptions {
   accessToken: string

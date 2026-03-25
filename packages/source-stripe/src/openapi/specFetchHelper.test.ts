@@ -2,8 +2,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveOpenApiSpec } from './specFetchHelper'
-import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
+import { resolveOpenApiSpec } from './specFetchHelper.js'
+import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec.js'
 
 async function createTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`))

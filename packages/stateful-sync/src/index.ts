@@ -5,15 +5,15 @@ export {
   UpdateCredentialSchema,
   LogEntrySchema,
   buildSchemas,
-} from './schemas'
-export type { Credential, SyncConfig, LogEntry } from './schemas'
+} from './schemas.js'
+export type { Credential, SyncConfig, LogEntry } from './schemas.js'
 
 // Store interfaces
-export type { CredentialStore, ConfigStore, StateStore, LogSink } from './stores'
+export type { CredentialStore, ConfigStore, StateStore, LogSink } from './stores.js'
 
 // Service
-export { StatefulSync, resolve } from './service'
-export type { StatefulSyncOptions } from './service'
+export { StatefulSync, resolve } from './service.js'
+export type { StatefulSyncOptions } from './service.js'
 
 // Store implementations
 export {
@@ -21,6 +21,6 @@ export {
   memoryConfigStore,
   memoryStateStore,
   memoryLogSink,
-} from './stores/memory'
-export { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file'
-export { stderrLogSink } from './stores/stderr'
+} from './stores/memory.js'
+export { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores/file.js'
+export { stderrLogSink } from './stores/stderr.js'

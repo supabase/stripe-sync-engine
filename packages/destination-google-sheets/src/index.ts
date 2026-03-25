@@ -11,9 +11,9 @@ import type {
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'
-import { appendRows, ensureSheet, ensureSpreadsheet } from './writer'
+import { appendRows, ensureSheet, ensureSpreadsheet } from './writer.js'
 
-export { ensureSpreadsheet, ensureSheet, appendRows, readSheet } from './writer'
+export { ensureSpreadsheet, ensureSheet, appendRows, readSheet } from './writer.js'
 
 // MARK: - Spec
 

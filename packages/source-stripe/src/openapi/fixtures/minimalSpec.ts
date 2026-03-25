@@ -1,4 +1,4 @@
-import type { OpenApiSpec } from '../../types'
+import type { OpenApiSpec } from '../types.js'
 
 export const minimalStripeOpenApiSpec: OpenApiSpec = {
   openapi: '3.0.0',

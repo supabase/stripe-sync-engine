@@ -1,7 +1,7 @@
 import type { CatalogMessage, Stream } from '@stripe/protocol'
-import type { ResourceConfig } from './types'
-import type { ParsedResourceTable } from './openapi/types'
-import { parsedTableToJsonSchema } from './openapi/jsonSchemaConverter'
+import type { ResourceConfig } from './types.js'
+import type { ParsedResourceTable } from './openapi/types.js'
+import { parsedTableToJsonSchema } from './openapi/jsonSchemaConverter.js'
 
 /** Derive a CatalogMessage from the existing resource registry (no json_schema). */
 export function catalogFromRegistry(registry: Record<string, ResourceConfig>): CatalogMessage {

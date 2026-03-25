@@ -10,11 +10,11 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/protocol'
-import source from './index'
-import { fromWebhookEvent } from './process-event'
-import { buildResourceRegistry } from './resourceRegistry'
-import type { ResourceConfig } from './types'
-import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket'
+import source from './index.js'
+import { fromWebhookEvent } from './process-event.js'
+import { buildResourceRegistry } from './resourceRegistry.js'
+import type { ResourceConfig } from './types.js'
+import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket.js'
 
 // Mock the WebSocket module
 const mockClose = vi.fn()
@@ -30,7 +30,7 @@ vi.mock('./src-websocket', () => ({
 }))
 
 vi.mock('./resourceRegistry', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./resourceRegistry')>()),
+  ...(await importOriginal<typeof import('./resourceRegistry.js')>()),
   buildResourceRegistry: vi.fn(),
 }))
 
@@ -1158,7 +1158,7 @@ describe('StripeSource', () => {
     })
 
     it('read() creates WebSocket client when websocket: true', async () => {
-      const { createStripeWebSocketClient } = await import('./src-websocket')
+      const { createStripeWebSocketClient } = await import('./src-websocket.js')
 
       const iter = source
         .read({
@@ -1388,7 +1388,7 @@ describe('StripeSource', () => {
     })
 
     it('read() with websocket: true creates WebSocket client (combined config)', async () => {
-      const { createStripeWebSocketClient } = await import('./src-websocket')
+      const { createStripeWebSocketClient } = await import('./src-websocket.js')
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
 
       vi.mocked(createStripeWebSocketClient).mockClear()
@@ -1591,7 +1591,7 @@ describe('StripeSource', () => {
 
   describe('architecture purity', () => {
     it('source never imports from or references any destination module', () => {
-      const srcDir = path.resolve(__dirname, '..')
+      const srcDir = path.resolve(import.meta.dirname, '..')
       const sourceFiles = getAllTsFiles(srcDir)
 
       // Type-only imports are allowed (no runtime dependency)

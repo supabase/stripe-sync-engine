@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { parseNdjsonChunks } from '../ndjson'
+import { parseNdjsonChunks } from '../ndjson.js'
 
 // MARK: - Helpers
 

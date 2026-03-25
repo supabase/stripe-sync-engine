@@ -1,7 +1,7 @@
 // Store interfaces for stateful sync.
 // Types (Credential, SyncConfig, LogEntry) are defined in ./schemas.
 
-import type { Credential, SyncConfig, LogEntry } from './schemas'
+import type { Credential, SyncConfig, LogEntry } from './schemas.js'
 
 export type { Credential, SyncConfig, LogEntry }
 

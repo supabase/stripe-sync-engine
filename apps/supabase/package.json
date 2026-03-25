@@ -4,7 +4,6 @@
   "private": false,
   "description": "Supabase integration for Stripe Sync Engine — edge functions and deployment",
   "type": "module",
-  "main": "./dist/index.cjs",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -16,13 +15,12 @@
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
-        "import": "./dist/index.js",
-        "require": "./dist/index.cjs"
+        "import": "./dist/index.js"
       }
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --shims",
+    "build": "node build.mjs",
     "lint": "eslint src --ext .ts",
     "test": "vitest --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts"

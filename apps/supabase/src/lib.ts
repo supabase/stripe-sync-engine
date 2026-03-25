@@ -5,4 +5,4 @@ export {
   getCurrentVersion,
   type DeployClientOptions,
   type ProjectInfo,
-} from './supabase'
+} from './supabase.js'

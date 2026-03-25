@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createMemorySheets } from './memory-sheets'
+import { createMemorySheets } from './memory-sheets.js'
 
 describe('createMemorySheets', () => {
   it('create — returns an ID and a default Sheet1 tab', async () => {

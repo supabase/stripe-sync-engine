@@ -13,7 +13,7 @@ import type {
   LogSink,
   SyncConfig,
   Credential,
-} from './stores'
+} from './stores.js'
 
 // MARK: - Resolution
 

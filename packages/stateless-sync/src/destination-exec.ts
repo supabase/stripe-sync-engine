@@ -7,7 +7,7 @@ import type {
   DestinationInput,
   DestinationOutput,
 } from '@stripe/protocol'
-import { splitCmd, spawnAndCollect, spawnWithStdin } from './lib/exec-helpers'
+import { splitCmd, spawnAndCollect, spawnWithStdin } from './lib/exec-helpers.js'
 
 /**
  * Wrap a connector CLI command as a Destination.

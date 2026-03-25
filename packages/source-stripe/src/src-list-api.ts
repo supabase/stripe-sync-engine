@@ -1,6 +1,6 @@
 import type { ErrorMessage, Message, StateMessage, StreamStatusMessage } from '@stripe/protocol'
 import { toRecordMessage } from '@stripe/protocol'
-import type { ResourceConfig } from './types'
+import type { ResourceConfig } from './types.js'
 
 function findConfigByTableName(
   registry: Record<string, ResourceConfig>,

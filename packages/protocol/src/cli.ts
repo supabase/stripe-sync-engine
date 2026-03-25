@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { Command } from 'commander'
-import type { Source, Destination, ConnectorSpecification, DestinationInput } from './protocol'
-import { parseNdjsonChunks, writeLine } from './ndjson'
+import type { Source, Destination, ConnectorSpecification, DestinationInput } from './protocol.js'
+import { parseNdjsonChunks, writeLine } from './ndjson.js'
 
 // MARK: - Config parsing
 

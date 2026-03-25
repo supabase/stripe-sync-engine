@@ -2,7 +2,6 @@
   "name": "@stripe/stateful-sync",
   "version": "0.1.0",
   "type": "module",
-  "main": "./dist/index.js",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -14,14 +13,13 @@
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
-        "import": "./dist/index.js",
-        "require": "./dist/index.cjs"
+        "import": "./dist/index.js"
       }
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
-    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "build": "tsc",
+    "dev": "tsc --watch",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -35,7 +33,6 @@
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
     "pg": "^8.16.3",
-    "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

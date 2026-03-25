@@ -12,7 +12,7 @@ import { createConnectorResolver } from '@stripe/stateless-sync'
 import source from '@stripe/source-stripe'
 import destination from '@stripe/destination-postgres'
 import { createApp } from '@stripe/sync-engine-stateful'
-import { describeWithEnv } from '../test-helpers'
+import { describeWithEnv } from '../test-helpers.js'
 
 // ---------------------------------------------------------------------------
 // Config

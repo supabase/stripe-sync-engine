@@ -4,14 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { sourceTest, destinationTest, createConnectorResolver } from '@stripe/stateless-sync'
 import type { Message, StateMessage, Source, Destination } from '@stripe/stateless-sync'
 import destPostgres from '@stripe/destination-postgres'
-import { StatefulSync, resolve } from './service'
+import { StatefulSync, resolve } from './service.js'
 import {
   memoryCredentialStore,
   memoryConfigStore,
   memoryStateStore,
   memoryLogSink,
-} from './stores/memory'
-import type { Credential, SyncConfig } from './stores'
+} from './stores/memory.js'
+import type { Credential, SyncConfig } from './stores.js'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle
