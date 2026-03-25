@@ -16,7 +16,7 @@ const config = {
 }
 
 const completeResult: SyncResult = {
-  cursors: {
+  state: {
     customers: { status: 'complete' },
     products: { status: 'complete' },
   },
@@ -26,7 +26,7 @@ const completeResult: SyncResult = {
 }
 
 const emptyResult: SyncResult = {
-  cursors: {},
+  state: {},
   all_complete: false,
   state_count: 0,
   errors: [],
@@ -86,7 +86,7 @@ describe('SyncWorkflow', () => {
           syncCallCount++
           if (syncCallCount < 3) {
             return {
-              cursors: { customers: { cursor: `page_${syncCallCount}` } },
+              state: { customers: { cursor: `page_${syncCallCount}` } },
               all_complete: false,
               state_count: 1,
               errors: [],
@@ -202,7 +202,7 @@ describe('SyncWorkflow', () => {
           // Slow sync so delete arrives mid-backfill
           await new Promise((r) => setTimeout(r, 500))
           return {
-            cursors: { customers: { cursor: 'page_1' } },
+            state: { customers: { cursor: 'page_1' } },
             all_complete: false,
             state_count: 1,
             errors: [],

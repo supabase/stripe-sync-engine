@@ -43,7 +43,7 @@ export const deleteSignal = defineSignal('delete')
 export const statusQuery = defineQuery<WorkflowStatus>('status')
 
 export async function syncWorkflow(config: SyncConfig): Promise<void> {
-  let cursors: Record<string, unknown> = config.cursors ?? {}
+  let state: Record<string, unknown> = config.state ?? {}
   let phase: string = config.phase ?? 'setup'
   let paused = false
   let deleted = false
@@ -73,7 +73,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     (): WorkflowStatus => ({
       phase,
       paused,
-      cursors,
+      state,
       iteration,
     })
   )
@@ -89,7 +89,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     if (iteration >= CONTINUE_AS_NEW_THRESHOLD) {
       await continueAsNew<typeof syncWorkflow>({
         ...config,
-        cursors,
+        state,
         phase: phase as SyncConfig['phase'],
       })
     }
@@ -108,8 +108,8 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
       await waitWhilePaused()
       if (deleted) return
 
-      const result = await sync({ ...config, cursors })
-      cursors = { ...cursors, ...result.cursors }
+      const result = await sync({ ...config, state })
+      state = { ...state, ...result.state }
 
       await tickIteration()
 
@@ -134,8 +134,8 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
 
       // Process batch
       const batch = eventBuffer.splice(0, EVENT_BATCH_SIZE)
-      const result = await sync({ ...config, cursors }, batch)
-      cursors = { ...cursors, ...result.cursors }
+      const result = await sync({ ...config, state }, batch)
+      state = { ...state, ...result.state }
 
       await tickIteration()
     }

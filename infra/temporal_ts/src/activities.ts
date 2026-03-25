@@ -30,7 +30,7 @@ export function createActivities(engineUrl: string): SyncActivities {
     async sync(config, input?) {
       const headers: Record<string, string> = {
         'X-Sync-Params': buildSyncParamsHeader(config, {
-          state: config.cursors,
+          state: config.state,
         }),
       }
 
@@ -47,8 +47,8 @@ export function createActivities(engineUrl: string): SyncActivities {
       })
       if (!resp.ok) throw new Error(`Sync failed: ${resp.status}`)
 
-      // Stream NDJSON response, extracting cursors and errors
-      const cursors: Record<string, unknown> = {}
+      // Stream NDJSON response, extracting state and errors
+      const state: Record<string, unknown> = {}
       const errors: SyncResult['errors'] = []
       let messageCount = 0
 
@@ -57,7 +57,7 @@ export function createActivities(engineUrl: string): SyncActivities {
         messageCount++
 
         if (m.type === 'state' && m.stream) {
-          cursors[m.stream] = m.data
+          state[m.stream] = m.data
         } else if (m.type === 'error') {
           errors.push({
             message: m.message || m.data?.message || 'Unknown error',
@@ -74,19 +74,19 @@ export function createActivities(engineUrl: string): SyncActivities {
         heartbeat({ messages: messageCount })
       }
 
-      // Determine completeness: each configured stream must have cursor.status === 'complete'
+      // Determine completeness: each configured stream must have state[stream].status === 'complete'
       const streamNames = (config.streams ?? []).map((s) => s.name)
       const all_complete =
         streamNames.length > 0 &&
         streamNames.every((name) => {
-          const cursor = cursors[name] as any
-          return cursor && cursor.status === 'complete'
+          const s = state[name] as any
+          return s && s.status === 'complete'
         })
 
       return {
-        cursors,
+        state,
         all_complete,
-        state_count: Object.keys(cursors).length,
+        state_count: Object.keys(state).length,
         errors,
       }
     },
