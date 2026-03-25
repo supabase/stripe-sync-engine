@@ -33,7 +33,7 @@
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/cli/index.js dist/api/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
+    "unpublish": "npm unpublish --force"
   },
   "files": [
     "dist",

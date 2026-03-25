@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
+    "unpublish": "npm unpublish --force"
   },
   "dependencies": {
     "pg": "^8.16.3"

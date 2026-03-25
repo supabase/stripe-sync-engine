@@ -9,12 +9,6 @@
 
 set -euo pipefail
 
-REGISTRY="${STRIPE_NPM_REGISTRY:?STRIPE_NPM_REGISTRY must be set}"
-echo "Publishing to $REGISTRY"
-
 pnpm -r run --if-present unpublish 2>/dev/null || true
 
-pnpm publish -r \
-  --registry "$REGISTRY" \
-  --access public \
-  --no-git-checks
+pnpm publish -r --access public --no-git-checks
