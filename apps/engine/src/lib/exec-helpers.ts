@@ -93,9 +93,15 @@ export async function* spawnWithStdin<TIn, TOut>(
  * Split a command string into [bin, ...baseArgs].
  * e.g. "npx @stripe/sync-source-stripe" → ["npx", "@stripe/sync-source-stripe"]
  * e.g. "/path/to/source-stripe"    → ["/path/to/source-stripe"]
+ *
+ * If the binary is a bare .js file (e.g. resolved from a workspace package's bin
+ * field), it may not have execute permissions after `tsc`. Run it via `node`.
  */
 export function splitCmd(cmd: string): [string, string[]] {
   const parts = cmd.trim().split(/\s+/)
   const [bin = cmd, ...baseArgs] = parts
+  if (bin.endsWith('.js')) {
+    return ['node', [bin, ...baseArgs]]
+  }
   return [bin, baseArgs]
 }
