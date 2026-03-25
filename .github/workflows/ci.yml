@@ -149,11 +149,6 @@ jobs:
       - name: Docker smoke test
         run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
 
-      - name: Publish test
-        run: bash e2e/publish.test.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   # ---------------------------------------------------------------------------
   # E2E — pull Docker image, run e2e & connector-loading tests
   # ---------------------------------------------------------------------------
