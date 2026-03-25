@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+// In Zod v4, objects strip unknown keys by default.
+// Schemas that accept connector-specific fields use .catchall(z.unknown()).
+
 // MARK: - Credential schemas
 
 export const Credential = z
@@ -9,10 +12,10 @@ export const Credential = z
     created_at: z.string(),
     updated_at: z.string(),
   })
-  .passthrough()
+  .catchall(z.unknown())
 export type Credential = z.infer<typeof Credential>
 
-export const CreateCredential = z.object({ type: z.string() }).passthrough()
+export const CreateCredential = z.object({ type: z.string() }).catchall(z.unknown())
 export type CreateCredential = z.infer<typeof CreateCredential>
 
 export const UpdateCredential = z.record(z.string(), z.unknown())
@@ -25,7 +28,7 @@ export const SourceConfig = z
     type: z.string(),
     credential_id: z.string().optional(),
   })
-  .passthrough()
+  .catchall(z.unknown())
 export type SourceConfig = z.infer<typeof SourceConfig>
 
 export const DestinationConfig = z
@@ -33,7 +36,7 @@ export const DestinationConfig = z
     type: z.string(),
     credential_id: z.string().optional(),
   })
-  .passthrough()
+  .catchall(z.unknown())
 export type DestinationConfig = z.infer<typeof DestinationConfig>
 
 export const StreamConfig = z.object({
