@@ -45,22 +45,7 @@ The `"default"` condition is required alongside `"import"` because tsx's CJS res
 
 ### bin entries
 
-Same pattern for `bin` — source files have `#!/usr/bin/env tsx` shebangs for dev, `publishConfig.bin` points to dist:
-
-```json
-{
-  "bin": { "source-stripe": "./src/bin.ts" },
-  "publishConfig": {
-    "bin": { "source-stripe": "./dist/bin.js" }
-  }
-}
-```
-
-tsup preserves shebangs verbatim, so build scripts include a sed step:
-
-```sh
-tsup ... && sed -i '' 's|#!/usr/bin/env tsx|#!/usr/bin/env node|' dist/bin.js
-```
+Source files use `#!/usr/bin/env node` shebangs. tsc preserves them verbatim in dist output, so no post-processing is needed.
 
 ## Why workspace deps are in devDependencies
 

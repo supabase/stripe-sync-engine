@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 import connector, { spec } from './index.js'
 import { runConnectorCli } from '@stripe/sync-protocol/cli'
 

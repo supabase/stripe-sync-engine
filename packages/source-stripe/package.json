@@ -14,8 +14,8 @@
     "source-stripe": "./dist/bin.js"
   },
   "scripts": {
-    "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",
-    "test": "vitest",
+    "build": "tsc",
+    "test": "vitest"
   },
   "files": [
     "dist",

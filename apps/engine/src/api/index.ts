@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 
 import { serve } from '@hono/node-server'
 import { createConnectorResolver } from '../lib/index.js'
