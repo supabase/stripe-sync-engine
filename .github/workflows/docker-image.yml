@@ -63,7 +63,7 @@ jobs:
           IMAGE="ghcr.io/${{ github.repository }}:${SHA}"
           docker pull "$IMAGE"
           if [ -n "${STRIPE_API_KEY:-}" ]; then
-            bash tests/docker-test.sh "$IMAGE"
+            bash e2e/docker.test.sh "$IMAGE"
           else
             echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available. Running smoke only."
             docker run --rm "$IMAGE" --version
@@ -72,10 +72,10 @@ jobs:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
 
-      # --- Plugin loading test ---
+      # --- Connector loading test ---
 
-      - name: E2E plugin loading test
-        run: bash tests/e2e-connector-loading.sh
+      - name: Connector loading test
+        run: bash e2e/connector-loading.test.sh
 
       # --- E2E vitest tests (real Stripe API) ---
 
@@ -85,7 +85,7 @@ jobs:
             echo "::warning::E2E tests skipped — STRIPE_API_KEY not available (fork PR?)"
             exit 0
           fi
-          pnpm --filter @stripe/sync-test-e2e run test
+          pnpm --filter @stripe/sync-e2e run test
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

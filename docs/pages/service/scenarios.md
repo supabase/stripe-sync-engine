@@ -92,9 +92,9 @@ Both target the same Postgres host with different schemas.
 
 ## Files
 
-| File                                    | Description                                          |
-| --------------------------------------- | ---------------------------------------------------- |
-| `scenarios.md`                          | This document                                        |
-| `ARCHITECTURE.md`                       | System layers, core model, source/destination types  |
-| `packages/protocol/src/protocol.ts`     | Source, Destination interfaces; message types        |
-| `packages/stateful-sync/src/service.ts` | `StatefulSync` class — credential + state management |
+| File                                | Description                                          |
+| ----------------------------------- | ---------------------------------------------------- |
+| `scenarios.md`                      | This document                                        |
+| `ARCHITECTURE.md`                   | System layers, core model, source/destination types  |
+| `packages/protocol/src/protocol.ts` | Source, Destination interfaces; message types        |
+| `apps/service/src/lib/service.ts`   | `StatefulSync` class — credential + state management |

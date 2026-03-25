@@ -5,26 +5,23 @@ The sync engine decomposes into packages along the architecture's isolation boun
 ```
 packages/
 ├── protocol/                 ← core protocol (message types, interfaces, Zod schemas)
-├── stateless-sync/           ← engine, connector loader, pipeline utilities
-├── stateful-sync/            ← store interfaces + StatefulSync coordinator
 ├── source-stripe/            ← Stripe API source connector
 ├── destination-postgres/     ← Postgres destination connector
 ├── destination-google-sheets/← Google Sheets destination connector
-├── store-postgres/           ← Postgres migration runner + embedded migrations
+├── state-postgres/           ← Postgres state store (migration runner + embedded migrations)
 ├── util-postgres/            ← shared Postgres utilities (upsert, rate limiter)
-└── ts-cli/                   ← generic TypeScript module CLI runner
+└── ts-cli/                   ← generic TypeScript module CLI runner (private)
 apps/
-├── stateless/                ← one-shot CLI + HTTP API (no persistence between runs)
-├── stateful/                 ← persistent CLI + HTTP API (credentials, config, state on disk)
-├── sync-engine/              ← published CLI (npm: @stripe/sync-engine, binary: sync-engine)
-└── supabase/                 ← Supabase integration (edge functions + deployment)
+├── engine/                   ← sync engine library + stateless CLI + HTTP API
+├── service/                  ← stateful service (credential/state management)
+└── supabase/                 ← Supabase edge functions (Deno runtime)
 ```
 
 ## Dependency graph
 
 ```
   ┌────────────────┐       ┌──────────────┐  ┌──────────────┐
-  │   protocol     │       │store-postgres │  │ util-postgres │
+  │   protocol     │       │state-postgres │  │ util-postgres │
   │  (types only)  │       │  (pg only)    │  │  (pg only)    │
   └───────┬────────┘       └──────────────┘  └──────────────┘
           │                  standalone — no protocol dep
@@ -33,42 +30,35 @@ apps/
  sources  │    destinations
  (stripe) │    (pg, sheets)
     │     │           │
-    │ stateless-sync  │       ← engine + connector loader + pipeline utils
-    │ (protocol only) │         (depends on protocol)
+    │  apps/engine    │       ← engine + connector loader + pipeline utils + CLI + API
+    │  (protocol only)│         (depends on protocol, state-postgres)
     │     │           │
-    │ stateful-sync   │       ← store interfaces + StatefulSync coordinator
-    │(stateless-sync) │         (no pg dep — stores are injected)
+    │  apps/service   │       ← store interfaces + StatefulSync coordinator
+    │  (engine only)  │         (no pg dep — stores are injected by CLI/API)
     │     │           │
     │     │     NO ARROWS BETWEEN
     │     │     SOURCES ↔ DESTINATIONS
     │     │
-    │  apps/stateless ─→ stateless-sync
-    │  apps/stateful  ─→ apps/stateless + stateful-sync
-    │  apps/sync-engine ─→ stateless-sync + store-postgres
-    │     │
     └─ apps/supabase  ─→ protocol + source-stripe + destination-postgres
-                          + store-postgres + stateful-sync
+                          + state-postgres + apps/engine
 ```
 
 ### Canonical dependency layering
 
-| Layer          | Packages                                                             | Depends on                                                                             |
-| -------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Core           | `protocol`                                                           | nothing (only `zod`)                                                                   |
-| Connectors     | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `protocol` only                                                                        |
-| Stateless sync | `stateless-sync`                                                     | `protocol` only                                                                        |
-| Pg utilities   | `store-postgres`, `util-postgres`                                    | `pg` only (no protocol dep)                                                            |
-| Stateful sync  | `stateful-sync`                                                      | `stateless-sync` only (no `pg` dep)                                                    |
-| Stateless app  | `apps/stateless`                                                     | `stateless-sync` only                                                                  |
-| Stateful app   | `apps/stateful`                                                      | `apps/stateless` + `stateful-sync`                                                     |
-| Published CLI  | `apps/sync-engine`                                                   | `stateless-sync` + `store-postgres`                                                    |
-| Integration    | `apps/supabase`                                                      | `protocol`, `source-stripe`, `destination-postgres`, `store-postgres`, `stateful-sync` |
+| Layer         | Package                                                              | Depends on                                                   |
+| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Core          | `protocol`                                                           | nothing (only `zod`)                                         |
+| Connectors    | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `protocol` only                                              |
+| Pg utilities  | `state-postgres`, `util-postgres`                                    | `pg` only (no protocol dep)                                  |
+| Engine + CLI  | `apps/engine`                                                        | `protocol`, `state-postgres`, connectors                     |
+| Service       | `apps/service`                                                       | `apps/engine`                                                |
+| Integration   | `apps/supabase`                                                      | `protocol`, `source-stripe`, `destination-postgres`, `apps/engine` |
 
 **Key rules:**
 
-- Stateless apps do NOT depend on `stateful-sync`.
-- Stateful apps should NOT import directly from `protocol`; types flow through the stateless layer.
-- `store-postgres` and `util-postgres` are standalone `pg`-only packages — they have no sync-engine workspace dependencies. Apps inject them at composition time.
+- Connectors only depend on `protocol` — never on each other or on infrastructure.
+- `state-postgres` and `util-postgres` are standalone `pg`-only packages — they have no sync-engine workspace dependencies. Apps inject them at composition time.
+- `apps/service` does NOT depend directly on `pg`; Postgres stores are injected by the CLI/API entrypoints.
 
 ## Packages
 
@@ -83,16 +73,6 @@ Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `So
 **Exports:** Message types, Source/Destination interfaces, Zod schemas, message helpers.
 
 **Dependencies:** `zod` (for schema validation).
-
-### `stateless-sync` — engine + connector loader
-
-Runtime code for executing syncs: the engine (wires source → destination), the connector loader (subprocess adapter + resolution), and pipeline utilities. Re-exports everything from `protocol` so consumers only need one import.
-
-**Package name:** `@stripe/sync-engine`
-
-**Exports:** Everything from `protocol` + `createEngine`, `createConnectorResolver`, `SyncParams`, `forward`, `collect`, `filterDataMessages`.
-
-**Dependencies:** `@stripe/sync-protocol`, `zod`.
 
 ### `source-stripe` — Stripe API source
 
@@ -130,7 +110,7 @@ Writes records into a Google Sheets spreadsheet.
 
 **Must NOT depend on:** Any source or infrastructure package.
 
-### `store-postgres` — Postgres migration runner
+### `state-postgres` — Postgres state store
 
 Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific SQL migrations, handles schema creation, migration tracking, and template rendering.
 
@@ -139,16 +119,6 @@ Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific S
 **Exports:** `runMigrations`, `runMigrationsFromContent`, `embeddedMigrations`, `genericBootstrapMigrations`, `renderMigrationTemplate`.
 
 **Dependencies:** `pg`.
-
-### `stateful-sync` — store interfaces + StatefulSync
-
-Defines store interfaces (`CredentialStore`, `ConfigStore`, `StateStore`, `LogSink`) with lightweight implementations (memory, file, stderr). The `StatefulSync` coordinator loads config → credentials → state, resolves connectors, creates the engine, runs the sync, persists state, and handles auth_error with credential refresh + retry.
-
-**Package name:** `@stripe/sync-engine`
-
-**Exports:** Store interfaces + implementations, `StatefulSync`, `resolve`.
-
-**Dependencies:** `@stripe/sync-engine`.
 
 ### `util-postgres` — shared Postgres utilities
 
@@ -164,41 +134,40 @@ Shared Postgres helpers used by multiple packages. Batched upsert with timestamp
 
 Generic CLI tool that can call any exported function/method from a TypeScript module, with support for stdin piping, positional args, and named args. Used for ad-hoc testing and scripting.
 
-**Package name:** `@stripe/sync-ts-cli`
+**Package name:** `@stripe/sync-ts-cli` (private)
 
 **Exports:** `run` (CLI entrypoint).
 
 **Dependencies:** None.
 
-### `apps/stateless` — one-shot CLI + API
+### `apps/engine` — sync engine library + stateless CLI + HTTP API
 
-Runs a single sync from command-line flags or HTTP. No persistence between runs — caller provides all inputs. Thin wrapper around `@stripe/sync-engine`.
+The core of the system. Contains the engine that wires source → destination, the connector loader (subprocess adapter + resolution), and pipeline utilities. Also provides the `sync-engine` binary (CLI) and an HTTP API server.
+
+Published as the user-facing npm package.
 
 **Package name:** `@stripe/sync-engine`
 
-**Binaries:** `sync-engine-stateless` (CLI), `sync-engine-stateless-api` (HTTP server)
+**Exports:**
+- `"."` — library: `createEngine`, `createConnectorResolver`, `SyncParams`, `forward`, `collect`, `filterDataMessages`, `sourceTest`, `destinationTest`, everything from `protocol`
+- `"./cli"` — CLI `CommandDef` (citty program, no side effects)
+- `"./api"` — `createApp` factory (Hono app, no side effects)
+
+**Binary:** `sync-engine` → `dist/cli/index.js`
+
+**Dependencies:** `@stripe/sync-protocol`, `@stripe/sync-state-postgres`, connectors, `citty`, `hono`, `dotenv`.
+
+### `apps/service` — stateful sync service
+
+Wraps the engine with credential management and state persistence. Defines store interfaces (`CredentialStore`, `StateStore`, `LogSink`) with file-based implementations. The `StatefulSync` coordinator loads config → credentials → state, resolves connectors, runs the engine, and persists output state.
+
+**Package name:** `@stripe/sync-service`
+
+**Exports:** Store interfaces + implementations, `StatefulSync`.
+
+**Binary:** `sync-service`
 
 **Dependencies:** `@stripe/sync-engine`.
-
-### `apps/stateful` — persistent CLI + API
-
-Wraps the stateless app with `StatefulSync` for credential, config, and state persistence. CRUD endpoints for credentials and syncs, plus streaming sync execution. Uses 4 file-based stores under `--data-dir`.
-
-**Package name:** `@stripe/sync-engine`
-
-**Binaries:** `sync-engine-stateful` (CLI), `sync-engine-stateful-api` (HTTP server)
-
-**Dependencies:** `@stripe/sync-engine`, `@stripe/sync-engine`.
-
-### `apps/sync-engine` — published CLI
-
-The user-facing published CLI. Simple one-shot sync: reads Stripe API key + Postgres URL from flags/env, runs the full pipeline, persists state to `_sync_state` table in Postgres.
-
-**Package name:** `@stripe/sync-engine`
-
-**Binary:** `sync-engine`
-
-**Dependencies:** `@stripe/sync-engine`, `@stripe/sync-state-postgres`.
 
 ### `apps/supabase` — Supabase integration
 
@@ -216,8 +185,7 @@ Deployment target for the Supabase installation flow. Bundles edge functions (De
 | `destination-*` packages never import from `source-*` packages        | CI lint: disallowed import paths |
 | `source-*` and `destination-*` only depend on `protocol`              | package.json audit               |
 | `protocol` has zero runtime deps beyond `zod`                         | package.json audit               |
-| Stateless apps depend on `stateless-sync` only, never `stateful-sync` | package.json audit               |
-| Stateful apps depend on their stateless counterpart + `stateful-sync` | package.json audit               |
+| `apps/service` does not depend directly on `pg`                       | package.json audit               |
 
 ## pnpm workspace
 

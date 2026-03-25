@@ -14,7 +14,7 @@
 #   - For GitHub Packages: GITHUB_TOKEN set (CI provides this automatically)
 #
 # Usage:
-#   bash tests/e2e-publish.sh
+#   bash e2e/publish.test.sh
 #
 
 set -euo pipefail
@@ -59,7 +59,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 2: Publishing packages ---"
 
-pnpm -r --filter '!./tests/*' publish \
+pnpm -r --filter '!./e2e' publish \
   --registry "$REGISTRY" \
   --access public \
   --no-git-checks \

@@ -3,26 +3,20 @@
 Engine-layer CLI wrapping `createEngine()` from `@stripe/sync-engine`.
 No credentials store, no syncs CRUD, no service mode.
 
-## `sync-engine` — run the pipeline
+## `sync-engine sync` — run the pipeline
 
-The default command. Discovers streams, builds the catalog, runs
+Discovers streams, builds the catalog, runs
 `source.read() → engine → destination.write()`.
 
 ```sh
-# Minimal — Stripe → Postgres, all streams, full_refresh
-sync-engine --api-key sk_test_... --database-url postgres://localhost/mydb
+# Minimal — Stripe → Postgres, all streams
+sync-engine sync --stripe-api-key sk_test_... --postgres-url postgres://localhost/mydb
 
 # Filter streams
-sync-engine --api-key sk_test_... --database-url postgres://... --streams customers,invoices
-
-# Google Sheets destination (inferred from --sheets-id)
-sync-engine --api-key sk_test_... --sheets-id 1abc...xyz --streams customers
+sync-engine sync --stripe-api-key sk_test_... --postgres-url postgres://... --streams customers,invoices
 
 # From a JSON config file (SyncParams shape)
-sync-engine --config sync.json
-
-# Pipe SyncParams via stdin
-cat sync.json | sync-engine --config -
+sync-engine sync --config sync.json
 ```
 
 **Env var alternatives:**
@@ -30,7 +24,7 @@ cat sync.json | sync-engine --config -
 ```sh
 export STRIPE_API_KEY=sk_test_...
 export DATABASE_URL=postgres://localhost/mydb
-sync-engine   # picks up from env
+sync-engine sync   # picks up from env
 ```
 
 **Output contract:**
@@ -39,79 +33,39 @@ sync-engine   # picks up from env
 - stderr → logs, errors, stream status
 - Exit 0 on success, non-zero on failure
 
-## `sync-engine discover`
-
-Maps to `source.discover({ config })`. Lists available streams.
-
-```sh
-# Stream names, one per line
-sync-engine discover --api-key sk_test_...
-
-# Full CatalogMessage as JSON (with primary_key, json_schema)
-sync-engine discover --api-key sk_test_... --json
-```
-
 ## `sync-engine check`
 
 Maps to `source.check({ config })` + `destination.check({ config })`.
 Validates connectivity on both ends.
 
 ```sh
-sync-engine check --api-key sk_test_... --database-url postgres://...
+sync-engine check --stripe-api-key sk_test_... --postgres-url postgres://...
 # ✓ Source: connected
 # ✓ Destination: connected
-
-# Only checks source when no destination flags are present
-sync-engine check --api-key sk_test_...
-# ✓ Source: connected
 ```
 
-## `sync-engine spec`
+## `sync-engine serve`
 
-Maps to `source.spec()` / `destination.spec()`. Prints the connector's
-config JSON Schema.
+Starts the HTTP API server. The default action when invoked bare.
 
 ```sh
-sync-engine spec --source
-# { "connection_specification": { ... api_key, base_url ... } }
-
-sync-engine spec --destination
-# { "connection_specification": { ... connection_string, schema ... } }
+sync-engine serve --port 3000
+# or
+sync-engine --port 3000
 ```
-
-## `sync-engine migrate`
-
-Destination-specific. Creates/updates tables before first sync.
-
-```sh
-sync-engine migrate --database-url postgres://...
-# Creates stream tables (e.g. customers, invoices) with (_pk, data) schema
-```
-
-## Destination routing
-
-The CLI infers which destination from the flags present:
-
-| Flags present    | Destination                      |
-| ---------------- | -------------------------------- |
-| `--database-url` | destination-postgres             |
-| `--sheets-id`    | destination-google-sheets        |
-| Both             | Error: "specify one destination" |
-
-Pipe mode bypasses routing entirely — you pick the destination binary.
 
 ## Flag → SyncParams mapping
 
-| Flag             | SyncParams field                       | Env var           |
-| ---------------- | -------------------------------------- | ----------------- |
-| `--api-key`      | `source_config.api_key`                | `STRIPE_API_KEY`  |
-| `--base-url`     | `source_config.base_url`               | `STRIPE_BASE_URL` |
-| `--database-url` | `destination_config.connection_string` | `DATABASE_URL`    |
-| `--sheets-id`    | `destination_config.spreadsheet_id`    | —                 |
-| `--streams`      | `streams[].name` (comma-separated)     | —                 |
-| `--config`       | entire `SyncParams` from JSON file     | —                 |
-
-`--config` overrides all other flags. When `--config -`, reads from stdin.
+| Flag                | SyncParams field                       | Env var                         |
+| ------------------- | -------------------------------------- | ------------------------------- |
+| `--stripe-api-key`  | `source_config.api_key`                | `STRIPE_API_KEY`                |
+| `--stripe-base-url` | `source_config.base_url`               | —                               |
+| `--websocket`       | `source_config.websocket`              | —                               |
+| `--postgres-url`    | `destination_config.connection_string` | `POSTGRES_URL` / `DATABASE_URL` |
+| `--postgres-schema` | `destination_config.schema`            | —                               |
+| `--streams`         | `streams[].name` (comma-separated)     | —                               |
+| `--no-state`        | (skip state load/persist)              | —                               |
+| `--config`          | entire `SyncParams` from JSON file     | —                               |
 
 ## Pipe mode
 
@@ -121,6 +75,8 @@ Individual connector commands via `ts-cli` for Unix composition.
 alias source-stripe='node packages/ts-cli/dist/index.js ./packages/source-stripe/dist/index.js'
 alias dest-postgres='node packages/ts-cli/dist/index.js ./packages/destination-postgres/dist/index.js'
 ```
+
+_(Paths are relative to the monorepo root.)_
 
 ### Source commands
 

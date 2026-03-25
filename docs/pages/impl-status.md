@@ -2,7 +2,7 @@
 
 Single source of truth for what's done, what's in progress, and what's left.
 
-**Last updated**: 2026-03-23
+**Last updated**: 2026-03-25
 **Branch**: `v2`
 
 ## Packages
@@ -15,14 +15,11 @@ Target structure from `packages.md`. Status: EXISTS / MISSING / WRONG.
 | `packages/source-stripe`             | EXISTS | Has `backfill.ts`, `streams/`, `openapi/`, `cli.ts`. Three input modes: stdin, WebSocket, HTTP. |
 | `packages/destination-postgres`      | EXISTS | Has real `write()`. No Stripe-specific knowledge (openapi moved out).                           |
 | `packages/destination-google-sheets` | EXISTS | Fully implemented. `write()` works. E2E test.                                                   |
-| `packages/stateless-sync`            | EXISTS | Engine (`createEngine`), connector loader, pipeline utils (`forward`, `collect`).               |
-| `packages/stateful-sync`             | EXISTS | `StatefulSync` class, store interfaces + implementations.                                       |
-| `packages/store-postgres`            | EXISTS | Migration runner + embedded migrations.                                                         |
+| `packages/state-postgres`            | EXISTS | Migration runner + embedded migrations.                                                         |
 | `packages/util-postgres`             | EXISTS | Shared Postgres helpers (upsert, rate limiter).                                                 |
 | `packages/ts-cli`                    | EXISTS | Generic TypeScript module CLI runner.                                                           |
-| `apps/stateless`                     | EXISTS | One-shot CLI + HTTP API.                                                                        |
-| `apps/stateful`                      | EXISTS | Persistent CLI + HTTP API with file-based stores.                                               |
-| `apps/sync-engine`                   | EXISTS | Published CLI (`sync-engine` binary).                                                           |
+| `apps/engine`                        | EXISTS | Engine (`createEngine`), connector loader, pipeline utils, CLI, HTTP API.                       |
+| `apps/service`                       | EXISTS | `StatefulSync` class, store interfaces + file-based implementations.                            |
 | `apps/supabase`                      | EXISTS | Supabase integration (edge functions).                                                          |
 
 ## Architecture compliance
@@ -82,7 +79,7 @@ There is no `Orchestrator` interface — orchestration is handled by `createEngi
 | `write()` — full implementation | REAL   | 1 E2E test (needs credentials) |
 | Rate limit retry                | REAL   | Built into writer.ts           |
 
-### stateless-sync (engine)
+### apps/engine (engine)
 
 | Method / Function           | Status | Test coverage               |
 | --------------------------- | ------ | --------------------------- |
@@ -93,7 +90,7 @@ There is no `Orchestrator` interface — orchestration is handled by `createEngi
 | `spawnSource()`             | REAL   | Subprocess adapter          |
 | `spawnDestination()`        | REAL   | Subprocess adapter          |
 
-### stateful-sync (StatefulSync)
+### apps/service (StatefulSync)
 
 | Method                              | Status | Test coverage     |
 | ----------------------------------- | ------ | ----------------- |

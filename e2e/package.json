@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-test-e2e",
+  "name": "@stripe/sync-e2e",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"

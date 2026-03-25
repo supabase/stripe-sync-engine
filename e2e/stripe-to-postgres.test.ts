@@ -5,7 +5,7 @@ import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
 import { createEngine } from '@stripe/sync-engine'
 import type { StateMessage, DestinationOutput } from '@stripe/sync-protocol'
-import { describeWithEnv } from '../test-helpers.js'
+import { describeWithEnv } from './test-helpers.js'
 
 // ---------------------------------------------------------------------------
 // Config

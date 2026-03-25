@@ -336,8 +336,8 @@ The source uses the map to resume each stream from its last checkpoint.
 
 ## Files
 
-| File                                    | Description                                      |
-| --------------------------------------- | ------------------------------------------------ |
-| `packages/protocol/src/protocol.ts`     | Message protocol + Source/Destination interfaces |
-| `packages/stateless-sync/src/engine.ts` | `createEngine()` — wires source → destination    |
-| `ARCHITECTURE.md`                       | This document                                    |
+| File                                 | Description                                      |
+| ------------------------------------ | ------------------------------------------------ |
+| `packages/protocol/src/protocol.ts`  | Message protocol + Source/Destination interfaces |
+| `apps/engine/src/lib/engine.ts`      | `createEngine()` — wires source → destination    |
+| `ARCHITECTURE.md`                    | This document                                    |

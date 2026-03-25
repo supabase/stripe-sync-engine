@@ -11,8 +11,6 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
-    "link": "scripts/link-bins.sh",
-    "unlink": "scripts/link-bins.sh --unlink",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
