@@ -36,9 +36,7 @@ node -e "
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
 " > "$outdir/service.json"
 
-if ! $check_mode; then
-  pnpm prettier --write "$outdir/engine.json" "$outdir/service.json" --log-level warn
-fi
+pnpm prettier --write "$outdir/engine.json" "$outdir/service.json" --log-level warn
 
 if $check_mode; then
   drift=false
