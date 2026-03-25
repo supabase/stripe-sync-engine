@@ -5,35 +5,19 @@
   "description": "Stripe Sync Engine stateless app — CLI and HTTP API for one-shot sync",
   "type": "module",
   "bin": {
-    "sync-engine-stateless": "./src/cli/index.ts",
-    "sync-engine-stateless-api": "./src/api/index.ts"
+    "sync-engine-stateless": "./dist/cli/index.js",
+    "sync-engine-stateless-api": "./dist/api/index.js"
   },
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./app": {
-      "types": "./src/api/app.ts",
-      "import": "./src/api/app.ts",
-      "default": "./src/api/app.ts"
-    }
-  },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "import": "./dist/index.js"
-      },
-      "./app": {
-        "types": "./dist/api/app.d.ts",
-        "import": "./dist/api/app.js"
-      }
-    },
-    "bin": {
-      "sync-engine-stateless": "./dist/cli/index.js",
-      "sync-engine-stateless-api": "./dist/api/index.js"
+      "bun": "./src/api/app.ts",
+      "types": "./dist/api/app.d.ts",
+      "import": "./dist/api/app.js"
     }
   },
   "scripts": {
@@ -42,7 +26,8 @@
     "test": "vitest --passWithNoTests"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "dependencies": {
     "@hono/node-server": "^1",

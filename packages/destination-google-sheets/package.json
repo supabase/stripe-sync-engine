@@ -5,31 +5,21 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
-    }
-  },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "import": "./dist/index.js"
-      }
-    },
-    "bin": {
-      "destination-google-sheets": "./dist/bin.js"
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "bin": {
-    "destination-google-sheets": "./src/bin.ts"
+    "destination-google-sheets": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",
     "test": "vitest"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",

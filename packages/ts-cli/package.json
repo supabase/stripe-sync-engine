@@ -5,44 +5,24 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./config": {
-      "types": "./src/config.ts",
-      "import": "./src/config.ts",
-      "default": "./src/config.ts"
+      "bun": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
     },
     "./ndjson": {
-      "types": "./src/ndjson.ts",
-      "import": "./src/ndjson.ts",
-      "default": "./src/ndjson.ts"
+      "bun": "./src/ndjson.ts",
+      "types": "./dist/ndjson.d.ts",
+      "import": "./dist/ndjson.js"
     },
     "./openapi": {
-      "types": "./src/openapi/index.ts",
-      "import": "./src/openapi/index.ts",
-      "default": "./src/openapi/index.ts"
-    }
-  },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "import": "./dist/index.js"
-      },
-      "./config": {
-        "types": "./dist/config.d.ts",
-        "import": "./dist/config.js"
-      },
-      "./ndjson": {
-        "types": "./dist/ndjson.d.ts",
-        "import": "./dist/ndjson.js"
-      },
-      "./openapi": {
-        "types": "./dist/openapi.d.ts",
-        "import": "./dist/openapi.js"
-      }
+      "bun": "./src/openapi/index.ts",
+      "types": "./dist/openapi.d.ts",
+      "import": "./dist/openapi.js"
     }
   },
   "scripts": {
@@ -57,6 +37,7 @@
     "vitest": "^3.2"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ]
 }

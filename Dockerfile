@@ -17,32 +17,6 @@ RUN pnpm build
 FROM build AS deploy
 RUN pnpm --filter @stripe/sync-engine deploy --prod /deploy
 
-# pnpm deploy doesn't apply publishConfig — workspace packages still point
-# exports at src/. Rewrite them to use dist/ (the publishConfig values).
-# Must patch both top-level and .pnpm hoisted copies.
-RUN node -e " \
-  const fs = require('fs'), path = require('path'); \
-  function patchDir(dir) { \
-    if (!fs.existsSync(dir)) return; \
-    for (const entry of fs.readdirSync(dir)) { \
-      const pj = path.join(dir, entry, 'package.json'); \
-      if (!fs.existsSync(pj)) continue; \
-      const pkg = JSON.parse(fs.readFileSync(pj, 'utf8')); \
-      if (!pkg.publishConfig) continue; \
-      for (const [k, v] of Object.entries(pkg.publishConfig)) pkg[k] = v; \
-      delete pkg.publishConfig; \
-      fs.writeFileSync(pj, JSON.stringify(pkg, null, 2) + '\n'); \
-    } \
-  } \
-  patchDir('/deploy/node_modules/@stripe'); \
-  const pnpm = '/deploy/node_modules/.pnpm'; \
-  if (fs.existsSync(pnpm)) { \
-    for (const d of fs.readdirSync(pnpm)) { \
-      patchDir(path.join(pnpm, d, 'node_modules/@stripe')); \
-    } \
-  } \
-"
-
 # Final image — just the bundle + external node_modules
 FROM node:24-alpine
 WORKDIR /app
