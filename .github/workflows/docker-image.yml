@@ -1,3 +1,4 @@
+# TODO: rename this file back to e2e.yml once it exists on the default branch
 name: E2E
 
 on:
