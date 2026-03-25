@@ -70,7 +70,11 @@ jobs:
           fi
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
       # --- Connector loading test ---
 

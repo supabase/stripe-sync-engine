@@ -9,7 +9,7 @@
 #
 # Required env: STRIPE_API_KEY
 # Optional env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_SPREADSHEET_ID
-# Optional env: DATABASE_URL (for Postgres write test)
+# Optional env: POSTGRES_URL (for Postgres write test)
 set -euo pipefail
 
 MODE="${1:-local}"
@@ -23,7 +23,7 @@ case "$MODE" in
     echo "  <image>        Test a specific image, e.g. sync-engine:test"
     echo ""
     echo "Required env: STRIPE_API_KEY"
-    echo "Optional env: DATABASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,"
+    echo "Optional env: POSTGRES_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,"
     echo "              GOOGLE_REFRESH_TOKEN, GOOGLE_SPREADSHEET_ID"
     exit 0
     ;;
@@ -104,9 +104,9 @@ else
 fi
 
 # --- 3) Write to Postgres ---
-if [ -n "${DATABASE_URL:-}" ]; then
+if [ -n "${POSTGRES_URL:-}" ]; then
   # Rewrite localhost for Docker container access
-  DOCKER_PG_URL="${DATABASE_URL//localhost/$DOCKER_HOST_ADDR}"
+  DOCKER_PG_URL="${POSTGRES_URL//localhost/$DOCKER_HOST_ADDR}"
   echo "==> Setting up Postgres (/setup) → $DOCKER_PG_URL"
   PG_PARAMS=$(printf '{"source_name":"stripe","source_config":{"api_key":"%s"},"destination_name":"postgres","destination_config":{"url":"%s","schema":"stripe_docker_test"}}' \
     "$STRIPE_API_KEY" "$DOCKER_PG_URL")
@@ -120,9 +120,9 @@ if [ -n "${DATABASE_URL:-}" ]; then
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
   echo "$PG_WRITE_OUTPUT" | head -3 || true
-  echo "    Database: $DATABASE_URL schema=stripe_docker_test"
+  echo "    Database: $POSTGRES_URL schema=stripe_docker_test"
 else
-  echo "==> Skipping Postgres write (DATABASE_URL not set)"
+  echo "==> Skipping Postgres write (POSTGRES_URL not set)"
 fi
 
 echo "==> Done"
