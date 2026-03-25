@@ -13,7 +13,6 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "unpublish": "npm unpublish --force"
   },
   "dependencies": {
     "pg": "^8.16.3"

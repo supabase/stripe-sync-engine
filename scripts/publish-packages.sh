@@ -9,6 +9,8 @@
 
 set -euo pipefail
 
-pnpm -r run --if-present unpublish 2>/dev/null || true
+pnpm ls -r --json \
+  | jq -r '.[] | select(.private != true) | .name + "@" + .version' \
+  | xargs -I{} npm unpublish {} --force 2>/dev/null || true
 
 pnpm publish -r --access public --no-git-checks

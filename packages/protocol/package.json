@@ -18,7 +18,6 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest --passWithNoTests",
-    "unpublish": "npm unpublish --force"
   },
   "dependencies": {
     "citty": "^0.1.6",

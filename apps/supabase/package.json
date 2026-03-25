@@ -16,7 +16,6 @@
     "lint": "eslint src --ext .ts",
     "test": "vitest --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "unpublish": "npm unpublish --force"
   },
   "files": [
     "dist",
