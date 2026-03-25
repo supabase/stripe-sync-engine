@@ -5,8 +5,7 @@
   "description": "Stripe Sync Service — stateful sync with credential management and webhook fan-out",
   "type": "module",
   "bin": {
-    "sync-service": "./dist/bin/cli.js",
-    "sync-service-api": "./dist/bin/api.js"
+    "sync-service": "./dist/bin/cli.js"
   },
   "exports": {
     ".": {
