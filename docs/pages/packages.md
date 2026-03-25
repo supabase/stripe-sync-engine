@@ -45,14 +45,14 @@ apps/
 
 ### Canonical dependency layering
 
-| Layer         | Package                                                              | Depends on                                                   |
-| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Core          | `protocol`                                                           | nothing (only `zod`)                                         |
-| Connectors    | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `protocol` only                                              |
-| Pg utilities  | `state-postgres`, `util-postgres`                                    | `pg` only (no protocol dep)                                  |
-| Engine + CLI  | `apps/engine`                                                        | `protocol`, `state-postgres`, connectors                     |
-| Service       | `apps/service`                                                       | `apps/engine`                                                |
-| Integration   | `apps/supabase`                                                      | `protocol`, `source-stripe`, `destination-postgres`, `apps/engine` |
+| Layer        | Package                                                              | Depends on                                                         |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Core         | `protocol`                                                           | nothing (only `zod`)                                               |
+| Connectors   | `source-stripe`, `destination-postgres`, `destination-google-sheets` | `protocol` only                                                    |
+| Pg utilities | `state-postgres`, `util-postgres`                                    | `pg` only (no protocol dep)                                        |
+| Engine + CLI | `apps/engine`                                                        | `protocol`, `state-postgres`, connectors                           |
+| Service      | `apps/service`                                                       | `apps/engine`                                                      |
+| Integration  | `apps/supabase`                                                      | `protocol`, `source-stripe`, `destination-postgres`, `apps/engine` |
 
 **Key rules:**
 
@@ -149,6 +149,7 @@ Published as the user-facing npm package.
 **Package name:** `@stripe/sync-engine`
 
 **Exports:**
+
 - `"."` — library: `createEngine`, `createConnectorResolver`, `SyncParams`, `forward`, `collect`, `filterDataMessages`, `sourceTest`, `destinationTest`, everything from `protocol`
 - `"./cli"` — CLI `CommandDef` (citty program, no side effects)
 - `"./api"` — `createApp` factory (Hono app, no side effects)
@@ -179,13 +180,13 @@ Deployment target for the Supabase installation flow. Bundles edge functions (De
 
 ## Isolation rules
 
-| Rule                                                                  | Enforced by                      |
-| --------------------------------------------------------------------- | -------------------------------- |
-| `source-*` packages never import from `destination-*` packages        | CI lint: disallowed import paths |
-| `destination-*` packages never import from `source-*` packages        | CI lint: disallowed import paths |
-| `source-*` and `destination-*` only depend on `protocol`              | package.json audit               |
-| `protocol` has zero runtime deps beyond `zod`                         | package.json audit               |
-| `apps/service` does not depend directly on `pg`                       | package.json audit               |
+| Rule                                                           | Enforced by                      |
+| -------------------------------------------------------------- | -------------------------------- |
+| `source-*` packages never import from `destination-*` packages | CI lint: disallowed import paths |
+| `destination-*` packages never import from `source-*` packages | CI lint: disallowed import paths |
+| `source-*` and `destination-*` only depend on `protocol`       | package.json audit               |
+| `protocol` has zero runtime deps beyond `zod`                  | package.json audit               |
+| `apps/service` does not depend directly on `pg`                | package.json audit               |
 
 ## pnpm workspace
 

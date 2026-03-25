@@ -44,7 +44,7 @@ export const statusQuery = defineQuery<WorkflowStatus>('status')
 
 export async function syncWorkflow(config: SyncConfig): Promise<void> {
   let state: Record<string, unknown> = config.state ?? {}
-  let phase: string = config.phase ?? 'setup'
+  let backfillComplete = config.phase === 'live'
   let paused = false
   let deleted = false
   const eventBuffer: unknown[] = []
@@ -71,7 +71,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
   setHandler(
     statusQuery,
     (): WorkflowStatus => ({
-      phase,
+      phase: backfillComplete ? 'live' : 'backfill',
       paused,
       state,
       iteration,
@@ -90,95 +90,55 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
       await continueAsNew<typeof syncWorkflow>({
         ...config,
         state,
-        phase: phase as SyncConfig['phase'],
+        phase: backfillComplete ? ('live' as const) : ('backfill' as const),
       })
     }
   }
 
-  // --- Setup phase ---
+  // --- Setup ---
 
-  async function runSetup() {
+  if (config.phase !== 'backfill' && config.phase !== 'live') {
     await setup(config)
-  }
-
-  // --- Backfill phase ---
-
-  async function runBackfill() {
-    while (true) {
-      await waitWhilePaused()
-      if (deleted) return
-
-      const result = await sync({ ...config, state })
-      state = { ...state, ...result.state }
-
-      await tickIteration()
-
-      if (result.all_complete) break
-      // Safety valve: no progress and no errors means nothing left to do
-      if (result.state_count === 0 && result.errors.length === 0) break
+    if (deleted) {
+      await teardown(config)
+      return
     }
   }
 
-  // --- Live phase ---
+  // --- Main loop: interleaved backfill + live events ---
 
-  async function runLive() {
-    while (true) {
-      await waitWhilePaused()
-      if (deleted) return
+  while (true) {
+    await waitWhilePaused()
+    if (deleted) break
 
-      // Wait for events or 60s timeout
-      await condition(() => eventBuffer.length > 0 || deleted, 60_000)
-
-      if (deleted) return
-      if (eventBuffer.length === 0) continue
-
-      // Process batch
+    // 1. Drain buffered events (always, even during backfill)
+    if (eventBuffer.length > 0) {
       const batch = eventBuffer.splice(0, EVENT_BATCH_SIZE)
       const result = await sync({ ...config, state }, batch)
       state = { ...state, ...result.state }
-
       await tickIteration()
+      continue // Re-check for more events before doing backfill
     }
+
+    // 2. Backfill page (if not complete)
+    if (!backfillComplete) {
+      const result = await sync({ ...config, state })
+      state = { ...state, ...result.state }
+      await tickIteration()
+
+      if (result.all_complete) {
+        backfillComplete = true
+      } else if (result.state_count === 0 && result.errors.length === 0) {
+        // Safety valve: no progress and no errors means nothing left to do
+        backfillComplete = true
+      }
+      continue
+    }
+
+    // 3. Backfill done, no events — wait for events or timeout
+    await condition(() => eventBuffer.length > 0 || deleted, 60_000)
   }
 
-  // --- Phase state machine ---
-
-  switch (phase) {
-    case 'setup':
-      await runSetup()
-      if (deleted) {
-        await teardown(config)
-        return
-      }
-      phase = 'backfill'
-      await runBackfill()
-      if (deleted) {
-        await teardown(config)
-        return
-      }
-      phase = 'live'
-      await runLive()
-      if (deleted) {
-        await teardown(config)
-      }
-      break
-    case 'backfill':
-      await runBackfill()
-      if (deleted) {
-        await teardown(config)
-        return
-      }
-      phase = 'live'
-      await runLive()
-      if (deleted) {
-        await teardown(config)
-      }
-      break
-    case 'live':
-      await runLive()
-      if (deleted) {
-        await teardown(config)
-      }
-      break
-  }
+  // Teardown on delete
+  await teardown(config)
 }

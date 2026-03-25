@@ -64,6 +64,9 @@ export const ConfiguredStream = z.object({
       })
     )
     .optional(),
+
+  /** If set, only these field names are included in records for this stream. */
+  fields: z.array(z.string()).optional(),
 })
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
 
@@ -175,7 +178,11 @@ export const SyncEngineParams = z.object({
   destination_config: z.record(z.string(), z.unknown()),
   streams: z
     .array(
-      z.object({ name: z.string(), sync_mode: z.enum(['incremental', 'full_refresh']).optional() })
+      z.object({
+        name: z.string(),
+        sync_mode: z.enum(['incremental', 'full_refresh']).optional(),
+        fields: z.array(z.string()).optional(),
+      })
     )
     .optional(),
   state: z.record(z.string(), z.unknown()).optional(),

@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
+    "test": "vitest run"
   },
   "dependencies": {
     "pg": "^8.16.3"

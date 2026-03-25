@@ -35,11 +35,11 @@ A Stripe organization may want to sync from a specific Stripe account. The sourc
 
 ## Files
 
-| File                                  | Description                                                         |
-| ------------------------------------- | ------------------------------------------------------------------- |
-| `packages/protocol/src/protocol.ts`   | TypeScript interfaces for Source, Destination; message types        |
-| `apps/engine/src/lib/engine.ts`       | `createEngine()` — engine factory                                   |
-| `apps/service/src/lib/service.ts`     | `StatefulSync` class — the composition root                         |
-| `apps/service/src/lib/stores.ts`      | Store interfaces: CredentialStore, StateStore, LogSink              |
-| `apps/service/src/api/app.ts`         | Service HTTP API                                                    |
-| `apps/service/src/cli/index.ts`       | Service CLI entrypoint                                              |
+| File                                | Description                                                  |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `packages/protocol/src/protocol.ts` | TypeScript interfaces for Source, Destination; message types |
+| `apps/engine/src/lib/engine.ts`     | `createEngine()` — engine factory                            |
+| `apps/service/src/lib/service.ts`   | `StatefulSync` class — the composition root                  |
+| `apps/service/src/lib/stores.ts`    | Store interfaces: CredentialStore, StateStore, LogSink       |
+| `apps/service/src/api/app.ts`       | Service HTTP API                                             |
+| `apps/service/src/cli/index.ts`     | Service CLI entrypoint                                       |

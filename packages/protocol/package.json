@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest --passWithNoTests",
+    "test": "vitest --passWithNoTests"
   },
   "dependencies": {
     "citty": "^0.1.6",

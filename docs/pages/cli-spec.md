@@ -26,50 +26,50 @@ The default action (bare `sync-engine`) starts the HTTP API server.
 
 ### `sync-engine serve`
 
-| Flag                           | Env var | Default | Description                                       |
-| ------------------------------ | ------- | ------- | ------------------------------------------------- |
-| `--port <n>`                   | `PORT`  |         | Port to listen on                                 |
-| `--connectors-from-command-map`|         |         | Explicit connector command mappings (JSON or @file) |
-| `--no-connectors-from-path`    |         | false   | Disable PATH-based connector discovery            |
-| `--connectors-from-npm`        |         | false   | Enable npm auto-download of connectors            |
+| Flag                            | Env var | Default | Description                                         |
+| ------------------------------- | ------- | ------- | --------------------------------------------------- |
+| `--port <n>`                    | `PORT`  |         | Port to listen on                                   |
+| `--connectors-from-command-map` |         |         | Explicit connector command mappings (JSON or @file) |
+| `--no-connectors-from-path`     |         | false   | Disable PATH-based connector discovery              |
+| `--connectors-from-npm`         |         | false   | Enable npm auto-download of connectors              |
 
 ### `sync-engine sync` / `sync-engine check`
 
 #### Source (Stripe)
 
-| Flag                    | Env var           | Description                          |
-| ----------------------- | ----------------- | ------------------------------------ |
-| `--stripe-api-key`      | `STRIPE_API_KEY`  | Stripe API key                       |
-| `--stripe-base-url`     |                   | Override Stripe API base URL         |
-| `--websocket`           |                   | Stay alive for real-time WebSocket events (default: false) |
-| `--backfill-limit <n>`  |                   | Max objects to backfill per stream   |
+| Flag                   | Env var          | Description                                                |
+| ---------------------- | ---------------- | ---------------------------------------------------------- |
+| `--stripe-api-key`     | `STRIPE_API_KEY` | Stripe API key                                             |
+| `--stripe-base-url`    |                  | Override Stripe API base URL                               |
+| `--websocket`          |                  | Stay alive for real-time WebSocket events (default: false) |
+| `--backfill-limit <n>` |                  | Max objects to backfill per stream                         |
 
 #### Destination (Postgres)
 
-| Flag                | Env var                           | Description                        |
-| ------------------- | --------------------------------- | ---------------------------------- |
-| `--postgres-url`    | `POSTGRES_URL` / `DATABASE_URL`   | Postgres connection string         |
-| `--postgres-schema` |                                   | Target schema (default: `stripe`)  |
+| Flag                | Env var                         | Description                       |
+| ------------------- | ------------------------------- | --------------------------------- |
+| `--postgres-url`    | `POSTGRES_URL` / `DATABASE_URL` | Postgres connection string        |
+| `--postgres-schema` |                                 | Target schema (default: `stripe`) |
 
 #### Sync behavior
 
-| Flag              | Default | Description                                      |
-| ----------------- | ------- | ------------------------------------------------ |
-| `--streams`       |         | Comma-separated stream names to sync             |
-| `--no-state`      | false   | Skip state loading/saving (always full refresh)  |
+| Flag         | Default | Description                                     |
+| ------------ | ------- | ----------------------------------------------- |
+| `--streams`  |         | Comma-separated stream names to sync            |
+| `--no-state` | false   | Skip state loading/saving (always full refresh) |
 
 #### Generic / advanced
 
-| Flag                           | Description                                          |
-| ------------------------------ | ---------------------------------------------------- |
-| `--source`                     | Source connector name (inferred from flags)          |
-| `--destination`                | Destination connector name (inferred from flags)     |
-| `--source-config`              | Raw source config JSON or @file                      |
-| `--destination-config`         | Raw destination config JSON or @file                 |
-| `--config`                     | File path or inline JSON with full SyncParams        |
-| `--connectors-from-command-map`| Explicit connector command mappings (JSON or @file)  |
-| `--no-connectors-from-path`    | Disable PATH-based connector discovery               |
-| `--connectors-from-npm`        | Enable npm auto-download of connectors               |
+| Flag                            | Description                                         |
+| ------------------------------- | --------------------------------------------------- |
+| `--source`                      | Source connector name (inferred from flags)         |
+| `--destination`                 | Destination connector name (inferred from flags)    |
+| `--source-config`               | Raw source config JSON or @file                     |
+| `--destination-config`          | Raw destination config JSON or @file                |
+| `--config`                      | File path or inline JSON with full SyncParams       |
+| `--connectors-from-command-map` | Explicit connector command mappings (JSON or @file) |
+| `--no-connectors-from-path`     | Disable PATH-based connector discovery              |
+| `--connectors-from-npm`         | Enable npm auto-download of connectors              |
 
 ---
 

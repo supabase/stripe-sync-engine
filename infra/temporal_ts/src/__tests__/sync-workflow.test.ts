@@ -52,7 +52,7 @@ afterAll(async () => {
 })
 
 describe('SyncWorkflow', () => {
-  it('runs through setup → backfill → live phases then exits on delete', async () => {
+  it('runs setup, backfill, then waits for events until delete', async () => {
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-1',
@@ -142,7 +142,7 @@ describe('SyncWorkflow', () => {
     })
   })
 
-  it('processes stripe_event signals in live phase', async () => {
+  it('processes stripe_event signals', async () => {
     const syncCalls: unknown[][] = []
 
     const worker = await Worker.create({

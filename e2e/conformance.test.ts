@@ -36,7 +36,10 @@ const connectorDirs = packageDirs.filter(
 const sources = [
   ...packageDirs
     .filter((d) => d.startsWith('source-'))
-    .map((d) => ({ name: resolvePackageName(d), mod: undefined as Record<string, unknown> | undefined })),
+    .map((d) => ({
+      name: resolvePackageName(d),
+      mod: undefined as Record<string, unknown> | undefined,
+    })),
   {
     name: '@stripe/sync-engine (source-test)',
     mod: { default: sourceTest, spec: sourceTestSpec } as Record<string, unknown>,
@@ -45,7 +48,10 @@ const sources = [
 const destinations = [
   ...packageDirs
     .filter((d) => d.startsWith('destination-'))
-    .map((d) => ({ name: resolvePackageName(d), mod: undefined as Record<string, unknown> | undefined })),
+    .map((d) => ({
+      name: resolvePackageName(d),
+      mod: undefined as Record<string, unknown> | undefined,
+    })),
   {
     name: '@stripe/sync-engine (destination-test)',
     mod: { default: destinationTest, spec: destinationTestSpec } as Record<string, unknown>,
@@ -55,7 +61,7 @@ const destinations = [
 describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = initialMod ?? await import(name)
+    mod = initialMod ?? (await import(name))
   })
 
   it('has a default export', () => {
@@ -104,7 +110,7 @@ describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
 describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = initialMod ?? await import(name)
+    mod = initialMod ?? (await import(name))
   })
 
   it('has a default export', () => {
