@@ -18,7 +18,7 @@ export async function syncAction(opts: CliOptions) {
         | Record<string, string>
         | undefined,
       path: opts.connectorsFromPath,
-      npm: opts.connectorsFromNpm ?? true,
+      npm: opts.connectorsFromNpm ?? false,
     }
   )
   const params = resolveOptions(opts)

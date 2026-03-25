@@ -164,11 +164,10 @@ export function resolveBin(name: string, role: 'source' | 'destination'): string
 
 /**
  * Controls which dynamic resolution strategies are enabled beyond the registered
- * (in-process) connectors. Maps 1:1 to CLI flags and JSON config fields.
+ * (in-process) connectors. Maps 1:1 to CLI flags.
  *
- * CLI:   --connectors-from-path    --connectors-from-npm    --connectors-from-command-map
- * TS:    connectorsFromPath         connectorsFromNpm         connectorsFromCommandMap
- * JSON:  connectors_from_path      connectors_from_npm       connectors_from_command_map
+ * CLI:  --connectors-from-path    --connectors-from-npm    --connectors-from-command-map
+ * TS:   connectorsFromPath         connectorsFromNpm         connectorsFromCommandMap
  */
 export interface ConnectorsFrom {
   /**
@@ -188,11 +187,11 @@ export interface ConnectorsFrom {
   commandMap?: Record<string, string>
 }
 
-export interface ConnectorResolverOptions {
-  /** Preloaded connectors — skip dynamic loading for these. */
-  sources?: Record<string, Source>
-  /** Preloaded connectors — skip dynamic loading for these. */
-  destinations?: Record<string, Destination>
+export interface RegisteredConnectors {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sources?: Record<string, Source<any>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  destinations?: Record<string, Destination<any>>
 }
 
 export type ResolvedConnector<T> = { connector: T; configSchema: z.ZodType }
@@ -227,7 +226,7 @@ function configSchemaFromSpec(connector: {
  * 5. **Error** — connector not found.
  */
 export function createConnectorResolver(
-  registered: ConnectorResolverOptions,
+  registered: RegisteredConnectors,
   connectorsFrom?: ConnectorsFrom
 ): ConnectorResolver {
   const sourceCache = new Map<string, Source>(Object.entries(registered.sources ?? {}))

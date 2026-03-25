@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveBin } from './loader'
+import { resolveBin } from './resolver'
 import { createSourceFromExec } from './source-exec'
 import { createDestinationFromExec } from './destination-exec'
 

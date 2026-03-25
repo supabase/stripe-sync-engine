@@ -12,7 +12,7 @@ import {
 import type { Destination, Source } from '@stripe/protocol'
 import type { RouterCallbacks } from './pipeline'
 import { forward } from './pipeline'
-import type { ConnectorResolver } from './loader'
+import type { ConnectorResolver } from './resolver'
 
 // MARK: - Engine interface
 

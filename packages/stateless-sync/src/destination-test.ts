@@ -16,7 +16,7 @@ export const destinationTest = {
   },
 
   async *write(
-    _params: { config: DestinationTestConfig; catalog: unknown },
+    _params: { config: Record<string, unknown>; catalog: unknown },
     $stdin: AsyncIterable<Message>
   ) {
     for await (const msg of $stdin) {
@@ -25,6 +25,6 @@ export const destinationTest = {
       }
     }
   },
-} satisfies Destination<DestinationTestConfig>
+} satisfies Destination
 
 export default destinationTest

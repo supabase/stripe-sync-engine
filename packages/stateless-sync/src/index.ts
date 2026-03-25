@@ -10,13 +10,13 @@ export {
   resolveSpecifier,
   resolveBin,
   createConnectorResolver,
-} from './loader'
+} from './resolver'
 export type {
   ConnectorResolver,
-  ConnectorResolverOptions,
+  RegisteredConnectors,
   ConnectorsFrom,
   ResolvedConnector,
-} from './loader'
+} from './resolver'
 export { createSourceFromExec } from './source-exec'
 export { createDestinationFromExec } from './destination-exec'
 export { sourceTest, sourceTestSpec } from './source-test'

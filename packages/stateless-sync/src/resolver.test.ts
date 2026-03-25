@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { resolveSpecifier, resolveBin, createConnectorResolver } from './loader'
+import { resolveSpecifier, resolveBin, createConnectorResolver } from './resolver'
 import { sourceTest } from './source-test'
 import { destinationTest } from './destination-test'
 
