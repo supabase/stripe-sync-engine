@@ -23,7 +23,7 @@ export function createActivities(serviceUrl: string): SyncActivities {
         body = input.map((item) => JSON.stringify(item)).join('\n') + '\n'
       }
 
-      const resp = await fetch(`${serviceUrl}/syncs/${syncId}/run`, {
+      const resp = await fetch(`${serviceUrl}/syncs/${syncId}/sync`, {
         method: 'POST',
         headers,
         body,

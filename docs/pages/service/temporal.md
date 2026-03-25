@@ -18,7 +18,7 @@ graph TD
     subgraph Service["Sync Service (HTTP)"]
         CRUD["/syncs CRUD"]
         Setup["/syncs/{id}/setup"]
-        Run["/syncs/{id}/run"]
+        Run["/syncs/{id}/sync"]
         Teardown["/syncs/{id}/teardown"]
         WHRoute["/webhooks/{cred_id}"]
         Bridge["TemporalBridge"]
@@ -50,7 +50,7 @@ graph TD
     %% Workflow → Activities → Service
     Workflow --> Worker
     Worker -- "POST /syncs/{id}/setup" --> Setup
-    Worker -- "POST /syncs/{id}/run" --> Run
+    Worker -- "POST /syncs/{id}/sync" --> Run
     Worker -- "POST /syncs/{id}/teardown" --> Teardown
 
     %% Service internals
@@ -87,7 +87,7 @@ sequenceDiagram
     Note over Workflow: Next loop iteration
 
     Workflow->>Worker: run(syncId, [event1, event2, ...])
-    Worker->>Service: POST /syncs/{id}/run<br/>Body: NDJSON events
+    Worker->>Service: POST /syncs/{id}/sync<br/>Body: NDJSON events
     Service->>Service: resolve config + creds
     Service->>Stripe: engine.read($stdin=events)
     Stripe-->>Service: expanded objects
@@ -119,7 +119,7 @@ sequenceDiagram
 
     loop Reconciliation loop
         Workflow->>Worker: run(syncId)
-        Worker->>Service: POST /syncs/{id}/run
+        Worker->>Service: POST /syncs/{id}/sync
         Service->>Service: resolve config + creds + state
         Service->>Service: engine.read (Stripe API) → engine.write (dest)
         Service-->>Worker: NDJSON stream (heartbeat every 50 msgs)
@@ -196,7 +196,7 @@ The old approach had activities calling the **stateless engine** API directly �
 Three activities, all HTTP calls to the service:
 
 - **`setup(syncId)`** → `POST /syncs/{id}/setup` (expect 204)
-- **`run(syncId, input?)`** → `POST /syncs/{id}/run`
+- **`run(syncId, input?)`** → `POST /syncs/{id}/sync`
   - Without input: backfill mode (no body)
   - With events: sends NDJSON body
   - Streams response, heartbeats every 50 messages, collects errors

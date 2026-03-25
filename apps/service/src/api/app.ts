@@ -687,9 +687,9 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'runSync',
+      operationId: 'sync',
       method: 'post',
-      path: '/syncs/{id}/run',
+      path: '/syncs/{id}/sync',
       tags: ['Sync Operations'],
       summary: 'Run sync pipeline (read → write)',
       description:

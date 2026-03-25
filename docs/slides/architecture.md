@@ -274,7 +274,7 @@ flowchart TD
 flowchart LR
   C["POST /credentials"] --> CS[("credentials.json")]
   SY["POST /syncs"] --> SS[("syncs.json")]
-  RN["POST /syncs/:id/run"] --> SVC["StatefulSync.run()\nstreaming NDJSON"]
+  RN["POST /syncs/:id/sync"] --> SVC["StatefulSync.run()\nstreaming NDJSON"]
   WH["POST /webhooks/:cred_id"] --> PE["push_event()\nfan-out to queues"]
   style RN fill:#dcfce7,stroke:#22c55e
   style WH fill:#fef9c3,stroke:#eab308

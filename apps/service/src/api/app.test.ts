@@ -52,7 +52,7 @@ describe('GET /openapi.json', () => {
     expect(paths).toContain('/credentials/{id}')
     expect(paths).toContain('/syncs')
     expect(paths).toContain('/syncs/{id}')
-    expect(paths).toContain('/syncs/{id}/run')
+    expect(paths).toContain('/syncs/{id}/sync')
     expect(paths).toContain('/webhooks/{credential_id}')
   })
 
