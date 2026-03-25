@@ -59,6 +59,20 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Ensure all shell tests are wired up
+        run: |
+          missing=()
+          for f in e2e/*.test.sh; do
+            name=$(basename "$f")
+            if ! grep -rq "$name" .github/workflows/; then
+              missing+=("$f")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf 'Not referenced in any workflow: %s\n' "${missing[@]}"
+            exit 1
+          fi
+
       - name: Check OpenAPI specs are up to date
         run: ./scripts/generate-openapi.sh --check
 
@@ -246,3 +260,13 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
+
+      - name: Publish test
+        run: |
+          if [ -z "${STRIPE_NPM_REGISTRY:-}" ]; then
+            echo "::warning::publish.test.sh skipped — STRIPE_NPM_REGISTRY not set"
+            exit 0
+          fi
+          bash e2e/publish.test.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
