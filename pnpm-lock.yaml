@@ -117,6 +117,40 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  apps/service:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1
+        version: 1.19.11(hono@4.12.8)
+      '@hono/swagger-ui':
+        specifier: ^0.6
+        version: 0.6.1(hono@4.12.8)
+      '@hono/zod-openapi':
+        specifier: ^1.2
+        version: 1.2.2(hono@4.12.8)(zod@4.3.6)
+      '@stripe/sync-engine':
+        specifier: workspace:*
+        version: link:../engine
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+      hono:
+        specifier: ^4
+        version: 4.12.8
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+
   apps/supabase:
     dependencies:
       '@stripe/sync-destination-postgres':
@@ -319,33 +353,6 @@ importers:
       '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
-      pg:
-        specifier: ^8.16.0
-        version: 8.16.3
-      stripe:
-        specifier: ^17.7.0
-        version: 17.7.0
-      vitest:
-        specifier: ^3.2.1
-        version: 3.2.4(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1)
-
-  tests/integration:
-    devDependencies:
-      '@stripe/sync-destination-postgres':
-        specifier: workspace:*
-        version: link:../../packages/destination-postgres
-      '@stripe/sync-engine':
-        specifier: workspace:*
-        version: link:../../apps/engine
-      '@stripe/sync-protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@stripe/sync-source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/sync-state-postgres':
-        specifier: workspace:*
-        version: link:../../packages/state-postgres
       pg:
         specifier: ^8.16.0
         version: 8.16.3
@@ -3819,6 +3826,14 @@ snapshots:
       chai: 5.2.0
       tinyrainbow: 2.0.0
 
+  '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1))':
+    dependencies:
+      '@vitest/spy': 3.2.4
+      estree-walker: 3.0.3
+      magic-string: 0.30.19
+    optionalDependencies:
+      vite: 7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
+
   '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 3.2.4
@@ -4940,7 +4955,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1))
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4

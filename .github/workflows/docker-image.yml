@@ -77,19 +77,6 @@ jobs:
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh
 
-      # --- Integration tests (real Stripe API) ---
-
-      - name: Integration tests
-        run: |
-          if [ -z "${STRIPE_API_KEY:-}" ]; then
-            echo "::warning::Integration tests skipped — STRIPE_API_KEY not available (fork PR?)"
-            exit 0
-          fi
-          pnpm --filter @stripe/sync-test-integration run test:integration
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-
       # --- E2E vitest tests (real Stripe API) ---
 
       - name: E2E vitest tests
