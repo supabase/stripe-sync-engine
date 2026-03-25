@@ -26,3 +26,7 @@ private/
 
 # Git worktrees
 .worktrees/
+
+# Terraform state (contains secrets)
+*.tfstate
+*.tfstate.backup

@@ -26,7 +26,6 @@ graph TD
         CRUD["/syncs CRUD"]
         Resolve["GET /syncs/{id}<br/>?include_credentials=true"]
         WHRoute["/webhooks/{cred_id}"]
-        Bridge["TemporalBridge"]
     end
 
     subgraph EngineAPI["Sync Engine"]
@@ -45,16 +44,10 @@ graph TD
         Sheets["Google Sheets"]
     end
 
-    %% CRUD → Bridge → Workflow
-    CRUD -- "POST /syncs" --> Bridge
-    Bridge -- "start(syncId)" --> Workflow
-    CRUD -- "DELETE /syncs/{id}" --> Bridge
-    Bridge -- "signal: delete" --> Workflow
-
-    %% Webhook → Bridge → Workflow
+    %% Service → Workflow
+    CRUD -- "start / signal: delete" --> Workflow
+    WHRoute -- "signal: stripe_event" --> Workflow
     StripeWH --> WHRoute
-    WHRoute --> Bridge
-    Bridge -- "signal: stripe_event" --> Workflow
 
     %% Workflow → Activities
     Workflow --> Worker
@@ -114,17 +107,13 @@ The webhook path crosses three boundaries (Stripe → Service → Temporal → E
 sequenceDiagram
     participant Stripe
     participant Service as Sync Service
-    participant Bridge as TemporalBridge
     participant Workflow as syncWorkflow
     participant Activity
     participant Engine as Sync Engine
 
     Stripe->>Service: POST /webhooks/{credential_id}
-    Service->>Bridge: pushEvent(credentialId, event)
-
-    Note over Bridge: Find all syncs with<br/>matching credential_id
-
-    Bridge->>Workflow: signal('stripe_event', event)
+    Note over Service: Find all syncs with<br/>matching credential_id
+    Service->>Workflow: signal('stripe_event', event)
     Note over Workflow: Buffer event
 
     Note over Workflow: Next loop iteration
@@ -144,15 +133,13 @@ sequenceDiagram
 sequenceDiagram
     participant User
     participant Service as Sync Service
-    participant Bridge as TemporalBridge
     participant Workflow as syncWorkflow
     participant Activity
     participant Engine as Sync Engine
     participant Dest as Destination
 
     User->>Service: POST /syncs (create)
-    Service->>Bridge: start(syncId)
-    Bridge->>Workflow: start syncWorkflow(syncId)
+    Service->>Workflow: start syncWorkflow(syncId)
 
     Workflow->>Activity: setup(syncId)
     Activity->>Service: GET /syncs/{id}?include_credentials=true
@@ -170,8 +157,7 @@ sequenceDiagram
     end
 
     User->>Service: DELETE /syncs/{id}
-    Service->>Bridge: stop(syncId)
-    Bridge->>Workflow: signal('delete')
+    Service->>Workflow: signal('delete')
 
     Workflow->>Activity: teardown(syncId)
     Activity->>Service: GET /syncs/{id}?include_credentials=true
@@ -255,18 +241,6 @@ The engine handles state internally via `selectStateStore`:
 - **`run(syncId, input?)`** — resolve from service → `POST /sync` on engine (with optional NDJSON body for events)
 - **`teardown(syncId)`** — resolve from service → `POST /teardown` on engine
 
-### Bridge (`temporal/bridge.ts`)
-
-Client-side adapter used by the service API:
-
-| Service API route          | Bridge method                     | Temporal action                                           |
-| -------------------------- | --------------------------------- | --------------------------------------------------------- |
-| `POST /syncs`              | `bridge.start(syncId)`            | Start workflow                                            |
-| `DELETE /syncs/{id}`       | `bridge.stop(syncId)`             | Signal `delete`                                           |
-| `POST /syncs/{id}/pause`   | `bridge.pause(syncId)`            | Signal `pause`                                            |
-| `POST /syncs/{id}/resume`  | `bridge.resume(syncId)`           | Signal `resume`                                           |
-| `POST /webhooks/{cred_id}` | `bridge.pushEvent(credId, event)` | Signal `stripe_event` to all syncs sharing the credential |
-
 ### Worker (`temporal/worker.ts`)
 
 Runs as a separate process via the CLI:
@@ -287,7 +261,7 @@ temporal server start-dev
 # Terminal 2: Sync engine (stateless execution)
 sync-engine serve --port 4010
 
-# Terminal 3: Sync service (config CRUD + Temporal bridge)
+# Terminal 3: Sync service (config CRUD + Temporal)
 sync-service serve --temporal-address localhost:7233
 
 # Terminal 4: Worker
@@ -355,7 +329,6 @@ curl -X DELETE http://localhost:4020/syncs/<id>
 | `apps/service/src/temporal/types.ts`                   | `RunResult`, `SyncActivities`, `WorkflowStatus` |
 | `apps/service/src/temporal/activities.ts`              | Resolve from service, execute on engine         |
 | `apps/service/src/temporal/workflows.ts`               | Workflow: signals, queries, main loop           |
-| `apps/service/src/temporal/bridge.ts`                  | Client-side adapter (service → Temporal)        |
 | `apps/service/src/temporal/worker.ts`                  | Worker factory                                  |
 | `apps/service/src/cli/main.ts`                         | `worker` subcommand                             |
 | `apps/service/src/__tests__/temporal-workflow.test.ts` | Unit tests                                      |
