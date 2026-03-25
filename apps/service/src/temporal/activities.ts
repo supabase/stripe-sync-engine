@@ -2,11 +2,41 @@ import { heartbeat } from '@temporalio/activity'
 import { parseNdjsonStream } from '@stripe/sync-engine'
 import type { SyncActivities, RunResult } from './types.js'
 
-export function createActivities(serviceUrl: string): SyncActivities {
+/**
+ * Resolve a sync's config with credentials inlined from the service,
+ * then build the X-Sync-Params header value for the engine API.
+ */
+async function resolveParams(serviceUrl: string, syncId: string): Promise<string> {
+  const resp = await fetch(`${serviceUrl}/syncs/${syncId}?include_credentials=true`)
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    throw new Error(`Failed to resolve sync ${syncId} (${resp.status}): ${text}`)
+  }
+  const config = (await resp.json()) as {
+    source: { type: string; [k: string]: unknown }
+    destination: { type: string; [k: string]: unknown }
+    streams?: Array<{ name: string; sync_mode?: string }>
+  }
+  const { type: source_name, ...source_config } = config.source
+  const { type: destination_name, ...destination_config } = config.destination
+  return JSON.stringify({
+    source_name,
+    source_config,
+    destination_name,
+    destination_config,
+    streams: config.streams,
+  })
+}
+
+export function createActivities(opts: { serviceUrl: string; engineUrl: string }): SyncActivities {
+  const { serviceUrl, engineUrl } = opts
+
   return {
     async setup(syncId) {
-      const resp = await fetch(`${serviceUrl}/syncs/${syncId}/setup`, {
+      const params = await resolveParams(serviceUrl, syncId)
+      const resp = await fetch(`${engineUrl}/setup`, {
         method: 'POST',
+        headers: { 'X-Sync-Params': params },
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
@@ -15,7 +45,8 @@ export function createActivities(serviceUrl: string): SyncActivities {
     },
 
     async run(syncId, input?) {
-      const headers: Record<string, string> = {}
+      const params = await resolveParams(serviceUrl, syncId)
+      const headers: Record<string, string> = { 'X-Sync-Params': params }
       let body: string | undefined
 
       if (input && input.length > 0) {
@@ -23,14 +54,14 @@ export function createActivities(serviceUrl: string): SyncActivities {
         body = input.map((item) => JSON.stringify(item)).join('\n') + '\n'
       }
 
-      const resp = await fetch(`${serviceUrl}/syncs/${syncId}/sync`, {
+      const resp = await fetch(`${engineUrl}/sync`, {
         method: 'POST',
         headers,
         body,
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
-        throw new Error(`Run failed (${resp.status}): ${text}`)
+        throw new Error(`Sync failed (${resp.status}): ${text}`)
       }
 
       const errors: RunResult['errors'] = []
@@ -63,8 +94,10 @@ export function createActivities(serviceUrl: string): SyncActivities {
     },
 
     async teardown(syncId) {
-      const resp = await fetch(`${serviceUrl}/syncs/${syncId}/teardown`, {
+      const params = await resolveParams(serviceUrl, syncId)
+      const resp = await fetch(`${engineUrl}/teardown`, {
         method: 'POST',
+        headers: { 'X-Sync-Params': params },
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')

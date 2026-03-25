@@ -14,6 +14,7 @@ import {
   UpdateSync as UpdateSyncSchema,
 } from '../lib/schemas.js'
 import type { Credential, SyncConfig } from '../lib/schemas.js'
+import { resolveCredentials } from '../lib/resolve.js'
 import { SyncService } from '../lib/service.js'
 import type { TemporalOptions } from '../temporal/bridge.js'
 import {
@@ -442,6 +443,15 @@ export function createApp(options?: AppOptions) {
       const { id } = c.req.valid('param')
       try {
         const config = await configs.get(id)
+        if (c.req.query('include_credentials') === 'true') {
+          const sourceCred = config.source.credential_id
+            ? await credentials.get(config.source.credential_id)
+            : undefined
+          const destCred = config.destination.credential_id
+            ? await credentials.get(config.destination.credential_id)
+            : undefined
+          return c.json(resolveCredentials({ config, sourceCred, destCred }) as any, 200)
+        }
         return c.json(config as any, 200)
       } catch {
         return c.json({ error: `Sync ${id} not found` }, 404)

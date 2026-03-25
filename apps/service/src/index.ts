@@ -27,7 +27,7 @@ export {
 } from './lib/stores-fs.js'
 
 // Resolution
-export { resolve } from './lib/resolve.js'
+export { resolve, resolveCredentials } from './lib/resolve.js'
 
 // Service
 export { SyncService } from './lib/service.js'

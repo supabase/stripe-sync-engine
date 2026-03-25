@@ -6,6 +6,7 @@ export interface WorkerOptions {
   namespace?: string
   taskQueue: string
   serviceUrl: string
+  engineUrl: string
   /** Path to compiled workflows.js (Temporal bundles it for V8 sandbox). */
   workflowsPath: string
 }
@@ -20,6 +21,9 @@ export async function createWorker(opts: WorkerOptions): Promise<Worker> {
     namespace: opts.namespace ?? 'default',
     taskQueue: opts.taskQueue,
     workflowsPath: opts.workflowsPath,
-    activities: createActivities(opts.serviceUrl),
+    activities: createActivities({
+      serviceUrl: opts.serviceUrl,
+      engineUrl: opts.engineUrl,
+    }),
   })
 }

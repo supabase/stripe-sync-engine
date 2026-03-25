@@ -86,7 +86,12 @@ const workerCmd = defineCommand({
     'service-url': {
       type: 'string',
       default: 'http://localhost:4020',
-      description: 'Sync service HTTP URL (default: http://localhost:4020)',
+      description: 'Sync service URL for config resolution (default: http://localhost:4020)',
+    },
+    'engine-url': {
+      type: 'string',
+      default: 'http://localhost:4010',
+      description: 'Sync engine URL for sync execution (default: http://localhost:4010)',
     },
   },
   async run({ args }) {
@@ -94,6 +99,7 @@ const workerCmd = defineCommand({
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const namespace = args['temporal-namespace'] || 'default'
     const serviceUrl = args['service-url'] || 'http://localhost:4020'
+    const engineUrl = args['engine-url'] || 'http://localhost:4010'
     const temporalAddress = args['temporal-address']
 
     // workflowsPath: resolve relative to the package dist directory
@@ -105,13 +111,15 @@ const workerCmd = defineCommand({
       namespace,
       taskQueue,
       serviceUrl,
+      engineUrl,
       workflowsPath,
     })
 
     console.log('Starting Temporal worker...')
     console.log(`  Temporal:    ${temporalAddress} (${namespace})`)
     console.log(`  Task queue:  ${taskQueue}`)
-    console.log(`  Service URL: ${serviceUrl}`)
+    console.log(`  Service:     ${serviceUrl}`)
+    console.log(`  Engine:      ${engineUrl}`)
 
     await worker.run()
   },
@@ -126,7 +134,16 @@ export async function createProgram(opts?: { dataDir?: string }) {
     spec,
     handler: async (req) => app.fetch(req),
     groupByTag: true,
-    exclude: ['health'],
+    exclude: [
+      'health',
+      // Engine proxy routes — hidden from CLI (use sync-engine CLI directly)
+      'setupSync',
+      'teardownSync',
+      'checkSync',
+      'readSync',
+      'writeSync',
+      'sync',
+    ],
     ndjsonBodyStream: () =>
       process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
     meta: {

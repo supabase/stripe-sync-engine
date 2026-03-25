@@ -73,6 +73,31 @@ export function createScopedPgStateStore(
 }
 
 /**
+ * Convention entry point: ensures the `_sync_state` table exists.
+ * Called by `selectStateStore` before creating the state store.
+ */
+export async function setupStateStore(config: {
+  connection_string: string
+  schema?: string
+}): Promise<void> {
+  const pool = new pg.Pool({ connectionString: config.connection_string })
+  const schema = config.schema ?? 'public'
+  try {
+    await pool.query(sql`
+      CREATE TABLE IF NOT EXISTS "${schema}"."_sync_state" (
+        sync_id TEXT NOT NULL,
+        stream TEXT NOT NULL,
+        state JSONB NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (sync_id, stream)
+      )
+    `)
+  } finally {
+    await pool.end()
+  }
+}
+
+/**
  * Convention entry point: creates a pool-owning, engine-compatible state store.
  * `syncId` defaults to `'default'` — HTTP API callers share a single sync slot
  * per destination; the service layer passes a real UUID for multi-tenancy.

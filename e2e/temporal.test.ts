@@ -14,8 +14,8 @@ import source from '@stripe/sync-source-stripe'
 import pgDestination from '@stripe/sync-destination-postgres'
 import sheetsDestination from '@stripe/sync-destination-google-sheets'
 import { readSheet } from '@stripe/sync-destination-google-sheets'
-import { createConnectorResolver } from '@stripe/sync-engine'
-import { createApp, createActivities } from '@stripe/sync-service'
+import { createConnectorResolver, createApp as createEngineApp } from '@stripe/sync-engine'
+import { createApp as createServiceApp, createActivities } from '@stripe/sync-service'
 import { describeWithEnv } from './test-helpers.js'
 
 // ---------------------------------------------------------------------------
@@ -59,11 +59,19 @@ async function pollUntil(
   throw new Error(`pollUntil timed out after ${timeout}ms`)
 }
 
-/** Create shared infra: Temporal test env, service API, Postgres pool. */
+/**
+ * Create shared infra: Temporal test env, service API, engine API, Postgres pool.
+ *
+ * Service API: config CRUD, credential management, webhook ingress.
+ * Engine API: stateless sync execution (setup, sync, teardown).
+ * Activities call service for config resolution → engine for execution.
+ */
 function createTestInfra() {
   let testEnv: TestWorkflowEnvironment
-  let server: ServerType
+  let serviceServer: ServerType
+  let engineServer: ServerType
   let serviceUrl: string
+  let engineUrl: string
   let pool: pg.Pool
   let dataDir: string
 
@@ -76,6 +84,9 @@ function createTestInfra() {
     get serviceUrl() {
       return serviceUrl
     },
+    get engineUrl() {
+      return engineUrl
+    },
     get pool() {
       return pool
     },
@@ -87,26 +98,37 @@ function createTestInfra() {
       testEnv = await TestWorkflowEnvironment.createLocal()
       dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
 
-      const port = await findFreePort()
       const connectors = createConnectorResolver({
         sources: { stripe: source },
         destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
       })
-      const app = createApp({ connectors, dataDir })
-      server = serve({ fetch: app.fetch, port })
-      serviceUrl = `http://localhost:${port}`
 
+      // Start service API (config CRUD)
+      const servicePort = await findFreePort()
+      const serviceApp = createServiceApp({ connectors, dataDir })
+      serviceServer = serve({ fetch: serviceApp.fetch, port: servicePort })
+      serviceUrl = `http://localhost:${servicePort}`
+
+      // Start engine API (stateless sync execution)
+      const enginePort = await findFreePort()
+      const engineApp = createEngineApp(connectors)
+      engineServer = serve({ fetch: engineApp.fetch, port: enginePort })
+      engineUrl = `http://localhost:${enginePort}`
+
+      // Postgres pool
       pool = new pg.Pool({ connectionString: POSTGRES_URL })
       await pool.query('SELECT 1')
 
       console.log(`\n  Service:  ${serviceUrl}`)
+      console.log(`  Engine:   ${engineUrl}`)
       console.log(`  Data dir: ${dataDir}`)
       console.log(`  Postgres: ${POSTGRES_URL}`)
     },
 
     async teardown() {
       await pool?.end().catch(() => {})
-      server?.close()
+      serviceServer?.close()
+      engineServer?.close()
       await testEnv?.teardown()
       if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true })
     },
@@ -161,7 +183,10 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
       connection: infra.testEnv.nativeConnection,
       taskQueue: 'pg-queue',
       workflowsPath: infra.workflowsPath,
-      activities: createActivities(infra.serviceUrl),
+      activities: createActivities({
+        serviceUrl: infra.serviceUrl,
+        engineUrl: infra.engineUrl,
+      }),
     })
 
     await worker.runUntil(async () => {
@@ -190,24 +215,20 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
       console.log(`  Sample: ${sampleRows[0].id} → ${sampleRows[0].name}`)
 
       // --- Live event via stripe_event signal ---
-      // Update a product via Stripe API
       const products = await stripe.products.list({ limit: 1 })
       const product = products.data[0]
       const newName = `temporal-e2e-${Date.now()}`
       await stripe.products.update(product.id, { name: newName })
       console.log(`  Updated product ${product.id} → "${newName}"`)
 
-      // Fetch the event from Stripe events API and signal the workflow
       await new Promise((r) => setTimeout(r, 2000))
       const events = await stripe.events.list({ limit: 5, type: 'product.updated' })
       const event = events.data[0]
       console.log(`  Fetched event ${event.id} (${event.type})`)
       await handle.signal('stripe_event', event)
 
-      // Wait for the event to be processed
       await new Promise((r) => setTimeout(r, 5000))
 
-      // Verify the update landed
       const { rows: updatedRows } = await infra.pool.query(
         `SELECT _raw_data->>'name' AS name FROM "${schema}"."products" WHERE id = $1`,
         [product.id]
@@ -221,7 +242,7 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
       try {
         await handle.result()
       } catch {
-        // Expected on cancellation
+        // Expected
       }
     })
 
@@ -260,8 +281,6 @@ describeWithEnv(
     const infra = createTestInfra()
     let sheetsClient: ReturnType<typeof google.sheets>
 
-    // The stream name "products" becomes the sheet tab name.
-    // We clean up the tab after the test.
     const streamName = 'products'
 
     beforeAll(async () => {
@@ -276,7 +295,6 @@ describeWithEnv(
     }, 120_000)
 
     afterAll(async () => {
-      // Clean up test tab
       if (sheetsClient && !process.env.KEEP_TEST_DATA) {
         try {
           const meta = await sheetsClient.spreadsheets.get({
@@ -300,7 +318,6 @@ describeWithEnv(
     })
 
     it('backfills products from Stripe into a Google Sheet tab', async () => {
-      // --- Create sync ---
       const syncRes = await fetch(`${infra.serviceUrl}/syncs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -311,11 +328,9 @@ describeWithEnv(
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
             refresh_token: GOOGLE_REFRESH_TOKEN,
-            access_token: 'placeholder', // OAuth2 will refresh via refresh_token
+            access_token: 'placeholder',
             spreadsheet_id: GOOGLE_SPREADSHEET_ID,
           },
-          // Use the unique tab name as the stream name —
-          // the sheets destination creates a tab per stream
           streams: [{ name: streamName }],
         }),
       })
@@ -323,7 +338,6 @@ describeWithEnv(
       const sync = (await syncRes.json()) as { id: string }
       console.log(`  Sync: ${sync.id}`)
 
-      // --- Start workflow + worker ---
       const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
         args: [sync.id],
         workflowId: `sync_${sync.id}`,
@@ -334,16 +348,18 @@ describeWithEnv(
         connection: infra.testEnv.nativeConnection,
         taskQueue: 'sheets-queue',
         workflowsPath: infra.workflowsPath,
-        activities: createActivities(infra.serviceUrl),
+        activities: createActivities({
+          serviceUrl: infra.serviceUrl,
+          engineUrl: infra.engineUrl,
+        }),
       })
 
       await worker.runUntil(async () => {
-        // --- Wait for data to appear in the sheet ---
         await pollUntil(
           async () => {
             try {
               const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
-              return rows.length > 1 // header + at least one data row
+              return rows.length > 1
             } catch {
               return false
             }
@@ -351,7 +367,6 @@ describeWithEnv(
           { timeout: 60_000, interval: 2000 }
         )
 
-        // --- Verify data ---
         const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
         const headerRow = rows[0]
         const dataRows = rows.slice(1)
@@ -360,7 +375,6 @@ describeWithEnv(
 
         expect(dataRows.length).toBeGreaterThan(0)
 
-        // Find the 'id' column and verify product IDs
         const idCol = headerRow.indexOf('id')
         expect(idCol).toBeGreaterThanOrEqual(0)
         for (const row of dataRows) {
@@ -368,7 +382,6 @@ describeWithEnv(
         }
         console.log(`  Sample: ${dataRows[0][idCol]}`)
 
-        // --- Signal delete ---
         await handle.signal('delete')
         try {
           await handle.result()

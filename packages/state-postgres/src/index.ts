@@ -1,5 +1,10 @@
 // State store
-export { createPgStateStore, createScopedPgStateStore, createStateStore } from './state-store.js'
+export {
+  createPgStateStore,
+  createScopedPgStateStore,
+  createStateStore,
+  setupStateStore,
+} from './state-store.js'
 export type { StateStore, ScopedStateStore } from './state-store.js'
 
 // Migrations
