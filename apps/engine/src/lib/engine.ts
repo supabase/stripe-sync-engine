@@ -10,8 +10,8 @@ import {
   CheckResult,
 } from '@stripe/sync-protocol'
 import type { Destination, Source } from '@stripe/sync-protocol'
-import type { RouterCallbacks } from './pipeline.js'
-import { forward } from './pipeline.js'
+import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
+import type { StateStore } from './state-store.js'
 import type { ConnectorResolver } from './resolver.js'
 
 // MARK: - Engine interface
@@ -22,17 +22,7 @@ export interface Engine {
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
   read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
   write(messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput>
-  run(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
-}
-
-// MARK: - Helpers
-
-const stderrCallbacks: RouterCallbacks = {
-  onLog: (message: string, level: string) => console.error(`[${level}] ${message}`),
-  onError: (message: string, failureType: string) =>
-    console.error(`[error:${failureType}] ${message}`),
-  onStreamStatus: (stream: string, status: string) =>
-    console.error(`[status] ${stream}: ${status}`),
+  sync(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
 }
 
 /**
@@ -53,6 +43,7 @@ export function buildCatalog(
         stream: s,
         sync_mode: wanted.get(s.name)!.sync_mode ?? 'full_refresh',
         destination_sync_mode: 'append' as const,
+        fields: wanted.get(s.name)!.fields,
       }))
   } else {
     streams = discovered.map((s) => ({
@@ -70,10 +61,8 @@ export function buildCatalog(
 export function createEngine(
   config: SyncEngineParams,
   connectors: { source: Source; destination: Destination },
-  callbacks?: RouterCallbacks
+  stateStore: StateStore
 ): Engine {
-  const cb = callbacks ?? stderrCallbacks
-
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
   const destSpec = connectors.destination.spec()
@@ -96,11 +85,6 @@ export function createEngine(
     return _catalog
   }
 
-  /** Set of stream names in the catalog, for membership validation. */
-  function catalogStreamNames(catalog: ConfiguredCatalog): Set<string> {
-    return new Set(catalog.streams.map((s) => s.stream.name))
-  }
-
   return {
     async setup() {
       const catalog = await getCatalog()
@@ -110,10 +94,10 @@ export function createEngine(
       ])
     },
 
-    async teardown(opts?: { remove_shared_resources?: boolean }) {
+    async teardown(teardownOpts?: { remove_shared_resources?: boolean }) {
       await Promise.all([
-        connectors.source.teardown?.({ config: sourceConfig, ...opts }),
-        connectors.destination.teardown?.({ config: destConfig, ...opts }),
+        connectors.source.teardown?.({ config: sourceConfig, ...teardownOpts }),
+        connectors.destination.teardown?.({ config: destConfig, ...teardownOpts }),
       ])
     },
 
@@ -126,40 +110,27 @@ export function createEngine(
     },
 
     async *read(input?: AsyncIterable<unknown>) {
-      const catalog = await getCatalog()
-      const knownStreams = catalogStreamNames(catalog)
-
       const raw = connectors.source.read(
-        { config: sourceConfig, catalog, state: config.state },
+        { config: sourceConfig, catalog: await getCatalog(), state: config.state },
         input
       )
-
       for await (const msg of raw) {
-        const validated = Message.parse(msg)
-        // Stream membership check for record and state messages
-        if (
-          (validated.type === 'record' || validated.type === 'state') &&
-          !knownStreams.has(validated.stream)
-        ) {
-          cb.onError?.(`Unknown stream "${validated.stream}" not in catalog`, 'system_error')
-          continue
-        }
-        yield validated
+        yield Message.parse(msg)
       }
     },
 
     async *write(messages: AsyncIterable<Message>) {
       const catalog = await getCatalog()
-      const forwarded = forward(messages, cb)
-      const destOutput = connectors.destination.write({ config: destConfig, catalog }, forwarded)
+      const destInput = pipe(messages, enforceCatalog(catalog), log, filterType('record', 'state'))
+      const destOutput = connectors.destination.write({ config: destConfig, catalog }, destInput)
       for await (const msg of destOutput) {
         yield DestinationOutput.parse(msg)
       }
     },
 
-    async *run(input?: AsyncIterable<unknown>) {
+    async *sync(input?: AsyncIterable<unknown>) {
       await this.setup()
-      yield* this.write(this.read(input))
+      yield* pipe(this.write(this.read(input)), persistState(stateStore))
     },
   }
 }
@@ -167,12 +138,12 @@ export function createEngine(
 export async function createEngineFromParams(
   params: SyncParams,
   resolver: ConnectorResolver,
-  callbacks?: RouterCallbacks
+  stateStore: StateStore
 ): Promise<Engine> {
   const { source_name: sourceName, destination_name: destName, ...engineParams } = params
   const [source, destination] = await Promise.all([
     resolver.resolveSource(sourceName),
     resolver.resolveDestination(destName),
   ])
-  return createEngine(engineParams, { source, destination }, callbacks)
+  return createEngine(engineParams, { source, destination }, stateStore)
 }

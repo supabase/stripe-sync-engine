@@ -1,14 +1,14 @@
-import { createEngine } from '@stripe/sync-engine'
+import { createEngine, noopStateStore, pipe, persistState } from '@stripe/sync-engine'
 import type {
   SyncParams,
   DestinationOutput,
   Message,
   ConnectorResolver,
   CheckResult,
+  StateStore as PipelineStateStore,
 } from '@stripe/sync-engine'
-import type { CredentialStore, ConfigStore, LogSink } from './stores.js'
-import type { StateStore } from '@stripe/sync-engine'
-import type { Credential, SyncConfig } from './schemas.js'
+import type { CredentialStore, ConfigStore, LogSink, StateStore } from './stores.js'
+import type { SyncConfig } from './schemas.js'
 import { resolve } from './resolve.js'
 
 // MARK: - Async queue
@@ -87,6 +87,21 @@ export class SyncService {
     this.destinationOverrides = opts.destinationOverrides
   }
 
+  /** Create a scoped state writer for a single sync run. */
+  private makeStateWriter(syncId: string): PipelineStateStore {
+    return {
+      set: async (stream, data) => {
+        await this.states.set(syncId, stream, data)
+        this.logs.write(syncId, {
+          level: 'debug',
+          message: `checkpoint: ${stream}`,
+          stream,
+          timestamp: new Date().toISOString(),
+        })
+      },
+    }
+  }
+
   /** Resolve config + credentials + state into an engine instance. */
   private async resolveEngine(syncId: string) {
     const config = await this.configs.get(syncId)
@@ -107,7 +122,7 @@ export class SyncService {
       sourceOverrides: this.sourceOverrides,
       destinationOverrides: this.destinationOverrides,
     })
-    const engine = createEngine(params, { source, destination })
+    const engine = createEngine(params, { source, destination }, noopStateStore())
     return { engine, config }
   }
 
@@ -154,18 +169,8 @@ export class SyncService {
 
   async *write(syncId: string, messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput> {
     const { engine } = await this.resolveEngine(syncId)
-    for await (const msg of engine.write(messages)) {
-      if (msg.type === 'state') {
-        await this.states.set(syncId, msg.stream, msg.data)
-        this.logs.write(syncId, {
-          level: 'debug',
-          message: `checkpoint: ${msg.stream}`,
-          stream: msg.stream,
-          timestamp: new Date().toISOString(),
-        })
-      }
-      yield msg
-    }
+    const stateWriter = this.makeStateWriter(syncId)
+    yield* pipe(engine.write(messages), persistState(stateWriter))
   }
 
   async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput> {
@@ -210,7 +215,7 @@ export class SyncService {
           destinationOverrides: this.destinationOverrides,
         })
 
-        const engine = createEngine(params, { source, destination })
+        const engine = createEngine(params, { source, destination }, noopStateStore())
         await engine.setup()
 
         let authError = false
@@ -226,18 +231,8 @@ export class SyncService {
           }
         }
 
-        for await (const msg of engine.write(intercepted())) {
-          if (msg.type === 'state') {
-            await this.states.set(syncId, msg.stream, msg.data)
-            this.logs.write(syncId, {
-              level: 'debug',
-              message: `checkpoint: ${msg.stream}`,
-              stream: msg.stream,
-              timestamp: new Date().toISOString(),
-            })
-          }
-          yield msg
-        }
+        const stateWriter = this.makeStateWriter(syncId)
+        yield* pipe(engine.write(intercepted()), persistState(stateWriter))
 
         if (!authError) return
 

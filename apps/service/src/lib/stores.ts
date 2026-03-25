@@ -2,10 +2,14 @@ import type { Credential, SyncConfig, LogEntry } from './schemas.js'
 
 export type { Credential, SyncConfig, LogEntry }
 
-// Re-export StateStore from the engine
-export type { StateStore } from '@stripe/sync-engine'
-
 // MARK: - Store interfaces
+
+export interface StateStore {
+  get(syncId: string): Promise<Record<string, unknown> | undefined>
+  set(syncId: string, stream: string, data: unknown): Promise<void>
+  clear(syncId: string): Promise<void>
+  close?(): Promise<void>
+}
 
 export interface CredentialStore {
   get(id: string): Promise<Credential>

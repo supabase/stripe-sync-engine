@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine } from '../lib/index.js'
+import { createEngine, noopStateStore } from '../lib/index.js'
 import type { Message, DestinationOutput } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ function makeEngine(
       state: overrides.state,
     },
     { source, destination },
-    {}
+    noopStateStore()
   )
 }
 
@@ -119,7 +119,7 @@ beforeAll(async () => {
 describe('selective sync', () => {
   it('syncs only the requested stream — other tables not created', async () => {
     const engine = makeEngine({ streams: [{ name: targetStream }] })
-    await collect(engine.run())
+    await collect(engine.sync())
 
     // Only target table exists
     const { rows: tables } = await pool.query(
@@ -143,7 +143,7 @@ describe('selective backfill', () => {
       streams: [{ name: targetStream }],
       state: { [targetStream]: { pageCursor: null, status: 'complete' } },
     })
-    await collect(engine.run())
+    await collect(engine.sync())
 
     // Table WAS created by setup()
     const { rows: tables } = await pool.query(

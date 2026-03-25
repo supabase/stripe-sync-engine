@@ -2,7 +2,12 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
 import type { Message, ConnectorResolver, SyncParams as SyncParamsType } from '../lib/index.js'
-import { createEngineFromParams, parseNdjsonStream, SyncParams } from '../lib/index.js'
+import {
+  createEngineFromParams,
+  noopStateStore,
+  parseNdjsonStream,
+  SyncParams,
+} from '../lib/index.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 
 // ── Shared schemas ──────────────────────────────────────────────
@@ -119,7 +124,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       await engine.setup()
       return c.body(null, 204) as any
     }
@@ -144,7 +149,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       await engine.teardown()
       return c.body(null, 204) as any
     }
@@ -172,7 +177,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       const result = await engine.check()
       return c.json(result, 200)
     }
@@ -201,7 +206,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
       return ndjsonResponse(engine.read(input)) as any
     }
@@ -236,7 +241,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       if (!hasBody(c)) {
         return c.json({ error: 'Request body required for /write' }, 400)
       }
@@ -251,7 +256,7 @@ export function createApp(resolver: ConnectorResolver) {
       method: 'post',
       path: '/sync',
       tags: ['Sync'],
-      summary: 'Run full sync (read → write pipeline)',
+      summary: 'Run sync pipeline (read → write)',
       description:
         'Executes a complete source→destination sync. Streams NDJSON messages. Optional NDJSON body provides catalog/state/event input.',
       request: { headers: XSyncParamsHeader },
@@ -268,7 +273,7 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver)
+      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
       return ndjsonResponse(engine.sync(input)) as any
     }

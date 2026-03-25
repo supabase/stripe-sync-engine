@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createEngine } from '../lib/index.js'
+import { createEngine, noopStateStore } from '../lib/index.js'
 import { sourceTest } from '../lib/index.js'
 import destination from '@stripe/sync-destination-postgres'
 import type { RecordMessage, StateMessage } from '../lib/index.js'
@@ -98,7 +98,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         destination_config: { connection_string: connectionString, schema: SCHEMA },
       },
       { source: sourceTest, destination },
-      {}
+      noopStateStore()
     )
 
     const input = [
@@ -109,7 +109,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     ]
 
     // Run pipeline with $stdin passthrough, persist each state checkpoint
-    for await (const msg of engine.run(toAsync(input))) {
+    for await (const msg of engine.sync(toAsync(input))) {
       if (msg.type === 'state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
@@ -148,7 +148,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         state: loadedState,
       },
       { source: sourceTest, destination },
-      {}
+      noopStateStore()
     )
 
     const input = [
@@ -157,7 +157,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       state('customers', { after: 'cus_5' }),
     ]
 
-    for await (const msg of engine.run(toAsync(input))) {
+    for await (const msg of engine.sync(toAsync(input))) {
       if (msg.type === 'state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)

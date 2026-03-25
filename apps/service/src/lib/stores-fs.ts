@@ -9,7 +9,7 @@ import {
 import { join, basename } from 'node:path'
 import type { Credential, SyncConfig } from './schemas.js'
 import type { CredentialStore, ConfigStore, LogSink } from './stores.js'
-import type { StateStore } from '@stripe/sync-engine'
+import type { StateStore } from './stores.js'
 
 // MARK: - Helpers
 

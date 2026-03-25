@@ -1,62 +1,91 @@
-import type { DestinationInput, DestinationOutput, Message } from '@stripe/sync-protocol'
-import {
-  isDataMessage,
-  isLogMessage,
-  isErrorMessage,
-  isStreamStatusMessage,
-} from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
+import type { StateStore } from './state-store.js'
 
-// MARK: - Filter helpers
+// MARK: - enforceCatalog
 
 /**
- * Filter a message stream to only data messages (RecordMessage + StateMessage).
- * This is what the orchestrator's `forward` stage uses to strip logs, errors,
- * and status messages before passing the stream to a destination.
+ * Drop messages for streams not in the catalog and apply per-stream field filtering.
+ * Passes non-data messages (log, error, stream_status, catalog) through unchanged.
  */
-export async function* filterDataMessages(
-  messages: AsyncIterable<Message>
-): AsyncIterable<DestinationInput> {
+export function enforceCatalog(
+  catalog: ConfiguredCatalog
+): (msgs: AsyncIterable<Message>) => AsyncIterable<Message> {
+  const streamMap = new Map(catalog.streams.map((cs) => [cs.stream.name, cs]))
+  return async function* (messages) {
+    for await (const msg of messages) {
+      if (msg.type === 'record' || msg.type === 'state') {
+        const cs = streamMap.get(msg.stream)
+        if (!cs) {
+          console.error(`[error:system_error] Unknown stream "${msg.stream}" not in catalog`)
+          continue
+        }
+        if (msg.type === 'record' && cs.fields?.length) {
+          const allowed = new Set(cs.fields)
+          yield {
+            ...msg,
+            data: Object.fromEntries(Object.entries(msg.data).filter(([k]) => allowed.has(k))),
+          }
+        } else {
+          yield msg
+        }
+      } else {
+        yield msg
+      }
+    }
+  }
+}
+
+// MARK: - log
+
+/**
+ * Tap stage: logs diagnostics to stderr and passes ALL messages through unchanged.
+ */
+export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
   for await (const msg of messages) {
-    if (isDataMessage(msg)) {
+    if (msg.type === 'log') console.error(`[${msg.level}] ${msg.message}`)
+    else if (msg.type === 'error') console.error(`[error:${msg.failure_type}] ${msg.message}`)
+    else if (msg.type === 'stream_status') console.error(`[status] ${msg.stream}: ${msg.status}`)
+    yield msg
+  }
+}
+
+// MARK: - filterType
+
+/**
+ * Generic type filter — narrows the Message union to only the specified types.
+ */
+export function filterType<T extends Message['type']>(
+  ...types: T[]
+): (msgs: AsyncIterable<Message>) => AsyncIterable<Extract<Message, { type: T }>> {
+  const set = new Set<string>(types)
+  return async function* (messages) {
+    for await (const msg of messages) {
+      if (set.has(msg.type)) yield msg as Extract<Message, { type: T }>
+    }
+  }
+}
+
+// MARK: - persistState
+
+/**
+ * Tap on DestinationOutput: persists state messages via the provided store,
+ * then passes all messages through unchanged.
+ */
+export function persistState(
+  store: StateStore
+): (msgs: AsyncIterable<DestinationOutput>) => AsyncIterable<DestinationOutput> {
+  return async function* (messages) {
+    for await (const msg of messages) {
+      if (msg.type === 'state') await store.set(msg.stream, msg.data)
       yield msg
     }
   }
 }
 
-// MARK: - Pipeline stages
-
-export type RouterCallbacks = {
-  onLog?: (message: string, level: string) => void
-  onError?: (message: string, failureType: string) => void
-  onStreamStatus?: (stream: string, status: string) => void
-}
+// MARK: - collect
 
 /**
- * Sits between source and destination in a pipe.
- * Forwards RecordMessage and StateMessage to the destination.
- * Routes LogMessage, ErrorMessage, StreamStatusMessage to callbacks.
- */
-export async function* forward(
-  messages: AsyncIterable<Message>,
-  callbacks?: RouterCallbacks
-): AsyncIterable<DestinationInput> {
-  for await (const msg of messages) {
-    if (isDataMessage(msg)) {
-      yield msg
-    } else if (isLogMessage(msg)) {
-      callbacks?.onLog?.(msg.message, msg.level)
-    } else if (isErrorMessage(msg)) {
-      callbacks?.onError?.(msg.message, msg.failure_type)
-    } else if (isStreamStatusMessage(msg)) {
-      callbacks?.onStreamStatus?.(msg.stream, msg.status)
-    }
-    // CatalogMessage is silently dropped
-  }
-}
-
-/**
- * Sits after destination in a pipe.
- * Yields all destination output (state, log, error) to the caller.
+ * Identity pass-through for DestinationOutput — useful as a terminal stage.
  */
 export async function* collect(
   output: AsyncIterable<DestinationOutput>
@@ -64,4 +93,36 @@ export async function* collect(
   for await (const msg of output) {
     yield msg
   }
+}
+
+// MARK: - pipe
+
+export function pipe<A>(src: AsyncIterable<A>): AsyncIterable<A>
+export function pipe<A, B>(
+  src: AsyncIterable<A>,
+  f1: (a: AsyncIterable<A>) => AsyncIterable<B>
+): AsyncIterable<B>
+export function pipe<A, B, C>(
+  src: AsyncIterable<A>,
+  f1: (a: AsyncIterable<A>) => AsyncIterable<B>,
+  f2: (a: AsyncIterable<B>) => AsyncIterable<C>
+): AsyncIterable<C>
+export function pipe<A, B, C, D>(
+  src: AsyncIterable<A>,
+  f1: (a: AsyncIterable<A>) => AsyncIterable<B>,
+  f2: (a: AsyncIterable<B>) => AsyncIterable<C>,
+  f3: (a: AsyncIterable<C>) => AsyncIterable<D>
+): AsyncIterable<D>
+export function pipe<A, B, C, D, E>(
+  src: AsyncIterable<A>,
+  f1: (a: AsyncIterable<A>) => AsyncIterable<B>,
+  f2: (a: AsyncIterable<B>) => AsyncIterable<C>,
+  f3: (a: AsyncIterable<C>) => AsyncIterable<D>,
+  f4: (a: AsyncIterable<D>) => AsyncIterable<E>
+): AsyncIterable<E>
+export function pipe(
+  src: AsyncIterable<unknown>,
+  ...fns: Array<(a: AsyncIterable<unknown>) => AsyncIterable<unknown>>
+): AsyncIterable<unknown> {
+  return fns.reduce((acc, fn) => fn(acc), src)
 }

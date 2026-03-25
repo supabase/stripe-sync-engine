@@ -19,6 +19,7 @@ import {
 } from '@stripe/sync-protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '@stripe/sync-protocol'
 import { createEngine, buildCatalog } from './engine.js'
+import { noopStateStore } from './state-store.js'
 import { sourceTest } from './source-test.js'
 import { destinationTest } from './destination-test.js'
 
@@ -314,7 +315,8 @@ describe('engine config validation', () => {
           source_config: { streams: {} },
           destination_config: {},
         },
-        { source: sourceTest, destination: destinationTest }
+        { source: sourceTest, destination: destinationTest },
+        noopStateStore()
       )
     ).not.toThrow()
   })
@@ -331,7 +333,8 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         { source_config: {}, destination_config: {} },
-        { source, destination: destinationTest }
+        { source, destination: destinationTest },
+        noopStateStore()
       )
     ).toThrow()
   })
@@ -355,7 +358,8 @@ describe('engine config validation', () => {
           source_config: { streams: {} },
           destination_config: {},
         },
-        { source: sourceTest, destination }
+        { source: sourceTest, destination },
+        noopStateStore()
       )
     ).toThrow()
   })
@@ -376,10 +380,11 @@ describe('engine config validation', () => {
 
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source, destination: destinationTest }
+      { source, destination: destinationTest },
+      noopStateStore()
     )
     // Trigger discover to verify the default was applied
-    return drain(engine.run())
+    return drain(engine.sync())
   })
 
   it('fromJSONSchema({}).parse(anything) works — backward compat with mock specs', () => {
@@ -402,7 +407,8 @@ describe('engine message validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: sourceTest, destination: destinationTest }
+      { source: sourceTest, destination: destinationTest },
+      noopStateStore()
     )
 
     const results = await drain(
@@ -433,7 +439,8 @@ describe('engine message validation', () => {
     }
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: badSource, destination: destinationTest }
+      { source: badSource, destination: destinationTest },
+      noopStateStore()
     )
 
     await expect(drain(engine.read())).rejects.toThrow()
@@ -458,12 +465,13 @@ describe('engine message validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: sourceTest, destination: badDest }
+      { source: sourceTest, destination: badDest },
+      noopStateStore()
     )
 
     await expect(
       drain(
-        engine.run(
+        engine.sync(
           toAsync([
             { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
             { type: 'state', stream: 'customers', data: { status: 'complete' } },
@@ -485,7 +493,8 @@ describe('engine stream membership validation', () => {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: sourceTest, destination: destinationTest }
+      { source: sourceTest, destination: destinationTest },
+      noopStateStore()
     )
 
     const results = await drain(
@@ -497,71 +506,6 @@ describe('engine stream membership validation', () => {
       )
     )
     expect(results.filter((m) => m.type === 'record')).toHaveLength(1)
-  })
-
-  it('record with unknown stream triggers error callback and is dropped', async () => {
-    // Source that emits a record for a stream not in the catalog
-    const badSource: Source = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({
-        type: 'catalog',
-        streams: [{ name: 'customers', primary_key: [['id']] }],
-      }),
-      read: async function* () {
-        yield {
-          type: 'record' as const,
-          stream: 'unknown_stream',
-          data: { id: '1' },
-          emitted_at: 1000,
-        }
-      },
-    }
-    const onError = vi.fn()
-    const engine = createEngine(
-      { source_config: {}, destination_config: {} },
-      { source: badSource, destination: destinationTest },
-      { onError }
-    )
-
-    const results = await drain(engine.read())
-    expect(results).toHaveLength(0)
-    expect(onError).toHaveBeenCalledOnce()
-    expect(onError).toHaveBeenCalledWith(
-      'Unknown stream "unknown_stream" not in catalog',
-      'system_error'
-    )
-  })
-
-  it('state with unknown stream triggers error callback and is dropped', async () => {
-    const badSource: Source = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({
-        type: 'catalog',
-        streams: [{ name: 'customers', primary_key: [['id']] }],
-      }),
-      read: async function* () {
-        yield {
-          type: 'state' as const,
-          stream: 'nonexistent',
-          data: { cursor: 'x' },
-        }
-      },
-    }
-    const onError = vi.fn()
-    const engine = createEngine(
-      { source_config: {}, destination_config: {} },
-      { source: badSource, destination: destinationTest },
-      { onError }
-    )
-
-    const results = await drain(engine.read())
-    expect(results).toHaveLength(0)
-    expect(onError).toHaveBeenCalledWith(
-      'Unknown stream "nonexistent" not in catalog',
-      'system_error'
-    )
   })
 
   it('non-stream messages pass through regardless of stream field', async () => {
@@ -585,7 +529,8 @@ describe('engine stream membership validation', () => {
     }
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source, destination: destinationTest }
+      { source, destination: destinationTest },
+      noopStateStore()
     )
 
     const results = await drain(engine.read())
@@ -596,20 +541,21 @@ describe('engine stream membership validation', () => {
 })
 
 // ---------------------------------------------------------------------------
-// engine.run() pipeline tests
+// engine.sync() pipeline tests
 // ---------------------------------------------------------------------------
 
-describe('engine.run() pipeline', () => {
+describe('engine.sync() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = createEngine(
       {
         source_config: { streams: { customers: {} } },
         destination_config: {},
       },
-      { source: sourceTest, destination: destinationTest }
+      { source: sourceTest, destination: destinationTest },
+      noopStateStore()
     )
     const results = await drain(
-      engine.run(
+      engine.sync(
         toAsync([
           {
             type: 'record',
@@ -650,10 +596,11 @@ describe('engine.run() pipeline', () => {
         destination_config: {},
         streams: [{ name: 'customers' }],
       },
-      { source: sourceTest, destination: destinationTest }
+      { source: sourceTest, destination: destinationTest },
+      noopStateStore()
     )
     const results = await drain(
-      engine.run(
+      engine.sync(
         toAsync([
           { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
           { type: 'state', stream: 'customers', data: { status: 'complete' } },
@@ -709,11 +656,12 @@ describe('engine.run() pipeline', () => {
 
     const engine = createEngine(
       { source_config: {}, destination_config: {} },
-      { source: mixedSource, destination: destinationTest }
+      { source: mixedSource, destination: destinationTest },
+      noopStateStore()
     )
-    const results = await drain(engine.run())
+    const results = await drain(engine.sync())
 
-    // Only the state message passes through engine.run() (record goes to dest but
+    // Only the state message passes through engine.sync() (record goes to dest but
     // dest only yields state back; log/error/stream_status are routed to callbacks)
     expect(results).toHaveLength(1)
     expect(results[0]!.type).toBe('state')

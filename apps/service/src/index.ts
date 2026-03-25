@@ -16,7 +16,7 @@ export {
 
 // Store interfaces
 export type { CredentialStore, ConfigStore, LogSink } from './lib/stores.js'
-export type { StateStore } from '@stripe/sync-engine'
+export type { StateStore } from './lib/stores.js'
 
 // File-system store implementations
 export {
