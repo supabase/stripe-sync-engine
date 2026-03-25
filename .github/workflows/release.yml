@@ -18,28 +18,46 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.sha }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: ./.nvmrc
-          cache: pnpm
-
-      - name: Install dependencies & build
-        run: pnpm install --frozen-lockfile && pnpm build
-
-      - name: Publish to npmjs.org
+      - name: Pack from GitHub Packages and publish to npmjs.org
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          pnpm -r --filter '!./tests/*' publish --access public --no-git-checks
+          set -euo pipefail
+          WORKDIR=$(mktemp -d)
+          cd "$WORKDIR"
+
+          # Auth for reading from GitHub Packages
+          echo "@stripe:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+
+          PACKAGES=(
+            @stripe/sync-protocol
+            @stripe/sync-util-postgres
+            @stripe/sync-lib-stateless
+            @stripe/sync-lib-stateful
+            @stripe/sync-source-stripe
+            @stripe/sync-destination-postgres
+            @stripe/sync-destination-google-sheets
+            @stripe/sync-store-postgres
+            @stripe/sync-engine-stateless
+            @stripe/sync-engine-stateful
+            @stripe/sync-integration-supabase
+            @stripe/sync-engine
+          )
+
+          for pkg in "${PACKAGES[@]}"; do
+            echo "--- $pkg ---"
+            npm pack "$pkg" --registry https://npm.pkg.github.com
+          done
+
+          echo ""
+          echo "=== Publishing to npmjs.org ==="
+          for tgz in *.tgz; do
+            echo "Publishing $tgz"
+            npm publish "$tgz" --registry https://registry.npmjs.org --access public
+          done
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_//registry.npmjs.org/:_authToken: ${{ secrets.NPM_TOKEN }}
 
   docker:
     name: Promote Docker image to Docker Hub
