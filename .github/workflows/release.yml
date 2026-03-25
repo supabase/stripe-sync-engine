@@ -18,37 +18,30 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.sha }}
-          sparse-checkout: |
-            packages
-            apps
-          sparse-checkout-cone-mode: false
-
       - name: Pack from GitHub Packages and publish to npmjs.org
         run: |
           set -euo pipefail
           WORKDIR=$(mktemp -d)
-
-          # Discover publishable @stripe/* packages from package.json files
-          PACKAGES=$(node -e '
-            const fs = require("fs"), path = require("path");
-            for (const dir of ["packages", "apps"]) {
-              for (const entry of fs.readdirSync(dir)) {
-                try {
-                  const pkg = JSON.parse(fs.readFileSync(path.join(dir, entry, "package.json")));
-                  if (pkg.name && pkg.private !== true) console.log(pkg.name);
-                } catch {}
-              }
-            }
-          ')
-
           cd "$WORKDIR"
 
           # Auth for reading from GitHub Packages
           echo "@stripe:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+
+          # Discover @stripe/* packages from GitHub Packages API
+          PACKAGES=$(curl -sf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages?package_type=npm&per_page=100" \
+            | node -e "
+              const pkgs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              pkgs.filter(p => p.repository && p.repository.name === '${{ github.event.repository.name }}')
+                  .forEach(p => console.log('@${{ github.repository_owner }}/' + p.name));
+            ")
+
+          echo "Packages to promote:"
+          echo "$PACKAGES"
+          echo ""
 
           for pkg in $PACKAGES; do
             echo "--- $pkg ---"
