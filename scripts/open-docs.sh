@@ -5,20 +5,19 @@ set -euo pipefail
 
 APP="${1:-engine}"
 
-case "$APP" in
-  engine)
-    PORT="${PORT:-3000}"
-    CMD="bun apps/engine/src/cli/index.ts serve --port $PORT"
-    ;;
-  service)
-    PORT="${PORT:-4020}"
-    CMD="bun apps/service/src/bin/cli.ts serve --port $PORT"
-    ;;
-  *)
-    echo "Usage: $0 [engine|service]" >&2
-    exit 1
-    ;;
-esac
+if command -v bun &> /dev/null; then
+  case "$APP" in
+    engine)  PORT="${PORT:-3000}"; CMD="bun apps/engine/src/cli/index.ts serve --port $PORT" ;;
+    service) PORT="${PORT:-4020}"; CMD="bun apps/service/src/bin/cli.ts serve --port $PORT" ;;
+    *) echo "Usage: $0 [engine|service]" >&2; exit 1 ;;
+  esac
+else
+  case "$APP" in
+    engine)  PORT="${PORT:-3000}"; CMD="node apps/engine/dist/cli/index.js serve --port $PORT" ;;
+    service) PORT="${PORT:-4020}"; CMD="node apps/service/dist/bin/cli.js serve --port $PORT" ;;
+    *) echo "Usage: $0 [engine|service]" >&2; exit 1 ;;
+  esac
+fi
 
 cd "$(dirname "$0")/.."
 
