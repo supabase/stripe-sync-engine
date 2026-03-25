@@ -19,18 +19,27 @@ RUN pnpm --filter @stripe/sync-engine deploy --prod /deploy
 
 # pnpm deploy doesn't apply publishConfig — workspace packages still point
 # exports at src/. Rewrite them to use dist/ (the publishConfig values).
+# Must patch both top-level and .pnpm hoisted copies.
 RUN node -e " \
   const fs = require('fs'), path = require('path'); \
-  const nm = '/deploy/node_modules/@stripe'; \
-  if (!fs.existsSync(nm)) process.exit(0); \
-  for (const dir of fs.readdirSync(nm)) { \
-    const pj = path.join(nm, dir, 'package.json'); \
-    if (!fs.existsSync(pj)) continue; \
-    const pkg = JSON.parse(fs.readFileSync(pj, 'utf8')); \
-    if (!pkg.publishConfig) continue; \
-    for (const [k, v] of Object.entries(pkg.publishConfig)) pkg[k] = v; \
-    delete pkg.publishConfig; \
-    fs.writeFileSync(pj, JSON.stringify(pkg, null, 2) + '\n'); \
+  function patchDir(dir) { \
+    if (!fs.existsSync(dir)) return; \
+    for (const entry of fs.readdirSync(dir)) { \
+      const pj = path.join(dir, entry, 'package.json'); \
+      if (!fs.existsSync(pj)) continue; \
+      const pkg = JSON.parse(fs.readFileSync(pj, 'utf8')); \
+      if (!pkg.publishConfig) continue; \
+      for (const [k, v] of Object.entries(pkg.publishConfig)) pkg[k] = v; \
+      delete pkg.publishConfig; \
+      fs.writeFileSync(pj, JSON.stringify(pkg, null, 2) + '\n'); \
+    } \
+  } \
+  patchDir('/deploy/node_modules/@stripe'); \
+  const pnpm = '/deploy/node_modules/.pnpm'; \
+  if (fs.existsSync(pnpm)) { \
+    for (const d of fs.readdirSync(pnpm)) { \
+      patchDir(path.join(pnpm, d, 'node_modules/@stripe')); \
+    } \
   } \
 "
 
