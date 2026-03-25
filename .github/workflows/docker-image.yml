@@ -59,9 +59,13 @@ jobs:
 
       - name: Docker tests
         run: |
+          # Try pulling pre-built image; fall back to local build
           SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
           IMAGE="ghcr.io/${{ github.repository }}:${SHA}"
-          docker pull "$IMAGE"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Image $IMAGE not found in ghcr.io, building locally"
+            docker build -t "$IMAGE" .
+          fi
           if [ -n "${STRIPE_API_KEY:-}" ]; then
             bash tests/docker-test.sh "$IMAGE"
           else
@@ -76,8 +80,6 @@ jobs:
 
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh
-        env:
-          STRIPE_NPM_REGISTRY: https://registry.npmjs.org
 
       # --- Integration tests (real Stripe API) ---
 

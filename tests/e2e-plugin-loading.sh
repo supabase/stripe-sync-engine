@@ -74,6 +74,12 @@ echo "--- Step 2: Installing tarballs into temp project ---"
 cd "$TMPDIR_BASE"
 pnpm init > /dev/null 2>&1
 
+# Disable scoped registry — this test installs from local tarballs only.
+# The repo .npmrc points @stripe to $STRIPE_NPM_REGISTRY which would break
+# resolution in the temp dir. Write a blank .npmrc to override.
+echo "# local tarballs only — no scoped registry" > .npmrc
+unset STRIPE_NPM_REGISTRY 2>/dev/null || true
+
 # Override all workspace packages to use the local tarballs.
 cat > package.json <<EOF
 {
