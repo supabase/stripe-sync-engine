@@ -18,7 +18,8 @@
     "dev": "tsc --watch",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
   },
   "dependencies": {
     "@stripe/sync-util-postgres": "workspace:*",

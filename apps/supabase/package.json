@@ -15,7 +15,8 @@
     "build": "node build.mjs",
     "lint": "eslint src --ext .ts",
     "test": "vitest --passWithNoTests",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
   },
   "files": [
     "dist",

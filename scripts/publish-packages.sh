@@ -12,14 +12,7 @@ set -euo pipefail
 REGISTRY="${STRIPE_NPM_REGISTRY:?STRIPE_NPM_REGISTRY must be set}"
 echo "Publishing to $REGISTRY"
 
-for dir in packages/* apps/*; do
-  pj="$dir/package.json"
-  [ -f "$pj" ] || continue
-  grep -q '"private": true' "$pj" && continue
-  name=$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$pj')).name)")
-  version=$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$pj')).version)")
-  npm unpublish "$name@$version" --registry "$REGISTRY" --force 2>/dev/null || true
-done
+pnpm -r run --if-present unpublish 2>/dev/null || true
 
 pnpm publish -r \
   --registry "$REGISTRY" \

@@ -17,7 +17,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
   },
   "dependencies": {
     "citty": "^0.1.6",

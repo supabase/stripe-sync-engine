@@ -15,7 +15,8 @@
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",
-    "test": "vitest"
+    "test": "vitest",
+    "unpublish": "npm unpublish --registry $STRIPE_NPM_REGISTRY --force"
   },
   "files": [
     "dist",
