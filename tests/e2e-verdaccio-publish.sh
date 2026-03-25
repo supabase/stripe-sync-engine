@@ -5,7 +5,7 @@
 # as an end-user would install and run the CLI.
 #
 # Prerequisites:
-#   - Verdaccio running on localhost:4873 (docker compose up -d verdaccio)
+#   - npm-registry running on localhost:4873 (docker compose --profile npm-registry up -d npm-registry)
 #   - All packages built (pnpm build)
 #
 # Usage:
@@ -38,7 +38,7 @@ echo "--- Step 1: Checking Verdaccio ---"
 
 if ! curl -sf "$REGISTRY/-/ping" > /dev/null 2>&1; then
   echo "FAIL: Verdaccio not reachable at $REGISTRY"
-  echo "Run: docker compose up -d verdaccio"
+  echo "Run: docker compose --profile npm-registry up -d npm-registry"
   exit 1
 fi
 echo "  Verdaccio is up"

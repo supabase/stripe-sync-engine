@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Start Verdaccio
-        run: docker compose --profile verdaccio up -d --wait verdaccio
+        run: docker compose --profile npm-registry up -d --wait npm-registry
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
