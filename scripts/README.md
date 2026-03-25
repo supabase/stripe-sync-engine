@@ -11,7 +11,7 @@ TS_RUNNER="bun" ./scripts/read-from-stripe.sh
 TS_RUNNER="node --import tsx" ./scripts/read-from-stripe.sh
 ```
 
-Why not `node --strip-types`? Our codebase uses `moduleResolution: "bundler"` with extensionless imports (`from './index'` not `from './index.ts'`). Node's built-in type stripping doesn't resolve `.ts` extensions — it only strips type annotations from files it already found.
+Why not `node --strip-types`? Node refuses to strip types for files inside `node_modules/`, which includes pnpm workspace symlinks — so workspace packages stay broken even with the flag enabled.
 
 ## Connector demos
 
@@ -43,9 +43,9 @@ These use the sync-engine CLI which handles discover → read → write in one s
 
 | Script               | Description                                      |
 | -------------------- | ------------------------------------------------ |
-| `reset-postgres.sh`  | Drop all non-system schemas and tables in public |
-| `release-package.sh` | Create a GitHub release with a built tarball     |
-| `d2.mjs`             | Render D2 diagrams to SVG                        |
+| `reset-postgres.sh`      | Drop all non-system schemas and tables in public        |
+| `publish-packages.sh`    | Publish all non-private packages to `$STRIPE_NPM_REGISTRY` |
+| `d2.mjs`                 | Render D2 diagrams to SVG                               |
 
 ## Environment variables
 

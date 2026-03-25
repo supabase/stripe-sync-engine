@@ -38,11 +38,7 @@ jobs:
       - name: Publish to GitHub Packages
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
-          pnpm -r --filter '!./tests/*' publish \
-            --registry "$STRIPE_NPM_REGISTRY" \
-            --access public \
-            --no-git-checks \
-            2>&1 || true
+          ./scripts/publish-packages.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
