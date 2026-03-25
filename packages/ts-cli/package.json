@@ -1,7 +1,7 @@
 {
   "name": "@stripe/sync-ts-cli",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "exports": {
     ".": {
