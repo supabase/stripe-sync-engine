@@ -33,6 +33,10 @@ export { resolve } from './lib/resolve.js'
 export { SyncService } from './lib/service.js'
 export type { SyncServiceOptions } from './lib/service.js'
 
+// Temporal bridge
+export { TemporalBridge } from './lib/temporal.js'
+export type { TemporalOptions } from './lib/temporal.js'
+
 // API app factory
 export { createApp } from './api/app.js'
 export type { AppOptions } from './api/app.js'

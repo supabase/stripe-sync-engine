@@ -15,6 +15,7 @@ import {
 } from '../lib/schemas.js'
 import type { Credential, SyncConfig } from '../lib/schemas.js'
 import { SyncService } from '../lib/service.js'
+import type { TemporalOptions } from '../lib/temporal.js'
 import {
   fileCredentialStore,
   fileConfigStore,
@@ -66,6 +67,8 @@ export interface AppOptions {
   dataDir?: string
   /** Pre-built connector resolver (for tests with mocks). */
   connectors?: ConnectorResolver
+  /** When set, sync lifecycle is managed by Temporal instead of running in-process. */
+  temporal?: TemporalOptions
 }
 
 export function createApp(options?: AppOptions) {
@@ -83,6 +86,7 @@ export function createApp(options?: AppOptions) {
     states,
     logs,
     connectors,
+    temporal: options?.temporal,
   })
 
   const app = new OpenAPIHono({
@@ -400,6 +404,7 @@ export function createApp(options?: AppOptions) {
       const id = genId('sync')
       const stored = { id, ...(body as Record<string, unknown>) } as SyncConfig
       await configs.set(id, stored)
+      await service.temporal?.start(id, stored)
       return c.json(stored as any, 201)
     }
   )
@@ -480,6 +485,7 @@ export function createApp(options?: AppOptions) {
           id,
         } as SyncConfig
         await configs.set(id, updated)
+        await service.temporal?.updateConfig(id, updated)
         return c.json(updated as any, 200)
       } catch {
         return c.json({ error: `Sync ${id} not found` }, 404)
@@ -510,6 +516,7 @@ export function createApp(options?: AppOptions) {
       const { id } = c.req.valid('param')
       try {
         await configs.get(id)
+        await service.temporal?.stop(id)
         await configs.delete(id)
         await states.clear(id)
         return c.json({ id, deleted: true as const }, 200)
@@ -695,6 +702,81 @@ export function createApp(options?: AppOptions) {
       const body = c.req.raw.body
       const input = body && c.req.header('content-type') ? parseNdjsonStream(body) : undefined
       return ndjsonResponse(service.run(id, input)) as any
+    }
+  )
+
+  // MARK: - Temporal-only operations (pause / resume)
+
+  app.openapi(
+    createRoute({
+      operationId: 'pauseSync',
+      method: 'post',
+      path: '/syncs/{id}/pause',
+      tags: ['Sync Operations'],
+      summary: 'Pause a running sync (Temporal mode only)',
+      description:
+        'Signals the Temporal workflow to pause. The sync will stop processing after the current batch completes. Requires --temporal-address.',
+      request: { params: SyncIdParam },
+      responses: {
+        204: { description: 'Pause signal sent' },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+        409: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pause requires Temporal mode',
+        },
+      },
+    }),
+    async (c) => {
+      if (!service.temporal) {
+        return c.json({ error: 'Pause requires Temporal mode (--temporal-address)' }, 409)
+      }
+      const { id } = c.req.valid('param')
+      try {
+        await configs.get(id)
+      } catch {
+        return c.json({ error: `Sync ${id} not found` }, 404)
+      }
+      await service.temporal.pause(id)
+      return c.body(null, 204) as any
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      operationId: 'resumeSync',
+      method: 'post',
+      path: '/syncs/{id}/resume',
+      tags: ['Sync Operations'],
+      summary: 'Resume a paused sync (Temporal mode only)',
+      description: 'Signals the Temporal workflow to resume. Requires --temporal-address.',
+      request: { params: SyncIdParam },
+      responses: {
+        204: { description: 'Resume signal sent' },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Sync not found',
+        },
+        409: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Resume requires Temporal mode',
+        },
+      },
+    }),
+    async (c) => {
+      if (!service.temporal) {
+        return c.json({ error: 'Resume requires Temporal mode (--temporal-address)' }, 409)
+      }
+      const { id } = c.req.valid('param')
+      try {
+        await configs.get(id)
+      } catch {
+        return c.json({ error: `Sync ${id} not found` }, 404)
+      }
+      await service.temporal.resume(id)
+      return c.body(null, 204) as any
     }
   )
 

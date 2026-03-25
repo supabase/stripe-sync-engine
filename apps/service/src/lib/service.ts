@@ -10,6 +10,10 @@ import type {
 import type { CredentialStore, ConfigStore, LogSink, StateStore } from './stores.js'
 import type { SyncConfig } from './schemas.js'
 import { resolve } from './resolve.js'
+import { TemporalBridge } from './temporal.js'
+import type { TemporalOptions } from './temporal.js'
+
+export type { TemporalOptions } from './temporal.js'
 
 // MARK: - Async queue
 
@@ -60,6 +64,8 @@ export type SyncServiceOptions = {
   sourceOverrides?: Record<string, unknown>
   /** Extra config fields merged on top of destination credential (env vars, CLI flags). */
   destinationOverrides?: Record<string, unknown>
+  /** When set, sync lifecycle is managed by Temporal instead of running in-process. */
+  temporal?: TemporalOptions
 }
 
 const MAX_AUTH_RETRIES = 2
@@ -73,6 +79,7 @@ export class SyncService {
   private refreshCredential?: (credentialId: string) => Promise<void>
   private sourceOverrides?: Record<string, unknown>
   private destinationOverrides?: Record<string, unknown>
+  readonly temporal?: TemporalBridge
   /** Registry of active input queues keyed by credential_id. */
   private inputQueues: Map<string, Set<(event: unknown) => void>> = new Map()
 
@@ -85,6 +92,13 @@ export class SyncService {
     this.refreshCredential = opts.refreshCredential
     this.sourceOverrides = opts.sourceOverrides
     this.destinationOverrides = opts.destinationOverrides
+    if (opts.temporal) {
+      this.temporal = new TemporalBridge(
+        opts.temporal.client,
+        opts.temporal.taskQueue,
+        opts.configs
+      )
+    }
   }
 
   /** Create a scoped state writer for a single sync run. */
@@ -128,9 +142,13 @@ export class SyncService {
 
   /**
    * Push an event to all running syncs that share the given credential.
-   * Each sync verifies the event independently via its own webhook secret.
+   * In Temporal mode, signals the workflow. Otherwise pushes to in-process queues.
    */
   push_event(credential_id: string, event: unknown): void {
+    if (this.temporal) {
+      this.temporal.pushEvent(credential_id, event)
+      return
+    }
     const queues = this.inputQueues.get(credential_id)
     if (!queues) return
     for (const push of queues) {
