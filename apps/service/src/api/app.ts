@@ -674,8 +674,10 @@ export function createApp(options?: AppOptions) {
       method: 'post',
       path: '/syncs/{id}/run',
       tags: ['Sync Operations'],
-      summary: 'Run full sync (read → write pipeline)',
-      description: 'Executes a complete source→destination sync. Streams NDJSON messages.',
+      summary: 'Run sync pipeline (read → write)',
+      description:
+        'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
+        'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
       request: { params: SyncIdParam },
       responses: {
         200: {

@@ -258,7 +258,8 @@ export function createApp(resolver: ConnectorResolver) {
       tags: ['Sync'],
       summary: 'Run sync pipeline (read → write)',
       description:
-        'Executes a complete source→destination sync. Streams NDJSON messages. Optional NDJSON body provides catalog/state/event input.',
+        'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
+        'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
       request: { headers: XSyncParamsHeader },
       responses: {
         200: {

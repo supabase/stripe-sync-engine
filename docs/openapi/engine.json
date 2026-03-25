@@ -13,7 +13,9 @@
     "/health": {
       "get": {
         "operationId": "health",
-        "tags": ["Status"],
+        "tags": [
+          "Status"
+        ],
         "summary": "Health check",
         "responses": {
           "200": {
@@ -25,10 +27,14 @@
                   "properties": {
                     "ok": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     }
                   },
-                  "required": ["ok"]
+                  "required": [
+                    "ok"
+                  ]
                 }
               }
             }
@@ -39,7 +45,9 @@
     "/setup": {
       "post": {
         "operationId": "setup",
-        "tags": ["Sync"],
+        "tags": [
+          "Sync"
+        ],
         "summary": "Set up destination schema",
         "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
         "parameters": [
@@ -80,7 +88,9 @@
     "/teardown": {
       "post": {
         "operationId": "teardown",
-        "tags": ["Sync"],
+        "tags": [
+          "Sync"
+        ],
         "summary": "Tear down destination schema",
         "description": "Drops destination tables. Irreversible.",
         "parameters": [
@@ -121,7 +131,9 @@
     "/check": {
       "get": {
         "operationId": "check",
-        "tags": ["Sync"],
+        "tags": [
+          "Sync"
+        ],
         "summary": "Check connector connection",
         "description": "Validates the source/destination config and tests connectivity.",
         "parameters": [
@@ -150,29 +162,42 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": ["succeeded", "failed"]
+                          "enum": [
+                            "succeeded",
+                            "failed"
+                          ]
                         },
                         "message": {
                           "type": "string"
                         }
                       },
-                      "required": ["status"]
+                      "required": [
+                        "status"
+                      ]
                     },
                     "destination": {
                       "type": "object",
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": ["succeeded", "failed"]
+                          "enum": [
+                            "succeeded",
+                            "failed"
+                          ]
                         },
                         "message": {
                           "type": "string"
                         }
                       },
-                      "required": ["status"]
+                      "required": [
+                        "status"
+                      ]
                     }
                   },
-                  "required": ["source", "destination"]
+                  "required": [
+                    "source",
+                    "destination"
+                  ]
                 }
               }
             }
@@ -198,7 +223,9 @@
     "/read": {
       "post": {
         "operationId": "read",
-        "tags": ["Sync"],
+        "tags": [
+          "Sync"
+        ],
         "summary": "Read records from source",
         "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.",
         "parameters": [
@@ -248,7 +275,9 @@
     "/write": {
       "post": {
         "operationId": "write",
-        "tags": ["Sync"],
+        "tags": [
+          "Sync"
+        ],
         "summary": "Write records to destination",
         "description": "Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.",
         "parameters": [
@@ -310,9 +339,11 @@
     "/sync": {
       "post": {
         "operationId": "sync",
-        "tags": ["Sync"],
-        "summary": "Run full sync (read → write pipeline)",
-        "description": "Executes a complete source→destination sync. Streams NDJSON messages. Optional NDJSON body provides catalog/state/event input.",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "Run sync pipeline (read → write)",
+        "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
         "parameters": [
           {
             "schema": {
