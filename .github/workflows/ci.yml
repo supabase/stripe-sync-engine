@@ -6,7 +6,17 @@ on:
     branches: [main, v2]
   workflow_dispatch:
 
+permissions:
+  packages: write
+  contents: read
+
+env:
+  STRIPE_NPM_REGISTRY: https://npm.pkg.github.com
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Test — lint, build, unit & integration tests
+  # ---------------------------------------------------------------------------
   test:
     name: Lint, build & test
     runs-on: ubuntu-24.04
@@ -75,3 +85,144 @@ jobs:
       - name: Skipped test warnings
         if: always()
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
+
+  # ---------------------------------------------------------------------------
+  # Build — publish npm packages & Docker image
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & push
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      # --- npm: publish @stripe/* to GitHub Packages ---
+
+      - name: Publish to GitHub Packages
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+          ./scripts/publish-packages.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Docker: build & push to ghcr.io ---
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          TAG="${GITHUB_REF_NAME//\//-}"
+          docker build \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
+            -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository }}:${TAG} \
+            .
+
+      - name: Push Docker image
+        run: |
+          TAG="${GITHUB_REF_NAME//\//-}"
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}:${TAG}
+
+      - name: Docker smoke test
+        run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+
+  # ---------------------------------------------------------------------------
+  # E2E — pull Docker image, run e2e & connector-loading tests
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E tests
+    needs: build
+    runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      # --- Docker tests ---
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker tests
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          docker pull "$IMAGE"
+          if [ -n "${STRIPE_API_KEY:-}" ]; then
+            bash e2e/docker.test.sh "$IMAGE"
+          else
+            echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available. Running smoke only."
+            docker run --rm "$IMAGE" --version
+          fi
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
+
+      # --- Connector loading test ---
+
+      - name: Connector loading test
+        run: bash e2e/connector-loading.test.sh
+
+      # --- E2E vitest tests (real Stripe API) ---
+
+      - name: E2E vitest tests
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::E2E tests skipped — STRIPE_API_KEY not available (fork PR?)"
+            exit 0
+          fi
+          pnpm --filter @stripe/sync-e2e run test
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
