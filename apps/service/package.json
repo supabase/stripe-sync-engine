@@ -1,0 +1,53 @@
+{
+  "name": "@stripe/sync-service",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Stripe Sync Service — stateful sync with credential management and webhook fan-out",
+  "type": "module",
+  "bin": {
+    "sync-service": "./dist/bin/cli.js",
+    "sync-service-api": "./dist/bin/api.js"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@hono/node-server": "^1",
+    "@hono/swagger-ui": "^0.6",
+    "@hono/zod-openapi": "^1.2",
+    "@stripe/sync-engine": "workspace:*",
+    "citty": "^0.1.6",
+    "dotenv": "^16.4.7",
+    "hono": "^4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stripe/sync-engine.git"
+  },
+  "homepage": "https://github.com/stripe/sync-engine#readme",
+  "keywords": [
+    "stripe",
+    "sync",
+    "service",
+    "typescript"
+  ],
+  "author": "Stripe <https://stripe.com/>"
+}
