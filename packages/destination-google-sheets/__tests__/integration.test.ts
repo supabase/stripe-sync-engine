@@ -7,7 +7,7 @@ import type {
 import { google } from 'googleapis'
 import { expect, it } from 'vitest'
 import { createDestination, type Config, readSheet } from '../src/index.js'
-import { describeWithEnv } from '../../../tests/test-helpers.js'
+import { describeWithEnv } from '../../../e2e/test-helpers.js'
 
 async function* toAsyncIter<T>(items: T[]): AsyncIterableIterator<T> {
   for (const item of items) yield item
