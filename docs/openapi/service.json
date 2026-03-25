@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /credentials | List credentials |\n| POST | /credentials | Create credential |\n| GET | /credentials/{id} | Retrieve credential |\n| PATCH | /credentials/{id} | Update credential |\n| DELETE | /credentials/{id} | Delete credential |\n| GET | /syncs | List syncs |\n| POST | /syncs | Create sync |\n| GET | /syncs/{id} | Retrieve sync |\n| PATCH | /syncs/{id} | Update sync |\n| DELETE | /syncs/{id} | Delete sync |\n| POST | /syncs/{id}/setup | Set up destination schema for a sync |\n| POST | /syncs/{id}/teardown | Tear down destination schema for a sync |\n| GET | /syncs/{id}/check | Check connector connection for a sync |\n| POST | /syncs/{id}/read | Read records from the sync source |\n| POST | /syncs/{id}/write | Write records to the sync destination |\n| POST | /syncs/{id}/sync | Run sync pipeline (read → write) |\n| POST | /syncs/{id}/pause | Pause a running sync (Temporal mode only) |\n| POST | /syncs/{id}/resume | Resume a paused sync (Temporal mode only) |\n| POST | /webhooks/{credential_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /credentials | List credentials |\n| POST | /credentials | Create credential |\n| GET | /credentials/{id} | Retrieve credential |\n| PATCH | /credentials/{id} | Update credential |\n| DELETE | /credentials/{id} | Delete credential |\n| GET | /syncs | List syncs |\n| POST | /syncs | Create sync |\n| GET | /syncs/{id} | Retrieve sync |\n| PATCH | /syncs/{id} | Update sync |\n| DELETE | /syncs/{id} | Delete sync |\n| POST | /syncs/{id}/setup | Set up destination schema for a sync |\n| POST | /syncs/{id}/teardown | Tear down destination schema for a sync |\n| GET | /syncs/{id}/check | Check connector connection for a sync |\n| POST | /syncs/{id}/read | Read records from the sync source |\n| POST | /syncs/{id}/write | Write records to the sync destination |\n| POST | /syncs/{id}/sync | Run sync pipeline (read → write) |\n| POST | /syncs/{id}/pause | Pause a running sync (Temporal mode only) |\n| POST | /syncs/{id}/resume | Resume a paused sync (Temporal mode only) |\n| POST | //webhooks/{credential_id} | Ingest a Stripe webhook event |"
   },
   "components": {
     "schemas": {},
@@ -1331,7 +1331,7 @@
         }
       }
     },
-    "/webhooks/{credential_id}": {
+    "//webhooks/{credential_id}": {
       "post": {
         "operationId": "pushWebhook",
         "tags": ["Webhooks"],
