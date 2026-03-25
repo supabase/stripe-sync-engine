@@ -17,6 +17,7 @@ const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
 
 interface PkgJson {
   name: string
+  bin?: Record<string, string>
 }
 
 function readPkgJson(dir: string): PkgJson {
@@ -158,6 +159,15 @@ describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) =>
 
 describe.each(connectorDirs)('connector bin: %s', (dir) => {
   const pkg = readPkgJson(dir)
+
+  it('package.json has a bin field pointing to .js', () => {
+    expect(pkg.bin, 'bin field should exist').toBeDefined()
+    const binPaths = Object.values(pkg.bin!)
+    expect(binPaths.length).toBeGreaterThan(0)
+    for (const p of binPaths) {
+      expect(p, `bin path "${p}" should point to a .js file`).toMatch(/\.js$/)
+    }
+  })
 
   it('createConnectorCli registers correct commands', async () => {
     const mod = await import(pkg.name)
