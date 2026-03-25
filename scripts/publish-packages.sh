@@ -13,33 +13,14 @@ set -euo pipefail
 REGISTRY="${STRIPE_NPM_REGISTRY:?STRIPE_NPM_REGISTRY must be set}"
 echo "Publishing to $REGISTRY"
 
-FAILED=0
+output=$(pnpm publish -r \
+  --registry "$REGISTRY" \
+  --access public \
+  --no-git-checks \
+  2>&1) && status=0 || status=$?
 
-for dir in packages/* apps/*; do
-  pj="$dir/package.json"
-  [ -f "$pj" ] || continue
+echo "$output"
 
-  # Skip private packages
-  grep -q '"private": true' "$pj" && continue
-
-  name=$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$pj')). name)")
-
-  printf "  %-55s" "$name"
-
-  output=$(cd "$dir" && npm publish \
-    --registry "$REGISTRY" \
-    --access public \
-    2>&1) && status=0 || status=$?
-
-  if [ $status -eq 0 ]; then
-    echo "✓"
-  elif echo "$output" | grep -qE "EPUBLISHCONFLICT|E409|already exists|previously published"; then
-    echo "already published"
-  else
-    echo "FAILED"
-    echo "$output" >&2
-    FAILED=1
-  fi
-done
-
-exit $FAILED
+if [ $status -ne 0 ] && ! echo "$output" | grep -qE "EPUBLISHCONFLICT|E409|already exists|previously published"; then
+  exit $status
+fi
