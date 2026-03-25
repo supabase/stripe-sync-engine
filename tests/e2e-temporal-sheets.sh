@@ -333,46 +333,46 @@ done
 log "OK" "stripe listen connected (${ELAPSED}s)"
 echo ""
 
-# ── Step 8: Wait for backfill ───────────────────────────────────
+# ── Step 8: Wait for data in sheet ──────────────────────────────
 
-log "BACKFILL" "Polling workflow status until backfill completes..."
+log "SYNC" "Polling for products data in Google Sheets..."
+
+# Resolve spreadsheet ID early if provided
+SHEET_ID="${GOOGLE_SPREADSHEET_ID:-}"
 
 ELAPSED=0
 TIMEOUT=120
+BACKFILL_COUNT=0
 while true; do
-  PHASE=$(tctl_query_field "$WORKFLOW_ID" status phase)
+  # Try to resolve spreadsheet ID from API logs if not provided
+  if [ -z "$SHEET_ID" ]; then
+    SHEET_ID=$(grep -o 'wrote to spreadsheet [^ ]*' /tmp/e2e-sheets-api-${TS}.log 2>/dev/null \
+      | tail -1 | awk '{print $NF}' || true)
+  fi
 
-  if [ "$PHASE" = "live" ]; then
-    log "OK" "Backfill complete — workflow in live phase (${ELAPSED}s)"
-    break
+  if [ -n "$SHEET_ID" ]; then
+    BACKFILL_COUNT=$(sheets_row_count "$SHEET_ID" "products")
+    if [ "$BACKFILL_COUNT" -gt 0 ]; then
+      log "OK" "Products found in sheet: ${BACKFILL_COUNT} rows (${ELAPSED}s)"
+      break
+    fi
   fi
 
   sleep 3
   ELAPSED=$((ELAPSED + 3))
   if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-    fail "Workflow did not reach live phase after ${TIMEOUT}s"
+    if [ -z "$SHEET_ID" ]; then
+      cat /tmp/e2e-sheets-api-${TS}.log 2>/dev/null || true
+      fail "No spreadsheet ID found after ${TIMEOUT}s"
+    fi
+    fail "No products found in sheet after ${TIMEOUT}s"
   fi
 
   if [ $((ELAPSED % 15)) -eq 0 ]; then
-    log "WAIT" "Phase: ${PHASE:-unknown} (${ELAPSED}s elapsed)"
+    log "WAIT" "Sheet ID: ${SHEET_ID:-pending}, rows: ${BACKFILL_COUNT} (${ELAPSED}s elapsed)"
   fi
 done
 
-# Resolve spreadsheet ID
-if [ -n "$GOOGLE_SPREADSHEET_ID" ]; then
-  SHEET_ID="$GOOGLE_SPREADSHEET_ID"
-else
-  SHEET_ID=$(grep -o 'wrote to spreadsheet [^ ]*' /tmp/e2e-sheets-api-${TS}.log 2>/dev/null \
-    | tail -1 | awk '{print $NF}')
-fi
-
-if [ -z "$SHEET_ID" ]; then
-  cat /tmp/e2e-sheets-api-${TS}.log 2>/dev/null || true
-  fail "No spreadsheet ID found"
-fi
-
-BACKFILL_COUNT=$(sheets_row_count "$SHEET_ID" "products")
-log "OK" "Backfill: ${BACKFILL_COUNT} products in sheet"
 log "INFO" "Spreadsheet: https://docs.google.com/spreadsheets/d/${SHEET_ID}"
 echo ""
 

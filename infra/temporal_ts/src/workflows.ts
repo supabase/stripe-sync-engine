@@ -44,7 +44,6 @@ export const statusQuery = defineQuery<WorkflowStatus>('status')
 
 export async function syncWorkflow(config: SyncConfig): Promise<void> {
   let state: Record<string, unknown> = config.state ?? {}
-  let backfillComplete = config.phase === 'live'
   let paused = false
   let deleted = false
   const eventBuffer: unknown[] = []
@@ -71,7 +70,7 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
   setHandler(
     statusQuery,
     (): WorkflowStatus => ({
-      phase: backfillComplete ? 'live' : 'backfill',
+      phase: 'running',
       paused,
       state,
       iteration,
@@ -90,14 +89,14 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
       await continueAsNew<typeof syncWorkflow>({
         ...config,
         state,
-        phase: backfillComplete ? ('live' as const) : ('backfill' as const),
+        phase: 'running' as const,
       })
     }
   }
 
-  // --- Setup ---
+  // --- Setup (first run only) ---
 
-  if (config.phase !== 'backfill' && config.phase !== 'live') {
+  if (config.phase !== 'running') {
     await setup(config)
     if (deleted) {
       await teardown(config)
@@ -105,38 +104,24 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     }
   }
 
-  // --- Main loop: interleaved backfill + live events ---
+  // --- Main loop: continuous reconciliation + optimistic updates ---
 
   while (true) {
     await waitWhilePaused()
     if (deleted) break
 
-    // 1. Drain buffered events (always, even during backfill)
+    // 1. Optimistic updates: drain buffered events (stateless — no cursors)
     if (eventBuffer.length > 0) {
       const batch = eventBuffer.splice(0, EVENT_BATCH_SIZE)
-      const result = await sync({ ...config, state }, batch)
-      state = { ...state, ...result.state }
+      await sync(config, batch) // no state, fire-and-forget
       await tickIteration()
-      continue // Re-check for more events before doing backfill
+      continue // Re-check for more events before reconciliation
     }
 
-    // 2. Backfill page (if not complete)
-    if (!backfillComplete) {
-      const result = await sync({ ...config, state })
-      state = { ...state, ...result.state }
-      await tickIteration()
-
-      if (result.all_complete) {
-        backfillComplete = true
-      } else if (result.state_count === 0 && result.errors.length === 0) {
-        // Safety valve: no progress and no errors means nothing left to do
-        backfillComplete = true
-      }
-      continue
-    }
-
-    // 3. Backfill done, no events — wait for events or timeout
-    await condition(() => eventBuffer.length > 0 || deleted, 60_000)
+    // 2. Reconciliation: next page (state carries pagination cursors forever)
+    const result = await sync({ ...config, state })
+    state = { ...state, ...result.state }
+    await tickIteration()
   }
 
   // Teardown on delete

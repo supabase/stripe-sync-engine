@@ -5,7 +5,7 @@ export interface SyncConfig {
   destination_config: Record<string, unknown>
   streams?: Array<{ name: string; sync_mode?: string }>
   state?: Record<string, unknown>
-  phase?: 'setup' | 'backfill' | 'live'
+  phase?: 'setup' | 'running'
 }
 
 export interface SyncResult {

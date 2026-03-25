@@ -117,7 +117,7 @@ describe('Streaming activities with heartbeats', () => {
         taskQueue: 'stream-test-1',
       })
 
-      // Wait for backfill to complete (sync returns all_complete: true), then delete in live
+      // Wait for reconciliation to run, then delete
       await new Promise((r) => setTimeout(r, 8000))
       await handle.signal('delete')
       await handle.result()
@@ -202,7 +202,7 @@ describe('Streaming activities with heartbeats', () => {
 
       await worker.runUntil(async () => {
         const handle = await testEnv.client.workflow.start('syncWorkflow', {
-          args: [{ ...config, phase: 'live' as const }],
+          args: [{ ...config, phase: 'running' as const }],
           workflowId: 'stream-test-2',
           taskQueue: 'stream-test-2',
         })

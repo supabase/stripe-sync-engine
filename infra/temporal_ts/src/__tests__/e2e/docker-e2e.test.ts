@@ -193,18 +193,18 @@ describe(
         let verificationError: string | undefined
 
         await worker.runUntil(async () => {
-          // Poll until live phase
+          // Poll until data appears in Postgres
           while (true) {
             await new Promise((r) => setTimeout(r, 1000))
             try {
-              const status = await handle.query('status')
-              if (status.phase === 'live') break
+              const result = await pgClient!.query(
+                `SELECT count(*) AS cnt FROM "${schema}"."products"`
+              )
+              if (parseInt(result.rows[0].cnt, 10) > 0) break
             } catch {
-              // Workflow not ready yet
+              // Table may not exist yet
             }
           }
-
-          await new Promise((r) => setTimeout(r, 1000))
 
           try {
             const result = await pgClient!.query(
@@ -291,14 +291,16 @@ describe(
         let verificationError: string | undefined
 
         await worker.runUntil(async () => {
-          // Poll until live phase
+          // Poll until data appears in Postgres
           while (true) {
             await new Promise((r) => setTimeout(r, 1000))
             try {
-              const status = await handle.query('status')
-              if (status.phase === 'live') break
+              const result = await pgClient!.query(
+                `SELECT count(*) AS cnt FROM "${schema}"."products"`
+              )
+              if (parseInt(result.rows[0].cnt, 10) > 0) break
             } catch {
-              // Workflow not ready yet
+              // Table may not exist yet
             }
           }
 

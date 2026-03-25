@@ -15,27 +15,20 @@ const config = {
   streams: [{ name: 'customers' }, { name: 'products' }],
 }
 
-const completeResult: SyncResult = {
+const pageResult: SyncResult = {
   state: {
-    customers: { status: 'complete' },
-    products: { status: 'complete' },
+    customers: { cursor: 'page_1' },
+    products: { cursor: 'page_1' },
   },
-  all_complete: true,
-  state_count: 2,
-  errors: [],
-}
-
-const emptyResult: SyncResult = {
-  state: {},
   all_complete: false,
-  state_count: 0,
+  state_count: 2,
   errors: [],
 }
 
 function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities {
   return {
     setup: async () => {},
-    sync: async () => completeResult,
+    sync: async () => pageResult,
     teardown: async () => {},
     ...overrides,
   }
@@ -52,12 +45,23 @@ afterAll(async () => {
 })
 
 describe('SyncWorkflow', () => {
-  it('runs setup, backfill, then waits for events until delete', async () => {
+  it('runs setup then continuous reconciliation until delete', async () => {
+    let setupCalled = false
+    let syncCallCount = 0
+
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-1',
       workflowsPath,
-      activities: stubActivities(),
+      activities: stubActivities({
+        setup: async () => {
+          setupCalled = true
+        },
+        sync: async () => {
+          syncCallCount++
+          return pageResult
+        },
+      }),
     })
 
     await worker.runUntil(async () => {
@@ -67,14 +71,22 @@ describe('SyncWorkflow', () => {
         taskQueue: 'test-queue-1',
       })
 
-      // Let it reach live phase, then delete
+      // Let it run several reconciliation pages
       await new Promise((r) => setTimeout(r, 2000))
+
+      const status = await handle.query('status')
+      expect(status.phase).toBe('running')
+      expect(status.iteration).toBeGreaterThan(0)
+
       await handle.signal('delete')
       await handle.result()
+
+      expect(setupCalled).toBe(true)
+      expect(syncCallCount).toBeGreaterThan(1)
     })
   })
 
-  it('pages through backfill until all_complete', async () => {
+  it('accumulates state across reconciliation pages', async () => {
     let syncCallCount = 0
 
     const worker = await Worker.create({
@@ -82,17 +94,15 @@ describe('SyncWorkflow', () => {
       taskQueue: 'test-queue-2',
       workflowsPath,
       activities: stubActivities({
-        sync: async () => {
+        sync: async (cfg) => {
           syncCallCount++
-          if (syncCallCount < 3) {
-            return {
-              state: { customers: { cursor: `page_${syncCallCount}` } },
-              all_complete: false,
-              state_count: 1,
-              errors: [],
-            }
+          // Return different cursors each page to verify accumulation
+          return {
+            state: { customers: { cursor: `page_${syncCallCount}` } },
+            all_complete: syncCallCount >= 3,
+            state_count: 1,
+            errors: [],
           }
-          return completeResult
         },
       }),
     })
@@ -104,12 +114,18 @@ describe('SyncWorkflow', () => {
         taskQueue: 'test-queue-2',
       })
 
-      // Backfill pages then enters live, signal delete
+      // Let it run several pages — reconciliation continues even after all_complete
       await new Promise((r) => setTimeout(r, 3000))
+
+      const status = await handle.query('status')
+      // State should have accumulated cursor from latest page
+      expect(status.state).toHaveProperty('customers')
+
+      // Reconciliation keeps running past all_complete
+      expect(syncCallCount).toBeGreaterThan(3)
+
       await handle.signal('delete')
       await handle.result()
-
-      expect(syncCallCount).toBeGreaterThanOrEqual(3)
     })
   })
 
@@ -142,17 +158,17 @@ describe('SyncWorkflow', () => {
     })
   })
 
-  it('processes stripe_event signals', async () => {
-    const syncCalls: unknown[][] = []
+  it('processes stripe_event signals as stateless optimistic updates', async () => {
+    const syncCalls: { config: any; input?: unknown[] }[] = []
 
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-4',
       workflowsPath,
       activities: stubActivities({
-        sync: async (_config, input?) => {
-          if (input) syncCalls.push(input)
-          return completeResult
+        sync: async (cfg, input?) => {
+          syncCalls.push({ config: cfg, input: input ?? undefined })
+          return pageResult
         },
       }),
     })
@@ -164,8 +180,10 @@ describe('SyncWorkflow', () => {
         taskQueue: 'test-queue-4',
       })
 
-      // Wait for live phase
-      await new Promise((r) => setTimeout(r, 2000))
+      // Let reconciliation start
+      await new Promise((r) => setTimeout(r, 1500))
+
+      // Send events — these should be processed as stateless optimistic updates
       await handle.signal('stripe_event', {
         id: 'evt_1',
         type: 'customer.created',
@@ -174,23 +192,31 @@ describe('SyncWorkflow', () => {
         id: 'evt_2',
         type: 'product.updated',
       })
+
       await new Promise((r) => setTimeout(r, 2000))
       await handle.signal('delete')
       await handle.result()
 
-      // sync should have been called with the events as input
-      expect(syncCalls.length).toBeGreaterThanOrEqual(1)
-      const allEvents = syncCalls.flat()
+      // Find event-bearing sync calls (input is defined)
+      const eventCalls = syncCalls.filter((c) => c.input)
+      expect(eventCalls.length).toBeGreaterThanOrEqual(1)
+
+      const allEvents = eventCalls.flatMap((c) => c.input!)
       expect(allEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'evt_1' }),
           expect.objectContaining({ id: 'evt_2' }),
         ])
       )
+
+      // Event calls should NOT include state in config (stateless)
+      for (const call of eventCalls) {
+        expect(call.config).not.toHaveProperty('state')
+      }
     })
   })
 
-  it('triggers teardown on delete during backfill', async () => {
+  it('triggers teardown on delete during reconciliation', async () => {
     let teardownCalled = false
 
     const worker = await Worker.create({
@@ -199,7 +225,7 @@ describe('SyncWorkflow', () => {
       workflowsPath,
       activities: stubActivities({
         sync: async () => {
-          // Slow sync so delete arrives mid-backfill
+          // Slow sync so delete arrives mid-reconciliation
           await new Promise((r) => setTimeout(r, 500))
           return {
             state: { customers: { cursor: 'page_1' } },
