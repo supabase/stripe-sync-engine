@@ -32,5 +32,5 @@ ENV NODE_ENV=production
 ENV GIT_COMMIT=$GIT_COMMIT
 ENV BUILD_DATE=$BUILD_DATE
 ENV COMMIT_URL=$COMMIT_URL
-ENTRYPOINT ["node", "dist/cli.js"]
+ENTRYPOINT ["node", "dist/cli/index.js"]
 CMD ["serve"]

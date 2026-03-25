@@ -315,7 +315,8 @@ export function createApp(resolver: ConnectorResolver) {
       info: {
         title: 'Stripe Sync Engine',
         version: '1.0.0',
-        description: 'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).',
+        description:
+          'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).',
       },
     })
     spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)
