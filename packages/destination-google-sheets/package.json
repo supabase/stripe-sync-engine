@@ -11,7 +11,12 @@
     }
   },
   "bin": {
-    "destination-google-sheets": "./dist/bin.js"
+    "destination-google-sheets": "./src/bin.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "destination-google-sheets": "./dist/bin.js"
+    }
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/bin.js",

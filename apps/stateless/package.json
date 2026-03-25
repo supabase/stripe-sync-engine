@@ -5,8 +5,14 @@
   "description": "Stripe Sync Engine stateless app — CLI and HTTP API for one-shot sync",
   "type": "module",
   "bin": {
-    "sync-engine-stateless": "./dist/cli/index.js",
-    "sync-engine-stateless-api": "./dist/api/index.js"
+    "sync-engine-stateless": "./src/cli/index.ts",
+    "sync-engine-stateless-api": "./src/api/index.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "sync-engine-stateless": "./dist/cli/index.js",
+      "sync-engine-stateless-api": "./dist/api/index.js"
+    }
   },
   "exports": {
     ".": {

@@ -59,13 +59,9 @@ jobs:
 
       - name: Docker tests
         run: |
-          # Try pulling pre-built image; fall back to local build
           SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
           IMAGE="ghcr.io/${{ github.repository }}:${SHA}"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Image $IMAGE not found in ghcr.io, building locally"
-            docker build -t "$IMAGE" .
-          fi
+          docker pull "$IMAGE"
           if [ -n "${STRIPE_API_KEY:-}" ]; then
             bash tests/docker-test.sh "$IMAGE"
           else
