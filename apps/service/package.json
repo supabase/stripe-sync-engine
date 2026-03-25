@@ -25,9 +25,10 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
-    "@hono/swagger-ui": "^0.6",
+    "@scalar/hono-api-reference": "^0.6",
     "@hono/zod-openapi": "^1.2",
     "@stripe/sync-engine": "workspace:*",
+    "@stripe/sync-ts-cli": "workspace:*",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4",

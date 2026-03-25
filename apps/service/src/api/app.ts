@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { swaggerUI } from '@hono/swagger-ui'
+import { apiReference } from '@scalar/hono-api-reference'
 import type { ConnectorResolver, Message } from '@stripe/sync-engine'
 import { createConnectorResolver, parseNdjsonStream } from '@stripe/sync-engine'
 import { ndjsonResponse } from '@stripe/sync-engine'
@@ -735,7 +735,7 @@ export function createApp(options?: AppOptions) {
     },
   })
 
-  app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+  app.get('/docs', apiReference({ url: '/openapi.json' }))
 
   return app
 }

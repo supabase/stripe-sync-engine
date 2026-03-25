@@ -35,7 +35,7 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
-    "@hono/swagger-ui": "^0.6",
+    "@scalar/hono-api-reference": "^0.6",
     "@hono/zod-openapi": "^1.2",
     "@stripe/sync-destination-google-sheets": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",

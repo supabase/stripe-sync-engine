@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { swaggerUI } from '@hono/swagger-ui'
+import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
 import type { Message, ConnectorResolver, SyncParams as SyncParamsType } from '../lib/index.js'
 import { createEngineFromParams, parseNdjsonStream, SyncParams } from '../lib/index.js'
@@ -270,7 +270,7 @@ export function createApp(resolver: ConnectorResolver) {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
       const engine = await createEngineFromParams(params, resolver)
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
-      return ndjsonResponse(engine.run(input)) as any
+      return ndjsonResponse(engine.sync(input)) as any
     }
   )
 
@@ -287,7 +287,7 @@ export function createApp(resolver: ConnectorResolver) {
     },
   })
 
-  app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+  app.get('/docs', apiReference({ url: '/openapi.json' }))
 
   return app
 }

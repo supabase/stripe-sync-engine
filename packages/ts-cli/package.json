@@ -21,8 +21,8 @@
     },
     "./openapi": {
       "bun": "./src/openapi/index.ts",
-      "types": "./dist/openapi.d.ts",
-      "import": "./dist/openapi.js"
+      "types": "./dist/openapi/index.d.ts",
+      "import": "./dist/openapi/index.js"
     }
   },
   "scripts": {

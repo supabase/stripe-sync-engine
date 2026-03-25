@@ -1,4 +1,6 @@
 #!/usr/bin/env node
 import { runMain } from 'citty'
-import { program } from './command.js'
+import { createProgram } from './command.js'
+
+const program = await createProgram()
 runMain(program)

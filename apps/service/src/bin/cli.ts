@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config'
 import { runMain } from 'citty'
-import { main } from '../cli/main.js'
+import { createProgram } from '../cli/main.js'
 
-runMain(main)
+const program = await createProgram()
+runMain(program)
