@@ -13,6 +13,11 @@
       "types": "./src/config.ts",
       "import": "./src/config.ts",
       "default": "./src/config.ts"
+    },
+    "./ndjson": {
+      "types": "./src/ndjson.ts",
+      "import": "./src/ndjson.ts",
+      "default": "./src/ndjson.ts"
     }
   },
   "publishConfig": {
@@ -24,6 +29,10 @@
       "./config": {
         "types": "./dist/config.d.ts",
         "import": "./dist/config.js"
+      },
+      "./ndjson": {
+        "types": "./dist/ndjson.d.ts",
+        "import": "./dist/ndjson.js"
       }
     }
   },

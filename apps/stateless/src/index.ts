@@ -36,4 +36,4 @@ export {
   parseNdjsonStream,
 } from '@stripe/stateless-sync'
 
-export { ndjsonResponse } from './stream.js'
+export { ndjsonResponse } from '@stripe/ts-cli/ndjson'

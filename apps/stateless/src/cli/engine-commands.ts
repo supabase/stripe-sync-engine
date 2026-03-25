@@ -1,22 +1,16 @@
 import type { Message } from '@stripe/stateless-sync'
 import {
   createEngineFromParams,
-  parseNdjsonChunks,
   createConnectorResolver,
   forward,
   collect,
   SyncParams,
 } from '@stripe/stateless-sync'
 import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
-import { envPrefix, parseJsonOrFile, mergeConfig } from '@stripe/ts-cli'
+import { envPrefix, parseJsonOrFile, mergeConfig, parseStreams } from '@stripe/ts-cli'
+import { readStdin, writeLine } from '@stripe/ts-cli/ndjson'
 
 const resolver = createConnectorResolver({})
-
-/** Parse comma-separated stream names into the streams array format. */
-function parseStreams(value: string | undefined): Array<{ name: string }> | undefined {
-  if (!value) return undefined
-  return value.split(',').map((name) => ({ name: name.trim() }))
-}
 
 /** Resolve CLI options + env vars + config file into SyncParams. */
 export function resolveParams(opts: {
@@ -54,16 +48,6 @@ export function resolveParams(opts: {
     console.error('Failed to resolve sync params — check your options and config')
     process.exit(1)
   }
-}
-
-/** Write a single NDJSON line to stdout. */
-function writeLine(obj: unknown) {
-  process.stdout.write(JSON.stringify(obj) + '\n')
-}
-
-/** Read NDJSON lines from stdin. */
-function readStdin(): AsyncIterable<unknown> {
-  return parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>)
 }
 
 // MARK: - Commands

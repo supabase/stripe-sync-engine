@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { Command } from 'commander'
-import { parseNdjsonChunks } from '@stripe/stateless-sync'
+import { readStdin, writeLine } from '@stripe/ts-cli/ndjson'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run.js'
 
 const program = new Command()
@@ -40,35 +40,31 @@ addSyncOptions(
   program.command('check').description('Check source and destination connectivity')
 ).action(async (opts) => {
   const result = await checkSync({ syncId: opts.syncId, dataDir: opts.dataDir })
-  process.stdout.write(JSON.stringify(result) + '\n')
+  writeLine(result)
 })
 
 addSyncOptions(
   program.command('read').description('Read records from the source connector')
 ).action(async (opts) => {
-  const $stdin = !process.stdin.isTTY
-    ? (parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>)
-    : undefined
+  const $stdin = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of readSync({ syncId: opts.syncId, dataDir: opts.dataDir, $stdin })) {
-    process.stdout.write(JSON.stringify(msg) + '\n')
+    writeLine(msg)
   }
 })
 
 addSyncOptions(
   program.command('write').description('Write messages to the destination connector')
 ).action(async (opts) => {
-  const $stdin = parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>
+  const $stdin = readStdin()
   for await (const msg of writeSync({ syncId: opts.syncId, dataDir: opts.dataDir, $stdin })) {
-    process.stdout.write(JSON.stringify(msg) + '\n')
+    writeLine(msg)
   }
 })
 
 addSyncOptions(program.command('run').description('Run a full sync')).action(async (opts) => {
-  const $stdin = !process.stdin.isTTY
-    ? (parseNdjsonChunks(process.stdin as AsyncIterable<Buffer>) as AsyncIterable<unknown>)
-    : undefined
+  const $stdin = !process.stdin.isTTY ? readStdin() : undefined
   for await (const msg of runSync({ syncId: opts.syncId, dataDir: opts.dataDir, $stdin })) {
-    process.stdout.write(JSON.stringify(msg) + '\n')
+    writeLine(msg)
   }
 })
 

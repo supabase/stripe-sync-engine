@@ -1,3 +1,17 @@
+import * as readline from 'node:readline'
+
+/** Read NDJSON lines from stdin. */
+export async function* readStdin(): AsyncIterable<unknown> {
+  for await (const line of readline.createInterface({ input: process.stdin })) {
+    if (line.trim()) yield JSON.parse(line)
+  }
+}
+
+/** Write a single NDJSON line to stdout. */
+export function writeLine(obj: unknown) {
+  process.stdout.write(JSON.stringify(obj) + '\n')
+}
+
 /** Wrap an AsyncIterable into an NDJSON streaming Response (application/x-ndjson). */
 export function ndjsonResponse<T>(iterable: AsyncIterable<T>): Response {
   const encoder = new TextEncoder()

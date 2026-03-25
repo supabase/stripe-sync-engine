@@ -7,7 +7,7 @@ import type {
   SyncParams as SyncParamsType,
 } from '@stripe/stateless-sync'
 import { createEngineFromParams, parseNdjsonStream, SyncParams } from '@stripe/stateless-sync'
-import { ndjsonResponse } from '../stream.js'
+import { ndjsonResponse } from '@stripe/ts-cli/ndjson'
 
 // ── Shared schemas ──────────────────────────────────────────────
 

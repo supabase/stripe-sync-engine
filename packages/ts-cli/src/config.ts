@@ -95,6 +95,16 @@ export function parseJsonOrFile(value: string | undefined): Record<string, unkno
   return configFromFile(trimmed)
 }
 
+/** Parse comma-separated stream names into the streams array format. */
+export function parseStreams(value: string | undefined): Array<{ name: string }> | undefined {
+  if (!value) return undefined
+  return value
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => ({ name }))
+}
+
 /** Try to JSON-parse a string value. Returns the original string if parsing fails. */
 function tryJsonParse(value: string): unknown {
   try {

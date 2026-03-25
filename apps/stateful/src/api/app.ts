@@ -3,11 +3,8 @@ import { join } from 'node:path'
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import type { ConnectorResolver, Message } from '@stripe/sync-engine-stateless'
-import {
-  createConnectorResolver,
-  ndjsonResponse,
-  parseNdjsonStream,
-} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver, parseNdjsonStream } from '@stripe/sync-engine-stateless'
+import { ndjsonResponse } from '@stripe/ts-cli/ndjson'
 import {
   StatefulSync,
   buildSchemas,

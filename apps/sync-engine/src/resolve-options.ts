@@ -1,6 +1,6 @@
 import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
 import { SyncParams } from '@stripe/stateless-sync'
-import { envPrefix, mergeConfig, parseJsonOrFile } from '@stripe/ts-cli'
+import { envPrefix, mergeConfig, parseJsonOrFile, parseStreams } from '@stripe/ts-cli'
 
 export interface CliOptions {
   // Stripe flags
@@ -24,16 +24,6 @@ export interface CliOptions {
   connectorsFromCommandMap?: string
   connectorsFromPath?: boolean // Commander inverts --no-connectors-from-path → false
   connectorsFromNpm?: boolean
-}
-
-/** Parse comma-separated stream names into the streams array format. */
-function parseStreams(value: string | undefined): Array<{ name: string }> | undefined {
-  if (!value) return undefined
-  return value
-    .split(',')
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((name) => ({ name }))
 }
 
 /** Infer source connector name from flags. */

@@ -1,1 +1,1 @@
-export { envPrefix, configFromFile, mergeConfig, parseJsonOrFile } from './config.js'
+export { envPrefix, configFromFile, mergeConfig, parseJsonOrFile, parseStreams } from './config.js'
