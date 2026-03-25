@@ -19,22 +19,16 @@ const retryPolicy = {
   maximumAttempts: 10,
 } as const
 
-// Health check: 30s, no retry
-const { healthCheck } = proxyActivities<SyncActivities>({
-  startToCloseTimeout: '30s',
+// Setup/teardown: 2m with retry
+const { setup, teardown } = proxyActivities<SyncActivities>({
+  startToCloseTimeout: '2m',
+  retry: retryPolicy,
 })
 
-// Setup/teardown/process event: 2m with retry
-const { sourceSetup, destinationSetup, processEvent, sourceTeardown, destinationTeardown } =
-  proxyActivities<SyncActivities>({
-    startToCloseTimeout: '2m',
-    retry: retryPolicy,
-  })
-
-// Data activities: 5m with retry and heartbeat
-const { backfillPage, writeBatch } = proxyActivities<SyncActivities>({
-  startToCloseTimeout: '5m',
-  heartbeatTimeout: '1m',
+// Sync: 10m with retry and heartbeat
+const { sync } = proxyActivities<SyncActivities>({
+  startToCloseTimeout: '10m',
+  heartbeatTimeout: '2m',
   retry: retryPolicy,
 })
 
@@ -90,21 +84,6 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     await condition(() => !paused || deleted)
   }
 
-  function updateCursors(stateMessages: Array<{ stream?: string; data?: unknown }> | undefined) {
-    if (!stateMessages) return
-    for (const msg of stateMessages) {
-      if (msg.stream) {
-        cursors[msg.stream] = msg.data
-      }
-    }
-  }
-
-  function updateCursorsFromHash(stateHash: Record<string, unknown>) {
-    for (const [stream, data] of Object.entries(stateHash)) {
-      cursors[stream] = data
-    }
-  }
-
   async function tickIteration() {
     iteration++
     if (iteration >= CONTINUE_AS_NEW_THRESHOLD) {
@@ -116,57 +95,27 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
     }
   }
 
-  // --- Teardown ---
-
-  async function runTeardown() {
-    await destinationTeardown(config)
-    await sourceTeardown(config)
-  }
-
   // --- Setup phase ---
 
   async function runSetup() {
-    if (deleted) {
-      await runTeardown()
-      return
-    }
-    await healthCheck(config)
-    await sourceSetup(config)
-    await destinationSetup(config)
+    await setup(config)
   }
 
   // --- Backfill phase ---
 
-  async function backfillStream(streamName: string) {
-    let cursor = cursors[streamName]
-
+  async function runBackfill() {
     while (true) {
       await waitWhilePaused()
       if (deleted) return
 
-      const result = await backfillPage(config, streamName, cursor)
-      const records = result.records
-      if (!records || records.length === 0) break
-
-      const writeResult = await writeBatch(config, records)
-      updateCursors(writeResult.states)
-      cursor = cursors[streamName]
+      const result = await sync({ ...config, cursors })
+      cursors = { ...cursors, ...result.cursors }
 
       await tickIteration()
 
-      const complete = result.stream_statuses?.some((s) => s.status === 'complete')
-      if (complete) break
-    }
-  }
-
-  async function runBackfill() {
-    const streams = config.streams ?? []
-    for (const streamConfig of streams) {
-      await backfillStream(streamConfig.name)
-      if (deleted) {
-        await runTeardown()
-        return
-      }
+      if (result.all_complete) break
+      // Safety valve: no progress and no errors means nothing left to do
+      if (result.state_count === 0 && result.errors.length === 0) break
     }
   }
 
@@ -175,30 +124,18 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
   async function runLive() {
     while (true) {
       await waitWhilePaused()
-      if (deleted) {
-        await runTeardown()
-        return
-      }
+      if (deleted) return
 
       // Wait for events or 60s timeout
       await condition(() => eventBuffer.length > 0 || deleted, 60_000)
 
-      if (eventBuffer.length === 0 && !deleted) continue
-      if (deleted) {
-        await runTeardown()
-        return
-      }
+      if (deleted) return
+      if (eventBuffer.length === 0) continue
 
       // Process batch
       const batch = eventBuffer.splice(0, EVENT_BATCH_SIZE)
-      if (batch.length > 0) {
-        for (const event of batch) {
-          const result = await processEvent(config, event)
-          if (result.state && Object.keys(result.state).length > 0) {
-            updateCursorsFromHash(result.state)
-          }
-        }
-      }
+      const result = await sync({ ...config, cursors }, batch)
+      cursors = { ...cursors, ...result.cursors }
 
       await tickIteration()
     }
@@ -209,21 +146,39 @@ export async function syncWorkflow(config: SyncConfig): Promise<void> {
   switch (phase) {
     case 'setup':
       await runSetup()
-      if (deleted) return
+      if (deleted) {
+        await teardown(config)
+        return
+      }
       phase = 'backfill'
       await runBackfill()
-      if (deleted) return
+      if (deleted) {
+        await teardown(config)
+        return
+      }
       phase = 'live'
       await runLive()
+      if (deleted) {
+        await teardown(config)
+      }
       break
     case 'backfill':
       await runBackfill()
-      if (deleted) return
+      if (deleted) {
+        await teardown(config)
+        return
+      }
       phase = 'live'
       await runLive()
+      if (deleted) {
+        await teardown(config)
+      }
       break
     case 'live':
       await runLive()
+      if (deleted) {
+        await teardown(config)
+      }
       break
   }
 }

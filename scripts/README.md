@@ -41,11 +41,11 @@ These use the sync-engine CLI which handles discover → read → write in one s
 
 ## Utilities
 
-| Script               | Description                                      |
-| -------------------- | ------------------------------------------------ |
-| `reset-postgres.sh`      | Drop all non-system schemas and tables in public        |
-| `publish-packages.sh`    | Publish all non-private packages to `$STRIPE_NPM_REGISTRY` |
-| `d2.mjs`                 | Render D2 diagrams to SVG                               |
+| Script                | Description                                                |
+| --------------------- | ---------------------------------------------------------- |
+| `reset-postgres.sh`   | Drop all non-system schemas and tables in public           |
+| `publish-packages.sh` | Publish all non-private packages to `$STRIPE_NPM_REGISTRY` |
+| `d2.mjs`              | Render D2 diagrams to SVG                                  |
 
 ## Environment variables
 

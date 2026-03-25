@@ -6,6 +6,8 @@ async function main() {
   const temporalNamespace = process.env.TEMPORAL_NAMESPACE || 'default'
   const port = Number(process.env.WEBHOOK_BRIDGE_PORT || '8088')
 
+  const defaultWorkflowId = process.env.DEFAULT_WORKFLOW_ID || ''
+
   const connection = await Connection.connect({ address: temporalAddress })
   const client = new Client({ connection, namespace: temporalNamespace })
 
@@ -20,6 +22,28 @@ async function main() {
       try {
         const body = await readBody(req)
         const event = JSON.parse(body)
+
+        // When DEFAULT_WORKFLOW_ID is set, signal that workflow directly
+        // (bypasses account-based routing — useful for non-Connect test keys)
+        if (defaultWorkflowId) {
+          try {
+            const handle = client.workflow.getHandle(defaultWorkflowId)
+            await handle.signal('stripe_event', event)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ status: 'ok', signaled: 1, workflow_id: defaultWorkflowId }))
+          } catch (err: any) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(
+              JSON.stringify({
+                status: 'error',
+                workflow_id: defaultWorkflowId,
+                error: err.message,
+              })
+            )
+          }
+          return
+        }
+
         const accountId = event.account || event?.data?.object?.account
 
         if (!accountId) {
@@ -62,6 +86,9 @@ async function main() {
     console.log('Starting webhook bridge...')
     console.log(`  Temporal: ${temporalAddress} (${temporalNamespace})`)
     console.log(`  Port:     ${port}`)
+    if (defaultWorkflowId) {
+      console.log(`  Default workflow: ${defaultWorkflowId}`)
+    }
     console.log(`Webhook bridge listening on port ${port}`)
   })
 

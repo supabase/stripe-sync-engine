@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
 import path from 'node:path'
-import type { SyncActivities, CategorizedMessages } from '../types'
+import type { SyncActivities, SyncResult } from '../types'
 
 // workflowsPath must point to compiled JS (Temporal bundles it for V8 sandbox)
 const workflowsPath = path.resolve(process.cwd(), 'dist/workflows.js')
@@ -15,27 +15,28 @@ const config = {
   streams: [{ name: 'customers' }, { name: 'products' }],
 }
 
-const emptyResult: CategorizedMessages = {
-  records: [],
-  states: [],
+const completeResult: SyncResult = {
+  cursors: {
+    customers: { status: 'complete' },
+    products: { status: 'complete' },
+  },
+  all_complete: true,
+  state_count: 2,
   errors: [],
-  stream_statuses: [],
-  messages: [],
+}
+
+const emptyResult: SyncResult = {
+  cursors: {},
+  all_complete: false,
+  state_count: 0,
+  errors: [],
 }
 
 function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities {
   return {
-    healthCheck: async () => ({
-      source: { status: 'succeeded' },
-      destination: { status: 'succeeded' },
-    }),
-    sourceSetup: async () => {},
-    destinationSetup: async () => {},
-    sourceTeardown: async () => {},
-    destinationTeardown: async () => {},
-    backfillPage: async () => emptyResult,
-    writeBatch: async () => emptyResult,
-    processEvent: async () => ({ records_written: 0, state: {} }),
+    setup: async () => {},
+    sync: async () => completeResult,
+    teardown: async () => {},
     ...overrides,
   }
 }
@@ -73,47 +74,26 @@ describe('SyncWorkflow', () => {
     })
   })
 
-  it('pages through backfill records and writes them', async () => {
-    let backfillCallCount = 0
+  it('pages through backfill until all_complete', async () => {
+    let syncCallCount = 0
 
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-2',
       workflowsPath,
       activities: stubActivities({
-        backfillPage: async (_config, stream, _cursor) => {
-          backfillCallCount++
-          if (backfillCallCount <= 2) {
+        sync: async () => {
+          syncCallCount++
+          if (syncCallCount < 3) {
             return {
-              records: [
-                {
-                  type: 'record',
-                  stream,
-                  data: { id: `obj_${backfillCallCount}` },
-                  emitted_at: Date.now(),
-                },
-              ],
-              states: [],
+              cursors: { customers: { cursor: `page_${syncCallCount}` } },
+              all_complete: false,
+              state_count: 1,
               errors: [],
-              stream_statuses: [],
-              messages: [],
             }
           }
-          return emptyResult
+          return completeResult
         },
-        writeBatch: async () => ({
-          records: [],
-          states: [
-            {
-              type: 'state' as const,
-              stream: 'customers',
-              data: { cursor: 'abc' },
-            },
-          ],
-          errors: [],
-          stream_statuses: [],
-          messages: [{ type: 'state', stream: 'customers', data: { cursor: 'abc' } }],
-        }),
       }),
     })
 
@@ -124,9 +104,12 @@ describe('SyncWorkflow', () => {
         taskQueue: 'test-queue-2',
       })
 
+      // Backfill pages then enters live, signal delete
       await new Promise((r) => setTimeout(r, 3000))
       await handle.signal('delete')
       await handle.result()
+
+      expect(syncCallCount).toBeGreaterThanOrEqual(3)
     })
   })
 
@@ -160,11 +143,18 @@ describe('SyncWorkflow', () => {
   })
 
   it('processes stripe_event signals in live phase', async () => {
+    const syncCalls: unknown[][] = []
+
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-4',
       workflowsPath,
-      activities: stubActivities(),
+      activities: stubActivities({
+        sync: async (_config, input?) => {
+          if (input) syncCalls.push(input)
+          return completeResult
+        },
+      }),
     })
 
     await worker.runUntil(async () => {
@@ -174,6 +164,7 @@ describe('SyncWorkflow', () => {
         taskQueue: 'test-queue-4',
       })
 
+      // Wait for live phase
       await new Promise((r) => setTimeout(r, 2000))
       await handle.signal('stripe_event', {
         id: 'evt_1',
@@ -186,19 +177,39 @@ describe('SyncWorkflow', () => {
       await new Promise((r) => setTimeout(r, 2000))
       await handle.signal('delete')
       await handle.result()
+
+      // sync should have been called with the events as input
+      expect(syncCalls.length).toBeGreaterThanOrEqual(1)
+      const allEvents = syncCalls.flat()
+      expect(allEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'evt_1' }),
+          expect.objectContaining({ id: 'evt_2' }),
+        ])
+      )
     })
   })
 
   it('triggers teardown on delete during backfill', async () => {
+    let teardownCalled = false
+
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-5',
       workflowsPath,
       activities: stubActivities({
-        backfillPage: async () => {
-          // Slow backfill so delete arrives mid-backfill
+        sync: async () => {
+          // Slow sync so delete arrives mid-backfill
           await new Promise((r) => setTimeout(r, 500))
-          return emptyResult
+          return {
+            cursors: { customers: { cursor: 'page_1' } },
+            all_complete: false,
+            state_count: 1,
+            errors: [],
+          }
+        },
+        teardown: async () => {
+          teardownCalled = true
         },
       }),
     })
@@ -213,6 +224,8 @@ describe('SyncWorkflow', () => {
       await new Promise((r) => setTimeout(r, 300))
       await handle.signal('delete')
       await handle.result()
+
+      expect(teardownCalled).toBe(true)
     })
   })
 })

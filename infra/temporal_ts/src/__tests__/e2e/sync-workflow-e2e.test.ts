@@ -12,7 +12,7 @@ import Stripe from 'stripe'
 const STRIPE_API_KEY = process.env.STRIPE_API_KEY!
 const POSTGRES_URL =
   process.env.POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/postgres'
-const repoRoot = path.resolve(process.cwd(), '..')
+const repoRoot = path.resolve(process.cwd(), '../..')
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -32,11 +32,11 @@ function findFreePort(): Promise<number> {
 
 function startStatelessApi(port: number): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
-    const statelessDir = path.join(repoRoot, 'apps/stateless')
-    const apiEntry = path.join(statelessDir, 'dist/api/index.js')
+    const engineDir = path.join(repoRoot, 'apps/engine')
+    const apiEntry = path.join(engineDir, 'dist/api/index.js')
 
     const proc = spawn('node', [apiEntry], {
-      cwd: statelessDir,
+      cwd: engineDir,
       env: { ...process.env, PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -129,7 +129,7 @@ describe(
         let verificationError: string | undefined
 
         await worker.runUntil(async () => {
-          // Poll until live phase
+          // Poll until live phase (backfill complete)
           while (true) {
             await new Promise((r) => setTimeout(r, 1000))
             try {

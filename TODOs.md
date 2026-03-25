@@ -43,7 +43,7 @@ TODO:
 
 - [ ] Secret store for supabase, how do we use that? integrate with env based one?
 - [ ] Add how we allow for indexs and RLS to be possible in destination postgres
-- [ ] Inngest, how does a generic one work and does it help us?
-- [ ] Create input queue? What's up with that?
+- [x] Inngest, how does a generic one work and does it help us?
+- [x] Create input queue? What's up with that?
 
 - [ ] Test credential refreshing how

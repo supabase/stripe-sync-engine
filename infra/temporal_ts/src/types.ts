@@ -8,17 +8,11 @@ export interface SyncConfig {
   phase?: 'setup' | 'backfill' | 'live'
 }
 
-export interface CategorizedMessages {
-  records: unknown[]
-  states: Array<{ type: 'state'; stream: string; data: unknown }>
-  errors: unknown[]
-  stream_statuses: Array<{ type: 'stream_status'; stream: string; status: string }>
-  messages: unknown[]
-}
-
-export interface ProcessEventResult {
-  records_written: number
-  state: Record<string, unknown>
+export interface SyncResult {
+  cursors: Record<string, unknown>
+  all_complete: boolean
+  state_count: number
+  errors: Array<{ message: string; failure_type: string; stream?: string }>
 }
 
 export interface WorkflowStatus {
@@ -29,12 +23,7 @@ export interface WorkflowStatus {
 }
 
 export interface SyncActivities {
-  healthCheck(config: SyncConfig): Promise<unknown>
-  sourceSetup(config: SyncConfig): Promise<void>
-  destinationSetup(config: SyncConfig): Promise<void>
-  backfillPage(config: SyncConfig, stream: string, cursor: unknown): Promise<CategorizedMessages>
-  writeBatch(config: SyncConfig, records: unknown[]): Promise<CategorizedMessages>
-  processEvent(config: SyncConfig, event: unknown): Promise<ProcessEventResult>
-  sourceTeardown(config: SyncConfig): Promise<void>
-  destinationTeardown(config: SyncConfig): Promise<void>
+  setup(config: SyncConfig): Promise<void>
+  sync(config: SyncConfig, input?: unknown[]): Promise<SyncResult>
+  teardown(config: SyncConfig): Promise<void>
 }
