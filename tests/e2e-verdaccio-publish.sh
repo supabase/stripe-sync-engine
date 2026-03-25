@@ -106,6 +106,14 @@ publish_package() {
       }
     }
 
+    // Apply publishConfig overrides (exports, bin, main, etc.)
+    if (pkg.publishConfig) {
+      for (const [key, val] of Object.entries(pkg.publishConfig)) {
+        pkg[key] = val;
+      }
+      delete pkg.publishConfig;
+    }
+
     fs.writeFileSync('$stage_dir/package.json', JSON.stringify(pkg, null, 2) + '\n');
   "
 

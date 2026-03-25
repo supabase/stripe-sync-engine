@@ -12,6 +12,7 @@ const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
 interface PkgJson {
   name: string
   bin?: Record<string, string>
+  publishConfig?: { bin?: Record<string, string> }
 }
 
 function readPkgJson(dir: string): PkgJson {
@@ -147,7 +148,14 @@ describe.each(connectorDirs)('connector bin: %s', (dir) => {
     expect(typeof pkg.bin).toBe('object')
     const binPaths = Object.values(pkg.bin!)
     expect(binPaths.length).toBeGreaterThan(0)
+    // Dev bin points to .ts source; publishConfig.bin points to .js dist
     for (const p of binPaths) {
+      expect(p).toMatch(/\.(js|ts)$/)
+    }
+    // publishConfig.bin must exist and point to .js
+    const publishBin = pkg.publishConfig?.bin as Record<string, string> | undefined
+    expect(publishBin, 'publishConfig.bin should exist').toBeDefined()
+    for (const p of Object.values(publishBin!)) {
       expect(p).toMatch(/\.js$/)
     }
   })
