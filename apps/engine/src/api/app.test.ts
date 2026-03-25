@@ -45,6 +45,65 @@ function bodyHeaders(body: string): Record<string, string> {
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// OpenAPI spec
+// ---------------------------------------------------------------------------
+
+describe('GET /openapi.json', () => {
+  it('returns a valid OpenAPI 3.0 spec', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    expect(res.status).toBe(200)
+    const spec = await res.json()
+    expect(spec.openapi).toBe('3.0.0')
+    expect(spec.info.title).toBeDefined()
+    expect(spec.paths).toBeDefined()
+  })
+
+  it('includes all sync operation paths', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as { paths: Record<string, unknown> }
+    const paths = Object.keys(spec.paths)
+
+    expect(paths).toContain('/health')
+    expect(paths).toContain('/setup')
+    expect(paths).toContain('/teardown')
+    expect(paths).toContain('/check')
+    expect(paths).toContain('/read')
+    expect(paths).toContain('/write')
+    expect(paths).toContain('/sync')
+  })
+
+  it('documents the X-Sync-Params header on sync routes', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+
+    // /check is a GET with X-Sync-Params header
+    const checkOp = spec.paths['/check']?.get
+    expect(checkOp).toBeDefined()
+    const headerParam = checkOp.parameters?.find(
+      (p: any) => p.in === 'header' && p.name === 'x-sync-params'
+    )
+    expect(headerParam).toBeDefined()
+  })
+})
+
+describe('GET /docs', () => {
+  it('returns HTML (Scalar API reference)', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/docs')
+    expect(res.status).toBe(200)
+    const contentType = res.headers.get('content-type') ?? ''
+    expect(contentType).toContain('text/html')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Sync operations
+// ---------------------------------------------------------------------------
+
 describe('POST /setup', () => {
   it('returns 204', async () => {
     const app = createApp(resolver)

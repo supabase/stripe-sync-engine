@@ -30,6 +30,58 @@ function app() {
 }
 
 // ---------------------------------------------------------------------------
+// OpenAPI spec
+// ---------------------------------------------------------------------------
+
+describe('GET /openapi.json', () => {
+  it('returns a valid OpenAPI 3.0 spec', async () => {
+    const res = await app().request('/openapi.json')
+    expect(res.status).toBe(200)
+    const spec = await res.json()
+    expect(spec.openapi).toBe('3.0.0')
+    expect(spec.info.title).toBeDefined()
+    expect(spec.paths).toBeDefined()
+  })
+
+  it('includes credential, sync, and webhook paths', async () => {
+    const res = await app().request('/openapi.json')
+    const spec = (await res.json()) as { paths: Record<string, unknown> }
+    const paths = Object.keys(spec.paths)
+
+    expect(paths).toContain('/credentials')
+    expect(paths).toContain('/credentials/{id}')
+    expect(paths).toContain('/syncs')
+    expect(paths).toContain('/syncs/{id}')
+    expect(paths).toContain('/syncs/{id}/run')
+    expect(paths).toContain('/webhooks/{credential_id}')
+  })
+
+  it('tags operations for grouped CLI generation', async () => {
+    const res = await app().request('/openapi.json')
+    const spec = (await res.json()) as any
+    const allTags = new Set<string>()
+    for (const pathItem of Object.values(spec.paths) as any[]) {
+      for (const op of Object.values(pathItem) as any[]) {
+        if (op?.tags) op.tags.forEach((t: string) => allTags.add(t))
+      }
+    }
+    expect(allTags).toContain('Credentials')
+    expect(allTags).toContain('Syncs')
+    expect(allTags).toContain('Sync Operations')
+    expect(allTags).toContain('Webhooks')
+  })
+})
+
+describe('GET /docs', () => {
+  it('returns HTML (Scalar API reference)', async () => {
+    const res = await app().request('/docs')
+    expect(res.status).toBe(200)
+    const contentType = res.headers.get('content-type') ?? ''
+    expect(contentType).toContain('text/html')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
 

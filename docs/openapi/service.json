@@ -1,0 +1,1259 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Stripe Sync Service API",
+    "version": "1.0.0",
+    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress"
+  },
+  "components": {
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "tags": ["Status"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/credentials": {
+      "get": {
+        "operationId": "listCredentials",
+        "tags": ["Credentials"],
+        "summary": "List credentials",
+        "responses": {
+          "200": {
+            "description": "List of credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "type", "created_at", "updated_at"],
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["data", "has_more"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCredential",
+        "tags": ["Credentials"],
+        "summary": "Create credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type"],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "type", "created_at", "updated_at"],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/credentials/{id}": {
+      "get": {
+        "operationId": "getCredential",
+        "tags": ["Credentials"],
+        "summary": "Retrieve credential",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cred_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "type", "created_at", "updated_at"],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateCredential",
+        "tags": ["Credentials"],
+        "summary": "Update credential",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cred_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "type", "created_at", "updated_at"],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCredential",
+        "tags": ["Credentials"],
+        "summary": "Delete credential",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cred_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["id", "deleted"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Credential is referenced by one or more syncs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs": {
+      "get": {
+        "operationId": "listSyncs",
+        "tags": ["Syncs"],
+        "summary": "List syncs",
+        "responses": {
+          "200": {
+            "description": "List of syncs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "credential_id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          },
+                          "destination": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "credential_id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          },
+                          "streams": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "sync_mode": {
+                                  "type": "string",
+                                  "enum": ["incremental", "full_refresh"]
+                                }
+                              },
+                              "required": ["name"]
+                            }
+                          }
+                        },
+                        "required": ["id", "source", "destination"]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["data", "has_more"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSync",
+        "tags": ["Syncs"],
+        "summary": "Create sync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "credential_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "destination": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "credential_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "streams": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "sync_mode": {
+                          "type": "string",
+                          "enum": ["incremental", "full_refresh"]
+                        }
+                      },
+                      "required": ["name"]
+                    }
+                  }
+                },
+                "required": ["source", "destination"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "streams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "sync_mode": {
+                            "type": "string",
+                            "enum": ["incremental", "full_refresh"]
+                          }
+                        },
+                        "required": ["name"]
+                      }
+                    }
+                  },
+                  "required": ["id", "source", "destination"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}": {
+      "get": {
+        "operationId": "getSync",
+        "tags": ["Syncs"],
+        "summary": "Retrieve sync",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "streams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "sync_mode": {
+                            "type": "string",
+                            "enum": ["incremental", "full_refresh"]
+                          }
+                        },
+                        "required": ["name"]
+                      }
+                    }
+                  },
+                  "required": ["id", "source", "destination"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateSync",
+        "tags": ["Syncs"],
+        "summary": "Update sync",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "credential_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "destination": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "credential_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "streams": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "sync_mode": {
+                          "type": "string",
+                          "enum": ["incremental", "full_refresh"]
+                        }
+                      },
+                      "required": ["name"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "credential_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "streams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "sync_mode": {
+                            "type": "string",
+                            "enum": ["incremental", "full_refresh"]
+                          }
+                        },
+                        "required": ["name"]
+                      }
+                    }
+                  },
+                  "required": ["id", "source", "destination"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSync",
+        "tags": ["Syncs"],
+        "summary": "Delete sync",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted sync",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["id", "deleted"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/setup": {
+      "post": {
+        "operationId": "setupSync",
+        "tags": ["Sync Operations"],
+        "summary": "Set up destination schema for a sync",
+        "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Setup complete"
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/teardown": {
+      "post": {
+        "operationId": "teardownSync",
+        "tags": ["Sync Operations"],
+        "summary": "Tear down destination schema for a sync",
+        "description": "Drops destination tables. Irreversible.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Teardown complete"
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/check": {
+      "get": {
+        "operationId": "checkSync",
+        "tags": ["Sync Operations"],
+        "summary": "Check connector connection for a sync",
+        "description": "Validates the source/destination config and tests connectivity.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connection check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"]
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"]
+                    }
+                  },
+                  "required": ["source", "destination"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/read": {
+      "post": {
+        "operationId": "readSync",
+        "tags": ["Sync Operations"],
+        "summary": "Read records from the sync source",
+        "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides input.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/write": {
+      "post": {
+        "operationId": "writeSync",
+        "tags": ["Sync Operations"],
+        "summary": "Write records to the sync destination",
+        "description": "Reads NDJSON messages from the request body and writes them to the destination.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "type": "string",
+                "description": "Newline-delimited JSON sync messages, one per line",
+                "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of write result messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/syncs/{id}/run": {
+      "post": {
+        "operationId": "runSync",
+        "tags": ["Sync Operations"],
+        "summary": "Run full sync (read → write pipeline)",
+        "description": "Executes a complete source→destination sync. Streams NDJSON messages.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sync_abc123"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sync not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{credential_id}": {
+      "post": {
+        "operationId": "pushWebhook",
+        "tags": ["Webhooks"],
+        "summary": "Ingest a Stripe webhook event",
+        "description": "Receives a raw Stripe webhook and fans it out to all active syncs sharing the credential.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cred_abc123"
+            },
+            "required": true,
+            "name": "credential_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

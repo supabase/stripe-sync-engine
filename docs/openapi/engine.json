@@ -1,0 +1,361 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Stripe Sync Stateless API",
+    "version": "1.0.0",
+    "description": "Stripe Sync Engine stateless API — one-shot source/destination sync over HTTP. All sync endpoints accept configuration via the X-Sync-Params header (JSON-encoded SyncParams)."
+  },
+  "components": {
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "tags": ["Status"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/setup": {
+      "post": {
+        "operationId": "setup",
+        "tags": ["Sync"],
+        "summary": "Set up destination schema",
+        "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Setup complete"
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teardown": {
+      "post": {
+        "operationId": "teardown",
+        "tags": ["Sync"],
+        "summary": "Tear down destination schema",
+        "description": "Drops destination tables. Irreversible.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Teardown complete"
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/check": {
+      "get": {
+        "operationId": "check",
+        "tags": ["Sync"],
+        "summary": "Check connector connection",
+        "description": "Validates the source/destination config and tests connectivity.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connection check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"]
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"]
+                    }
+                  },
+                  "required": ["source", "destination"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/read": {
+      "post": {
+        "operationId": "read",
+        "tags": ["Sync"],
+        "summary": "Read records from source",
+        "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/write": {
+      "post": {
+        "operationId": "write",
+        "tags": ["Sync"],
+        "summary": "Write records to destination",
+        "description": "Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "type": "string",
+                "description": "Newline-delimited JSON sync messages, one per line",
+                "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of write result messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params or missing body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync": {
+      "post": {
+        "operationId": "sync",
+        "tags": ["Sync"],
+        "summary": "Run full sync (read → write pipeline)",
+        "description": "Executes a complete source→destination sync. Streams NDJSON messages. Optional NDJSON body provides catalog/state/event input.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+            },
+            "required": false,
+            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "name": "x-sync-params",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string",
+                  "description": "Newline-delimited JSON sync messages, one per line",
+                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
