@@ -70,6 +70,9 @@ jobs:
             postgres:18 \
             psql -h localhost -p 55432 -U postgres -d postgres -c 'create schema if not exists "stripe";'
 
+      - name: stripe-mock smoke test
+        run: bash e2e/stripe-mock.test.sh
+
       - name: Tests
         run: pnpm test
         env:
@@ -145,6 +148,11 @@ jobs:
 
       - name: Docker smoke test
         run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+
+      - name: Publish test
+        run: bash e2e/publish.test.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # E2E — pull Docker image, run e2e & connector-loading tests
@@ -226,3 +234,20 @@ jobs:
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+
+      # --- Service → Engine e2e (temporal.test.sh) ---
+
+      - name: Service → Engine e2e
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::temporal.test.sh skipped — STRIPE_API_KEY not available"
+            exit 0
+          fi
+          bash e2e/temporal.test.sh
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
