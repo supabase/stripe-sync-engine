@@ -176,7 +176,7 @@ export interface ConnectorsFrom {
    */
   path?: boolean
   /**
-   * Download `@stripe/source-*` / `@stripe/destination-*` from npm.
+   * Download `@stripe/sync-source-*` / `@stripe/sync-destination-*` from npm.
    * Default: `false`.
    */
   npm?: boolean
@@ -222,7 +222,7 @@ function configSchemaFromSpec(connector: {
  * 1. **Registered** — in-process connectors passed in `registered`. Always checked first.
  * 2. **commandMap** — explicit name→command mappings in `connectorsFrom.commandMap`.
  * 3. **path** — `node_modules/.bin` / PATH scan (enabled unless `connectorsFrom.path === false`).
- * 4. **npm** — `npx @stripe/source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
+ * 4. **npm** — `npx @stripe/sync-source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
  * 5. **Error** — connector not found.
  */
 export function createConnectorResolver(
@@ -263,7 +263,7 @@ export function createConnectorResolver(
 
     // npm: download from @stripe scope via npx
     if (connectorsFrom?.npm) {
-      return `npx @stripe/${role}-${name}`
+      return `npx @stripe/sync-${role}-${name}`
     }
 
     return undefined
@@ -283,7 +283,7 @@ export function createConnectorResolver(
       }
 
       throw new Error(
-        `Source connector "${name}" not found. Register it or install @stripe/source-${name}.`
+        `Source connector "${name}" not found. Register it or install @stripe/sync-source-${name}.`
       )
     },
 
@@ -300,7 +300,7 @@ export function createConnectorResolver(
       }
 
       throw new Error(
-        `Destination connector "${name}" not found. Register it or install @stripe/destination-${name}.`
+        `Destination connector "${name}" not found. Register it or install @stripe/sync-destination-${name}.`
       )
     },
 

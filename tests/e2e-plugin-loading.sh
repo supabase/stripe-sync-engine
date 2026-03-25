@@ -23,14 +23,14 @@ TMPDIR_BASE=$(mktemp -d)
 
 cleanup() {
   rm -rf "$TMPDIR_BASE"
-  rm -f "$REPO_ROOT"/stripe-protocol-*.tgz
-  rm -f "$REPO_ROOT"/stripe-stateless-sync-*.tgz
-  rm -f "$REPO_ROOT"/stripe-source-stripe-*.tgz
-  rm -f "$REPO_ROOT"/stripe-destination-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-destination-google-sheets-*.tgz
-  rm -f "$REPO_ROOT"/stripe-store-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-util-postgres-*.tgz
-  rm -f "$REPO_ROOT"/stripe-ts-cli-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-protocol-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-lib-stateless-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-source-stripe-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-destination-postgres-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-destination-google-sheets-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-store-postgres-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-util-postgres-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-ts-cli-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-*.tgz
 }
