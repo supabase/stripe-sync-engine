@@ -49,6 +49,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check OpenAPI specs are up to date
+        run: ./scripts/generate-openapi.sh --check
+
       - name: Initialize DB schema
         run: |
           docker run --rm \

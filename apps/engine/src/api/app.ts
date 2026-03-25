@@ -109,7 +109,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'setup',
       method: 'post',
       path: '/setup',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Set up destination schema',
       description:
         'Creates destination tables and applies migrations. Safe to call multiple times.',
@@ -135,7 +135,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'teardown',
       method: 'post',
       path: '/teardown',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Tear down destination schema',
       description: 'Drops destination tables. Irreversible.',
       request: { headers: XSyncParamsHeader },
@@ -160,7 +160,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'check',
       method: 'get',
       path: '/check',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Check connector connection',
       description: 'Validates the source/destination config and tests connectivity.',
       request: { headers: XSyncParamsHeader },
@@ -188,7 +188,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'read',
       method: 'post',
       path: '/read',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Read records from source',
       description:
         'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.',
@@ -217,7 +217,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'write',
       method: 'post',
       path: '/write',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Write records to destination',
       description:
         'Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.',
@@ -255,7 +255,7 @@ export function createApp(resolver: ConnectorResolver) {
       operationId: 'sync',
       method: 'post',
       path: '/sync',
-      tags: ['Sync'],
+      tags: ['Stateless Sync API'],
       summary: 'Run sync pipeline (read → write)',
       description:
         'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
@@ -285,7 +285,7 @@ export function createApp(resolver: ConnectorResolver) {
   app.doc('/openapi.json', {
     openapi: '3.0.0',
     info: {
-      title: 'Stripe Sync Stateless API',
+      title: 'Stripe Sync Engine',
       version: '1.0.0',
       description:
         'Stripe Sync Engine stateless API — one-shot source/destination sync over HTTP. ' +
