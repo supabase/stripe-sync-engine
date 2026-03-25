@@ -285,3 +285,5 @@ export default source
 
 export { buildResourceRegistry } from './resourceRegistry.js'
 export { catalogFromRegistry } from './catalog.js'
+export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'
+export type { ParsedResourceTable, ParsedOpenApiSpec } from './openapi/types.js'

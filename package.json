@@ -12,7 +12,8 @@
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "visualizer": "pnpm --filter @stripe/sync-visualizer dev"
   },
   "dependencies": {
     "pino": "^10.0.0"

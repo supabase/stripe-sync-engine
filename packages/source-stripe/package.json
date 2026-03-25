@@ -8,6 +8,11 @@
       "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./browser": {
+      "bun": "./src/openapi/browser.ts",
+      "types": "./dist/openapi/browser.d.ts",
+      "import": "./dist/openapi/browser.js"
     }
   },
   "bin": {

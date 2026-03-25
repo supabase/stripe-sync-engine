@@ -1,0 +1,4 @@
+.vercel
+.next
+.env*.local
+tsconfig.tsbuildinfo
