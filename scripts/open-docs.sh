@@ -8,11 +8,11 @@ APP="${1:-engine}"
 case "$APP" in
   engine)
     PORT="${PORT:-3000}"
-    CMD="node apps/engine/dist/cli/index.js serve --port $PORT"
+    CMD="bun apps/engine/src/cli/index.ts serve --port $PORT"
     ;;
   service)
     PORT="${PORT:-4020}"
-    CMD="node apps/service/dist/bin/cli.js serve --port $PORT"
+    CMD="bun apps/service/src/bin/cli.ts serve --port $PORT"
     ;;
   *)
     echo "Usage: $0 [engine|service]" >&2
