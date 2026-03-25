@@ -36,11 +36,8 @@ PACKAGES=$(curl -sf \
   -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Accept: application/vnd.github+json" \
   "https://api.github.com/orgs/${GITHUB_REPO_OWNER}/packages?package_type=npm&per_page=100" \
-  | node -e "
-    const pkgs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-    pkgs.filter(p => p.repository && p.repository.name === '${GITHUB_REPO_NAME}')
-        .forEach(p => console.log('@${GITHUB_REPO_OWNER}/' + p.name));
-  ")
+  | jq -r --arg repo "$GITHUB_REPO_NAME" --arg owner "$GITHUB_REPO_OWNER" \
+    '.[] | select(.repository.name == $repo) | "@\($owner)/\(.name)"')
 
 if [ -z "$PACKAGES" ]; then
   echo "FAIL: no packages found for ${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}"
