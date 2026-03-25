@@ -53,18 +53,20 @@ jobs:
 
       - name: Build Docker image
         run: |
+          TAG="${GITHUB_REF_NAME//\//-}"
           docker build \
             --build-arg GIT_COMMIT=${{ github.sha }} \
             --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
             --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
             -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
-            -t ghcr.io/${{ github.repository }}:${{ github.ref_name }} \
+            -t ghcr.io/${{ github.repository }}:${TAG} \
             .
 
       - name: Push Docker image
         run: |
+          TAG="${GITHUB_REF_NAME//\//-}"
           docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker push ghcr.io/${{ github.repository }}:${TAG}
 
       - name: Docker smoke test
         run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
