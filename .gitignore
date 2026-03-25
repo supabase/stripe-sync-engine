@@ -27,6 +27,9 @@ private/
 # Git worktrees
 .worktrees/
 
+# Claude Code local state
+.claude/
+
 # Terraform state (contains secrets)
 *.tfstate
 *.tfstate.backup
