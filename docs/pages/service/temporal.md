@@ -6,9 +6,10 @@ title: Temporal Workflow Architecture
 
 When Temporal is enabled, sync lifecycle is managed by durable workflows instead of running in-process. The workflow orchestrates setup, continuous reconciliation, live event processing, and teardown.
 
-Two servers run independently:
+Three servers run independently:
 
-- **Service API** — config CRUD, credential management, webhook ingress, config resolution
+- **Webhook Server** — public-facing; receives raw Stripe events and signals the matching Temporal workflow(s)
+- **Service API** — internal; config CRUD, credential management, config resolution
 - **Engine API** — stateless sync execution (setup, sync, teardown via `X-Sync-Params`)
 
 Activities call the service for config resolution, then the engine for execution.
@@ -22,10 +23,13 @@ graph TD
         StripeWH["Stripe Webhooks"]
     end
 
-    subgraph Service["Sync Service"]
+    subgraph WebhookServer["Webhook Server (public)"]
+        WHRoute["POST /webhooks/{cred_id}"]
+    end
+
+    subgraph Service["Sync Service (internal)"]
         CRUD["/syncs CRUD"]
         Resolve["GET /syncs/{id}<br/>?include_credentials=true"]
-        WHRoute["/webhooks/{cred_id}"]
     end
 
     subgraph EngineAPI["Sync Engine"]
@@ -44,10 +48,12 @@ graph TD
         Sheets["Google Sheets"]
     end
 
+    %% Stripe → Webhook Server → Temporal
+    StripeWH --> WHRoute
+    WHRoute -- "signal: stripe_event" --> Workflow
+
     %% Service → Workflow
     CRUD -- "start / signal: delete" --> Workflow
-    WHRoute -- "signal: stripe_event" --> Workflow
-    StripeWH --> WHRoute
 
     %% Workflow → Activities
     Workflow --> Worker
@@ -101,19 +107,21 @@ sequenceDiagram
 
 ## Webhook Event Flow
 
-The webhook path crosses three boundaries (Stripe → Service → Temporal → Engine):
+The webhook path crosses four boundaries (Stripe → Webhook Server → Temporal → Service → Engine):
 
 ```mermaid
 sequenceDiagram
     participant Stripe
-    participant Service as Sync Service
+    participant Webhook as Webhook Server
     participant Workflow as syncWorkflow
     participant Activity
+    participant Service as Sync Service
     participant Engine as Sync Engine
 
-    Stripe->>Service: POST /webhooks/{credential_id}
-    Note over Service: Find all syncs with<br/>matching credential_id
-    Service->>Workflow: signal('stripe_event', event)
+    Stripe->>Webhook: POST /webhooks/{credential_id}
+    Note over Webhook: Scan syncs.json for<br/>matching credential_id
+    Webhook->>Workflow: signal('stripe_event', event)
+    Webhook-->>Stripe: 200 ok (fire-and-forget)
     Note over Workflow: Buffer event
 
     Note over Workflow: Next loop iteration
@@ -193,16 +201,18 @@ stateDiagram-v2
 
 ## Key Design Decisions
 
-### Why two servers?
+### Why three servers?
 
-The service and engine have different responsibilities:
+Each server has a single, clearly scoped responsibility:
 
-|             | Sync Service                                        | Sync Engine                                 |
-| ----------- | --------------------------------------------------- | ------------------------------------------- |
-| **Purpose** | Config CRUD, credential management, webhook ingress | Stateless sync execution                    |
-| **State**   | Stores configs, credentials                         | Manages cursor state via `selectStateStore` |
-| **Routes**  | `/syncs`, `/credentials`, `/webhooks`               | `/setup`, `/sync`, `/teardown`              |
-| **Config**  | Stored form (`credential_id` references)            | Resolved form (`X-Sync-Params`)             |
+|             | Webhook Server                                      | Sync Service                                        | Sync Engine                                 |
+| ----------- | --------------------------------------------------- | --------------------------------------------------- | ------------------------------------------- |
+| **Purpose** | Public webhook ingress; fan out signals to Temporal | Config CRUD, credential management, config resolution | Stateless sync execution                    |
+| **State**   | None — reads config store to locate matching syncs  | Stores configs, credentials                         | Manages cursor state via `selectStateStore` |
+| **Routes**  | `POST /webhooks/{credential_id}`                    | `/syncs`, `/credentials`                            | `/setup`, `/sync`, `/teardown`              |
+| **Exposure**| Public (Stripe POSTs here)                          | Internal                                            | Internal                                    |
+
+The webhook server requires only a Temporal client and the config store (read-only) to fan out signals. It never touches credentials or runs connectors.
 
 ### Why activities resolve each time?
 
@@ -261,17 +271,20 @@ temporal server start-dev
 # Terminal 2: Sync engine (stateless execution)
 sync-engine serve --port 4010
 
-# Terminal 3: Sync service (config CRUD + Temporal)
-sync-service serve --temporal-address localhost:7233
+# Terminal 3: Sync service (config CRUD + config resolution)
+sync-service serve --port 4020 --temporal-address localhost:7233
 
-# Terminal 4: Worker
+# Terminal 4: Webhook server (public ingress)
+sync-service webhook --port 4030 --temporal-address localhost:7233
+
+# Terminal 5: Worker
 sync-service worker --temporal-address localhost:7233
 ```
 
 Create a sync — the workflow starts automatically:
 
 ```sh
-# Create sync
+# Create sync (via internal service API)
 curl -X POST http://localhost:4020/syncs \
   -H 'Content-Type: application/json' \
   -d '{
@@ -290,6 +303,8 @@ curl -X POST http://localhost:4020/syncs/<id>/resume
 # Delete (triggers teardown)
 curl -X DELETE http://localhost:4020/syncs/<id>
 ```
+
+Point Stripe's webhook dashboard at the **webhook server** (`http://your-host:4030/webhooks/{credential_id}`), not the service API.
 
 ## Testing
 
@@ -326,10 +341,11 @@ curl -X DELETE http://localhost:4020/syncs/<id>
 
 | File                                                   | Role                                            |
 | ------------------------------------------------------ | ----------------------------------------------- |
+| `apps/service/src/api/webhook-app.ts`                  | `createWebhookApp` — standalone webhook ingress |
 | `apps/service/src/temporal/types.ts`                   | `RunResult`, `SyncActivities`, `WorkflowStatus` |
 | `apps/service/src/temporal/activities.ts`              | Resolve from service, execute on engine         |
 | `apps/service/src/temporal/workflows.ts`               | Workflow: signals, queries, main loop           |
 | `apps/service/src/temporal/worker.ts`                  | Worker factory                                  |
-| `apps/service/src/cli/main.ts`                         | `worker` subcommand                             |
+| `apps/service/src/cli/main.ts`                         | `serve`, `webhook`, `worker` subcommands        |
 | `apps/service/src/__tests__/temporal-workflow.test.ts` | Unit tests                                      |
 | `e2e/temporal.test.ts`                                 | E2E tests                                       |
