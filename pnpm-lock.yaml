@@ -404,6 +404,10 @@ importers:
         version: 3.2.4(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/ts-cli:
+    dependencies:
+      commander:
+        specifier: ^13.1.0
+        version: 13.1.0
     devDependencies:
       '@types/node':
         specifier: ^24
