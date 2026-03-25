@@ -75,7 +75,7 @@ jobs:
       # --- Plugin loading test ---
 
       - name: E2E plugin loading test
-        run: bash tests/e2e-plugin-loading.sh
+        run: bash tests/e2e-connector-loading.sh
 
       # --- E2E vitest tests (real Stripe API) ---
 
