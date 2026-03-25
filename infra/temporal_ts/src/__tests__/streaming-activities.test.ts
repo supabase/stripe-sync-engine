@@ -9,7 +9,7 @@ const workflowsPath = path.resolve(process.cwd(), 'dist/workflows.js')
 
 /**
  * Spin up a mock HTTP server that serves the 3-activity endpoints.
- * /run streams NDJSON state messages with configurable delay.
+ * /sync streams NDJSON state messages with configurable delay.
  */
 function createMockServer(opts: { streamCount: number; delayMs: number; complete?: boolean }): {
   server: http.Server
@@ -24,7 +24,7 @@ function createMockServer(opts: { streamCount: number; delayMs: number; complete
       return
     }
 
-    if (url.pathname === '/run') {
+    if (url.pathname === '/sync') {
       // Stream NDJSON state messages
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson' })
       let i = 0
@@ -139,7 +139,7 @@ describe('Streaming activities with heartbeats', () => {
         return
       }
 
-      if (url.pathname === '/run') {
+      if (url.pathname === '/sync') {
         let body = ''
         req.on('data', (chunk) => {
           body += chunk

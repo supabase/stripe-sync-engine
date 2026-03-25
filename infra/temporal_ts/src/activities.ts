@@ -40,7 +40,7 @@ export function createActivities(engineUrl: string): SyncActivities {
         body = input.map((item) => JSON.stringify(item)).join('\n') + '\n'
       }
 
-      const resp = await fetch(`${engineUrl}/run`, {
+      const resp = await fetch(`${engineUrl}/sync`, {
         method: 'POST',
         headers,
         body,

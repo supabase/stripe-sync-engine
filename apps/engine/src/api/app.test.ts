@@ -162,7 +162,7 @@ describe('POST /write', () => {
   })
 })
 
-describe('POST /run', () => {
+describe('POST /sync', () => {
   it('runs full pipeline, streams NDJSON state', async () => {
     const app = createApp(resolver)
 
@@ -175,7 +175,7 @@ describe('POST /run', () => {
       },
       { type: 'state', stream: 'customers', data: { status: 'complete' } },
     ])
-    const res = await app.request('/run', {
+    const res = await app.request('/sync', {
       method: 'POST',
       headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(runBody) },
       body: runBody,

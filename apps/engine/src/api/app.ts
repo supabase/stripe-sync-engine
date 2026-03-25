@@ -247,9 +247,9 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
-      operationId: 'run',
+      operationId: 'sync',
       method: 'post',
-      path: '/run',
+      path: '/sync',
       tags: ['Sync'],
       summary: 'Run full sync (read → write pipeline)',
       description:
