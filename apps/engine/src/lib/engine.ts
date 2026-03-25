@@ -110,8 +110,10 @@ export function createEngine(
     },
 
     async *read(input?: AsyncIterable<unknown>) {
+      const stored = await stateStore.get()
+      const state = stored ?? config.state
       const raw = connectors.source.read(
-        { config: sourceConfig, catalog: await getCatalog(), state: config.state },
+        { config: sourceConfig, catalog: await getCatalog(), state },
         input
       )
       for await (const msg of raw) {

@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine, noopStateStore } from '../lib/index.js'
+import { createEngine, noopStateStore, selectStateStore } from '../lib/index.js'
 import type { Message, DestinationOutput } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
@@ -198,5 +198,82 @@ describe('engine read → write', () => {
       `SELECT count(*)::int AS n FROM "${SCHEMA}"."${targetStream}"`
     )
     expect(rows[0].n).toBeGreaterThan(0)
+  })
+})
+
+describe('resumable sync via state store', () => {
+  const params = {
+    source_name: 'stripe',
+    destination_name: 'postgres',
+    source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+    destination_config: { connection_string: '', schema: SCHEMA },
+    streams: [{ name: '' }],
+  }
+
+  // Keep params.destination_config.connection_string and streams in sync with runtime values
+  beforeAll(() => {
+    // connectionString is set in the outer beforeAll — access it after that runs
+  })
+
+  beforeEach(async () => {
+    // Outer beforeEach already dropped the schema. Create the _sync_state table in addition
+    // to what the engine's setup() will create for the stream table.
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${SCHEMA}"`)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "${SCHEMA}"."_sync_state" (
+        sync_id TEXT NOT NULL,
+        stream TEXT NOT NULL,
+        state JSONB NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (sync_id, stream)
+      )
+    `)
+  })
+
+  it('auto-persists state after sync', async () => {
+    const store = await selectStateStore({
+      ...params,
+      destination_config: { connection_string: connectionString, schema: SCHEMA },
+      streams: [{ name: targetStream }],
+    })
+    const engine = createEngine(
+      {
+        source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination_config: { connection_string: connectionString, schema: SCHEMA },
+        streams: [{ name: targetStream }],
+      },
+      { source, destination },
+      store
+    )
+    await collect(engine.sync())
+    expect(await store.get()).toMatchObject({ [targetStream]: expect.any(Object) })
+    await store.close?.()
+  })
+
+  it('pre-seeded complete state skips backfill', async () => {
+    const store = await selectStateStore({
+      ...params,
+      destination_config: { connection_string: connectionString, schema: SCHEMA },
+      streams: [{ name: targetStream }],
+    })
+    await store.set(targetStream, { pageCursor: null, status: 'complete' })
+
+    const engine = createEngine(
+      {
+        source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination_config: { connection_string: connectionString, schema: SCHEMA },
+        streams: [{ name: targetStream }],
+      },
+      { source, destination },
+      store
+    )
+    await collect(engine.sync())
+
+    // Table created by setup() but no records written (backfill skipped by complete state)
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM "${SCHEMA}"."${targetStream}"`
+    )
+    expect(rows[0].n).toBe(0)
+    await store.close?.()
   })
 })

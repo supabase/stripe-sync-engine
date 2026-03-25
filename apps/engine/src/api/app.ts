@@ -6,6 +6,7 @@ import {
   createEngineFromParams,
   noopStateStore,
   parseNdjsonStream,
+  selectStateStore,
   SyncParams,
 } from '../lib/index.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
@@ -82,6 +83,18 @@ export function createApp(resolver: ConnectorResolver) {
       return SyncParams.parse(JSON.parse(header))
     } catch {
       throw new HTTPException(400, { message: 'Invalid JSON in X-Sync-Params header' })
+    }
+  }
+
+  /** Wraps an async iterable to call `fn()` after iteration completes or throws. */
+  async function* closeAfter<T>(
+    iter: AsyncIterable<T>,
+    fn: () => Promise<void> | void
+  ): AsyncIterable<T> {
+    try {
+      yield* iter
+    } finally {
+      await fn()
     }
   }
 
@@ -241,12 +254,13 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
       if (!hasBody(c)) {
         return c.json({ error: 'Request body required for /write' }, 400)
       }
+      const stateStore = await selectStateStore(params)
+      const engine = await createEngineFromParams(params, resolver, stateStore)
       const messages = parseNdjsonStream<Message>(c.req.raw.body!)
-      return ndjsonResponse(engine.write(messages)) as any
+      return ndjsonResponse(closeAfter(engine.write(messages), () => stateStore.close?.())) as any
     }
   )
 
@@ -274,9 +288,10 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
+      const stateStore = await selectStateStore(params)
+      const engine = await createEngineFromParams(params, resolver, stateStore)
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
-      return ndjsonResponse(engine.sync(input)) as any
+      return ndjsonResponse(closeAfter(engine.sync(input), () => stateStore.close?.())) as any
     }
   )
 

@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import pg from 'pg'
 import { sql } from '@stripe/sync-util-postgres'
 
 export interface StateStore {
@@ -47,5 +47,44 @@ export function createPgStateStore(
     async close() {
       await pool.end()
     },
+  }
+}
+
+/** Engine-compatible state store scoped to a single sync_id. */
+export interface ScopedStateStore {
+  get(): Promise<Record<string, unknown> | undefined>
+  set(stream: string, data: unknown): Promise<void>
+}
+
+/**
+ * Wraps `createPgStateStore` to scope all operations to a single `syncId`.
+ * Returns the engine-compatible `ScopedStateStore` interface.
+ */
+export function createScopedPgStateStore(
+  pool: pg.Pool,
+  schema: string,
+  syncId: string
+): ScopedStateStore {
+  const store = createPgStateStore(pool, schema)
+  return {
+    get: () => store.get(syncId),
+    set: (stream, data) => store.set(syncId, stream, data),
+  }
+}
+
+/**
+ * Convention entry point: creates a pool-owning, engine-compatible state store.
+ * `syncId` defaults to `'default'` — HTTP API callers share a single sync slot
+ * per destination; the service layer passes a real UUID for multi-tenancy.
+ */
+export function createStateStore(
+  config: { connection_string: string; schema?: string },
+  syncId = 'default'
+): ScopedStateStore & { close(): Promise<void> } {
+  const pool = new pg.Pool({ connectionString: config.connection_string })
+  const scoped = createScopedPgStateStore(pool, config.schema ?? 'public', syncId)
+  return {
+    ...scoped,
+    close: () => pool.end(),
   }
 }

@@ -1,6 +1,5 @@
-import { createEngine, noopStateStore, pipe, persistState } from '@stripe/sync-engine'
+import { createEngine, pipe, persistState } from '@stripe/sync-engine'
 import type {
-  SyncParams,
   DestinationOutput,
   Message,
   ConnectorResolver,
@@ -104,6 +103,7 @@ export class SyncService {
   /** Create a scoped state writer for a single sync run. */
   private makeStateWriter(syncId: string): PipelineStateStore {
     return {
+      get: async () => this.states.get(syncId),
       set: async (stream, data) => {
         await this.states.set(syncId, stream, data)
         this.logs.write(syncId, {
@@ -116,7 +116,7 @@ export class SyncService {
     }
   }
 
-  /** Resolve config + credentials + state into an engine instance. */
+  /** Resolve config + credentials into an engine instance. State is loaded via stateWriter. */
   private async resolveEngine(syncId: string) {
     const config = await this.configs.get(syncId)
     const source = await this.connectors.resolveSource(config.source.type)
@@ -127,16 +127,14 @@ export class SyncService {
     const destCred = config.destination.credential_id
       ? await this.credentials.get(config.destination.credential_id)
       : undefined
-    const state = await this.states.get(syncId)
     const params = resolve({
       config,
       sourceCred,
       destCred,
-      state,
       sourceOverrides: this.sourceOverrides,
       destinationOverrides: this.destinationOverrides,
     })
-    const engine = createEngine(params, { source, destination }, noopStateStore())
+    const engine = createEngine(params, { source, destination }, this.makeStateWriter(syncId))
     return { engine, config }
   }
 
@@ -222,18 +220,16 @@ export class SyncService {
           ? await this.credentials.get(config.destination.credential_id)
           : undefined
 
-        const state = await this.states.get(syncId)
-
         const params = resolve({
           config,
           sourceCred,
           destCred,
-          state,
           sourceOverrides: this.sourceOverrides,
           destinationOverrides: this.destinationOverrides,
         })
 
-        const engine = createEngine(params, { source, destination }, noopStateStore())
+        const stateWriter = this.makeStateWriter(syncId)
+        const engine = createEngine(params, { source, destination }, stateWriter)
         await engine.setup()
 
         let authError = false
@@ -249,7 +245,6 @@ export class SyncService {
           }
         }
 
-        const stateWriter = this.makeStateWriter(syncId)
         yield* pipe(engine.write(intercepted()), persistState(stateWriter))
 
         if (!authError) return
