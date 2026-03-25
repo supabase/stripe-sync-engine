@@ -18,32 +18,39 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+          sparse-checkout: |
+            packages
+            apps
+          sparse-checkout-cone-mode: false
+
       - name: Pack from GitHub Packages and publish to npmjs.org
         run: |
           set -euo pipefail
           WORKDIR=$(mktemp -d)
+
+          # Discover publishable @stripe/* packages from package.json files
+          PACKAGES=$(node -e '
+            const fs = require("fs"), path = require("path");
+            for (const dir of ["packages", "apps"]) {
+              for (const entry of fs.readdirSync(dir)) {
+                try {
+                  const pkg = JSON.parse(fs.readFileSync(path.join(dir, entry, "package.json")));
+                  if (pkg.name && pkg.private !== true) console.log(pkg.name);
+                } catch {}
+              }
+            }
+          ')
+
           cd "$WORKDIR"
 
           # Auth for reading from GitHub Packages
           echo "@stripe:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
 
-          PACKAGES=(
-            @stripe/sync-protocol
-            @stripe/sync-util-postgres
-            @stripe/sync-lib-stateless
-            @stripe/sync-lib-stateful
-            @stripe/sync-source-stripe
-            @stripe/sync-destination-postgres
-            @stripe/sync-destination-google-sheets
-            @stripe/sync-store-postgres
-            @stripe/sync-engine-stateless
-            @stripe/sync-engine-stateful
-            @stripe/sync-integration-supabase
-            @stripe/sync-engine
-          )
-
-          for pkg in "${PACKAGES[@]}"; do
+          for pkg in $PACKAGES; do
             echo "--- $pkg ---"
             npm pack "$pkg" --registry https://npm.pkg.github.com
           done
