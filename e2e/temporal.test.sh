@@ -208,11 +208,7 @@ fi
 
 # ── Sync 2: Stripe → Google Sheets (optional) ─────────────────────
 
-# Google Sheets connector doesn't support subprocess mode (setup/teardown commands).
-# The engine uses subprocess mode when running connectors as binaries.
-# Sheets e2e is tested in vitest (temporal.test.ts) where connectors run in-process.
-SHEETS_ENABLED="${SHEETS_ENABLED:-}"
-if [ -n "$SHEETS_ENABLED" ] && [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
+if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
    [ -n "${GOOGLE_REFRESH_TOKEN:-}" ] && [ -n "${GOOGLE_SPREADSHEET_ID:-}" ]; then
 
   echo ""
@@ -268,8 +264,7 @@ print(len(rows) - 1 if len(rows) > 1 else 0)  # minus header
   run_sync_cycle "Stripe → Google Sheets" "$SHEETS_SYNC_ID" verify_sheets
 else
   echo ""
-  echo "--- Skipping Google Sheets sync (set SHEETS_ENABLED=1 + Google env vars) ---"
-  echo "    Note: Sheets connector requires in-process mode; use vitest (temporal.test.ts) for full Sheets e2e"
+  echo "--- Skipping Google Sheets sync (set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_SPREADSHEET_ID) ---"
 fi
 
 echo ""

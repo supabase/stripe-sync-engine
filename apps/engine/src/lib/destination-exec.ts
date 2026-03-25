@@ -74,10 +74,7 @@ export function createDestinationFromExec(cmd: string): Destination {
           JSON.stringify(params.catalog),
         ])
       } catch (err) {
-        if (String(err).includes("unknown command 'setup'")) {
-          console.error('setup: not applicable')
-          return
-        }
+        if (/unknown command.*setup/i.test(String(err))) return
         throw err
       }
     },
@@ -91,10 +88,7 @@ export function createDestinationFromExec(cmd: string): Destination {
           JSON.stringify(params.config),
         ])
       } catch (err) {
-        if (String(err).includes("unknown command 'teardown'")) {
-          console.error('teardown: not applicable')
-          return
-        }
+        if (/unknown command.*teardown/i.test(String(err))) return
         throw err
       }
     },
