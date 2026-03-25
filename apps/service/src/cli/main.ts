@@ -168,7 +168,9 @@ const webhookCmd = defineCommand({
     const port = Number(args.port)
     serve({ fetch: app.fetch, port }, () => {
       console.log(`Webhook server listening on http://localhost:${port}`)
-      console.log(`  Temporal: ${args['temporal-address']} (queue: ${args['temporal-task-queue'] || 'sync-engine'})`)
+      console.log(
+        `  Temporal: ${args['temporal-address']} (queue: ${args['temporal-task-queue'] || 'sync-engine'})`
+      )
     })
   },
 })
@@ -203,6 +205,11 @@ export async function createProgram(opts?: { dataDir?: string }) {
 
   return defineCommand({
     ...specCli,
-    subCommands: { serve: serveCmd, worker: workerCmd, webhook: webhookCmd, ...specCli.subCommands },
+    subCommands: {
+      serve: serveCmd,
+      worker: workerCmd,
+      webhook: webhookCmd,
+      ...specCli.subCommands,
+    },
   })
 }

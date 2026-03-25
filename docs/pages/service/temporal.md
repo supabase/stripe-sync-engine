@@ -205,12 +205,12 @@ stateDiagram-v2
 
 Each server has a single, clearly scoped responsibility:
 
-|             | Webhook Server                                      | Sync Service                                        | Sync Engine                                 |
-| ----------- | --------------------------------------------------- | --------------------------------------------------- | ------------------------------------------- |
-| **Purpose** | Public webhook ingress; fan out signals to Temporal | Config CRUD, credential management, config resolution | Stateless sync execution                    |
-| **State**   | None — reads config store to locate matching syncs  | Stores configs, credentials                         | Manages cursor state via `selectStateStore` |
-| **Routes**  | `POST /webhooks/{credential_id}`                    | `/syncs`, `/credentials`                            | `/setup`, `/sync`, `/teardown`              |
-| **Exposure**| Public (Stripe POSTs here)                          | Internal                                            | Internal                                    |
+|              | Webhook Server                                      | Sync Service                                          | Sync Engine                                 |
+| ------------ | --------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| **Purpose**  | Public webhook ingress; fan out signals to Temporal | Config CRUD, credential management, config resolution | Stateless sync execution                    |
+| **State**    | None — reads config store to locate matching syncs  | Stores configs, credentials                           | Manages cursor state via `selectStateStore` |
+| **Routes**   | `POST /webhooks/{credential_id}`                    | `/syncs`, `/credentials`                              | `/setup`, `/sync`, `/teardown`              |
+| **Exposure** | Public (Stripe POSTs here)                          | Internal                                              | Internal                                    |
 
 The webhook server requires only a Temporal client and the config store (read-only) to fan out signals. It never touches credentials or runs connectors.
 
