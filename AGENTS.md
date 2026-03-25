@@ -60,6 +60,14 @@ reporting back. Don't just push and return — keep polling `gh pr checks` or
 
 - All serializable inputs/outputs (Zod schemas, JSON wire format) must use **snake_case** field names.
 
+## Worktrees
+
+When creating git worktrees, always use `.worktrees/` at the repo root — **not** `.claude/worktrees/`.
+
+```sh
+git worktree add .worktrees/<name> <branch>
+```
+
 ## Key Gotchas
 
 - `tsx` fails on `apps/supabase` — `?raw` imports pull in Deno-only code. Other packages work fine with `npx tsx`.
