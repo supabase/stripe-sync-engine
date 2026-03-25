@@ -18,46 +18,18 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Pack from GitHub Packages and publish to npmjs.org
-        run: |
-          set -euo pipefail
-          WORKDIR=$(mktemp -d)
-          cd "$WORKDIR"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+          sparse-checkout: scripts/promote-to-npmjs.sh
 
-          # Auth for reading from GitHub Packages
-          echo "@stripe:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
-
-          # Discover @stripe/* packages from GitHub Packages API
-          PACKAGES=$(curl -sf \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/orgs/${{ github.repository_owner }}/packages?package_type=npm&per_page=100" \
-            | node -e "
-              const pkgs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-              pkgs.filter(p => p.repository && p.repository.name === '${{ github.event.repository.name }}')
-                  .forEach(p => console.log('@${{ github.repository_owner }}/' + p.name));
-            ")
-
-          echo "Packages to promote:"
-          echo "$PACKAGES"
-          echo ""
-
-          for pkg in $PACKAGES; do
-            echo "--- $pkg ---"
-            npm pack "$pkg" --registry https://npm.pkg.github.com
-          done
-
-          echo ""
-          echo "=== Publishing to npmjs.org ==="
-          for tgz in *.tgz; do
-            echo "Publishing $tgz"
-            npm publish "$tgz" --registry https://registry.npmjs.org --access public
-          done
+      - name: Promote to npmjs.org
+        run: bash scripts/promote-to-npmjs.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_//registry.npmjs.org/:_authToken: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
 
   docker:
     name: Promote Docker image to Docker Hub
