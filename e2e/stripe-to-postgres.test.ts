@@ -3,7 +3,7 @@ import Stripe from 'stripe'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine } from '@stripe/sync-engine'
+import { createEngine, noopStateStore } from '@stripe/sync-engine'
 import type { StateMessage, DestinationOutput } from '@stripe/sync-protocol'
 import { describeWithEnv } from './test-helpers.js'
 
@@ -52,7 +52,8 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         destination_config: { connection_string: POSTGRES_URL, schema: SCHEMA },
         streams: STREAMS.map((name) => ({ name })),
       },
-      { source, destination }
+      { source, destination },
+      noopStateStore()
     )
   }
 
