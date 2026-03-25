@@ -77,7 +77,13 @@ cd "$TMPDIR_BASE"
 mkdir test-npx && cd test-npx
 npm init -y > /dev/null 2>&1
 
-VERSION_OUTPUT=$(npx --registry "$REGISTRY" @stripe/sync-engine --version 2>&1)
+# Point @stripe scope at the registry (npx --registry only sets default, not scoped)
+echo "@stripe:registry=$REGISTRY" > .npmrc
+if [[ "$REGISTRY" == *"npm.pkg.github.com"* ]]; then
+  echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+fi
+
+VERSION_OUTPUT=$(npx @stripe/sync-engine --version 2>&1)
 echo "  Version: $VERSION_OUTPUT"
 
 if [ -n "$VERSION_OUTPUT" ]; then
@@ -93,11 +99,11 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 4: npx @stripe/sync-engine --help ---"
 
-if npx --registry "$REGISTRY" @stripe/sync-engine --help > /dev/null 2>&1; then
+if npx @stripe/sync-engine --help > /dev/null 2>&1; then
   echo "  PASS: --help exits 0"
 else
   echo "  FAIL: --help exited with $?"
-  npx --registry "$REGISTRY" @stripe/sync-engine --help 2>&1 || true
+  npx @stripe/sync-engine --help 2>&1 || true
   exit 1
 fi
 echo ""
@@ -109,7 +115,7 @@ echo "--- Step 5: npx @stripe/sync-engine check (connector loading) ---"
 
 PARAMS='{"source_name":"stripe","destination_name":"postgres","source_config":{"api_key":"sk_test_fake"},"destination_config":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
 
-CHECK_OUTPUT=$(npx --registry "$REGISTRY" @stripe/sync-engine check --params "$PARAMS" 2>&1 || true)
+CHECK_OUTPUT=$(npx @stripe/sync-engine check --params "$PARAMS" 2>&1 || true)
 
 # check will fail (bad credentials) but should NOT fail on "not found" (connector loading)
 if echo "$CHECK_OUTPUT" | grep -qi "not found"; then
