@@ -1,11 +1,11 @@
-name: Release
+name: Publish to npm
 
 on:
   workflow_dispatch:
 
 jobs:
   npm:
-    name: Build and Publish to NPM
+    name: Build and publish all packages to npm
     permissions:
       contents: read
 
@@ -23,20 +23,15 @@ jobs:
           node-version-file: ./.nvmrc
           cache: pnpm
 
-      # Ensure npm 11.5.1 or later is installed for trusted publishing support
-      - name: Update npm
-        run: npm install -g npm@latest
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Install dependencies and build
-        run: |
-          cd packages/sync-engine
-          pnpm install --frozen-lockfile
-          pnpm run build
+      - name: Build all packages
+        run: pnpm build
 
-      - name: Publish to npm
+      - name: Publish all public packages to npm
         run: |
-          cd packages/sync-engine
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          npm publish --access public
+          pnpm -r --filter '!./tests/*' publish --access public --no-git-checks
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

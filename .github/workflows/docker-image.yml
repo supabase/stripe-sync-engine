@@ -1,10 +1,7 @@
-name: Build Docker Image
+name: Publish Docker image
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - '**'
 
 # Builds and pushes to Docker Hub: https://hub.docker.com/r/stripe/sync-engine
 #
