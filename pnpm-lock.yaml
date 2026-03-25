@@ -218,9 +218,18 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../packages/protocol
+      '@stripe/sync-service':
+        specifier: workspace:*
+        version: link:../apps/service
       '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../packages/source-stripe
+      '@temporalio/testing':
+        specifier: ^1
+        version: 1.15.0(tslib@2.8.1)
+      '@temporalio/worker':
+        specifier: ^1
+        version: 1.15.0(tslib@2.8.1)
       pg:
         specifier: ^8.16.0
         version: 8.16.3
