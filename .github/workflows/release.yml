@@ -1,18 +1,26 @@
-name: Publish to npm
+name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to promote (must have been built by build.yml)'
+        required: true
+        type: string
+
+permissions:
+  packages: read
+  contents: read
 
 jobs:
   npm:
-    name: Build and publish all packages to npm
-    permissions:
-      contents: read
-
+    name: Promote npm packages to npmjs.org
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -23,15 +31,39 @@ jobs:
           node-version-file: ./.nvmrc
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
 
-      - name: Build all packages
-        run: pnpm build
-
-      - name: Publish all public packages to npm
+      - name: Publish to npmjs.org
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           pnpm -r --filter '!./tests/*' publish --access public --no-git-checks
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  docker:
+    name: Promote Docker image to Docker Hub
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_SYNC_ENGINE }}
+
+      - name: Pull from ghcr.io and push to Docker Hub
+        run: |
+          SOURCE="ghcr.io/${{ github.repository }}:${{ inputs.sha }}"
+          docker pull "$SOURCE"
+          docker tag "$SOURCE" stripe/sync-engine:${{ inputs.sha }}
+          docker tag "$SOURCE" stripe/sync-engine:latest
+          docker push stripe/sync-engine:${{ inputs.sha }}
+          docker push stripe/sync-engine:latest

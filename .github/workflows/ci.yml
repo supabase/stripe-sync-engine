@@ -3,14 +3,12 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - v2
+    branches: [main, v2]
   workflow_dispatch:
 
 jobs:
   test:
-    name: Test
+    name: Lint, build & test
     runs-on: ubuntu-24.04
 
     steps:
@@ -48,7 +46,7 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Builds successfully
+      - name: Build
         run: pnpm build
 
       - name: Initialize DB schema
@@ -69,160 +67,3 @@ jobs:
       - name: Skipped test warnings
         if: always()
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
-
-  e2e-test:
-    name: E2E & integration tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Start services
-        run: docker compose up -d --wait
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: ./.nvmrc
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build all packages
-        run: pnpm build
-
-      - name: Set up .env file
-        run: |
-          touch apps/stateless/.env
-          echo DATABASE_URL='postgresql://postgres:postgres@localhost:5432/app_db' >> apps/stateless/.env
-          echo STRIPE_API_KEY='${{ secrets.STRIPE_API_KEY }}' >> apps/stateless/.env
-          echo STRIPE_API_KEY_2='${{ secrets.STRIPE_API_KEY_2 }}' >> apps/stateless/.env
-          echo STRIPE_API_KEY_3='${{ secrets.STRIPE_API_KEY_3 }}' >> apps/stateless/.env
-          echo NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}' >> apps/stateless/.env
-
-      - name: E2E plugin loading test
-        run: bash tests/e2e-plugin-loading.sh
-
-      - name: Integration tests
-        run: |
-          if [ -z "$STRIPE_API_KEY" ]; then
-            echo "::warning::Integration tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
-            exit 0
-          fi
-          pnpm --filter @stripe/sync-test-integration run test:integration
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-
-      - name: E2E vitest tests
-        run: |
-          if [ -z "$STRIPE_API_KEY" ]; then
-            echo "::warning::E2E tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
-            exit 0
-          fi
-          pnpm --filter @stripe/sync-test-e2e run test
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-
-  temporal-ts-test:
-    name: Temporal TS tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Start services
-        run: docker compose up -d --wait
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: ./.nvmrc
-          cache: pnpm
-
-      - name: Install monorepo dependencies & build
-        run: pnpm install --frozen-lockfile && pnpm build
-
-      - name: Install temporal_ts dependencies & build
-        run: cd infra/temporal_ts && npm install && npm run build
-
-      - name: Unit tests
-        run: cd infra/temporal_ts && npm test
-
-      - name: E2E tests (Docker Temporal)
-        run: |
-          if [ -z "$STRIPE_API_KEY" ]; then
-            echo "::warning::Temporal e2e tests skipped — STRIPE_API_KEY secret not available (fork PR?)"
-            exit 0
-          fi
-          cd infra/temporal_ts && npx vitest run src/__tests__/e2e/docker-e2e.test.ts
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-          TEMPORAL_ADDRESS: 'localhost:7233'
-
-  publish-test:
-    name: Verdaccio publish & npx test
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Start Verdaccio
-        run: docker compose --profile npm-registry up -d --wait npm-registry
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: ./.nvmrc
-          cache: pnpm
-
-      - name: Install dependencies & build
-        run: pnpm install --frozen-lockfile && pnpm build
-
-      - name: Publish & test npx
-        run: bash tests/e2e-verdaccio-publish.sh
-
-  docker-build:
-    name: Docker build & test
-    runs-on: ubuntu-24.04
-
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Docker build + smoke tests
-        run: |
-          if [ -z "$STRIPE_API_KEY" ]; then
-            echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available (fork PR?). Running build-only."
-            docker build -t sync-engine:test .
-            docker run --rm sync-engine:test --version
-            exit 0
-          fi
-          bash tests/docker-test.sh
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

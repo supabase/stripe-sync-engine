@@ -73,7 +73,7 @@ services:
       retries: 20
       start_period: 30s
 
-  # --- Local registries (for publish/deploy testing) ---
+  # --- Local npm registry (for publish testing) ---
 
   npm-registry:
     image: verdaccio/verdaccio
@@ -84,17 +84,6 @@ services:
       - ./.verdaccio/config.yaml:/verdaccio/conf/config.yaml
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://0.0.0.0:4873/-/ping || exit 1']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  docker-registry:
-    image: registry:2
-    profiles: [docker-registry]
-    ports:
-      - '5050:5000'
-    healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/v2/ || exit 1']
       interval: 5s
       timeout: 3s
       retries: 5
