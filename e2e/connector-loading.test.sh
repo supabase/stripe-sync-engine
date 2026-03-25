@@ -188,11 +188,9 @@ echo ""
 # Step 8: unknown connector name → "not found"
 # ---------------------------------------------------------------------------
 echo "--- Step 8: unknown connector name → not found ---"
+UNKNOWN_PARAMS='{"source_name":"nonexistent-xyz","source_config":{},"destination_name":"nonexistent-xyz","destination_config":{},"streams":[{"name":"x"}]}'
 STEP8_OUTPUT=$(npx sync-engine check \
-     --source nonexistent-xyz \
-     --destination nonexistent-xyz \
-     --source-config '{}' \
-     --destination-config '{}' \
+     --x-sync-params "$UNKNOWN_PARAMS" \
      2>&1 || true)
 if echo "$STEP8_OUTPUT" | grep -qi "not found"; then
   echo "  PASS: unknown connector correctly reports 'not found'"
