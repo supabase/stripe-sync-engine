@@ -13,20 +13,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./app": {
+    "./cli": {
+      "bun": "./src/cli/command.ts",
+      "types": "./dist/cli/command.d.ts",
+      "import": "./dist/cli/command.js"
+    },
+    "./api": {
       "bun": "./src/api/app.ts",
       "types": "./dist/api/app.d.ts",
       "import": "./dist/api/app.js"
-    },
-    "./source-test": {
-      "bun": "./src/lib/source-test.ts",
-      "types": "./dist/lib/source-test.d.ts",
-      "import": "./dist/lib/source-test.js"
-    },
-    "./destination-test": {
-      "bun": "./src/lib/destination-test.ts",
-      "types": "./dist/lib/destination-test.d.ts",
-      "import": "./dist/lib/destination-test.js"
     }
   },
   "scripts": {

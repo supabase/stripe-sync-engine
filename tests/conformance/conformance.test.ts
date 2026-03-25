@@ -3,6 +3,12 @@ import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { ConnectorSpecification } from '@stripe/sync-protocol'
 import { createConnectorCli } from '@stripe/sync-protocol/cli'
+import {
+  sourceTest,
+  sourceTestSpec,
+  destinationTest,
+  destinationTestSpec,
+} from '@stripe/sync-engine'
 
 const packagesDir = resolve(import.meta.dirname, '../../packages')
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
@@ -30,20 +36,26 @@ const connectorDirs = packageDirs.filter(
 const sources = [
   ...packageDirs
     .filter((d) => d.startsWith('source-'))
-    .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-engine/source-test' },
+    .map((d) => ({ name: resolvePackageName(d), mod: undefined as Record<string, unknown> | undefined })),
+  {
+    name: '@stripe/sync-engine (source-test)',
+    mod: { default: sourceTest, spec: sourceTestSpec } as Record<string, unknown>,
+  },
 ]
 const destinations = [
   ...packageDirs
     .filter((d) => d.startsWith('destination-'))
-    .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-engine/destination-test' },
+    .map((d) => ({ name: resolvePackageName(d), mod: undefined as Record<string, unknown> | undefined })),
+  {
+    name: '@stripe/sync-engine (destination-test)',
+    mod: { default: destinationTest, spec: destinationTestSpec } as Record<string, unknown>,
+  },
 ]
 
-describe.each(sources)('source: $name', ({ name }) => {
+describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(name)
+    mod = initialMod ?? await import(name)
   })
 
   it('has a default export', () => {
@@ -89,10 +101,10 @@ describe.each(sources)('source: $name', ({ name }) => {
   })
 })
 
-describe.each(destinations)('destination: $name', ({ name }) => {
+describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) => {
   let mod: Record<string, unknown>
   beforeAll(async () => {
-    mod = await import(name)
+    mod = initialMod ?? await import(name)
   })
 
   it('has a default export', () => {
