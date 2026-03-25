@@ -23,7 +23,7 @@ import {
   fileStateStore,
   fileLogSink,
 } from '../lib/stores-fs.js'
-import { createWebhookApp } from './webhook-app.js'
+import { mountWebhookRoutes } from './webhook-app.js'
 
 // MARK: - Helpers
 
@@ -796,7 +796,7 @@ export function createApp(options?: AppOptions) {
 
   // MARK: - Webhook ingress (mounted from webhook-app.ts)
 
-  app.route('', createWebhookApp({ push_event: (id, e) => service.push_event(id, e) }))
+  mountWebhookRoutes(app, (id, e) => service.push_event(id, e))
 
   // MARK: - OpenAPI spec + Swagger UI
 
