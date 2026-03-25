@@ -6,64 +6,165 @@ title: Temporal Workflow Architecture
 
 When Temporal is enabled, sync lifecycle is managed by durable workflows instead of running in-process. The workflow orchestrates setup, continuous reconciliation, live event processing, and teardown — all by calling the service HTTP API.
 
-## Architecture
+## Architecture Overview
 
+```mermaid
+graph TD
+    subgraph Stripe
+        StripeAPI["Stripe API"]
+        StripeWH["Stripe Webhooks"]
+    end
+
+    subgraph Service["Sync Service (HTTP)"]
+        CRUD["/syncs CRUD"]
+        Setup["/syncs/{id}/setup"]
+        Run["/syncs/{id}/run"]
+        Teardown["/syncs/{id}/teardown"]
+        WHRoute["/webhooks/{cred_id}"]
+        Bridge["TemporalBridge"]
+        Resolve["resolve config + creds + state"]
+        Engine["Engine"]
+    end
+
+    subgraph Temporal["Temporal Server"]
+        Workflow["syncWorkflow(syncId)"]
+        Worker["Worker (activities)"]
+    end
+
+    subgraph Destinations
+        Postgres["Postgres"]
+        Sheets["Google Sheets"]
+    end
+
+    %% CRUD → Bridge → Workflow
+    CRUD -- "POST /syncs" --> Bridge
+    Bridge -- "start(syncId)" --> Workflow
+    CRUD -- "DELETE /syncs/{id}" --> Bridge
+    Bridge -- "signal: delete" --> Workflow
+
+    %% Webhook → Bridge → Workflow
+    StripeWH --> WHRoute
+    WHRoute --> Bridge
+    Bridge -- "signal: stripe_event" --> Workflow
+
+    %% Workflow → Activities → Service
+    Workflow --> Worker
+    Worker -- "POST /syncs/{id}/setup" --> Setup
+    Worker -- "POST /syncs/{id}/run" --> Run
+    Worker -- "POST /syncs/{id}/teardown" --> Teardown
+
+    %% Service internals
+    Setup --> Resolve --> Engine
+    Run --> Resolve
+    Teardown --> Resolve
+
+    %% Engine → external
+    Engine -- "read" --> StripeAPI
+    Engine -- "write" --> Postgres
+    Engine -- "write" --> Sheets
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Temporal Server                                                    │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  syncWorkflow(syncId)                                       │    │
-│  │                                                             │    │
-│  │  Signals:           Queries:                                │    │
-│  │  · stripe_event     · status → { phase, paused, iteration }│    │
-│  │  · pause                                                    │    │
-│  │  · resume           Loop:                                   │    │
-│  │  · delete           1. Drain event buffer → run(id, events) │    │
-│  │                     2. Backfill page    → run(id)           │    │
-│  │                     3. continueAsNew at 500 iterations      │    │
-│  └──────────┬──────────────────────────────────────────────────┘    │
-│             │                                                       │
-│  ┌──────────▼──────────────────────────────────────────────────┐    │
-│  │  Worker (activities)                                        │    │
-│  │                                                             │    │
-│  │  setup(syncId)   → POST /syncs/{id}/setup                  │    │
-│  │  run(syncId)     → POST /syncs/{id}/run     (streams NDJSON)│    │
-│  │  run(syncId, []) → POST /syncs/{id}/run     (NDJSON body)  │    │
-│  │  teardown(syncId)→ POST /syncs/{id}/teardown               │    │
-│  └──────────┬──────────────────────────────────────────────────┘    │
-└─────────────┼───────────────────────────────────────────────────────┘
-              │ HTTP
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Sync Service API                                                   │
-│                                                                     │
-│  /syncs/{id}/setup    → engine.setup()                             │
-│  /syncs/{id}/run      → engine.read() | engine.write() + persist   │
-│  /syncs/{id}/teardown → engine.teardown()                          │
-│                                                                     │
-│  Resolves: config, credentials, state, connectors                  │
-│  Persists: state checkpoints, logs                                 │
-└──────────┬─────────────────────────┬───────────────────────────────┘
-           │                         │
-           ▼                         ▼
-    ┌─────────────┐          ┌──────────────┐
-    │ Stripe API  │          │  Destination  │
-    │ (source)    │          │  (Postgres,   │
-    │             │          │   Sheets, …)  │
-    └─────────────┘          └──────────────┘
+
+## Webhook Event Flow
+
+The webhook path is the most complex interaction — it crosses three boundaries (Stripe → Service → Temporal → Service):
+
+```mermaid
+sequenceDiagram
+    participant Stripe
+    participant Service as Service API
+    participant Bridge as TemporalBridge
+    participant Workflow as syncWorkflow
+    participant Worker as Worker (activity)
+
+    Stripe->>Service: POST /webhooks/{credential_id}
+    Service->>Bridge: pushEvent(credentialId, event)
+
+    Note over Bridge: Find all syncs with<br/>matching credential_id
+
+    Bridge->>Workflow: signal('stripe_event', event)
+    Note over Workflow: Buffer event
+
+    Note over Workflow: Next loop iteration
+
+    Workflow->>Worker: run(syncId, [event1, event2, ...])
+    Worker->>Service: POST /syncs/{id}/run<br/>Body: NDJSON events
+    Service->>Service: resolve config + creds
+    Service->>Stripe: engine.read($stdin=events)
+    Stripe-->>Service: expanded objects
+    Service->>Service: engine.write → destination
+    Service-->>Worker: NDJSON response stream
+    Worker-->>Workflow: RunResult
+```
+
+## Backfill Flow
+
+Backfill is simpler — no webhooks, just the workflow calling `run` in a loop:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Service as Service API
+    participant Bridge as TemporalBridge
+    participant Workflow as syncWorkflow
+    participant Worker as Worker (activity)
+    participant Dest as Destination
+
+    User->>Service: POST /syncs (create)
+    Service->>Bridge: start(syncId)
+    Bridge->>Workflow: start syncWorkflow(syncId)
+
+    Workflow->>Worker: setup(syncId)
+    Worker->>Service: POST /syncs/{id}/setup
+    Service->>Dest: CREATE TABLE / ensure schema
+
+    loop Reconciliation loop
+        Workflow->>Worker: run(syncId)
+        Worker->>Service: POST /syncs/{id}/run
+        Service->>Service: resolve config + creds + state
+        Service->>Service: engine.read (Stripe API) → engine.write (dest)
+        Service-->>Worker: NDJSON stream (heartbeat every 50 msgs)
+        Worker-->>Workflow: RunResult
+        Note over Workflow: continueAsNew at 500 iterations
+    end
+
+    User->>Service: DELETE /syncs/{id}
+    Service->>Bridge: stop(syncId)
+    Bridge->>Workflow: signal('delete')
+
+    Workflow->>Worker: teardown(syncId)
+    Worker->>Service: POST /syncs/{id}/teardown
+    Service->>Dest: DROP TABLE / cleanup
+```
+
+## Workflow State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Setup: phase != 'running'
+    [*] --> Loop: phase == 'running'<br/>(after continueAsNew)
+    Setup --> Loop: setup(syncId)
+    Setup --> Teardown: delete signal<br/>during setup
+
+    state Loop {
+        [*] --> CheckPause
+        CheckPause --> Paused: paused == true
+        Paused --> CheckPause: resume signal
+        CheckPause --> DrainEvents: events buffered
+        CheckPause --> Backfill: no events
+        DrainEvents --> CheckIteration: run(syncId, events)
+        Backfill --> CheckIteration: run(syncId)
+        CheckIteration --> CheckPause: iteration < 500
+        CheckIteration --> ContinueAsNew: iteration >= 500
+    }
+
+    Loop --> Teardown: delete signal
+    Teardown --> [*]: teardown(syncId)
+    ContinueAsNew --> [*]: continueAsNew(syncId, 'running')
 ```
 
 ## Key Design Decision: Activities Call the Service API
 
-The old approach had activities calling the **stateless engine** API directly — passing the full `SyncConfig` + accumulated state on every call via an `X-Sync-Params` header. This meant:
-
-- Activities needed the full config (credentials embedded in every call)
-- State was accumulated inside the workflow and passed back-and-forth
-- Config changes required signaling the workflow with `updateConfigSignal`
-- `continueAsNew` had to carry the full config + state payload
-
-The new approach has activities call the **stateful service** API with just a `syncId`:
+The old approach had activities calling the **stateless engine** API directly — passing the full `SyncConfig` + accumulated state on every call via an `X-Sync-Params` header. The new approach has activities call the **stateful service** API with just a `syncId`:
 
 | Aspect                  | Before (engine API)              | After (service API)               |
 | ----------------------- | -------------------------------- | --------------------------------- |
@@ -78,19 +179,7 @@ The new approach has activities call the **stateful service** API with just a `s
 
 ### Workflow (`temporal/workflows.ts`)
 
-The workflow is a simple state machine:
-
-```
-syncWorkflow(syncId, opts?)
-  │
-  ├── phase !== 'running' → setup(syncId)
-  │
-  └── loop:
-        ├── wait while paused
-        ├── if events buffered → run(syncId, events)
-        ├── else → run(syncId)  // backfill page
-        └── continueAsNew at 500 iterations
-```
+**Input:** `syncWorkflow(syncId: string, opts?: { phase?: string })`
 
 **Signals:**
 
@@ -125,27 +214,17 @@ Activity timeouts and retries:
 
 The `TemporalBridge` is the **client-side** adapter used by the service API to start/stop/signal workflows when CRUD operations happen:
 
-- `POST /syncs` → `bridge.start(syncId)` starts a workflow
-- `DELETE /syncs/{id}` → `bridge.stop(syncId)` signals delete
-- `POST /syncs/{id}/pause` → `bridge.pause(syncId)`
-- `POST /syncs/{id}/resume` → `bridge.resume(syncId)`
-- `POST /webhooks/{credential_id}` → `bridge.pushEvent(credentialId, event)` fans out to all syncs sharing the credential
+| Service API route          | Bridge method                     | Temporal action                                           |
+| -------------------------- | --------------------------------- | --------------------------------------------------------- |
+| `POST /syncs`              | `bridge.start(syncId)`            | Start workflow                                            |
+| `DELETE /syncs/{id}`       | `bridge.stop(syncId)`             | Signal `delete`                                           |
+| `POST /syncs/{id}/pause`   | `bridge.pause(syncId)`            | Signal `pause`                                            |
+| `POST /syncs/{id}/resume`  | `bridge.resume(syncId)`           | Signal `resume`                                           |
+| `POST /webhooks/{cred_id}` | `bridge.pushEvent(credId, event)` | Signal `stripe_event` to all syncs sharing the credential |
 
 ### Worker (`temporal/worker.ts`)
 
-Factory function that creates a Temporal `Worker` instance:
-
-```ts
-createWorker({
-  temporalAddress: 'localhost:7233',
-  namespace: 'default',
-  taskQueue: 'sync-engine',
-  serviceUrl: 'http://localhost:4020',
-  workflowsPath: 'dist/temporal/workflows.js',
-})
-```
-
-The worker runs as a separate process via the CLI:
+Factory function that creates a Temporal `Worker` instance. Runs as a separate process via the CLI:
 
 ```sh
 sync-service worker \
@@ -153,36 +232,7 @@ sync-service worker \
   --service-url http://localhost:4020
 ```
 
-## Data Flow: Backfill
-
-```
-1. POST /syncs          → service stores config, bridge.start(syncId)
-2. Temporal starts syncWorkflow(syncId)
-3. Workflow calls setup(syncId) activity
-4.   Activity → POST /syncs/{id}/setup → service → engine.setup()
-5. Workflow enters main loop, calls run(syncId) activity
-6.   Activity → POST /syncs/{id}/run → service resolves config+creds+state
-7.   → engine.read() (Stripe API) → engine.write() (destination) → persist state
-8.   Activity streams NDJSON response, heartbeats every 50 messages
-9. Loop continues (backfill pages, event batches) until delete signal
-```
-
-## Data Flow: Live Webhook Event
-
-```
-1. Stripe sends webhook → POST /webhooks/{credential_id}
-2. Service calls bridge.pushEvent(credentialId, event)
-3. Bridge finds all syncs with matching credential_id
-4. Bridge signals each workflow: handle.signal('stripe_event', event)
-5. Workflow buffers the event
-6. Next loop iteration: drains buffer → run(syncId, [event1, event2, ...])
-7.   Activity → POST /syncs/{id}/run with NDJSON body (events)
-8.   Service passes events as $stdin to engine → source processes → destination writes
-```
-
 ## Running Locally
-
-Start Temporal dev server, the service, and a worker:
 
 ```sh
 # Terminal 1: Temporal dev server
