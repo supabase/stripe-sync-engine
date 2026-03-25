@@ -41,6 +41,10 @@ export type { TemporalOptions } from './temporal/bridge.js'
 export { createApp } from './api/app.js'
 export type { AppOptions } from './api/app.js'
 
+// Standalone webhook ingress app
+export { createWebhookApp } from './api/webhook-app.js'
+export type { WebhookAppOptions } from './api/webhook-app.js'
+
 // Temporal workflow types (for consumers that need to reference them)
 export type { RunResult, SyncActivities, WorkflowStatus } from './temporal/types.js'
 export { createActivities } from './temporal/activities.js'

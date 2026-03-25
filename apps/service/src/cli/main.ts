@@ -1,4 +1,5 @@
 import path from 'node:path'
+import os from 'node:os'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
@@ -125,6 +126,53 @@ const workerCmd = defineCommand({
   },
 })
 
+// Standalone webhook ingress command (Temporal mode only)
+const webhookCmd = defineCommand({
+  meta: { name: 'webhook', description: 'Start the webhook ingress server (Temporal mode)' },
+  args: {
+    port: {
+      type: 'string',
+      default: '4030',
+      description: 'HTTP server port (default: 4030)',
+    },
+    'data-dir': {
+      type: 'string',
+      description: 'Data directory — must point at the same store as the sync service',
+    },
+    'temporal-address': {
+      type: 'string',
+      required: true,
+      description: 'Temporal server address (e.g. localhost:7233)',
+    },
+    'temporal-task-queue': {
+      type: 'string',
+      default: 'sync-engine',
+      description: 'Temporal task queue name (default: sync-engine)',
+    },
+  },
+  async run({ args }) {
+    const { fileConfigStore } = await import('../lib/stores-fs.js')
+    const { TemporalBridge } = await import('../temporal/bridge.js')
+    const { createWebhookApp } = await import('../api/webhook-app.js')
+
+    const temporal = await createTemporalClient(
+      args['temporal-address'],
+      args['temporal-task-queue'] || 'sync-engine'
+    )
+    const dataDir =
+      args['data-dir'] || process.env.DATA_DIR || path.join(os.homedir(), '.stripe-sync')
+    const configs = fileConfigStore(`${dataDir}/syncs`)
+    const bridge = new TemporalBridge(temporal.client, temporal.taskQueue, configs)
+
+    const app = createWebhookApp({ push_event: (id, e) => bridge.pushEvent(id, e) })
+    const port = Number(args.port)
+    serve({ fetch: app.fetch, port }, () => {
+      console.log(`Webhook server listening on http://localhost:${port}`)
+      console.log(`  Temporal: ${args['temporal-address']} (queue: ${args['temporal-task-queue'] || 'sync-engine'})`)
+    })
+  },
+})
+
 export async function createProgram(opts?: { dataDir?: string }) {
   const app = createApp({ dataDir: opts?.dataDir })
   const res = await app.request('/openapi.json')
@@ -155,6 +203,6 @@ export async function createProgram(opts?: { dataDir?: string }) {
 
   return defineCommand({
     ...specCli,
-    subCommands: { serve: serveCmd, worker: workerCmd, ...specCli.subCommands },
+    subCommands: { serve: serveCmd, worker: workerCmd, webhook: webhookCmd, ...specCli.subCommands },
   })
 }

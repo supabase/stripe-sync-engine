@@ -23,6 +23,7 @@ import {
   fileStateStore,
   fileLogSink,
 } from '../lib/stores-fs.js'
+import { createWebhookApp } from './webhook-app.js'
 
 // MARK: - Helpers
 
@@ -116,13 +117,6 @@ export function createApp(options?: AppOptions) {
 
   const SyncIdParam = z.object({
     id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: 'sync_abc123' }),
-  })
-
-  const WebhookParam = z.object({
-    credential_id: z.string().openapi({
-      param: { name: 'credential_id', in: 'path' },
-      example: 'cred_abc123',
-    }),
   })
 
   // ── Health ──────────────────────────────────────────────────────
@@ -800,33 +794,9 @@ export function createApp(options?: AppOptions) {
     }
   )
 
-  // MARK: - Webhook ingress
+  // MARK: - Webhook ingress (mounted from webhook-app.ts)
 
-  app.openapi(
-    createRoute({
-      operationId: 'pushWebhook',
-      method: 'post',
-      path: '/webhooks/{credential_id}',
-      tags: ['Webhooks'],
-      summary: 'Ingest a Stripe webhook event',
-      description:
-        "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
-      request: { params: WebhookParam },
-      responses: {
-        200: {
-          content: { 'text/plain': { schema: z.literal('ok') } },
-          description: 'Event accepted',
-        },
-      },
-    }),
-    async (c) => {
-      const { credential_id } = c.req.valid('param')
-      const body = await c.req.text()
-      const headers = Object.fromEntries(c.req.raw.headers.entries())
-      service.push_event(credential_id, { body, headers })
-      return c.text('ok', 200)
-    }
-  )
+  app.route('', createWebhookApp({ push_event: (id, e) => service.push_event(id, e) }))
 
   // MARK: - OpenAPI spec + Swagger UI
 
