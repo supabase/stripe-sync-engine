@@ -317,3 +317,111 @@ describe('createCliFromSpec', () => {
     expect(names).toContain('GET:/syncs')
   })
 })
+
+// ---------------------------------------------------------------------------
+// ndjsonBodyStream
+// ---------------------------------------------------------------------------
+
+const ndjsonWriteSpec: OpenAPISpec = {
+  paths: {
+    '/write': {
+      post: {
+        operationId: 'write',
+        tags: [],
+        requestBody: {
+          required: true,
+          content: { 'application/x-ndjson': { schema: { type: 'string' } } },
+        },
+        responses: {
+          '200': { description: 'OK', content: { 'application/x-ndjson': {} } },
+        },
+      },
+    },
+  },
+}
+
+describe('ndjsonBodyStream', () => {
+  it('uses ReadableStream as body and sets Content-Type + Transfer-Encoding headers', async () => {
+    const capturedRequests: Request[] = []
+    const handler = vi.fn().mockImplementation((req: Request) => {
+      capturedRequests.push(req)
+      return Promise.resolve(
+        new Response('{"type":"state","stream":"s","data":{}}\n', {
+          headers: { 'content-type': 'application/x-ndjson' },
+        })
+      )
+    })
+
+    const ndjsonLine = '{"type":"record","stream":"test","data":{"id":"1"},"emitted_at":0}'
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(ndjsonLine + '\n'))
+        controller.close()
+      },
+    })
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    const root = createCliFromSpec({
+      spec: ndjsonWriteSpec,
+      handler,
+      ndjsonBodyStream: () => stream as ReadableStream,
+    })
+
+    // bodyRequired=true but --body is optional when ndjsonBodyStream is provided
+    await root.parseAsync(['write'], { from: 'user' })
+
+    writeSpy.mockRestore()
+
+    expect(capturedRequests).toHaveLength(1)
+    const req = capturedRequests[0]!
+    expect(req.method).toBe('POST')
+    expect(req.headers.get('Content-Type')).toBe('application/x-ndjson')
+    expect(req.headers.get('Transfer-Encoding')).toBe('chunked')
+    expect(req.body).not.toBeNull()
+    const bodyText = await req.text()
+    expect(bodyText).toContain('"type":"record"')
+  })
+
+  it('falls back to --body flag when ndjsonBodyStream returns null', async () => {
+    const capturedRequests: Request[] = []
+    const handler = vi.fn().mockImplementation((req: Request) => {
+      capturedRequests.push(req)
+      return Promise.resolve(new Response('', { status: 200 }))
+    })
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    const root = createCliFromSpec({
+      spec: ndjsonWriteSpec,
+      handler,
+      ndjsonBodyStream: () => null, // TTY — no stdin
+    })
+
+    await root.parseAsync(['write', '--body', 'line1\nline2'], { from: 'user' })
+
+    writeSpy.mockRestore()
+
+    expect(capturedRequests).toHaveLength(1)
+    const req = capturedRequests[0]!
+    // No stream override — Transfer-Encoding is NOT set
+    expect(req.headers.get('Transfer-Encoding')).toBeNull()
+    // --body value is used as body
+    const bodyText = await req.text()
+    expect(bodyText).toBe('line1\nline2')
+  })
+
+  it('makes --body optional for ndjson operations when ndjsonBodyStream is provided', () => {
+    const handler = vi.fn()
+    const root = createCliFromSpec({
+      spec: ndjsonWriteSpec,
+      handler,
+      ndjsonBodyStream: () => new ReadableStream(),
+    })
+    const writeCmd = root.commands.find((c) => c.name() === 'write')!
+    const bodyOpt = writeCmd.options.find((o) => o.long === '--body')!
+    // Should be optional (not mandatory), since stream provides the body
+    expect(bodyOpt.mandatory).toBe(false)
+  })
+})

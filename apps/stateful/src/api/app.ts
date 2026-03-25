@@ -78,6 +78,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'health',
       method: 'get',
       path: '/health',
       tags: ['Status'],
@@ -107,6 +108,7 @@ export function createApp(options?: AppOptions) {
   // List credentials
   app.openapi(
     createRoute({
+      operationId: 'listCredentials',
       method: 'get',
       path: '/credentials',
       tags: ['Credentials'],
@@ -133,6 +135,7 @@ export function createApp(options?: AppOptions) {
   // Create credential
   app.openapi(
     createRoute({
+      operationId: 'createCredential',
       method: 'post',
       path: '/credentials',
       tags: ['Credentials'],
@@ -169,6 +172,7 @@ export function createApp(options?: AppOptions) {
   // Get credential
   app.openapi(
     createRoute({
+      operationId: 'getCredential',
       method: 'get',
       path: '/credentials/{id}',
       tags: ['Credentials'],
@@ -199,6 +203,7 @@ export function createApp(options?: AppOptions) {
   // Update credential
   app.openapi(
     createRoute({
+      operationId: 'updateCredential',
       method: 'patch',
       path: '/credentials/{id}',
       tags: ['Credentials'],
@@ -246,6 +251,7 @@ export function createApp(options?: AppOptions) {
   // Delete credential
   app.openapi(
     createRoute({
+      operationId: 'deleteCredential',
       method: 'delete',
       path: '/credentials/{id}',
       tags: ['Credentials'],
@@ -323,6 +329,7 @@ export function createApp(options?: AppOptions) {
   // List syncs
   app.openapi(
     createRoute({
+      operationId: 'listSyncs',
       method: 'get',
       path: '/syncs',
       tags: ['Syncs'],
@@ -343,6 +350,7 @@ export function createApp(options?: AppOptions) {
   // Create sync
   app.openapi(
     createRoute({
+      operationId: 'createSync',
       method: 'post',
       path: '/syncs',
       tags: ['Syncs'],
@@ -381,6 +389,7 @@ export function createApp(options?: AppOptions) {
   // Get sync
   app.openapi(
     createRoute({
+      operationId: 'getSync',
       method: 'get',
       path: '/syncs/{id}',
       tags: ['Syncs'],
@@ -411,6 +420,7 @@ export function createApp(options?: AppOptions) {
   // Update sync
   app.openapi(
     createRoute({
+      operationId: 'updateSync',
       method: 'patch',
       path: '/syncs/{id}',
       tags: ['Syncs'],
@@ -459,6 +469,7 @@ export function createApp(options?: AppOptions) {
   // Delete sync
   app.openapi(
     createRoute({
+      operationId: 'deleteSync',
       method: 'delete',
       path: '/syncs/{id}',
       tags: ['Syncs'],
@@ -498,6 +509,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'setupSync',
       method: 'post',
       path: '/syncs/{id}/setup',
       tags: ['Sync Operations'],
@@ -522,6 +534,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'teardownSync',
       method: 'post',
       path: '/syncs/{id}/teardown',
       tags: ['Sync Operations'],
@@ -545,6 +558,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'checkSync',
       method: 'get',
       path: '/syncs/{id}/check',
       tags: ['Sync Operations'],
@@ -571,6 +585,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'readSync',
       method: 'post',
       path: '/syncs/{id}/read',
       tags: ['Sync Operations'],
@@ -599,6 +614,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'writeSync',
       method: 'post',
       path: '/syncs/{id}/write',
       tags: ['Sync Operations'],
@@ -640,6 +656,7 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
+      operationId: 'runSync',
       method: 'post',
       path: '/syncs/{id}/run',
       tags: ['Sync Operations'],
@@ -675,6 +692,7 @@ export function createApp(options?: AppOptions) {
   // that share the given credential. Each sync verifies the signature itself.
   app.openapi(
     createRoute({
+      operationId: 'pushWebhook',
       method: 'post',
       path: '/webhooks/{credential_id}',
       tags: ['Webhooks'],

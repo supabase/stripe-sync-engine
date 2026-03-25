@@ -1,215 +1,257 @@
-import { describe, expect, it } from 'vitest'
-import { sourceTest, destinationTest } from '@stripe/sync-lib-stateless'
-import type { ConnectorResolver, DestinationOutput, Message } from '@stripe/sync-engine-stateless'
-import { memoryCredentialStore, memoryConfigStore } from '@stripe/sync-lib-stateful'
-import type { Credential } from '@stripe/sync-lib-stateful'
-import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run.js'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import type {
+  Source,
+  Message,
+  StateMessage,
+  Destination,
+  DestinationInput,
+  DestinationOutput,
+} from '@stripe/sync-engine-stateless'
+import { createConnectorResolver } from '@stripe/sync-engine-stateless'
+import { createCliFromSpec } from '@stripe/sync-ts-cli'
+import { createApp } from '../api/app.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeCred(id: string, type: string): Credential {
+async function* toAsync<T>(items: T[]): AsyncIterable<T> {
+  for (const item of items) yield item
+}
+
+function makeSource(messages: Message[]): Source {
   return {
-    id,
-    type,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    spec: () => ({ config: {} }),
+    check: async () => ({ status: 'succeeded' as const }),
+    discover: async () => ({
+      type: 'catalog',
+      streams: [{ name: 'customers', primary_key: [['id']] }],
+    }),
+    read: () => toAsync(messages),
+    setup: async () => {},
+    teardown: async () => {},
   }
 }
 
-/** Re-iterable async iterable from an array — each `for await` gets a fresh iterator. */
-function toAsync<T>(items: T[]): AsyncIterable<T> {
+function makeDestination(): Destination {
   return {
-    [Symbol.asyncIterator]() {
-      let i = 0
-      return {
-        async next() {
-          if (i < items.length) return { value: items[i++], done: false as const }
-          return { value: undefined, done: true as const }
-        },
-      }
-    },
+    spec: () => ({ config: {} }),
+    check: async () => ({ status: 'succeeded' as const }),
+    write: (
+      _params: { config: Record<string, unknown>; catalog: any },
+      $stdin: AsyncIterable<DestinationInput>
+    ): AsyncIterable<DestinationOutput> =>
+      (async function* () {
+        for await (const msg of $stdin) {
+          if (msg.type === 'state') yield msg
+        }
+      })(),
+    setup: async () => {},
+    teardown: async () => {},
   }
+}
+
+let dataDir: string
+
+beforeEach(() => {
+  dataDir = mkdtempSync(join(tmpdir(), 'stateful-cli-test-'))
+})
+
+afterEach(() => {
+  rmSync(dataDir, { recursive: true, force: true })
+})
+
+async function seedSync(app: ReturnType<typeof createApp>): Promise<string> {
+  const srcRes = await app.request('/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'stripe-api-core', api_key: 'sk_test' }),
+  })
+  const { id: srcCredId } = await srcRes.json()
+
+  const dstRes = await app.request('/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'postgres',
+      connection_string: 'postgresql://u:p@localhost:5432/db',
+    }),
+  })
+  const { id: dstCredId } = await dstRes.json()
+
+  const syncRes = await app.request('/syncs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      account_id: 'acct_test',
+      status: 'backfilling',
+      source: { type: 'stripe-api-core', credential_id: srcCredId },
+      destination: { type: 'postgres', credential_id: dstCredId },
+    }),
+  })
+  const { id } = await syncRes.json()
+  return id
+}
+
+async function makeCli(app: ReturnType<typeof createApp>) {
+  const spec = await (await app.fetch(new Request('http://localhost/openapi.json'))).json()
+  return createCliFromSpec({
+    spec,
+    handler: (req) => Promise.resolve(app.fetch(req)),
+    exclude: ['health', 'pushWebhook'],
+  })
+}
+
+function captureStdout(): { lines: string[]; restore: () => void } {
+  const lines: string[] = []
+  const spy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
+    lines.push(String(data))
+    return true
+  })
+  return { lines, restore: () => spy.mockRestore() }
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('runSync', () => {
-  it('yields state messages from a successful sync', async () => {
-    const resolver: ConnectorResolver = {
-      resolveSource: async () => sourceTest,
-      resolveDestination: async () => destinationTest,
-    }
-
-    const credentials = memoryCredentialStore({
-      'src-cred': makeCred('src-cred', 'test'),
-      'dst-cred': makeCred('dst-cred', 'test'),
+describe('stateful CLI commands', () => {
+  it('list-syncs outputs seeded syncs as JSON', async () => {
+    const app = createApp({
+      dataDir,
+      connectors: createConnectorResolver({
+        sources: { 'stripe-api-core': makeSource([]) },
+        destinations: { postgres: makeDestination() },
+      }),
     })
+    const syncId = await seedSync(app)
+    const cli = await makeCli(app)
 
-    const configs = memoryConfigStore({
-      test_sync: {
-        id: 'test_sync',
-        source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
-        destination: { type: 'test', credential_id: 'dst-cred' },
+    const { lines, restore } = captureStdout()
+    await cli.parseAsync(['list-syncs'], { from: 'user' })
+    restore()
+
+    const parsed = JSON.parse(lines.join(''))
+    expect(parsed.data).toHaveLength(1)
+    expect(parsed.data[0].id).toBe(syncId)
+  })
+
+  it('get-sync <id> returns the sync using a positional argument', async () => {
+    const app = createApp({
+      dataDir,
+      connectors: createConnectorResolver({
+        sources: { 'stripe-api-core': makeSource([]) },
+        destinations: { postgres: makeDestination() },
+      }),
+    })
+    const syncId = await seedSync(app)
+    const cli = await makeCli(app)
+
+    const { lines, restore } = captureStdout()
+    await cli.parseAsync(['get-sync', syncId], { from: 'user' })
+    restore()
+
+    const parsed = JSON.parse(lines.join(''))
+    expect(parsed.id).toBe(syncId)
+  })
+
+  it('check-sync <id> outputs source + destination check results', async () => {
+    const app = createApp({
+      dataDir,
+      connectors: createConnectorResolver({
+        sources: { 'stripe-api-core': makeSource([]) },
+        destinations: { postgres: makeDestination() },
+      }),
+    })
+    const syncId = await seedSync(app)
+    const cli = await makeCli(app)
+
+    const { lines, restore } = captureStdout()
+    await cli.parseAsync(['check-sync', syncId], { from: 'user' })
+    restore()
+
+    const parsed = JSON.parse(lines.join(''))
+    expect(parsed.source.status).toBe('succeeded')
+    expect(parsed.destination.status).toBe('succeeded')
+  })
+
+  it('run-sync <id> streams NDJSON state messages', async () => {
+    const stateMsg: StateMessage = { type: 'state', stream: 'customers', data: { cursor: 'x' } }
+    const record: Message = {
+      type: 'record',
+      stream: 'customers',
+      data: { id: 'c1' },
+      emitted_at: 0,
+    }
+    const app = createApp({
+      dataDir,
+      connectors: createConnectorResolver({
+        sources: { 'stripe-api-core': makeSource([record, stateMsg]) },
+        destinations: { postgres: makeDestination() },
+      }),
+    })
+    const syncId = await seedSync(app)
+    const cli = await makeCli(app)
+
+    const { lines, restore } = captureStdout()
+    await cli.parseAsync(['run-sync', syncId], { from: 'user' })
+    restore()
+
+    const msgs = lines
+      .join('')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l))
+    const states = msgs.filter((m: any) => m.type === 'state')
+    expect(states.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('write-sync <id> accepts ndjsonBodyStream and streams state messages back', async () => {
+    const app = createApp({
+      dataDir,
+      connectors: createConnectorResolver({
+        sources: { 'stripe-api-core': makeSource([]) },
+        destinations: { postgres: makeDestination() },
+      }),
+    })
+    const syncId = await seedSync(app)
+
+    const ndjsonInput =
+      [
+        JSON.stringify({ type: 'record', stream: 'customers', data: { id: 'c1' }, emitted_at: 0 }),
+        JSON.stringify({ type: 'state', stream: 'customers', data: { cursor: 'z' } }),
+      ].join('\n') + '\n'
+
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(ndjsonInput))
+        controller.close()
       },
     })
 
-    const messages: DestinationOutput[] = []
-    for await (const msg of runSync({
-      syncId: 'test_sync',
-      connectors: resolver,
-      credentials,
-      configs,
-      $stdin: toAsync([
-        {
-          type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1', name: 'Alice' },
-          emitted_at: Date.now(),
-        },
-        { type: 'state', stream: 'customers', data: { status: 'complete' } },
-      ]),
-    })) {
-      messages.push(msg)
-    }
-
-    const states = messages.filter((m) => m.type === 'state')
-    expect(states).toHaveLength(1)
-    expect(states[0]!.stream).toBe('customers')
-    expect(states[0]!.data).toEqual({ status: 'complete' })
-  })
-
-  it('pipeline produces state for each stream', async () => {
-    const resolver: ConnectorResolver = {
-      resolveSource: async () => sourceTest,
-      resolveDestination: async () => destinationTest,
-    }
-
-    const credentials = memoryCredentialStore({
-      'src-cred': makeCred('src-cred', 'test'),
-      'dst-cred': makeCred('dst-cred', 'test'),
+    const spec = await (await app.fetch(new Request('http://localhost/openapi.json'))).json()
+    const cli = createCliFromSpec({
+      spec,
+      handler: (req) => Promise.resolve(app.fetch(req)),
+      exclude: ['health', 'pushWebhook'],
+      ndjsonBodyStream: () => stream as ReadableStream,
     })
 
-    const configs = memoryConfigStore({
-      test_sync: {
-        id: 'test_sync',
-        source: {
-          type: 'test',
-          credential_id: 'src-cred',
-          streams: { customers: {}, invoices: {} },
-        },
-        destination: { type: 'test', credential_id: 'dst-cred' },
-      },
-    })
+    const { lines, restore } = captureStdout()
+    await cli.parseAsync(['write-sync', syncId], { from: 'user' })
+    restore()
 
-    const messages: DestinationOutput[] = []
-    for await (const msg of runSync({
-      syncId: 'test_sync',
-      connectors: resolver,
-      credentials,
-      configs,
-      $stdin: toAsync([
-        { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
-        { type: 'state', stream: 'customers', data: { status: 'complete' } },
-        { type: 'record', stream: 'invoices', data: { id: 'inv_1' }, emitted_at: Date.now() },
-        { type: 'state', stream: 'invoices', data: { status: 'complete' } },
-      ]),
-    })) {
-      messages.push(msg)
-    }
-
-    const states = messages.filter((m) => m.type === 'state')
-    expect(states).toHaveLength(2)
-    expect(states.map((m) => m.stream).sort()).toEqual(['customers', 'invoices'])
-  })
-})
-
-// ---------------------------------------------------------------------------
-// setupSync / teardownSync / checkSync / readSync / writeSync
-// ---------------------------------------------------------------------------
-
-function makeOpts(extra: Partial<Parameters<typeof runSync>[0]> = {}) {
-  const resolver: ConnectorResolver = {
-    resolveSource: async () => sourceTest,
-    resolveDestination: async () => destinationTest,
-  }
-  const credentials = memoryCredentialStore({
-    'src-cred': makeCred('src-cred', 'test'),
-    'dst-cred': makeCred('dst-cred', 'test'),
-  })
-  const configs = memoryConfigStore({
-    test_sync: {
-      id: 'test_sync',
-      source: { type: 'test', credential_id: 'src-cred', streams: { customers: {} } },
-      destination: { type: 'test', credential_id: 'dst-cred' },
-    },
-  })
-  return {
-    syncId: 'test_sync',
-    connectors: resolver,
-    credentials,
-    configs,
-    ...extra,
-  }
-}
-
-describe('setupSync', () => {
-  it('resolves without error', async () => {
-    await expect(setupSync(makeOpts())).resolves.toBeUndefined()
-  })
-})
-
-describe('teardownSync', () => {
-  it('resolves without error', async () => {
-    await expect(teardownSync(makeOpts())).resolves.toBeUndefined()
-  })
-})
-
-describe('checkSync', () => {
-  it('returns source and destination check results', async () => {
-    const result = await checkSync(makeOpts())
-    expect(result.source.status).toBe('succeeded')
-    expect(result.destination.status).toBe('succeeded')
-  })
-})
-
-describe('readSync', () => {
-  it('yields messages from source', async () => {
-    const $stdin = toAsync([
-      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
-      { type: 'state' as const, stream: 'customers', data: { cursor: 'abc' } },
-    ])
-    const msgs: Message[] = []
-    for await (const msg of readSync(makeOpts({ $stdin }))) {
-      msgs.push(msg)
-    }
-    expect(msgs.length).toBeGreaterThan(0)
-  })
-})
-
-describe('writeSync', () => {
-  it('yields state messages after writing records', async () => {
-    const $stdin = toAsync([
-      { type: 'record' as const, stream: 'customers', data: { id: 'c1' }, emitted_at: 0 },
-      { type: 'state' as const, stream: 'customers', data: { cursor: 'z' } },
-    ] as Message[])
-    const msgs: DestinationOutput[] = []
-    for await (const msg of writeSync(makeOpts({ $stdin }))) {
-      msgs.push(msg)
-    }
-    const states = msgs.filter((m) => m.type === 'state')
+    const msgs = lines
+      .join('')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l))
+    const states = msgs.filter((m: any) => m.type === 'state')
     expect(states).toHaveLength(1)
-    expect(states[0]!.stream).toBe('customers')
-  })
-
-  it('throws when $stdin is not provided', async () => {
-    await expect(async () => {
-      for await (const _ of writeSync(makeOpts())) {
-        // nothing
-      }
-    }).rejects.toThrow('$stdin required')
+    expect(states[0].stream).toBe('customers')
   })
 })

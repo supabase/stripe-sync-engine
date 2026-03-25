@@ -19,6 +19,9 @@ export interface CreateCliFromSpecOptions {
   groupByTag?: boolean
   /** Base URL for constructing Request objects (default: 'http://localhost') */
   baseUrl?: string
+  /** Provider for NDJSON request body stream. Called when operation.ndjsonRequest === true.
+   * Return a ReadableStream to use as body, or null/undefined to fall back to --body flag. */
+  ndjsonBodyStream?: () => ReadableStream | null | undefined
 }
 
 /** Returns a Commander Command with subcommands for each API operation. */
@@ -30,6 +33,7 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): Command {
     exclude = [],
     groupByTag = false,
     baseUrl = 'http://localhost',
+    ndjsonBodyStream,
   } = opts
 
   const root = new Command()
@@ -58,17 +62,17 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): Command {
     for (const [tag, ops] of groups) {
       const group = new Command(toCliFlag(tag))
       for (const op of ops) {
-        group.addCommand(buildCommand(op, handler, baseUrl, nameOperation))
+        group.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
       }
       root.addCommand(group)
     }
 
     for (const op of ungrouped) {
-      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation))
+      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
     }
   } else {
     for (const op of operations) {
-      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation))
+      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
     }
   }
 
@@ -80,7 +84,8 @@ export function buildCommand(
   operation: ParsedOperation,
   handler: Handler,
   baseUrl = 'http://localhost',
-  nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string
+  nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string,
+  ndjsonBodyStream?: () => ReadableStream | null | undefined
 ): Command {
   const rawOp: OpenAPIOperation = {
     operationId: operation.operationId,
@@ -150,8 +155,11 @@ export function buildCommand(
         }
       }
     } else {
-      // Complex or NDJSON body: single --body flag
-      if (operation.bodyRequired) {
+      // Complex or NDJSON body: single --body flag.
+      // When ndjsonBodyStream is provided, --body is optional for NDJSON operations
+      // because the stream supplies the body at runtime; the API enforces presence.
+      const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
+      if (operation.bodyRequired && !bodyOptional) {
         cmd.requiredOption('--body <json>', 'Request body as JSON string')
       } else {
         cmd.option('--body [json]', 'Request body as JSON string')
@@ -164,7 +172,24 @@ export function buildCommand(
     const positionals = actionArgs.slice(0, operation.pathParams.length) as string[]
     const opts = actionArgs[operation.pathParams.length] as Record<string, string | undefined>
 
-    const request = buildRequest(operation, positionals, opts, baseUrl)
+    let request = buildRequest(operation, positionals, opts, baseUrl)
+
+    if (operation.ndjsonRequest && ndjsonBodyStream) {
+      const stream = ndjsonBodyStream()
+      if (stream) {
+        const headers = new Headers(request.headers)
+        headers.set('Content-Type', 'application/x-ndjson')
+        headers.set('Transfer-Encoding', 'chunked')
+        request = new Request(request.url, {
+          method: request.method,
+          headers,
+          body: stream,
+          // Node.js requires duplex:'half' for streaming request bodies
+          duplex: 'half',
+        } as RequestInit)
+      }
+    }
+
     const response = await handler(request)
     await handleResponse(response, operation)
   })

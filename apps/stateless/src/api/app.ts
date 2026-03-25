@@ -88,6 +88,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'health',
       method: 'get',
       path: '/health',
       tags: ['Status'],
@@ -104,6 +105,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'setup',
       method: 'post',
       path: '/setup',
       tags: ['Sync'],
@@ -129,6 +131,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'teardown',
       method: 'post',
       path: '/teardown',
       tags: ['Sync'],
@@ -153,6 +156,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'check',
       method: 'get',
       path: '/check',
       tags: ['Sync'],
@@ -180,6 +184,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'read',
       method: 'post',
       path: '/read',
       tags: ['Sync'],
@@ -208,6 +213,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'write',
       method: 'post',
       path: '/write',
       tags: ['Sync'],
@@ -245,6 +251,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
+      operationId: 'run',
       method: 'post',
       path: '/run',
       tags: ['Sync'],
