@@ -24,15 +24,13 @@ TMPDIR_BASE=$(mktemp -d)
 cleanup() {
   rm -rf "$TMPDIR_BASE"
   rm -f "$REPO_ROOT"/stripe-sync-protocol-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-lib-stateless-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-engine-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-destination-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-destination-google-sheets-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-store-postgres-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-state-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-util-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-ts-cli-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-engine-stateless-*.tgz
-  rm -f "$REPO_ROOT"/stripe-sync-engine-*.tgz
 }
 trap cleanup EXIT
 
@@ -46,18 +44,16 @@ echo ""
 echo "--- Step 1: Packing packages ---"
 
 PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/dev/null | tail -1)
-ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-lib-stateless pack 2>/dev/null | tail -1)
+ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-postgres pack 2>/dev/null | tail -1)
 DEST_SHEETS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-google-sheets pack 2>/dev/null | tail -1)
-STORE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-store-postgres pack 2>/dev/null | tail -1)
+STATE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-state-postgres pack 2>/dev/null | tail -1)
 UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2>/dev/null | tail -1)
 TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-ts-cli pack 2>/dev/null | tail -1)
-STATELESS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless pack 2>/dev/null | tail -1)
-CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine pack 2>/dev/null | tail -1)
 
 for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-           "$STORE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$STATELESS_TGZ" "$CLI_TGZ"; do
+           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -88,21 +84,20 @@ cat > package.json <<EOF
   "pnpm": {
     "overrides": {
       "@stripe/sync-protocol": "$PROTOCOL_TGZ",
-      "@stripe/sync-lib-stateless": "$ENGINE_TGZ",
+      "@stripe/sync-engine": "$ENGINE_TGZ",
       "@stripe/sync-source-stripe": "$SOURCE_TGZ",
       "@stripe/sync-destination-postgres": "$DEST_TGZ",
       "@stripe/sync-destination-google-sheets": "$DEST_SHEETS_TGZ",
-      "@stripe/sync-store-postgres": "$STORE_PG_TGZ",
+      "@stripe/sync-state-postgres": "$STATE_PG_TGZ",
       "@stripe/sync-util-postgres": "$UTIL_PG_TGZ",
-      "@stripe/sync-ts-cli": "$TSCLI_TGZ",
-      "@stripe/sync-engine-stateless": "$STATELESS_TGZ"
+      "@stripe/sync-ts-cli": "$TSCLI_TGZ"
     }
   }
 }
 EOF
 
 pnpm add "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-         "$STORE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$STATELESS_TGZ" "$CLI_TGZ" \
+         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" \
          2>&1 | tail -5
 echo ""
 

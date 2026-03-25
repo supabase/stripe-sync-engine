@@ -1,0 +1,77 @@
+{
+  "name": "@stripe/sync-engine",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Stripe Sync Engine — sync Stripe data to Postgres",
+  "type": "module",
+  "bin": {
+    "sync-engine": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./app": {
+      "bun": "./src/api/app.ts",
+      "types": "./dist/api/app.d.ts",
+      "import": "./dist/api/app.js"
+    },
+    "./source-test": {
+      "bun": "./src/lib/source-test.ts",
+      "types": "./dist/lib/source-test.d.ts",
+      "import": "./dist/lib/source-test.js"
+    },
+    "./destination-test": {
+      "bun": "./src/lib/destination-test.ts",
+      "types": "./dist/lib/destination-test.d.ts",
+      "import": "./dist/lib/destination-test.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && node ../../scripts/fix-shebangs.mjs dist/cli/index.js dist/api/index.js",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@hono/node-server": "^1",
+    "@hono/swagger-ui": "^0.6",
+    "@hono/zod-openapi": "^1.2",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-state-postgres": "workspace:*",
+    "@stripe/sync-ts-cli": "workspace:*",
+    "citty": "^0.1.6",
+    "dotenv": "^16.4.7",
+    "googleapis": "^148.0.0",
+    "hono": "^4",
+    "pg": "^8.16.3",
+    "stripe": "^17.7.0",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.4",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stripe/sync-engine.git"
+  },
+  "homepage": "https://github.com/stripe/sync-engine#readme",
+  "keywords": [
+    "stripe",
+    "sync",
+    "database",
+    "typescript"
+  ],
+  "author": "Stripe <https://stripe.com/>"
+}

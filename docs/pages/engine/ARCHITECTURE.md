@@ -197,7 +197,7 @@ Source → Engine → Destination
 ### Minimal sync
 
 ```typescript
-import { createEngine } from '@stripe/sync-lib-stateless'
+import { createEngine } from '@stripe/sync-engine'
 
 const engine = createEngine(params, { source, destination })
 
@@ -207,7 +207,7 @@ for await (const msg of engine.run()) {
 }
 ```
 
-`createEngine` lives in `@stripe/sync-lib-stateless`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
+`createEngine` lives in `@stripe/sync-engine`. Pipeline utilities (`forward`, `collect`, `filterDataMessages`) also live there.
 
 ### Validation boundary
 

@@ -47,7 +47,7 @@ Callers (`apps/sync-engine`) call `runMigrations()` for bootstrap, then `source.
 - `Source` — `spec()`, `check()`, `discover()`, `read(params, $stdin?)`; optional `setup?()`, `teardown?()`
 - `Destination` — `spec()`, `check()`, `write(params, $stdin)`; optional `setup?()`, `teardown?()`
 
-There is no `Orchestrator` interface — orchestration is handled by `createEngine()` in `@stripe/sync-lib-stateless`.
+There is no `Orchestrator` interface — orchestration is handled by `createEngine()` in `@stripe/sync-engine`.
 
 ## Interface implementations
 
@@ -181,7 +181,7 @@ All P0 items resolved:
 - [x] `packages/stateful-sync` exists with `StatefulSync` class
 - [x] All CLI stubs replaced with real implementations
 - [x] `Source` and `Destination` interfaces defined in `packages/protocol`
-- [x] `createEngine()` in `@stripe/sync-lib-stateless`
+- [x] `createEngine()` in `@stripe/sync-engine`
 - [x] Zero cross-boundary imports between source/destination library code
 - [x] `pnpm build && pnpm lint` clean
 - [ ] All .todo test stubs filled or removed with justification

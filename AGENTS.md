@@ -9,14 +9,11 @@ pnpm install
 pnpm build          # required before running CLI or e2e tests
 ```
 
-Most packages run directly from source via `npx tsx` — no build needed.
-`node --strip-types` does not work because the codebase uses `moduleResolution: "bundler"`
-with extensionless imports (`from './index'` not `from './index.ts'`).
+Minimum Node.js version: **24**. Most packages run directly from source via `npx tsx` — no build needed.
 
 Exceptions that require `pnpm build`:
 
 - `apps/supabase` — uses `?raw` imports (bundler feature)
-- `apps/stateless` — uses `import ... with { type: 'json' }` (import attributes)
 
 For dev with auto-rebuild: `cd packages/sync-engine && pnpm dev`
 
@@ -38,14 +35,20 @@ pnpm lint
 pnpm build
 ```
 
-If you add a migration, register it in `packages/store-postgres/src/migrations/index.ts`
+If you add a migration, register it in `packages/state-postgres/src/migrations/index.ts`
 (the barrel test will catch omissions).
 
 ## Monorepo Layout
 
-- `packages/sync-engine` — core sync engine + CLI (published as `@stripe/sync-engine`)
-- `packages/source-stripe` — Stripe source connector + webhook ingress server (Fastify)
-- `packages/sync-engine/src/supabase` — Supabase edge functions (Deno runtime, not Node)
+- `packages/sync-engine` — core sync engine + CLI + HTTP API (published as `@stripe/sync-engine`)
+- `packages/protocol` — sync protocol types and schemas (`@stripe/sync-protocol`)
+- `packages/source-stripe` — Stripe source connector (`@stripe/sync-source-stripe`)
+- `packages/destination-postgres` — Postgres destination connector
+- `packages/destination-google-sheets` — Google Sheets destination connector
+- `packages/state-postgres` — Postgres state store (`@stripe/sync-state-postgres`)
+- `packages/util-postgres` — shared Postgres utilities
+- `packages/ts-cli` — internal CLI utilities (private)
+- `apps/supabase` — Supabase edge functions (Deno runtime, not Node)
 
 ## GitHub Workflow
 

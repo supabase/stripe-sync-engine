@@ -78,7 +78,7 @@ Since these packages are build-time inputs (not runtime dependencies), they belo
   "devDependencies": {
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
-    "@stripe/sync-lib-stateless": "workspace:*"
+    "@stripe/sync-engine": "workspace:*"
   }
 }
 ```

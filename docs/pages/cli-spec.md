@@ -310,7 +310,7 @@ sync-engine -c sync.json
 sync-engine -c '{"source_config":{"api_key":"sk_test_abc"},"destination_config":{"connection_string":"postgres://localhost/mydb"}}'
 
 # Level 6: programmatic (library, not CLI)
-import { createEngine } from '@stripe/sync-lib-stateless'
+import { createEngine } from '@stripe/sync-engine'
 ```
 
 ---

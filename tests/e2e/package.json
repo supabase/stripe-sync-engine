@@ -8,8 +8,7 @@
   "devDependencies": {
     "@hono/node-server": "^1",
     "@stripe/sync-protocol": "workspace:*",
-    "@stripe/sync-lib-stateless": "workspace:*",
-    "@stripe/sync-engine-stateful": "workspace:*",
+    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
     "pg": "^8.16.0",

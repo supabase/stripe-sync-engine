@@ -88,7 +88,7 @@ Contains: message types (`RecordMessage`, `StateMessage`, `CatalogMessage`), `So
 
 Runtime code for executing syncs: the engine (wires source → destination), the connector loader (subprocess adapter + resolution), and pipeline utilities. Re-exports everything from `protocol` so consumers only need one import.
 
-**Package name:** `@stripe/sync-lib-stateless`
+**Package name:** `@stripe/sync-engine`
 
 **Exports:** Everything from `protocol` + `createEngine`, `createConnectorResolver`, `SyncParams`, `forward`, `collect`, `filterDataMessages`.
 
@@ -134,7 +134,7 @@ Writes records into a Google Sheets spreadsheet.
 
 Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific SQL migrations, handles schema creation, migration tracking, and template rendering.
 
-**Package name:** `@stripe/sync-store-postgres`
+**Package name:** `@stripe/sync-state-postgres`
 
 **Exports:** `runMigrations`, `runMigrationsFromContent`, `embeddedMigrations`, `genericBootstrapMigrations`, `renderMigrationTemplate`.
 
@@ -144,11 +144,11 @@ Postgres-specific migration infrastructure. Runs bootstrap and Stripe-specific S
 
 Defines store interfaces (`CredentialStore`, `ConfigStore`, `StateStore`, `LogSink`) with lightweight implementations (memory, file, stderr). The `StatefulSync` coordinator loads config → credentials → state, resolves connectors, creates the engine, runs the sync, persists state, and handles auth_error with credential refresh + retry.
 
-**Package name:** `@stripe/sync-lib-stateful`
+**Package name:** `@stripe/sync-engine`
 
 **Exports:** Store interfaces + implementations, `StatefulSync`, `resolve`.
 
-**Dependencies:** `@stripe/sync-lib-stateless`.
+**Dependencies:** `@stripe/sync-engine`.
 
 ### `util-postgres` — shared Postgres utilities
 
@@ -172,23 +172,23 @@ Generic CLI tool that can call any exported function/method from a TypeScript mo
 
 ### `apps/stateless` — one-shot CLI + API
 
-Runs a single sync from command-line flags or HTTP. No persistence between runs — caller provides all inputs. Thin wrapper around `@stripe/sync-lib-stateless`.
+Runs a single sync from command-line flags or HTTP. No persistence between runs — caller provides all inputs. Thin wrapper around `@stripe/sync-engine`.
 
-**Package name:** `@stripe/sync-engine-stateless`
+**Package name:** `@stripe/sync-engine`
 
 **Binaries:** `sync-engine-stateless` (CLI), `sync-engine-stateless-api` (HTTP server)
 
-**Dependencies:** `@stripe/sync-lib-stateless`.
+**Dependencies:** `@stripe/sync-engine`.
 
 ### `apps/stateful` — persistent CLI + API
 
 Wraps the stateless app with `StatefulSync` for credential, config, and state persistence. CRUD endpoints for credentials and syncs, plus streaming sync execution. Uses 4 file-based stores under `--data-dir`.
 
-**Package name:** `@stripe/sync-engine-stateful`
+**Package name:** `@stripe/sync-engine`
 
 **Binaries:** `sync-engine-stateful` (CLI), `sync-engine-stateful-api` (HTTP server)
 
-**Dependencies:** `@stripe/sync-engine-stateless`, `@stripe/sync-lib-stateful`.
+**Dependencies:** `@stripe/sync-engine`, `@stripe/sync-engine`.
 
 ### `apps/sync-engine` — published CLI
 
@@ -198,7 +198,7 @@ The user-facing published CLI. Simple one-shot sync: reads Stripe API key + Post
 
 **Binary:** `sync-engine`
 
-**Dependencies:** `@stripe/sync-lib-stateless`, `@stripe/sync-store-postgres`.
+**Dependencies:** `@stripe/sync-engine`, `@stripe/sync-state-postgres`.
 
 ### `apps/supabase` — Supabase integration
 
@@ -206,7 +206,7 @@ Deployment target for the Supabase installation flow. Bundles edge functions (De
 
 **Package name:** `@stripe/sync-integration-supabase`
 
-**Dependencies:** `@stripe/sync-protocol`, `@stripe/sync-source-stripe`, `@stripe/sync-destination-postgres`, `@stripe/sync-store-postgres`, `@stripe/sync-lib-stateful`.
+**Dependencies:** `@stripe/sync-protocol`, `@stripe/sync-source-stripe`, `@stripe/sync-destination-postgres`, `@stripe/sync-state-postgres`, `@stripe/sync-engine`.
 
 ## Isolation rules
 

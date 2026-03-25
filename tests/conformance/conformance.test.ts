@@ -31,13 +31,13 @@ const sources = [
   ...packageDirs
     .filter((d) => d.startsWith('source-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-lib-stateless/source-test' },
+  { name: '@stripe/sync-engine/source-test' },
 ]
 const destinations = [
   ...packageDirs
     .filter((d) => d.startsWith('destination-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/sync-lib-stateless/destination-test' },
+  { name: '@stripe/sync-engine/destination-test' },
 ]
 
 describe.each(sources)('source: $name', ({ name }) => {

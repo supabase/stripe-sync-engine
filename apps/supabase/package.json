@@ -23,10 +23,10 @@
   ],
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
-    "@stripe/sync-store-postgres": "workspace:*",
-    "@stripe/sync-lib-stateful": "workspace:*",
+    "@stripe/sync-state-postgres": "workspace:*",
     "supabase-management-js": "^2.0.2"
   },
   "devDependencies": {
