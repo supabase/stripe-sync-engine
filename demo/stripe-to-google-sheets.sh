@@ -5,7 +5,7 @@
 # Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-npx tsx}"
+RUN="${TS_RUNNER:-$(dirname "$0")/../scripts/ts-run}"
 
 ACCT=$(curl -su "$STRIPE_API_KEY:" https://api.stripe.com/v1/account 2>/dev/null \
   | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).id))")

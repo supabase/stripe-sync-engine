@@ -10,7 +10,7 @@
 # Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-npx tsx}"
+RUN="${TS_RUNNER:-$(dirname "$0")/../scripts/ts-run}"
 
 echo "Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID" >&2
 

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Universal TypeScript runner.
+# Uses bun if available; otherwise remaps src/…ts → dist/…js and runs with node.
+#
+# Usage: scripts/ts-run <src/path/to/file.ts> [args...]
+
+FILE="$1"; shift
+
+if command -v bun &>/dev/null; then
+  exec bun "$FILE" "$@"
+else
+  NODE_FILE="${FILE/\/src\//\/dist\/}"
+  NODE_FILE="${NODE_FILE%.ts}.js"
+  exec node "$NODE_FILE" "$@"
+fi

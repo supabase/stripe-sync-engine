@@ -4,16 +4,11 @@
 set -euo pipefail
 
 APP="${1:-engine}"
-
-if command -v bun &> /dev/null; then
-  RUN="bun"; DIR="src"; EXT="ts"
-else
-  RUN="node"; DIR="dist"; EXT="js"
-fi
+RUN="$(dirname "$0")/ts-run"
 
 case "$APP" in
-  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/$DIR/cli/index.$EXT" ;;
-  service) PORT="${PORT:-4020}"; ENTRY="apps/service/$DIR/bin/cli.$EXT" ;;
+  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/src/cli/index.ts" ;;
+  service) PORT="${PORT:-4020}"; ENTRY="apps/service/src/bin/cli.ts" ;;
   *) echo "Usage: $0 [engine|service]" >&2; exit 1 ;;
 esac
 
