@@ -29,7 +29,7 @@ TODO:
 - [ ] Status reporting in the Supabase ui (ideally live)
   - [ ] Parsing the state properties on the sync object
 - [ ] Figure out packaging for Supbase, packaging in particular
-- [ ] Remove esbuild/`?raw` bundling — now that all packages are published to npm, edge functions can use `npm:@stripe/source-stripe@0.1.0` imports directly. Deno resolves them at runtime, no build-time bundling needed. Template version numbers at deploy time. Eliminates esbuild from the repo entirely.
+- [ ] Remove esbuild/`?raw` bundling — now that all packages are published to npm, edge functions can use `npm:@stripe/sync-source-stripe@0.1.0` imports directly. Deno resolves them at runtime, no build-time bundling needed. Template version numbers at deploy time. Eliminates esbuild from the repo entirely.
 
 ## Replit
 

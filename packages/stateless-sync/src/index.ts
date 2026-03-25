@@ -1,4 +1,4 @@
-export * from '@stripe/protocol'
+export * from '@stripe/sync-protocol'
 export { forward, collect, filterDataMessages } from './pipeline.js'
 export type { RouterCallbacks } from './pipeline.js'
 export { createEngine, createEngineFromParams, buildCatalog } from './engine.js'

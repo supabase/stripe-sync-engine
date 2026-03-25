@@ -1,10 +1,10 @@
-import type { DestinationInput, DestinationOutput, Message } from '@stripe/protocol'
+import type { DestinationInput, DestinationOutput, Message } from '@stripe/sync-protocol'
 import {
   isDataMessage,
   isLogMessage,
   isErrorMessage,
   isStreamStatusMessage,
-} from '@stripe/protocol'
+} from '@stripe/sync-protocol'
 
 // MARK: - Filter helpers
 

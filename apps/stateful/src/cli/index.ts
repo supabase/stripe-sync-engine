@@ -2,7 +2,7 @@
 
 import 'dotenv/config'
 import { Command } from 'commander'
-import { readStdin, writeLine } from '@stripe/ts-cli/ndjson'
+import { readStdin, writeLine } from '@stripe/sync-ts-cli/ndjson'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run.js'
 
 const program = new Command()

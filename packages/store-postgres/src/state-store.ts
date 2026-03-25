@@ -1,5 +1,5 @@
 import type pg from 'pg'
-import { sql } from '@stripe/util-postgres'
+import { sql } from '@stripe/sync-util-postgres'
 
 export interface StateStore {
   get(syncId: string): Promise<Record<string, unknown> | undefined>

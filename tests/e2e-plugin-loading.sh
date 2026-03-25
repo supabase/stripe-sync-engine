@@ -45,14 +45,14 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 1: Packing packages ---"
 
-PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/protocol pack 2>/dev/null | tail -1)
-ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/stateless-sync pack 2>/dev/null | tail -1)
-SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/source-stripe pack 2>/dev/null | tail -1)
-DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-postgres pack 2>/dev/null | tail -1)
-DEST_SHEETS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/destination-google-sheets pack 2>/dev/null | tail -1)
-STORE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/store-postgres pack 2>/dev/null | tail -1)
-UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/util-postgres pack 2>/dev/null | tail -1)
-TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/ts-cli pack 2>/dev/null | tail -1)
+PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/dev/null | tail -1)
+ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-lib-stateless pack 2>/dev/null | tail -1)
+SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-source-stripe pack 2>/dev/null | tail -1)
+DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-postgres pack 2>/dev/null | tail -1)
+DEST_SHEETS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-google-sheets pack 2>/dev/null | tail -1)
+STORE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-store-postgres pack 2>/dev/null | tail -1)
+UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2>/dev/null | tail -1)
+TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-ts-cli pack 2>/dev/null | tail -1)
 STATELESS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine-stateless pack 2>/dev/null | tail -1)
 CLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine pack 2>/dev/null | tail -1)
 
@@ -81,14 +81,14 @@ cat > package.json <<EOF
   "version": "1.0.0",
   "pnpm": {
     "overrides": {
-      "@stripe/protocol": "$PROTOCOL_TGZ",
-      "@stripe/stateless-sync": "$ENGINE_TGZ",
-      "@stripe/source-stripe": "$SOURCE_TGZ",
-      "@stripe/destination-postgres": "$DEST_TGZ",
-      "@stripe/destination-google-sheets": "$DEST_SHEETS_TGZ",
-      "@stripe/store-postgres": "$STORE_PG_TGZ",
-      "@stripe/util-postgres": "$UTIL_PG_TGZ",
-      "@stripe/ts-cli": "$TSCLI_TGZ",
+      "@stripe/sync-protocol": "$PROTOCOL_TGZ",
+      "@stripe/sync-lib-stateless": "$ENGINE_TGZ",
+      "@stripe/sync-source-stripe": "$SOURCE_TGZ",
+      "@stripe/sync-destination-postgres": "$DEST_TGZ",
+      "@stripe/sync-destination-google-sheets": "$DEST_SHEETS_TGZ",
+      "@stripe/sync-store-postgres": "$STORE_PG_TGZ",
+      "@stripe/sync-util-postgres": "$UTIL_PG_TGZ",
+      "@stripe/sync-ts-cli": "$TSCLI_TGZ",
       "@stripe/sync-engine-stateless": "$STATELESS_TGZ"
     }
   }

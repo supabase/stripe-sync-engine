@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Destination, Message } from '@stripe/protocol'
+import type { Destination, Message } from '@stripe/sync-protocol'
 
 export const spec = z.object({})
 export { spec as destinationTestSpec }

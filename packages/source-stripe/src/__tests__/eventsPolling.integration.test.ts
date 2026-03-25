@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/protocol'
+import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
 import source from '../index.js'
 import type { StripeStreamState } from '../index.js'
 

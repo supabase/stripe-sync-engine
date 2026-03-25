@@ -204,7 +204,7 @@ tables/columns. Both sides need to agree on the catalog for a sync to work.
 
 ### I only care about testing my destination (or source). Do I have to configure both?
 
-Use the test connectors from `@stripe/stateless-sync`. They're in-process
+Use the test connectors from `@stripe/sync-lib-stateless`. They're in-process
 utilities intended for this exact case:
 
 - **`testSource`** — declares stream names from config and passes `$stdin`
@@ -215,7 +215,7 @@ utilities intended for this exact case:
 Pass them directly when constructing the engine in code:
 
 ```ts
-import { createEngine, testSource, testDestination } from '@stripe/stateless-sync'
+import { createEngine, testSource, testDestination } from '@stripe/sync-lib-stateless'
 
 // Test your destination with a trivial source
 const engine = createEngine(params, {

@@ -1,6 +1,6 @@
 # Writing Connectors
 
-This guide covers how to implement a new source or destination using `@stripe/protocol`.
+This guide covers how to implement a new source or destination using `@stripe/sync-protocol`.
 
 ## Structure
 
@@ -14,7 +14,7 @@ A connector is a single package that exports:
 packages/source-example/
   src/
     index.ts      # spec + default export
-  package.json    # depends on @stripe/protocol
+  package.json    # depends on @stripe/sync-protocol
 ```
 
 ## Rules
@@ -177,8 +177,8 @@ info via `catalog.streams[i].stream.name` and `catalog.streams[i].stream.primary
 
 ```ts
 import { z } from 'zod'
-import type { Source } from '@stripe/protocol'
-import { toRecordMessage } from '@stripe/protocol'
+import type { Source } from '@stripe/sync-protocol'
+import { toRecordMessage } from '@stripe/sync-protocol'
 
 export const spec = z.object({
   api_key: z.string().describe('API key'),
@@ -220,7 +220,7 @@ export default source
 
 ```ts
 import { z } from 'zod'
-import type { Destination } from '@stripe/protocol'
+import type { Destination } from '@stripe/sync-protocol'
 
 export const spec = z.object({
   connection_string: z.string().describe('Connection string'),

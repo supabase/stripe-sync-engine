@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/source-stripe",
+  "name": "@stripe/sync-source-stripe",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -32,7 +32,7 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/protocol": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
     "stripe": "^17.7.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"

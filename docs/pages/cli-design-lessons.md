@@ -53,7 +53,7 @@ engine → spawn('source-stripe read --config ...')
 
 This is simpler than gRPC-based plugin systems and language-agnostic — any
 binary that speaks the protocol works. Multi-word commands like
-`"npx @stripe/source-stripe"` are split on whitespace at spawn time, so
+`"npx @stripe/sync-source-stripe"` are split on whitespace at spawn time, so
 connectors don't need to be local binaries.
 
 ## Connector discovery

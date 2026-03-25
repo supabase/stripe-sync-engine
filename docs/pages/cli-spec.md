@@ -310,7 +310,7 @@ sync-engine -c sync.json
 sync-engine -c '{"source_config":{"api_key":"sk_test_abc"},"destination_config":{"connection_string":"postgres://localhost/mydb"}}'
 
 # Level 6: programmatic (library, not CLI)
-import { createEngine } from '@stripe/stateless-sync'
+import { createEngine } from '@stripe/sync-lib-stateless'
 ```
 
 ---
@@ -322,8 +322,8 @@ The CLI is a **thin composition root**:
 ```
 sync-engine CLI
   ├─ resolves config (flags + env + config file → SyncParams)
-  ├─ imports @stripe/source-stripe
-  ├─ imports @stripe/destination-postgres
+  ├─ imports @stripe/sync-source-stripe
+  ├─ imports @stripe/sync-destination-postgres
   ├─ loads state from {schema}._sync_state
   ├─ calls runSync(config, source, destination)
   ├─ persists yielded StateMessages to _sync_state

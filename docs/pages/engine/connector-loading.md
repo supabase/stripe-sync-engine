@@ -9,8 +9,8 @@ How the engine finds, loads, and communicates with connectors.
 The app imports connectors statically and registers them with the resolver:
 
 ```ts
-import source from '@stripe/source-stripe'
-import destination from '@stripe/destination-postgres'
+import source from '@stripe/sync-source-stripe'
+import destination from '@stripe/sync-destination-postgres'
 
 const resolver = createConnectorResolver({
   sources: { stripe: source },
@@ -114,9 +114,9 @@ Under the hood, all three strategies produce a command string that gets spawned 
 | ------------ | -------------------------------------------- |
 | `commandMap` | `"npx @acme/source-salesforce"`              |
 | `path`       | `"/path/to/node_modules/.bin/source-stripe"` |
-| `npm`        | `"npx @stripe/source-stripe"`                |
+| `npm`        | `"npx @stripe/sync-source-stripe"`           |
 
-Multi-word commands are split on whitespace at spawn time — `"npx @stripe/source-stripe"` becomes `spawn("npx", ["@stripe/source-stripe", "spec", ...])`.
+Multi-word commands are split on whitespace at spawn time — `"npx @stripe/sync-source-stripe"` becomes `spawn("npx", ["@stripe/sync-source-stripe", "spec", ...])`.
 
 ## CLI flags
 

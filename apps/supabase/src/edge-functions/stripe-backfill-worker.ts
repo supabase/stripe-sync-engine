@@ -9,8 +9,8 @@
 
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
-import { buildResourceRegistry } from '@stripe/source-stripe'
-import { upsertMany } from '@stripe/destination-postgres'
+import { buildResourceRegistry } from '@stripe/sync-source-stripe'
+import { upsertMany } from '@stripe/sync-destination-postgres'
 
 // Module-level singletons (reused across requests in Deno edge functions)
 const dbUrl = Deno.env.get('SUPABASE_DB_URL')

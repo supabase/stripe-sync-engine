@@ -1,7 +1,7 @@
 import { z } from '@hono/zod-openapi'
 
 // Re-export non-connector-specific schemas from the library
-export { UpdateCredentialSchema } from '@stripe/stateful-sync'
+export { UpdateCredentialSchema } from '@stripe/sync-lib-stateful'
 
 // ── HTTP-layer response helpers ─────────────────────────────────
 

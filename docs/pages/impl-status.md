@@ -29,10 +29,10 @@ Target structure from `packages.md`. Status: EXISTS / MISSING / WRONG.
 
 ### Isolation: source never imports destination
 
-`source-stripe` library code (`src/index.ts` entrypoint) has zero imports from `@stripe/destination-postgres`.
+`source-stripe` library code (`src/index.ts` entrypoint) has zero imports from `@stripe/sync-destination-postgres`.
 
 - Fastify server, `WebhookWriter`, `StripeSyncWebhook` all deleted — webhook HTTP listener now lives inside `read()` using Node `http.createServer`
-- No `optionalDependencies` on `@stripe/destination-postgres`
+- No `optionalDependencies` on `@stripe/sync-destination-postgres`
 
 ### Isolation: destination has no Stripe-specific knowledge
 
@@ -47,7 +47,7 @@ Callers (`apps/sync-engine`) call `runMigrations()` for bootstrap, then `source.
 - `Source` — `spec()`, `check()`, `discover()`, `read(params, $stdin?)`; optional `setup?()`, `teardown?()`
 - `Destination` — `spec()`, `check()`, `write(params, $stdin)`; optional `setup?()`, `teardown?()`
 
-There is no `Orchestrator` interface — orchestration is handled by `createEngine()` in `@stripe/stateless-sync`.
+There is no `Orchestrator` interface — orchestration is handled by `createEngine()` in `@stripe/sync-lib-stateless`.
 
 ## Interface implementations
 
@@ -181,7 +181,7 @@ All P0 items resolved:
 - [x] `packages/stateful-sync` exists with `StatefulSync` class
 - [x] All CLI stubs replaced with real implementations
 - [x] `Source` and `Destination` interfaces defined in `packages/protocol`
-- [x] `createEngine()` in `@stripe/stateless-sync`
+- [x] `createEngine()` in `@stripe/sync-lib-stateless`
 - [x] Zero cross-boundary imports between source/destination library code
 - [x] `pnpm build && pnpm lint` clean
 - [ ] All .todo test stubs filled or removed with justification

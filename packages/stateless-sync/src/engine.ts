@@ -8,8 +8,8 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   CheckResult,
-} from '@stripe/protocol'
-import type { Destination, Source } from '@stripe/protocol'
+} from '@stripe/sync-protocol'
+import type { Destination, Source } from '@stripe/sync-protocol'
 import type { RouterCallbacks } from './pipeline.js'
 import { forward } from './pipeline.js'
 import type { ConnectorResolver } from './resolver.js'

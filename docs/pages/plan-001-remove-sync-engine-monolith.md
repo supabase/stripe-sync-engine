@@ -37,7 +37,7 @@ apps/
 | Component                | LoC     | Reason                                                           |
 | ------------------------ | ------- | ---------------------------------------------------------------- |
 | `sigma/`                 | ~44,775 | User decision: remove entirely                                   |
-| `protocol/index.ts`      | 34      | Redundant re-export of `@stripe/protocol`                        |
+| `protocol/index.ts`      | 34      | Redundant re-export of `@stripe/sync-protocol`                   |
 | `database/QueryUtils.ts` | 70      | Byte-identical duplicate of `destination-postgres/QueryUtils.ts` |
 
 ### → `packages/source-stripe`
@@ -182,5 +182,5 @@ No StripeSync intermediary needed. No circular dependency.
 3. `pnpm lint && pnpm format:check` — clean
 4. `packages/sync-engine/` does not exist
 5. No import of `@stripe/sync-engine` remains in any package (only in apps/cli's re-exports)
-6. `apps/supabase-dashboard` imports `parseSchemaComment` from `@stripe/integration-supabase` (or `apps/supabase`)
+6. `apps/supabase-dashboard` imports `parseSchemaComment` from `@stripe/sync-integration-supabase` (or `apps/supabase`)
 7. Dependency graph has no cycles: source-stripe and destination-postgres depend only on sync-protocol

@@ -1,5 +1,5 @@
-import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/protocol'
-import { toRecordMessage } from '@stripe/protocol'
+import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
+import { toRecordMessage } from '@stripe/sync-protocol'
 import type Stripe from 'stripe'
 import type { Config } from './index.js'
 import type { ResourceConfig } from './types.js'

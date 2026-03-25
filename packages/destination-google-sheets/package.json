@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/destination-google-sheets",
+  "name": "@stripe/sync-destination-google-sheets",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -32,7 +32,7 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/protocol": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
     "googleapis": "^148.0.0",
     "zod": "^4.3.6"
   },

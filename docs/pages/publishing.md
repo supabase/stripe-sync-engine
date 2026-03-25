@@ -64,7 +64,7 @@ tsup ... && sed -i '' 's|#!/usr/bin/env tsx|#!/usr/bin/env node|' dist/bin.js
 
 ## Why workspace deps are in devDependencies
 
-`apps/sync-engine` uses tsup with `noExternal: [/^@stripe\//]`, which inlines all workspace package code into `dist/`. At runtime, there are no `require('@stripe/protocol')` calls — the code is compiled into the bundle.
+`apps/sync-engine` uses tsup with `noExternal: [/^@stripe\//]`, which inlines all workspace package code into `dist/`. At runtime, there are no `require('@stripe/sync-protocol')` calls — the code is compiled into the bundle.
 
 Since these packages are build-time inputs (not runtime dependencies), they belong in `devDependencies`:
 
@@ -76,9 +76,9 @@ Since these packages are build-time inputs (not runtime dependencies), they belo
     "hono": "^4"
   },
   "devDependencies": {
-    "@stripe/protocol": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
-    "@stripe/stateless-sync": "workspace:*"
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-lib-stateless": "workspace:*"
   }
 }
 ```

@@ -51,7 +51,7 @@ type SyncConfig = {
 
 ### SyncParams (resolved form)
 
-What the engine receives. Credentials inlined, state passed separately. This is the `SyncParams` type from `@stripe/stateless-sync`:
+What the engine receives. Credentials inlined, state passed separately. This is the `SyncParams` type from `@stripe/sync-lib-stateless`:
 
 ```ts
 type SyncParams = {
@@ -275,7 +275,7 @@ class StatefulSync {
 
 The four stores are injected via a named options object — the service doesn't know if they're Postgres, files, or in-memory.
 
-> **Note on `createEngine()`**: `StatefulSync` uses `createEngine()` directly (from `@stripe/stateless-sync`). The engine is the real interface — `StatefulSync` adds only the store-loading and state-persistence wrapper around it.
+> **Note on `createEngine()`**: `StatefulSync` uses `createEngine()` directly (from `@stripe/sync-lib-stateless`). The engine is the real interface — `StatefulSync` adds only the store-loading and state-persistence wrapper around it.
 
 ---
 

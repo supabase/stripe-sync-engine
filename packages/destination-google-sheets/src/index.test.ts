@@ -1,4 +1,4 @@
-import type { DestinationInput, DestinationOutput } from '@stripe/protocol'
+import type { DestinationInput, DestinationOutput } from '@stripe/sync-protocol'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDestination, envVars, type Config } from './index.js'
 import { readSheet } from './writer.js'

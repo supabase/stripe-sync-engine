@@ -1,14 +1,14 @@
-import type { Message } from '@stripe/stateless-sync'
+import type { Message } from '@stripe/sync-lib-stateless'
 import {
   createEngineFromParams,
   createConnectorResolver,
   forward,
   collect,
   SyncParams,
-} from '@stripe/stateless-sync'
-import type { SyncParams as SyncParamsType } from '@stripe/stateless-sync'
-import { envPrefix, parseJsonOrFile, mergeConfig, parseStreams } from '@stripe/ts-cli'
-import { readStdin, writeLine } from '@stripe/ts-cli/ndjson'
+} from '@stripe/sync-lib-stateless'
+import type { SyncParams as SyncParamsType } from '@stripe/sync-lib-stateless'
+import { envPrefix, parseJsonOrFile, mergeConfig, parseStreams } from '@stripe/sync-ts-cli'
+import { readStdin, writeLine } from '@stripe/sync-ts-cli/ndjson'
 
 const resolver = createConnectorResolver({})
 

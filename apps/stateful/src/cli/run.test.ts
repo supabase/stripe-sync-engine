@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { sourceTest, destinationTest } from '@stripe/stateless-sync'
+import { sourceTest, destinationTest } from '@stripe/sync-lib-stateless'
 import type { ConnectorResolver, DestinationOutput, Message } from '@stripe/sync-engine-stateless'
-import { memoryCredentialStore, memoryConfigStore } from '@stripe/stateful-sync'
-import type { Credential } from '@stripe/stateful-sync'
+import { memoryCredentialStore, memoryConfigStore } from '@stripe/sync-lib-stateful'
+import type { Credential } from '@stripe/sync-lib-stateful'
 import { setupSync, teardownSync, checkSync, readSync, writeSync, runSync } from './run.js'
 
 // ---------------------------------------------------------------------------

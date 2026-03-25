@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import type { Source, Destination } from '@stripe/protocol'
-import { ConnectorSpecification } from '@stripe/protocol'
+import type { Source, Destination } from '@stripe/sync-protocol'
+import { ConnectorSpecification } from '@stripe/sync-protocol'
 import { createSourceFromExec } from './source-exec.js'
 import { createDestinationFromExec } from './destination-exec.js'
 
@@ -95,11 +95,11 @@ function validateSpec(specFn: () => unknown, errors: string[]) {
  * Resolve a short connector name to a full package specifier.
  *
  * - File paths (starting with `.` or `/`) and scoped packages (containing `/`) pass through.
- * - Bare names resolve to `@stripe/source-<name>` or `@stripe/destination-<name>`.
+ * - Bare names resolve to `@stripe/sync-source-<name>` or `@stripe/sync-destination-<name>`.
  */
 export function resolveSpecifier(name: string, role: 'source' | 'destination'): string {
   if (name.startsWith('.') || name.startsWith('/') || name.includes('/')) return name
-  return `@stripe/${role}-${name}`
+  return `@stripe/sync-${role}-${name}`
 }
 
 // MARK: - Subprocess bin resolution
@@ -246,7 +246,7 @@ export function createConnectorResolver(
    * Get the command string for a connector via dynamic resolution strategies.
    * All three strategies (commandMap, path, npm) produce the same output: a command
    * string passed directly to createSourceFromExec/createDestinationFromExec. Multi-word commands
-   * (e.g. "npx @stripe/source-stripe") are split by subprocess.ts at spawn time.
+   * (e.g. "npx @stripe/sync-source-stripe") are split by subprocess.ts at spawn time.
    */
   function resolveVia(name: string, role: 'source' | 'destination'): string | undefined {
     const key = `${role}-${name}`

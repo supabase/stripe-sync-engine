@@ -8,7 +8,7 @@ import type {
   DestinationOutput,
   RecordMessage,
   StateMessage,
-} from '@stripe/protocol'
+} from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle

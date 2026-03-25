@@ -64,13 +64,13 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
-      '@stripe/stateful-sync':
-        specifier: workspace:*
-        version: link:../../packages/stateful-sync
       '@stripe/sync-engine-stateless':
         specifier: workspace:*
         version: link:../stateless
-      '@stripe/ts-cli':
+      '@stripe/sync-lib-stateful':
+        specifier: workspace:*
+        version: link:../../packages/stateful-sync
+      '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
       commander:
@@ -86,7 +86,7 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@stripe/stateless-sync':
+      '@stripe/sync-lib-stateless':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
       '@types/node':
@@ -110,10 +110,10 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
-      '@stripe/stateless-sync':
+      '@stripe/sync-lib-stateless':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
-      '@stripe/ts-cli':
+      '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
       commander:
@@ -126,10 +126,10 @@ importers:
         specifier: ^4
         version: 4.12.8
     devDependencies:
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/source-stripe':
+      '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
       '@types/node':
@@ -150,19 +150,19 @@ importers:
 
   apps/supabase:
     dependencies:
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/stateful-sync':
+      '@stripe/sync-lib-stateful':
         specifier: workspace:*
         version: link:../../packages/stateful-sync
-      '@stripe/store-postgres':
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@stripe/sync-source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/sync-store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
       supabase-management-js:
@@ -190,25 +190,25 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.2
         version: 1.2.2(hono@4.12.8)(zod@4.3.6)
-      '@stripe/destination-google-sheets':
+      '@stripe/sync-destination-google-sheets':
         specifier: workspace:*
         version: link:../../packages/destination-google-sheets
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/stateless-sync':
-        specifier: workspace:*
-        version: link:../../packages/stateless-sync
-      '@stripe/store-postgres':
-        specifier: workspace:*
-        version: link:../../packages/store-postgres
       '@stripe/sync-engine-stateless':
         specifier: workspace:*
         version: link:../stateless
-      '@stripe/ts-cli':
+      '@stripe/sync-lib-stateless':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
+      '@stripe/sync-source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/sync-store-postgres':
+        specifier: workspace:*
+        version: link:../../packages/store-postgres
+      '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
       commander:
@@ -248,7 +248,7 @@ importers:
 
   packages/destination-google-sheets:
     dependencies:
-      '@stripe/protocol':
+      '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
       googleapis:
@@ -264,10 +264,10 @@ importers:
 
   packages/destination-postgres:
     dependencies:
-      '@stripe/protocol':
+      '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@stripe/util-postgres':
+      '@stripe/sync-util-postgres':
         specifier: workspace:*
         version: link:../util-postgres
       pg:
@@ -308,7 +308,7 @@ importers:
 
   packages/source-stripe:
     dependencies:
-      '@stripe/protocol':
+      '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
       stripe:
@@ -333,14 +333,14 @@ importers:
 
   packages/stateful-sync:
     dependencies:
-      '@stripe/stateless-sync':
+      '@stripe/sync-lib-stateless':
         specifier: workspace:*
         version: link:../stateless-sync
       zod:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../destination-postgres
       '@types/node':
@@ -361,17 +361,17 @@ importers:
 
   packages/stateless-sync:
     dependencies:
-      '@stripe/protocol':
+      '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
       zod:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../destination-postgres
-      '@stripe/source-stripe':
+      '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../source-stripe
       '@types/node':
@@ -383,7 +383,7 @@ importers:
 
   packages/store-postgres:
     dependencies:
-      '@stripe/util-postgres':
+      '@stripe/sync-util-postgres':
         specifier: workspace:*
         version: link:../util-postgres
       pg:
@@ -427,21 +427,21 @@ importers:
 
   tests/conformance:
     devDependencies:
-      '@stripe/destination-google-sheets':
+      '@stripe/sync-destination-google-sheets':
         specifier: workspace:*
         version: link:../../packages/destination-google-sheets
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/stateless-sync':
+      '@stripe/sync-lib-stateless':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@stripe/sync-source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
       vitest:
         specifier: ^3.2.1
         version: 3.2.4(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1)
@@ -451,21 +451,21 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/stateless-sync':
-        specifier: workspace:*
-        version: link:../../packages/stateless-sync
       '@stripe/sync-engine-stateful':
         specifier: workspace:*
         version: link:../../apps/stateful
+      '@stripe/sync-lib-stateless':
+        specifier: workspace:*
+        version: link:../../packages/stateless-sync
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@stripe/sync-source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
       pg:
         specifier: ^8.16.0
         version: 8.16.3
@@ -478,22 +478,22 @@ importers:
 
   tests/integration:
     devDependencies:
-      '@stripe/destination-postgres':
+      '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
-      '@stripe/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@stripe/source-stripe':
-        specifier: workspace:*
-        version: link:../../packages/source-stripe
-      '@stripe/stateful-sync':
+      '@stripe/sync-lib-stateful':
         specifier: workspace:*
         version: link:../../packages/stateful-sync
-      '@stripe/stateless-sync':
+      '@stripe/sync-lib-stateless':
         specifier: workspace:*
         version: link:../../packages/stateless-sync
-      '@stripe/store-postgres':
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@stripe/sync-source-stripe':
+        specifier: workspace:*
+        version: link:../../packages/source-stripe
+      '@stripe/sync-store-postgres':
         specifier: workspace:*
         version: link:../../packages/store-postgres
       pg:

@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/destination-postgres",
+  "name": "@stripe/sync-destination-postgres",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -32,8 +32,8 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/protocol": "workspace:*",
-    "@stripe/util-postgres": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-util-postgres": "workspace:*",
     "pg": "^8.16.3",
     "zod": "^4.3.6"
   },

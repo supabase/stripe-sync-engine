@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/stateful-sync",
+  "name": "@stripe/sync-lib-stateful",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -25,11 +25,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stripe/stateless-sync": "workspace:*",
+    "@stripe/sync-lib-stateless": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@stripe/destination-postgres": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
     "@types/node": "^24",
     "@types/pg": "^8.15.4",
     "pg": "^8.16.3",

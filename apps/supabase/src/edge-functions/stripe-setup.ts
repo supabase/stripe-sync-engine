@@ -1,4 +1,4 @@
-import { runMigrationsFromContent, migrations } from '@stripe/store-postgres'
+import { runMigrationsFromContent, migrations } from '@stripe/sync-store-postgres'
 import Stripe from 'npm:stripe'
 import pg from 'npm:pg@8'
 

@@ -8,8 +8,8 @@ export type {
   StateStore,
   LogSink,
   StatefulSyncOptions,
-} from '@stripe/stateful-sync'
+} from '@stripe/sync-lib-stateful'
 
-export { StatefulSync, resolve } from '@stripe/stateful-sync'
+export { StatefulSync, resolve } from '@stripe/sync-lib-stateful'
 export { createApp } from './api/app.js'
 export type { AppOptions } from './api/app.js'

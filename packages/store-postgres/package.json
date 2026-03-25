@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/store-postgres",
+  "name": "@stripe/sync-store-postgres",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@stripe/util-postgres": "workspace:*",
+    "@stripe/sync-util-postgres": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {

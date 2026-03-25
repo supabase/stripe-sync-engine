@@ -192,7 +192,7 @@ const [, checkpoints] = await Promise.all([
 
 ## Dependencies
 
-- `@stripe/protocol` — `forward()`, `collect()`, `Source`, `Destination`, message types
+- `@stripe/sync-protocol` — `forward()`, `collect()`, `Source`, `Destination`, message types
 - `pg` — Postgres connection
 
 ## Existing code to reuse

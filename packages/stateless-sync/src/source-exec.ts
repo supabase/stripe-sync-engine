@@ -6,14 +6,14 @@ import type {
   CatalogMessage,
   ConfiguredCatalog,
   Message,
-} from '@stripe/protocol'
+} from '@stripe/sync-protocol'
 import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './lib/exec-helpers.js'
 
 /**
  * Wrap a connector CLI command as a Source.
  *
  * `cmd` may be a binary path or a space-separated command with base args,
- * e.g. `"npx @stripe/source-stripe"` or `"/path/to/source-stripe"`.
+ * e.g. `"npx @stripe/sync-source-stripe"` or `"/path/to/source-stripe"`.
  * The connector protocol subcommands (spec, check, read, etc.) are appended.
  *
  * If `$stdin` is passed to `read()`, it is piped to the subprocess stdin as

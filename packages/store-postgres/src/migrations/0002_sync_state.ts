@@ -1,4 +1,4 @@
-import { sql } from '@stripe/util-postgres'
+import { sql } from '@stripe/sync-util-postgres'
 
 export default sql`
 -- Generic sync state: per-stream cursor state keyed by sync_id.

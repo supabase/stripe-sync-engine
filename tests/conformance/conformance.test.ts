@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ConnectorSpecification } from '@stripe/protocol'
-import { createConnectorCli } from '@stripe/protocol/cli'
+import { ConnectorSpecification } from '@stripe/sync-protocol'
+import { createConnectorCli } from '@stripe/sync-protocol/cli'
 
 const packagesDir = resolve(import.meta.dirname, '../../packages')
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
@@ -31,13 +31,13 @@ const sources = [
   ...packageDirs
     .filter((d) => d.startsWith('source-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/stateless-sync/source-test' },
+  { name: '@stripe/sync-lib-stateless/source-test' },
 ]
 const destinations = [
   ...packageDirs
     .filter((d) => d.startsWith('destination-'))
     .map((d) => ({ name: resolvePackageName(d) })),
-  { name: '@stripe/stateless-sync/destination-test' },
+  { name: '@stripe/sync-lib-stateless/destination-test' },
 ]
 
 describe.each(sources)('source: $name', ({ name }) => {

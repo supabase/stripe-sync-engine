@@ -5,9 +5,9 @@ import type {
   Message,
   ConnectorResolver,
   SyncParams as SyncParamsType,
-} from '@stripe/stateless-sync'
-import { createEngineFromParams, parseNdjsonStream, SyncParams } from '@stripe/stateless-sync'
-import { ndjsonResponse } from '@stripe/ts-cli/ndjson'
+} from '@stripe/sync-lib-stateless'
+import { createEngineFromParams, parseNdjsonStream, SyncParams } from '@stripe/sync-lib-stateless'
+import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 
 // ── Shared schemas ──────────────────────────────────────────────
 

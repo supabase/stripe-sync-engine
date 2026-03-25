@@ -1,12 +1,12 @@
 import pg from 'pg'
-import { createEngineFromParams, createConnectorResolver } from '@stripe/stateless-sync'
-import type { DestinationOutput } from '@stripe/stateless-sync'
+import { createEngineFromParams, createConnectorResolver } from '@stripe/sync-lib-stateless'
+import type { DestinationOutput } from '@stripe/sync-lib-stateless'
 import {
   createPgStateStore,
   runMigrationsFromContent,
   genericBootstrapMigrations,
-} from '@stripe/store-postgres'
-import { parseJsonOrFile } from '@stripe/ts-cli'
+} from '@stripe/sync-store-postgres'
+import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import type { CliOptions } from './resolve-options.js'
 import { resolveOptions, getPostgresUrl, getPostgresSchema } from './resolve-options.js'
 

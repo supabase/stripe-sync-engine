@@ -4,7 +4,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import type { ConnectorResolver, Message } from '@stripe/sync-engine-stateless'
 import { createConnectorResolver, parseNdjsonStream } from '@stripe/sync-engine-stateless'
-import { ndjsonResponse } from '@stripe/ts-cli/ndjson'
+import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import {
   StatefulSync,
   buildSchemas,
@@ -12,8 +12,8 @@ import {
   fileConfigStore,
   fileStateStore,
   fileLogSink,
-} from '@stripe/stateful-sync'
-import type { Credential, SyncConfig } from '@stripe/stateful-sync'
+} from '@stripe/sync-lib-stateful'
+import type { Credential, SyncConfig } from '@stripe/sync-lib-stateful'
 import {
   CheckResultSchema,
   DeleteResponseSchema,

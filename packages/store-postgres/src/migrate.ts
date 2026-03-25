@@ -1,7 +1,7 @@
 import { Client } from 'pg'
 import crypto from 'node:crypto'
 import type { ConnectionOptions } from 'node:tls'
-import { sql } from '@stripe/util-postgres'
+import { sql } from '@stripe/sync-util-postgres'
 import { renderMigrationTemplate } from './migrationTemplate.js'
 import type { Migration } from './migrations/index.js'
 import { migrations as allMigrations } from './migrations/index.js'

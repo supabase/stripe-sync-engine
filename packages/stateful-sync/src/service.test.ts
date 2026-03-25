@@ -1,9 +1,9 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sourceTest, destinationTest, createConnectorResolver } from '@stripe/stateless-sync'
-import type { Message, StateMessage, Source, Destination } from '@stripe/stateless-sync'
-import destPostgres from '@stripe/destination-postgres'
+import { sourceTest, destinationTest, createConnectorResolver } from '@stripe/sync-lib-stateless'
+import type { Message, StateMessage, Source, Destination } from '@stripe/sync-lib-stateless'
+import destPostgres from '@stripe/sync-destination-postgres'
 import { StatefulSync, resolve } from './service.js'
 import {
   memoryCredentialStore,

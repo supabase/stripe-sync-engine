@@ -7,7 +7,7 @@ import type {
   DestinationOutput,
   ErrorMessage,
   LogMessage,
-} from '@stripe/protocol'
+} from '@stripe/sync-protocol'
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'

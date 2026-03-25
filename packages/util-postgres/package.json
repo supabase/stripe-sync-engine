@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/util-postgres",
+  "name": "@stripe/sync-util-postgres",
   "version": "0.1.0",
   "private": false,
   "type": "module",

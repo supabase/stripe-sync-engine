@@ -7,15 +7,15 @@ import type {
   CheckResult,
 } from '@stripe/sync-engine-stateless'
 import { createConnectorResolver } from '@stripe/sync-engine-stateless'
-import type { CredentialStore, ConfigStore } from '@stripe/stateful-sync'
+import type { CredentialStore, ConfigStore } from '@stripe/sync-lib-stateful'
 import {
   StatefulSync,
   fileCredentialStore,
   fileConfigStore,
   fileStateStore,
   fileLogSink,
-} from '@stripe/stateful-sync'
-import { envPrefix } from '@stripe/ts-cli'
+} from '@stripe/sync-lib-stateful'
+import { envPrefix } from '@stripe/sync-ts-cli'
 
 const DEFAULT_DATA_DIR = join(homedir(), '.stripe-sync')
 

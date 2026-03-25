@@ -13,46 +13,46 @@ the engine itself" — the naming below leaves room for an eventual
 
 ## Current packages (15)
 
-| #   | Current name                        | Location                             |
-| --- | ----------------------------------- | ------------------------------------ |
-| 1   | `@stripe/protocol`                  | `packages/sync-protocol`             |
-| 2   | `@stripe/stateless-sync`            | `packages/stateless-sync`            |
-| 3   | `@stripe/stateful-sync`             | `packages/stateful-sync`             |
-| 4   | `@stripe/source-stripe`             | `packages/source-stripe`             |
-| 5   | `@stripe/destination-postgres`      | `packages/destination-postgres`      |
-| 6   | `@stripe/destination-google-sheets` | `packages/destination-google-sheets` |
-| 7   | `@stripe/util-postgres`             | `packages/util-postgres`             |
-| 8   | `@stripe/store-postgres`            | `packages/store-postgres`            |
-| 9   | `@stripe/ts-cli`                    | `packages/ts-cli`                    |
-| 10  | `@stripe/sync-engine-stateless-cli` | `apps/stateless-cli`                 |
-| 11  | `@stripe/sync-engine-stateless-api` | `apps/stateless-api`                 |
-| 12  | `@stripe/sync-engine-stateful-cli`  | `apps/stateful-cli`                  |
-| 13  | `@stripe/sync-engine-stateful-api`  | `apps/stateful-api`                  |
-| 14  | `@stripe/integration-supabase`      | `apps/supabase`                      |
-| 15  | `@stripe/test-conformance`          | `tests/conformance`                  |
+| #   | Current name                             | Location                             |
+| --- | ---------------------------------------- | ------------------------------------ |
+| 1   | `@stripe/sync-protocol`                  | `packages/sync-protocol`             |
+| 2   | `@stripe/sync-lib-stateless`             | `packages/stateless-sync`            |
+| 3   | `@stripe/sync-lib-stateful`              | `packages/stateful-sync`             |
+| 4   | `@stripe/sync-source-stripe`             | `packages/source-stripe`             |
+| 5   | `@stripe/sync-destination-postgres`      | `packages/destination-postgres`      |
+| 6   | `@stripe/sync-destination-google-sheets` | `packages/destination-google-sheets` |
+| 7   | `@stripe/sync-util-postgres`             | `packages/util-postgres`             |
+| 8   | `@stripe/sync-store-postgres`            | `packages/store-postgres`            |
+| 9   | `@stripe/sync-ts-cli`                    | `packages/ts-cli`                    |
+| 10  | `@stripe/sync-engine-stateless-cli`      | `apps/stateless-cli`                 |
+| 11  | `@stripe/sync-engine-stateless-api`      | `apps/stateless-api`                 |
+| 12  | `@stripe/sync-engine-stateful-cli`       | `apps/stateful-cli`                  |
+| 13  | `@stripe/sync-engine-stateful-api`       | `apps/stateful-api`                  |
+| 14  | `@stripe/sync-integration-supabase`      | `apps/supabase`                      |
+| 15  | `@stripe/sync-test-conformance`          | `tests/conformance`                  |
 
 ## Proposed names
 
 Drop redundant "sync" / "sync-engine" prefixes now that the scope carries that
 meaning.
 
-| Old                                 | New                                      | Change type          |
-| ----------------------------------- | ---------------------------------------- | -------------------- |
-| `@stripe/protocol`                  | `@stripe-sync/protocol`                  | scope + drop "sync-" |
-| `@stripe/stateless-sync`            | `@stripe-sync/engine`                    | scope + rename       |
-| `@stripe/stateful-sync`             | `@stripe-sync/service`                   | scope + rename       |
-| `@stripe/source-stripe`             | `@stripe-sync/source-stripe`             | scope only           |
-| `@stripe/destination-postgres`      | `@stripe-sync/destination-postgres`      | scope only           |
-| `@stripe/destination-google-sheets` | `@stripe-sync/destination-google-sheets` | scope only           |
-| `@stripe/util-postgres`             | `@stripe-sync/util-postgres`             | scope only           |
-| `@stripe/store-postgres`            | `@stripe-sync/store-postgres`            | scope only           |
-| `@stripe/ts-cli`                    | `@stripe-sync/ts-cli`                    | scope only           |
-| `@stripe/sync-engine-stateless-cli` | `@stripe-sync/cli`                       | scope + drop prefix  |
-| `@stripe/sync-engine-stateless-api` | `@stripe-sync/api`                       | scope + drop prefix  |
-| `@stripe/sync-engine-stateful-cli`  | `@stripe-sync/stateful-cli`              | scope + drop prefix  |
-| `@stripe/sync-engine-stateful-api`  | `@stripe-sync/stateful-api`              | scope + drop prefix  |
-| `@stripe/integration-supabase`      | `@stripe-sync/integration-supabase`      | scope only           |
-| `@stripe/test-conformance`          | `@stripe-sync/test-conformance`          | scope only           |
+| Old                                      | New                                      | Change type          |
+| ---------------------------------------- | ---------------------------------------- | -------------------- |
+| `@stripe/sync-protocol`                  | `@stripe-sync/protocol`                  | scope + drop "sync-" |
+| `@stripe/sync-lib-stateless`             | `@stripe-sync/engine`                    | scope + rename       |
+| `@stripe/sync-lib-stateful`              | `@stripe-sync/service`                   | scope + rename       |
+| `@stripe/sync-source-stripe`             | `@stripe-sync/source-stripe`             | scope only           |
+| `@stripe/sync-destination-postgres`      | `@stripe-sync/destination-postgres`      | scope only           |
+| `@stripe/sync-destination-google-sheets` | `@stripe-sync/destination-google-sheets` | scope only           |
+| `@stripe/sync-util-postgres`             | `@stripe-sync/util-postgres`             | scope only           |
+| `@stripe/sync-store-postgres`            | `@stripe-sync/store-postgres`            | scope only           |
+| `@stripe/sync-ts-cli`                    | `@stripe-sync/ts-cli`                    | scope only           |
+| `@stripe/sync-engine-stateless-cli`      | `@stripe-sync/cli`                       | scope + drop prefix  |
+| `@stripe/sync-engine-stateless-api`      | `@stripe-sync/api`                       | scope + drop prefix  |
+| `@stripe/sync-engine-stateful-cli`       | `@stripe-sync/stateful-cli`              | scope + drop prefix  |
+| `@stripe/sync-engine-stateful-api`       | `@stripe-sync/stateful-api`              | scope + drop prefix  |
+| `@stripe/sync-integration-supabase`      | `@stripe-sync/integration-supabase`      | scope only           |
+| `@stripe/sync-test-conformance`          | `@stripe-sync/test-conformance`          | scope only           |
 
 ## What to change
 
@@ -97,7 +97,7 @@ Mechanical find-and-replace in this order:
 1. Longest names first (avoids partial matches):
    `@stripe/sync-engine-stateless-cli` → `@stripe-sync/cli`, etc.
 2. Then shorter names:
-   `@stripe/protocol` → `@stripe-sync/protocol`, etc.
+   `@stripe/sync-protocol` → `@stripe-sync/protocol`, etc.
 3. `pnpm install && pnpm build && pnpm format && pnpm lint && pnpm -r test`
 
 ## Verification

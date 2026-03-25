@@ -1,8 +1,8 @@
 import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
-import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/protocol'
-import { sql, upsert } from '@stripe/util-postgres'
+import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
+import { sql, upsert } from '@stripe/sync-util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 
 // MARK: - Spec

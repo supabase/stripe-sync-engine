@@ -1,17 +1,17 @@
 {
-  "name": "@stripe/test-integration",
+  "name": "@stripe/sync-test-integration",
   "private": true,
   "type": "module",
   "scripts": {
     "test:integration": "vitest run"
   },
   "devDependencies": {
-    "@stripe/protocol": "workspace:*",
-    "@stripe/stateless-sync": "workspace:*",
-    "@stripe/stateful-sync": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
-    "@stripe/destination-postgres": "workspace:*",
-    "@stripe/store-postgres": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-lib-stateless": "workspace:*",
+    "@stripe/sync-lib-stateful": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-store-postgres": "workspace:*",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"

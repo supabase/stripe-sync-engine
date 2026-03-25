@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/integration-supabase",
+  "name": "@stripe/sync-integration-supabase",
   "version": "0.1.0",
   "private": false,
   "description": "Supabase integration for Stripe Sync Engine — edge functions and deployment",
@@ -29,11 +29,11 @@
     "dist"
   ],
   "dependencies": {
-    "@stripe/protocol": "workspace:*",
-    "@stripe/source-stripe": "workspace:*",
-    "@stripe/destination-postgres": "workspace:*",
-    "@stripe/store-postgres": "workspace:*",
-    "@stripe/stateful-sync": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-store-postgres": "workspace:*",
+    "@stripe/sync-lib-stateful": "workspace:*",
     "supabase-management-js": "^2.0.2"
   },
   "devDependencies": {
