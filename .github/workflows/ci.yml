@@ -66,6 +66,11 @@ jobs:
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           STRIPE_MOCK_URL: 'http://localhost:12111'
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
       - name: Skipped test warnings
         if: always()
