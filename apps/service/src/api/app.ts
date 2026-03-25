@@ -72,9 +72,9 @@ export function createApp(options?: AppOptions) {
   const dataDir = options?.dataDir || process.env.DATA_DIR || join(homedir(), '.stripe-sync')
   const connectors = options?.connectors ?? createConnectorResolver({})
 
-  const credentials = fileCredentialStore(`${dataDir}/credentials.json`)
-  const configs = fileConfigStore(`${dataDir}/syncs.json`)
-  const states = fileStateStore(`${dataDir}/state.json`)
+  const credentials = fileCredentialStore(`${dataDir}/credentials`)
+  const configs = fileConfigStore(`${dataDir}/syncs`)
+  const states = fileStateStore(`${dataDir}/state`)
   const logs = fileLogSink(`${dataDir}/logs.ndjson`)
 
   const service = new SyncService({

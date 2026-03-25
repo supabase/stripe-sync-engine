@@ -1,77 +1,101 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import type { Credential, SyncConfig, LogEntry } from './schemas.js'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs'
+import { join, basename } from 'node:path'
+import type { Credential, SyncConfig } from './schemas.js'
 import type { CredentialStore, ConfigStore, LogSink } from './stores.js'
 import type { StateStore } from '@stripe/sync-engine'
 
-// Re-export the engine's file state store
-export { fileStateStore } from '@stripe/sync-engine'
-
 // MARK: - Helpers
 
-function ensureDir(filePath: string) {
-  const dir = dirname(filePath)
+function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 }
 
-function loadJson<T>(path: string): Record<string, T> {
-  if (!existsSync(path)) return {}
-  return JSON.parse(readFileSync(path, 'utf-8'))
+function readItem<T>(dir: string, id: string): T | undefined {
+  const filePath = join(dir, `${id}.json`)
+  if (!existsSync(filePath)) return undefined
+  return JSON.parse(readFileSync(filePath, 'utf-8'))
 }
 
-function saveJson(path: string, data: unknown): void {
-  ensureDir(path)
-  writeFileSync(path, JSON.stringify(data, null, 2) + '\n')
+function writeItem(dir: string, id: string, data: unknown): void {
+  ensureDir(dir)
+  writeFileSync(join(dir, `${id}.json`), JSON.stringify(data, null, 2) + '\n')
+}
+
+function removeItem(dir: string, id: string): void {
+  const filePath = join(dir, `${id}.json`)
+  if (existsSync(filePath)) unlinkSync(filePath)
+}
+
+function listItems<T>(dir: string): T[] {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf-8')) as T)
 }
 
 // MARK: - File-backed credential store
 
-export function fileCredentialStore(filePath: string): CredentialStore {
+export function fileCredentialStore(dir: string): CredentialStore {
   return {
     async get(id) {
-      const store = loadJson<Credential>(filePath)
-      const cred = store[id]
+      const cred = readItem<Credential>(dir, id)
       if (!cred) throw new Error(`Credential not found: ${id}`)
       return cred
     },
     async set(id, credential) {
-      const store = loadJson<Credential>(filePath)
-      store[id] = credential
-      saveJson(filePath, store)
+      writeItem(dir, id, credential)
     },
     async delete(id) {
-      const store = loadJson<Credential>(filePath)
-      delete store[id]
-      saveJson(filePath, store)
+      removeItem(dir, id)
     },
     async list() {
-      return Object.values(loadJson<Credential>(filePath))
+      return listItems<Credential>(dir)
     },
   }
 }
 
 // MARK: - File-backed config store
 
-export function fileConfigStore(filePath: string): ConfigStore {
+export function fileConfigStore(dir: string): ConfigStore {
   return {
     async get(id) {
-      const store = loadJson<SyncConfig>(filePath)
-      const config = store[id]
+      const config = readItem<SyncConfig>(dir, id)
       if (!config) throw new Error(`SyncConfig not found: ${id}`)
       return config
     },
     async set(id, config) {
-      const store = loadJson<SyncConfig>(filePath)
-      store[id] = config
-      saveJson(filePath, store)
+      writeItem(dir, id, config)
     },
     async delete(id) {
-      const store = loadJson<SyncConfig>(filePath)
-      delete store[id]
-      saveJson(filePath, store)
+      removeItem(dir, id)
     },
     async list() {
-      return Object.values(loadJson<SyncConfig>(filePath))
+      return listItems<SyncConfig>(dir)
+    },
+  }
+}
+
+// MARK: - File-backed state store
+
+export function fileStateStore(dir: string): StateStore {
+  return {
+    async get(syncId) {
+      return readItem<Record<string, unknown>>(dir, syncId)
+    },
+    async set(syncId, stream, data) {
+      const state = readItem<Record<string, unknown>>(dir, syncId) ?? {}
+      state[stream] = data
+      writeItem(dir, syncId, state)
+    },
+    async clear(syncId) {
+      removeItem(dir, syncId)
     },
   }
 }
@@ -81,7 +105,8 @@ export function fileConfigStore(filePath: string): ConfigStore {
 export function fileLogSink(filePath: string): LogSink {
   return {
     write(syncId, entry) {
-      ensureDir(filePath)
+      const dir = join(filePath, '..')
+      ensureDir(dir)
       const line = JSON.stringify({ syncId, ...entry }) + '\n'
       writeFileSync(filePath, line, { flag: 'a' })
     },
