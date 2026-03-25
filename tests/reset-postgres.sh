@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Drop all non-system schemas and all tables in public schema.
 #
-# Env: DATABASE_URL
+# Usage:
+#   ./reset-postgres.sh <database_url>
+#   DATABASE_URL=... ./reset-postgres.sh
 set -euo pipefail
+
+DATABASE_URL="${1:-${DATABASE_URL:?Usage: reset-postgres.sh <database_url>}}"
 
 echo "Postgres: $DATABASE_URL" >&2
 
