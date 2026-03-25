@@ -3,5 +3,7 @@ packages:
   - apps/*
   - tests/*
 
+injectWorkspacePackages: true
+
 ignoredBuiltDependencies:
   - esbuild
