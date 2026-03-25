@@ -35,6 +35,7 @@
     "@hono/zod-openapi": "^1.2",
     "@stripe/sync-lib-stateless": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
+    "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4"
   },

@@ -38,7 +38,7 @@ const mockDestinationWithSetup: Destination = {
 }
 
 function commandNames(program: ReturnType<typeof createConnectorCli>): string[] {
-  return program.commands.map((c) => c.name())
+  return Object.keys(program.subCommands ?? {})
 }
 
 describe('createConnectorCli', () => {
@@ -103,6 +103,6 @@ describe('createConnectorCli', () => {
 
   it('sets program name from opts', () => {
     const program = createConnectorCli(mockSource, { name: 'my-source' })
-    expect(program.name()).toBe('my-source')
+    expect(program.meta?.name).toBe('my-source')
   })
 })

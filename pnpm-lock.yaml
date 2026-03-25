@@ -73,6 +73,9 @@ importers:
       '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -113,6 +116,9 @@ importers:
       '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -205,9 +211,9 @@ importers:
       '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
-      commander:
-        specifier: ^12.1.0
-        version: 12.1.0
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -286,9 +292,9 @@ importers:
 
   packages/protocol:
     dependencies:
-      commander:
-        specifier: ^13.1.0
-        version: 13.1.0
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -399,9 +405,9 @@ importers:
 
   packages/ts-cli:
     dependencies:
-      commander:
-        specifier: ^13.1.0
-        version: 13.1.0
+      citty:
+        specifier: ^0.1.6
+        version: 0.1.6
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -1738,6 +1744,9 @@ packages:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
     engines: {node: '>= 16'}
 
+  citty@0.1.6:
+    resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
+
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
     engines: {node: '>=7.0.0'}
@@ -1749,16 +1758,12 @@ packages:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
 
-  commander@12.1.0:
-    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
-    engines: {node: '>=18'}
-
-  commander@13.1.0:
-    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
-    engines: {node: '>=18'}
-
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
+
+  consola@3.4.2:
+    resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
+    engines: {node: ^14.18.0 || >=16.10.0}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -4157,6 +4162,10 @@ snapshots:
 
   check-error@2.1.1: {}
 
+  citty@0.1.6:
+    dependencies:
+      consola: 3.4.2
+
   color-convert@2.0.1:
     dependencies:
       color-name: 1.1.4
@@ -4167,11 +4176,9 @@ snapshots:
     dependencies:
       delayed-stream: 1.0.0
 
-  commander@12.1.0: {}
-
-  commander@13.1.0: {}
-
   concat-map@0.0.1: {}
+
+  consola@3.4.2: {}
 
   cross-spawn@7.0.6:
     dependencies:
@@ -5162,7 +5169,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1))
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4
@@ -5204,7 +5211,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.8.1))
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@25.5.0)(tsx@4.21.0)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4

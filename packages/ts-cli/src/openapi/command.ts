@@ -1,5 +1,6 @@
-import { Command } from 'commander'
-import { buildRequest, handleResponse } from './dispatch.js'
+import { defineCommand } from 'citty'
+import type { ArgDef, CommandDef } from 'citty'
+import { buildRequest, handleResponse, toOptName } from './dispatch.js'
 import type { Handler } from './dispatch.js'
 import { defaultOperationName, parseSpec, toCliFlag, type ParsedOperation } from './parse.js'
 import type { OpenAPIOperation, OpenAPISpec } from './types.js'
@@ -22,10 +23,14 @@ export interface CreateCliFromSpecOptions {
   /** Provider for NDJSON request body stream. Called when operation.ndjsonRequest === true.
    * Return a ReadableStream to use as body, or null/undefined to fall back to --body flag. */
   ndjsonBodyStream?: () => ReadableStream | null | undefined
+  /** CLI metadata for the root command */
+  meta?: { name?: string; description?: string; version?: string }
+  /** Extra args to declare on the root command (e.g. --data-dir for help text) */
+  rootArgs?: Record<string, ArgDef>
 }
 
-/** Returns a Commander Command with subcommands for each API operation. */
-export function createCliFromSpec(opts: CreateCliFromSpecOptions): Command {
+/** Returns a citty CommandDef with subcommands for each API operation. */
+export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
   const {
     spec,
     handler,
@@ -34,17 +39,17 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): Command {
     groupByTag = false,
     baseUrl = 'http://localhost',
     ndjsonBodyStream,
+    meta,
+    rootArgs,
   } = opts
-
-  const root = new Command()
-  root.allowUnknownOption(false)
 
   const operations = parseSpec(spec).filter(
     (op) => !op.operationId || !exclude.includes(op.operationId)
   )
 
+  const subCommands: Record<string, CommandDef> = {}
+
   if (groupByTag) {
-    // Group by first tag
     const groups = new Map<string, ParsedOperation[]>()
     const ungrouped: ParsedOperation[] = []
 
@@ -60,33 +65,65 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): Command {
     }
 
     for (const [tag, ops] of groups) {
-      const group = new Command(toCliFlag(tag))
+      const groupSubCommands: Record<string, CommandDef> = {}
       for (const op of ops) {
-        group.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
+        const name = getOpName(op, nameOperation)
+        groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
       }
-      root.addCommand(group)
+      subCommands[toCliFlag(tag)] = defineCommand({
+        meta: { name: toCliFlag(tag) },
+        subCommands: groupSubCommands,
+      })
     }
 
     for (const op of ungrouped) {
-      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
+      const name = getOpName(op, nameOperation)
+      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
     }
   } else {
     for (const op of operations) {
-      root.addCommand(buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream))
+      const name = getOpName(op, nameOperation)
+      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
     }
   }
 
-  return root
+  return defineCommand({
+    meta: meta
+      ? { name: meta.name, description: meta.description, version: meta.version }
+      : undefined,
+    args: rootArgs,
+    subCommands,
+  })
 }
 
-/** Build a single Commander Command from a ParsedOperation. */
+function getOpName(
+  op: ParsedOperation,
+  nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string
+): string {
+  const rawOp: OpenAPIOperation = {
+    operationId: op.operationId,
+    tags: op.tags,
+    parameters: [...op.pathParams, ...op.queryParams, ...op.headerParams],
+    requestBody: op.bodySchema
+      ? {
+          required: op.bodyRequired,
+          content: { 'application/json': { schema: op.bodySchema } },
+        }
+      : undefined,
+  }
+  return nameOverride
+    ? nameOverride(op.method, op.path, rawOp)
+    : defaultOperationName(op.method, op.path, rawOp)
+}
+
+/** Build a single citty CommandDef from a ParsedOperation. */
 export function buildCommand(
   operation: ParsedOperation,
   handler: Handler,
   baseUrl = 'http://localhost',
   nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string,
   ndjsonBodyStream?: () => ReadableStream | null | undefined
-): Command {
+): CommandDef {
   const rawOp: OpenAPIOperation = {
     operationId: operation.operationId,
     tags: operation.tags,
@@ -103,38 +140,34 @@ export function buildCommand(
     ? nameOverride(operation.method, operation.path, rawOp)
     : defaultOperationName(operation.method, operation.path, rawOp)
 
-  const cmd = new Command(name)
+  const args: Record<string, ArgDef> = {}
 
-  // Path params become positional arguments
+  // Path params become positional args
   for (const param of operation.pathParams) {
-    if (param.required !== false) {
-      cmd.argument(`<${param.name}>`, param.description ?? '')
-    } else {
-      cmd.argument(`[${param.name}]`, param.description ?? '')
+    args[param.name] = {
+      type: 'positional',
+      required: param.required !== false,
+      description: param.description ?? '',
     }
   }
 
-  // Query params become --flags
+  // Query params become --flags (camelCase key → kebab-case flag)
   for (const param of operation.queryParams) {
-    const flag = toCliFlag(param.name)
-    const required = param.required === true
-    const valuePlaceholder = required ? `<${param.name}>` : `[${param.name}]`
-    if (required) {
-      cmd.requiredOption(`--${flag} ${valuePlaceholder}`, param.description ?? '')
-    } else {
-      cmd.option(`--${flag} ${valuePlaceholder}`, param.description ?? '')
+    const key = toOptName(param.name)
+    args[key] = {
+      type: 'string',
+      required: param.required === true,
+      description: param.description ?? '',
     }
   }
 
-  // Header params become --flags (kebab-cased)
+  // Header params become --flags (camelCase key → kebab-case flag)
   for (const param of operation.headerParams) {
-    const flag = toCliFlag(param.name)
-    const required = param.required === true
-    const valuePlaceholder = required ? `<${param.name}>` : `[${param.name}]`
-    if (required) {
-      cmd.requiredOption(`--${flag} ${valuePlaceholder}`, param.description ?? '')
-    } else {
-      cmd.option(`--${flag} ${valuePlaceholder}`, param.description ?? '')
+    const key = toOptName(param.name)
+    args[key] = {
+      type: 'string',
+      required: param.required === true,
+      description: param.description ?? '',
     }
   }
 
@@ -144,55 +177,58 @@ export function buildCommand(
     if (props && !operation.ndjsonRequest) {
       const requiredFields = operation.bodySchema.required ?? []
       for (const [propName, propSchema] of Object.entries(props)) {
-        const flag = toCliFlag(propName)
-        const isRequired = requiredFields.includes(propName)
-        const desc = propSchema.description ?? ''
-        const valuePlaceholder = isRequired ? `<${propName}>` : `[${propName}]`
-        if (isRequired) {
-          cmd.requiredOption(`--${flag} ${valuePlaceholder}`, desc)
-        } else {
-          cmd.option(`--${flag} ${valuePlaceholder}`, desc)
+        const key = toOptName(propName)
+        args[key] = {
+          type: 'string',
+          required: requiredFields.includes(propName),
+          description: propSchema.description ?? '',
         }
       }
     } else {
       // Complex or NDJSON body: single --body flag.
-      // When ndjsonBodyStream is provided, --body is optional for NDJSON operations
-      // because the stream supplies the body at runtime; the API enforces presence.
+      // When ndjsonBodyStream is provided, --body is optional for NDJSON operations.
       const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
-      if (operation.bodyRequired && !bodyOptional) {
-        cmd.requiredOption('--body <json>', 'Request body as JSON string')
-      } else {
-        cmd.option('--body [json]', 'Request body as JSON string')
+      args['body'] = {
+        type: 'string',
+        required: operation.bodyRequired === true && !bodyOptional,
+        description: 'Request body as JSON string',
       }
     }
   }
 
-  cmd.action(async (...actionArgs: unknown[]) => {
-    // Commander passes positional args first, then opts object, then command
-    const positionals = actionArgs.slice(0, operation.pathParams.length) as string[]
-    const opts = actionArgs[operation.pathParams.length] as Record<string, string | undefined>
+  return defineCommand({
+    meta: { name },
+    args,
+    async run({ args: cmdArgs }) {
+      // Extract positionals in path-param order, options from flat args object
+      const positionals = operation.pathParams.map(
+        (p) => (cmdArgs as Record<string, string>)[p.name]
+      )
+      const opts = cmdArgs as Record<string, string | undefined>
 
-    let request = buildRequest(operation, positionals, opts, baseUrl)
+      let request = buildRequest(operation, positionals, opts, baseUrl)
 
-    if (operation.ndjsonRequest && ndjsonBodyStream) {
-      const stream = ndjsonBodyStream()
-      if (stream) {
-        const headers = new Headers(request.headers)
-        headers.set('Content-Type', 'application/x-ndjson')
-        headers.set('Transfer-Encoding', 'chunked')
-        request = new Request(request.url, {
-          method: request.method,
-          headers,
-          body: stream,
-          // Node.js requires duplex:'half' for streaming request bodies
-          duplex: 'half',
-        } as RequestInit)
+      if (operation.ndjsonRequest && ndjsonBodyStream) {
+        const stream = ndjsonBodyStream()
+        if (stream) {
+          const headers = new Headers(request.headers)
+          headers.set('Content-Type', 'application/x-ndjson')
+          headers.set('Transfer-Encoding', 'chunked')
+          request = new Request(request.url, {
+            method: request.method,
+            headers,
+            body: stream,
+            // Node.js requires duplex:'half' for streaming request bodies
+            duplex: 'half',
+          } as RequestInit)
+        }
       }
-    }
 
-    const response = await handler(request)
-    await handleResponse(response, operation)
+      const response = await handler(request)
+      await handleResponse(response, operation)
+    },
   })
-
-  return cmd
 }
+
+/** Convert flag key (camelCase) back to --kebab-case for display/testing. */
+export { toCliFlag }

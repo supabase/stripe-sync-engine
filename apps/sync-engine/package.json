@@ -34,7 +34,7 @@
     "@stripe/sync-store-postgres": "workspace:*",
     "@stripe/sync-engine-stateless": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
-    "commander": "^12.1.0",
+    "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
     "hono": "^4",

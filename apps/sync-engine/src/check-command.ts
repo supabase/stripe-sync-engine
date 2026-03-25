@@ -10,7 +10,7 @@ export async function checkAction(opts: CliOptions) {
       commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
         | Record<string, string>
         | undefined,
-      path: opts.connectorsFromPath,
+      path: !opts.noConnectorsFromPath,
       npm: opts.connectorsFromNpm ?? false,
     }
   )

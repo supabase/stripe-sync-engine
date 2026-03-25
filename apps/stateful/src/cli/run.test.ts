@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { runCommand } from 'citty'
 import type {
   Source,
   Message,
@@ -131,7 +132,7 @@ describe('stateful CLI commands', () => {
     const cli = await makeCli(app)
 
     const { lines, restore } = captureStdout()
-    await cli.parseAsync(['list-syncs'], { from: 'user' })
+    await runCommand(cli, { rawArgs: ['list-syncs'] })
     restore()
 
     const parsed = JSON.parse(lines.join(''))
@@ -151,7 +152,7 @@ describe('stateful CLI commands', () => {
     const cli = await makeCli(app)
 
     const { lines, restore } = captureStdout()
-    await cli.parseAsync(['get-sync', syncId], { from: 'user' })
+    await runCommand(cli, { rawArgs: ['get-sync', syncId] })
     restore()
 
     const parsed = JSON.parse(lines.join(''))
@@ -170,7 +171,7 @@ describe('stateful CLI commands', () => {
     const cli = await makeCli(app)
 
     const { lines, restore } = captureStdout()
-    await cli.parseAsync(['check-sync', syncId], { from: 'user' })
+    await runCommand(cli, { rawArgs: ['check-sync', syncId] })
     restore()
 
     const parsed = JSON.parse(lines.join(''))
@@ -197,7 +198,7 @@ describe('stateful CLI commands', () => {
     const cli = await makeCli(app)
 
     const { lines, restore } = captureStdout()
-    await cli.parseAsync(['run-sync', syncId], { from: 'user' })
+    await runCommand(cli, { rawArgs: ['run-sync', syncId] })
     restore()
 
     const msgs = lines
@@ -242,7 +243,7 @@ describe('stateful CLI commands', () => {
     })
 
     const { lines, restore } = captureStdout()
-    await cli.parseAsync(['write-sync', syncId], { from: 'user' })
+    await runCommand(cli, { rawArgs: ['write-sync', syncId] })
     restore()
 
     const msgs = lines

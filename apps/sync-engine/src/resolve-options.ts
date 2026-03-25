@@ -13,7 +13,7 @@ export interface CliOptions {
   postgresSchema?: string
   // Sync flags
   streams?: string
-  state?: boolean // Commander inverts --no-state → state: false
+  noState?: boolean // true when --no-state is passed (skip state loading/saving)
   // Generic escape hatches
   source?: string
   destination?: string
@@ -22,7 +22,7 @@ export interface CliOptions {
   config?: string
   // Connector discovery flags
   connectorsFromCommandMap?: string
-  connectorsFromPath?: boolean // Commander inverts --no-connectors-from-path → false
+  noConnectorsFromPath?: boolean // true when --no-connectors-from-path is passed
   connectorsFromNpm?: boolean
 }
 

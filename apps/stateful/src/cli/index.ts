@@ -2,6 +2,7 @@
 
 import 'dotenv/config'
 import { Readable } from 'node:stream'
+import { runMain } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli'
 import { createApp } from '../api/app.js'
 
@@ -17,9 +18,12 @@ const root = createCliFromSpec({
   exclude: ['health', 'pushWebhook'],
   ndjsonBodyStream: () =>
     process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
+  meta: { name: 'sync-engine-stateful', version: '0.1.0' },
+  rootArgs: {
+    dataDir: {
+      type: 'string',
+      description: 'Data directory for credentials, syncs, state, and logs',
+    },
+  },
 })
-root
-  .name('sync-engine-stateful')
-  .version('0.1.0')
-  .option('--data-dir <path>', 'Data directory for credentials, syncs, state, and logs')
-root.parse()
+runMain(root)

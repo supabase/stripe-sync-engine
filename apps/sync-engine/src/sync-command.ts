@@ -17,13 +17,13 @@ export async function syncAction(opts: CliOptions) {
       commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
         | Record<string, string>
         | undefined,
-      path: opts.connectorsFromPath,
+      path: !opts.noConnectorsFromPath,
       npm: opts.connectorsFromNpm ?? false,
     }
   )
   const params = resolveOptions(opts)
   const destConfig = params.destination_config as Record<string, unknown>
-  const useState = opts.state !== false
+  const useState = !opts.noState
   const isPostgres =
     params.destination_name === 'postgres' || params.destination_name === 'destination-postgres'
 

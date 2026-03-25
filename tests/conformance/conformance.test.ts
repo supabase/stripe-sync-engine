@@ -164,7 +164,7 @@ describe.each(connectorDirs)('connector bin: %s', (dir) => {
     const mod = await import(pkg.name)
     const connector = mod.default as Record<string, unknown>
     const program = createConnectorCli(connector as never)
-    const commandNames = program.commands.map((c) => c.name())
+    const commandNames = Object.keys(program.subCommands ?? {})
 
     // Both source and destination get spec + check
     expect(commandNames).toContain('spec')

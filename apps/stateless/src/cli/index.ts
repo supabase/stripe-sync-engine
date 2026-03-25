@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 
 import { Readable } from 'node:stream'
+import { runMain } from 'citty'
 import { createConnectorResolver } from '@stripe/sync-lib-stateless'
 import { createCliFromSpec } from '@stripe/sync-ts-cli'
 import { createApp } from '../api/app.js'
@@ -15,6 +16,6 @@ const root = createCliFromSpec({
   exclude: ['health'],
   ndjsonBodyStream: () =>
     process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
+  meta: { name: 'sync-engine-stateless', version: VERSION },
 })
-root.name('sync-engine-stateless').version(VERSION)
-root.parse()
+runMain(root)

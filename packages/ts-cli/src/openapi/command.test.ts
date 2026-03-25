@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildCommand, createCliFromSpec } from './command.js'
+import { runCommand } from 'citty'
+import type { CommandDef } from 'citty'
+import { buildCommand, createCliFromSpec, toCliFlag } from './command.js'
 import type { ParsedOperation } from './parse.js'
 import type { OpenAPISpec } from './types.js'
 
@@ -79,6 +81,30 @@ const syncSpec: OpenAPISpec = {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers for introspecting citty CommandDef
+// ---------------------------------------------------------------------------
+
+function cmdName(cmd: CommandDef): string | undefined {
+  return cmd.meta?.name
+}
+
+function positionalNames(cmd: CommandDef): string[] {
+  return Object.entries(cmd.args ?? {})
+    .filter(([, def]) => def.type === 'positional')
+    .map(([key]) => key)
+}
+
+function optionFlags(cmd: CommandDef): string[] {
+  return Object.entries(cmd.args ?? {})
+    .filter(([, def]) => def.type !== 'positional')
+    .map(([key]) => '--' + toCliFlag(key))
+}
+
+function subCommandNames(cmd: CommandDef): string[] {
+  return Object.keys(cmd.subCommands ?? {})
+}
+
+// ---------------------------------------------------------------------------
 // buildCommand
 // ---------------------------------------------------------------------------
 
@@ -98,7 +124,7 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    expect(cmd.name()).toBe('list-syncs')
+    expect(cmdName(cmd)).toBe('list-syncs')
   })
 
   it('creates positional argument for path param', () => {
@@ -116,8 +142,7 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    const argNames = cmd.registeredArguments.map((a) => a.name())
-    expect(argNames).toContain('id')
+    expect(positionalNames(cmd)).toContain('id')
   })
 
   it('creates --flag options for query params', () => {
@@ -138,9 +163,9 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    const optNames = cmd.options.map((o) => o.long)
-    expect(optNames).toContain('--limit')
-    expect(optNames).toContain('--cursor')
+    const flags = optionFlags(cmd)
+    expect(flags).toContain('--limit')
+    expect(flags).toContain('--cursor')
   })
 
   it('creates --flags for header params (kebab-cased)', () => {
@@ -158,8 +183,7 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    const optNames = cmd.options.map((o) => o.long)
-    expect(optNames).toContain('--x-source-config')
+    expect(optionFlags(cmd)).toContain('--x-source-config')
   })
 
   it('creates per-property --flags for flat body schema', () => {
@@ -186,9 +210,9 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    const optNames = cmd.options.map((o) => o.long)
-    expect(optNames).toContain('--name')
-    expect(optNames).toContain('--source')
+    const flags = optionFlags(cmd)
+    expect(flags).toContain('--name')
+    expect(flags).toContain('--source')
   })
 
   it('creates --body for complex/nested body', () => {
@@ -208,8 +232,7 @@ describe('buildCommand', () => {
     }
     const handler = vi.fn()
     const cmd = buildCommand(op, handler)
-    const optNames = cmd.options.map((o) => o.long)
-    expect(optNames).toContain('--body')
+    expect(optionFlags(cmd)).toContain('--body')
   })
 })
 
@@ -225,7 +248,7 @@ describe('createCliFromSpec', () => {
       })
     )
     const root = createCliFromSpec({ spec: syncSpec, handler })
-    const names = root.commands.map((c) => c.name())
+    const names = subCommandNames(root)
     expect(names).toContain('list-syncs')
     expect(names).toContain('create-sync')
     expect(names).toContain('get-sync')
@@ -240,7 +263,7 @@ describe('createCliFromSpec', () => {
       handler,
       exclude: ['deleteSync', 'runSync'],
     })
-    const names = root.commands.map((c) => c.name())
+    const names = subCommandNames(root)
     expect(names).not.toContain('delete-sync')
     expect(names).not.toContain('run-sync')
     expect(names).toContain('list-syncs')
@@ -250,10 +273,10 @@ describe('createCliFromSpec', () => {
     const handler = vi.fn()
     const root = createCliFromSpec({ spec: syncSpec, handler, groupByTag: true })
     // All ops have tag 'syncs', so there's a 'syncs' subcommand group
-    const groupNames = root.commands.map((c) => c.name())
+    const groupNames = subCommandNames(root)
     expect(groupNames).toContain('syncs')
-    const syncsGroup = root.commands.find((c) => c.name() === 'syncs')!
-    const cmdNames = syncsGroup.commands.map((c) => c.name())
+    const syncsGroup = root.subCommands!['syncs'] as CommandDef
+    const cmdNames = subCommandNames(syncsGroup)
     expect(cmdNames).toContain('list-syncs')
     expect(cmdNames).toContain('run-sync')
   })
@@ -273,7 +296,7 @@ describe('createCliFromSpec', () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
     const root = createCliFromSpec({ spec: syncSpec, handler })
-    await root.parseAsync(['list-syncs', '--limit', '5'], { from: 'user' })
+    await runCommand(root, { rawArgs: ['list-syncs', '--limit', '5'] })
 
     expect(capturedRequests).toHaveLength(1)
     const req = capturedRequests[0]!
@@ -299,7 +322,7 @@ describe('createCliFromSpec', () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
     const root = createCliFromSpec({ spec: syncSpec, handler })
-    await root.parseAsync(['get-sync', 'sync_abc'], { from: 'user' })
+    await runCommand(root, { rawArgs: ['get-sync', 'sync_abc'] })
 
     expect(capturedRequests[0]!.url).toContain('/syncs/sync_abc')
 
@@ -313,7 +336,7 @@ describe('createCliFromSpec', () => {
       handler,
       nameOperation: (method, path) => `${method.toUpperCase()}:${path}`,
     })
-    const names = root.commands.map((c) => c.name())
+    const names = subCommandNames(root)
     expect(names).toContain('GET:/syncs')
   })
 })
@@ -370,7 +393,7 @@ describe('ndjsonBodyStream', () => {
     })
 
     // bodyRequired=true but --body is optional when ndjsonBodyStream is provided
-    await root.parseAsync(['write'], { from: 'user' })
+    await runCommand(root, { rawArgs: ['write'] })
 
     writeSpy.mockRestore()
 
@@ -399,7 +422,7 @@ describe('ndjsonBodyStream', () => {
       ndjsonBodyStream: () => null, // TTY — no stdin
     })
 
-    await root.parseAsync(['write', '--body', 'line1\nline2'], { from: 'user' })
+    await runCommand(root, { rawArgs: ['write', '--body', 'line1\nline2'] })
 
     writeSpy.mockRestore()
 
@@ -419,9 +442,8 @@ describe('ndjsonBodyStream', () => {
       handler,
       ndjsonBodyStream: () => new ReadableStream(),
     })
-    const writeCmd = root.commands.find((c) => c.name() === 'write')!
-    const bodyOpt = writeCmd.options.find((o) => o.long === '--body')!
-    // Should be optional (not mandatory), since stream provides the body
-    expect(bodyOpt.mandatory).toBe(false)
+    const writeCmd = root.subCommands!['write'] as CommandDef
+    // Should be optional (not required), since stream provides the body
+    expect(writeCmd.args?.['body']?.required).toBe(false)
   })
 })
