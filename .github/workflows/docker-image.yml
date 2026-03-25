@@ -76,6 +76,8 @@ jobs:
 
       - name: E2E plugin loading test
         run: bash tests/e2e-plugin-loading.sh
+        env:
+          STRIPE_NPM_REGISTRY: https://registry.npmjs.org
 
       # --- Integration tests (real Stripe API) ---
 
