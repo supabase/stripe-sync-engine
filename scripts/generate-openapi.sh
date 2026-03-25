@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Generate OpenAPI specs from both engine and service apps.
-# Output: docs/openapi/engine.json, docs/openapi/service.json
+# Generate OpenAPI specs from engine, service, and webhook apps.
+# Output: docs/openapi/{engine,service,webhook}.json
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -36,11 +36,20 @@ node -e "
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
 " > "$outdir/service.json"
 
-pnpm prettier --write "$outdir/engine.json" "$outdir/service.json" --log-level warn
+echo "Generating webhook OpenAPI spec..."
+node -e "
+  import { createWebhookApp } from './apps/service/dist/api/webhook-app.js';
+  const app = createWebhookApp({ push_event: () => {} });
+  const res = await app.request('/openapi.json');
+  const spec = await res.json();
+  process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
+" > "$outdir/webhook.json"
+
+pnpm prettier --write "$outdir/engine.json" "$outdir/service.json" "$outdir/webhook.json" --log-level warn
 
 if $check_mode; then
   drift=false
-  for spec in engine.json service.json; do
+  for spec in engine.json service.json webhook.json; do
     if ! diff -q "$outdir/$spec" "docs/openapi/$spec" > /dev/null 2>&1; then
       echo "DRIFT: docs/openapi/$spec is out of date"
       diff --unified "$outdir/$spec" "docs/openapi/$spec" || true
@@ -57,4 +66,5 @@ else
   echo "Done:"
   echo "  docs/openapi/engine.json  ($(wc -l < docs/openapi/engine.json) lines)"
   echo "  docs/openapi/service.json ($(wc -l < docs/openapi/service.json) lines)"
+  echo "  docs/openapi/webhook.json ($(wc -l < docs/openapi/webhook.json) lines)"
 fi

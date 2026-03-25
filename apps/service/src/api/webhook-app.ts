@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
+import { apiReference } from '@scalar/hono-api-reference'
 
 export interface WebhookAppOptions {
   /** Called for each incoming webhook event. Fire-and-forget. */
@@ -66,6 +67,24 @@ export function createWebhookApp({ push_event }: WebhookAppOptions) {
       }
     },
   })
+  app.get('/health', (c) => c.text('ok'))
+
   mountWebhookRoutes(app, push_event)
+
+  app.get('/openapi.json', (c) =>
+    c.json(
+      app.getOpenAPIDocument({
+        openapi: '3.0.0',
+        info: {
+          title: 'Stripe Sync Webhook Server',
+          version: '1.0.0',
+          description: 'Standalone webhook ingress — receives Stripe webhook events.',
+        },
+      })
+    )
+  )
+
+  app.get('/docs', apiReference({ url: '/openapi.json' }))
+
   return app
 }

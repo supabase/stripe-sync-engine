@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Start engine or service API server and open Scalar docs in the browser.
-# Usage: ./scripts/open-docs.sh [engine|service]
+# Start engine, service, or webhook server and open Scalar docs in the browser.
+# Usage: ./scripts/open-docs.sh [engine|service|webhook]
 set -euo pipefail
 
 APP="${1:-engine}"
 RUN="$(dirname "$0")/ts-run"
 
 case "$APP" in
-  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/src/cli/index.ts" ;;
-  service) PORT="${PORT:-4020}"; ENTRY="apps/service/src/bin/cli.ts" ;;
-  *) echo "Usage: $0 [engine|service]" >&2; exit 1 ;;
+  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/src/cli/index.ts";  CMD_ARGS="serve --port $PORT" ;;
+  service) PORT="${PORT:-4020}"; ENTRY="apps/service/src/bin/cli.ts";   CMD_ARGS="serve --port $PORT" ;;
+  webhook) PORT="${PORT:-4030}"; ENTRY="apps/service/src/bin/cli.ts";   CMD_ARGS="webhook --port $PORT --temporal-address localhost:7233" ;;
+  *) echo "Usage: $0 [engine|service|webhook]" >&2; exit 1 ;;
 esac
 
-CMD="$RUN $ENTRY serve --port $PORT"
+CMD="$RUN $ENTRY $CMD_ARGS"
 
 cd "$(dirname "$0")/.."
 

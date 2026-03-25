@@ -1,0 +1,46 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Stripe Sync Webhook Server",
+    "version": "1.0.0",
+    "description": "Standalone webhook ingress — receives Stripe webhook events."
+  },
+  "components": {
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/webhooks/{credential_id}": {
+      "post": {
+        "operationId": "pushWebhook",
+        "tags": ["Webhooks"],
+        "summary": "Ingest a Stripe webhook event",
+        "description": "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "cred_abc123"
+            },
+            "required": true,
+            "name": "credential_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "enum": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
