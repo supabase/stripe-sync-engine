@@ -15,6 +15,7 @@
     "@stripe/sync-destination-google-sheets": "workspace:*",
     "@temporalio/testing": "^1",
     "@temporalio/worker": "^1",
+    "googleapis": "^144",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"

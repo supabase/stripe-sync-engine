@@ -4,18 +4,22 @@ import { Worker } from '@temporalio/worker'
 import { serve } from '@hono/node-server'
 import type { ServerType } from '@hono/node-server'
 import pg from 'pg'
+import Stripe from 'stripe'
+import { google } from 'googleapis'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import net from 'node:net'
 import source from '@stripe/sync-source-stripe'
-import destination from '@stripe/sync-destination-postgres'
+import pgDestination from '@stripe/sync-destination-postgres'
+import sheetsDestination from '@stripe/sync-destination-google-sheets'
+import { readSheet } from '@stripe/sync-destination-google-sheets'
 import { createConnectorResolver } from '@stripe/sync-engine'
 import { createApp, createActivities } from '@stripe/sync-service'
 import { describeWithEnv } from './test-helpers.js'
 
 // ---------------------------------------------------------------------------
-// Config
+// Helpers
 // ---------------------------------------------------------------------------
 
 const POSTGRES_URL =
@@ -29,93 +33,116 @@ function schemaName(): string {
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.listen(0, '127.0.0.1', () => {
-      const addr = server.address()
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
       if (!addr || typeof addr === 'string') {
         reject(new Error('Could not get port'))
         return
       }
       const port = addr.port
-      server.close(() => resolve(port))
+      srv.close(() => resolve(port))
     })
-    server.on('error', reject)
+    srv.on('error', reject)
   })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+async function pollUntil(
+  fn: () => Promise<boolean>,
+  { timeout = 60_000, interval = 1000 } = {}
+): Promise<void> {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (await fn()) return
+    await new Promise((r) => setTimeout(r, interval))
+  }
+  throw new Error(`pollUntil timed out after ${timeout}ms`)
+}
 
-describeWithEnv('temporal e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
+/** Create shared infra: Temporal test env, service API, Postgres pool. */
+function createTestInfra() {
   let testEnv: TestWorkflowEnvironment
   let server: ServerType
   let serviceUrl: string
   let pool: pg.Pool
   let dataDir: string
-  const schema = schemaName()
 
-  // workflowsPath points at compiled JS in apps/service/dist
   const workflowsPath = path.resolve(process.cwd(), '../apps/service/dist/temporal/workflows.js')
 
+  return {
+    get testEnv() {
+      return testEnv
+    },
+    get serviceUrl() {
+      return serviceUrl
+    },
+    get pool() {
+      return pool
+    },
+    get workflowsPath() {
+      return workflowsPath
+    },
+
+    async setup() {
+      testEnv = await TestWorkflowEnvironment.createLocal()
+      dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
+
+      const port = await findFreePort()
+      const connectors = createConnectorResolver({
+        sources: { stripe: source },
+        destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
+      })
+      const app = createApp({ connectors, dataDir })
+      server = serve({ fetch: app.fetch, port })
+      serviceUrl = `http://localhost:${port}`
+
+      pool = new pg.Pool({ connectionString: POSTGRES_URL })
+      await pool.query('SELECT 1')
+
+      console.log(`\n  Service:  ${serviceUrl}`)
+      console.log(`  Data dir: ${dataDir}`)
+      console.log(`  Postgres: ${POSTGRES_URL}`)
+    },
+
+    async teardown() {
+      await pool?.end().catch(() => {})
+      server?.close()
+      await testEnv?.teardown()
+      if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true })
+    },
+  }
+}
+
+// ===========================================================================
+// 1. Stripe → Postgres (backfill + live webhook event)
+// ===========================================================================
+
+describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
+  const infra = createTestInfra()
+  const schema = schemaName()
+  let stripe: Stripe
+
   beforeAll(async () => {
-    // 1. Start Temporal test environment
-    testEnv = await TestWorkflowEnvironment.createLocal()
-
-    // 2. Isolated data directory
-    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
-
-    // 3. Start service API on a random port
-    const port = await findFreePort()
-    const connectors = createConnectorResolver({
-      sources: { stripe: source },
-      destinations: { postgres: destination },
-    })
-    const app = createApp({ connectors, dataDir })
-    server = serve({ fetch: app.fetch, port })
-    serviceUrl = `http://localhost:${port}`
-
-    // 4. Postgres pool
-    pool = new pg.Pool({ connectionString: POSTGRES_URL })
-    await pool.query('SELECT 1')
-
-    console.log(`\n  Service:  ${serviceUrl}`)
-    console.log(`  Data dir: ${dataDir}`)
-    console.log(`  Postgres: ${POSTGRES_URL} (schema: ${schema})`)
+    await infra.setup()
+    stripe = new Stripe(STRIPE_API_KEY)
+    console.log(`  Schema: ${schema}`)
   }, 120_000)
 
   afterAll(async () => {
-    if (pool) {
-      if (!process.env.KEEP_TEST_DATA) {
-        await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {})
-      }
-      await pool.end().catch(() => {})
+    if (infra.pool && !process.env.KEEP_TEST_DATA) {
+      await infra.pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {})
     }
-    server?.close()
-    await testEnv?.teardown()
-    if (dataDir) {
-      fs.rmSync(dataDir, { recursive: true, force: true })
-    }
+    await infra.teardown()
   })
 
-  it('backfills products from Stripe into Postgres via Temporal workflow', async () => {
-    // 1. Create sync with api_key directly on source config (no credential_id).
-    //    Using credential_id triggers an infinite webhook fan-out queue in
-    //    SyncService.run(), which would never complete for a backfill-only test.
-    const syncRes = await fetch(`${serviceUrl}/syncs`, {
+  it('backfills products then processes a live event via signal', async () => {
+    // --- Create sync (api_key inline — no credential_id to avoid infinite queue) ---
+    const syncRes = await fetch(`${infra.serviceUrl}/syncs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        source: {
-          type: 'stripe',
-          api_key: STRIPE_API_KEY,
-          backfill_limit: 5,
-        },
-        destination: {
-          type: 'postgres',
-          connection_string: POSTGRES_URL,
-          schema,
-        },
+        source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
+        destination: { type: 'postgres', connection_string: POSTGRES_URL, schema },
         streams: [{ name: 'products' }],
       }),
     })
@@ -123,55 +150,73 @@ describeWithEnv('temporal e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
     const sync = (await syncRes.json()) as { id: string }
     console.log(`  Sync: ${sync.id}`)
 
-    // 2. Start workflow with the sync ID
-    const handle = await testEnv.client.workflow.start('syncWorkflow', {
+    // --- Start workflow + worker ---
+    const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
       args: [sync.id],
       workflowId: `sync_${sync.id}`,
-      taskQueue: 'e2e-queue',
+      taskQueue: 'pg-queue',
     })
 
-    // 3. Create worker with real activities pointing at the service
     const worker = await Worker.create({
-      connection: testEnv.nativeConnection,
-      taskQueue: 'e2e-queue',
-      workflowsPath,
-      activities: createActivities(serviceUrl),
+      connection: infra.testEnv.nativeConnection,
+      taskQueue: 'pg-queue',
+      workflowsPath: infra.workflowsPath,
+      activities: createActivities(infra.serviceUrl),
     })
-
-    let verificationError: string | undefined
 
     await worker.runUntil(async () => {
-      // 4. Poll Postgres until data appears
-      const deadline = Date.now() + 60_000
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 1000))
+      // --- Wait for backfill data ---
+      await pollUntil(async () => {
         try {
-          const result = await pool.query(`SELECT count(*) AS cnt FROM "${schema}"."products"`)
-          if (parseInt(result.rows[0].cnt, 10) > 0) break
+          const r = await infra.pool.query(`SELECT count(*) AS cnt FROM "${schema}"."products"`)
+          return parseInt(r.rows[0].cnt, 10) > 0
         } catch {
-          // Table may not exist yet
+          return false
         }
-      }
+      })
 
-      // 5. Verify data landed
-      try {
-        const result = await pool.query(`SELECT count(*) AS cnt FROM "${schema}"."products"`)
-        const count = parseInt(result.rows[0].cnt, 10)
-        console.log(`  Postgres: ${schema}.products has ${count} rows`)
-        if (count === 0) verificationError = `Expected > 0 products, got ${count}`
+      const { rows: countRows } = await infra.pool.query(
+        `SELECT count(*) AS cnt FROM "${schema}"."products"`
+      )
+      const backfillCount = parseInt(countRows[0].cnt, 10)
+      console.log(`  Backfill: ${backfillCount} products`)
+      expect(backfillCount).toBeGreaterThan(0)
 
-        const row = await pool.query(
-          `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."products" LIMIT 1`
-        )
-        const sample = row.rows[0]
-        console.log(`  Sample: ${sample.id} → ${sample.name}`)
-        if (!sample.id.startsWith('prod_'))
-          verificationError = `Expected prod_ prefix, got ${sample.id}`
-      } catch (e: any) {
-        verificationError = `DB verification failed: ${e.message}`
-      }
+      // Verify data shape
+      const { rows: sampleRows } = await infra.pool.query(
+        `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."products" LIMIT 1`
+      )
+      expect(sampleRows[0].id).toMatch(/^prod_/)
+      console.log(`  Sample: ${sampleRows[0].id} → ${sampleRows[0].name}`)
 
-      // 6. Signal delete → teardown
+      // --- Live event via stripe_event signal ---
+      // Update a product via Stripe API
+      const products = await stripe.products.list({ limit: 1 })
+      const product = products.data[0]
+      const newName = `temporal-e2e-${Date.now()}`
+      await stripe.products.update(product.id, { name: newName })
+      console.log(`  Updated product ${product.id} → "${newName}"`)
+
+      // Fetch the event from Stripe events API and signal the workflow
+      await new Promise((r) => setTimeout(r, 2000))
+      const events = await stripe.events.list({ limit: 5, type: 'product.updated' })
+      const event = events.data[0]
+      console.log(`  Fetched event ${event.id} (${event.type})`)
+      await handle.signal('stripe_event', event)
+
+      // Wait for the event to be processed
+      await new Promise((r) => setTimeout(r, 5000))
+
+      // Verify the update landed
+      const { rows: updatedRows } = await infra.pool.query(
+        `SELECT _raw_data->>'name' AS name FROM "${schema}"."products" WHERE id = $1`,
+        [product.id]
+      )
+      expect(updatedRows.length).toBeGreaterThan(0)
+      expect(updatedRows[0].name).toBe(newName)
+      console.log(`  Live update verified: ${product.id} → "${updatedRows[0].name}"`)
+
+      // --- Teardown ---
       await handle.signal('delete')
       try {
         await handle.result()
@@ -180,11 +225,9 @@ describeWithEnv('temporal e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
       }
     })
 
-    if (verificationError) throw new Error(verificationError)
-
-    // 7. Verify tables dropped (teardown ran)
+    // Verify tables dropped
     if (!process.env.KEEP_TEST_DATA) {
-      const { rows } = await pool.query(
+      const { rows } = await infra.pool.query(
         `SELECT count(*) AS cnt FROM information_schema.tables WHERE table_schema = $1`,
         [schema]
       )
@@ -193,3 +236,146 @@ describeWithEnv('temporal e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY }) => {
     }
   })
 })
+
+// ===========================================================================
+// 2. Stripe → Google Sheets (backfill)
+// ===========================================================================
+
+describeWithEnv(
+  'temporal e2e: stripe → google-sheets',
+  [
+    'STRIPE_API_KEY',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'GOOGLE_REFRESH_TOKEN',
+    'GOOGLE_SPREADSHEET_ID',
+  ],
+  ({
+    STRIPE_API_KEY,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN,
+    GOOGLE_SPREADSHEET_ID,
+  }) => {
+    const infra = createTestInfra()
+    let sheetsClient: ReturnType<typeof google.sheets>
+
+    // The stream name "products" becomes the sheet tab name.
+    // We clean up the tab after the test.
+    const streamName = 'products'
+
+    beforeAll(async () => {
+      await infra.setup()
+
+      const auth = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
+      auth.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN })
+      sheetsClient = google.sheets({ version: 'v4', auth })
+
+      console.log(`  Spreadsheet: ${GOOGLE_SPREADSHEET_ID}`)
+      console.log(`  Tab: ${streamName}`)
+    }, 120_000)
+
+    afterAll(async () => {
+      // Clean up test tab
+      if (sheetsClient && !process.env.KEEP_TEST_DATA) {
+        try {
+          const meta = await sheetsClient.spreadsheets.get({
+            spreadsheetId: GOOGLE_SPREADSHEET_ID,
+          })
+          const sheet = meta.data.sheets?.find((s) => s.properties?.title === streamName)
+          if (sheet?.properties?.sheetId != null) {
+            await sheetsClient.spreadsheets.batchUpdate({
+              spreadsheetId: GOOGLE_SPREADSHEET_ID,
+              requestBody: {
+                requests: [{ deleteSheet: { sheetId: sheet.properties.sheetId } }],
+              },
+            })
+            console.log(`  Cleaned up tab: ${streamName}`)
+          }
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+      await infra.teardown()
+    })
+
+    it('backfills products from Stripe into a Google Sheet tab', async () => {
+      // --- Create sync ---
+      const syncRes = await fetch(`${infra.serviceUrl}/syncs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
+          destination: {
+            type: 'google-sheets',
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            refresh_token: GOOGLE_REFRESH_TOKEN,
+            access_token: 'placeholder', // OAuth2 will refresh via refresh_token
+            spreadsheet_id: GOOGLE_SPREADSHEET_ID,
+          },
+          // Use the unique tab name as the stream name —
+          // the sheets destination creates a tab per stream
+          streams: [{ name: streamName }],
+        }),
+      })
+      expect(syncRes.status).toBe(201)
+      const sync = (await syncRes.json()) as { id: string }
+      console.log(`  Sync: ${sync.id}`)
+
+      // --- Start workflow + worker ---
+      const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
+        args: [sync.id],
+        workflowId: `sync_${sync.id}`,
+        taskQueue: 'sheets-queue',
+      })
+
+      const worker = await Worker.create({
+        connection: infra.testEnv.nativeConnection,
+        taskQueue: 'sheets-queue',
+        workflowsPath: infra.workflowsPath,
+        activities: createActivities(infra.serviceUrl),
+      })
+
+      await worker.runUntil(async () => {
+        // --- Wait for data to appear in the sheet ---
+        await pollUntil(
+          async () => {
+            try {
+              const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
+              return rows.length > 1 // header + at least one data row
+            } catch {
+              return false
+            }
+          },
+          { timeout: 60_000, interval: 2000 }
+        )
+
+        // --- Verify data ---
+        const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
+        const headerRow = rows[0]
+        const dataRows = rows.slice(1)
+        console.log(`  Sheet: ${dataRows.length} data rows`)
+        console.log(`  Headers: ${headerRow.join(', ')}`)
+
+        expect(dataRows.length).toBeGreaterThan(0)
+
+        // Find the 'id' column and verify product IDs
+        const idCol = headerRow.indexOf('id')
+        expect(idCol).toBeGreaterThanOrEqual(0)
+        for (const row of dataRows) {
+          expect(row[idCol]).toMatch(/^prod_/)
+        }
+        console.log(`  Sample: ${dataRows[0][idCol]}`)
+
+        // --- Signal delete ---
+        await handle.signal('delete')
+        try {
+          await handle.result()
+        } catch {
+          // Expected
+        }
+      })
+    })
+  }
+)
