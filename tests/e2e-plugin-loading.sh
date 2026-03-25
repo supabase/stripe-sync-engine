@@ -192,15 +192,17 @@ echo ""
 # Step 8: unknown connector name → "not found"
 # ---------------------------------------------------------------------------
 echo "--- Step 8: unknown connector name → not found ---"
-if npx sync-engine check \
+STEP8_OUTPUT=$(npx sync-engine check \
      --source nonexistent-xyz \
      --destination nonexistent-xyz \
      --source-config '{}' \
      --destination-config '{}' \
-     2>&1 | grep -qi "not found"; then
+     2>&1 || true)
+if echo "$STEP8_OUTPUT" | grep -qi "not found"; then
   echo "  PASS: unknown connector correctly reports 'not found'"
 else
   echo "  FAIL: unknown connector did not report 'not found'"
+  echo "  Output: $STEP8_OUTPUT"
   exit 1
 fi
 echo ""
