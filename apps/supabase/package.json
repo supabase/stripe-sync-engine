@@ -15,7 +15,8 @@
     "build": "node build.mjs",
     "lint": "eslint src --ext .ts",
     "test": "vitest --passWithNoTests",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "files": [
     "dist",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "esbuild": "^0.27.2",
+    "stripe": "^18.1.0",
     "vitest": "^3.2.4"
   }
 }

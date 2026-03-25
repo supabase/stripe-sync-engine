@@ -6,31 +6,20 @@ import { beforeAll, describe, expect, it } from 'vitest'
 // ---------------------------------------------------------------------------
 
 describe.concurrent('Bundled edge function code', () => {
-  let webhookCode: string
-  let setupCode: string
-  let workerCode: string
-  let backfillWorkerCode: string
+  let syncCode: string
 
   beforeAll(async () => {
     const distPath = resolve(import.meta.dirname, '../../dist/index.js')
     const mod = await import(distPath)
-    webhookCode = mod.webhookFunctionCode
-    setupCode = mod.setupFunctionCode
-    workerCode = mod.workerFunctionCode
-    backfillWorkerCode = mod.backfillWorkerFunctionCode
+    syncCode = mod.syncFunctionCode
   })
 
-  it('all four edge functions are bundled', () => {
-    expect(webhookCode).toBeTruthy()
-    expect(setupCode).toBeTruthy()
-    expect(workerCode).toBeTruthy()
-    expect(backfillWorkerCode).toBeTruthy()
+  it('consolidated edge function is bundled', () => {
+    expect(syncCode).toBeTruthy()
   })
 
   it('bundled code contains Deno.serve entry point', () => {
-    for (const code of [webhookCode, setupCode, workerCode, backfillWorkerCode]) {
-      expect(code).toContain('Deno.serve')
-    }
+    expect(syncCode).toContain('Deno.serve')
   })
 
   it.todo(

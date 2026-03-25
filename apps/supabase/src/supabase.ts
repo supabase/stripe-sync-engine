@@ -1,10 +1,5 @@
 import { SupabaseManagementAPI } from 'supabase-management-js'
-import {
-  setupFunctionCode,
-  webhookFunctionCode,
-  workerFunctionCode,
-  backfillWorkerFunctionCode,
-} from './edge-function-code.js'
+import { syncFunctionCode } from './edge-function-code.js'
 import pkg from '../package.json' with { type: 'json' }
 import { parseSchemaComment, StripeSchemaComment } from './schemaComment.js'
 
@@ -165,7 +160,7 @@ export class SupabaseSetupClient {
         '${schedule}',
         $$
         SELECT net.http_post(
-          url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-worker',
+          url := 'https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-sync/sync',
           headers := jsonb_build_object(
             'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'stripe_sync_worker_secret')
           )
@@ -185,7 +180,7 @@ export class SupabaseSetupClient {
    * Get the webhook URL for this project
    */
   getWebhookUrl(): string {
-    return `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-webhook`
+    return `https://${this.projectRef}.${this.projectBaseUrl}/functions/v1/stripe-sync/webhook`
   }
 
   /**
@@ -381,7 +376,7 @@ export class SupabaseSetupClient {
 
   /**
    * Uninstall stripe-sync from a Supabase project
-   * Invokes the stripe-setup edge function's DELETE endpoint which handles cleanup
+   * Invokes the stripe-sync edge function's DELETE /setup endpoint which handles cleanup
    * Tracks uninstallation progress via schema comments
    */
   async uninstall(startTime?: number): Promise<void> {
@@ -392,9 +387,8 @@ export class SupabaseSetupClient {
         await this.updateComment({ status: 'uninstalling', startTime })
       }
 
-      // Invoke the DELETE endpoint on stripe-setup function
-      // Use accessToken in Authorization header for Management API validation
-      const setupResult = await this.invokeFunction('stripe-setup', 'DELETE', this.accessToken)
+      // Invoke the DELETE endpoint on the consolidated stripe-sync function
+      const setupResult = await this.invokeFunction('stripe-sync/setup', 'DELETE', this.accessToken)
 
       if (!setupResult.success) {
         throw new Error(`Uninstall failed: ${setupResult.error}`)
@@ -423,7 +417,8 @@ export class SupabaseSetupClient {
     workerIntervalSeconds?: number,
     rateLimit?: number,
     syncIntervalSeconds?: number,
-    startTime?: number
+    startTime?: number,
+    skipInitialSync?: boolean
   ): Promise<void> {
     const trimmedStripeKey = stripeKey.trim()
     if (!trimmedStripeKey.startsWith('sk_') && !trimmedStripeKey.startsWith('rk_')) {
@@ -445,7 +440,7 @@ export class SupabaseSetupClient {
       // Signal installation started
       await this.updateComment({ status: 'installing', oldVersion, startTime })
 
-      // Set secrets first -- stripe-setup needs STRIPE_SECRET_KEY to run
+      // Set secrets first -- stripe-sync needs STRIPE_SECRET_KEY to run
       const secrets = [{ name: 'STRIPE_SECRET_KEY', value: trimmedStripeKey }]
       if (this.supabaseManagementUrl) {
         secrets.push({ name: 'MANAGEMENT_API_URL', value: this.supabaseManagementUrl })
@@ -458,35 +453,37 @@ export class SupabaseSetupClient {
       }
       await this.setSecrets(secrets)
 
-      const versionedSetup = this.injectPackageVersion(setupFunctionCode, version)
-      await this.deployFunction('stripe-setup', versionedSetup, false)
+      // Deploy the single consolidated edge function
+      const versionedSync = this.injectPackageVersion(syncFunctionCode, version)
+      await this.deployFunction('stripe-sync', versionedSync, false)
 
-      // Run setup (migrations + webhook creation)
-      // Use accessToken for Management API validation
-      const setupResult = await this.invokeFunction('stripe-setup', 'POST', this.accessToken)
+      // Run setup (migrations + webhook creation) via the /setup path
+      const setupResult = await this.invokeFunction('stripe-sync/setup', 'POST', this.accessToken)
 
       if (!setupResult.success) {
         throw new Error(`Setup failed: ${setupResult.error}`)
       }
 
-      // Now deploy the remaining edge functions -- schema is ready
-      const versionedWebhook = this.injectPackageVersion(webhookFunctionCode, version)
-      const versionedWorker = this.injectPackageVersion(workerFunctionCode, version)
-      const versionedBackfillWorker = this.injectPackageVersion(backfillWorkerFunctionCode, version)
-
-      await this.deployFunction('stripe-webhook', versionedWebhook, false)
-      await this.deployFunction('stripe-worker', versionedWorker, false)
-      await this.deployFunction('stripe-backfill-worker', versionedBackfillWorker, false)
-
       // Setup pg_cron - this is required for automatic syncing
       await this.setupPgCronJob(workerIntervalSeconds)
 
-      // Invoke stripe-worker immediately to trigger first sync for better UX on Supabase
-      // dashboard. We want to see the first sync run immediately after an installation.
-      await this.invokeFunction('stripe-worker', 'POST', this.workerSecret)
-
-      // Set final version comment
+      // Set the comment status to installed here before invoking first sync
+      // because the installation is effectively done at this time
       await this.updateComment({ status: 'installed', oldVersion })
+
+      // Invoke sync immediately to trigger first sync for better UX on Supabase
+      // dashboard. We want to see the first sync run immediately after an installation.
+      // This is done after marking the installation as completed in the comment because
+      // running the sync might take some time and timeout the actual installation
+      // if done before.
+      if (!skipInitialSync) {
+        try {
+          await this.invokeFunction('stripe-sync/sync', 'POST', this.workerSecret)
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          console.warn(`Failed to invoke stripe-sync/sync: ${errorMessage}`)
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       try {
@@ -510,6 +507,7 @@ export async function install(params: {
   rateLimit?: number
   syncIntervalSeconds?: number
   startTime?: number
+  skipInitialSync?: boolean
 }): Promise<void> {
   const {
     supabaseAccessToken,
@@ -520,6 +518,7 @@ export async function install(params: {
     rateLimit,
     syncIntervalSeconds,
     startTime,
+    skipInitialSync,
   } = params
 
   const client = new SupabaseSetupClient({
@@ -535,7 +534,8 @@ export async function install(params: {
     workerIntervalSeconds,
     rateLimit,
     syncIntervalSeconds,
-    startTime
+    startTime,
+    skipInitialSync
   )
 }
 
