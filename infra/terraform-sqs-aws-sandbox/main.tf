@@ -236,6 +236,13 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -389,6 +396,123 @@ resource "aws_lambda_event_source_mapping" "consumer_sqs" {
   function_name    = aws_lambda_function.consumer.arn
   batch_size       = 10
   enabled          = true
+}
+
+# ---------- Real Sync Engine (Docker Hub image) ----------
+
+resource "aws_cloudwatch_log_group" "real_sync_engine" {
+  name              = "/ecs/real-sync-engine"
+  retention_in_days = 7
+}
+
+resource "aws_ecs_task_definition" "real_sync_engine" {
+  family                   = "real-sync-engine"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
+  container_definitions = jsonencode([{
+    name      = "real-sync-engine"
+    image     = "stripe/sync-engine:v2"
+    essential = true
+
+    portMappings = [{
+      containerPort = 3000
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      { name = "PORT", value = "3000" },
+      { name = "DATABASE_URL", value = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${aws_db_instance.postgres.db_name}" },
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.real_sync_engine.name
+        "awslogs-region"        = var.region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+}
+
+resource "aws_lb_target_group" "real_sync_engine" {
+  name        = "real-sync-engine"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    protocol            = "HTTP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200"
+  }
+}
+
+resource "aws_lb_listener" "real_sync_engine" {
+  load_balancer_arn = aws_lb.sync_engine.arn
+  port              = 8080
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.real_sync_engine.arn
+  }
+}
+
+resource "aws_security_group" "real_sync_engine_ecs" {
+  name        = "real-sync-engine-ecs"
+  description = "Allow traffic from ALB to real sync engine ECS tasks"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_ecs_service" "real_sync_engine" {
+  name            = "real-sync-engine"
+  cluster         = aws_ecs_cluster.sync_engine.id
+  task_definition = aws_ecs_task_definition.real_sync_engine.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.real_sync_engine_ecs.id]
+    assign_public_ip = true
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.real_sync_engine.arn
+    container_name   = "real-sync-engine"
+    container_port   = 3000
+  }
+
+  depends_on = [aws_lb_listener.real_sync_engine]
 }
 
 # ---------- Moved blocks (rename webhook-receiver → producer) ----------

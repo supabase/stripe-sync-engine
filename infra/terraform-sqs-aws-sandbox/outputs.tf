@@ -23,3 +23,8 @@ output "sqs_queue_url" {
   description = "SQS queue URL"
   value       = aws_sqs_queue.events.url
 }
+
+output "real_sync_engine_url" {
+  description = "Real sync engine ALB URL (port 8080)"
+  value       = "http://${aws_lb.sync_engine.dns_name}:8080"
+}
