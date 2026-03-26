@@ -5,19 +5,29 @@ import path from 'node:path'
 const ROOT = path.dirname(new URL(import.meta.url).pathname)
 const PAGES_DIR = path.join(ROOT, 'pages')
 const PUBLIC_DIR = path.join(ROOT, 'public')
+const OPENAPI_DIR = path.join(ROOT, 'openapi')
 const OUT_DIR = path.join(ROOT, 'out')
 const LAYOUT = fs.readFileSync(path.join(ROOT, 'layout.html'), 'utf8')
+
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name)
+    const d = path.join(dest, entry.name)
+    if (entry.isDirectory()) copyDir(s, d)
+    else fs.copyFileSync(s, d)
+  }
+}
 
 // Clean + create output dir
 fs.rmSync(OUT_DIR, { recursive: true, force: true })
 fs.mkdirSync(OUT_DIR, { recursive: true })
 
 // Copy public assets
-if (fs.existsSync(PUBLIC_DIR)) {
-  for (const file of fs.readdirSync(PUBLIC_DIR)) {
-    fs.copyFileSync(path.join(PUBLIC_DIR, file), path.join(OUT_DIR, file))
-  }
-}
+if (fs.existsSync(PUBLIC_DIR)) copyDir(PUBLIC_DIR, OUT_DIR)
+
+// Copy OpenAPI specs
+if (fs.existsSync(OPENAPI_DIR)) copyDir(OPENAPI_DIR, path.join(OUT_DIR, 'openapi'))
 
 // Collect all .md files recursively under PAGES_DIR
 function collectPages(dir, base = '') {

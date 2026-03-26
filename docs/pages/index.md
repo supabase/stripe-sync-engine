@@ -24,6 +24,10 @@ npx @stripe/sync-engine sync \
   --schema stripe
 ```
 
+## API Reference
+
+- [Engine API](/engine.html) — HTTP API for running syncs
+
 ## Slides
 
 - [Architecture overview](/slides/architecture/)
