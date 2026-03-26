@@ -1,7 +1,7 @@
 import { Client } from 'pg'
 import crypto from 'node:crypto'
 import type { ConnectionOptions } from 'node:tls'
-import { sql } from '@stripe/sync-util-postgres'
+import { sql, withPgConnectProxy } from '@stripe/sync-util-postgres'
 import { renderMigrationTemplate } from './migrationTemplate.js'
 import type { Migration } from './migrations/index.js'
 import { migrations as allMigrations } from './migrations/index.js'
@@ -173,11 +173,13 @@ async function runMigrationsWithContent(
   config: MigrationConfig,
   migrations: Migration[]
 ): Promise<void> {
-  const client = new Client({
-    connectionString: config.databaseUrl,
-    ssl: config.ssl,
-    connectionTimeoutMillis: 10_000,
-  })
+  const client = new Client(
+    withPgConnectProxy({
+      connectionString: config.databaseUrl,
+      ssl: config.ssl,
+      connectionTimeoutMillis: 10_000,
+    })
+  )
   const dataSchema = config.schemaName ?? 'public'
   const syncSchema = config.syncTablesSchemaName ?? dataSchema
   const tableName = '_migrations'

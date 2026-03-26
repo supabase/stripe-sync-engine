@@ -2,7 +2,7 @@ import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
-import { sql, upsert } from '@stripe/sync-util-postgres'
+import { sql, upsert, withPgConnectProxy } from '@stripe/sync-util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 
 // MARK: - Spec
@@ -42,19 +42,19 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
       roleArn: config.aws.role_arn,
       externalId: config.aws.external_id,
     })
-    return {
+    return withPgConnectProxy({
       host: config.host,
       port: config.port,
       database: config.database,
       user: config.user,
       password: passwordFn,
       ssl: true,
-    }
+    })
   }
 
   const connStr = config.connection_string ?? config.url
   if (connStr) {
-    return { connectionString: connStr }
+    return withPgConnectProxy({ connectionString: connStr })
   }
 
   throw new Error('Either connection_string (or url) or aws config is required')

@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { sql } from '@stripe/sync-util-postgres'
+import { sql, withPgConnectProxy } from '@stripe/sync-util-postgres'
 
 export interface StateStore {
   get(syncId: string): Promise<Record<string, unknown> | undefined>
@@ -80,7 +80,7 @@ export async function setupStateStore(config: {
   connection_string: string
   schema?: string
 }): Promise<void> {
-  const pool = new pg.Pool({ connectionString: config.connection_string })
+  const pool = new pg.Pool(withPgConnectProxy({ connectionString: config.connection_string }))
   const schema = config.schema ?? 'public'
   try {
     await pool.query(sql`
@@ -106,7 +106,7 @@ export function createStateStore(
   config: { connection_string: string; schema?: string },
   syncId = 'default'
 ): ScopedStateStore & { close(): Promise<void> } {
-  const pool = new pg.Pool({ connectionString: config.connection_string })
+  const pool = new pg.Pool(withPgConnectProxy({ connectionString: config.connection_string }))
   const scoped = createScopedPgStateStore(pool, config.schema ?? 'public', syncId)
   return {
     ...scoped,

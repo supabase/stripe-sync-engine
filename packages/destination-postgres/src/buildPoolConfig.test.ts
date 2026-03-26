@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./aws', () => ({
   buildRdsIamPasswordFn: vi.fn(),
@@ -16,6 +16,10 @@ describe('buildPoolConfig', () => {
     mockBuild.mockResolvedValue(mockPasswordFn)
   })
 
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('connection_string → { connectionString } PoolConfig', async () => {
     const config: Config = {
       connection_string: 'postgres://user:pass@localhost:5432/mydb',
@@ -27,6 +31,22 @@ describe('buildPoolConfig', () => {
     const result = await buildPoolConfig(config)
     expect(result).toEqual({ connectionString: 'postgres://user:pass@localhost:5432/mydb' })
     expect(mockBuild).not.toHaveBeenCalled()
+  })
+
+  it('adds proxy stream when PG_PROXY_HOST is set', async () => {
+    vi.stubEnv('PG_PROXY_HOST', 'pg-proxy.example.test')
+
+    const config: Config = {
+      connection_string: 'postgres://user:pass@localhost:5432/mydb',
+      port: 5432,
+      schema: 'stripe',
+      batch_size: 100,
+    }
+
+    const result = await buildPoolConfig(config)
+
+    expect(result.connectionString).toBe('postgres://user:pass@localhost:5432/mydb')
+    expect(typeof result.stream).toBe('function')
   })
 
   it('aws config → host/port/database/user/ssl/password-function PoolConfig', async () => {
