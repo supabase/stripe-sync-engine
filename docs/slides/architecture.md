@@ -11,40 +11,36 @@ A transport-agnostic pipeline for syncing Stripe data to any destination
 
 ---
 
-## Why This Architecture?
+## The pipeline in one slide
 
-<Transform :scale="0.85">
-
-```mermaid
-flowchart LR
-  P1["Problem: many destinations\nPostgres, Sheets, Kafka…"]
-  P2["Problem: 16 webhook\nendpoints per account"]
-  P3["Problem: local CLI today\nTemporal workflow tomorrow"]
-  P1 -->|solution| S1["Protocol layer\ninterchangeable connectors"]
-  P2 -->|solution| S2["Fan-out inside service\n1 endpoint → N syncs"]
-  P3 -->|solution| S3["Transport-agnostic pipeline\nswap transport, keep connectors"]
-  style P1 fill:#fee2e2,stroke:#ef4444
-  style P2 fill:#fee2e2,stroke:#ef4444
-  style P3 fill:#fee2e2,stroke:#ef4444
-  style S1 fill:#dcfce7,stroke:#22c55e
-  style S2 fill:#dcfce7,stroke:#22c55e
-  style S3 fill:#dcfce7,stroke:#22c55e
+```ts
+pipe(
+  source.read(params),             // AsyncIterable<Message>
+  enforceCatalog(catalog),         // stream filter + field projection
+  log,                             // diagnostics tap → stderr
+  filterType('record', 'state'),   // narrow to what destinations need
+  dest.write,                      // write records, emit state checkpoints
+  persistState(store),             // save cursors after each checkpoint
+)
 ```
 
-</Transform>
+Every component is `(AsyncIterable<A>) => AsyncIterable<B>`.
+Stages compose left-to-right with `pipe()`.
+Connectors only implement `source.read()` and `dest.write()` — nothing else.
 
 ---
 
-## Three-Layer Stack
+## Three-layer stack
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  packages/stateful-sync  (service)              │
-│  StatefulSync · stores · fan-out queues         │  ← adds persistence
+│  apps/service                                   │
+│  StatefulSync · credential store                │  ← adds persistence + lifecycle
+│  webhook fan-out · sync coordinator             │
 ├─────────────────────────────────────────────────┤
-│  packages/stateless-sync  (engine)              │
-│  createEngine() · connector loader              │  ← wires the pipeline
-│  NDJSON streaming · CLI helpers                 │
+│  apps/engine                                    │
+│  createEngine() · pipeline stages               │  ← wires the pipeline
+│  HTTP API · NDJSON streaming · CLI              │
 ├─────────────────────────────────────────────────┤
 │  packages/protocol                              │
 │  Source<TConfig, TState, TInput>                │  ← what connectors implement
@@ -53,32 +49,35 @@ flowchart LR
 ```
 
 Each layer only knows about the layer below it.
-Connectors only know about `protocol` — nothing about persistence or transport.
+Connectors only know `protocol` — nothing about stores, queues, or HTTP.
 
 ---
+layout: two-cols
+---
 
-## layout: two-cols
-
-## The Protocol Contract
+## The connector contract
 
 ```ts
 interface Source<TConfig, TState, TInput = never> {
-  spec():    ConnectorSpecification
-  check():   Promise<CheckResult>
+  spec():     ConnectorSpecification
+  check():    Promise<CheckResult>
   discover(): Promise<ConfiguredCatalog>
-  setup():   Promise<void>
-  read(params, $stdin?): AsyncIterable<Message>
-  teardown({ remove_shared_resources? }): Promise<void>
+  setup():    Promise<void>
+  read(params: SyncParams, $stdin?: AsyncIterable<TInput>):
+              AsyncIterable<Message>
+  teardown(opts?: { remove_shared_resources?: boolean }):
+              Promise<void>
 }
 
 interface Destination<TConfig, TState> {
-  spec():   ConnectorSpecification
-  setup():  Promise<void>
-  write(messages): AsyncIterable<StateMessage>
+  spec():  ConnectorSpecification
+  setup(): Promise<void>
+  write(messages: AsyncIterable<RecordMessage | StateMessage>):
+         AsyncIterable<StateMessage>
 }
 ```
 
-`Message` = `RecordMessage | StateMessage | ErrorMessage`
+`Message` = `RecordMessage | StateMessage | LogMessage | ErrorMessage | StreamStatusMessage`
 
 ::right::
 
@@ -88,164 +87,76 @@ interface Destination<TConfig, TState> {
 flowchart TD
   SRC["Source"]
   DST["Destination"]
-  SRC -->|"AsyncIterable&lt;Message&gt;"| DST
-  DST -->|"AsyncIterable&lt;StateMessage&gt;"| ST["state checkpoints"]
+  SRC -->|"AsyncIterable\n&lt;Message&gt;"| ENG["Engine\n(pipeline)"]
+  ENG -->|"record + state"| DST
+  DST -->|"AsyncIterable\n&lt;StateMessage&gt;"| ST["cursors"]
   style SRC fill:#dcfce7,stroke:#22c55e
+  style ENG fill:#f3e8ff,stroke:#a855f7
   style DST fill:#dbeafe,stroke:#3b82f6
   style ST fill:#fef9c3,stroke:#eab308
 ```
 
-State flows **as messages** — connectors never touch a DB directly.
+State flows **as messages in the stream**.
+Connectors never touch a store directly.
 
 ---
+layout: two-cols
+---
 
-## layout: two-cols
+## Pipeline stages
 
-## Message Protocol
-
-The pipeline speaks **NDJSON** — one message per line.
-
-```ts
-// Source → Engine: full union
-type Message =
-  | RecordMessage // a record to write
-  | StateMessage // cursor checkpoint
-  | CatalogMessage // stream discovery
-  | LogMessage // diagnostic output
-  | ErrorMessage // structured failure
-  | StreamStatusMessage // progress update
-
-// Engine → Destination: filtered down
-type DestinationInput = RecordMessage | StateMessage // engine strips the rest
-```
-
-The engine is the filter. Destinations never see logs,
-errors, or status messages — only data and checkpoints.
+| Stage | Type | Role |
+|-------|------|------|
+| `source.read()` | Source | Emit NDJSON messages |
+| `enforceCatalog()` | Filter | Drop streams/fields not in catalog |
+| `log` | Tap | Print diagnostics, pass all messages through |
+| `filterType()` | Filter | Narrow union to `record` + `state` |
+| `dest.write` | Destination | Write records, emit state checkpoints |
+| `persistState()` | Tap | Write cursors to store, pass all through |
 
 ::right::
 
-```ts
-type RecordMessage = {
-  type: 'record'
-  stream: string // target table / stream
-  data: Record<string, unknown>
-  emitted_at: number // epoch ms
-}
-
-type StateMessage = {
-  type: 'state'
-  stream: string // which stream's cursor
-  data: unknown // opaque — only source reads this
-}
-
-type ErrorMessage = {
-  type: 'error'
-  failure_type: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
-  message: string
-  stream?: string
-  stack_trace?: string
-}
-```
-
----
-
-## The Pipeline
-
-<Transform :scale="0.82">
+<br/><br/>
 
 ```mermaid
 flowchart LR
-  STDIN["$stdin?"]
-  SRC["source.read()"]
-  ENG["Engine"]
-  DST["destination.write()"]
-  STATE["state store"]
-  STDIN -->|"undefined → one-shot"| SRC
-  STDIN -->|"iterable → live loop"| SRC
-  SRC -->|"RecordMessage\nStateMessage"| ENG
-  ENG --> DST
-  ENG --> STATE
-  style ENG fill:#dcfce7,stroke:#22c55e
-  style STATE fill:#fef9c3,stroke:#eab308
+  SRC["source\n.read()"]
+  EC["enforceCatalog"]
+  LOG["log"]
+  FT["filterType"]
+  DST["dest\n.write()"]
+  PS["persistState"]
+  SRC --> EC --> LOG --> FT --> DST --> PS
+  style SRC fill:#dcfce7,stroke:#22c55e
+  style EC fill:#f3e8ff,stroke:#a855f7
+  style LOG fill:#f3e8ff,stroke:#a855f7
+  style FT fill:#f3e8ff,stroke:#a855f7
+  style DST fill:#dbeafe,stroke:#3b82f6
+  style PS fill:#f3e8ff,stroke:#a855f7
 ```
 
-</Transform>
-
-| `$stdin`             | Behaviour                         |
-| -------------------- | --------------------------------- |
-| `undefined`          | backfill → events poll → done     |
-| `AsyncIterable<...>` | skips backfill, live loop forever |
-
-The **same interface** works locally (direct pipe) or in cloud (Temporal activities).
+`createEngine()` assembles this chain. All stages are independently testable.
 
 ---
-
-## Source-Stripe: Three Sync Modes
-
-<Transform :scale="0.8">
-
-```mermaid
-flowchart LR
-  R["source.read($stdin?)"]
-  R -->|"$stdin"| EV["event-driven loop\nwebhook / WebSocket"]
-  R -->|"no $stdin"| BF["listApiBackfill()\ncursor: pageCursor"]
-  BF --> PO["pollEvents()\ncursor: last event ID"]
-  EV --> PSE["processStripeEvent()\nentitlements · revalidation\ncatalog filter"]
-  PO --> PSE
-  PSE --> MSG["RecordMessage\n+ StateMessage"]
-  style EV fill:#fef9c3,stroke:#eab308
-  style PSE fill:#dcfce7,stroke:#22c55e
-```
-
-</Transform>
-
-All verified `Stripe.Event` objects converge through `processStripeEvent()`.
-
+layout: two-cols
 ---
 
-## Webhook Fan-out
+## enforceCatalog — selective sync
 
-Stripe caps accounts at **~16 webhook endpoints**. One endpoint for all syncs.
-
-<Transform :scale="0.82">
-
-```mermaid
-flowchart LR
-  ST["Stripe"] -->|"POST /webhooks/:credential_id"| WH["Hono route"]
-  WH --> PE["StatefulSync\n.push_event()"]
-  PE --> QA["sync_A AsyncQueue\n[products]"]
-  PE --> QB["sync_B AsyncQueue\n[products, customers]"]
-  PE --> QC["sync_C AsyncQueue\n[invoices]"]
-  style PE fill:#fef9c3,stroke:#eab308
-  style WH fill:#dbeafe,stroke:#3b82f6
-```
-
-</Transform>
-
-Each sync has its own `AsyncQueue` under `credential_id`.
-`run()` registers on start, deregisters on stop — no leaked queues.
-
----
-
-## layout: two-cols
-
-## Stream Filtering
-
-Filtering happens **inside the source**, not at ingress.
-
-```ts {4}
-// source-stripe/src/process-event.ts
-
-const resourceConfig = registry[normalizeStripeObjectName(dataObject.object)]
-
-if (!streamNames.has(resourceConfig.tableName)) return
-//  ↑ the filter
-```
-
-`streamNames` built at `read()` startup:
+`buildCatalog()` turns user-configured stream names and fields
+into a `ConfiguredCatalog`. `enforceCatalog()` enforces it in the pipeline.
 
 ```ts
-const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
+const catalog = buildCatalog(
+  await source.discover(),      // all available streams
+  params.streams,               // user selection
+)
+// catalog = { streams: [ { stream: { name: 'products' }, fields: [...] } ] }
+
+enforceCatalog(catalog)(messages)
+//  ↳ drops records for unlisted streams
+//  ↳ trims record.data to allowed fields
+//  ↳ passes log/error/stream_status unchanged
 ```
 
 ::right::
@@ -254,77 +165,186 @@ const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
 
 ```mermaid
 flowchart TD
-  E["customer.updated"]
-  E --> A["sync_A\n{products}"]
-  E --> B["sync_B\n{products, customers}"]
-  A -->|"not in set"| X["✗  nothing written"]
-  B -->|"in set"| Y["✓  record + state"]
+  E1["customer.updated"]
+  E2["product.created"]
+  EC["enforceCatalog\n{streams: ['products']}"]
+  E1 --> EC
+  E2 --> EC
+  EC -->|"in catalog"| Y["✓  product.created\n→ dest.write()"]
+  EC -->|"not in catalog"| X["✗  customer.updated\ndropped"]
   style X fill:#fee2e2,stroke:#ef4444
   style Y fill:#dcfce7,stroke:#22c55e
-  style E fill:#dbeafe,stroke:#3b82f6
+  style EC fill:#f3e8ff,stroke:#a855f7
 ```
 
 ---
+layout: two-cols
+---
 
-## Stateful API
+## $stdin — one interface, two modes
 
-<Transform :scale="0.82">
+```ts
+// Backfill (one-shot): $stdin = undefined
+const engine = createEngine(params, connectors, store)
+for await (const s of engine.sync()) { }
+//  1. listApiBackfill() — page through Stripe API
+//  2. pollEvents()      — catch up on recent events
+//  3. done ✓
+
+// Live (forever): $stdin = webhook queue
+const queue = new AsyncQueue<StripeEvent>()
+for await (const s of engine.sync(queue)) { }
+//  1. skips backfill
+//  2. loops on queue forever → processStripeEvent()
+```
+
+`$stdin` is the seam between one-shot and live modes.
+The same `Source` handles both without any protocol change.
+
+::right::
+
+<br/>
+
+```mermaid
+flowchart TD
+  R["source.read($stdin?)"]
+  R -->|"$stdin = undefined"| BF["listApiBackfill()\ncursor: pageCursor"]
+  BF --> PO["pollEvents()\ncursor: last event ID"]
+  R -->|"$stdin = queue"| EV["live event loop"]
+  PO --> PSE["processStripeEvent()"]
+  EV --> PSE
+  PSE --> MSG["RecordMessage\n+ StateMessage"]
+  style EV fill:#fef9c3,stroke:#eab308
+  style PSE fill:#dcfce7,stroke:#22c55e
+```
+
+---
+layout: two-cols
+---
+
+## Webhook fan-out
+
+Stripe caps accounts at ~16 webhook endpoints.
+One endpoint serves all syncs under a credential.
+
+```ts
+// StatefulSync.push_event(credentialId, event)
+//  → finds all syncs under this credential
+//  → pushes to each sync's AsyncQueue
+
+// Each sync's source.read() has its own $stdin
+// The fan-out is invisible to the connector
+```
+
+::right::
+
+<br/><br/>
 
 ```mermaid
 flowchart LR
-  C["POST /credentials"] --> CS[("credentials.json")]
-  SY["POST /syncs"] --> SS[("syncs.json")]
-  RN["POST /syncs/:id/sync"] --> SVC["StatefulSync.run()\nstreaming NDJSON"]
-  WH["POST /webhooks/:cred_id"] --> PE["push_event()\nfan-out to queues"]
-  style RN fill:#dcfce7,stroke:#22c55e
-  style WH fill:#fef9c3,stroke:#eab308
+  ST["Stripe"] -->|"POST /webhooks/:cred_id"| WH["Hono route"]
+  WH --> PE["StatefulSync\npush_event()"]
+  PE --> QA["sync_A queue\n[products]"]
+  PE --> QB["sync_B queue\n[products, customers]"]
+  PE --> QC["sync_C queue\n[invoices]"]
+  style PE fill:#fef9c3,stroke:#eab308
+  style WH fill:#dbeafe,stroke:#3b82f6
 ```
 
-</Transform>
+Filtering happens **inside each source** against its own catalog.
+`sync_A` ignores the `customer.updated` event; `sync_B` processes it.
 
-Schemas are built **dynamically at startup** from registered connectors.
-Credential and sync schemas become discriminated unions over registered connector types.
-
+---
+layout: two-cols
 ---
 
 ## Destination: Postgres
 
-<Transform :scale="0.82">
+```
+Record {
+  stream: "products"
+  data: { id: "prod_1", name: "Widget", ... }
+}
+  ↓
+UPSERT INTO <schema>.products (id, _raw_data, ...)
+  ON CONFLICT (id) DO UPDATE SET ...
+```
+
+- **Schema per sync** — complete isolation between syncs
+- **`_raw_data` column** — full Stripe object as JSONB
+- **Generated columns** — typed fields derived from `_raw_data`
+- **Tables created on first write** — no migration step
+
+::right::
+
+<br/><br/>
 
 ```mermaid
 flowchart LR
-  EV["Stripe Event"] --> PSE["processStripeEvent()"]
-  PSE --> RM["RecordMessage"]
-  RM --> DW["destination.write()"]
-  DW --> DB[("UPSERT\nschema.stream\nid PK · _raw_data JSONB")]
-  DW --> SM["StateMessage"]
-  SM --> ST[("state.json")]
+  RM["RecordMessage"]
+  DW["dest.write()"]
+  DB[("schema.products\nid PK\n_raw_data JSONB\nname TEXT (generated)")]
+  SM["StateMessage"]
+  ST[("state store\ncursor per stream")]
+  RM --> DW --> DB
+  DW --> SM --> ST
   style DB fill:#dbeafe,stroke:#3b82f6
-  style SM fill:#dcfce7,stroke:#22c55e
+  style ST fill:#fef9c3,stroke:#eab308
+```
+
+---
+
+## HTTP API
+
+All routes accept `X-Sync-Params` (JSON-encoded `SyncParams`) and stream NDJSON responses.
+
+<Transform :scale="0.9">
+
+```mermaid
+flowchart LR
+  SETUP["POST /setup\n→ 204"]
+  CHECK["GET /check\n→ {source, dest}"]
+  READ["POST /read\n→ NDJSON messages"]
+  WRITE["POST /write\nbody: NDJSON\n→ NDJSON state"]
+  SYNC["POST /sync\n→ NDJSON state"]
+  TEAR["POST /teardown\n→ 204"]
+  ENG["createEngine()\n+ pipeline"]
+  SETUP --> ENG
+  CHECK --> ENG
+  READ  --> ENG
+  WRITE --> ENG
+  SYNC  --> ENG
+  TEAR  --> ENG
+  style ENG fill:#dcfce7,stroke:#22c55e
 ```
 
 </Transform>
 
-- Schema per sync — complete isolation between syncs
-- `_raw_data` stores the full Stripe object; typed columns via generated columns
-- Tables created on first write — no migration step required
+`read` + `write` separately → composable. `sync` = `write(read())` in one call.
 
 ---
 
-## Key Design Decisions
+## Key design decisions
 
 **`$stdin` as the seam**
-`undefined` → one-shot backfill. Infinite async iterable → live event loop.
-Same `Source` interface handles both. No protocol changes needed for webhooks.
+`undefined` → one-shot backfill + event poll → done.
+`AsyncIterable` → live event loop, runs forever.
+Same `Source` interface. No protocol changes needed for live mode.
 
-**Stateless / Stateful split**
-`cli` + `api` = one-shot, caller provides everything, no memory between calls.
-`service` = persistent cursors, credential store, lifecycle management.
+**Stateless / stateful split**
+Engine = one-shot, caller provides everything, no memory between calls.
+Service = persistent credentials, cursors, lifecycle management, fan-out.
+
+**Transport-agnostic pipeline**
+The pipeline is async iterables end-to-end. The transport is whatever drives them:
+- **stdio** — CLI mode, source stdout piped to dest stdin, great for scripts and local dev
+- **HTTP streaming** — server mode, same `createEngine()` behind a Hono route, response body streams NDJSON
+- **Temporal activity** — worker calls the HTTP server; retry/scheduling provided by Temporal
+
+**Connector isolation**
+Connectors implement `protocol` only. No stores, queues, HTTP, or cloud.
+Swap the transport; keep the connector.
 
 **`remove_shared_resources` on teardown**
 Service checks whether other syncs share the credential before deleting
-the webhook endpoint — prevents one sync from breaking its siblings.
-
-**Connector isolation**
-Connectors implement `protocol` only. They have no knowledge of stores,
-queues, HTTP routes, or cloud infrastructure. Swap the transport; keep the connector.
+the Stripe webhook endpoint — prevents one sync from breaking its siblings.
