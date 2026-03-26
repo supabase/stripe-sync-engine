@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: 'Commit SHA to promote (must have been built by build.yml)'
+        description: 'Commit SHA to promote (must have passed the CI build job)'
         required: true
         type: string
 
@@ -13,24 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  npm:
-    name: Promote npm packages to npmjs.org
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.sha }}
-          sparse-checkout: scripts/promote-to-npmjs.sh
-
-      - name: Promote to npmjs.org
-        run: bash scripts/promote-to-npmjs.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
-
   docker:
     name: Promote Docker image to Docker Hub
     runs-on: ubuntu-24.04
@@ -58,3 +40,21 @@ jobs:
         run: bash scripts/promote-to-dockerhub.sh
         env:
           GHCR_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.sha }}
+
+  npm:
+    name: Promote npm packages to npmjs.org
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+          sparse-checkout: scripts/promote-to-npmjs.sh
+
+      - name: Promote to npmjs.org
+        run: bash scripts/promote-to-npmjs.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_REPO_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO_NAME: ${{ github.event.repository.name }}
