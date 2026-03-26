@@ -151,7 +151,7 @@ const webhookCmd = defineCommand({
     },
   },
   async run({ args }) {
-    const { fileConfigStore } = await import('../lib/stores-fs.js')
+    const { filePipelineStore } = await import('../lib/stores-fs.js')
     const { TemporalBridge } = await import('../temporal/bridge.js')
     const { createWebhookApp } = await import('../api/webhook-app.js')
 
@@ -161,7 +161,7 @@ const webhookCmd = defineCommand({
     )
     const dataDir =
       args['data-dir'] || process.env.DATA_DIR || path.join(os.homedir(), '.stripe-sync')
-    const configs = fileConfigStore(`${dataDir}/syncs`)
+    const configs = filePipelineStore(`${dataDir}/pipelines`)
     const bridge = new TemporalBridge(temporal.client, temporal.taskQueue, configs)
 
     const app = createWebhookApp({ push_event: (id, e) => bridge.pushEvent(id, e) })

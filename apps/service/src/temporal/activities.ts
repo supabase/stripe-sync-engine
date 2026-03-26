@@ -6,11 +6,11 @@ import type { SyncActivities, RunResult } from './types.js'
  * Resolve a sync's config with credentials inlined from the service,
  * then build the X-Sync-Params header value for the engine API.
  */
-async function resolveParams(serviceUrl: string, syncId: string): Promise<string> {
-  const resp = await fetch(`${serviceUrl}/syncs/${syncId}?include_credentials=true`)
+async function resolveParams(serviceUrl: string, pipelineId: string): Promise<string> {
+  const resp = await fetch(`${serviceUrl}/pipelines/${pipelineId}`)
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
-    throw new Error(`Failed to resolve sync ${syncId} (${resp.status}): ${text}`)
+    throw new Error(`Failed to resolve pipeline ${pipelineId} (${resp.status}): ${text}`)
   }
   const config = (await resp.json()) as {
     source: { type: string; [k: string]: unknown }

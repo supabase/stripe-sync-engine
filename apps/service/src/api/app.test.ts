@@ -43,17 +43,15 @@ describe('GET /openapi.json', () => {
     expect(spec.paths).toBeDefined()
   })
 
-  it('includes credential, sync, and webhook paths', async () => {
+  it('includes pipeline and webhook paths', async () => {
     const res = await app().request('/openapi.json')
     const spec = (await res.json()) as { paths: Record<string, unknown> }
     const paths = Object.keys(spec.paths)
 
-    expect(paths).toContain('/credentials')
-    expect(paths).toContain('/credentials/{id}')
-    expect(paths).toContain('/syncs')
-    expect(paths).toContain('/syncs/{id}')
-    expect(paths).toContain('/syncs/{id}/sync')
-    expect(paths).toContain('/webhooks/{credential_id}')
+    expect(paths).toContain('/pipelines')
+    expect(paths).toContain('/pipelines/{id}')
+    expect(paths).toContain('/pipelines/{id}/sync')
+    expect(paths).toContain('/webhooks/{pipeline_id}')
   })
 
   it('tags operations for grouped CLI generation', async () => {
@@ -65,9 +63,8 @@ describe('GET /openapi.json', () => {
         if (op?.tags) op.tags.forEach((t: string) => allTags.add(t))
       }
     }
-    expect(allTags).toContain('Credentials')
-    expect(allTags).toContain('Syncs')
-    expect(allTags).toContain('Sync Operations')
+    expect(allTags).toContain('Pipelines')
+    expect(allTags).toContain('Pipeline Operations')
     expect(allTags).toContain('Webhooks')
   })
 })
@@ -94,106 +91,44 @@ describe('GET /health', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Credentials CRUD
+// Pipelines CRUD
 // ---------------------------------------------------------------------------
 
-describe('credentials', () => {
+describe('pipelines', () => {
   it('create → get → list → update → delete', async () => {
     const a = app()
 
-    // Create
-    const createRes = await a.request('/credentials', {
+    // Create pipeline (inline source/destination config)
+    const createRes = await a.request('/pipelines', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'stripe', api_key: 'sk_test_123' }),
+      body: JSON.stringify({
+        source: { type: 'test', api_key: 'sk_test_123' },
+        destination: { type: 'test', connection_string: 'postgres://localhost/db' },
+        streams: [{ name: 'customers' }],
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as any
-    expect(created.id).toMatch(/^cred_/)
-    expect(created.type).toBe('stripe')
-    expect(created.api_key).toBe('sk_test_123')
-    expect(created.created_at).toBeDefined()
+    expect(created.id).toMatch(/^pipe_/)
+    expect(created.source.type).toBe('test')
+    expect(created.source.api_key).toBe('sk_test_123')
 
-    const credId = created.id
+    const pipelineId = created.id
 
     // Get
-    const getRes = await a.request(`/credentials/${credId}`)
+    const getRes = await a.request(`/pipelines/${pipelineId}`)
     expect(getRes.status).toBe(200)
-    expect(((await getRes.json()) as any).api_key).toBe('sk_test_123')
 
     // List
-    const listRes = await a.request('/credentials')
+    const listRes = await a.request('/pipelines')
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as any
     expect(list.data).toHaveLength(1)
     expect(list.has_more).toBe(false)
 
     // Update
-    const updateRes = await a.request(`/credentials/${credId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: 'sk_test_456' }),
-    })
-    expect(updateRes.status).toBe(200)
-    const updated = (await updateRes.json()) as any
-    expect(updated.api_key).toBe('sk_test_456')
-    expect(updated.id).toBe(credId)
-
-    // Delete
-    const deleteRes = await a.request(`/credentials/${credId}`, {
-      method: 'DELETE',
-    })
-    expect(deleteRes.status).toBe(200)
-    expect(await deleteRes.json()).toEqual({ id: credId, deleted: true })
-
-    // 404 after delete
-    const missingRes = await a.request(`/credentials/${credId}`)
-    expect(missingRes.status).toBe(404)
-  })
-
-  it('returns 404 for non-existent credential', async () => {
-    const res = await app().request('/credentials/cred_nope')
-    expect(res.status).toBe(404)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Syncs CRUD
-// ---------------------------------------------------------------------------
-
-describe('syncs', () => {
-  it('create → get → list → update → delete', async () => {
-    const a = app()
-
-    // Create sync (no credential refs)
-    const createRes = await a.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test' },
-        destination: { type: 'test' },
-        streams: [{ name: 'customers' }],
-      }),
-    })
-    expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as any
-    expect(created.id).toMatch(/^sync_/)
-    expect(created.source.type).toBe('test')
-
-    const syncId = created.id
-
-    // Get
-    const getRes = await a.request(`/syncs/${syncId}`)
-    expect(getRes.status).toBe(200)
-
-    // List
-    const listRes = await a.request('/syncs')
-    expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as any
-    expect(list.data).toHaveLength(1)
-
-    // Update
-    const updateRes = await a.request(`/syncs/${syncId}`, {
+    const updateRes = await a.request(`/pipelines/${pipelineId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -205,64 +140,16 @@ describe('syncs', () => {
     expect(updated.streams[0].name).toBe('products')
 
     // Delete
-    const deleteRes = await a.request(`/syncs/${syncId}`, {
+    const deleteRes = await a.request(`/pipelines/${pipelineId}`, {
       method: 'DELETE',
     })
     expect(deleteRes.status).toBe(200)
-    expect(await deleteRes.json()).toEqual({ id: syncId, deleted: true })
+    expect(await deleteRes.json()).toEqual({ id: pipelineId, deleted: true })
   })
 
-  it('returns 404 for non-existent sync', async () => {
-    const res = await app().request('/syncs/sync_nope')
+  it('returns 404 for non-existent pipeline', async () => {
+    const res = await app().request('/pipelines/pipe_nope')
     expect(res.status).toBe(404)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Referential integrity
-// ---------------------------------------------------------------------------
-
-describe('referential integrity', () => {
-  it('rejects sync create with non-existent credential', async () => {
-    const res = await app().request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test', credential_id: 'cred_nope' },
-        destination: { type: 'test' },
-      }),
-    })
-    expect(res.status).toBe(400)
-    const body = (await res.json()) as any
-    expect(body.error).toContain('cred_nope')
-  })
-
-  it('prevents deleting credential referenced by a sync', async () => {
-    const a = app()
-
-    // Create credential
-    const credRes = await a.request('/credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'stripe', api_key: 'sk_test_123' }),
-    })
-    const cred = (await credRes.json()) as any
-
-    // Create sync referencing the credential
-    await a.request('/syncs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test', credential_id: cred.id },
-        destination: { type: 'test' },
-      }),
-    })
-
-    // Try to delete credential → 409
-    const deleteRes = await a.request(`/credentials/${cred.id}`, {
-      method: 'DELETE',
-    })
-    expect(deleteRes.status).toBe(409)
   })
 })
 
@@ -270,9 +157,9 @@ describe('referential integrity', () => {
 // Webhook ingress
 // ---------------------------------------------------------------------------
 
-describe('POST /webhooks/:credential_id', () => {
+describe('POST /webhooks/:pipeline_id', () => {
   it('accepts webhook events and returns ok', async () => {
-    const res = await app().request('/webhooks/cred_abc123', {
+    const res = await app().request('/webhooks/pipe_abc123', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'checkout.session.completed' }),

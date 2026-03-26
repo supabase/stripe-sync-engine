@@ -6,8 +6,8 @@ import type {
   CheckResult,
   StateStore as PipelineStateStore,
 } from '@stripe/sync-engine'
-import type { CredentialStore, ConfigStore, LogSink, StateStore } from './stores.js'
-import type { SyncConfig } from './schemas.js'
+import type { PipelineStore, LogSink, StateStore } from './stores.js'
+import type { Pipeline } from './schemas.js'
 import { resolve } from './resolve.js'
 import { TemporalBridge } from '../temporal/bridge.js'
 import type { TemporalOptions } from '../temporal/bridge.js'
@@ -52,61 +52,52 @@ function createAsyncQueue<T>() {
 // MARK: - SyncService
 
 export type SyncServiceOptions = {
-  credentials: CredentialStore
-  configs: ConfigStore
+  pipelines: PipelineStore
   states: StateStore
   logs: LogSink
   connectors: ConnectorResolver
-  /** Called on auth_error to refresh a credential. If not provided, auth_error is not retried. */
-  refreshCredential?: (credentialId: string) => Promise<void>
-  /** Extra config fields merged on top of source credential (env vars, CLI flags). */
+  /** Extra config fields merged on top of source config (env vars, CLI flags). */
   sourceOverrides?: Record<string, unknown>
-  /** Extra config fields merged on top of destination credential (env vars, CLI flags). */
+  /** Extra config fields merged on top of destination config (env vars, CLI flags). */
   destinationOverrides?: Record<string, unknown>
   /** When set, sync lifecycle is managed by Temporal instead of running in-process. */
   temporal?: TemporalOptions
 }
 
-const MAX_AUTH_RETRIES = 2
-
 export class SyncService {
-  private credentials: CredentialStore
-  private configs: ConfigStore
+  private pipelines: PipelineStore
   private states: StateStore
   private logs: LogSink
   private connectors: ConnectorResolver
-  private refreshCredential?: (credentialId: string) => Promise<void>
   private sourceOverrides?: Record<string, unknown>
   private destinationOverrides?: Record<string, unknown>
   readonly temporal?: TemporalBridge
-  /** Registry of active input queues keyed by credential_id. */
-  private inputQueues: Map<string, Set<(event: unknown) => void>> = new Map()
+  /** Registry of active input queues keyed by pipeline_id. */
+  private inputQueues: Map<string, (event: unknown) => void> = new Map()
 
   constructor(opts: SyncServiceOptions) {
-    this.credentials = opts.credentials
-    this.configs = opts.configs
+    this.pipelines = opts.pipelines
     this.states = opts.states
     this.logs = opts.logs
     this.connectors = opts.connectors
-    this.refreshCredential = opts.refreshCredential
     this.sourceOverrides = opts.sourceOverrides
     this.destinationOverrides = opts.destinationOverrides
     if (opts.temporal) {
       this.temporal = new TemporalBridge(
         opts.temporal.client,
         opts.temporal.taskQueue,
-        opts.configs
+        opts.pipelines
       )
     }
   }
 
-  /** Create a scoped state writer for a single sync run. */
-  private makeStateWriter(syncId: string): PipelineStateStore {
+  /** Create a scoped state writer for a single pipeline run. */
+  private makeStateWriter(pipelineId: string): PipelineStateStore {
     return {
-      get: async () => this.states.get(syncId),
+      get: async () => this.states.get(pipelineId),
       set: async (stream, data) => {
-        await this.states.set(syncId, stream, data)
-        this.logs.write(syncId, {
+        await this.states.set(pipelineId, stream, data)
+        this.logs.write(pipelineId, {
           level: 'debug',
           message: `checkpoint: ${stream}`,
           stream,
@@ -116,165 +107,97 @@ export class SyncService {
     }
   }
 
-  /** Resolve config + credentials into an engine instance. State is loaded via stateWriter. */
-  private async resolveEngine(syncId: string) {
-    const config = await this.configs.get(syncId)
-    const source = await this.connectors.resolveSource(config.source.type)
-    const destination = await this.connectors.resolveDestination(config.destination.type)
-    const sourceCred = config.source.credential_id
-      ? await this.credentials.get(config.source.credential_id)
-      : undefined
-    const destCred = config.destination.credential_id
-      ? await this.credentials.get(config.destination.credential_id)
-      : undefined
+  /** Resolve pipeline config into an engine instance. */
+  private async resolveEngine(pipelineId: string) {
+    const pipeline = await this.pipelines.get(pipelineId)
+    const source = await this.connectors.resolveSource(pipeline.source.type)
+    const destination = await this.connectors.resolveDestination(pipeline.destination.type)
     const params = resolve({
-      config,
-      sourceCred,
-      destCred,
+      pipeline,
       sourceOverrides: this.sourceOverrides,
       destinationOverrides: this.destinationOverrides,
     })
-    const engine = createEngine(params, { source, destination }, this.makeStateWriter(syncId))
-    return { engine, config }
+    const engine = createEngine(params, { source, destination }, this.makeStateWriter(pipelineId))
+    return { engine, pipeline }
   }
 
   /**
-   * Push an event to all running syncs that share the given credential.
-   * In Temporal mode, signals the workflow. Otherwise pushes to in-process queues.
+   * Push an event to the running pipeline with the given id.
+   * In Temporal mode, signals the workflow. Otherwise pushes to the in-process queue.
    */
-  push_event(credential_id: string, event: unknown): void {
+  push_event(pipelineId: string, event: unknown): void {
     if (this.temporal) {
-      this.temporal.pushEvent(credential_id, event)
+      this.temporal.pushEvent(pipelineId, event)
       return
     }
-    const queues = this.inputQueues.get(credential_id)
-    if (!queues) return
-    for (const push of queues) {
-      push(event)
-    }
+    const push = this.inputQueues.get(pipelineId)
+    if (push) push(event)
   }
 
-  async setup(syncId: string): Promise<void> {
-    const { engine } = await this.resolveEngine(syncId)
+  async setup(pipelineId: string): Promise<void> {
+    const { engine } = await this.resolveEngine(pipelineId)
     await engine.setup()
   }
 
-  async teardown(syncId: string): Promise<void> {
-    const { engine, config } = await this.resolveEngine(syncId)
-    const credId = config.source.credential_id
-    let remove_shared_resources = true
-    if (credId) {
-      const allSyncs = await this.configs.list()
-      const otherSyncs = allSyncs.filter(
-        (s) => s.id !== syncId && s.source.credential_id === credId
-      )
-      remove_shared_resources = otherSyncs.length === 0
-    }
-    await engine.teardown({ remove_shared_resources })
+  async teardown(pipelineId: string): Promise<void> {
+    const { engine } = await this.resolveEngine(pipelineId)
+    await engine.teardown({ remove_shared_resources: true })
   }
 
-  async check(syncId: string): Promise<{ source: CheckResult; destination: CheckResult }> {
-    const { engine } = await this.resolveEngine(syncId)
+  async check(pipelineId: string): Promise<{ source: CheckResult; destination: CheckResult }> {
+    const { engine } = await this.resolveEngine(pipelineId)
     return engine.check()
   }
 
-  async *read(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<Message> {
-    const { engine } = await this.resolveEngine(syncId)
+  async *read(pipelineId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<Message> {
+    const { engine } = await this.resolveEngine(pipelineId)
     yield* engine.read($stdin)
   }
 
-  async *write(syncId: string, messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput> {
-    const { engine } = await this.resolveEngine(syncId)
-    const stateWriter = this.makeStateWriter(syncId)
+  async *write(
+    pipelineId: string,
+    messages: AsyncIterable<Message>
+  ): AsyncIterable<DestinationOutput> {
+    const { engine } = await this.resolveEngine(pipelineId)
+    const stateWriter = this.makeStateWriter(pipelineId)
     yield* pipe(engine.write(messages), persistState(stateWriter))
   }
 
-  async *run(syncId: string, $stdin?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput> {
-    const config = await this.configs.get(syncId)
-    const source = await this.connectors.resolveSource(config.source.type)
-    const destination = await this.connectors.resolveDestination(config.destination.type)
+  async *run(
+    pipelineId: string,
+    $stdin?: AsyncIterable<unknown>
+  ): AsyncIterable<DestinationOutput> {
+    const pipeline = await this.pipelines.get(pipelineId)
+    const source = await this.connectors.resolveSource(pipeline.source.type)
+    const destination = await this.connectors.resolveDestination(pipeline.destination.type)
 
-    const credId = config.source.credential_id
     let activeStdin = $stdin
     let queuePush: ((event: unknown) => void) | undefined
 
-    // If no explicit stdin and the source has a credential, set up the webhook fan-out queue
-    if (!$stdin && credId) {
+    // Set up per-pipeline webhook queue when no explicit stdin provided
+    if (!$stdin) {
       const queue = createAsyncQueue<unknown>()
       queuePush = queue.push
       activeStdin = queue.iterable
-      if (!this.inputQueues.has(credId)) {
-        this.inputQueues.set(credId, new Set())
-      }
-      this.inputQueues.get(credId)!.add(queuePush)
+      this.inputQueues.set(pipelineId, queuePush)
     }
 
-    let retries = 0
-
     try {
-      while (retries <= MAX_AUTH_RETRIES) {
-        const sourceCred = config.source.credential_id
-          ? await this.credentials.get(config.source.credential_id)
-          : undefined
-        const destCred = config.destination.credential_id
-          ? await this.credentials.get(config.destination.credential_id)
-          : undefined
+      const params = resolve({
+        pipeline,
+        sourceOverrides: this.sourceOverrides,
+        destinationOverrides: this.destinationOverrides,
+      })
 
-        const params = resolve({
-          config,
-          sourceCred,
-          destCred,
-          sourceOverrides: this.sourceOverrides,
-          destinationOverrides: this.destinationOverrides,
-        })
+      const stateWriter = this.makeStateWriter(pipelineId)
+      const engine = createEngine(params, { source, destination }, stateWriter)
+      await engine.setup()
 
-        const stateWriter = this.makeStateWriter(syncId)
-        const engine = createEngine(params, { source, destination }, stateWriter)
-        await engine.setup()
-
-        let authError = false
-
-        const sourceMessages = engine.read(activeStdin)
-        const intercepted = async function* (): AsyncIterable<Message> {
-          for await (const msg of sourceMessages) {
-            if (msg.type === 'error' && msg.failure_type === 'auth_error') {
-              authError = true
-              return
-            }
-            yield msg
-          }
-        }
-
-        yield* pipe(engine.write(intercepted()), persistState(stateWriter))
-
-        if (!authError) return
-
-        if (!config.source.credential_id) {
-          throw new Error(`auth_error on sync ${syncId} but source has no credential_id to refresh`)
-        }
-        if (this.refreshCredential) {
-          this.logs.write(syncId, {
-            level: 'warn',
-            message: `auth_error — refreshing credential ${config.source.credential_id} (attempt ${retries + 1}/${MAX_AUTH_RETRIES})`,
-            timestamp: new Date().toISOString(),
-          })
-          await this.refreshCredential(config.source.credential_id)
-        } else {
-          throw new Error(
-            `auth_error on sync ${syncId} but no refreshCredential handler configured`
-          )
-        }
-
-        retries++
-      }
-
-      throw new Error(`Auth failed after ${MAX_AUTH_RETRIES} refresh attempts for sync ${syncId}`)
+      const sourceMessages = engine.read(activeStdin)
+      yield* pipe(engine.write(sourceMessages), persistState(stateWriter))
     } finally {
-      if (queuePush && credId) {
-        this.inputQueues.get(credId)?.delete(queuePush)
-        if (this.inputQueues.get(credId)?.size === 0) {
-          this.inputQueues.delete(credId)
-        }
+      if (queuePush) {
+        this.inputQueues.delete(pipelineId)
       }
     }
   }

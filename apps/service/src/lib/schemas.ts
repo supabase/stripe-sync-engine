@@ -3,30 +3,11 @@ import { z } from 'zod'
 // In Zod v4, objects strip unknown keys by default.
 // Schemas that accept connector-specific fields use .catchall(z.unknown()).
 
-// MARK: - Credential schemas
-
-export const Credential = z
-  .object({
-    id: z.string(),
-    type: z.string(),
-    created_at: z.string(),
-    updated_at: z.string(),
-  })
-  .catchall(z.unknown())
-export type Credential = z.infer<typeof Credential>
-
-export const CreateCredential = z.object({ type: z.string() }).catchall(z.unknown())
-export type CreateCredential = z.infer<typeof CreateCredential>
-
-export const UpdateCredential = z.record(z.string(), z.unknown())
-export type UpdateCredential = z.infer<typeof UpdateCredential>
-
-// MARK: - Sync config schemas
+// MARK: - Pipeline schemas
 
 export const SourceConfig = z
   .object({
     type: z.string(),
-    credential_id: z.string().optional(),
   })
   .catchall(z.unknown())
 export type SourceConfig = z.infer<typeof SourceConfig>
@@ -34,7 +15,6 @@ export type SourceConfig = z.infer<typeof SourceConfig>
 export const DestinationConfig = z
   .object({
     type: z.string(),
-    credential_id: z.string().optional(),
   })
   .catchall(z.unknown())
 export type DestinationConfig = z.infer<typeof DestinationConfig>
@@ -45,23 +25,23 @@ export const StreamConfig = z.object({
 })
 export type StreamConfig = z.infer<typeof StreamConfig>
 
-export const SyncConfig = z.object({
+export const Pipeline = z.object({
   id: z.string(),
   source: SourceConfig,
   destination: DestinationConfig,
   streams: z.array(StreamConfig).optional(),
 })
-export type SyncConfig = z.infer<typeof SyncConfig>
+export type Pipeline = z.infer<typeof Pipeline>
 
-export const CreateSync = z.object({
+export const CreatePipeline = z.object({
   source: SourceConfig,
   destination: DestinationConfig,
   streams: z.array(StreamConfig).optional(),
 })
-export type CreateSync = z.infer<typeof CreateSync>
+export type CreatePipeline = z.infer<typeof CreatePipeline>
 
-export const UpdateSync = CreateSync.partial()
-export type UpdateSync = z.infer<typeof UpdateSync>
+export const UpdatePipeline = CreatePipeline.partial()
+export type UpdatePipeline = z.infer<typeof UpdatePipeline>
 
 // MARK: - Log entry
 

@@ -3,24 +3,24 @@ import { apiReference } from '@scalar/hono-api-reference'
 
 export interface WebhookAppOptions {
   /** Called for each incoming webhook event. Fire-and-forget. */
-  push_event: (credentialId: string, event: unknown) => void
+  push_event: (pipelineId: string, event: unknown) => void
 }
 
 const WebhookParam = z.object({
-  credential_id: z.string().openapi({
-    param: { name: 'credential_id', in: 'path' },
-    example: 'cred_abc123',
+  pipeline_id: z.string().openapi({
+    param: { name: 'pipeline_id', in: 'path' },
+    example: 'pipe_abc123',
   }),
 })
 
 const webhookRoute = createRoute({
   operationId: 'pushWebhook',
   method: 'post',
-  path: '/webhooks/{credential_id}',
+  path: '/webhooks/{pipeline_id}',
   tags: ['Webhooks'],
   summary: 'Ingest a Stripe webhook event',
   description:
-    "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
+    "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
   request: { params: WebhookParam },
   responses: {
     200: {
@@ -31,28 +31,28 @@ const webhookRoute = createRoute({
 })
 
 /**
- * Register POST /webhooks/{credential_id} directly on any OpenAPIHono app.
+ * Register POST /webhooks/{pipeline_id} directly on any OpenAPIHono app.
  * Used by both `createApp` (single-process) and `createWebhookApp` (standalone).
  */
 export function mountWebhookRoutes(
   app: OpenAPIHono,
-  push_event: (credentialId: string, event: unknown) => void
+  push_event: (pipelineId: string, event: unknown) => void
 ) {
   app.openapi(webhookRoute, async (c) => {
-    const { credential_id } = c.req.valid('param')
+    const { pipeline_id } = c.req.valid('param')
     const body = await c.req.text()
     const headers = Object.fromEntries(c.req.raw.headers.entries())
-    push_event(credential_id, { body, headers })
+    push_event(pipeline_id, { body, headers })
     return c.text('ok', 200)
   })
 }
 
 /**
- * Standalone webhook ingress app — POST /webhooks/{credential_id}.
+ * Standalone webhook ingress app — POST /webhooks/{pipeline_id}.
  *
- * Deliberately thin: no credential management, no sync CRUD. Just receives a
- * raw Stripe event and hands it off to `push_event`, which in Temporal mode
- * signals the matching workflow(s) via TemporalBridge.
+ * Deliberately thin: no pipeline management. Just receives a raw Stripe event
+ * and hands it off to `push_event`, which in Temporal mode signals the matching
+ * workflow via TemporalBridge.
  *
  * Used in two ways:
  *   1. Mounted inside the main service app via `mountWebhookRoutes` for single-process dev.

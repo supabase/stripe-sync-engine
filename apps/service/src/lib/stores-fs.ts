@@ -6,9 +6,9 @@ import {
   readdirSync,
   unlinkSync,
 } from 'node:fs'
-import { join, basename } from 'node:path'
-import type { Credential, SyncConfig } from './schemas.js'
-import type { CredentialStore, ConfigStore, LogSink } from './stores.js'
+import { join } from 'node:path'
+import type { Pipeline } from './schemas.js'
+import type { PipelineStore, LogSink } from './stores.js'
 import type { StateStore } from './stores.js'
 
 // MARK: - Helpers
@@ -40,44 +40,23 @@ function listItems<T>(dir: string): T[] {
     .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf-8')) as T)
 }
 
-// MARK: - File-backed credential store
+// MARK: - File-backed pipeline store
 
-export function fileCredentialStore(dir: string): CredentialStore {
+export function filePipelineStore(dir: string): PipelineStore {
   return {
     async get(id) {
-      const cred = readItem<Credential>(dir, id)
-      if (!cred) throw new Error(`Credential not found: ${id}`)
-      return cred
+      const pipeline = readItem<Pipeline>(dir, id)
+      if (!pipeline) throw new Error(`Pipeline not found: ${id}`)
+      return pipeline
     },
-    async set(id, credential) {
-      writeItem(dir, id, credential)
+    async set(id, pipeline) {
+      writeItem(dir, id, pipeline)
     },
     async delete(id) {
       removeItem(dir, id)
     },
     async list() {
-      return listItems<Credential>(dir)
-    },
-  }
-}
-
-// MARK: - File-backed config store
-
-export function fileConfigStore(dir: string): ConfigStore {
-  return {
-    async get(id) {
-      const config = readItem<SyncConfig>(dir, id)
-      if (!config) throw new Error(`SyncConfig not found: ${id}`)
-      return config
-    },
-    async set(id, config) {
-      writeItem(dir, id, config)
-    },
-    async delete(id) {
-      removeItem(dir, id)
-    },
-    async list() {
-      return listItems<SyncConfig>(dir)
+      return listItems<Pipeline>(dir)
     },
   }
 }
@@ -86,16 +65,16 @@ export function fileConfigStore(dir: string): ConfigStore {
 
 export function fileStateStore(dir: string): StateStore {
   return {
-    async get(syncId) {
-      return readItem<Record<string, unknown>>(dir, syncId)
+    async get(pipelineId) {
+      return readItem<Record<string, unknown>>(dir, pipelineId)
     },
-    async set(syncId, stream, data) {
-      const state = readItem<Record<string, unknown>>(dir, syncId) ?? {}
+    async set(pipelineId, stream, data) {
+      const state = readItem<Record<string, unknown>>(dir, pipelineId) ?? {}
       state[stream] = data
-      writeItem(dir, syncId, state)
+      writeItem(dir, pipelineId, state)
     },
-    async clear(syncId) {
-      removeItem(dir, syncId)
+    async clear(pipelineId) {
+      removeItem(dir, pipelineId)
     },
   }
 }
@@ -104,10 +83,10 @@ export function fileStateStore(dir: string): StateStore {
 
 export function fileLogSink(filePath: string): LogSink {
   return {
-    write(syncId, entry) {
+    write(pipelineId, entry) {
       const dir = join(filePath, '..')
       ensureDir(dir)
-      const line = JSON.stringify({ syncId, ...entry }) + '\n'
+      const line = JSON.stringify({ pipelineId, ...entry }) + '\n'
       writeFileSync(filePath, line, { flag: 'a' })
     },
   }

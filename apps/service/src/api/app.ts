@@ -6,23 +6,14 @@ import type { ConnectorResolver, Message } from '@stripe/sync-engine'
 import { createConnectorResolver, parseNdjsonStream } from '@stripe/sync-engine'
 import { ndjsonResponse } from '@stripe/sync-engine'
 import {
-  Credential as CredentialSchema,
-  CreateCredential as CreateCredentialSchema,
-  UpdateCredential as UpdateCredentialSchema,
-  SyncConfig as SyncConfigSchema,
-  CreateSync as CreateSyncSchema,
-  UpdateSync as UpdateSyncSchema,
+  Pipeline as PipelineSchema,
+  CreatePipeline as CreatePipelineSchema,
+  UpdatePipeline as UpdatePipelineSchema,
 } from '../lib/schemas.js'
-import type { Credential, SyncConfig } from '../lib/schemas.js'
-import { resolveCredentials } from '../lib/resolve.js'
+import type { Pipeline } from '../lib/schemas.js'
 import { SyncService } from '../lib/service.js'
 import type { TemporalOptions } from '../temporal/bridge.js'
-import {
-  fileCredentialStore,
-  fileConfigStore,
-  fileStateStore,
-  fileLogSink,
-} from '../lib/stores-fs.js'
+import { filePipelineStore, fileStateStore, fileLogSink } from '../lib/stores-fs.js'
 import { mountWebhookRoutes } from './webhook-app.js'
 
 // MARK: - Helpers
@@ -87,14 +78,12 @@ export function createApp(options?: AppOptions) {
   const dataDir = options?.dataDir || process.env.DATA_DIR || join(homedir(), '.stripe-sync')
   const connectors = options?.connectors ?? createConnectorResolver({})
 
-  const credentials = fileCredentialStore(`${dataDir}/credentials`)
-  const configs = fileConfigStore(`${dataDir}/syncs`)
+  const pipelines = filePipelineStore(`${dataDir}/pipelines`)
   const states = fileStateStore(`${dataDir}/state`)
   const logs = fileLogSink(`${dataDir}/logs.ndjson`)
 
   const service = new SyncService({
-    credentials,
-    configs,
+    pipelines,
     states,
     logs,
     connectors,
@@ -111,12 +100,8 @@ export function createApp(options?: AppOptions) {
 
   // ── Path param schemas ──────────────────────────────────────────
 
-  const CredIdParam = z.object({
-    id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: 'cred_abc123' }),
-  })
-
-  const SyncIdParam = z.object({
-    id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: 'sync_abc123' }),
+  const PipelineIdParam = z.object({
+    id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: 'pipe_abc123' }),
   })
 
   // ── Health ──────────────────────────────────────────────────────
@@ -140,46 +125,46 @@ export function createApp(options?: AppOptions) {
     (c) => c.json({ ok: true as const }, 200)
   )
 
-  // MARK: - Credentials
+  // MARK: - Pipelines
 
   app.openapi(
     createRoute({
-      operationId: 'listCredentials',
+      operationId: 'listPipelines',
       method: 'get',
-      path: '/credentials',
-      tags: ['Credentials'],
-      summary: 'List credentials',
+      path: '/pipelines',
+      tags: ['Pipelines'],
+      summary: 'List pipelines',
       responses: {
         200: {
           content: {
-            'application/json': { schema: ListResponse(CredentialSchema) },
+            'application/json': { schema: ListResponse(PipelineSchema) },
           },
-          description: 'List of credentials',
+          description: 'List of pipelines',
         },
       },
     }),
     async (c) => {
-      const list = await credentials.list()
+      const list = await pipelines.list()
       return c.json({ data: list, has_more: false } as any, 200)
     }
   )
 
   app.openapi(
     createRoute({
-      operationId: 'createCredential',
+      operationId: 'createPipeline',
       method: 'post',
-      path: '/credentials',
-      tags: ['Credentials'],
-      summary: 'Create credential',
+      path: '/pipelines',
+      tags: ['Pipelines'],
+      summary: 'Create pipeline',
       request: {
         body: {
-          content: { 'application/json': { schema: CreateCredentialSchema } },
+          content: { 'application/json': { schema: CreatePipelineSchema } },
         },
       },
       responses: {
         201: {
-          content: { 'application/json': { schema: CredentialSchema } },
-          description: 'Created credential',
+          content: { 'application/json': { schema: PipelineSchema } },
+          description: 'Created pipeline',
         },
         400: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -189,226 +174,9 @@ export function createApp(options?: AppOptions) {
     }),
     async (c) => {
       const body = c.req.valid('json')
-      const id = genId('cred')
-      const now = new Date().toISOString()
-      const stored = {
-        id,
-        ...(body as Record<string, unknown>),
-        created_at: now,
-        updated_at: now,
-      } as Credential
-      await credentials.set(id, stored)
-      return c.json(stored as any, 201)
-    }
-  )
-
-  app.openapi(
-    createRoute({
-      operationId: 'getCredential',
-      method: 'get',
-      path: '/credentials/{id}',
-      tags: ['Credentials'],
-      summary: 'Retrieve credential',
-      request: { params: CredIdParam },
-      responses: {
-        200: {
-          content: { 'application/json': { schema: CredentialSchema } },
-          description: 'Retrieved credential',
-        },
-        404: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Not found',
-        },
-      },
-    }),
-    async (c) => {
-      const { id } = c.req.valid('param')
-      try {
-        const cred = await credentials.get(id)
-        return c.json(cred as any, 200)
-      } catch {
-        return c.json({ error: `Credential ${id} not found` }, 404)
-      }
-    }
-  )
-
-  app.openapi(
-    createRoute({
-      operationId: 'updateCredential',
-      method: 'patch',
-      path: '/credentials/{id}',
-      tags: ['Credentials'],
-      summary: 'Update credential',
-      request: {
-        params: CredIdParam,
-        body: {
-          content: { 'application/json': { schema: UpdateCredentialSchema } },
-        },
-      },
-      responses: {
-        200: {
-          content: { 'application/json': { schema: CredentialSchema } },
-          description: 'Updated credential',
-        },
-        404: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Not found',
-        },
-      },
-    }),
-    async (c) => {
-      const { id } = c.req.valid('param')
-      const patch = c.req.valid('json')
-      try {
-        const existing = await credentials.get(id)
-        const cleanPatch = Object.fromEntries(
-          Object.entries(patch as Record<string, unknown>).filter(([k]) => k !== 'id')
-        )
-        const updated = {
-          ...existing,
-          ...cleanPatch,
-          id,
-          updated_at: new Date().toISOString(),
-        } as Credential
-        await credentials.set(id, updated)
-        return c.json(updated as any, 200)
-      } catch {
-        return c.json({ error: `Credential ${id} not found` }, 404)
-      }
-    }
-  )
-
-  app.openapi(
-    createRoute({
-      operationId: 'deleteCredential',
-      method: 'delete',
-      path: '/credentials/{id}',
-      tags: ['Credentials'],
-      summary: 'Delete credential',
-      request: { params: CredIdParam },
-      responses: {
-        200: {
-          content: { 'application/json': { schema: DeleteResponseSchema } },
-          description: 'Deleted credential',
-        },
-        404: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Not found',
-        },
-        409: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Credential is referenced by one or more syncs',
-        },
-      },
-    }),
-    async (c) => {
-      const { id } = c.req.valid('param')
-      try {
-        await credentials.get(id)
-      } catch {
-        return c.json({ error: `Credential ${id} not found` }, 404)
-      }
-
-      const allSyncs = await configs.list()
-      const referencing = allSyncs.filter(
-        (s) => s.source.credential_id === id || s.destination.credential_id === id
-      )
-      if (referencing.length > 0) {
-        return c.json(
-          {
-            error: `Credential ${id} is referenced by sync(s): ${referencing.map((s) => s.id).join(', ')}`,
-          },
-          409
-        )
-      }
-
-      await credentials.delete(id)
-      return c.json({ id, deleted: true as const }, 200)
-    }
-  )
-
-  // ── Referential integrity helpers ───────────────────────────────
-
-  function collectCredentialIds(body: Record<string, unknown>): string[] {
-    const ids: string[] = []
-    const src = body.source as Record<string, unknown> | undefined
-    const dst = body.destination as Record<string, unknown> | undefined
-    if (src?.credential_id && typeof src.credential_id === 'string') ids.push(src.credential_id)
-    if (dst?.credential_id && typeof dst.credential_id === 'string') ids.push(dst.credential_id)
-    return ids
-  }
-
-  async function validateCredentialRefs(credIds: string[]): Promise<string[]> {
-    const missing: string[] = []
-    for (const id of credIds) {
-      try {
-        await credentials.get(id)
-      } catch {
-        missing.push(id)
-      }
-    }
-    return missing
-  }
-
-  // MARK: - Syncs
-
-  app.openapi(
-    createRoute({
-      operationId: 'listSyncs',
-      method: 'get',
-      path: '/syncs',
-      tags: ['Syncs'],
-      summary: 'List syncs',
-      responses: {
-        200: {
-          content: {
-            'application/json': { schema: ListResponse(SyncConfigSchema) },
-          },
-          description: 'List of syncs',
-        },
-      },
-    }),
-    async (c) => {
-      const list = await configs.list()
-      return c.json({ data: list, has_more: false } as any, 200)
-    }
-  )
-
-  app.openapi(
-    createRoute({
-      operationId: 'createSync',
-      method: 'post',
-      path: '/syncs',
-      tags: ['Syncs'],
-      summary: 'Create sync',
-      request: {
-        body: {
-          content: { 'application/json': { schema: CreateSyncSchema } },
-        },
-      },
-      responses: {
-        201: {
-          content: { 'application/json': { schema: SyncConfigSchema } },
-          description: 'Created sync',
-        },
-        400: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Invalid input',
-        },
-      },
-    }),
-    async (c) => {
-      const body = c.req.valid('json')
-
-      const credIds = collectCredentialIds(body as Record<string, unknown>)
-      const missing = await validateCredentialRefs(credIds)
-      if (missing.length > 0) {
-        return c.json({ error: `Credential(s) not found: ${missing.join(', ')}` }, 400)
-      }
-
-      const id = genId('sync')
-      const stored = { id, ...(body as Record<string, unknown>) } as SyncConfig
-      await configs.set(id, stored)
+      const id = genId('pipe')
+      const stored = { id, ...(body as Record<string, unknown>) } as Pipeline
+      await pipelines.set(id, stored)
       await service.temporal?.start(id)
       return c.json(stored as any, 201)
     }
@@ -416,16 +184,16 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'getSync',
+      operationId: 'getPipeline',
       method: 'get',
-      path: '/syncs/{id}',
-      tags: ['Syncs'],
-      summary: 'Retrieve sync',
-      request: { params: SyncIdParam },
+      path: '/pipelines/{id}',
+      tags: ['Pipelines'],
+      summary: 'Retrieve pipeline',
+      request: { params: PipelineIdParam },
       responses: {
         200: {
-          content: { 'application/json': { schema: SyncConfigSchema } },
-          description: 'Retrieved sync',
+          content: { 'application/json': { schema: PipelineSchema } },
+          description: 'Retrieved pipeline',
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -436,40 +204,31 @@ export function createApp(options?: AppOptions) {
     async (c) => {
       const { id } = c.req.valid('param')
       try {
-        const config = await configs.get(id)
-        if (c.req.query('include_credentials') === 'true') {
-          const sourceCred = config.source.credential_id
-            ? await credentials.get(config.source.credential_id)
-            : undefined
-          const destCred = config.destination.credential_id
-            ? await credentials.get(config.destination.credential_id)
-            : undefined
-          return c.json(resolveCredentials({ config, sourceCred, destCred }) as any, 200)
-        }
-        return c.json(config as any, 200)
+        const pipeline = await pipelines.get(id)
+        return c.json(pipeline as any, 200)
       } catch {
-        return c.json({ error: `Sync ${id} not found` }, 404)
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
     }
   )
 
   app.openapi(
     createRoute({
-      operationId: 'updateSync',
+      operationId: 'updatePipeline',
       method: 'patch',
-      path: '/syncs/{id}',
-      tags: ['Syncs'],
-      summary: 'Update sync',
+      path: '/pipelines/{id}',
+      tags: ['Pipelines'],
+      summary: 'Update pipeline',
       request: {
-        params: SyncIdParam,
+        params: PipelineIdParam,
         body: {
-          content: { 'application/json': { schema: UpdateSyncSchema } },
+          content: { 'application/json': { schema: UpdatePipelineSchema } },
         },
       },
       responses: {
         200: {
-          content: { 'application/json': { schema: SyncConfigSchema } },
-          description: 'Updated sync',
+          content: { 'application/json': { schema: PipelineSchema } },
+          description: 'Updated pipeline',
         },
         400: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -485,40 +244,33 @@ export function createApp(options?: AppOptions) {
       const { id } = c.req.valid('param')
       const patch = c.req.valid('json')
       try {
-        const existing = await configs.get(id)
-
-        const credIds = collectCredentialIds(patch as Record<string, unknown>)
-        const missing = await validateCredentialRefs(credIds)
-        if (missing.length > 0) {
-          return c.json({ error: `Credential(s) not found: ${missing.join(', ')}` }, 400)
-        }
-
+        const existing = await pipelines.get(id)
         const updated = {
           ...existing,
           ...(patch as Record<string, unknown>),
           id,
-        } as SyncConfig
-        await configs.set(id, updated)
+        } as Pipeline
+        await pipelines.set(id, updated)
         // No need to signal the workflow — activities re-read config from the service on each call
         return c.json(updated as any, 200)
       } catch {
-        return c.json({ error: `Sync ${id} not found` }, 404)
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
     }
   )
 
   app.openapi(
     createRoute({
-      operationId: 'deleteSync',
+      operationId: 'deletePipeline',
       method: 'delete',
-      path: '/syncs/{id}',
-      tags: ['Syncs'],
-      summary: 'Delete sync',
-      request: { params: SyncIdParam },
+      path: '/pipelines/{id}',
+      tags: ['Pipelines'],
+      summary: 'Delete pipeline',
+      request: { params: PipelineIdParam },
       responses: {
         200: {
           content: { 'application/json': { schema: DeleteResponseSchema } },
-          description: 'Deleted sync',
+          description: 'Deleted pipeline',
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -529,34 +281,34 @@ export function createApp(options?: AppOptions) {
     async (c) => {
       const { id } = c.req.valid('param')
       try {
-        await configs.get(id)
+        await pipelines.get(id)
         await service.temporal?.stop(id)
-        await configs.delete(id)
+        await pipelines.delete(id)
         await states.clear(id)
         return c.json({ id, deleted: true as const }, 200)
       } catch {
-        return c.json({ error: `Sync ${id} not found` }, 404)
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
     }
   )
 
-  // MARK: - Sync engine operations
+  // MARK: - Pipeline engine operations
 
   app.openapi(
     createRoute({
-      operationId: 'setupSync',
+      operationId: 'setupPipeline',
       method: 'post',
-      path: '/syncs/{id}/setup',
-      tags: ['Sync Operations'],
-      summary: 'Set up destination schema for a sync',
+      path: '/pipelines/{id}/setup',
+      tags: ['Pipeline Operations'],
+      summary: 'Set up destination schema for a pipeline',
       description:
         'Creates destination tables and applies migrations. Safe to call multiple times.',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         204: { description: 'Setup complete' },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -569,18 +321,18 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'teardownSync',
+      operationId: 'teardownPipeline',
       method: 'post',
-      path: '/syncs/{id}/teardown',
-      tags: ['Sync Operations'],
-      summary: 'Tear down destination schema for a sync',
+      path: '/pipelines/{id}/teardown',
+      tags: ['Pipeline Operations'],
+      summary: 'Tear down destination schema for a pipeline',
       description: 'Drops destination tables. Irreversible.',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         204: { description: 'Teardown complete' },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -593,13 +345,13 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'checkSync',
+      operationId: 'checkPipeline',
       method: 'get',
-      path: '/syncs/{id}/check',
-      tags: ['Sync Operations'],
-      summary: 'Check connector connection for a sync',
+      path: '/pipelines/{id}/check',
+      tags: ['Pipeline Operations'],
+      summary: 'Check connector connection for a pipeline',
       description: 'Validates the source/destination config and tests connectivity.',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         200: {
           content: { 'application/json': { schema: CheckResultSchema } },
@@ -607,7 +359,7 @@ export function createApp(options?: AppOptions) {
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -620,14 +372,14 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'readSync',
+      operationId: 'readPipeline',
       method: 'post',
-      path: '/syncs/{id}/read',
-      tags: ['Sync Operations'],
-      summary: 'Read records from the sync source',
+      path: '/pipelines/{id}/read',
+      tags: ['Pipeline Operations'],
+      summary: 'Read records from the pipeline source',
       description:
         'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides input.',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -635,7 +387,7 @@ export function createApp(options?: AppOptions) {
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -649,15 +401,15 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'writeSync',
+      operationId: 'writePipeline',
       method: 'post',
-      path: '/syncs/{id}/write',
-      tags: ['Sync Operations'],
-      summary: 'Write records to the sync destination',
+      path: '/pipelines/{id}/write',
+      tags: ['Pipeline Operations'],
+      summary: 'Write records to the pipeline destination',
       description:
         'Reads NDJSON messages from the request body and writes them to the destination.',
       request: {
-        params: SyncIdParam,
+        params: PipelineIdParam,
         body: {
           required: true,
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -674,7 +426,7 @@ export function createApp(options?: AppOptions) {
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -691,15 +443,15 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'sync',
+      operationId: 'syncPipeline',
       method: 'post',
-      path: '/syncs/{id}/sync',
-      tags: ['Sync Operations'],
-      summary: 'Run sync pipeline (read → write)',
+      path: '/pipelines/{id}/sync',
+      tags: ['Pipeline Operations'],
+      summary: 'Run pipeline (read → write)',
       description:
         'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
         'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -707,7 +459,7 @@ export function createApp(options?: AppOptions) {
         },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
       },
     }),
@@ -723,19 +475,19 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'pauseSync',
+      operationId: 'pausePipeline',
       method: 'post',
-      path: '/syncs/{id}/pause',
-      tags: ['Sync Operations'],
-      summary: 'Pause a running sync (Temporal mode only)',
+      path: '/pipelines/{id}/pause',
+      tags: ['Pipeline Operations'],
+      summary: 'Pause a running pipeline (Temporal mode only)',
       description:
-        'Signals the Temporal workflow to pause. The sync will stop processing after the current batch completes. Requires --temporal-address.',
-      request: { params: SyncIdParam },
+        'Signals the Temporal workflow to pause. The pipeline will stop processing after the current batch completes. Requires --temporal-address.',
+      request: { params: PipelineIdParam },
       responses: {
         204: { description: 'Pause signal sent' },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
         409: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -749,9 +501,9 @@ export function createApp(options?: AppOptions) {
       }
       const { id } = c.req.valid('param')
       try {
-        await configs.get(id)
+        await pipelines.get(id)
       } catch {
-        return c.json({ error: `Sync ${id} not found` }, 404)
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
       await service.temporal.pause(id)
       return c.body(null, 204) as any
@@ -760,18 +512,18 @@ export function createApp(options?: AppOptions) {
 
   app.openapi(
     createRoute({
-      operationId: 'resumeSync',
+      operationId: 'resumePipeline',
       method: 'post',
-      path: '/syncs/{id}/resume',
-      tags: ['Sync Operations'],
-      summary: 'Resume a paused sync (Temporal mode only)',
+      path: '/pipelines/{id}/resume',
+      tags: ['Pipeline Operations'],
+      summary: 'Resume a paused pipeline (Temporal mode only)',
       description: 'Signals the Temporal workflow to resume. Requires --temporal-address.',
-      request: { params: SyncIdParam },
+      request: { params: PipelineIdParam },
       responses: {
         204: { description: 'Resume signal sent' },
         404: {
           content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Sync not found',
+          description: 'Pipeline not found',
         },
         409: {
           content: { 'application/json': { schema: ErrorSchema } },
@@ -785,9 +537,9 @@ export function createApp(options?: AppOptions) {
       }
       const { id } = c.req.valid('param')
       try {
-        await configs.get(id)
+        await pipelines.get(id)
       } catch {
-        return c.json({ error: `Sync ${id} not found` }, 404)
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
       await service.temporal.resume(id)
       return c.body(null, 204) as any
@@ -806,7 +558,7 @@ export function createApp(options?: AppOptions) {
       info: {
         title: 'Stripe Sync Service',
         version: '1.0.0',
-        description: 'Stripe Sync Service — manage credentials, syncs, and webhook ingress.',
+        description: 'Stripe Sync Service — manage pipelines and webhook ingress.',
       },
     })
     spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)

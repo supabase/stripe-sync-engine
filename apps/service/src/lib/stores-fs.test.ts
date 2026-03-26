@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { fileCredentialStore, fileConfigStore, fileStateStore, fileLogSink } from './stores-fs.js'
+import { filePipelineStore, fileStateStore, fileLogSink } from './stores-fs.js'
 
 let tmpDir: string
 
@@ -15,71 +15,67 @@ afterEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// Credential store
+// Pipeline store
 // ---------------------------------------------------------------------------
 
-describe('fileCredentialStore', () => {
-  it('creates dir and writes $id.json per credential', async () => {
-    const dir = join(tmpDir, 'credentials')
-    const store = fileCredentialStore(dir)
+describe('filePipelineStore', () => {
+  it('creates dir and writes $id.json per pipeline', async () => {
+    const dir = join(tmpDir, 'pipelines')
+    const store = filePipelineStore(dir)
 
-    const cred = {
-      id: 'cred_1',
-      type: 'stripe',
-      api_key: 'sk_test_123',
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
+    const pipeline = {
+      id: 'pipe_1',
+      source: { type: 'stripe', api_key: 'sk_test_123' },
+      destination: { type: 'postgres', connection_string: 'postgres://localhost/db' },
     }
-    await store.set('cred_1', cred)
+    await store.set('pipe_1', pipeline)
 
-    // File exists at $dir/cred_1.json
-    expect(existsSync(join(dir, 'cred_1.json'))).toBe(true)
-    const ondisk = JSON.parse(readFileSync(join(dir, 'cred_1.json'), 'utf-8'))
-    expect(ondisk.api_key).toBe('sk_test_123')
+    // File exists at $dir/pipe_1.json
+    expect(existsSync(join(dir, 'pipe_1.json'))).toBe(true)
+    const ondisk = JSON.parse(readFileSync(join(dir, 'pipe_1.json'), 'utf-8'))
+    expect(ondisk.source.api_key).toBe('sk_test_123')
   })
 
-  it('get returns the stored credential', async () => {
-    const store = fileCredentialStore(join(tmpDir, 'creds'))
+  it('get returns the stored pipeline', async () => {
+    const store = filePipelineStore(join(tmpDir, 'pipelines'))
 
-    const cred = {
-      id: 'cred_a',
-      type: 'postgres',
-      connection_string: 'postgres://localhost/db',
-      created_at: '2026-01-01T00:00:00Z',
-      updated_at: '2026-01-01T00:00:00Z',
+    const pipeline = {
+      id: 'pipe_a',
+      source: { type: 'stripe', api_key: 'sk_test_abc' },
+      destination: { type: 'postgres', connection_string: 'postgres://localhost/db' },
     }
-    await store.set('cred_a', cred)
+    await store.set('pipe_a', pipeline)
 
-    const got = await store.get('cred_a')
-    expect(got).toEqual(cred)
+    const got = await store.get('pipe_a')
+    expect(got).toEqual(pipeline)
   })
 
   it('get throws for missing id', async () => {
-    const store = fileCredentialStore(join(tmpDir, 'creds'))
-    await expect(store.get('nope')).rejects.toThrow('Credential not found: nope')
+    const store = filePipelineStore(join(tmpDir, 'pipelines'))
+    await expect(store.get('nope')).rejects.toThrow('Pipeline not found: nope')
   })
 
-  it('list returns all credentials', async () => {
-    const store = fileCredentialStore(join(tmpDir, 'creds'))
+  it('list returns all pipelines', async () => {
+    const store = filePipelineStore(join(tmpDir, 'pipelines'))
 
-    await store.set('a', { id: 'a', type: 't', created_at: '', updated_at: '' })
-    await store.set('b', { id: 'b', type: 't', created_at: '', updated_at: '' })
+    await store.set('a', { id: 'a', source: { type: 's' }, destination: { type: 'd' } })
+    await store.set('b', { id: 'b', source: { type: 's' }, destination: { type: 'd' } })
 
     const list = await store.list()
     expect(list).toHaveLength(2)
-    expect(list.map((c) => c.id).sort()).toEqual(['a', 'b'])
+    expect(list.map((p) => p.id).sort()).toEqual(['a', 'b'])
   })
 
   it('list returns empty array when dir does not exist', async () => {
-    const store = fileCredentialStore(join(tmpDir, 'nonexistent'))
+    const store = filePipelineStore(join(tmpDir, 'nonexistent'))
     expect(await store.list()).toEqual([])
   })
 
   it('delete removes the file', async () => {
-    const dir = join(tmpDir, 'creds')
-    const store = fileCredentialStore(dir)
+    const dir = join(tmpDir, 'pipelines')
+    const store = filePipelineStore(dir)
 
-    await store.set('x', { id: 'x', type: 't', created_at: '', updated_at: '' })
+    await store.set('x', { id: 'x', source: { type: 's' }, destination: { type: 'd' } })
     expect(existsSync(join(dir, 'x.json'))).toBe(true)
 
     await store.delete('x')
@@ -87,54 +83,8 @@ describe('fileCredentialStore', () => {
   })
 
   it('delete is a no-op for missing id', async () => {
-    const store = fileCredentialStore(join(tmpDir, 'creds'))
+    const store = filePipelineStore(join(tmpDir, 'pipelines'))
     await store.delete('nope') // should not throw
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Config store
-// ---------------------------------------------------------------------------
-
-describe('fileConfigStore', () => {
-  it('round-trips a sync config via $id.json', async () => {
-    const dir = join(tmpDir, 'syncs')
-    const store = fileConfigStore(dir)
-
-    const config = {
-      id: 'sync_1',
-      source: { type: 'stripe' },
-      destination: { type: 'postgres' },
-      streams: [{ name: 'products' }],
-    }
-    await store.set('sync_1', config)
-
-    expect(existsSync(join(dir, 'sync_1.json'))).toBe(true)
-    expect(await store.get('sync_1')).toEqual(config)
-  })
-
-  it('get throws for missing id', async () => {
-    const store = fileConfigStore(join(tmpDir, 'syncs'))
-    await expect(store.get('nope')).rejects.toThrow('SyncConfig not found: nope')
-  })
-
-  it('list returns all configs', async () => {
-    const store = fileConfigStore(join(tmpDir, 'syncs'))
-
-    await store.set('s1', { id: 's1', source: { type: 'a' }, destination: { type: 'b' } })
-    await store.set('s2', { id: 's2', source: { type: 'c' }, destination: { type: 'd' } })
-
-    const list = await store.list()
-    expect(list).toHaveLength(2)
-  })
-
-  it('delete removes the file', async () => {
-    const dir = join(tmpDir, 'syncs')
-    const store = fileConfigStore(dir)
-
-    await store.set('s1', { id: 's1', source: { type: 'a' }, destination: { type: 'b' } })
-    await store.delete('s1')
-    expect(existsSync(join(dir, 's1.json'))).toBe(false)
   })
 })
 
@@ -145,24 +95,24 @@ describe('fileConfigStore', () => {
 describe('fileStateStore', () => {
   it('get returns undefined when no state exists', async () => {
     const store = fileStateStore(join(tmpDir, 'state'))
-    expect(await store.get('sync_1')).toBeUndefined()
+    expect(await store.get('pipe_1')).toBeUndefined()
   })
 
-  it('set creates $syncId.json with stream cursors', async () => {
+  it('set creates $pipelineId.json with stream cursors', async () => {
     const dir = join(tmpDir, 'state')
     const store = fileStateStore(dir)
 
-    await store.set('sync_1', 'products', { cursor: 'prod_100' })
-    await store.set('sync_1', 'customers', { cursor: 'cus_200' })
+    await store.set('pipe_1', 'products', { cursor: 'prod_100' })
+    await store.set('pipe_1', 'customers', { cursor: 'cus_200' })
 
-    const state = await store.get('sync_1')
+    const state = await store.get('pipe_1')
     expect(state).toEqual({
       products: { cursor: 'prod_100' },
       customers: { cursor: 'cus_200' },
     })
 
-    // On disk as sync_1.json
-    expect(existsSync(join(dir, 'sync_1.json'))).toBe(true)
+    // On disk as pipe_1.json
+    expect(existsSync(join(dir, 'pipe_1.json'))).toBe(true)
   })
 
   it('set overwrites a single stream cursor without losing others', async () => {
@@ -195,18 +145,18 @@ describe('fileLogSink', () => {
     const filePath = join(tmpDir, 'logs.ndjson')
     const sink = fileLogSink(filePath)
 
-    sink.write('sync_1', { level: 'info', message: 'started', timestamp: 't1' })
-    sink.write('sync_2', { level: 'debug', message: 'checkpoint', stream: 'p', timestamp: 't2' })
+    sink.write('pipe_1', { level: 'info', message: 'started', timestamp: 't1' })
+    sink.write('pipe_2', { level: 'debug', message: 'checkpoint', stream: 'p', timestamp: 't2' })
 
     const lines = readFileSync(filePath, 'utf-8').trim().split('\n')
     expect(lines).toHaveLength(2)
 
     const first = JSON.parse(lines[0]!)
-    expect(first.syncId).toBe('sync_1')
+    expect(first.pipelineId).toBe('pipe_1')
     expect(first.level).toBe('info')
 
     const second = JSON.parse(lines[1]!)
-    expect(second.syncId).toBe('sync_2')
+    expect(second.pipelineId).toBe('pipe_2')
     expect(second.stream).toBe('p')
   })
 })

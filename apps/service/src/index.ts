@@ -2,32 +2,24 @@
 
 // Schemas (Zod + inferred types)
 export {
-  Credential,
-  CreateCredential,
-  UpdateCredential,
   SourceConfig,
   DestinationConfig,
   StreamConfig,
-  SyncConfig,
-  CreateSync,
-  UpdateSync,
+  Pipeline,
+  CreatePipeline,
+  UpdatePipeline,
   LogEntry,
 } from './lib/schemas.js'
 
 // Store interfaces
-export type { CredentialStore, ConfigStore, LogSink } from './lib/stores.js'
+export type { PipelineStore, LogSink } from './lib/stores.js'
 export type { StateStore } from './lib/stores.js'
 
 // File-system store implementations
-export {
-  fileCredentialStore,
-  fileConfigStore,
-  fileStateStore,
-  fileLogSink,
-} from './lib/stores-fs.js'
+export { filePipelineStore, fileStateStore, fileLogSink } from './lib/stores-fs.js'
 
 // Resolution
-export { resolve, resolveCredentials } from './lib/resolve.js'
+export { resolve } from './lib/resolve.js'
 
 // Service
 export { SyncService } from './lib/service.js'
