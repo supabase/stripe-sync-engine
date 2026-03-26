@@ -38,7 +38,7 @@ The publish script (`tests/e2e-publish.sh`) publishes every workspace package, t
 
 ## Docker
 
-Docker images are built locally with `docker build` and in CI are pushed to `ghcr.io`. Release promotes from `ghcr.io` to Docker Hub (`stripe/sync-engine`).
+Docker images are built locally with `docker build`. In CI, pushes to `main` and `v2` first publish a multi-arch image to `ghcr.io`, then the same tested image is promoted to Docker Hub (`stripe/sync-engine`) with the branch tag and `latest`.
 
 ```sh
 # Build and test locally
