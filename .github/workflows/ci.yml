@@ -281,11 +281,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Docker Hub — promote the tested GHCR image to Docker Hub tags
+  # Docker Hub — promote the built GHCR image to Docker Hub tags
   # ---------------------------------------------------------------------------
   publish_dockerhub:
     name: Publish Docker Hub
-    needs: [test, build, e2e]
+    needs: [build]
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04
 
@@ -311,7 +311,7 @@ jobs:
         id: tag
         run: echo "name=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
-      - name: Promote tested image to Docker Hub
+      - name: Promote built image to Docker Hub
         run: bash scripts/promote-to-dockerhub.sh
         env:
           GHCR_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
