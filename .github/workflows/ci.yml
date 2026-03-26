@@ -61,6 +61,10 @@ jobs:
         run: |
           pnpm build
 
+      - name: Build Docker image
+        run: |
+          docker build -t stripe-sync-engine .
+
       - name: Initialize DB schema
         run: |
           docker run --rm \
