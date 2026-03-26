@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectorResolver, Message, StateMessage } from '../lib/index.js'
 import { sourceTest, destinationTest } from '../lib/index.js'
 import { createApp } from './app.js'
@@ -11,6 +11,8 @@ const resolver: ConnectorResolver = {
   resolveSource: async () => sourceTest,
   resolveDestination: async () => destinationTest,
 }
+const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 const syncParams = JSON.stringify({
   source_name: 'test',
@@ -44,6 +46,11 @@ function bodyHeaders(body: string): Record<string, string> {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  consoleInfo.mockClear()
+  consoleError.mockClear()
+})
 
 // ---------------------------------------------------------------------------
 // OpenAPI spec

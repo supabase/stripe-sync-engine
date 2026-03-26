@@ -7,6 +7,11 @@ on:
         description: 'Commit SHA to promote (must have passed the CI build job)'
         required: true
         type: string
+      dockerhub_tags:
+        description: 'Optional extra Docker Hub tags to publish in addition to the sha tag (for example: latest or v2 latest)'
+        required: false
+        default: latest
+        type: string
 
 permissions:
   packages: read
@@ -40,6 +45,7 @@ jobs:
         run: bash scripts/promote-to-dockerhub.sh
         env:
           GHCR_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.sha }}
+          DOCKERHUB_TAGS: ${{ inputs.dockerhub_tags }}
 
   npm:
     name: Promote npm packages to npmjs.org

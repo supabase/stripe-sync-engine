@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   RecordMessage,
@@ -22,6 +22,8 @@ import { createEngine, buildCatalog } from './engine.js'
 import { noopStateStore } from './state-store.js'
 import { sourceTest } from './source-test.js'
 import { destinationTest } from './destination-test.js'
+const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,6 +55,11 @@ function toAsync<T>(items: T[]): AsyncIterable<T> {
 // ---------------------------------------------------------------------------
 // Protocol schema tests
 // ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  consoleInfo.mockClear()
+  consoleError.mockClear()
+})
 
 describe('protocol schemas', () => {
   describe('Stream', () => {

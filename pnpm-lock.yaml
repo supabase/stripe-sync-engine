@@ -378,9 +378,15 @@ importers:
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
+      https-proxy-agent:
+        specifier: ^7.0.6
+        version: 7.0.6
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
+      undici:
+        specifier: ^7.16.0
+        version: 7.24.6
       ws:
         specifier: ^8.18.0
         version: 8.18.3
@@ -3664,6 +3670,10 @@ packages:
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+
+  undici@7.24.6:
+    resolution: {integrity: sha512-Xi4agocCbRzt0yYMZGMA6ApD7gvtUFaxm4ZmeacWI4cZxaF6C+8I8QfofC20NAePiB/IcvZmzkJ7XPa471AEtA==}
+    engines: {node: '>=20.18.1'}
 
   unionfs@4.6.0:
     resolution: {integrity: sha512-fJAy3gTHjFi5S3TP5EGdjs/OUMFFvI/ady3T8qVuZfkv8Qi8prV/Q8BuFEgODJslhZTT2z2qdD2lGdee9qjEnA==}
@@ -7300,6 +7310,8 @@ snapshots:
 
   undici-types@7.18.2:
     optional: true
+
+  undici@7.24.6: {}
 
   unionfs@4.6.0:
     dependencies:

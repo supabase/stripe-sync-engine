@@ -25,6 +25,84 @@ export interface Engine {
   sync(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
 }
 
+type EngineLogMetadata = {
+  sourceName?: string
+  destinationName?: string
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function engineLogContext(
+  config: SyncEngineParams,
+  metadata?: EngineLogMetadata
+): Record<string, unknown> {
+  return {
+    sourceName: metadata?.sourceName ?? 'unknown',
+    destinationName: metadata?.destinationName ?? 'unknown',
+    configuredStreamCount: config.streams?.length ?? 0,
+    configuredStreams: config.streams?.map((stream) => stream.name) ?? [],
+  }
+}
+
+async function withLoggedStep<T>(
+  label: string,
+  context: Record<string, unknown>,
+  fn: () => Promise<T>
+): Promise<T> {
+  const startedAt = Date.now()
+  console.info({ msg: `${label} started`, ...context })
+  try {
+    const result = await fn()
+    console.info({
+      msg: `${label} completed`,
+      ...context,
+      durationMs: Date.now() - startedAt,
+    })
+    return result
+  } catch (error) {
+    console.error({
+      msg: `${label} failed`,
+      ...context,
+      durationMs: Date.now() - startedAt,
+      error: formatError(error),
+    })
+    throw error
+  }
+}
+
+async function* withLoggedStream<T>(
+  label: string,
+  context: Record<string, unknown>,
+  iter: AsyncIterable<T>
+): AsyncIterable<T> {
+  const startedAt = Date.now()
+  let itemCount = 0
+  console.info({ msg: `${label} started`, ...context })
+  try {
+    for await (const item of iter) {
+      itemCount++
+      yield item
+    }
+    console.info({
+      msg: `${label} completed`,
+      ...context,
+      itemCount,
+      durationMs: Date.now() - startedAt,
+    })
+  } catch (error) {
+    console.error({
+      msg: `${label} failed`,
+      ...context,
+      itemCount,
+      durationMs: Date.now() - startedAt,
+      error: formatError(error),
+    })
+    throw error
+  }
+}
+
 /**
  * Build a ConfiguredCatalog from discovered streams, optionally filtered
  * by the streams listed in config.
@@ -61,7 +139,8 @@ export function buildCatalog(
 export function createEngine(
   config: SyncEngineParams,
   connectors: { source: Source; destination: Destination },
-  stateStore: StateStore
+  stateStore: StateStore,
+  metadata?: EngineLogMetadata
 ): Engine {
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
@@ -74,13 +153,34 @@ export function createEngine(
     string,
     unknown
   >
+  const baseContext = engineLogContext(config, metadata)
 
   // Lazy-cached catalog — discover is called at most once per engine instance.
   let _catalog: ConfiguredCatalog | null = null
   async function getCatalog(): Promise<ConfiguredCatalog> {
     if (!_catalog) {
-      const msg = await connectors.source.discover({ config: sourceConfig })
-      _catalog = buildCatalog(msg.streams, config.streams)
+      const startedAt = Date.now()
+      console.info({ msg: 'Engine source discover started', ...baseContext })
+      try {
+        const msg = await connectors.source.discover({ config: sourceConfig })
+        _catalog = buildCatalog(msg.streams, config.streams)
+        console.info({
+          msg: 'Engine source discover completed',
+          ...baseContext,
+          durationMs: Date.now() - startedAt,
+          discoveredStreamCount: msg.streams.length,
+          catalogStreamCount: _catalog.streams.length,
+          catalogStreams: _catalog.streams.map((stream) => stream.stream.name),
+        })
+      } catch (error) {
+        console.error({
+          msg: 'Engine source discover failed',
+          ...baseContext,
+          durationMs: Date.now() - startedAt,
+          error: formatError(error),
+        })
+        throw error
+      }
     }
     return _catalog
   }
@@ -89,8 +189,16 @@ export function createEngine(
     async setup() {
       const catalog = await getCatalog()
       await Promise.all([
-        connectors.source.setup?.({ config: sourceConfig, catalog }),
-        connectors.destination.setup?.({ config: destConfig, catalog }),
+        connectors.source.setup
+          ? withLoggedStep('Engine source setup', baseContext, () =>
+              connectors.source.setup!({ config: sourceConfig, catalog })
+            )
+          : Promise.resolve(),
+        connectors.destination.setup
+          ? withLoggedStep('Engine destination setup', baseContext, () =>
+              connectors.destination.setup!({ config: destConfig, catalog })
+            )
+          : Promise.resolve(),
       ])
     },
 
@@ -116,7 +224,15 @@ export function createEngine(
         { config: sourceConfig, catalog: await getCatalog(), state },
         input
       )
-      for await (const msg of raw) {
+      for await (const msg of withLoggedStream(
+        'Engine source read',
+        {
+          ...baseContext,
+          inputProvided: input !== undefined,
+          stateProvided: state !== undefined,
+        },
+        raw
+      )) {
         yield Message.parse(msg)
       }
     },
@@ -125,7 +241,11 @@ export function createEngine(
       const catalog = await getCatalog()
       const destInput = pipe(messages, enforceCatalog(catalog), log, filterType('record', 'state'))
       const destOutput = connectors.destination.write({ config: destConfig, catalog }, destInput)
-      for await (const msg of destOutput) {
+      for await (const msg of withLoggedStream(
+        'Engine destination write',
+        baseContext,
+        destOutput
+      )) {
         yield DestinationOutput.parse(msg)
       }
     },
@@ -147,5 +267,8 @@ export async function createEngineFromParams(
     resolver.resolveSource(sourceName),
     resolver.resolveDestination(destName),
   ])
-  return createEngine(engineParams, { source, destination }, stateStore)
+  return createEngine(engineParams, { source, destination }, stateStore, {
+    sourceName,
+    destinationName: destName,
+  })
 }

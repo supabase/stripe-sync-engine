@@ -17,11 +17,11 @@ No SDK. No framework. Just newline-delimited JSON.
 
 ```ts
 type Message =
-  | { type: 'record';        stream: string; data: Record<string, unknown>; emitted_at: number }
-  | { type: 'state';         stream: string; data: unknown }    // cursor checkpoint
-  | { type: 'log';           level: string;  message: string }  // diagnostic
-  | { type: 'error';         failure_type: string; message: string }
-  | { type: 'stream_status'; stream: string; status: string }   // progress signal
+  | { type: 'record'; stream: string; data: Record<string, unknown>; emitted_at: number }
+  | { type: 'state'; stream: string; data: unknown } // cursor checkpoint
+  | { type: 'log'; level: string; message: string } // diagnostic
+  | { type: 'error'; failure_type: string; message: string }
+  | { type: 'stream_status'; stream: string; status: string } // progress signal
 ```
 
 A source produces this stream. A destination consumes it. The simplest transport is stdio.
@@ -33,8 +33,8 @@ A source produces this stream. A destination consumes it. The simplest transport
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 1 — source.read() → dest.write()
 
@@ -69,8 +69,8 @@ flowchart LR
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 2 — pipe() for explicit composition
 
@@ -110,8 +110,8 @@ flowchart LR
 Each stage is `(AsyncIterable<A>) => AsyncIterable<B>`. Compose as many as you need.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 3 — log (tap)
 
@@ -121,21 +121,18 @@ Sources emit `log`, `error`, and `stream_status` messages alongside data.
 ```ts {3}
 const output = pipe(
   source.read(params),
-  log,               // ← new
-  dest.write,
+  log, // ← new
+  dest.write
 )
 ```
 
 ```ts
 export async function* log(messages) {
   for await (const msg of messages) {
-    if (msg.type === 'log')
-      console.error(`[${msg.level}] ${msg.message}`)
-    else if (msg.type === 'error')
-      console.error(`[error:${msg.failure_type}] ${msg.message}`)
-    else if (msg.type === 'stream_status')
-      console.error(`[status] ${msg.stream}: ${msg.status}`)
-    yield msg  // pass everything through
+    if (msg.type === 'log') console.error(`[${msg.level}] ${msg.message}`)
+    else if (msg.type === 'error') console.error(`[error:${msg.failure_type}] ${msg.message}`)
+    else if (msg.type === 'stream_status') console.error(`[status] ${msg.stream}: ${msg.status}`)
+    yield msg // pass everything through
   }
 }
 ```
@@ -162,8 +159,8 @@ flowchart LR
 Taps are transparent: every message still reaches the destination.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 4 — filterType (guard the destination)
 
@@ -174,8 +171,8 @@ Destinations only want `record` and `state`.
 const output = pipe(
   source.read(params),
   log,
-  filterType('record', 'state'),   // ← new
-  dest.write,
+  filterType('record', 'state'), // ← new
+  dest.write
 )
 ```
 
@@ -211,8 +208,8 @@ flowchart LR
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 5 — enforceCatalog (selective sync)
 
@@ -224,15 +221,15 @@ const catalog = {
   streams: [
     { stream: { name: 'products' }, fields: ['id', 'name', 'active'] },
     //  ↑ invoices not listed → all invoice records dropped
-  ]
+  ],
 }
 
 const output = pipe(
   source.read(params),
-  enforceCatalog(catalog),         // ← new
+  enforceCatalog(catalog), // ← new
   log,
   filterType('record', 'state'),
-  dest.write,
+  dest.write
 )
 ```
 
@@ -261,8 +258,8 @@ flowchart LR
 Two jobs: **stream filtering** (drop unknown streams) and **field projection** (trim records to allowed columns).
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 6 — persistState (checkpoint)
 
@@ -275,10 +272,11 @@ const output = pipe(
   log,
   filterType('record', 'state'),
   dest.write,
-  persistState(store),             // ← new
+  persistState(store) // ← new
 )
 
-for await (const _ of output) {}  // drive the pipeline
+for await (const _ of output) {
+} // drive the pipeline
 ```
 
 ```ts
@@ -319,12 +317,12 @@ Six stages, assembled in order.
 
 ```ts
 pipe(
-  source.read(params),             // 0. emit NDJSON messages
-  enforceCatalog(catalog),         // 1. drop unwanted streams and fields
-  log,                             // 2. print diagnostics to stderr
-  filterType('record', 'state'),   // 3. guard the destination's input type
-  dest.write,                      // 4. write records, emit state checkpoints
-  persistState(store),             // 5. save cursors after each checkpoint
+  source.read(params), // 0. emit NDJSON messages
+  enforceCatalog(catalog), // 1. drop unwanted streams and fields
+  log, // 2. print diagnostics to stderr
+  filterType('record', 'state'), // 3. guard the destination's input type
+  dest.write, // 4. write records, emit state checkpoints
+  persistState(store) // 5. save cursors after each checkpoint
 )
 ```
 
@@ -332,8 +330,8 @@ Each stage is a function `(AsyncIterable<A>) => AsyncIterable<B>`.
 Swap any stage. Add new stages. The others don't change.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## createEngine() — the assembled machine
 
@@ -394,8 +392,8 @@ The pipeline is just async iterables. The transport is whatever drives them.
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 8 — stdio transport (CLI / demo)
 
@@ -431,8 +429,8 @@ flowchart LR
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Step 8 — HTTP streaming transport (server)
 
@@ -476,8 +474,8 @@ flowchart LR
 The **transport changed**. The pipeline didn't.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## $stdin — live event loop
 
@@ -525,15 +523,15 @@ Same `Source` interface. No protocol change needed.
 
 ## Summary
 
-| Step | Addition | What it does |
-|------|----------|--------------|
-| 1 | `source.read() → dest.write()` | Minimal pipe |
-| 2 | `pipe()` | Explicit composition |
-| 3 | `log` | Diagnostics to stderr |
-| 4 | `filterType('record','state')` | Guard the destination |
-| 5 | `enforceCatalog(catalog)` | Stream filter + field projection |
-| 6 | `persistState(store)` | Checkpoint cursors after each batch |
-| 7 | `createEngine()` | Assemble + catalog discovery + validation |
-| 8a | stdio (CLI) | One-shot, in-process, pipe-friendly |
-| 8b | HTTP streaming (server) | Remote, multi-tenant, Temporal-ready |
-| 9 | `engine.sync($stdin)` | Live event loop from webhook queue |
+| Step | Addition                       | What it does                              |
+| ---- | ------------------------------ | ----------------------------------------- |
+| 1    | `source.read() → dest.write()` | Minimal pipe                              |
+| 2    | `pipe()`                       | Explicit composition                      |
+| 3    | `log`                          | Diagnostics to stderr                     |
+| 4    | `filterType('record','state')` | Guard the destination                     |
+| 5    | `enforceCatalog(catalog)`      | Stream filter + field projection          |
+| 6    | `persistState(store)`          | Checkpoint cursors after each batch       |
+| 7    | `createEngine()`               | Assemble + catalog discovery + validation |
+| 8a   | stdio (CLI)                    | One-shot, in-process, pipe-friendly       |
+| 8b   | HTTP streaming (server)        | Remote, multi-tenant, Temporal-ready      |
+| 9    | `engine.sync($stdin)`          | Live event loop from webhook queue        |

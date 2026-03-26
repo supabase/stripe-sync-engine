@@ -1,6 +1,6 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createEngine, noopStateStore } from '../lib/index.js'
 import { sourceTest } from '../lib/index.js'
 import destination from '@stripe/sync-destination-postgres'
@@ -13,6 +13,8 @@ import type { RecordMessage, StateMessage } from '../lib/index.js'
 let containerId: string
 let pool: pg.Pool
 let connectionString: string
+const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 beforeAll(async () => {
   containerId = execSync(
@@ -47,6 +49,11 @@ afterAll(async () => {
   if (containerId) {
     execSync(`docker rm -f ${containerId}`)
   }
+})
+
+beforeEach(() => {
+  consoleInfo.mockClear()
+  consoleError.mockClear()
 })
 
 // ---------------------------------------------------------------------------

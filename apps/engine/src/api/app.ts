@@ -23,6 +23,49 @@ function endpointTable(spec: { paths?: Record<string, unknown> }) {
   return ['| Method | Path | Summary |', '|--------|------|---------|', ...rows].join('\n')
 }
 
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function syncRequestContext(params: SyncParamsType) {
+  return {
+    sourceName: params.source_name,
+    destinationName: params.destination_name,
+    configuredStreamCount: params.streams?.length ?? 0,
+    configuredStreams: params.streams?.map((stream) => stream.name) ?? [],
+  }
+}
+
+async function* logApiStream<T>(
+  label: string,
+  iter: AsyncIterable<T>,
+  context: Record<string, unknown>,
+  startedAt = Date.now()
+): AsyncIterable<T> {
+  let itemCount = 0
+  try {
+    for await (const item of iter) {
+      itemCount++
+      yield item
+    }
+    console.info({
+      msg: `${label} completed`,
+      ...context,
+      itemCount,
+      durationMs: Date.now() - startedAt,
+    })
+  } catch (error) {
+    console.error({
+      msg: `${label} failed`,
+      ...context,
+      itemCount,
+      durationMs: Date.now() - startedAt,
+      error: formatError(error),
+    })
+    throw error
+  }
+}
+
 // ── Shared schemas ──────────────────────────────────────────────
 
 const XSyncParamsHeader = z.object({
@@ -149,9 +192,27 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const context = { path: '/setup', ...syncRequestContext(params) }
+      const startedAt = Date.now()
+      console.info({ msg: 'Engine API /setup started', ...context })
       const engine = await createEngineFromParams(params, resolver, noopStateStore())
-      await engine.setup()
-      return c.body(null, 204) as any
+      try {
+        await engine.setup()
+        console.info({
+          msg: 'Engine API /setup completed',
+          ...context,
+          durationMs: Date.now() - startedAt,
+        })
+        return c.body(null, 204) as any
+      } catch (error) {
+        console.error({
+          msg: 'Engine API /setup failed',
+          ...context,
+          durationMs: Date.now() - startedAt,
+          error: formatError(error),
+        })
+        throw error
+      }
     }
   )
 
@@ -231,9 +292,15 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const inputPresent = hasBody(c)
+      const context = { path: '/read', inputPresent, ...syncRequestContext(params) }
+      const startedAt = Date.now()
+      console.info({ msg: 'Engine API /read started', ...context })
       const engine = await createEngineFromParams(params, resolver, noopStateStore())
-      const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
-      return ndjsonResponse(engine.read(input)) as any
+      const input = inputPresent ? parseNdjsonStream(c.req.raw.body!) : undefined
+      return ndjsonResponse(
+        logApiStream('Engine API /read', engine.read(input), context, startedAt)
+      ) as any
     }
   )
 
@@ -266,13 +333,22 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const context = { path: '/write', ...syncRequestContext(params) }
       if (!hasBody(c)) {
+        console.error({ msg: 'Engine API /write missing request body', ...context })
         return c.json({ error: 'Request body required for /write' }, 400)
       }
+      const startedAt = Date.now()
+      console.info({ msg: 'Engine API /write started', ...context })
       const stateStore = await selectStateStore(params)
       const engine = await createEngineFromParams(params, resolver, stateStore)
       const messages = parseNdjsonStream<Message>(c.req.raw.body!)
-      return ndjsonResponse(closeAfter(engine.write(messages), () => stateStore.close?.())) as any
+      return ndjsonResponse(
+        closeAfter(
+          logApiStream('Engine API /write', engine.write(messages), context, startedAt),
+          () => stateStore.close?.()
+        )
+      ) as any
     }
   )
 

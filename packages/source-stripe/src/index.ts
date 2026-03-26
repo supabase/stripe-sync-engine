@@ -20,6 +20,7 @@ import { pollEvents } from './src-events-api.js'
 import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket.js'
 import { createStripeWebSocketClient } from './src-websocket.js'
 import type { ResourceConfig } from './types.js'
+import { makeClient } from './client.js'
 
 // MARK: - Spec
 
@@ -64,18 +65,6 @@ export const spec = z.object({
 })
 
 export type Config = z.infer<typeof spec>
-
-function makeClient(config: Config): Stripe {
-  if (config.base_url) {
-    const url = new URL(config.base_url)
-    return new Stripe(config.api_key, {
-      host: url.hostname,
-      port: parseInt(url.port) || (url.protocol === 'https:' ? 443 : 80),
-      protocol: url.protocol.replace(':', '') as 'http' | 'https',
-    })
-  }
-  return new Stripe(config.api_key)
-}
 
 /** Raw webhook payload requiring signature verification. */
 export type WebhookInput = {

@@ -19,6 +19,8 @@ import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket.
 // Mock the WebSocket module
 const mockClose = vi.fn()
 let capturedOnEvent: ((event: StripeWebhookEvent) => void) | null = null
+const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 vi.mock('./src-websocket', () => ({
   createStripeWebSocketClient: vi.fn(
@@ -110,6 +112,8 @@ const config = { api_key: 'sk_test_fake' }
 
 beforeEach(() => {
   vi.mocked(buildResourceRegistry).mockReset()
+  consoleInfo.mockClear()
+  consoleError.mockClear()
 })
 
 describe('StripeSource', () => {

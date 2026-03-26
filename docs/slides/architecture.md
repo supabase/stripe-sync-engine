@@ -15,12 +15,12 @@ A transport-agnostic pipeline for syncing Stripe data to any destination
 
 ```ts
 pipe(
-  source.read(params),             // AsyncIterable<Message>
-  enforceCatalog(catalog),         // stream filter + field projection
-  log,                             // diagnostics tap → stderr
-  filterType('record', 'state'),   // narrow to what destinations need
-  dest.write,                      // write records, emit state checkpoints
-  persistState(store),             // save cursors after each checkpoint
+  source.read(params), // AsyncIterable<Message>
+  enforceCatalog(catalog), // stream filter + field projection
+  log, // diagnostics tap → stderr
+  filterType('record', 'state'), // narrow to what destinations need
+  dest.write, // write records, emit state checkpoints
+  persistState(store) // save cursors after each checkpoint
 )
 ```
 
@@ -52,28 +52,25 @@ Each layer only knows about the layer below it.
 Connectors only know `protocol` — nothing about stores, queues, or HTTP.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## The connector contract
 
 ```ts
 interface Source<TConfig, TState, TInput = never> {
-  spec():     ConnectorSpecification
-  check():    Promise<CheckResult>
+  spec(): ConnectorSpecification
+  check(): Promise<CheckResult>
   discover(): Promise<ConfiguredCatalog>
-  setup():    Promise<void>
-  read(params: SyncParams, $stdin?: AsyncIterable<TInput>):
-              AsyncIterable<Message>
-  teardown(opts?: { remove_shared_resources?: boolean }):
-              Promise<void>
+  setup(): Promise<void>
+  read(params: SyncParams, $stdin?: AsyncIterable<TInput>): AsyncIterable<Message>
+  teardown(opts?: { remove_shared_resources?: boolean }): Promise<void>
 }
 
 interface Destination<TConfig, TState> {
-  spec():  ConnectorSpecification
+  spec(): ConnectorSpecification
   setup(): Promise<void>
-  write(messages: AsyncIterable<RecordMessage | StateMessage>):
-         AsyncIterable<StateMessage>
+  write(messages: AsyncIterable<RecordMessage | StateMessage>): AsyncIterable<StateMessage>
 }
 ```
 
@@ -100,19 +97,19 @@ State flows **as messages in the stream**.
 Connectors never touch a store directly.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Pipeline stages
 
-| Stage | Type | Role |
-|-------|------|------|
-| `source.read()` | Source | Emit NDJSON messages |
-| `enforceCatalog()` | Filter | Drop streams/fields not in catalog |
-| `log` | Tap | Print diagnostics, pass all messages through |
-| `filterType()` | Filter | Narrow union to `record` + `state` |
-| `dest.write` | Destination | Write records, emit state checkpoints |
-| `persistState()` | Tap | Write cursors to store, pass all through |
+| Stage              | Type        | Role                                         |
+| ------------------ | ----------- | -------------------------------------------- |
+| `source.read()`    | Source      | Emit NDJSON messages                         |
+| `enforceCatalog()` | Filter      | Drop streams/fields not in catalog           |
+| `log`              | Tap         | Print diagnostics, pass all messages through |
+| `filterType()`     | Filter      | Narrow union to `record` + `state`           |
+| `dest.write`       | Destination | Write records, emit state checkpoints        |
+| `persistState()`   | Tap         | Write cursors to store, pass all through     |
 
 ::right::
 
@@ -138,8 +135,8 @@ flowchart LR
 `createEngine()` assembles this chain. All stages are independently testable.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## enforceCatalog — selective sync
 
@@ -148,8 +145,8 @@ into a `ConfiguredCatalog`. `enforceCatalog()` enforces it in the pipeline.
 
 ```ts
 const catalog = buildCatalog(
-  await source.discover(),      // all available streams
-  params.streams,               // user selection
+  await source.discover(), // all available streams
+  params.streams // user selection
 )
 // catalog = { streams: [ { stream: { name: 'products' }, fields: [...] } ] }
 
@@ -178,22 +175,24 @@ flowchart TD
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## $stdin — one interface, two modes
 
 ```ts
 // Backfill (one-shot): $stdin = undefined
 const engine = createEngine(params, connectors, store)
-for await (const s of engine.sync()) { }
+for await (const s of engine.sync()) {
+}
 //  1. listApiBackfill() — page through Stripe API
 //  2. pollEvents()      — catch up on recent events
 //  3. done ✓
 
 // Live (forever): $stdin = webhook queue
 const queue = new AsyncQueue<StripeEvent>()
-for await (const s of engine.sync(queue)) { }
+for await (const s of engine.sync(queue)) {
+}
 //  1. skips backfill
 //  2. loops on queue forever → processStripeEvent()
 ```
@@ -219,8 +218,8 @@ flowchart TD
 ```
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Webhook fan-out
 
@@ -255,8 +254,8 @@ Filtering happens **inside each source** against its own catalog.
 `sync_A` ignores the `customer.updated` event; `sync_B` processes it.
 
 ---
-layout: two-cols
----
+
+## layout: two-cols
 
 ## Destination: Postgres
 
@@ -337,6 +336,7 @@ Service = persistent credentials, cursors, lifecycle management, fan-out.
 
 **Transport-agnostic pipeline**
 The pipeline is async iterables end-to-end. The transport is whatever drives them:
+
 - **stdio** — CLI mode, source stdout piped to dest stdin, great for scripts and local dev
 - **HTTP streaming** — server mode, same `createEngine()` behind a Hono route, response body streams NDJSON
 - **Temporal activity** — worker calls the HTTP server; retry/scheduling provided by Temporal

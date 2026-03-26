@@ -79,9 +79,21 @@ export async function* listApiBackfill(opts: {
           params.starting_after = pageCursor
         }
 
+        console.info({
+          msg: 'Starting Stripe list page',
+          stream: stream.name,
+          pageCursor,
+        })
         const response = await resourceConfig.listFn(
           params as Parameters<typeof resourceConfig.listFn>[0]
         )
+        console.info({
+          msg: 'Completed Stripe list page',
+          stream: stream.name,
+          pageCursor,
+          recordCount: response.data.length,
+          hasMore: response.has_more,
+        })
 
         for (const item of response.data) {
           yield toRecordMessage(stream.name, item as Record<string, unknown>)
@@ -125,6 +137,12 @@ export async function* listApiBackfill(opts: {
         } satisfies StreamStatusMessage
         continue
       }
+      console.error({
+        msg: 'Stripe list page failed',
+        stream: stream.name,
+        pageCursor,
+        error: err instanceof Error ? err.message : String(err),
+      })
       const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
       yield {
         type: 'error',
