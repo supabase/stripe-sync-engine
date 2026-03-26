@@ -13,7 +13,7 @@
 #   GOOGLE_CLIENT_ID        (optional — enables Sheets sync)
 #   GOOGLE_CLIENT_SECRET    (optional — enables Sheets sync)
 #   GOOGLE_REFRESH_TOKEN    (optional — enables Sheets sync)
-#   GOOGLE_SPREADSHEET_ID   (optional — enables Sheets sync)
+#   GOOGLE_SPREADSHEET_ID   (optional — reuses existing sheet; omit to auto-create)
 #   SKIP_DELETE=1           skip teardown + cleanup (leave data for inspection)
 set -euo pipefail
 
@@ -209,28 +209,42 @@ fi
 # ── Sync 2: Stripe → Google Sheets (optional) ─────────────────────
 
 if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
-   [ -n "${GOOGLE_REFRESH_TOKEN:-}" ] && [ -n "${GOOGLE_SPREADSHEET_ID:-}" ]; then
+   [ -n "${GOOGLE_REFRESH_TOKEN:-}" ]; then
 
   echo ""
   echo "--- Creating Google Sheets sync ---"
+
+  # Build destination config — reuse existing spreadsheet if GOOGLE_SPREADSHEET_ID is set
+  SHEETS_DEST="{
+    \"type\": \"google-sheets\",
+    \"client_id\": \"$GOOGLE_CLIENT_ID\",
+    \"client_secret\": \"$GOOGLE_CLIENT_SECRET\",
+    \"refresh_token\": \"$GOOGLE_REFRESH_TOKEN\",
+    \"access_token\": \"placeholder\""
+  if [ -n "${GOOGLE_SPREADSHEET_ID:-}" ]; then
+    SHEETS_DEST="$SHEETS_DEST, \"spreadsheet_id\": \"$GOOGLE_SPREADSHEET_ID\""
+    echo "  Reusing spreadsheet: $GOOGLE_SPREADSHEET_ID"
+  else
+    echo "  No GOOGLE_SPREADSHEET_ID set — connector will create a new spreadsheet"
+  fi
+  SHEETS_DEST="$SHEETS_DEST }"
+
   SHEETS_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/syncs" \
     -H 'Content-Type: application/json' \
     -d "{
       \"source\": { \"type\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 3 },
-      \"destination\": {
-        \"type\": \"google-sheets\",
-        \"client_id\": \"$GOOGLE_CLIENT_ID\",
-        \"client_secret\": \"$GOOGLE_CLIENT_SECRET\",
-        \"refresh_token\": \"$GOOGLE_REFRESH_TOKEN\",
-        \"access_token\": \"placeholder\",
-        \"spreadsheet_id\": \"$GOOGLE_SPREADSHEET_ID\"
-      },
+      \"destination\": $SHEETS_DEST,
       \"streams\": [{ \"name\": \"products\" }]
     }")
   SHEETS_SYNC_ID=$(echo "$SHEETS_SYNC_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-  echo "  Sync: $SHEETS_SYNC_ID (spreadsheet: $GOOGLE_SPREADSHEET_ID)"
+  echo "  Sync: $SHEETS_SYNC_ID (spreadsheet: ${GOOGLE_SPREADSHEET_ID:-auto-created})"
 
   verify_sheets() {
+    if [ -z "${GOOGLE_SPREADSHEET_ID:-}" ]; then
+      echo "  Verify: skipped (no GOOGLE_SPREADSHEET_ID to read back)"
+      return
+    fi
+
     # Read back via Sheets API using python + google-auth
     local row_count
     row_count=$(python3 -c "
@@ -264,7 +278,7 @@ print(len(rows) - 1 if len(rows) > 1 else 0)  # minus header
   run_sync_cycle "Stripe → Google Sheets" "$SHEETS_SYNC_ID" verify_sheets
 else
   echo ""
-  echo "--- Skipping Google Sheets sync (set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_SPREADSHEET_ID) ---"
+  echo "--- Skipping Google Sheets sync (set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN; GOOGLE_SPREADSHEET_ID is optional) ---"
 fi
 
 echo ""

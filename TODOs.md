@@ -47,3 +47,8 @@ TODO:
 - [x] Create input queue? What's up with that?
 
 - [ ] Test credential refreshing how
+
+## High
+
+- [ ] HTTP Connect proxy support (e.g. stripe/smokescreen)
+- [ ] Support oauth refreshing workflow
