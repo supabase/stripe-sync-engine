@@ -345,6 +345,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  packages/openapi:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.5.0
+        version: 24.10.1
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
+
   packages/protocol:
     dependencies:
       citty:
@@ -363,6 +372,9 @@ importers:
 
   packages/source-stripe:
     dependencies:
+      '@stripe/sync-openapi':
+        specifier: workspace:*
+        version: link:../openapi
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -116,8 +116,8 @@ describe('StripeSource', () => {
   describe('discover()', () => {
     it('returns a CatalogMessage with known streams', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
-        invoice: makeConfig({ order: 2, tableName: 'invoices' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
+        invoices: makeConfig({ order: 2, tableName: 'invoices' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -130,7 +130,7 @@ describe('StripeSource', () => {
 
     it('excludes resources with sync: false', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
         internal: makeConfig({ order: 2, tableName: 'internal', sync: false }),
       }
 
@@ -169,7 +169,7 @@ describe('StripeSource', () => {
         })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -236,12 +236,12 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: custListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
           tableName: 'invoices',
           listFn: invListFn as ResourceConfig['listFn'],
@@ -298,7 +298,7 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -334,7 +334,7 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -372,7 +372,7 @@ describe('StripeSource', () => {
   describe('fromWebhookEvent() — live mode scenarios', () => {
     it('webhook mode emits one RecordMessage + one StateMessage per event', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -404,7 +404,7 @@ describe('StripeSource', () => {
 
     it('returns null for unsupported object type', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -417,7 +417,7 @@ describe('StripeSource', () => {
 
     it('returns null for objects without id (preview/draft)', () => {
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoices' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       const event = makeEvent({
@@ -431,7 +431,7 @@ describe('StripeSource', () => {
 
     it('passes through deleted flag from event data', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -451,7 +451,7 @@ describe('StripeSource', () => {
 
     it('returns null when event data.object has no object field', () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       const event = makeEvent({
@@ -467,7 +467,7 @@ describe('StripeSource', () => {
       // The same Stripe.Event structure is received regardless of transport.
       // This test verifies fromWebhookEvent works for any Stripe.Event input.
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoices' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       const event = makeEvent({
@@ -491,7 +491,7 @@ describe('StripeSource', () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Rate limit exceeded'))
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -541,7 +541,7 @@ describe('StripeSource', () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Connection refused'))
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -568,12 +568,12 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: failingListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
           tableName: 'invoices',
           listFn: successListFn as ResourceConfig['listFn'],
@@ -621,7 +621,7 @@ describe('StripeSource', () => {
     // Shared registry for these tests
     const listFn = vi.fn()
     const registry: Record<string, ResourceConfig> = {
-      customer: makeConfig({
+      customers: makeConfig({
         order: 1,
         tableName: 'customers',
         listFn: listFn as ResourceConfig['listFn'],
@@ -810,7 +810,7 @@ describe('StripeSource', () => {
   describe('read(input) — enriched webhook processing', () => {
     it('delete event yields record with deleted: true', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -840,7 +840,7 @@ describe('StripeSource', () => {
 
     it('delete event detected by event type (not just deleted flag)', async () => {
       const registry: Record<string, ResourceConfig> = {
-        product: makeConfig({ order: 1, tableName: 'products' }),
+        products: makeConfig({ order: 1, tableName: 'products' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -866,7 +866,7 @@ describe('StripeSource', () => {
 
     it('subscription event yields subscription_items from nested items.data', async () => {
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({ order: 1, tableName: 'subscriptions' }),
+        subscriptions: makeConfig({ order: 1, tableName: 'subscriptions' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -992,7 +992,7 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({
+        subscriptions: makeConfig({
           order: 1,
           tableName: 'subscriptions',
           retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
@@ -1027,7 +1027,7 @@ describe('StripeSource', () => {
       const retrieveFn = vi.fn()
 
       const registry: Record<string, ResourceConfig> = {
-        subscription: makeConfig({
+        subscriptions: makeConfig({
           order: 1,
           tableName: 'subscriptions',
           retrieveFn: retrieveFn as ResourceConfig['retrieveFn'],
@@ -1061,7 +1061,7 @@ describe('StripeSource', () => {
 
     it('preview objects (no id) produce no output', async () => {
       const registry: Record<string, ResourceConfig> = {
-        invoice: makeConfig({ order: 1, tableName: 'invoices' }),
+        invoices: makeConfig({ order: 1, tableName: 'invoices' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1105,7 +1105,7 @@ describe('StripeSource', () => {
 
     it('throws when raw webhook input is provided without webhook_secret', async () => {
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers' }),
+        customers: makeConfig({ order: 1, tableName: 'customers' }),
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
@@ -1124,12 +1124,12 @@ describe('StripeSource', () => {
 
   describe('read() — WebSocket streaming', () => {
     const registry: Record<string, ResourceConfig> = {
-      customer: makeConfig({
+      customers: makeConfig({
         order: 1,
         tableName: 'customers',
         listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
       }),
-      invoice: makeConfig({
+      invoices: makeConfig({
         order: 2,
         tableName: 'invoices',
         listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
@@ -1256,7 +1256,7 @@ describe('StripeSource', () => {
         })
 
       const wsRegistry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -1418,7 +1418,7 @@ describe('StripeSource', () => {
     it('starts an HTTP server on webhook_port and processes POSTed webhooks', async () => {
       const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({ order: 1, tableName: 'customers', listFn }),
+        customers: makeConfig({ order: 1, tableName: 'customers', listFn }),
       }
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       const cat = catalog({ name: 'customers' })
@@ -1452,7 +1452,7 @@ describe('StripeSource', () => {
     it('skips backfill when all streams are already complete', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -1481,7 +1481,7 @@ describe('StripeSource', () => {
     it('stamps initial events_cursor after first backfill completes', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -1511,7 +1511,7 @@ describe('StripeSource', () => {
     it('does not run events polling when poll_events is false/absent', async () => {
       const listFn = vi.fn()
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: listFn as ResourceConfig['listFn'],
@@ -1542,12 +1542,12 @@ describe('StripeSource', () => {
       })
 
       const registry: Record<string, ResourceConfig> = {
-        customer: makeConfig({
+        customers: makeConfig({
           order: 1,
           tableName: 'customers',
           listFn: custListFn as ResourceConfig['listFn'],
         }),
-        invoice: makeConfig({
+        invoices: makeConfig({
           order: 2,
           tableName: 'invoices',
           listFn: (() =>

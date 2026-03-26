@@ -7,6 +7,19 @@ import type {
 import { toRecordMessage } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
 
+const SKIPPABLE_ERROR_PATTERNS = [
+  'only available in testmode',
+  'not in live mode',
+  'Must provide customer',
+  'Must provide ',
+  'Missing required param',
+]
+
+function isSkippableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return SKIPPABLE_ERROR_PATTERNS.some((p) => msg.includes(p))
+}
+
 function findConfigByTableName(
   registry: Record<string, ResourceConfig>,
   tableName: string
@@ -36,6 +49,8 @@ export async function* listApiBackfill(opts: {
       continue
     }
 
+    if (!resourceConfig.listFn) continue
+
     // Skip already-complete streams (e.g. resuming after full backfill for events polling)
     const streamState = state?.[stream.name]
     if (streamState?.status === 'complete') continue
@@ -56,12 +71,17 @@ export async function* listApiBackfill(opts: {
         // Drain any queued events before each page
         if (drainQueue) yield* drainQueue()
 
-        const params: { limit: number; starting_after?: string } = { limit: 100 }
+        const params: Record<string, unknown> = {}
+        if (resourceConfig.supportsLimit !== false) {
+          params.limit = 100
+        }
         if (pageCursor) {
           params.starting_after = pageCursor
         }
 
-        const response = await resourceConfig.listFn(params)
+        const response = await resourceConfig.listFn(
+          params as Parameters<typeof resourceConfig.listFn>[0]
+        )
 
         for (const item of response.data) {
           yield toRecordMessage(stream.name, item as Record<string, unknown>)
@@ -69,7 +89,9 @@ export async function* listApiBackfill(opts: {
         }
 
         hasMore = response.has_more
-        if (response.data.length > 0) {
+        if (response.pageCursor) {
+          pageCursor = response.pageCursor
+        } else if (response.data.length > 0) {
           pageCursor = (response.data[response.data.length - 1] as { id: string }).id
         }
 
@@ -95,6 +117,14 @@ export async function* listApiBackfill(opts: {
         status: 'complete',
       } satisfies StreamStatusMessage
     } catch (err) {
+      if (isSkippableError(err)) {
+        yield {
+          type: 'stream_status',
+          stream: stream.name,
+          status: 'complete',
+        } satisfies StreamStatusMessage
+        continue
+      }
       const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
       yield {
         type: 'error',

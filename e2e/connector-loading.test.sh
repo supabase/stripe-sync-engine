@@ -24,6 +24,7 @@ TMPDIR_BASE=$(mktemp -d)
 cleanup() {
   rm -rf "$TMPDIR_BASE"
   rm -f "$REPO_ROOT"/stripe-sync-protocol-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-openapi-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-engine-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-source-stripe-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-destination-postgres-*.tgz
@@ -44,6 +45,7 @@ echo ""
 echo "--- Step 1: Packing packages ---"
 
 PROTOCOL_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-protocol pack 2>/dev/null | tail -1)
+OPENAPI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-openapi pack 2>/dev/null | tail -1)
 ENGINE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-engine pack 2>/dev/null | tail -1)
 SOURCE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-source-stripe pack 2>/dev/null | tail -1)
 DEST_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-postgres pack 2>/dev/null | tail -1)
@@ -52,7 +54,7 @@ STATE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-state-postgres pack
 UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2>/dev/null | tail -1)
 TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-ts-cli pack 2>/dev/null | tail -1)
 
-for tgz in "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
+for tgz in "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
            "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
@@ -84,6 +86,7 @@ cat > package.json <<EOF
   "pnpm": {
     "overrides": {
       "@stripe/sync-protocol": "$PROTOCOL_TGZ",
+      "@stripe/sync-openapi": "$OPENAPI_TGZ",
       "@stripe/sync-engine": "$ENGINE_TGZ",
       "@stripe/sync-source-stripe": "$SOURCE_TGZ",
       "@stripe/sync-destination-postgres": "$DEST_TGZ",
@@ -96,7 +99,7 @@ cat > package.json <<EOF
 }
 EOF
 
-pnpm add "$PROTOCOL_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
+pnpm add "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
          "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" \
          2>&1 | tail -5
 echo ""
@@ -189,14 +192,14 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 8: unknown connector name → not found ---"
 UNKNOWN_PARAMS='{"source_name":"nonexistent-xyz","source_config":{},"destination_name":"nonexistent-xyz","destination_config":{},"streams":[{"name":"x"}]}'
-STEP8_OUTPUT=$(npx sync-engine check \
+unknown_output=$(npx sync-engine check \
      --x-sync-params "$UNKNOWN_PARAMS" \
      2>&1 || true)
-if echo "$STEP8_OUTPUT" | grep -qi "not found"; then
+if echo "$unknown_output" | grep -qi "not found"; then
   echo "  PASS: unknown connector correctly reports 'not found'"
 else
   echo "  FAIL: unknown connector did not report 'not found'"
-  echo "  Output: $STEP8_OUTPUT"
+  echo "  Output: $unknown_output"
   exit 1
 fi
 echo ""

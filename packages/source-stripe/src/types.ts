@@ -1,4 +1,5 @@
-import Stripe from 'stripe'
+import type Stripe from 'stripe'
+import type { ListFn, RetrieveFn } from '@stripe/sync-openapi'
 import type { RevalidateEntityName } from './resourceRegistry.js'
 
 /**
@@ -29,21 +30,22 @@ export type BaseResourceConfig = {
   isFinalState?: (entity: any) => boolean
 }
 
-export type StripeListResourceConfig = BaseResourceConfig & {
-  /** Function to list items from Stripe API */
-  listFn: (params: Stripe.PaginationParams & { created?: Stripe.RangeQueryParam }) => Promise<{
-    data: unknown[]
-    has_more: boolean
-  }>
-  /** Function to retrieve a single item by ID from Stripe API */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  retrieveFn: (id: string) => Promise<Stripe.Response<any>>
-  /** Optional list of sub-resources to expand during upsert/fetching (e.g. 'refunds', 'listLineItems') */
-  listExpands?: Record<string, (id: string) => Promise<Stripe.ApiList<{ id?: string }>>>[]
+export type ResourceConfig = BaseResourceConfig & {
+  listFn?: ListFn
+  retrieveFn?: RetrieveFn
+  /** Whether the list API supports the `limit` parameter */
+  supportsLimit?: boolean
+  /** Nested child resources discovered from the spec (e.g. subscription items under subscriptions) */
+  nestedResources?: {
+    tableName: string
+    resourceId: string
+    apiPath: string
+    parentParamName: string
+    supportsPagination: boolean
+  }[]
+  /** For nested resources, the parent path parameter name */
+  parentParamName?: string
 }
-
-/** Union of all resource configuration types */
-export type ResourceConfig = StripeListResourceConfig
 
 export type RevalidateEntity = RevalidateEntityName
 
