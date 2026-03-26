@@ -23,11 +23,12 @@ echo "Source: $GHCR_IMAGE"
 echo "Target: stripe/sync-engine:$TAG + stripe/sync-engine:latest"
 echo ""
 
-docker pull "$GHCR_IMAGE"
-docker tag "$GHCR_IMAGE" "stripe/sync-engine:$TAG"
-docker tag "$GHCR_IMAGE" "stripe/sync-engine:latest"
-docker push "stripe/sync-engine:$TAG"
-docker push "stripe/sync-engine:latest"
+# Use buildx imagetools to copy the multi-arch manifest directly
+# (no need to pull/retag — works across registries without downloading layers)
+docker buildx imagetools create \
+  --tag "stripe/sync-engine:$TAG" \
+  --tag "stripe/sync-engine:latest" \
+  "$GHCR_IMAGE"
 
 echo ""
 echo "=== Done ==="
