@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { TestWorkflowEnvironment } from '@temporalio/testing'
-import { Worker } from '@temporalio/worker'
+import { Connection, Client } from '@temporalio/client'
+import { NativeConnection, Worker } from '@temporalio/worker'
 import { serve } from '@hono/node-server'
 import type { ServerType } from '@hono/node-server'
 import pg from 'pg'
@@ -24,6 +24,8 @@ import { describeWithEnv } from './test-helpers.js'
 
 const POSTGRES_URL =
   process.env.POSTGRES_URL ?? 'postgresql://postgres:postgres@localhost:5432/postgres'
+
+const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS ?? 'localhost:7233'
 
 function schemaName(): string {
   const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
@@ -60,14 +62,14 @@ async function pollUntil(
 }
 
 /**
- * Create shared infra: Temporal test env, service API, engine API, Postgres pool.
+ * Create shared infra: Temporal client, service API, engine API, Postgres pool.
  *
- * Service API: config CRUD, credential management, webhook ingress.
- * Engine API: stateless sync execution (setup, sync, teardown).
- * Activities call service for config resolution → engine for execution.
+ * Connects to an external Temporal server (Docker) instead of downloading
+ * a test server binary — faster and more reliable in CI.
  */
 function createTestInfra() {
-  let testEnv: TestWorkflowEnvironment
+  let client: Client
+  let nativeConnection: NativeConnection
   let serviceServer: ServerType
   let engineServer: ServerType
   let serviceUrl: string
@@ -78,8 +80,11 @@ function createTestInfra() {
   const workflowsPath = path.resolve(process.cwd(), '../apps/service/dist/temporal/workflows.js')
 
   return {
-    get testEnv() {
-      return testEnv
+    get client() {
+      return client
+    },
+    get nativeConnection() {
+      return nativeConnection
     },
     get serviceUrl() {
       return serviceUrl
@@ -95,7 +100,11 @@ function createTestInfra() {
     },
 
     async setup() {
-      testEnv = await TestWorkflowEnvironment.createLocal()
+      // Connect to external Temporal server (from docker compose or CI service)
+      const connection = await Connection.connect({ address: TEMPORAL_ADDRESS })
+      client = new Client({ connection })
+      nativeConnection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS })
+
       dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
 
       const connectors = createConnectorResolver({
@@ -121,6 +130,7 @@ function createTestInfra() {
 
       console.log(`\n  Service:  ${serviceUrl}`)
       console.log(`  Engine:   ${engineUrl}`)
+      console.log(`  Temporal: ${TEMPORAL_ADDRESS}`)
       console.log(`  Data dir: ${dataDir}`)
       console.log(`  Postgres: ${POSTGRES_URL}`)
     },
@@ -129,7 +139,7 @@ function createTestInfra() {
       await pool?.end().catch(() => {})
       serviceServer?.close()
       engineServer?.close()
-      await testEnv?.teardown()
+      nativeConnection?.close().catch(() => {})
       if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true })
     },
   }
@@ -148,7 +158,7 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
     await infra.setup()
     stripe = new Stripe(STRIPE_API_KEY)
     console.log(`  Schema: ${schema}`)
-  }, 240_000)
+  }, 60_000)
 
   afterAll(async () => {
     if (infra.pool && !process.env.KEEP_TEST_DATA) {
@@ -173,14 +183,14 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
     console.log(`  Pipeline: ${sync.id}`)
 
     // --- Start workflow + worker ---
-    const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
+    const handle = await infra.client.workflow.start('syncWorkflow', {
       args: [sync.id],
       workflowId: `pipe_${sync.id}`,
       taskQueue: 'pg-queue',
     })
 
     const worker = await Worker.create({
-      connection: infra.testEnv.nativeConnection,
+      connection: infra.nativeConnection,
       taskQueue: 'pg-queue',
       workflowsPath: infra.workflowsPath,
       activities: createActivities({
@@ -292,7 +302,7 @@ describeWithEnv(
 
       console.log(`  Spreadsheet: ${GOOGLE_SPREADSHEET_ID}`)
       console.log(`  Tab: ${streamName}`)
-    }, 240_000)
+    }, 60_000)
 
     afterAll(async () => {
       if (sheetsClient && !process.env.KEEP_TEST_DATA) {
@@ -338,14 +348,14 @@ describeWithEnv(
       const sync = (await syncRes.json()) as { id: string }
       console.log(`  Pipeline: ${sync.id}`)
 
-      const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
+      const handle = await infra.client.workflow.start('syncWorkflow', {
         args: [sync.id],
         workflowId: `pipe_${sync.id}`,
         taskQueue: 'sheets-queue',
       })
 
       const worker = await Worker.create({
-        connection: infra.testEnv.nativeConnection,
+        connection: infra.nativeConnection,
         taskQueue: 'sheets-queue',
         workflowsPath: infra.workflowsPath,
         activities: createActivities({

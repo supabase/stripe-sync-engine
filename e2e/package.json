@@ -13,7 +13,7 @@
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-destination-google-sheets": "workspace:*",
-    "@temporalio/testing": "^1",
+    "@temporalio/client": "^1",
     "@temporalio/worker": "^1",
     "googleapis": "^144",
     "pg": "^8.16.0",

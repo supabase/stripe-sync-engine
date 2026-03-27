@@ -184,6 +184,33 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      temporal-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: temporal
+          POSTGRES_PASSWORD: temporal
+        options: >-
+          --health-cmd "pg_isready -U temporal"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      temporal:
+        image: temporalio/auto-setup:latest
+        env:
+          DB: postgres12
+          DB_PORT: 5432
+          POSTGRES_USER: temporal
+          POSTGRES_PWD: temporal
+          POSTGRES_SEEDS: temporal-db
+        ports:
+          - 7233:7233
+        options: >-
+          --health-cmd "tctl cluster health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v5
 
@@ -246,6 +273,7 @@ jobs:
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          TEMPORAL_ADDRESS: 'localhost:7233'
 
       # --- Service → Engine e2e (temporal.test.sh) ---
 
