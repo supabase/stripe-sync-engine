@@ -5,6 +5,7 @@ import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
+import { logger } from './logger.js'
 
 export function serveAction(opts: {
   port?: number
@@ -33,6 +34,6 @@ export function serveAction(opts: {
   )
   const app = createApp(resolver)
   serve({ fetch: app.fetch, port }, (info) => {
-    console.log(`Sync Engine listening on http://localhost:${info.port}`)
+    logger.info({ port: info.port }, `Sync Engine listening on http://localhost:${info.port}`)
   })
 }

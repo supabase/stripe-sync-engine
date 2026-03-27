@@ -6,6 +6,7 @@ import pgDestination from '@stripe/sync-destination-postgres'
 import sheetsDestination from '@stripe/sync-destination-google-sheets'
 import { createConnectorResolver } from '../lib/index.js'
 import { createApp } from './app.js'
+import { logger } from '../logger.js'
 
 const port = Number(process.env.PORT || 3001)
 const resolver = createConnectorResolver({
@@ -15,5 +16,5 @@ const resolver = createConnectorResolver({
 const app = createApp(resolver)
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Sync Engine API listening on http://localhost:${info.port}`)
+  logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
 })

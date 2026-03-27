@@ -6,6 +6,7 @@ import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { serve } from '@hono/node-server'
 import { createApp } from '../api/app.js'
 import type { TemporalOptions } from '../temporal/bridge.js'
+import { logger } from '../logger.js'
 
 async function createTemporalClient(address: string, taskQueue: string): Promise<TemporalOptions> {
   // Dynamic import — @temporalio/client is an optional dependency
@@ -48,8 +49,12 @@ const serveCmd = defineCommand({
         args['temporal-address'],
         args['temporal-task-queue'] || 'sync-engine'
       )
-      console.log(
-        `Temporal mode: ${args['temporal-address']} (queue: ${args['temporal-task-queue'] || 'sync-engine'})`
+      logger.info(
+        {
+          temporalAddress: args['temporal-address'],
+          taskQueue: args['temporal-task-queue'] || 'sync-engine',
+        },
+        'Temporal mode enabled'
       )
     }
 
@@ -59,8 +64,8 @@ const serveCmd = defineCommand({
     })
 
     serve({ fetch: app.fetch, port }, () => {
-      console.log(`Sync Service listening on http://localhost:${port}`)
-      console.log(`API docs: http://localhost:${port}/docs`)
+      logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
+      logger.info({ url: `http://localhost:${port}/docs` }, 'API docs available')
     })
   },
 })
@@ -116,11 +121,10 @@ const workerCmd = defineCommand({
       workflowsPath,
     })
 
-    console.log('Starting Temporal worker...')
-    console.log(`  Temporal:    ${temporalAddress} (${namespace})`)
-    console.log(`  Task queue:  ${taskQueue}`)
-    console.log(`  Service:     ${serviceUrl}`)
-    console.log(`  Engine:      ${engineUrl}`)
+    logger.info(
+      { temporalAddress, namespace, taskQueue, serviceUrl, engineUrl },
+      'Starting Temporal worker'
+    )
 
     await worker.run()
   },
@@ -167,9 +171,13 @@ const webhookCmd = defineCommand({
     const app = createWebhookApp({ push_event: (id, e) => bridge.pushEvent(id, e) })
     const port = Number(args.port)
     serve({ fetch: app.fetch, port }, () => {
-      console.log(`Webhook server listening on http://localhost:${port}`)
-      console.log(
-        `  Temporal: ${args['temporal-address']} (queue: ${args['temporal-task-queue'] || 'sync-engine'})`
+      logger.info(
+        {
+          port,
+          temporalAddress: args['temporal-address'],
+          taskQueue: args['temporal-task-queue'] || 'sync-engine',
+        },
+        `Webhook server listening on http://localhost:${port}`
       )
     })
   },

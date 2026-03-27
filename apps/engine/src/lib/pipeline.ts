@@ -1,5 +1,6 @@
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
 import type { StateStore } from './state-store.js'
+import { logger } from '../logger.js'
 
 // MARK: - enforceCatalog
 
@@ -16,7 +17,7 @@ export function enforceCatalog(
       if (msg.type === 'record' || msg.type === 'state') {
         const cs = streamMap.get(msg.stream)
         if (!cs) {
-          console.error(`[error:system_error] Unknown stream "${msg.stream}" not in catalog`)
+          logger.error({ stream: msg.stream }, 'Unknown stream not in catalog')
           continue
         }
         if (msg.type === 'record' && cs.fields?.length) {
@@ -42,9 +43,11 @@ export function enforceCatalog(
  */
 export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
   for await (const msg of messages) {
-    if (msg.type === 'log') console.error(`[${msg.level}] ${msg.message}`)
-    else if (msg.type === 'error') console.error(`[error:${msg.failure_type}] ${msg.message}`)
-    else if (msg.type === 'stream_status') console.error(`[status] ${msg.stream}: ${msg.status}`)
+    if (msg.type === 'log') logger[msg.level](msg.message)
+    else if (msg.type === 'error')
+      logger.error({ stream: msg.stream, failure_type: msg.failure_type }, msg.message)
+    else if (msg.type === 'stream_status')
+      logger.info({ stream: msg.stream, status: msg.status }, 'stream_status')
     yield msg
   }
 }

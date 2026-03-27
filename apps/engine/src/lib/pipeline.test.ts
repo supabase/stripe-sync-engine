@@ -1,7 +1,23 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
 import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
 import type { StateStore } from './state-store.js'
+
+vi.mock('../logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+  },
+}))
+
+import { logger } from '../logger.js'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,29 +74,27 @@ describe('enforceCatalog()', () => {
     expect((result[0] as { data: unknown }).data).toEqual({ id: 'sub_1', status: 'active' })
   })
 
-  it('drops record with unknown stream and logs to stderr', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('drops record with unknown stream and logs error', async () => {
     const msgs: Message[] = [
       { type: 'record', stream: 'unknown_stream', data: { id: '1' }, emitted_at: 1 },
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(stderrSpy).toHaveBeenCalledOnce()
-    expect(stderrSpy).toHaveBeenCalledWith(
-      '[error:system_error] Unknown stream "unknown_stream" not in catalog'
+    expect(logger.error).toHaveBeenCalledOnce()
+    expect(logger.error).toHaveBeenCalledWith(
+      { stream: 'unknown_stream' },
+      'Unknown stream not in catalog'
     )
-    stderrSpy.mockRestore()
   })
 
-  it('drops state with unknown stream and logs to stderr', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('drops state with unknown stream and logs error', async () => {
     const msgs: Message[] = [{ type: 'state', stream: 'nonexistent', data: { cursor: 'x' } }]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(stderrSpy).toHaveBeenCalledWith(
-      '[error:system_error] Unknown stream "nonexistent" not in catalog'
+    expect(logger.error).toHaveBeenCalledWith(
+      { stream: 'nonexistent' },
+      'Unknown stream not in catalog'
     )
-    stderrSpy.mockRestore()
   })
 
   it('passes non-data messages (log, error, stream_status) through unchanged', async () => {
@@ -139,7 +153,6 @@ describe('log()', () => {
       { type: 'error', failure_type: 'system_error', message: 'oops' },
       { type: 'stream_status', stream: 'customers', status: 'complete' },
     ]
-    vi.spyOn(console, 'error').mockImplementation(() => {})
     const result = await drain(log(toAsync(msgs)))
     expect(result).toHaveLength(5)
     expect(result[0]).toMatchObject({ type: 'record' })
@@ -147,42 +160,41 @@ describe('log()', () => {
     expect(result[2]).toMatchObject({ type: 'log' })
     expect(result[3]).toMatchObject({ type: 'error' })
     expect(result[4]).toMatchObject({ type: 'stream_status' })
-    vi.restoreAllMocks()
   })
 
-  it('logs log messages to stderr', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('logs log messages via logger at the correct level', async () => {
     const msgs: Message[] = [{ type: 'log', level: 'warn', message: 'careful' }]
     await drain(log(toAsync(msgs)))
-    expect(stderrSpy).toHaveBeenCalledWith('[warn] careful')
-    stderrSpy.mockRestore()
+    expect(logger.warn).toHaveBeenCalledWith('careful')
   })
 
-  it('logs error messages to stderr', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('logs error messages via logger.error', async () => {
     const msgs: Message[] = [{ type: 'error', failure_type: 'transient_error', message: 'retry' }]
     await drain(log(toAsync(msgs)))
-    expect(stderrSpy).toHaveBeenCalledWith('[error:transient_error] retry')
-    stderrSpy.mockRestore()
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ failure_type: 'transient_error' }),
+      'retry'
+    )
   })
 
-  it('logs stream_status messages to stderr', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('logs stream_status messages via logger.info', async () => {
     const msgs: Message[] = [{ type: 'stream_status', stream: 'orders', status: 'running' }]
     await drain(log(toAsync(msgs)))
-    expect(stderrSpy).toHaveBeenCalledWith('[status] orders: running')
-    stderrSpy.mockRestore()
+    expect(logger.info).toHaveBeenCalledWith(
+      { stream: 'orders', status: 'running' },
+      'stream_status'
+    )
   })
 
   it('does not log record or state messages', async () => {
-    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const msgs: Message[] = [
       { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
     ]
     await drain(log(toAsync(msgs)))
-    expect(stderrSpy).not.toHaveBeenCalled()
-    stderrSpy.mockRestore()
+    expect(logger.info).not.toHaveBeenCalled()
+    expect(logger.error).not.toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
   })
 })
 

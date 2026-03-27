@@ -13,6 +13,7 @@ import type { Destination, Source } from '@stripe/sync-protocol'
 import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
 import type { StateStore } from './state-store.js'
 import type { ConnectorResolver } from './resolver.js'
+import { logger } from '../logger.js'
 
 // MARK: - Engine interface
 
@@ -28,10 +29,6 @@ export interface Engine {
 type EngineLogMetadata = {
   sourceName?: string
   destinationName?: string
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function engineLogContext(
@@ -52,22 +49,13 @@ async function withLoggedStep<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   const startedAt = Date.now()
-  console.info({ msg: `${label} started`, ...context })
+  logger.info(context, `${label} started`)
   try {
     const result = await fn()
-    console.info({
-      msg: `${label} completed`,
-      ...context,
-      durationMs: Date.now() - startedAt,
-    })
+    logger.info({ ...context, durationMs: Date.now() - startedAt }, `${label} completed`)
     return result
   } catch (error) {
-    console.error({
-      msg: `${label} failed`,
-      ...context,
-      durationMs: Date.now() - startedAt,
-      error: formatError(error),
-    })
+    logger.error({ ...context, durationMs: Date.now() - startedAt, err: error }, `${label} failed`)
     throw error
   }
 }
@@ -79,26 +67,18 @@ async function* withLoggedStream<T>(
 ): AsyncIterable<T> {
   const startedAt = Date.now()
   let itemCount = 0
-  console.info({ msg: `${label} started`, ...context })
+  logger.info(context, `${label} started`)
   try {
     for await (const item of iter) {
       itemCount++
       yield item
     }
-    console.info({
-      msg: `${label} completed`,
-      ...context,
-      itemCount,
-      durationMs: Date.now() - startedAt,
-    })
+    logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
   } catch (error) {
-    console.error({
-      msg: `${label} failed`,
-      ...context,
-      itemCount,
-      durationMs: Date.now() - startedAt,
-      error: formatError(error),
-    })
+    logger.error(
+      { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
+      `${label} failed`
+    )
     throw error
   }
 }
@@ -162,25 +142,25 @@ export function createEngine(
   async function getCatalog(): Promise<ConfiguredCatalog> {
     if (!_catalog) {
       const startedAt = Date.now()
-      console.info({ msg: 'Engine source discover started', ...baseContext })
+      logger.info(baseContext, 'Engine source discover started')
       try {
         const msg = await connectors.source.discover({ config: sourceConfig })
         _catalog = buildCatalog(msg.streams, config.streams)
-        console.info({
-          msg: 'Engine source discover completed',
-          ...baseContext,
-          durationMs: Date.now() - startedAt,
-          discoveredStreamCount: msg.streams.length,
-          catalogStreamCount: _catalog.streams.length,
-          catalogStreams: _catalog.streams.map((stream) => stream.stream.name),
-        })
+        logger.info(
+          {
+            ...baseContext,
+            durationMs: Date.now() - startedAt,
+            discoveredStreamCount: msg.streams.length,
+            catalogStreamCount: _catalog.streams.length,
+            catalogStreams: _catalog.streams.map((stream) => stream.stream.name),
+          },
+          'Engine source discover completed'
+        )
       } catch (error) {
-        console.error({
-          msg: 'Engine source discover failed',
-          ...baseContext,
-          durationMs: Date.now() - startedAt,
-          error: formatError(error),
-        })
+        logger.error(
+          { ...baseContext, durationMs: Date.now() - startedAt, err: error },
+          'Engine source discover failed'
+        )
         throw error
       }
     }
