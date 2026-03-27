@@ -1,4 +1,5 @@
-# Build step — install all deps and compile with tsc
+# Install deps and create standalone deployment
+# Expects pre-built dist/ directories in the build context (from `pnpm build`)
 FROM node:24-alpine AS build
 
 ENV PNPM_HOME="/pnpm"
@@ -10,20 +11,15 @@ WORKDIR /app
 COPY . ./
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN pnpm build
-
-# Create standalone deployment with lockfile-pinned deps
-FROM build AS deploy
 RUN pnpm --filter @stripe/sync-engine deploy --prod /deploy
 
 # Final image — just the bundle + external node_modules
 FROM node:24-alpine
 WORKDIR /app
 
-COPY --from=deploy /deploy/package.json ./
-COPY --from=deploy /deploy/dist ./dist
-COPY --from=deploy /deploy/node_modules ./node_modules
+COPY --from=build /deploy/package.json ./
+COPY --from=build /deploy/dist ./dist
+COPY --from=build /deploy/node_modules ./node_modules
 
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
