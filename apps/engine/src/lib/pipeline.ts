@@ -85,6 +85,24 @@ export function persistState(
   }
 }
 
+// MARK: - takeStateCheckpoints
+
+/**
+ * Stops streaming after yielding `limit` state messages (across all streams).
+ * All non-state messages before and between state messages pass through.
+ */
+export function takeStateCheckpoints<T extends { type: string }>(
+  limit: number
+): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
+  return async function* (messages) {
+    let count = 0
+    for await (const msg of messages) {
+      yield msg
+      if (msg.type === 'state' && ++count >= limit) return
+    }
+  }
+}
+
 // MARK: - collect
 
 /**

@@ -311,6 +311,86 @@ describe('POST /sync', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// X-State-Checkpoint-Limit
+// ---------------------------------------------------------------------------
+
+describe('X-State-Checkpoint-Limit', () => {
+  it('POST /read stops after N state messages', async () => {
+    const app = createApp(resolver)
+
+    const body = toNdjson([
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: '1' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      { type: 'state', stream: 'customers', data: { cursor: '2' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_3' }, emitted_at: 3 },
+    ])
+    const res = await app.request('/read', {
+      method: 'POST',
+      headers: {
+        'X-Sync-Params': syncParams,
+        'X-State-Checkpoint-Limit': '1',
+        ...bodyHeaders(body),
+      },
+      body,
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Message>(res)
+    // Should get 1 record + 1 state, then stop
+    expect(events).toHaveLength(2)
+    expect(events[0]!.type).toBe('record')
+    expect(events[1]!.type).toBe('state')
+  })
+
+  it('POST /sync stops after N state messages', async () => {
+    const app = createApp(resolver)
+
+    const body = toNdjson([
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: '1' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      { type: 'state', stream: 'customers', data: { cursor: '2' } },
+    ])
+    const res = await app.request('/sync', {
+      method: 'POST',
+      headers: {
+        'X-Sync-Params': syncParams,
+        'X-State-Checkpoint-Limit': '1',
+        ...bodyHeaders(body),
+      },
+      body,
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Message>(res)
+    // destinationTest only yields state messages, so we get 1 state then stop
+    expect(events).toHaveLength(1)
+    expect(events[0]!.type).toBe('state')
+  })
+
+  it('POST /read without limit returns all messages', async () => {
+    const app = createApp(resolver)
+
+    const body = toNdjson([
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: '1' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      { type: 'state', stream: 'customers', data: { cursor: '2' } },
+    ])
+    const res = await app.request('/read', {
+      method: 'POST',
+      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(body) },
+      body,
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Message>(res)
+    expect(events).toHaveLength(4)
+  })
+})
+
 describe('error handling', () => {
   it('returns 400 when X-Sync-Params header is missing', async () => {
     const app = createApp(resolver)

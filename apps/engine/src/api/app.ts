@@ -1,7 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
-import type { Message, ConnectorResolver, SyncParams as SyncParamsType } from '../lib/index.js'
+import type {
+  Message,
+  DestinationOutput,
+  ConnectorResolver,
+  SyncParams as SyncParamsType,
+} from '../lib/index.js'
 import {
   createEngineFromParams,
   noopStateStore,
@@ -9,6 +14,7 @@ import {
   selectStateStore,
   SyncParams,
 } from '../lib/index.js'
+import { takeStateCheckpoints } from '../lib/pipeline.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { logger } from '../logger.js'
 
@@ -70,6 +76,14 @@ const XSyncParamsHeader = z.object({
         streams: [{ name: 'products' }],
       }),
     }),
+})
+
+const XStateCheckpointLimitHeader = z.object({
+  'x-state-checkpoint-limit': z.coerce.number().int().positive().optional().openapi({
+    description:
+      'When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.',
+    example: '1',
+  }),
 })
 
 const ConnectorCheckSchema = z.object({
@@ -262,7 +276,7 @@ export function createApp(resolver: ConnectorResolver) {
       summary: 'Read records from source',
       description:
         'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.',
-      request: { headers: XSyncParamsHeader },
+      request: { headers: XSyncParamsHeader.merge(XStateCheckpointLimitHeader) },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -276,15 +290,18 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const checkpointLimit = c.req.header('X-State-Checkpoint-Limit')
       const inputPresent = hasBody(c)
       const context = { path: '/read', inputPresent, ...syncRequestContext(params) }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /read started')
       const engine = await createEngineFromParams(params, resolver, noopStateStore())
       const input = inputPresent ? parseNdjsonStream(c.req.raw.body!) : undefined
-      return ndjsonResponse(
-        logApiStream('Engine API /read', engine.read(input), context, startedAt)
-      ) as any
+      let output: AsyncIterable<Message> = engine.read(input)
+      if (checkpointLimit) {
+        output = takeStateCheckpoints<Message>(Number(checkpointLimit))(output)
+      }
+      return ndjsonResponse(logApiStream('Engine API /read', output, context, startedAt)) as any
     }
   )
 
@@ -346,7 +363,7 @@ export function createApp(resolver: ConnectorResolver) {
       description:
         'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
         'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
-      request: { headers: XSyncParamsHeader },
+      request: { headers: XSyncParamsHeader.merge(XStateCheckpointLimitHeader) },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -360,10 +377,15 @@ export function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const checkpointLimit = c.req.header('X-State-Checkpoint-Limit')
       const stateStore = await selectStateStore(params)
       const engine = await createEngineFromParams(params, resolver, stateStore)
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
-      return ndjsonResponse(closeAfter(engine.sync(input), () => stateStore.close?.())) as any
+      let output: AsyncIterable<DestinationOutput> = engine.sync(input)
+      if (checkpointLimit) {
+        output = takeStateCheckpoints<DestinationOutput>(Number(checkpointLimit))(output)
+      }
+      return ndjsonResponse(closeAfter(output, () => stateStore.close?.())) as any
     }
   )
 

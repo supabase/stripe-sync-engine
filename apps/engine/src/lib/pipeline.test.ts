@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
+import {
+  enforceCatalog,
+  filterType,
+  log,
+  persistState,
+  pipe,
+  takeStateCheckpoints,
+} from './pipeline.js'
 import type { StateStore } from './state-store.js'
 
 vi.mock('../logger.js', () => ({
@@ -304,6 +311,56 @@ describe('persistState()', () => {
       { stream: 'invoices', data: { cursor: '2' } },
       { stream: 'customers', data: { cursor: '3' } },
     ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// takeStateCheckpoints()
+// ---------------------------------------------------------------------------
+
+describe('takeStateCheckpoints()', () => {
+  it('stops after the Nth state message', async () => {
+    const msgs: Message[] = [
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: '1' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      { type: 'state', stream: 'customers', data: { cursor: '2' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_3' }, emitted_at: 3 },
+    ]
+    const result = await drain(takeStateCheckpoints<Message>(1)(toAsync(msgs)))
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({ type: 'record', data: { id: 'cus_1' } })
+    expect(result[1]).toMatchObject({ type: 'state', data: { cursor: '1' } })
+  })
+
+  it('yields everything when limit exceeds state message count', async () => {
+    const msgs: Message[] = [
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: '1' } },
+    ]
+    const result = await drain(takeStateCheckpoints<Message>(5)(toAsync(msgs)))
+    expect(result).toHaveLength(2)
+  })
+
+  it('counts state messages across multiple streams', async () => {
+    const msgs: Message[] = [
+      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      { type: 'state', stream: 'customers', data: { cursor: 'a' } },
+      { type: 'record', stream: 'products', data: { id: 'prod_1' }, emitted_at: 2 },
+      { type: 'state', stream: 'products', data: { cursor: 'b' } },
+      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 3 },
+      { type: 'state', stream: 'customers', data: { cursor: 'c' } },
+    ]
+    const result = await drain(takeStateCheckpoints<Message>(2)(toAsync(msgs)))
+    expect(result).toHaveLength(4)
+    expect(result[3]).toMatchObject({ type: 'state', stream: 'products' })
+  })
+
+  it('yields the state message itself before stopping', async () => {
+    const msgs: Message[] = [{ type: 'state', stream: 'customers', data: { cursor: '1' } }]
+    const result = await drain(takeStateCheckpoints<Message>(1)(toAsync(msgs)))
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ type: 'state' })
   })
 })
 
