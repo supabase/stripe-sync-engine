@@ -75,7 +75,11 @@ function resolve(opts: {
 }): SyncParams {
   return {
     source: { name: opts.config.source.type, ...opts.config.source, ...opts.sourceCred?.fields },
-    destination: { name: opts.config.destination.type, ...opts.config.destination, ...opts.destCred?.fields },
+    destination: {
+      name: opts.config.destination.type,
+      ...opts.config.destination,
+      ...opts.destCred?.fields,
+    },
     streams: opts.config.streams,
     state: opts.state,
   }

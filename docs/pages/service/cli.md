@@ -56,16 +56,16 @@ sync-engine --port 3000
 
 ## Flag → SyncParams mapping
 
-| Flag                | SyncParams field                    | Env var                         |
-| ------------------- | ----------------------------------- | ------------------------------- |
-| `--stripe-api-key`  | `source.api_key`                    | `STRIPE_API_KEY`                |
-| `--stripe-base-url` | `source.base_url`                   | —                               |
-| `--websocket`       | `source.websocket`                  | —                               |
-| `--postgres-url`    | `destination.connection_string`     | `POSTGRES_URL` / `DATABASE_URL` |
-| `--postgres-schema` | `destination.schema`                | —                               |
-| `--streams`         | `streams[].name` (comma-separated)  | —                               |
-| `--no-state`        | (skip state load/persist)           | —                               |
-| `--config`          | entire `SyncParams` from JSON file  | —                               |
+| Flag                | SyncParams field                   | Env var                         |
+| ------------------- | ---------------------------------- | ------------------------------- |
+| `--stripe-api-key`  | `source.api_key`                   | `STRIPE_API_KEY`                |
+| `--stripe-base-url` | `source.base_url`                  | —                               |
+| `--websocket`       | `source.websocket`                 | —                               |
+| `--postgres-url`    | `destination.connection_string`    | `POSTGRES_URL` / `DATABASE_URL` |
+| `--postgres-schema` | `destination.schema`               | —                               |
+| `--streams`         | `streams[].name` (comma-separated) | —                               |
+| `--no-state`        | (skip state load/persist)          | —                               |
+| `--config`          | entire `SyncParams` from JSON file | —                               |
 
 ## Pipe mode
 

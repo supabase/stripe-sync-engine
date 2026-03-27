@@ -7,11 +7,11 @@ stateless and stateful CLIs (same resolution, different defaults).
 
 A sync run needs these values:
 
-| Field         | Example                                                    | Required |
-| ------------- | ---------------------------------------------------------- | -------- |
-| `source`      | `{"name":"stripe","api_key":"sk_test_..."}`                | yes      |
-| `destination` | `{"name":"postgres","connection_string":"pg://"}`          | yes      |
-| `streams`     | `["customers","invoices"]`                                 | no       |
+| Field         | Example                                           | Required |
+| ------------- | ------------------------------------------------- | -------- |
+| `source`      | `{"name":"stripe","api_key":"sk_test_..."}`       | yes      |
+| `destination` | `{"name":"postgres","connection_string":"pg://"}` | yes      |
+| `streams`     | `["customers","invoices"]`                        | no       |
 
 ## Config sources (highest priority first)
 
