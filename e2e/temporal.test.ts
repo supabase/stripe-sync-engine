@@ -163,8 +163,8 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
-        destination: { type: 'postgres', connection_string: POSTGRES_URL, schema },
+        source: { name: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
+        destination: { name: 'postgres', connection_string: POSTGRES_URL, schema },
         streams: [{ name: 'products' }],
       }),
     })
@@ -322,9 +322,9 @@ describeWithEnv(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
+          source: { name: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
           destination: {
-            type: 'google-sheets',
+            name: 'google-sheets',
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
             refresh_token: GOOGLE_REFRESH_TOKEN,
