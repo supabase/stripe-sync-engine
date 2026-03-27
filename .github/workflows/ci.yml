@@ -206,7 +206,7 @@ jobs:
         ports:
           - 7233:7233
         options: >-
-          --health-cmd "echo | nc -z localhost 7233"
+          --health-cmd "bash -c 'echo > /dev/tcp/127.0.0.1/7233'"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 30
