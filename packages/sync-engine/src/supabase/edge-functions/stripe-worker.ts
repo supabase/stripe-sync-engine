@@ -24,20 +24,20 @@ const schemaName = Deno.env.get('SYNC_SCHEMA_NAME') ?? 'stripe'
 const syncTablesSchemaName = Deno.env.get('SYNC_TABLES_SCHEMA_NAME') ?? schemaName
 
 const sql = postgres(dbUrl, { max: 1, prepare: false })
-const stripeSync = await StripeSync.create({
-  poolConfig: { connectionString: dbUrl, max: 1 },
-  stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
-  enableSigma: false,
-  partnerId: 'pp_supabase',
-  schemaName,
-  syncTablesSchemaName,
-})
-const objects = stripeSync.getSupportedSyncObjects()
-const tableNames = objects.map(
-  (obj: keyof typeof stripeSync.resourceRegistry) => stripeSync.resourceRegistry[obj].tableName
-)
 
 Deno.serve(async (req) => {
+  const stripeSync = await StripeSync.create({
+    poolConfig: { connectionString: dbUrl, max: 1 },
+    stripeSecretKey: Deno.env.get('STRIPE_SECRET_KEY')!,
+    enableSigma: false,
+    partnerId: 'pp_supabase',
+    schemaName,
+    syncTablesSchemaName,
+  })
+  const objects = stripeSync.getSupportedSyncObjects()
+  const tableNames = objects.map(
+    (obj: keyof typeof stripeSync.resourceRegistry) => stripeSync.resourceRegistry[obj].tableName
+  )
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response('Unauthorized', { status: 401 })

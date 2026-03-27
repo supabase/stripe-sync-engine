@@ -77,8 +77,18 @@ export class StripeSyncWorker {
             }
           )
         }
-        this.config.logger?.error({ err }, 'Task processing failed; sleeping 1s before retry')
-        await new Promise((r) => setTimeout(r, 100))
+        const errStr = String(err).toLowerCase()
+        if (errStr.includes('expired')) {
+          // wait out the key rotation edge case
+          this.config.logger?.error(
+            { err },
+            'Task processing failed (expired); sleeping 60s before retry'
+          )
+          await new Promise((r) => setTimeout(r, 60_000))
+        } else {
+          this.config.logger?.error({ err }, 'Task processing failed; sleeping 100ms before retry')
+          await new Promise((r) => setTimeout(r, 100))
+        }
       }
     }
   }
