@@ -29,8 +29,8 @@ function formatError(error: unknown): string {
 
 function syncRequestContext(params: SyncParamsType) {
   return {
-    sourceName: params.source_name,
-    destinationName: params.destination_name,
+    sourceName: params.source.name,
+    destinationName: params.destination.name,
     configuredStreamCount: params.streams?.length ?? 0,
     configuredStreams: params.streams?.map((stream) => stream.name) ?? [],
   }
@@ -74,12 +74,10 @@ const XSyncParamsHeader = z.object({
     .optional()
     .openapi({
       description:
-        'JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }',
+        'JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }',
       example: JSON.stringify({
-        source_name: 'stripe',
-        source_config: { api_key: 'sk_test_...' },
-        destination_name: 'postgres',
-        destination_config: { connection_string: 'postgres://localhost/db' },
+        source: { name: 'stripe', api_key: 'sk_test_...' },
+        destination: { name: 'postgres', connection_string: 'postgres://localhost/db' },
         streams: [{ name: 'products' }],
       }),
     }),
@@ -383,7 +381,58 @@ export function createApp(resolver: ConnectorResolver) {
     }
   )
 
+  // ── Connectors ─────────────────────────────────────────────────
+
+  const ConnectorsResponseSchema = z.object({
+    sources: z.record(z.string(), z.object({ config_schema: z.record(z.string(), z.unknown()) })),
+    destinations: z.record(
+      z.string(),
+      z.object({ config_schema: z.record(z.string(), z.unknown()) })
+    ),
+  })
+
+  app.openapi(
+    createRoute({
+      operationId: 'listConnectors',
+      method: 'get',
+      path: '/connectors',
+      tags: ['Connectors'],
+      summary: 'List available connectors and their config schemas',
+      responses: {
+        200: {
+          content: { 'application/json': { schema: ConnectorsResponseSchema } },
+          description: 'Available connectors with their JSON Schema configs',
+        },
+      },
+    }),
+    (c) => {
+      const sources = Object.fromEntries(
+        [...resolver.sources()].map(([name, r]) => [name, { config_schema: r.rawConfigJsonSchema }])
+      )
+      const destinations = Object.fromEntries(
+        [...resolver.destinations()].map(([name, r]) => [
+          name,
+          { config_schema: r.rawConfigJsonSchema },
+        ])
+      )
+      return c.json({ sources, destinations }, 200)
+    }
+  )
+
   // ── OpenAPI spec + Swagger UI ───────────────────────────────────
+
+  function capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1)
+  }
+
+  function connectorSchemaName(name: string, role: 'Source' | 'Destination'): string {
+    // e.g. "stripe" → "Stripe", "google-sheets" → "GoogleSheets"
+    const pascal = name
+      .split(/[-_]/)
+      .map((w) => capitalize(w))
+      .join('')
+    return `${pascal}${role}Config`
+  }
 
   app.get('/openapi.json', (c) => {
     const spec = app.getOpenAPIDocument({
@@ -395,6 +444,89 @@ export function createApp(resolver: ConnectorResolver) {
           'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).',
       },
     })
+
+    // Inject typed connector config schemas into OpenAPI components
+    const doc = spec as any
+    if (!doc.components) doc.components = {}
+    if (!doc.components.schemas) doc.components.schemas = {}
+
+    // Individual source config variants
+    for (const [name, r] of resolver.sources()) {
+      const schema = JSON.parse(JSON.stringify(r.rawConfigJsonSchema))
+      schema.properties = { name: { type: 'string', enum: [name] }, ...(schema.properties ?? {}) }
+      schema.required = ['name', ...(schema.required ?? [])]
+      doc.components.schemas[connectorSchemaName(name, 'Source')] = schema
+    }
+
+    // Individual destination config variants
+    for (const [name, r] of resolver.destinations()) {
+      const schema = JSON.parse(JSON.stringify(r.rawConfigJsonSchema))
+      schema.properties = { name: { type: 'string', enum: [name] }, ...(schema.properties ?? {}) }
+      schema.required = ['name', ...(schema.required ?? [])]
+      doc.components.schemas[connectorSchemaName(name, 'Destination')] = schema
+    }
+
+    // SourceConfig = discriminated union of all source variants
+    const sourceNames = [...resolver.sources().keys()]
+    if (sourceNames.length > 0) {
+      doc.components.schemas['SourceConfig'] = {
+        discriminator: { propertyName: 'name' },
+        oneOf: sourceNames.map((n) => ({
+          $ref: `#/components/schemas/${connectorSchemaName(n, 'Source')}`,
+        })),
+      }
+    }
+
+    // DestinationConfig = discriminated union of all destination variants
+    const destNames = [...resolver.destinations().keys()]
+    if (destNames.length > 0) {
+      doc.components.schemas['DestinationConfig'] = {
+        discriminator: { propertyName: 'name' },
+        oneOf: destNames.map((n) => ({
+          $ref: `#/components/schemas/${connectorSchemaName(n, 'Destination')}`,
+        })),
+      }
+    }
+
+    // SyncParams schema
+    doc.components.schemas['SyncParams'] = {
+      type: 'object',
+      required: ['source', 'destination'],
+      properties: {
+        source:
+          sourceNames.length > 0
+            ? { $ref: '#/components/schemas/SourceConfig' }
+            : {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string' } },
+                additionalProperties: true,
+              },
+        destination:
+          destNames.length > 0
+            ? { $ref: '#/components/schemas/DestinationConfig' }
+            : {
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string' } },
+                additionalProperties: true,
+              },
+        streams: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['name'],
+            properties: {
+              name: { type: 'string' },
+              sync_mode: { type: 'string', enum: ['incremental', 'full_refresh'] },
+              fields: { type: 'array', items: { type: 'string' } },
+            },
+          },
+        },
+        state: { type: 'object', additionalProperties: true },
+      },
+    }
+
     spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)
     return c.json(spec)
   })

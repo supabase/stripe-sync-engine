@@ -7,14 +7,14 @@ import { z } from 'zod'
 
 export const SourceConfig = z
   .object({
-    type: z.string(),
+    name: z.string(),
   })
   .catchall(z.unknown())
 export type SourceConfig = z.infer<typeof SourceConfig>
 
 export const DestinationConfig = z
   .object({
-    type: z.string(),
+    name: z.string(),
   })
   .catchall(z.unknown())
 export type DestinationConfig = z.infer<typeof DestinationConfig>

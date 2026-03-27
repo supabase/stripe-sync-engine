@@ -110,8 +110,8 @@ export class SyncService {
   /** Resolve pipeline config into an engine instance. */
   private async resolveEngine(pipelineId: string) {
     const pipeline = await this.pipelines.get(pipelineId)
-    const source = await this.connectors.resolveSource(pipeline.source.type)
-    const destination = await this.connectors.resolveDestination(pipeline.destination.type)
+    const source = await this.connectors.resolveSource(pipeline.source.name)
+    const destination = await this.connectors.resolveDestination(pipeline.destination.name)
     const params = resolve({
       pipeline,
       sourceOverrides: this.sourceOverrides,
@@ -168,8 +168,8 @@ export class SyncService {
     $stdin?: AsyncIterable<unknown>
   ): AsyncIterable<DestinationOutput> {
     const pipeline = await this.pipelines.get(pipelineId)
-    const source = await this.connectors.resolveSource(pipeline.source.type)
-    const destination = await this.connectors.resolveDestination(pipeline.destination.type)
+    const source = await this.connectors.resolveSource(pipeline.source.name)
+    const destination = await this.connectors.resolveDestination(pipeline.destination.name)
 
     let activeStdin = $stdin
     let queuePush: ((event: unknown) => void) | undefined

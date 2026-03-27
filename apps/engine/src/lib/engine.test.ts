@@ -282,17 +282,17 @@ describe('protocol schemas', () => {
   describe('SyncEngineParams', () => {
     it('parses minimal params', () => {
       const result = SyncEngineParams.parse({
-        source_config: {},
-        destination_config: {},
+        source: { name: 'stripe' },
+        destination: { name: 'postgres' },
       })
-      expect(result.source_config).toEqual({})
-      expect(result.destination_config).toEqual({})
+      expect(result.source).toEqual({ name: 'stripe' })
+      expect(result.destination).toEqual({ name: 'postgres' })
     })
 
     it('parses with all fields', () => {
       const result = SyncEngineParams.parse({
-        source_config: { api_key: 'sk_test' },
-        destination_config: { url: 'pg://...' },
+        source: { name: 'stripe', api_key: 'sk_test' },
+        destination: { name: 'postgres', url: 'pg://...' },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
         state: { customers: { cursor: 'abc' } },
       })
@@ -300,12 +300,12 @@ describe('protocol schemas', () => {
       expect(result.state).toEqual({ customers: { cursor: 'abc' } })
     })
 
-    it('rejects missing source_config', () => {
-      expect(() => SyncEngineParams.parse({ destination_config: {} })).toThrow()
+    it('rejects missing source', () => {
+      expect(() => SyncEngineParams.parse({ destination: { name: 'postgres' } })).toThrow()
     })
 
-    it('rejects missing destination_config', () => {
-      expect(() => SyncEngineParams.parse({ source_config: {} })).toThrow()
+    it('rejects missing destination', () => {
+      expect(() => SyncEngineParams.parse({ source: { name: 'stripe' } })).toThrow()
     })
   })
 })
@@ -319,8 +319,8 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          source_config: { streams: {} },
-          destination_config: {},
+          source: { name: 'test', streams: {} },
+          destination: { name: 'test' },
         },
         { source: sourceTest, destination: destinationTest },
         noopStateStore()
@@ -339,7 +339,7 @@ describe('engine config validation', () => {
     }
     expect(() =>
       createEngine(
-        { source_config: {}, destination_config: {} },
+        { source: { name: 'test' }, destination: { name: 'test' } },
         { source, destination: destinationTest },
         noopStateStore()
       )
@@ -362,8 +362,8 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          source_config: { streams: {} },
-          destination_config: {},
+          source: { name: 'test', streams: {} },
+          destination: { name: 'test' },
         },
         { source: sourceTest, destination },
         noopStateStore()
@@ -386,7 +386,7 @@ describe('engine config validation', () => {
     }
 
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { source: { name: 'test' }, destination: { name: 'test' } },
       { source, destination: destinationTest },
       noopStateStore()
     )
@@ -411,8 +411,8 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.read()', async () => {
     const engine = createEngine(
       {
-        source_config: { streams: { customers: {} } },
-        destination_config: {},
+        source: { name: 'test', streams: { customers: {} } },
+        destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       noopStateStore()
@@ -445,7 +445,7 @@ describe('engine message validation', () => {
       },
     }
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { source: { name: 'test' }, destination: { name: 'test' } },
       { source: badSource, destination: destinationTest },
       noopStateStore()
     )
@@ -469,8 +469,8 @@ describe('engine message validation', () => {
 
     const engine = createEngine(
       {
-        source_config: { streams: { customers: {} } },
-        destination_config: {},
+        source: { name: 'test', streams: { customers: {} } },
+        destination: { name: 'test' },
       },
       { source: sourceTest, destination: badDest },
       noopStateStore()
@@ -497,8 +497,8 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = createEngine(
       {
-        source_config: { streams: { customers: {} } },
-        destination_config: {},
+        source: { name: 'test', streams: { customers: {} } },
+        destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       noopStateStore()
@@ -535,7 +535,7 @@ describe('engine stream membership validation', () => {
       },
     }
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { source: { name: 'test' }, destination: { name: 'test' } },
       { source, destination: destinationTest },
       noopStateStore()
     )
@@ -555,8 +555,8 @@ describe('engine.sync() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = createEngine(
       {
-        source_config: { streams: { customers: {} } },
-        destination_config: {},
+        source: { name: 'test', streams: { customers: {} } },
+        destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       noopStateStore()
@@ -599,8 +599,8 @@ describe('engine.sync() pipeline', () => {
   it('stream filtering: only configures requested streams', async () => {
     const engine = createEngine(
       {
-        source_config: { streams: { customers: {}, invoices: {} } },
-        destination_config: {},
+        source: { name: 'test', streams: { customers: {}, invoices: {} } },
+        destination: { name: 'test' },
         streams: [{ name: 'customers' }],
       },
       { source: sourceTest, destination: destinationTest },
@@ -662,7 +662,7 @@ describe('engine.sync() pipeline', () => {
     }
 
     const engine = createEngine(
-      { source_config: {}, destination_config: {} },
+      { source: { name: 'test' }, destination: { name: 'test' } },
       { source: mixedSource, destination: destinationTest },
       noopStateStore()
     )

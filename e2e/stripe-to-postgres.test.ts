@@ -44,12 +44,13 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
   function makeEngine(opts: { websocket?: boolean } = {}) {
     return createEngine(
       {
-        source_config: {
+        source: {
+          name: 'stripe',
           api_key: STRIPE_API_KEY,
           backfill_limit: BACKFILL_LIMIT,
           ...(opts.websocket && { websocket: true }),
         },
-        destination_config: { connection_string: POSTGRES_URL, schema: SCHEMA },
+        destination: { name: 'postgres', connection_string: POSTGRES_URL, schema: SCHEMA },
         streams: STREAMS.map((name) => ({ name })),
       },
       { source, destination },

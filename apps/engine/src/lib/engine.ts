@@ -145,11 +145,13 @@ export function createEngine(
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
   const destSpec = connectors.destination.spec()
-  const sourceConfig = z.fromJSONSchema(sourceSpec.config).parse(config.source_config) as Record<
+  const { name: _sn, ...rawSourceConfig } = config.source
+  const { name: _dn, ...rawDestConfig } = config.destination
+  const sourceConfig = z.fromJSONSchema(sourceSpec.config).parse(rawSourceConfig) as Record<
     string,
     unknown
   >
-  const destConfig = z.fromJSONSchema(destSpec.config).parse(config.destination_config) as Record<
+  const destConfig = z.fromJSONSchema(destSpec.config).parse(rawDestConfig) as Record<
     string,
     unknown
   >
@@ -262,12 +264,13 @@ export async function createEngineFromParams(
   resolver: ConnectorResolver,
   stateStore: StateStore
 ): Promise<Engine> {
-  const { source_name: sourceName, destination_name: destName, ...engineParams } = params
+  const sourceName = params.source.name
+  const destName = params.destination.name
   const [source, destination] = await Promise.all([
     resolver.resolveSource(sourceName),
     resolver.resolveDestination(destName),
   ])
-  return createEngine(engineParams, { source, destination }, stateStore, {
+  return createEngine(params, { source, destination }, stateStore, {
     sourceName,
     destinationName: destName,
   })

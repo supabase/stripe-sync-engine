@@ -13,17 +13,13 @@ async function resolveParams(serviceUrl: string, pipelineId: string): Promise<st
     throw new Error(`Failed to resolve pipeline ${pipelineId} (${resp.status}): ${text}`)
   }
   const config = (await resp.json()) as {
-    source: { type: string; [k: string]: unknown }
-    destination: { type: string; [k: string]: unknown }
+    source: { name: string; [k: string]: unknown }
+    destination: { name: string; [k: string]: unknown }
     streams?: Array<{ name: string; sync_mode?: string }>
   }
-  const { type: source_name, ...source_config } = config.source
-  const { type: destination_name, ...destination_config } = config.destination
   return JSON.stringify({
-    source_name,
-    source_config,
-    destination_name,
-    destination_config,
+    source: config.source,
+    destination: config.destination,
     streams: config.streams,
   })
 }

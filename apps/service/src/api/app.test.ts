@@ -103,15 +103,15 @@ describe('pipelines', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        source: { type: 'test', api_key: 'sk_test_123' },
-        destination: { type: 'test', connection_string: 'postgres://localhost/db' },
+        source: { name: 'test', api_key: 'sk_test_123' },
+        destination: { name: 'test', connection_string: 'postgres://localhost/db' },
         streams: [{ name: 'customers' }],
       }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as any
     expect(created.id).toMatch(/^pipe_/)
-    expect(created.source.type).toBe('test')
+    expect(created.source.name).toBe('test')
     expect(created.source.api_key).toBe('sk_test_123')
 
     const pipelineId = created.id

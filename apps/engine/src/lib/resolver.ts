@@ -194,7 +194,11 @@ export interface RegisteredConnectors {
   destinations?: Record<string, Destination<any>>
 }
 
-export type ResolvedConnector<T> = { connector: T; configSchema: z.ZodType }
+export type ResolvedConnector<T> = {
+  connector: T
+  configSchema: z.ZodType
+  rawConfigJsonSchema: Record<string, unknown>
+}
 
 export interface ConnectorResolver {
   resolveSource(name: string): Promise<Source>
@@ -205,14 +209,16 @@ export interface ConnectorResolver {
   destinations(): ReadonlyMap<string, ResolvedConnector<Destination>>
 }
 
-/** Convert a connector's spec().config JSON Schema to a Zod object schema. */
-function configSchemaFromSpec(connector: {
-  spec(): { config: Record<string, unknown> }
-}): z.ZodType {
-  const schema = z.fromJSONSchema(connector.spec().config)
+/** Convert a connector's spec().config JSON Schema to a Zod object schema + raw JSON Schema. */
+function configSchemaFromSpec(connector: { spec(): { config: Record<string, unknown> } }): {
+  configSchema: z.ZodType
+  rawConfigJsonSchema: Record<string, unknown>
+} {
+  const rawConfigJsonSchema = connector.spec().config
+  const schema = z.fromJSONSchema(rawConfigJsonSchema)
   // fromJSONSchema({}) returns ZodAny — fall back to empty object for composability
-  if (schema instanceof z.ZodObject) return schema
-  return z.object({})
+  const configSchema = schema instanceof z.ZodObject ? schema : z.object({})
+  return { configSchema, rawConfigJsonSchema }
 }
 
 /**
@@ -235,11 +241,11 @@ export function createConnectorResolver(
   // Build schema maps from all known connectors
   const _sources = new Map<string, ResolvedConnector<Source>>()
   for (const [name, connector] of sourceCache) {
-    _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+    _sources.set(name, { connector, ...configSchemaFromSpec(connector) })
   }
   const _destinations = new Map<string, ResolvedConnector<Destination>>()
   for (const [name, connector] of destCache) {
-    _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+    _destinations.set(name, { connector, ...configSchemaFromSpec(connector) })
   }
 
   /**
@@ -278,7 +284,7 @@ export function createConnectorResolver(
       if (cmd) {
         const connector = createSourceFromExec(cmd)
         sourceCache.set(name, connector)
-        _sources.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+        _sources.set(name, { connector, ...configSchemaFromSpec(connector) })
         return connector
       }
 
@@ -295,7 +301,7 @@ export function createConnectorResolver(
       if (cmd) {
         const connector = createDestinationFromExec(cmd)
         destCache.set(name, connector)
-        _destinations.set(name, { connector, configSchema: configSchemaFromSpec(connector) })
+        _destinations.set(name, { connector, ...configSchemaFromSpec(connector) })
         return connector
       }
 

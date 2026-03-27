@@ -81,8 +81,8 @@ function makeEngine(
 ) {
   return createEngine(
     {
-      source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-      destination_config: { connection_string: connectionString, schema: SCHEMA },
+      source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: overrides.streams,
       state: overrides.state,
     },
@@ -203,14 +203,12 @@ describe('engine read → write', () => {
 
 describe('resumable sync via state store', () => {
   const params = {
-    source_name: 'stripe',
-    destination_name: 'postgres',
-    source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-    destination_config: { connection_string: '', schema: SCHEMA },
+    source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+    destination: { name: 'postgres', connection_string: '', schema: SCHEMA },
     streams: [{ name: '' }],
   }
 
-  // Keep params.destination_config.connection_string and streams in sync with runtime values
+  // Keep params.destination.connection_string and streams in sync with runtime values
   beforeAll(() => {
     // connectionString is set in the outer beforeAll — access it after that runs
   })
@@ -233,13 +231,13 @@ describe('resumable sync via state store', () => {
   it('auto-persists state after sync', async () => {
     const store = await selectStateStore({
       ...params,
-      destination_config: { connection_string: connectionString, schema: SCHEMA },
+      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],
     })
     const engine = createEngine(
       {
-        source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination_config: { connection_string: connectionString, schema: SCHEMA },
+        source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
         streams: [{ name: targetStream }],
       },
       { source, destination },
@@ -253,15 +251,15 @@ describe('resumable sync via state store', () => {
   it('pre-seeded complete state skips backfill', async () => {
     const store = await selectStateStore({
       ...params,
-      destination_config: { connection_string: connectionString, schema: SCHEMA },
+      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],
     })
     await store.set(targetStream, { pageCursor: null, status: 'complete' })
 
     const engine = createEngine(
       {
-        source_config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination_config: { connection_string: connectionString, schema: SCHEMA },
+        source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
         streams: [{ name: targetStream }],
       },
       { source, destination },

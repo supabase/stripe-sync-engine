@@ -10,15 +10,35 @@ import { createApp } from './app.js'
 const resolver: ConnectorResolver = {
   resolveSource: async () => sourceTest,
   resolveDestination: async () => destinationTest,
+  sources: () =>
+    new Map([
+      [
+        'test',
+        {
+          connector: sourceTest,
+          configSchema: {} as any,
+          rawConfigJsonSchema: sourceTest.spec().config,
+        },
+      ],
+    ]),
+  destinations: () =>
+    new Map([
+      [
+        'test',
+        {
+          connector: destinationTest,
+          configSchema: {} as any,
+          rawConfigJsonSchema: destinationTest.spec().config,
+        },
+      ],
+    ]),
 }
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
 const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 const syncParams = JSON.stringify({
-  source_name: 'test',
-  destination_name: 'test',
-  source_config: { streams: { customers: {} } },
-  destination_config: {},
+  source: { name: 'test', streams: { customers: {} } },
+  destination: { name: 'test' },
 })
 
 /** Read an NDJSON response body into an array of parsed lines. */
@@ -80,6 +100,29 @@ describe('GET /openapi.json', () => {
     expect(paths).toContain('/read')
     expect(paths).toContain('/write')
     expect(paths).toContain('/sync')
+    expect(paths).toContain('/connectors')
+  })
+
+  it('injects typed connector schemas into components', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+    const schemaNames = Object.keys(spec.components?.schemas ?? {})
+
+    expect(schemaNames).toContain('TestSourceConfig')
+    expect(schemaNames).toContain('TestDestinationConfig')
+    expect(schemaNames).toContain('SourceConfig')
+    expect(schemaNames).toContain('DestinationConfig')
+    expect(schemaNames).toContain('SyncParams')
+
+    // SourceConfig is a discriminated union
+    expect(spec.components.schemas.SourceConfig.discriminator.propertyName).toBe('name')
+    expect(spec.components.schemas.SourceConfig.oneOf).toHaveLength(1)
+
+    // Each variant has name as required field
+    const testSource = spec.components.schemas.TestSourceConfig
+    expect(testSource.required).toContain('name')
+    expect(testSource.properties.name.enum).toEqual(['test'])
   })
 
   it('documents the X-Sync-Params header on sync routes', async () => {
@@ -94,6 +137,18 @@ describe('GET /openapi.json', () => {
       (p: any) => p.in === 'header' && p.name === 'x-sync-params'
     )
     expect(headerParam).toBeDefined()
+  })
+})
+
+describe('GET /connectors', () => {
+  it('returns available connectors with config schemas', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/connectors')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as any
+    expect(body.sources).toHaveProperty('test')
+    expect(body.destinations).toHaveProperty('test')
+    expect(body.sources.test.config_schema).toBeDefined()
   })
 })
 
