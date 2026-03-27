@@ -79,7 +79,10 @@ export async function* listApiBackfill(opts: {
           params.starting_after = pageCursor
         }
 
-        console.info({
+        // TODO: replace with structured logger once one is wired into the source connector;
+        // console.error (stderr) is used here intentionally — console.log/info would write
+        // to stdout and corrupt the NDJSON output stream.
+        console.error({
           msg: 'Starting Stripe list page',
           stream: stream.name,
           pageCursor,
@@ -87,7 +90,7 @@ export async function* listApiBackfill(opts: {
         const response = await resourceConfig.listFn(
           params as Parameters<typeof resourceConfig.listFn>[0]
         )
-        console.info({
+        console.error({
           msg: 'Completed Stripe list page',
           stream: stream.name,
           pageCursor,
