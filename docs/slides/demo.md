@@ -341,8 +341,8 @@ plus catalog discovery, config validation, and state loading.
 ```ts
 const engine = createEngine(
   {
-    source_config:      { api_key: 'sk_test_...' },
-    destination_config: { connection_string: 'postgres://...' },
+    source:      { name: 'stripe', api_key: 'sk_test_...' },
+    destination: { name: 'postgres', connection_string: 'postgres://...' },
     streams: [
       { name: 'products', fields: ['id', 'name', 'active'] },
     ],
@@ -362,7 +362,7 @@ for await (const state of engine.sync()) { … }
 
 ```mermaid
 flowchart TD
-  P["SyncEngineParams\nsource_config\ndestination_config\nstreams\nstate"]
+  P["SyncEngineParams\nsource\ndestination\nstreams\nstate"]
   CE["createEngine()"]
   EN["Engine\n.read()\n.write()\n.sync()"]
   P --> CE
@@ -441,10 +441,8 @@ node dist/api/index.js --port 3000
 # Run a sync over HTTP — response streams NDJSON
 curl -X POST http://localhost:3000/sync \
   -H 'X-Sync-Params: {
-    "source_name": "stripe",
-    "source_config": { "api_key": "sk_test_...", "backfill_limit": 50 },
-    "destination_name": "postgres",
-    "destination_config": { "connection_string": "postgres://..." },
+    "source": { "name": "stripe", "api_key": "sk_test_...", "backfill_limit": 50 },
+    "destination": { "name": "postgres", "connection_string": "postgres://..." },
     "streams": [{ "name": "products" }]
   }'
 ```

@@ -113,7 +113,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 5: npx @stripe/sync-engine check (connector loading) ---"
 
-PARAMS='{"source_name":"stripe","destination_name":"postgres","source_config":{"api_key":"sk_test_fake"},"destination_config":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
+PARAMS='{"source":{"name":"stripe","api_key":"sk_test_fake"},"destination":{"name":"postgres","connection_string":"postgresql://fake:fake@localhost:5432/fake"}}'
 
 CHECK_OUTPUT=$(npx --yes @stripe/sync-engine check --params "$PARAMS" 2>&1 || true)
 

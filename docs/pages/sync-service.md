@@ -55,10 +55,8 @@ What the engine receives. Credentials inlined, state passed separately. This is 
 
 ```ts
 type SyncParams = {
-  source?: string // connector specifier (default: 'stripe')
-  destination: string // connector specifier
-  source_config: Record<string, unknown> // credential fields + config merged
-  destination_config: Record<string, unknown> // credential fields + config merged
+  source: { name: string; [key: string]: unknown } // name + credential fields + config merged
+  destination: { name: string; [key: string]: unknown } // name + credential fields + config merged
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
   state?: Record<string, unknown>
 }
@@ -76,10 +74,8 @@ function resolve(opts: {
   state?: Record<string, unknown>
 }): SyncParams {
   return {
-    source: opts.config.source.type,
-    destination: opts.config.destination.type,
-    source_config: { ...opts.config.source, ...opts.sourceCred?.fields },
-    destination_config: { ...opts.config.destination, ...opts.destCred?.fields },
+    source: { name: opts.config.source.type, ...opts.config.source, ...opts.sourceCred?.fields },
+    destination: { name: opts.config.destination.type, ...opts.config.destination, ...opts.destCred?.fields },
     streams: opts.config.streams,
     state: opts.state,
   }

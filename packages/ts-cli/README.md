@@ -38,7 +38,7 @@ Load a JSON config file. Returns `{}` if path is `undefined`.
 
 ```ts
 configFromFile('./sync.json')
-// → { source_config: { api_key: "..." }, destination_config: { ... } }
+// → { source: { name: "stripe", api_key: "..." }, destination: { name: "postgres", ... } }
 
 configFromFile(undefined)
 // → {}

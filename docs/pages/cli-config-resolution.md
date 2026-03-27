@@ -7,13 +7,11 @@ stateless and stateful CLIs (same resolution, different defaults).
 
 A sync run needs these values:
 
-| Field                | Example                         | Required |
-| -------------------- | ------------------------------- | -------- |
-| `source`             | `stripe`                        | yes      |
-| `destination`        | `postgres`                      | yes      |
-| `source_config`      | `{"api_key":"sk_test_..."}`     | yes      |
-| `destination_config` | `{"connection_string":"pg://"}` | yes      |
-| `streams`            | `["customers","invoices"]`      | no       |
+| Field         | Example                                                    | Required |
+| ------------- | ---------------------------------------------------------- | -------- |
+| `source`      | `{"name":"stripe","api_key":"sk_test_..."}`                | yes      |
+| `destination` | `{"name":"postgres","connection_string":"pg://"}`          | yes      |
+| `streams`     | `["customers","invoices"]`                                 | no       |
 
 ## Config sources (highest priority first)
 
@@ -23,10 +21,8 @@ Individual flags for each field:
 
 ```sh
 sync-engine \
-  --source stripe \
-  --destination postgres \
-  --source-config '{"api_key":"sk_test_..."}' \
-  --destination-config '{"connection_string":"postgresql://..."}' \
+  --source '{"name":"stripe","api_key":"sk_test_..."}' \
+  --destination '{"name":"postgres","connection_string":"postgresql://..."}' \
   --streams customers,invoices
 ```
 
@@ -34,10 +30,8 @@ Or a single JSON blob:
 
 ```sh
 sync-engine --params '{
-  "source": "stripe",
-  "destination": "postgres",
-  "source_config": {"api_key": "sk_test_..."},
-  "destination_config": {"connection_string": "postgresql://..."}
+  "source": {"name": "stripe", "api_key": "sk_test_..."},
+  "destination": {"name": "postgres", "connection_string": "postgresql://..."}
 }'
 ```
 
@@ -51,19 +45,18 @@ sync-engine --params params.json --streams invoices
 ### 2. Environment variables
 
 ```sh
-export SOURCE_CONFIG='{"api_key":"sk_test_..."}'
-export DESTINATION_CONFIG='{"connection_string":"postgresql://..."}'
-sync-engine --source stripe --destination postgres
+export SOURCE='{"name":"stripe","api_key":"sk_test_..."}'
+export DESTINATION='{"name":"postgres","connection_string":"postgresql://..."}'
+sync-engine
 ```
 
-| Env var              | Populates            |
-| -------------------- | -------------------- |
-| `SOURCE_CONFIG`      | `source_config`      |
-| `DESTINATION_CONFIG` | `destination_config` |
+| Env var       | Populates     |
+| ------------- | ------------- |
+| `SOURCE`      | `source`      |
+| `DESTINATION` | `destination` |
 
-Env vars only populate config fields (the secret-heavy parts). Connector
-types (`source`, `destination`) always come from flags, `--params`, or a
-config file — never from env vars alone.
+Env vars populate the merged connector objects (including name and config).
+Connector types can also come from flags, `--params`, or a config file.
 
 A `.env` file in the working directory is loaded automatically.
 
@@ -77,12 +70,12 @@ Where `sync.json`:
 
 ```json
 {
-  "source": "stripe",
-  "destination": "postgres",
-  "source_config": {
+  "source": {
+    "name": "stripe",
     "api_key": "sk_test_..."
   },
-  "destination_config": {
+  "destination": {
+    "name": "postgres",
     "connection_string": "postgresql://localhost/mydb"
   },
   "streams": ["customers", "invoices"]
@@ -95,7 +88,7 @@ Where `sync.json`:
 
 | Field         | Default                      |
 | ------------- | ---------------------------- |
-| `source`      | `stripe`                     |
+| `source.name` | `stripe`                     |
 | `destination` | (none)                       |
 | `streams`     | all (discovered from source) |
 
@@ -116,15 +109,14 @@ set the same field, the individual flag wins.
 
 ```sh
 # .env
-SOURCE_CONFIG={"api_key":"sk_test_..."}
-DESTINATION_CONFIG={"connection_string":"postgresql://localhost/mydb"}
+SOURCE={"name":"stripe","api_key":"sk_test_..."}
+DESTINATION={"name":"postgres","connection_string":"postgresql://localhost/mydb"}
 ```
 
 ```sh
-sync-engine --destination postgres
-# source defaults to stripe
-# source_config from SOURCE_CONFIG env var
-# destination_config from DESTINATION_CONFIG env var
+sync-engine
+# source from SOURCE env var (name=stripe, plus config)
+# destination from DESTINATION env var
 # streams auto-discovered
 ```
 
@@ -133,15 +125,15 @@ sync-engine --destination postgres
 ```json
 // sync.json — safe to commit (no secrets)
 {
-  "source": "stripe",
-  "destination": "postgres",
+  "source": { "name": "stripe" },
+  "destination": { "name": "postgres" },
   "streams": ["customers", "invoices"]
 }
 ```
 
 ```sh
-SOURCE_CONFIG='{"api_key":"sk_test_..."}' \
-DESTINATION_CONFIG='{"connection_string":"postgresql://..."}' \
+SOURCE='{"name":"stripe","api_key":"sk_test_..."}' \
+DESTINATION='{"name":"postgres","connection_string":"postgresql://..."}' \
 sync-engine --config sync.json
 ```
 
@@ -149,10 +141,8 @@ sync-engine --config sync.json
 
 ```sh
 sync-engine \
-  --source stripe \
-  --destination postgres \
-  --source-config '{"api_key":"sk_test_..."}' \
-  --destination-config '{"connection_string":"postgresql://..."}' \
+  --source '{"name":"stripe","api_key":"sk_test_..."}' \
+  --destination '{"name":"postgres","connection_string":"postgresql://..."}' \
   --streams customers,invoices
 ```
 
@@ -174,12 +164,12 @@ sync-engine --config sync.json --streams '*'
 When a required field is missing, the error should say where it looked:
 
 ```
-Error: destination_config is required
+Error: destination is required
 
 Provide it via:
-  --destination-config '{"connection_string":"..."}'
-  DESTINATION_CONFIG='{"connection_string":"..."}' (env var)
-  --config sync.json (with destination_config field)
+  --destination '{"name":"postgres","connection_string":"..."}'
+  DESTINATION='{"name":"postgres","connection_string":"..."}' (env var)
+  --config sync.json (with destination field)
 ```
 
 ## Non-goals
@@ -190,5 +180,5 @@ Provide it via:
 - No config file format beyond JSON (no YAML, TOML). JSON is sufficient
   and matches the wire format.
 - No per-connector env var conventions (`STRIPE_API_KEY`, `DATABASE_URL`).
-  The CLI is connector-agnostic — `SOURCE_CONFIG` and `DESTINATION_CONFIG`
+  The CLI is connector-agnostic — `SOURCE` and `DESTINATION`
   work with any connector.

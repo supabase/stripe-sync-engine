@@ -217,7 +217,7 @@ The engine is the validation boundary between connectors. Connectors are untrust
 
 **On write** — every message from `destination.write()` is validated with `DestinationOutput.parse(msg)` (state, error, or log). Invalid output throws.
 
-**On creation** — `source_config` and `destination_config` are validated against each connector's JSON Schema (from `spec().config`) via `z.fromJSONSchema(spec.config).parse(config)`. Bad config fails fast before any I/O.
+**On creation** — the `source` and `destination` config objects are validated against each connector's JSON Schema (from `spec().config`) via `z.fromJSONSchema(spec.config).parse(config)`. Bad config fails fast before any I/O.
 
 **Not validated** — the `forward()` pipeline stage between engine and destination uses TypeScript type guards (`isDataMessage`), not Zod runtime parsing. This is intentional: by the time messages reach `forward()`, they have already been validated by `Message.parse()` in the read stage.
 

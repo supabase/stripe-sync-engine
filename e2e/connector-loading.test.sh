@@ -109,7 +109,7 @@ echo ""
 # ---------------------------------------------------------------------------
 
 # JSON-encoded X-Sync-Params header value for check requests.
-SYNC_PARAMS='{"source_name":"stripe","source_config":{"api_key":"sk_test_fake"},"destination_name":"postgres","destination_config":{"connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
+SYNC_PARAMS='{"source":{"name":"stripe","api_key":"sk_test_fake"},"destination":{"name":"postgres","connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
 
 # Run `sync-engine check` with fake credentials and given extra flags.
 # Exits non-zero (bad credentials) but must NOT output "not found".
@@ -191,7 +191,7 @@ echo ""
 # Step 8: unknown connector name → "not found"
 # ---------------------------------------------------------------------------
 echo "--- Step 8: unknown connector name → not found ---"
-UNKNOWN_PARAMS='{"source_name":"nonexistent-xyz","source_config":{},"destination_name":"nonexistent-xyz","destination_config":{},"streams":[{"name":"x"}]}'
+UNKNOWN_PARAMS='{"source":{"name":"nonexistent-xyz"},"destination":{"name":"nonexistent-xyz"},"streams":[{"name":"x"}]}'
 unknown_output=$(npx sync-engine check \
      --x-sync-params "$UNKNOWN_PARAMS" \
      2>&1 || true)

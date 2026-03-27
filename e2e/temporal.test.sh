@@ -70,13 +70,11 @@ resolve_params() {
   curl -sf "$SERVICE_URL/pipelines/$sync_id" | python3 -c "
 import sys, json
 c = json.load(sys.stdin)
-src = {k:v for k,v in c['source'].items() if k != 'type'}
-dst = {k:v for k,v in c['destination'].items() if k != 'type'}
+src = dict(c['source']); src['name'] = src.pop('type')
+dst = dict(c['destination']); dst['name'] = dst.pop('type')
 print(json.dumps({
-  'source_name': c['source']['type'],
-  'source_config': src,
-  'destination_name': c['destination']['type'],
-  'destination_config': dst,
+  'source': src,
+  'destination': dst,
   'streams': c.get('streams', [])
 }))
 "

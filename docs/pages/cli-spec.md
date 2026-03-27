@@ -91,7 +91,7 @@ The `--config` flag accepts a file path or inline JSON. If the trimmed value sta
 sync-engine sync --config sync.json
 
 # Inline JSON (agentic use)
-sync-engine sync --config '{"source_config":{"api_key":"sk_test_..."},...}'
+sync-engine sync --config '{"source":{"name":"stripe","api_key":"sk_test_..."},...}'
 ```
 
 ---
@@ -207,7 +207,7 @@ sync-engine sync \
 sync-engine sync --config sync.json
 
 # Level 5: inline JSON (agentic)
-sync-engine sync --config '{"source_config":{"api_key":"sk_test_abc"},"destination_config":{"connection_string":"postgres://localhost/mydb"}}'
+sync-engine sync --config '{"source":{"name":"stripe","api_key":"sk_test_abc"},"destination":{"name":"postgres","connection_string":"postgres://localhost/mydb"}}'
 
 # Level 6: programmatic (library, not CLI)
 import { createEngine } from '@stripe/sync-engine'

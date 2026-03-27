@@ -11,7 +11,7 @@ kill $(lsof -ti:$PORT 2>/dev/null) 2>/dev/null || true
 (cd "$ROOT/apps/engine" && PORT=$PORT node dist/api/index.js) &>/dev/null & ENGINE_PID=$!
 until nc -z 127.0.0.1 $PORT 2>/dev/null; do sleep 0.3; done
 
-PARAMS='{"source_name":"stripe","source_config":{"api_key":"'"$STRIPE_API_KEY"'","backfill_limit":5},"destination_name":"postgres","destination_config":{"connection_string":"'"$POSTGRES_URL"'","schema":"'"$SCHEMA"'"},"streams":[{"name":"products","fields":["id","name"]}]}'
+PARAMS='{"source":{"name":"stripe","api_key":"'"$STRIPE_API_KEY"'","backfill_limit":5},"destination":{"name":"postgres","connection_string":"'"$POSTGRES_URL"'","schema":"'"$SCHEMA"'"},"streams":[{"name":"products","fields":["id","name"]}]}'
 
 curl -sf -X POST "http://localhost:$PORT/sync" -H "X-Sync-Params: $PARAMS" | jq .
 

@@ -88,7 +88,7 @@ sequenceDiagram
         Note over Activity,Service: 1. Resolve config
         Activity->>Service: GET /syncs/{id}?include_credentials=true
         Service-->>Activity: SyncConfig with creds inline
-        Note over Activity: Build X-Sync-Params<br/>(source_name, source_config,<br/>destination_name, destination_config,<br/>streams)
+        Note over Activity: Build X-Sync-Params<br/>(source: {name, ...config},<br/>destination: {name, ...config},<br/>streams)
     end
 
     rect rgb(240, 255, 240)

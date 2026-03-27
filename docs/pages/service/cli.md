@@ -56,16 +56,16 @@ sync-engine --port 3000
 
 ## Flag → SyncParams mapping
 
-| Flag                | SyncParams field                       | Env var                         |
-| ------------------- | -------------------------------------- | ------------------------------- |
-| `--stripe-api-key`  | `source_config.api_key`                | `STRIPE_API_KEY`                |
-| `--stripe-base-url` | `source_config.base_url`               | —                               |
-| `--websocket`       | `source_config.websocket`              | —                               |
-| `--postgres-url`    | `destination_config.connection_string` | `POSTGRES_URL` / `DATABASE_URL` |
-| `--postgres-schema` | `destination_config.schema`            | —                               |
-| `--streams`         | `streams[].name` (comma-separated)     | —                               |
-| `--no-state`        | (skip state load/persist)              | —                               |
-| `--config`          | entire `SyncParams` from JSON file     | —                               |
+| Flag                | SyncParams field                    | Env var                         |
+| ------------------- | ----------------------------------- | ------------------------------- |
+| `--stripe-api-key`  | `source.api_key`                    | `STRIPE_API_KEY`                |
+| `--stripe-base-url` | `source.base_url`                   | —                               |
+| `--websocket`       | `source.websocket`                  | —                               |
+| `--postgres-url`    | `destination.connection_string`     | `POSTGRES_URL` / `DATABASE_URL` |
+| `--postgres-schema` | `destination.schema`                | —                               |
+| `--streams`         | `streams[].name` (comma-separated)  | —                               |
+| `--no-state`        | (skip state load/persist)           | —                               |
+| `--config`          | entire `SyncParams` from JSON file  | —                               |
 
 ## Pipe mode
 
@@ -132,10 +132,12 @@ For `--config sync.json`:
 
 ```json
 {
-  "source_config": {
+  "source": {
+    "name": "stripe",
     "api_key": "sk_test_..."
   },
-  "destination_config": {
+  "destination": {
+    "name": "postgres",
     "connection_string": "postgres://localhost/mydb"
   },
   "streams": [{ "name": "customers", "sync_mode": "incremental" }, { "name": "invoices" }]
@@ -146,8 +148,8 @@ Fields match the `SyncParams` type in `@stripe/sync-engine`:
 
 ```ts
 interface SyncParams {
-  source_config: Record<string, unknown>
-  destination_config: Record<string, unknown>
+  source: { name: string } & Record<string, unknown>
+  destination: { name: string } & Record<string, unknown>
   streams?: Array<{ name: string; sync_mode?: 'incremental' | 'full_refresh' }>
   state?: Record<string, unknown>
 }
