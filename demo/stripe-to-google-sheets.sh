@@ -12,16 +12,17 @@ ACCT=$(curl -su "$STRIPE_API_KEY:" https://api.stripe.com/v1/account 2>/dev/null
 echo "Stripe: $ACCT" >&2
 echo "Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID" >&2
 
-$RUN apps/sync-engine/src/cli.ts sync \
-  --stripe-api-key "$STRIPE_API_KEY" \
-  --destination google-sheets \
-  --destination-config "{
-    \"client_id\": \"$GOOGLE_CLIENT_ID\",
-    \"client_secret\": \"$GOOGLE_CLIENT_SECRET\",
-    \"access_token\": \"unused\",
-    \"refresh_token\": \"$GOOGLE_REFRESH_TOKEN\",
-    \"spreadsheet_id\": \"$GOOGLE_SPREADSHEET_ID\"
-  }" \
-  --streams products \
-  --backfill-limit 10 \
-  --no-state
+PIPELINE=$(node -e "console.log(JSON.stringify({
+  source: { name: 'stripe', api_key: process.env.STRIPE_API_KEY, backfill_limit: 10 },
+  destination: {
+    name: 'google-sheets',
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    access_token: 'unused',
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    spreadsheet_id: process.env.GOOGLE_SPREADSHEET_ID,
+  },
+  streams: [{ name: 'products' }],
+}))")
+
+$RUN apps/engine/src/cli/index.ts sync --xPipeline "$PIPELINE"
