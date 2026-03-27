@@ -66,7 +66,10 @@ export async function* spawnWithStdin<TIn, TOut>(
     })
   })
 
-  // Pipe input to stdin in the background
+  // Pipe input to stdin in the background.
+  // Errors are swallowed here: if the source or stdin fails, stdin is closed so
+  // the subprocess can exit. The main generator will surface the error via the
+  // non-zero exit code path below.
   ;(async () => {
     try {
       for await (const item of input) {
@@ -75,6 +78,8 @@ export async function* spawnWithStdin<TIn, TOut>(
           await new Promise<void>((resolve) => child.stdin.once('drain', resolve))
         }
       }
+    } catch {
+      // Input stream failed — close stdin so the subprocess exits cleanly
     } finally {
       child.stdin.end()
     }
