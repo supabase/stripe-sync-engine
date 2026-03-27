@@ -2,8 +2,8 @@
 # End-to-end test: Service (config resolution) → Engine (sync execution)
 #
 # Tests the same flow that Temporal activities execute:
-#   1. Create syncs via service API (Postgres + optionally Google Sheets)
-#   2. GET /syncs/{id}?include_credentials=true → resolved config
+#   1. Create pipelines via service API (Postgres + optionally Google Sheets)
+#   2. GET /pipelines/{id} → resolved config
 #   3. POST /setup, /sync, /teardown on engine with X-Sync-Params
 #   4. Verify data landed, verify teardown
 #
@@ -64,10 +64,10 @@ wait_for_port() {
   exit 1
 }
 
-# Resolve a sync's config and build X-Sync-Params header value
+# Resolve a pipeline's config and build X-Sync-Params header value
 resolve_params() {
   local sync_id=$1
-  curl -sf "$SERVICE_URL/syncs/$sync_id?include_credentials=true" | python3 -c "
+  curl -sf "$SERVICE_URL/pipelines/$sync_id" | python3 -c "
 import sys, json
 c = json.load(sys.stdin)
 src = {k:v for k,v in c['source'].items() if k != 'type'}
@@ -166,8 +166,8 @@ echo "  Postgres: $POSTGRES_URL"
 # ── Sync 1: Stripe → Postgres ─────────────────────────────────────
 
 echo ""
-echo "--- Creating Postgres sync ---"
-PG_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/syncs" \
+echo "--- Creating Postgres pipeline ---"
+PG_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/pipelines" \
   -H 'Content-Type: application/json' \
   -d "{
     \"source\": { \"type\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 5 },
@@ -175,7 +175,7 @@ PG_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/syncs" \
     \"streams\": [{ \"name\": \"products\" }]
   }")
 PG_SYNC_ID=$(echo "$PG_SYNC_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "  Sync: $PG_SYNC_ID (schema: $SCHEMA)"
+echo "  Pipeline: $PG_SYNC_ID (schema: $SCHEMA)"
 
 verify_postgres() {
   local count
@@ -212,7 +212,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
    [ -n "${GOOGLE_REFRESH_TOKEN:-}" ]; then
 
   echo ""
-  echo "--- Creating Google Sheets sync ---"
+  echo "--- Creating Google Sheets pipeline ---"
 
   # Build destination config — reuse existing spreadsheet if GOOGLE_SPREADSHEET_ID is set
   SHEETS_DEST="{
@@ -229,7 +229,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
   fi
   SHEETS_DEST="$SHEETS_DEST }"
 
-  SHEETS_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/syncs" \
+  SHEETS_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/pipelines" \
     -H 'Content-Type: application/json' \
     -d "{
       \"source\": { \"type\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 3 },
@@ -237,7 +237,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
       \"streams\": [{ \"name\": \"products\" }]
     }")
   SHEETS_SYNC_ID=$(echo "$SHEETS_SYNC_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-  echo "  Sync: $SHEETS_SYNC_ID (spreadsheet: ${GOOGLE_SPREADSHEET_ID:-auto-created})"
+  echo "  Pipeline: $SHEETS_SYNC_ID (spreadsheet: ${GOOGLE_SPREADSHEET_ID:-auto-created})"
 
   verify_sheets() {
     if [ -z "${GOOGLE_SPREADSHEET_ID:-}" ]; then

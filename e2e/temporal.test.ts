@@ -159,7 +159,7 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
 
   it('backfills products then processes a live event via signal', async () => {
     // --- Create sync (api_key inline — no credential_id to avoid infinite queue) ---
-    const syncRes = await fetch(`${infra.serviceUrl}/syncs`, {
+    const syncRes = await fetch(`${infra.serviceUrl}/pipelines`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -170,12 +170,12 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
     })
     expect(syncRes.status).toBe(201)
     const sync = (await syncRes.json()) as { id: string }
-    console.log(`  Sync: ${sync.id}`)
+    console.log(`  Pipeline: ${sync.id}`)
 
     // --- Start workflow + worker ---
     const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
       args: [sync.id],
-      workflowId: `sync_${sync.id}`,
+      workflowId: `pipe_${sync.id}`,
       taskQueue: 'pg-queue',
     })
 
@@ -318,7 +318,7 @@ describeWithEnv(
     })
 
     it('backfills products from Stripe into a Google Sheet tab', async () => {
-      const syncRes = await fetch(`${infra.serviceUrl}/syncs`, {
+      const syncRes = await fetch(`${infra.serviceUrl}/pipelines`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -336,11 +336,11 @@ describeWithEnv(
       })
       expect(syncRes.status).toBe(201)
       const sync = (await syncRes.json()) as { id: string }
-      console.log(`  Sync: ${sync.id}`)
+      console.log(`  Pipeline: ${sync.id}`)
 
       const handle = await infra.testEnv.client.workflow.start('syncWorkflow', {
         args: [sync.id],
-        workflowId: `sync_${sync.id}`,
+        workflowId: `pipe_${sync.id}`,
         taskQueue: 'sheets-queue',
       })
 
