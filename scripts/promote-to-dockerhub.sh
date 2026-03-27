@@ -54,16 +54,12 @@ for target_tag in "${target_tags[@]}"; do
 done
 echo ""
 
-# Use buildx imagetools to copy the multi-arch manifest directly
-# (no need to pull/retag — works across registries without downloading layers)
-create_args=()
-for target_tag in "${target_tags[@]}"; do
-  create_args+=(--tag "stripe/sync-engine:$target_tag")
-done
+docker pull "$GHCR_IMAGE"
 
-docker buildx imagetools create \
-  "${create_args[@]}" \
-  "$GHCR_IMAGE"
+for target_tag in "${target_tags[@]}"; do
+  docker tag "$GHCR_IMAGE" "stripe/sync-engine:$target_tag"
+  docker push "stripe/sync-engine:$target_tag"
+done
 
 echo ""
 echo "=== Done ==="
