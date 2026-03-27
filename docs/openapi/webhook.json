@@ -10,20 +10,20 @@
     "parameters": {}
   },
   "paths": {
-    "/webhooks/{credential_id}": {
+    "/webhooks/{pipeline_id}": {
       "post": {
         "operationId": "pushWebhook",
         "tags": ["Webhooks"],
         "summary": "Ingest a Stripe webhook event",
-        "description": "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
+        "description": "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "cred_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
-            "name": "credential_id",
+            "name": "pipeline_id",
             "in": "path"
           }
         ],

@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage credentials, syncs, and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /credentials | List credentials |\n| POST | /credentials | Create credential |\n| GET | /credentials/{id} | Retrieve credential |\n| PATCH | /credentials/{id} | Update credential |\n| DELETE | /credentials/{id} | Delete credential |\n| GET | /syncs | List syncs |\n| POST | /syncs | Create sync |\n| GET | /syncs/{id} | Retrieve sync |\n| PATCH | /syncs/{id} | Update sync |\n| DELETE | /syncs/{id} | Delete sync |\n| POST | /syncs/{id}/setup | Set up destination schema for a sync |\n| POST | /syncs/{id}/teardown | Tear down destination schema for a sync |\n| GET | /syncs/{id}/check | Check connector connection for a sync |\n| POST | /syncs/{id}/read | Read records from the sync source |\n| POST | /syncs/{id}/write | Write records to the sync destination |\n| POST | /syncs/{id}/sync | Run sync pipeline (read → write) |\n| POST | /syncs/{id}/pause | Pause a running sync (Temporal mode only) |\n| POST | /syncs/{id}/resume | Resume a paused sync (Temporal mode only) |\n| POST | /webhooks/{credential_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/setup | Set up destination schema for a pipeline |\n| POST | /pipelines/{id}/teardown | Tear down destination schema for a pipeline |\n| GET | /pipelines/{id}/check | Check connector connection for a pipeline |\n| POST | /pipelines/{id}/read | Read records from the pipeline source |\n| POST | /pipelines/{id}/write | Write records to the pipeline destination |\n| POST | /pipelines/{id}/sync | Run pipeline (read → write) |\n| POST | /pipelines/{id}/pause | Pause a running pipeline (Temporal mode only) |\n| POST | /pipelines/{id}/resume | Resume a paused pipeline (Temporal mode only) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "components": {
     "schemas": {},
@@ -36,335 +36,14 @@
         }
       }
     },
-    "/credentials": {
+    "/pipelines": {
       "get": {
-        "operationId": "listCredentials",
-        "tags": ["Credentials"],
-        "summary": "List credentials",
+        "operationId": "listPipelines",
+        "tags": ["Pipelines"],
+        "summary": "List pipelines",
         "responses": {
           "200": {
-            "description": "List of credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string"
-                          },
-                          "created_at": {
-                            "type": "string"
-                          },
-                          "updated_at": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["id", "type", "created_at", "updated_at"],
-                        "additionalProperties": {
-                          "nullable": true
-                        }
-                      }
-                    },
-                    "has_more": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["data", "has_more"]
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createCredential",
-        "tags": ["Credentials"],
-        "summary": "Create credential",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": {
-                  "nullable": true
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created credential",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["id", "type", "created_at", "updated_at"],
-                  "additionalProperties": {
-                    "nullable": true
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/credentials/{id}": {
-      "get": {
-        "operationId": "getCredential",
-        "tags": ["Credentials"],
-        "summary": "Retrieve credential",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "cred_abc123"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Retrieved credential",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["id", "type", "created_at", "updated_at"],
-                  "additionalProperties": {
-                    "nullable": true
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateCredential",
-        "tags": ["Credentials"],
-        "summary": "Update credential",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "cred_abc123"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": {
-                  "nullable": true
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated credential",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "created_at": {
-                      "type": "string"
-                    },
-                    "updated_at": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["id", "type", "created_at", "updated_at"],
-                  "additionalProperties": {
-                    "nullable": true
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteCredential",
-        "tags": ["Credentials"],
-        "summary": "Delete credential",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "cred_abc123"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Deleted credential",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "deleted": {
-                      "type": "boolean",
-                      "enum": [true]
-                    }
-                  },
-                  "required": ["id", "deleted"]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Credential is referenced by one or more syncs",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/syncs": {
-      "get": {
-        "operationId": "listSyncs",
-        "tags": ["Syncs"],
-        "summary": "List syncs",
-        "responses": {
-          "200": {
-            "description": "List of syncs",
+            "description": "List of pipelines",
             "content": {
               "application/json": {
                 "schema": {
@@ -383,9 +62,6 @@
                             "properties": {
                               "type": {
                                 "type": "string"
-                              },
-                              "credential_id": {
-                                "type": "string"
                               }
                             },
                             "required": ["type"],
@@ -397,9 +73,6 @@
                             "type": "object",
                             "properties": {
                               "type": {
-                                "type": "string"
-                              },
-                              "credential_id": {
                                 "type": "string"
                               }
                             },
@@ -440,9 +113,9 @@
         }
       },
       "post": {
-        "operationId": "createSync",
-        "tags": ["Syncs"],
-        "summary": "Create sync",
+        "operationId": "createPipeline",
+        "tags": ["Pipelines"],
+        "summary": "Create pipeline",
         "requestBody": {
           "content": {
             "application/json": {
@@ -453,9 +126,6 @@
                     "type": "object",
                     "properties": {
                       "type": {
-                        "type": "string"
-                      },
-                      "credential_id": {
                         "type": "string"
                       }
                     },
@@ -468,9 +138,6 @@
                     "type": "object",
                     "properties": {
                       "type": {
-                        "type": "string"
-                      },
-                      "credential_id": {
                         "type": "string"
                       }
                     },
@@ -503,7 +170,7 @@
         },
         "responses": {
           "201": {
-            "description": "Created sync",
+            "description": "Created pipeline",
             "content": {
               "application/json": {
                 "schema": {
@@ -517,9 +184,6 @@
                       "properties": {
                         "type": {
                           "type": "string"
-                        },
-                        "credential_id": {
-                          "type": "string"
                         }
                       },
                       "required": ["type"],
@@ -531,9 +195,6 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "type": "string"
-                        },
-                        "credential_id": {
                           "type": "string"
                         }
                       },
@@ -582,16 +243,16 @@
         }
       }
     },
-    "/syncs/{id}": {
+    "/pipelines/{id}": {
       "get": {
-        "operationId": "getSync",
-        "tags": ["Syncs"],
-        "summary": "Retrieve sync",
+        "operationId": "getPipeline",
+        "tags": ["Pipelines"],
+        "summary": "Retrieve pipeline",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -600,7 +261,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Retrieved sync",
+            "description": "Retrieved pipeline",
             "content": {
               "application/json": {
                 "schema": {
@@ -614,9 +275,6 @@
                       "properties": {
                         "type": {
                           "type": "string"
-                        },
-                        "credential_id": {
-                          "type": "string"
                         }
                       },
                       "required": ["type"],
@@ -628,9 +286,6 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "type": "string"
-                        },
-                        "credential_id": {
                           "type": "string"
                         }
                       },
@@ -679,14 +334,14 @@
         }
       },
       "patch": {
-        "operationId": "updateSync",
-        "tags": ["Syncs"],
-        "summary": "Update sync",
+        "operationId": "updatePipeline",
+        "tags": ["Pipelines"],
+        "summary": "Update pipeline",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -704,9 +359,6 @@
                     "properties": {
                       "type": {
                         "type": "string"
-                      },
-                      "credential_id": {
-                        "type": "string"
                       }
                     },
                     "required": ["type"],
@@ -718,9 +370,6 @@
                     "type": "object",
                     "properties": {
                       "type": {
-                        "type": "string"
-                      },
-                      "credential_id": {
                         "type": "string"
                       }
                     },
@@ -752,7 +401,7 @@
         },
         "responses": {
           "200": {
-            "description": "Updated sync",
+            "description": "Updated pipeline",
             "content": {
               "application/json": {
                 "schema": {
@@ -766,9 +415,6 @@
                       "properties": {
                         "type": {
                           "type": "string"
-                        },
-                        "credential_id": {
-                          "type": "string"
                         }
                       },
                       "required": ["type"],
@@ -780,9 +426,6 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "type": "string"
-                        },
-                        "credential_id": {
                           "type": "string"
                         }
                       },
@@ -846,14 +489,14 @@
         }
       },
       "delete": {
-        "operationId": "deleteSync",
-        "tags": ["Syncs"],
-        "summary": "Delete sync",
+        "operationId": "deletePipeline",
+        "tags": ["Pipelines"],
+        "summary": "Delete pipeline",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -862,7 +505,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Deleted sync",
+            "description": "Deleted pipeline",
             "content": {
               "application/json": {
                 "schema": {
@@ -899,17 +542,17 @@
         }
       }
     },
-    "/syncs/{id}/setup": {
+    "/pipelines/{id}/setup": {
       "post": {
-        "operationId": "setupSync",
-        "tags": ["Sync Operations"],
-        "summary": "Set up destination schema for a sync",
+        "operationId": "setupPipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Set up destination schema for a pipeline",
         "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -921,7 +564,7 @@
             "description": "Setup complete"
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -938,17 +581,17 @@
         }
       }
     },
-    "/syncs/{id}/teardown": {
+    "/pipelines/{id}/teardown": {
       "post": {
-        "operationId": "teardownSync",
-        "tags": ["Sync Operations"],
-        "summary": "Tear down destination schema for a sync",
+        "operationId": "teardownPipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Tear down destination schema for a pipeline",
         "description": "Drops destination tables. Irreversible.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -960,7 +603,7 @@
             "description": "Teardown complete"
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -977,17 +620,17 @@
         }
       }
     },
-    "/syncs/{id}/check": {
+    "/pipelines/{id}/check": {
       "get": {
-        "operationId": "checkSync",
-        "tags": ["Sync Operations"],
-        "summary": "Check connector connection for a sync",
+        "operationId": "checkPipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Check connector connection for a pipeline",
         "description": "Validates the source/destination config and tests connectivity.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1035,7 +678,7 @@
             }
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1052,17 +695,17 @@
         }
       }
     },
-    "/syncs/{id}/read": {
+    "/pipelines/{id}/read": {
       "post": {
-        "operationId": "readSync",
-        "tags": ["Sync Operations"],
-        "summary": "Read records from the sync source",
+        "operationId": "readPipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Read records from the pipeline source",
         "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides input.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1083,7 +726,7 @@
             }
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1100,17 +743,17 @@
         }
       }
     },
-    "/syncs/{id}/write": {
+    "/pipelines/{id}/write": {
       "post": {
-        "operationId": "writeSync",
-        "tags": ["Sync Operations"],
-        "summary": "Write records to the sync destination",
+        "operationId": "writePipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Write records to the pipeline destination",
         "description": "Reads NDJSON messages from the request body and writes them to the destination.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1158,7 +801,7 @@
             }
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1175,17 +818,17 @@
         }
       }
     },
-    "/syncs/{id}/sync": {
+    "/pipelines/{id}/sync": {
       "post": {
-        "operationId": "sync",
-        "tags": ["Sync Operations"],
-        "summary": "Run sync pipeline (read → write)",
+        "operationId": "syncPipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Run pipeline (read → write)",
         "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1206,7 +849,7 @@
             }
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1223,17 +866,17 @@
         }
       }
     },
-    "/syncs/{id}/pause": {
+    "/pipelines/{id}/pause": {
       "post": {
-        "operationId": "pauseSync",
-        "tags": ["Sync Operations"],
-        "summary": "Pause a running sync (Temporal mode only)",
-        "description": "Signals the Temporal workflow to pause. The sync will stop processing after the current batch completes. Requires --temporal-address.",
+        "operationId": "pausePipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Pause a running pipeline (Temporal mode only)",
+        "description": "Signals the Temporal workflow to pause. The pipeline will stop processing after the current batch completes. Requires --temporal-address.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1245,7 +888,7 @@
             "description": "Pause signal sent"
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1277,17 +920,17 @@
         }
       }
     },
-    "/syncs/{id}/resume": {
+    "/pipelines/{id}/resume": {
       "post": {
-        "operationId": "resumeSync",
-        "tags": ["Sync Operations"],
-        "summary": "Resume a paused sync (Temporal mode only)",
+        "operationId": "resumePipeline",
+        "tags": ["Pipeline Operations"],
+        "summary": "Resume a paused pipeline (Temporal mode only)",
         "description": "Signals the Temporal workflow to resume. Requires --temporal-address.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "sync_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
             "name": "id",
@@ -1299,7 +942,7 @@
             "description": "Resume signal sent"
           },
           "404": {
-            "description": "Sync not found",
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1331,20 +974,20 @@
         }
       }
     },
-    "/webhooks/{credential_id}": {
+    "/webhooks/{pipeline_id}": {
       "post": {
         "operationId": "pushWebhook",
         "tags": ["Webhooks"],
         "summary": "Ingest a Stripe webhook event",
-        "description": "Receives a raw Stripe webhook event, verifies its signature using the credential's webhook secret, and enqueues it for processing by the active sync.",
+        "description": "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "example": "cred_abc123"
+              "example": "pipe_abc123"
             },
             "required": true,
-            "name": "credential_id",
+            "name": "pipeline_id",
             "in": "path"
           }
         ],
