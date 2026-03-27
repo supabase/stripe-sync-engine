@@ -275,7 +275,7 @@ export interface Source<
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
 
   /** Clean up external resources. Called when a sync is deleted. */
-  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
+  teardown?(params: { config: TConfig }): Promise<void>
 }
 
 // MARK: - Destination
@@ -321,5 +321,5 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
 
   /** Clean up downstream resources. Called when a sync is deleted. */
-  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
+  teardown?(params: { config: TConfig }): Promise<void>
 }

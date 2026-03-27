@@ -153,8 +153,8 @@ const source = {
     }
   },
 
-  async teardown({ config, remove_shared_resources = true }) {
-    if (config.webhook_url && remove_shared_resources) {
+  async teardown({ config }) {
+    if (config.webhook_url) {
       const stripe = makeClient(config)
       const existing = await stripe.webhookEndpoints.list({ limit: 100 })
       for (const wh of existing.data) {

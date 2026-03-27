@@ -141,7 +141,7 @@ export class SyncService {
 
   async teardown(pipelineId: string): Promise<void> {
     const { engine } = await this.resolveEngine(pipelineId)
-    await engine.teardown({ remove_shared_resources: true })
+    await engine.teardown()
   }
 
   async check(pipelineId: string): Promise<{ source: CheckResult; destination: CheckResult }> {

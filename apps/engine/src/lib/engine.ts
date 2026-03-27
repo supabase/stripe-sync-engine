@@ -18,7 +18,7 @@ import type { ConnectorResolver } from './resolver.js'
 
 export interface Engine {
   setup(): Promise<void>
-  teardown(opts?: { remove_shared_resources?: boolean }): Promise<void>
+  teardown(): Promise<void>
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
   read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
   write(messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput>
@@ -202,10 +202,10 @@ export function createEngine(
       ])
     },
 
-    async teardown(teardownOpts?: { remove_shared_resources?: boolean }) {
+    async teardown() {
       await Promise.all([
-        connectors.source.teardown?.({ config: sourceConfig, ...teardownOpts }),
-        connectors.destination.teardown?.({ config: destConfig, ...teardownOpts }),
+        connectors.source.teardown?.({ config: sourceConfig }),
+        connectors.destination.teardown?.({ config: destConfig }),
       ])
     },
 

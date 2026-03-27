@@ -64,7 +64,7 @@ interface Source<TConfig, TState, TInput = never> {
   discover(): Promise<ConfiguredCatalog>
   setup(): Promise<void>
   read(params: SyncParams, $stdin?: AsyncIterable<TInput>): AsyncIterable<Message>
-  teardown(opts?: { remove_shared_resources?: boolean }): Promise<void>
+  teardown(): Promise<void>
 }
 
 interface Destination<TConfig, TState> {
@@ -345,6 +345,5 @@ The pipeline is async iterables end-to-end. The transport is whatever drives the
 Connectors implement `protocol` only. No stores, queues, HTTP, or cloud.
 Swap the transport; keep the connector.
 
-**`remove_shared_resources` on teardown**
-Service checks whether other syncs share the credential before deleting
-the Stripe webhook endpoint — prevents one sync from breaking its siblings.
+**Unconditional teardown**
+Teardown always cleans up all managed resources (webhook endpoints, schemas, etc.).

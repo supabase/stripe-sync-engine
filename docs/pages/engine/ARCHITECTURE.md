@@ -43,7 +43,7 @@ interface Source<TConfig, TStreamState, TInput> {
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
-  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
+  teardown?(params: { config: TConfig }): Promise<void>
 }
 ```
 
@@ -73,7 +73,7 @@ interface Destination<TConfig> {
     $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput>
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
-  teardown?(params: { config: TConfig; remove_shared_resources?: boolean }): Promise<void>
+  teardown?(params: { config: TConfig }): Promise<void>
 }
 ```
 
