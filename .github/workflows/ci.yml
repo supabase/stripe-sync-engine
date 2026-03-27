@@ -206,9 +206,9 @@ jobs:
         ports:
           - 7233:7233
         options: >-
-          --health-cmd "temporal operator cluster health"
-          --health-interval 10s
-          --health-timeout 5s
+          --health-cmd "echo | nc -z localhost 7233"
+          --health-interval 5s
+          --health-timeout 3s
           --health-retries 30
           --health-start-period 30s
 
