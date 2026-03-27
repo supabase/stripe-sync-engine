@@ -70,11 +70,9 @@ resolve_params() {
   curl -sf "$SERVICE_URL/pipelines/$sync_id" | python3 -c "
 import sys, json
 c = json.load(sys.stdin)
-src = dict(c['source']); src['name'] = src.pop('type')
-dst = dict(c['destination']); dst['name'] = dst.pop('type')
 print(json.dumps({
-  'source': src,
-  'destination': dst,
+  'source': c['source'],
+  'destination': c['destination'],
   'streams': c.get('streams', [])
 }))
 "
@@ -168,8 +166,8 @@ echo "--- Creating Postgres pipeline ---"
 PG_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/pipelines" \
   -H 'Content-Type: application/json' \
   -d "{
-    \"source\": { \"type\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 5 },
-    \"destination\": { \"type\": \"postgres\", \"connection_string\": \"$POSTGRES_URL\", \"schema\": \"$SCHEMA\" },
+    \"source\": { \"name\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 5 },
+    \"destination\": { \"name\": \"postgres\", \"connection_string\": \"$POSTGRES_URL\", \"schema\": \"$SCHEMA\" },
     \"streams\": [{ \"name\": \"products\" }]
   }")
 PG_SYNC_ID=$(echo "$PG_SYNC_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
@@ -214,7 +212,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
 
   # Build destination config — reuse existing spreadsheet if GOOGLE_SPREADSHEET_ID is set
   SHEETS_DEST="{
-    \"type\": \"google-sheets\",
+    \"name\": \"google-sheets\",
     \"client_id\": \"$GOOGLE_CLIENT_ID\",
     \"client_secret\": \"$GOOGLE_CLIENT_SECRET\",
     \"refresh_token\": \"$GOOGLE_REFRESH_TOKEN\",
@@ -230,7 +228,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ] && [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && \
   SHEETS_SYNC_RESP=$(curl -sf -X POST "$SERVICE_URL/pipelines" \
     -H 'Content-Type: application/json' \
     -d "{
-      \"source\": { \"type\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 3 },
+      \"source\": { \"name\": \"stripe\", \"api_key\": \"$STRIPE_API_KEY\", \"backfill_limit\": 3 },
       \"destination\": $SHEETS_DEST,
       \"streams\": [{ \"name\": \"products\" }]
     }")
