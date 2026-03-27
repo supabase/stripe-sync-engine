@@ -67,7 +67,7 @@ services:
       temporal-db:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'tctl', 'cluster', 'health']
+      test: ['CMD', 'temporal', 'operator', 'cluster', 'health']
       interval: 10s
       timeout: 5s
       retries: 20
