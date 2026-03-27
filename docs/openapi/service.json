@@ -60,11 +60,11 @@
                           "source": {
                             "type": "object",
                             "properties": {
-                              "type": {
+                              "name": {
                                 "type": "string"
                               }
                             },
-                            "required": ["type"],
+                            "required": ["name"],
                             "additionalProperties": {
                               "nullable": true
                             }
@@ -72,11 +72,11 @@
                           "destination": {
                             "type": "object",
                             "properties": {
-                              "type": {
+                              "name": {
                                 "type": "string"
                               }
                             },
-                            "required": ["type"],
+                            "required": ["name"],
                             "additionalProperties": {
                               "nullable": true
                             }
@@ -125,11 +125,11 @@
                   "source": {
                     "type": "object",
                     "properties": {
-                      "type": {
+                      "name": {
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": ["name"],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -137,11 +137,11 @@
                   "destination": {
                     "type": "object",
                     "properties": {
-                      "type": {
+                      "name": {
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": ["name"],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -182,11 +182,11 @@
                     "source": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -194,11 +194,11 @@
                     "destination": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -273,11 +273,11 @@
                     "source": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -285,11 +285,11 @@
                     "destination": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -357,11 +357,11 @@
                   "source": {
                     "type": "object",
                     "properties": {
-                      "type": {
+                      "name": {
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": ["name"],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -369,11 +369,11 @@
                   "destination": {
                     "type": "object",
                     "properties": {
-                      "type": {
+                      "name": {
                         "type": "string"
                       }
                     },
-                    "required": ["type"],
+                    "required": ["name"],
                     "additionalProperties": {
                       "nullable": true
                     }
@@ -413,11 +413,11 @@
                     "source": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }
@@ -425,11 +425,11 @@
                     "destination": {
                       "type": "object",
                       "properties": {
-                        "type": {
+                        "name": {
                           "type": "string"
                         }
                       },
-                      "required": ["type"],
+                      "required": ["name"],
                       "additionalProperties": {
                         "nullable": true
                       }

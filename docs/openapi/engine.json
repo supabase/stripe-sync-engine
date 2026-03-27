@@ -3,10 +3,63 @@
   "info": {
     "title": "Stripe Sync Engine",
     "version": "1.0.0",
-    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /setup | Set up destination schema |\n| POST | /teardown | Tear down destination schema |\n| GET | /check | Check connector connection |\n| POST | /read | Read records from source |\n| POST | /write | Write records to destination |\n| POST | /sync | Run sync pipeline (read → write) |"
+    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /setup | Set up destination schema |\n| POST | /teardown | Tear down destination schema |\n| GET | /check | Check connector connection |\n| POST | /read | Read records from source |\n| POST | /write | Write records to destination |\n| POST | /sync | Run sync pipeline (read → write) |\n| GET | /connectors | List available connectors and their config schemas |"
   },
   "components": {
-    "schemas": {},
+    "schemas": {
+      "SyncParams": {
+        "type": "object",
+        "required": ["source", "destination"],
+        "properties": {
+          "source": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "destination": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "sync_mode": {
+                  "type": "string",
+                  "enum": ["incremental", "full_refresh"]
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "state": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
     "parameters": {}
   },
   "paths": {
@@ -46,11 +99,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -87,11 +140,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -128,11 +181,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -205,11 +258,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -255,11 +308,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -317,11 +370,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
-              "example": "{\"source_name\":\"stripe\",\"source_config\":{\"api_key\":\"sk_test_...\"},\"destination_name\":\"postgres\",\"destination_config\":{\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source_name, source_config, destination_name, destination_config, streams }",
+            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
           }
@@ -350,6 +403,58 @@
                       "nullable": true
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connectors": {
+      "get": {
+        "operationId": "listConnectors",
+        "tags": ["Connectors"],
+        "summary": "List available connectors and their config schemas",
+        "responses": {
+          "200": {
+            "description": "Available connectors with their JSON Schema configs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sources": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "config_schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "required": ["config_schema"]
+                      }
+                    },
+                    "destinations": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "config_schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "required": ["config_schema"]
+                      }
+                    }
+                  },
+                  "required": ["sources", "destinations"]
                 }
               }
             }
