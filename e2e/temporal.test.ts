@@ -148,7 +148,7 @@ describeWithEnv('temporal e2e: stripe → postgres', ['STRIPE_API_KEY'], ({ STRI
     await infra.setup()
     stripe = new Stripe(STRIPE_API_KEY)
     console.log(`  Schema: ${schema}`)
-  }, 120_000)
+  }, 240_000)
 
   afterAll(async () => {
     if (infra.pool && !process.env.KEEP_TEST_DATA) {
@@ -292,7 +292,7 @@ describeWithEnv(
 
       console.log(`  Spreadsheet: ${GOOGLE_SPREADSHEET_ID}`)
       console.log(`  Tab: ${streamName}`)
-    }, 120_000)
+    }, 240_000)
 
     afterAll(async () => {
       if (sheetsClient && !process.env.KEEP_TEST_DATA) {
