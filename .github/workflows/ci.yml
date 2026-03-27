@@ -205,12 +205,6 @@ jobs:
           POSTGRES_SEEDS: temporal-db
         ports:
           - 7233:7233
-        options: >-
-          --health-cmd "bash -c 'echo > /dev/tcp/127.0.0.1/7233'"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 30
-          --health-start-period 30s
 
     steps:
       - uses: actions/checkout@v5

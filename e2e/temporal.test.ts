@@ -100,9 +100,19 @@ function createTestInfra() {
     },
 
     async setup() {
-      // Connect to external Temporal server (from docker compose or CI service)
-      const connection = await Connection.connect({ address: TEMPORAL_ADDRESS })
-      client = new Client({ connection })
+      // Connect to external Temporal server (from docker compose or CI service).
+      // Retry connection — the auto-setup container may still be initializing.
+      let connection
+      for (let i = 0; i < 30; i++) {
+        try {
+          connection = await Connection.connect({ address: TEMPORAL_ADDRESS })
+          break
+        } catch {
+          if (i === 29) throw new Error(`Could not connect to Temporal at ${TEMPORAL_ADDRESS}`)
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+      client = new Client({ connection: connection! })
       nativeConnection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS })
 
       dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
