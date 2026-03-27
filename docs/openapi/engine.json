@@ -265,6 +265,19 @@
             "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
             "in": "header"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+              "example": "1"
+            },
+            "required": false,
+            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+            "name": "x-state-checkpoint-limit",
+            "in": "header"
           }
         ],
         "responses": {
@@ -376,6 +389,19 @@
             "required": false,
             "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
             "name": "x-sync-params",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+              "example": "1"
+            },
+            "required": false,
+            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+            "name": "x-state-checkpoint-limit",
             "in": "header"
           }
         ],
