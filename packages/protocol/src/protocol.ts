@@ -170,10 +170,10 @@ export const StreamStatusMessage = z.object({
 })
 export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
-// MARK: - Sync engine params
+// MARK: - Pipeline params
 
-/** Parameters for a sync engine run — config, catalog selection, and runtime state. */
-export const SyncEngineParams = z.object({
+/** Parameters for a sync pipeline — source/destination config and optional stream selection. */
+export const PipelineParams = z.object({
   source: z.object({ name: z.string() }).catchall(z.unknown()),
   destination: z.object({ name: z.string() }).catchall(z.unknown()),
   streams: z
@@ -185,16 +185,20 @@ export const SyncEngineParams = z.object({
       })
     )
     .optional(),
-  state: z.record(z.string(), z.unknown()).optional(),
 })
-export type SyncEngineParams = z.infer<typeof SyncEngineParams>
+export type PipelineParams = z.infer<typeof PipelineParams>
 
-/**
- * SyncParams — identical to SyncEngineParams.
- * The `name` field inside `source` and `destination` serves as the connector specifier.
- */
-export const SyncParams = SyncEngineParams
-export type SyncParams = z.infer<typeof SyncParams>
+/** @deprecated Use PipelineParams */
+export const SyncEngineParams = PipelineParams
+/** @deprecated Use PipelineParams */
+export type SyncEngineParams = PipelineParams
+
+/** The full set of parsed sync request params: pipeline config + cursor state + pagination. */
+export interface SyncParams {
+  pipeline: PipelineParams
+  state?: Record<string, unknown>
+  stateCheckpointLimit?: number
+}
 
 // MARK: - Message unions
 

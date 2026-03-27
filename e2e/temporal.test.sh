@@ -4,7 +4,7 @@
 # Tests the same flow that Temporal activities execute:
 #   1. Create pipelines via service API (Postgres + optionally Google Sheets)
 #   2. GET /pipelines/{id} → resolved config
-#   3. POST /setup, /sync, /teardown on engine with X-Sync-Params
+#   3. POST /setup, /sync, /teardown on engine with X-Pipeline
 #   4. Verify data landed, verify teardown
 #
 # Env vars:
@@ -64,7 +64,7 @@ wait_for_port() {
   exit 1
 }
 
-# Resolve a pipeline's config and build X-Sync-Params header value
+# Resolve a pipeline's config and build X-Pipeline header value
 resolve_params() {
   local sync_id=$1
   curl -sf "$SERVICE_URL/pipelines/$sync_id" | python3 -c "
@@ -93,13 +93,13 @@ run_sync_cycle() {
   # Setup
   local status
   status=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$ENGINE_URL/setup" \
-    -H "X-Sync-Params: $params")
+    -H "X-Pipeline: $params")
   echo "  Setup: HTTP $status"
   [ "$status" = "204" ] || { echo "FAIL: expected 204, got $status"; exit 1; }
 
   # Sync
   local output
-  output=$(curl -sf -X POST "$ENGINE_URL/sync" -H "X-Sync-Params: $params")
+  output=$(curl -sf -X POST "$ENGINE_URL/sync" -H "X-Pipeline: $params")
   local lines
   lines=$(echo "$output" | wc -l | tr -d ' ')
   echo "  Sync: $lines NDJSON lines"
@@ -125,7 +125,7 @@ print(n)
   # Teardown
   if [ -z "$SKIP_DELETE" ]; then
     status=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$ENGINE_URL/teardown" \
-      -H "X-Sync-Params: $params")
+      -H "X-Pipeline: $params")
     echo "  Teardown: HTTP $status"
     [ "$status" = "204" ] || { echo "FAIL: expected 204, got $status"; exit 1; }
   else

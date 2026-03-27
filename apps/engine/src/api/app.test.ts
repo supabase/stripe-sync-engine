@@ -113,7 +113,7 @@ describe('GET /openapi.json', () => {
     expect(schemaNames).toContain('TestDestinationConfig')
     expect(schemaNames).toContain('SourceConfig')
     expect(schemaNames).toContain('DestinationConfig')
-    expect(schemaNames).toContain('SyncParams')
+    expect(schemaNames).toContain('PipelineParams')
 
     // SourceConfig is a discriminated union
     expect(spec.components.schemas.SourceConfig.discriminator.propertyName).toBe('name')
@@ -125,16 +125,16 @@ describe('GET /openapi.json', () => {
     expect(testSource.properties.name.enum).toEqual(['test'])
   })
 
-  it('documents the X-Sync-Params header on sync routes', async () => {
+  it('documents the X-Pipeline header on sync routes', async () => {
     const app = createApp(resolver)
     const res = await app.request('/openapi.json')
     const spec = (await res.json()) as any
 
-    // /check is a GET with X-Sync-Params header
+    // /check is a GET with X-Pipeline header
     const checkOp = spec.paths['/check']?.get
     expect(checkOp).toBeDefined()
     const headerParam = checkOp.parameters?.find(
-      (p: any) => p.in === 'header' && p.name === 'x-sync-params'
+      (p: any) => p.in === 'header' && p.name === 'x-pipeline'
     )
     expect(headerParam).toBeDefined()
   })
@@ -172,7 +172,7 @@ describe('POST /setup', () => {
 
     const res = await app.request('/setup', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Pipeline': syncParams },
     })
     expect(res.status).toBe(204)
   })
@@ -184,7 +184,7 @@ describe('POST /teardown', () => {
 
     const res = await app.request('/teardown', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Pipeline': syncParams },
     })
     expect(res.status).toBe(204)
   })
@@ -195,7 +195,7 @@ describe('GET /check', () => {
     const app = createApp(resolver)
 
     const res = await app.request('/check', {
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Pipeline': syncParams },
     })
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -221,7 +221,7 @@ describe('POST /read', () => {
     ])
     const res = await app.request('/read', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(body) },
+      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
       body,
     })
 
@@ -256,7 +256,7 @@ describe('POST /write', () => {
     const writeBody = toNdjson(records)
     const res = await app.request('/write', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(writeBody) },
+      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(writeBody) },
       body: writeBody,
     })
 
@@ -275,7 +275,7 @@ describe('POST /write', () => {
 
     const res = await app.request('/write', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams },
+      headers: { 'X-Pipeline': syncParams },
     })
     expect(res.status).toBe(400)
     const body = await res.json()
@@ -298,7 +298,7 @@ describe('POST /sync', () => {
     ])
     const res = await app.request('/sync', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(runBody) },
+      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(runBody) },
       body: runBody,
     })
 
@@ -329,7 +329,7 @@ describe('X-State-Checkpoint-Limit', () => {
     const res = await app.request('/read', {
       method: 'POST',
       headers: {
-        'X-Sync-Params': syncParams,
+        'X-Pipeline': syncParams,
         'X-State-Checkpoint-Limit': '1',
         ...bodyHeaders(body),
       },
@@ -356,7 +356,7 @@ describe('X-State-Checkpoint-Limit', () => {
     const res = await app.request('/sync', {
       method: 'POST',
       headers: {
-        'X-Sync-Params': syncParams,
+        'X-Pipeline': syncParams,
         'X-State-Checkpoint-Limit': '1',
         ...bodyHeaders(body),
       },
@@ -381,7 +381,7 @@ describe('X-State-Checkpoint-Limit', () => {
     ])
     const res = await app.request('/read', {
       method: 'POST',
-      headers: { 'X-Sync-Params': syncParams, ...bodyHeaders(body) },
+      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
       body,
     })
 
@@ -392,20 +392,20 @@ describe('X-State-Checkpoint-Limit', () => {
 })
 
 describe('error handling', () => {
-  it('returns 400 when X-Sync-Params header is missing', async () => {
+  it('returns 400 when X-Pipeline header is missing', async () => {
     const app = createApp(resolver)
 
     const res = await app.request('/check')
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body.error).toContain('Missing X-Sync-Params')
+    expect(body.error).toContain('Missing X-Pipeline')
   })
 
-  it('returns 400 when X-Sync-Params header is invalid JSON', async () => {
+  it('returns 400 when X-Pipeline header is invalid JSON', async () => {
     const app = createApp(resolver)
 
     const res = await app.request('/check', {
-      headers: { 'X-Sync-Params': 'not-json' },
+      headers: { 'X-Pipeline': 'not-json' },
     })
     expect(res.status).toBe(400)
     const body = await res.json()

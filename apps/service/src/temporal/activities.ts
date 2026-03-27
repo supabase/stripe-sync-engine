@@ -4,7 +4,7 @@ import type { SyncActivities, RunResult } from './types.js'
 
 /**
  * Resolve a sync's config with credentials inlined from the service,
- * then build the X-Sync-Params header value for the engine API.
+ * then build the X-Pipeline header value for the engine API.
  */
 async function resolveParams(serviceUrl: string, pipelineId: string): Promise<string> {
   const resp = await fetch(`${serviceUrl}/pipelines/${pipelineId}`)
@@ -32,7 +32,7 @@ export function createActivities(opts: { serviceUrl: string; engineUrl: string }
       const params = await resolveParams(serviceUrl, syncId)
       const resp = await fetch(`${engineUrl}/setup`, {
         method: 'POST',
-        headers: { 'X-Sync-Params': params },
+        headers: { 'X-Pipeline': params },
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
@@ -42,7 +42,7 @@ export function createActivities(opts: { serviceUrl: string; engineUrl: string }
 
     async run(syncId, input?) {
       const params = await resolveParams(serviceUrl, syncId)
-      const headers: Record<string, string> = { 'X-Sync-Params': params }
+      const headers: Record<string, string> = { 'X-Pipeline': params }
       let body: string | undefined
 
       if (input && input.length > 0) {
@@ -93,7 +93,7 @@ export function createActivities(opts: { serviceUrl: string; engineUrl: string }
       const params = await resolveParams(serviceUrl, syncId)
       const resp = await fetch(`${engineUrl}/teardown`, {
         method: 'POST',
-        headers: { 'X-Sync-Params': params },
+        headers: { 'X-Pipeline': params },
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')

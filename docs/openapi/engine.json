@@ -3,11 +3,11 @@
   "info": {
     "title": "Stripe Sync Engine",
     "version": "1.0.0",
-    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /setup | Set up destination schema |\n| POST | /teardown | Tear down destination schema |\n| GET | /check | Check connector connection |\n| POST | /read | Read records from source |\n| POST | /write | Write records to destination |\n| POST | /sync | Run sync pipeline (read → write) |\n| GET | /connectors | List available connectors and their config schemas |"
+    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineParams). Optional cursor state can be provided via `X-State`.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /setup | Set up destination schema |\n| POST | /teardown | Tear down destination schema |\n| GET | /check | Check connector connection |\n| POST | /read | Read records from source |\n| POST | /write | Write records to destination |\n| POST | /sync | Run sync pipeline (read → write) |\n| GET | /connectors | List available connectors and their config schemas |"
   },
   "components": {
     "schemas": {
-      "SyncParams": {
+      "PipelineParams": {
         "type": "object",
         "required": ["source", "destination"],
         "properties": {
@@ -52,10 +52,6 @@
                 }
               }
             }
-          },
-          "state": {
-            "type": "object",
-            "additionalProperties": true
           }
         }
       }
@@ -99,12 +95,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
             "in": "header"
           }
         ],
@@ -140,12 +136,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
             "in": "header"
           }
         ],
@@ -181,12 +177,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
             "in": "header"
           }
         ],
@@ -258,12 +254,23 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+              "example": "{\"products\":{\"cursor\":\"prod_xyz\"}}"
+            },
+            "required": false,
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+            "name": "x-state",
             "in": "header"
           },
           {
@@ -321,12 +328,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
             "in": "header"
           }
         ],
@@ -383,12 +390,23 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
               "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
             },
             "required": false,
-            "description": "JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-sync-params",
+            "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
+            "name": "x-pipeline",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+              "example": "{\"products\":{\"cursor\":\"prod_xyz\"}}"
+            },
+            "required": false,
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+            "name": "x-state",
             "in": "header"
           },
           {

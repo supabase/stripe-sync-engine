@@ -108,7 +108,7 @@ echo ""
 # Helpers
 # ---------------------------------------------------------------------------
 
-# JSON-encoded X-Sync-Params header value for check requests.
+# JSON-encoded X-Pipeline header value for check requests.
 SYNC_PARAMS='{"source":{"name":"stripe","api_key":"sk_test_fake"},"destination":{"name":"postgres","connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
 
 # Run `sync-engine check` with fake credentials and given extra flags.
@@ -117,7 +117,7 @@ SYNC_PARAMS='{"source":{"name":"stripe","api_key":"sk_test_fake"},"destination":
 check_loads() {
   local output
   output=$(npx sync-engine check \
-    --x-sync-params "$SYNC_PARAMS" \
+    --x-pipeline "$SYNC_PARAMS" \
     "$@" 2>&1 || true)
   if echo "$output" | grep -qi "not found"; then
     echo "  FAIL: got 'not found' — connector loading failed"
@@ -130,7 +130,7 @@ check_loads() {
 check_not_found() {
   local output
   output=$(npx sync-engine check \
-    --x-sync-params "$SYNC_PARAMS" \
+    --x-pipeline "$SYNC_PARAMS" \
     "$@" 2>&1 || true)
   if echo "$output" | grep -qi "not found"; then
     return 0
@@ -193,7 +193,7 @@ echo ""
 echo "--- Step 8: unknown connector name → not found ---"
 UNKNOWN_PARAMS='{"source":{"name":"nonexistent-xyz"},"destination":{"name":"nonexistent-xyz"},"streams":[{"name":"x"}]}'
 unknown_output=$(npx sync-engine check \
-     --x-sync-params "$UNKNOWN_PARAMS" \
+     --x-pipeline "$UNKNOWN_PARAMS" \
      2>&1 || true)
 if echo "$unknown_output" | grep -qi "not found"; then
   echo "  PASS: unknown connector correctly reports 'not found'"

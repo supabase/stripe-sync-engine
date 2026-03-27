@@ -2,8 +2,7 @@ import { z } from 'zod'
 import {
   DestinationOutput,
   Message,
-  SyncEngineParams,
-  SyncParams,
+  PipelineParams,
   Stream,
   ConfiguredStream,
   ConfiguredCatalog,
@@ -32,7 +31,7 @@ type EngineLogMetadata = {
 }
 
 function engineLogContext(
-  config: SyncEngineParams,
+  config: PipelineParams,
   metadata?: EngineLogMetadata
 ): Record<string, unknown> {
   return {
@@ -89,7 +88,7 @@ async function* withLoggedStream<T>(
  */
 export function buildCatalog(
   discovered: Stream[],
-  configStreams?: SyncEngineParams['streams']
+  configStreams?: PipelineParams['streams']
 ): ConfiguredCatalog {
   let streams: ConfiguredStream[]
 
@@ -117,10 +116,11 @@ export function buildCatalog(
 // MARK: - Factory
 
 export function createEngine(
-  config: SyncEngineParams,
+  config: PipelineParams,
   connectors: { source: Source; destination: Destination },
   stateStore: StateStore,
-  metadata?: EngineLogMetadata
+  metadata?: EngineLogMetadata,
+  externalState?: Record<string, unknown>
 ): Engine {
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
@@ -201,7 +201,7 @@ export function createEngine(
 
     async *read(input?: AsyncIterable<unknown>) {
       const stored = await stateStore.get()
-      const state = stored ?? config.state
+      const state = stored ?? externalState
       const raw = connectors.source.read(
         { config: sourceConfig, catalog: await getCatalog(), state },
         input
@@ -240,9 +240,10 @@ export function createEngine(
 }
 
 export async function createEngineFromParams(
-  params: SyncParams,
+  params: PipelineParams,
   resolver: ConnectorResolver,
-  stateStore: StateStore
+  stateStore: StateStore,
+  externalState?: Record<string, unknown>
 ): Promise<Engine> {
   const sourceName = params.source.name
   const destName = params.destination.name
@@ -250,8 +251,11 @@ export async function createEngineFromParams(
     resolver.resolveSource(sourceName),
     resolver.resolveDestination(destName),
   ])
-  return createEngine(params, { source, destination }, stateStore, {
-    sourceName,
-    destinationName: destName,
-  })
+  return createEngine(
+    params,
+    { source, destination },
+    stateStore,
+    { sourceName, destinationName: destName },
+    externalState
+  )
 }

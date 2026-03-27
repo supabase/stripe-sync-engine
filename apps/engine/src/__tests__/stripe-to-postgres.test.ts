@@ -84,10 +84,11 @@ function makeEngine(
       source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
       destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: overrides.streams,
-      state: overrides.state,
     },
     { source, destination },
-    noopStateStore()
+    noopStateStore(),
+    undefined,
+    overrides.state
   )
 }
 

@@ -294,10 +294,8 @@ describe('protocol schemas', () => {
         source: { name: 'stripe', api_key: 'sk_test' },
         destination: { name: 'postgres', url: 'pg://...' },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
-        state: { customers: { cursor: 'abc' } },
       })
       expect(result.streams).toHaveLength(1)
-      expect(result.state).toEqual({ customers: { cursor: 'abc' } })
     })
 
     it('rejects missing source', () => {

@@ -79,7 +79,7 @@ echo "==> Reading from Stripe (/read)"
 READ_PARAMS=$(printf '{"source":{"name":"stripe","api_key":"%s","backfill_limit":5},"destination":{"name":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
 
 STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/read" \
-  -H "X-Sync-Params: $READ_PARAMS")
+  -H "X-Pipeline: $READ_PARAMS")
 
 RECORD_COUNT=$(echo "$STRIPE_OUTPUT" | grep -c '"type":"record"' || true)
 echo "    Got $RECORD_COUNT record(s)"
@@ -93,7 +93,7 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
     "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
   SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
-    -H "X-Sync-Params: $SHEETS_PARAMS" \
+    -H "X-Pipeline: $SHEETS_PARAMS" \
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
 
@@ -112,11 +112,11 @@ if [ -n "${POSTGRES_URL:-}" ]; then
     "$STRIPE_API_KEY" "$DOCKER_PG_URL")
 
   curl -sf --max-time 30 -X POST "http://localhost:$PORT/setup" \
-    -H "X-Sync-Params: $PG_PARAMS" && echo "    OK" || echo "    setup returned non-204 (may be fine)"
+    -H "X-Pipeline: $PG_PARAMS" && echo "    OK" || echo "    setup returned non-204 (may be fine)"
 
   echo "==> Writing to Postgres (/write)"
   PG_WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
-    -H "X-Sync-Params: $PG_PARAMS" \
+    -H "X-Pipeline: $PG_PARAMS" \
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
   echo "$PG_WRITE_OUTPUT" | head -3 || true

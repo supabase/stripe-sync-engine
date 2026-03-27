@@ -152,10 +152,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       {
         source: { name: 'test', streams: { customers: {} } },
         destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
-        state: loadedState,
       },
       { source: sourceTest, destination },
-      noopStateStore()
+      noopStateStore(),
+      undefined,
+      loadedState
     )
 
     const input = [

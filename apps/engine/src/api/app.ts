@@ -1,18 +1,13 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
-import type {
-  Message,
-  DestinationOutput,
-  ConnectorResolver,
-  SyncParams as SyncParamsType,
-} from '../lib/index.js'
+import type { Message, DestinationOutput, ConnectorResolver, SyncParams } from '../lib/index.js'
 import {
   createEngineFromParams,
   noopStateStore,
   parseNdjsonStream,
   selectStateStore,
-  SyncParams,
+  PipelineParams,
 } from '../lib/index.js'
 import { takeStateCheckpoints } from '../lib/pipeline.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
@@ -30,12 +25,12 @@ function endpointTable(spec: { paths?: Record<string, unknown> }) {
   return ['| Method | Path | Summary |', '|--------|------|---------|', ...rows].join('\n')
 }
 
-function syncRequestContext(params: SyncParamsType) {
+function syncRequestContext(params: SyncParams) {
   return {
-    sourceName: params.source.name,
-    destinationName: params.destination.name,
-    configuredStreamCount: params.streams?.length ?? 0,
-    configuredStreams: params.streams?.map((stream) => stream.name) ?? [],
+    sourceName: params.pipeline.source.name,
+    destinationName: params.pipeline.destination.name,
+    configuredStreamCount: params.pipeline.streams?.length ?? 0,
+    configuredStreams: params.pipeline.streams?.map((stream) => stream.name) ?? [],
   }
 }
 
@@ -63,18 +58,29 @@ async function* logApiStream<T>(
 
 // ── Shared schemas ──────────────────────────────────────────────
 
-const XSyncParamsHeader = z.object({
-  'x-sync-params': z
+const XPipelineHeader = z.object({
+  'x-pipeline': z
     .string()
     .optional()
     .openapi({
       description:
-        'JSON-encoded SyncParams: { source: { name, ...config }, destination: { name, ...config }, streams }',
+        'JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }',
       example: JSON.stringify({
         source: { name: 'stripe', api_key: 'sk_test_...' },
         destination: { name: 'postgres', connection_string: 'postgres://localhost/db' },
         streams: [{ name: 'products' }],
       }),
+    }),
+})
+
+const XStateHeader = z.object({
+  'x-state': z
+    .string()
+    .optional()
+    .openapi({
+      description:
+        'JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.',
+      example: JSON.stringify({ products: { cursor: 'prod_xyz' } }),
     }),
 })
 
@@ -130,16 +136,35 @@ export function createApp(resolver: ConnectorResolver) {
     return false
   }
 
-  /** Parse and validate X-Sync-Params header, or throw 400. */
-  function requireSyncParams(header: string | undefined): SyncParamsType {
-    if (!header) {
-      throw new HTTPException(400, { message: 'Missing X-Sync-Params header' })
+  /** Parse all sync headers (X-Pipeline, X-State, X-State-Checkpoint-Limit) into SyncParams. */
+  function parseSyncParams(c: {
+    req: { header: (name: string) => string | undefined }
+  }): SyncParams {
+    const pipelineHeader = c.req.header('X-Pipeline')
+    if (!pipelineHeader) {
+      throw new HTTPException(400, { message: 'Missing X-Pipeline header' })
     }
+    let pipeline
     try {
-      return SyncParams.parse(JSON.parse(header))
+      pipeline = PipelineParams.parse(JSON.parse(pipelineHeader))
     } catch {
-      throw new HTTPException(400, { message: 'Invalid JSON in X-Sync-Params header' })
+      throw new HTTPException(400, { message: 'Invalid JSON in X-Pipeline header' })
     }
+
+    const stateHeader = c.req.header('X-State')
+    let state: Record<string, unknown> | undefined
+    if (stateHeader) {
+      try {
+        state = JSON.parse(stateHeader)
+      } catch {
+        throw new HTTPException(400, { message: 'Invalid JSON in X-State header' })
+      }
+    }
+
+    const limitHeader = c.req.header('X-State-Checkpoint-Limit')
+    const stateCheckpointLimit = limitHeader ? Number(limitHeader) : undefined
+
+    return { pipeline, state, stateCheckpointLimit }
   }
 
   /** Wraps an async iterable to call `fn()` after iteration completes or throws. */
@@ -182,7 +207,7 @@ export function createApp(resolver: ConnectorResolver) {
       summary: 'Set up destination schema',
       description:
         'Creates destination tables and applies migrations. Safe to call multiple times.',
-      request: { headers: XSyncParamsHeader },
+      request: { headers: XPipelineHeader },
       responses: {
         204: { description: 'Setup complete' },
         400: {
@@ -192,11 +217,11 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const params = parseSyncParams(c)
       const context = { path: '/setup', ...syncRequestContext(params) }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /setup started')
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
+      const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
       try {
         await engine.setup()
         logger.info(
@@ -222,7 +247,7 @@ export function createApp(resolver: ConnectorResolver) {
       tags: ['Stateless Sync API'],
       summary: 'Tear down destination schema',
       description: 'Drops destination tables. Irreversible.',
-      request: { headers: XSyncParamsHeader },
+      request: { headers: XPipelineHeader },
       responses: {
         204: { description: 'Teardown complete' },
         400: {
@@ -232,8 +257,8 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
+      const params = parseSyncParams(c)
+      const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
       await engine.teardown()
       return c.body(null, 204) as any
     }
@@ -247,7 +272,7 @@ export function createApp(resolver: ConnectorResolver) {
       tags: ['Stateless Sync API'],
       summary: 'Check connector connection',
       description: 'Validates the source/destination config and tests connectivity.',
-      request: { headers: XSyncParamsHeader },
+      request: { headers: XPipelineHeader },
       responses: {
         200: {
           content: { 'application/json': { schema: CheckResultSchema } },
@@ -260,8 +285,8 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
+      const params = parseSyncParams(c)
+      const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
       const result = await engine.check()
       return c.json(result, 200)
     }
@@ -276,7 +301,9 @@ export function createApp(resolver: ConnectorResolver) {
       summary: 'Read records from source',
       description:
         'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.',
-      request: { headers: XSyncParamsHeader.merge(XStateCheckpointLimitHeader) },
+      request: {
+        headers: XPipelineHeader.merge(XStateHeader).merge(XStateCheckpointLimitHeader),
+      },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -289,17 +316,21 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const checkpointLimit = c.req.header('X-State-Checkpoint-Limit')
+      const params = parseSyncParams(c)
       const inputPresent = hasBody(c)
       const context = { path: '/read', inputPresent, ...syncRequestContext(params) }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /read started')
-      const engine = await createEngineFromParams(params, resolver, noopStateStore())
+      const engine = await createEngineFromParams(
+        params.pipeline,
+        resolver,
+        noopStateStore(),
+        params.state
+      )
       const input = inputPresent ? parseNdjsonStream(c.req.raw.body!) : undefined
       let output: AsyncIterable<Message> = engine.read(input)
-      if (checkpointLimit) {
-        output = takeStateCheckpoints<Message>(Number(checkpointLimit))(output)
+      if (params.stateCheckpointLimit) {
+        output = takeStateCheckpoints<Message>(params.stateCheckpointLimit)(output)
       }
       return ndjsonResponse(logApiStream('Engine API /read', output, context, startedAt)) as any
     }
@@ -315,7 +346,7 @@ export function createApp(resolver: ConnectorResolver) {
       description:
         'Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.',
       request: {
-        headers: XSyncParamsHeader,
+        headers: XPipelineHeader,
         body: {
           required: true,
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -333,7 +364,7 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
+      const params = parseSyncParams(c)
       const context = { path: '/write', ...syncRequestContext(params) }
       if (!hasBody(c)) {
         logger.error(context, 'Engine API /write missing request body')
@@ -341,8 +372,8 @@ export function createApp(resolver: ConnectorResolver) {
       }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /write started')
-      const stateStore = await selectStateStore(params)
-      const engine = await createEngineFromParams(params, resolver, stateStore)
+      const stateStore = await selectStateStore(params.pipeline)
+      const engine = await createEngineFromParams(params.pipeline, resolver, stateStore)
       const messages = parseNdjsonStream<Message>(c.req.raw.body!)
       return ndjsonResponse(
         closeAfter(
@@ -363,7 +394,9 @@ export function createApp(resolver: ConnectorResolver) {
       description:
         'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
         'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
-      request: { headers: XSyncParamsHeader.merge(XStateCheckpointLimitHeader) },
+      request: {
+        headers: XPipelineHeader.merge(XStateHeader).merge(XStateCheckpointLimitHeader),
+      },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: NdjsonSchema } },
@@ -376,14 +409,18 @@ export function createApp(resolver: ConnectorResolver) {
       },
     }),
     async (c) => {
-      const params = requireSyncParams(c.req.header('X-Sync-Params'))
-      const checkpointLimit = c.req.header('X-State-Checkpoint-Limit')
-      const stateStore = await selectStateStore(params)
-      const engine = await createEngineFromParams(params, resolver, stateStore)
+      const params = parseSyncParams(c)
+      const stateStore = await selectStateStore(params.pipeline)
+      const engine = await createEngineFromParams(
+        params.pipeline,
+        resolver,
+        stateStore,
+        params.state
+      )
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
       let output: AsyncIterable<DestinationOutput> = engine.sync(input)
-      if (checkpointLimit) {
-        output = takeStateCheckpoints<DestinationOutput>(Number(checkpointLimit))(output)
+      if (params.stateCheckpointLimit) {
+        output = takeStateCheckpoints<DestinationOutput>(params.stateCheckpointLimit)(output)
       }
       return ndjsonResponse(closeAfter(output, () => stateStore.close?.())) as any
     }
@@ -449,7 +486,7 @@ export function createApp(resolver: ConnectorResolver) {
         title: 'Stripe Sync Engine',
         version: '1.0.0',
         description:
-          'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Sync-Params` header (JSON-encoded SyncParams).',
+          'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineParams). Optional cursor state can be provided via `X-State`.',
       },
     })
 
@@ -496,8 +533,8 @@ export function createApp(resolver: ConnectorResolver) {
       }
     }
 
-    // SyncParams schema
-    doc.components.schemas['SyncParams'] = {
+    // PipelineParams schema
+    doc.components.schemas['PipelineParams'] = {
       type: 'object',
       required: ['source', 'destination'],
       properties: {
@@ -531,7 +568,6 @@ export function createApp(resolver: ConnectorResolver) {
             },
           },
         },
-        state: { type: 'object', additionalProperties: true },
       },
     }
 

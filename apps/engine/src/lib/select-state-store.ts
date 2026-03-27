@@ -1,6 +1,6 @@
 import { noopStateStore } from './state-store.js'
 import type { StateStore } from './state-store.js'
-import type { SyncParams } from '@stripe/sync-protocol'
+import type { PipelineParams } from '@stripe/sync-protocol'
 
 /**
  * Convention-based state store factory.
@@ -16,7 +16,7 @@ import type { SyncParams } from '@stripe/sync-protocol'
  * The service layer, which does have sync UUIDs, calls `createStateStore` directly.
  */
 export async function selectStateStore(
-  params: SyncParams
+  params: PipelineParams
 ): Promise<StateStore & { close?(): Promise<void> }> {
   try {
     const { name: destName, ...destConfig } = params.destination
