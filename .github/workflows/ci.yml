@@ -197,7 +197,7 @@ jobs:
           cache: pnpm
 
       - name: Install psql client
-        run: sudo apt-get install -y postgresql-client
+        run: sudo apt-get update -q && sudo apt-get install -y postgresql-client
 
       - name: Install dependencies & build
         run: pnpm install --frozen-lockfile && pnpm build
