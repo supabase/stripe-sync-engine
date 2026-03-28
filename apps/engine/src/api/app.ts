@@ -104,9 +104,31 @@ const CheckResultSchema = z.object({
 
 const ErrorSchema = z.object({ error: z.unknown() })
 
-const NdjsonSchema = z.string().openapi({
-  description: 'Newline-delimited JSON sync messages, one per line',
-  example: '{"type":"record","stream":"products","data":{"id":"prod_123","name":"Widget"}}\n',
+/**
+ * NDJSON schemas for OpenAPI route definitions.
+ *
+ * Hono/zod-openapi only supports `schema` (not `itemSchema` from OpenAPI 3.2),
+ * so we describe the per-line item shape here. The generated spec is then
+ * post-processed to wrap these in the proper NDJSON structure.
+ */
+const NdjsonReadSchema = z.string().openapi({
+  description:
+    'NDJSON stream — one JSON object per line. Each line is a Message (record | state | catalog | log | error | stream_status).',
+  example:
+    '{"type":"record","stream":"products","data":{"id":"prod_123","name":"Widget"},"emitted_at":1700000000000}\n{"type":"state","stream":"products","data":{"cursor":"prod_123"}}\n',
+})
+
+const NdjsonWriteSchema = z.string().openapi({
+  description:
+    'NDJSON stream — one JSON object per line. Each line is a DestinationOutput (state | error | log).',
+  example: '{"type":"state","stream":"products","data":{"cursor":"prod_123"}}\n',
+})
+
+const NdjsonInputSchema = z.string().openapi({
+  description:
+    'NDJSON stream — one JSON object per line. Each line is a Message (record | state | catalog | log | error | stream_status).',
+  example:
+    '{"type":"record","stream":"products","data":{"id":"prod_123","name":"Widget"},"emitted_at":1700000000000}\n{"type":"state","stream":"products","data":{"cursor":"prod_123"}}\n',
 })
 
 // ── App factory ────────────────────────────────────────────────
@@ -306,7 +328,7 @@ export function createApp(resolver: ConnectorResolver) {
       },
       responses: {
         200: {
-          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          content: { 'application/x-ndjson': { schema: NdjsonReadSchema } },
           description: 'NDJSON stream of sync messages',
         },
         400: {
@@ -349,12 +371,12 @@ export function createApp(resolver: ConnectorResolver) {
         headers: XPipelineHeader,
         body: {
           required: true,
-          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          content: { 'application/x-ndjson': { schema: NdjsonInputSchema } },
         },
       },
       responses: {
         200: {
-          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          content: { 'application/x-ndjson': { schema: NdjsonWriteSchema } },
           description: 'NDJSON stream of write result messages',
         },
         400: {
@@ -399,7 +421,7 @@ export function createApp(resolver: ConnectorResolver) {
       },
       responses: {
         200: {
-          content: { 'application/x-ndjson': { schema: NdjsonSchema } },
+          content: { 'application/x-ndjson': { schema: NdjsonWriteSchema } },
           description: 'NDJSON stream of sync messages',
         },
         400: {
@@ -569,6 +591,126 @@ export function createApp(resolver: ConnectorResolver) {
           },
         },
       },
+    }
+
+    // ── NDJSON message schemas ───────────────────────────────────
+    // Each line in an NDJSON stream is one of these message types.
+
+    doc.components.schemas['RecordMessage'] = {
+      type: 'object',
+      required: ['type', 'stream', 'data', 'emitted_at'],
+      properties: {
+        type: { type: 'string', enum: ['record'] },
+        stream: { type: 'string' },
+        data: { type: 'object', additionalProperties: true },
+        emitted_at: { type: 'number', description: 'Epoch ms when the source emitted this record' },
+      },
+    }
+
+    doc.components.schemas['StateMessage'] = {
+      type: 'object',
+      required: ['type', 'stream', 'data'],
+      properties: {
+        type: { type: 'string', enum: ['state'] },
+        stream: { type: 'string' },
+        data: { description: 'Opaque cursor data — only the source reads/writes this' },
+      },
+    }
+
+    doc.components.schemas['LogMessage'] = {
+      type: 'object',
+      required: ['type', 'level', 'message'],
+      properties: {
+        type: { type: 'string', enum: ['log'] },
+        level: { type: 'string', enum: ['debug', 'info', 'warn', 'error'] },
+        message: { type: 'string' },
+      },
+    }
+
+    doc.components.schemas['ErrorMessage'] = {
+      type: 'object',
+      required: ['type', 'failure_type', 'message'],
+      properties: {
+        type: { type: 'string', enum: ['error'] },
+        failure_type: {
+          type: 'string',
+          enum: ['config_error', 'system_error', 'transient_error', 'auth_error'],
+        },
+        message: { type: 'string' },
+        stream: { type: 'string' },
+        stack_trace: { type: 'string' },
+      },
+    }
+
+    doc.components.schemas['CatalogMessage'] = {
+      type: 'object',
+      required: ['type', 'streams'],
+      properties: {
+        type: { type: 'string', enum: ['catalog'] },
+        streams: { type: 'array', items: { type: 'object', additionalProperties: true } },
+      },
+    }
+
+    doc.components.schemas['StreamStatusMessage'] = {
+      type: 'object',
+      required: ['type', 'stream', 'status'],
+      properties: {
+        type: { type: 'string', enum: ['stream_status'] },
+        stream: { type: 'string' },
+        status: { type: 'string', enum: ['started', 'running', 'complete', 'incomplete'] },
+      },
+    }
+
+    // Discriminated unions
+    doc.components.schemas['Message'] = {
+      description:
+        'Any message flowing through the engine (one per NDJSON line). Discriminated by `type`.',
+      discriminator: { propertyName: 'type' },
+      oneOf: [
+        { $ref: '#/components/schemas/RecordMessage' },
+        { $ref: '#/components/schemas/StateMessage' },
+        { $ref: '#/components/schemas/CatalogMessage' },
+        { $ref: '#/components/schemas/LogMessage' },
+        { $ref: '#/components/schemas/ErrorMessage' },
+        { $ref: '#/components/schemas/StreamStatusMessage' },
+      ],
+    }
+
+    doc.components.schemas['DestinationOutput'] = {
+      description:
+        'Messages the destination yields back (one per NDJSON line). Discriminated by `type`.',
+      discriminator: { propertyName: 'type' },
+      oneOf: [
+        { $ref: '#/components/schemas/StateMessage' },
+        { $ref: '#/components/schemas/ErrorMessage' },
+        { $ref: '#/components/schemas/LogMessage' },
+      ],
+    }
+
+    // Rewrite application/x-ndjson content to reference per-item schemas.
+    // OpenAPI 3.0 has no `itemSchema`, so we describe the per-line item as `schema`
+    // and add x-item-schema as a vendor extension for tooling that understands NDJSON.
+    for (const [, methods] of Object.entries(doc.paths ?? {})) {
+      for (const [, op] of Object.entries(methods as Record<string, any>)) {
+        if (!op || typeof op !== 'object') continue
+        // Response bodies
+        for (const resp of Object.values(op.responses ?? {})) {
+          const ndjson = (resp as any)?.content?.['application/x-ndjson']
+          if (ndjson) {
+            const isWrite = ndjson.schema?.description?.includes('DestinationOutput')
+            ndjson.schema = {
+              $ref: `#/components/schemas/${isWrite ? 'DestinationOutput' : 'Message'}`,
+            }
+            ndjson['x-ndjson-item-schema'] = ndjson.schema
+          }
+        }
+        // Request bodies
+        const reqNdjson = op.requestBody?.content?.['application/x-ndjson']
+        if (reqNdjson) {
+          reqNdjson.schema = { $ref: '#/components/schemas/Message' }
+          reqNdjson['x-ndjson-item-schema'] = reqNdjson.schema
+        }
+      }
     }
 
     spec.info.description += '\n\n## Endpoints\n\n' + endpointTable(spec)

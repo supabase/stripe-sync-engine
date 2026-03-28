@@ -54,6 +54,160 @@
             }
           }
         }
+      },
+      "RecordMessage": {
+        "type": "object",
+        "required": ["type", "stream", "data", "emitted_at"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["record"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "emitted_at": {
+            "type": "number",
+            "description": "Epoch ms when the source emitted this record"
+          }
+        }
+      },
+      "StateMessage": {
+        "type": "object",
+        "required": ["type", "stream", "data"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["state"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {
+            "description": "Opaque cursor data — only the source reads/writes this"
+          }
+        }
+      },
+      "LogMessage": {
+        "type": "object",
+        "required": ["type", "level", "message"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["log"]
+          },
+          "level": {
+            "type": "string",
+            "enum": ["debug", "info", "warn", "error"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorMessage": {
+        "type": "object",
+        "required": ["type", "failure_type", "message"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "failure_type": {
+            "type": "string",
+            "enum": ["config_error", "system_error", "transient_error", "auth_error"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "stack_trace": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogMessage": {
+        "type": "object",
+        "required": ["type", "streams"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["catalog"]
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "StreamStatusMessage": {
+        "type": "object",
+        "required": ["type", "stream", "status"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["stream_status"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["started", "running", "complete", "incomplete"]
+          }
+        }
+      },
+      "Message": {
+        "description": "Any message flowing through the engine (one per NDJSON line). Discriminated by `type`.",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RecordMessage"
+          },
+          {
+            "$ref": "#/components/schemas/StateMessage"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogMessage"
+          },
+          {
+            "$ref": "#/components/schemas/LogMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorMessage"
+          },
+          {
+            "$ref": "#/components/schemas/StreamStatusMessage"
+          }
+        ]
+      },
+      "DestinationOutput": {
+        "description": "Messages the destination yields back (one per NDJSON line). Discriminated by `type`.",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StateMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorMessage"
+          },
+          {
+            "$ref": "#/components/schemas/LogMessage"
+          }
+        ]
       }
     },
     "parameters": {}
@@ -293,9 +447,10 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "type": "string",
-                  "description": "Newline-delimited JSON sync messages, one per line",
-                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                  "$ref": "#/components/schemas/Message"
+                },
+                "x-ndjson-item-schema": {
+                  "$ref": "#/components/schemas/Message"
                 }
               }
             }
@@ -342,9 +497,10 @@
           "content": {
             "application/x-ndjson": {
               "schema": {
-                "type": "string",
-                "description": "Newline-delimited JSON sync messages, one per line",
-                "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                "$ref": "#/components/schemas/Message"
+              },
+              "x-ndjson-item-schema": {
+                "$ref": "#/components/schemas/Message"
               }
             }
           }
@@ -355,9 +511,10 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "type": "string",
-                  "description": "Newline-delimited JSON sync messages, one per line",
-                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                  "$ref": "#/components/schemas/DestinationOutput"
+                },
+                "x-ndjson-item-schema": {
+                  "$ref": "#/components/schemas/DestinationOutput"
                 }
               }
             }
@@ -429,9 +586,10 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "type": "string",
-                  "description": "Newline-delimited JSON sync messages, one per line",
-                  "example": "{\"type\":\"record\",\"stream\":\"products\",\"data\":{\"id\":\"prod_123\",\"name\":\"Widget\"}}\n"
+                  "$ref": "#/components/schemas/DestinationOutput"
+                },
+                "x-ndjson-item-schema": {
+                  "$ref": "#/components/schemas/DestinationOutput"
                 }
               }
             }

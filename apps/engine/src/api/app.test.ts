@@ -125,6 +125,39 @@ describe('GET /openapi.json', () => {
     expect(testSource.properties.name.enum).toEqual(['test'])
   })
 
+  it('defines NDJSON message schemas with discriminated unions', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+    const schemas = spec.components.schemas
+
+    // Individual message types
+    expect(schemas.RecordMessage.properties.type.enum).toEqual(['record'])
+    expect(schemas.StateMessage.properties.type.enum).toEqual(['state'])
+    expect(schemas.ErrorMessage.properties.type.enum).toEqual(['error'])
+
+    // Message union
+    expect(schemas.Message.discriminator.propertyName).toBe('type')
+    expect(schemas.Message.oneOf).toHaveLength(6)
+
+    // DestinationOutput union
+    expect(schemas.DestinationOutput.discriminator.propertyName).toBe('type')
+    expect(schemas.DestinationOutput.oneOf).toHaveLength(3)
+
+    // NDJSON responses reference item schemas (not plain strings)
+    const readNdjson =
+      spec.paths['/read']?.post?.responses?.['200']?.content?.['application/x-ndjson']
+    expect(readNdjson.schema.$ref).toBe('#/components/schemas/Message')
+
+    const writeNdjson =
+      spec.paths['/write']?.post?.responses?.['200']?.content?.['application/x-ndjson']
+    expect(writeNdjson.schema.$ref).toBe('#/components/schemas/DestinationOutput')
+
+    const syncNdjson =
+      spec.paths['/sync']?.post?.responses?.['200']?.content?.['application/x-ndjson']
+    expect(syncNdjson.schema.$ref).toBe('#/components/schemas/DestinationOutput')
+  })
+
   it('documents the X-Pipeline header on sync routes', async () => {
     const app = createApp(resolver)
     const res = await app.request('/openapi.json')
