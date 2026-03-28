@@ -109,81 +109,73 @@ const CheckResultSchema = z.object({
 
 const ErrorSchema = z.object({ error: z.unknown() })
 
-// ── NDJSON per-item schemas ─────────────────────────────────
-// Each line in an NDJSON stream is one of these message types.
-// Protocol schemas use plain zod; re-register with @hono/zod-openapi's `z`
-// to get .openapi() for named $ref generation.
-
-const RecordMessageSchema = z
-  .object({
-    type: z.literal('record'),
-    stream: z.string(),
-    data: z.record(z.string(), z.unknown()),
-    emitted_at: z.number(),
-  })
-  .openapi('RecordMessage')
-
-const StateMessageSchema = z
-  .object({
-    type: z.literal('state'),
-    stream: z.string(),
-    data: z.unknown(),
-  })
-  .openapi('StateMessage')
-
-const CatalogMessageSchema = z
-  .object({
-    type: z.literal('catalog'),
-    streams: z.array(z.object({ name: z.string(), primary_key: z.array(z.array(z.string())) })),
-  })
-  .openapi('CatalogMessage')
-
-const LogMessageSchema = z
-  .object({
-    type: z.literal('log'),
-    level: z.enum(['debug', 'info', 'warn', 'error']),
-    message: z.string(),
-  })
-  .openapi('LogMessage')
-
-const ErrorMessageSchema = z
-  .object({
-    type: z.literal('error'),
-    failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
-    message: z.string(),
-    stream: z.string().optional(),
-    stack_trace: z.string().optional(),
-  })
-  .openapi('ErrorMessage')
-
-const StreamStatusMessageSchema = z
-  .object({
-    type: z.literal('stream_status'),
-    stream: z.string(),
-    status: z.enum(['started', 'running', 'complete', 'incomplete']),
-  })
-  .openapi('StreamStatusMessage')
-
-/** Any message flowing through the engine — one per NDJSON line. */
-const MessageSchema = z
-  .discriminatedUnion('type', [
-    RecordMessageSchema,
-    StateMessageSchema,
-    CatalogMessageSchema,
-    LogMessageSchema,
-    ErrorMessageSchema,
-    StreamStatusMessageSchema,
-  ])
-  .openapi('Message')
-
-/** Messages the destination yields back — one per NDJSON line. */
-const DestinationOutputSchema = z
-  .discriminatedUnion('type', [StateMessageSchema, ErrorMessageSchema, LogMessageSchema])
-  .openapi('DestinationOutput')
-
 // ── App factory ────────────────────────────────────────────────
 
 export function createApp(resolver: ConnectorResolver) {
+  // ── NDJSON per-item schemas ─────────────────────────────────
+  // OpenAPI registrations for the protocol message types. Uses hono's `z`
+  // (which has .openapi()) — these mirror @stripe/sync-protocol exactly.
+
+  const RecordMessageSchema = z
+    .object({
+      type: z.literal('record'),
+      stream: z.string(),
+      data: z.record(z.string(), z.unknown()),
+      emitted_at: z.number(),
+    })
+    .openapi('RecordMessage')
+
+  const StateMessageSchema = z
+    .object({ type: z.literal('state'), stream: z.string(), data: z.unknown() })
+    .openapi('StateMessage')
+
+  const CatalogMessageSchema = z
+    .object({
+      type: z.literal('catalog'),
+      streams: z.array(z.object({ name: z.string(), primary_key: z.array(z.array(z.string())) })),
+    })
+    .openapi('CatalogMessage')
+
+  const LogMessageSchema = z
+    .object({
+      type: z.literal('log'),
+      level: z.enum(['debug', 'info', 'warn', 'error']),
+      message: z.string(),
+    })
+    .openapi('LogMessage')
+
+  const ErrorMessageSchema = z
+    .object({
+      type: z.literal('error'),
+      failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
+      message: z.string(),
+      stream: z.string().optional(),
+      stack_trace: z.string().optional(),
+    })
+    .openapi('ErrorMessage')
+
+  const StreamStatusMessageSchema = z
+    .object({
+      type: z.literal('stream_status'),
+      stream: z.string(),
+      status: z.enum(['started', 'running', 'complete', 'incomplete']),
+    })
+    .openapi('StreamStatusMessage')
+
+  const MessageSchema = z
+    .discriminatedUnion('type', [
+      RecordMessageSchema,
+      StateMessageSchema,
+      CatalogMessageSchema,
+      LogMessageSchema,
+      ErrorMessageSchema,
+      StreamStatusMessageSchema,
+    ])
+    .openapi('Message')
+
+  const DestinationOutputSchema = z
+    .discriminatedUnion('type', [StateMessageSchema, ErrorMessageSchema, LogMessageSchema])
+    .openapi('DestinationOutput')
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) {
