@@ -173,7 +173,7 @@ export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 // MARK: - Pipeline params
 
 /** Parameters for a sync pipeline — source/destination config and optional stream selection. */
-export const PipelineParams = z.object({
+export const PipelineConfig = z.object({
   source: z.object({ name: z.string() }).catchall(z.unknown()),
   destination: z.object({ name: z.string() }).catchall(z.unknown()),
   streams: z
@@ -186,16 +186,16 @@ export const PipelineParams = z.object({
     )
     .optional(),
 })
-export type PipelineParams = z.infer<typeof PipelineParams>
+export type PipelineConfig = z.infer<typeof PipelineConfig>
 
-/** @deprecated Use PipelineParams */
-export const SyncEngineParams = PipelineParams
-/** @deprecated Use PipelineParams */
-export type SyncEngineParams = PipelineParams
+/** @deprecated Use PipelineConfig */
+export const SyncEngineParams = PipelineConfig
+/** @deprecated Use PipelineConfig */
+export type SyncEngineParams = PipelineConfig
 
 /** The full set of parsed sync request params: pipeline config + cursor state + pagination. */
 export interface SyncParams {
-  pipeline: PipelineParams
+  pipeline: PipelineConfig
   state?: Record<string, unknown>
   stateCheckpointLimit?: number
 }

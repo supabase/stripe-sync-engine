@@ -12,7 +12,7 @@ import {
   noopStateStore,
   parseNdjsonStream,
   selectStateStore,
-  PipelineParams,
+  PipelineConfig,
 } from '../lib/index.js'
 import { takeStateCheckpoints } from '../lib/pipeline.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
@@ -69,7 +69,7 @@ const XPipelineHeader = z.object({
     .optional()
     .openapi({
       description:
-        'JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }',
+        'JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }',
       example: JSON.stringify({
         source: { name: 'stripe', api_key: 'sk_test_...' },
         destination: { name: 'postgres', connection_string: 'postgres://localhost/db' },
@@ -218,7 +218,7 @@ export function createApp(resolver: ConnectorResolver) {
     }
     let pipeline
     try {
-      pipeline = PipelineParams.parse(JSON.parse(pipelineHeader))
+      pipeline = PipelineConfig.parse(JSON.parse(pipelineHeader))
     } catch {
       throw new HTTPException(400, { message: 'Invalid JSON in X-Pipeline header' })
     }
@@ -558,7 +558,7 @@ export function createApp(resolver: ConnectorResolver) {
         title: 'Stripe Sync Engine',
         version: '1.0.0',
         description:
-          'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineParams). Optional cursor state can be provided via `X-State`.',
+          'Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineConfig). Optional cursor state can be provided via `X-State`.',
       },
     })
 
@@ -605,8 +605,8 @@ export function createApp(resolver: ConnectorResolver) {
       }
     }
 
-    // PipelineParams schema
-    doc.components.schemas['PipelineParams'] = {
+    // PipelineConfig schema
+    doc.components.schemas['PipelineConfig'] = {
       type: 'object',
       required: ['source', 'destination'],
       properties: {
@@ -652,7 +652,7 @@ export function createApp(resolver: ConnectorResolver) {
             param.schema = {
               type: 'string',
               contentMediaType: 'application/json',
-              contentSchema: { $ref: '#/components/schemas/PipelineParams' },
+              contentSchema: { $ref: '#/components/schemas/PipelineConfig' },
             }
           } else if (param.name === 'x-state') {
             param.schema = {

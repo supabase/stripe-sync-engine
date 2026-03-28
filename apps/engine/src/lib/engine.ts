@@ -2,7 +2,7 @@ import { z } from 'zod'
 import {
   DestinationOutput,
   Message,
-  PipelineParams,
+  PipelineConfig,
   Stream,
   ConfiguredStream,
   ConfiguredCatalog,
@@ -31,7 +31,7 @@ type EngineLogMetadata = {
 }
 
 function engineLogContext(
-  config: PipelineParams,
+  config: PipelineConfig,
   metadata?: EngineLogMetadata
 ): Record<string, unknown> {
   return {
@@ -88,7 +88,7 @@ async function* withLoggedStream<T>(
  */
 export function buildCatalog(
   discovered: Stream[],
-  configStreams?: PipelineParams['streams']
+  configStreams?: PipelineConfig['streams']
 ): ConfiguredCatalog {
   let streams: ConfiguredStream[]
 
@@ -116,7 +116,7 @@ export function buildCatalog(
 // MARK: - Factory
 
 export function createEngine(
-  config: PipelineParams,
+  config: PipelineConfig,
   connectors: { source: Source; destination: Destination },
   stateStore: StateStore,
   metadata?: EngineLogMetadata,
@@ -240,7 +240,7 @@ export function createEngine(
 }
 
 export async function createEngineFromParams(
-  params: PipelineParams,
+  params: PipelineConfig,
   resolver: ConnectorResolver,
   stateStore: StateStore,
   externalState?: Record<string, unknown>

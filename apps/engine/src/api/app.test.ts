@@ -113,7 +113,7 @@ describe('GET /openapi.json', () => {
     expect(schemaNames).toContain('TestDestinationConfig')
     expect(schemaNames).toContain('SourceConfig')
     expect(schemaNames).toContain('DestinationConfig')
-    expect(schemaNames).toContain('PipelineParams')
+    expect(schemaNames).toContain('PipelineConfig')
 
     // SourceConfig is a discriminated union
     expect(spec.components.schemas.SourceConfig.discriminator.propertyName).toBe('name')
