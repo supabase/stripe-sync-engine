@@ -1,5 +1,6 @@
 import type { OpenApiSchemaObject, OpenApiSpec } from './types.js'
 import { OPENAPI_RESOURCE_TABLE_ALIASES } from './runtimeMappings.js'
+import { fetchWithProxy } from './transport.js'
 
 const SCHEMA_REF_PREFIX = '#/components/schemas/'
 
@@ -232,7 +233,7 @@ export function buildListFn(
       const headers = authHeaders(apiKey)
       if (apiVersion) headers['Stripe-Version'] = apiVersion
 
-      const response = await fetch(`${base}${apiPath}?${qs}`, { headers })
+      const response = await fetchWithProxy(`${base}${apiPath}?${qs}`, { headers })
       const body = (await response.json()) as {
         data: unknown[]
         next_page_url?: string | null
@@ -253,7 +254,7 @@ export function buildListFn(
       }
     }
 
-    const response = await fetch(`${base}${apiPath}?${qs}`, {
+    const response = await fetchWithProxy(`${base}${apiPath}?${qs}`, {
       headers: authHeaders(apiKey),
     })
     const body = (await response.json()) as { data: unknown[]; has_more: boolean }
@@ -277,13 +278,13 @@ export function buildRetrieveFn(
       const headers = authHeaders(apiKey)
       if (apiVersion) headers['Stripe-Version'] = apiVersion
 
-      const response = await fetch(`${base}${apiPath}/${id}`, { headers })
+      const response = await fetchWithProxy(`${base}${apiPath}/${id}`, { headers })
       return await response.json()
     }
   }
 
   return async (id) => {
-    const response = await fetch(`${base}${apiPath}/${id}`, {
+    const response = await fetchWithProxy(`${base}${apiPath}/${id}`, {
       headers: authHeaders(apiKey),
     })
     return await response.json()

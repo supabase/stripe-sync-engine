@@ -1,12 +1,17 @@
 import Stripe from 'stripe'
-import { HttpsProxyAgent } from 'https-proxy-agent'
-import { getProxyUrl, parsePositiveInteger, type TransportEnv } from './transport.js'
+import {
+  getHttpsProxyAgentForTarget,
+  parsePositiveInteger,
+  type TransportEnv,
+} from './transport.js'
 
 export type StripeClientConfigInput = {
   api_key: string
   base_url?: string
 }
 export { getProxyUrl as getStripeProxyUrl } from './transport.js'
+
+const DEFAULT_STRIPE_API_BASE = 'https://api.stripe.com'
 
 function buildBaseUrlOptions(
   baseUrl: string
@@ -32,15 +37,17 @@ export function buildStripeClientOptions(
   }
 
   if (config.base_url) {
+    const httpAgent = getHttpsProxyAgentForTarget(config.base_url, env)
     return {
       ...options,
       ...buildBaseUrlOptions(config.base_url),
+      ...(httpAgent ? { httpAgent } : {}),
     }
   }
 
-  const proxyUrl = getProxyUrl(env)
-  if (proxyUrl) {
-    options.httpAgent = new HttpsProxyAgent(proxyUrl)
+  const httpAgent = getHttpsProxyAgentForTarget(DEFAULT_STRIPE_API_BASE, env)
+  if (httpAgent) {
+    options.httpAgent = httpAgent
   }
 
   return options

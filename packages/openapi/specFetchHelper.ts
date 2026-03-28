@@ -2,6 +2,7 @@ import os from 'node:os'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types.js'
+import { fetchWithProxy } from './transport.js'
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 
@@ -107,7 +108,7 @@ async function resolveLatestCommitSha(): Promise<string | null> {
   url.searchParams.set('path', 'latest/openapi.spec3.sdk.json')
   url.searchParams.set('per_page', '1')
 
-  const response = await fetch(url, { headers: githubHeaders() })
+  const response = await fetchWithProxy(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to resolve latest Stripe OpenAPI commit (${response.status} ${response.statusText})`
@@ -126,7 +127,7 @@ async function resolveCommitShaForApiVersion(apiVersion: string): Promise<string
   url.searchParams.set('until', until)
   url.searchParams.set('per_page', '1')
 
-  const response = await fetch(url, { headers: githubHeaders() })
+  const response = await fetchWithProxy(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to resolve Stripe OpenAPI commit (${response.status} ${response.statusText})`
@@ -140,7 +141,7 @@ async function resolveCommitShaForApiVersion(apiVersion: string): Promise<string
 
 async function fetchSpecForCommit(commitSha: string): Promise<OpenApiSpec> {
   const url = `https://raw.githubusercontent.com/stripe/openapi/${commitSha}/latest/openapi.spec3.sdk.json`
-  const response = await fetch(url, { headers: githubHeaders() })
+  const response = await fetchWithProxy(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to download Stripe OpenAPI spec for commit ${commitSha} (${response.status} ${response.statusText})`

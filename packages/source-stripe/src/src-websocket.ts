@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { fetchWithProxy } from './transport.js'
+import { fetchWithProxy, getHttpsProxyAgentForTarget } from './transport.js'
 
 const CLI_VERSION = '1.33.0'
 
@@ -157,8 +157,10 @@ export async function createStripeWebSocketClient(
     return new Promise((resolve, reject) => {
       lastPongReceived = Date.now()
       const wsUrl = `${session.websocket_url}?websocket_feature=${encodeURIComponent(session.websocket_authorized_feature)}`
+      const agent = getHttpsProxyAgentForTarget(wsUrl)
 
       ws = new WebSocket(wsUrl, {
+        ...(agent ? { agent } : {}),
         headers: {
           'Accept-Encoding': 'identity',
           'User-Agent': `Stripe/v1 stripe-cli/${CLI_VERSION}`,

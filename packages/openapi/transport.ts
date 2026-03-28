@@ -1,23 +1,9 @@
 import { ProxyAgent } from 'undici'
-import { HttpsProxyAgent } from 'https-proxy-agent'
 
 export type TransportEnv = Record<string, string | undefined>
 type ProxyTarget = URL | string
 
 const proxyAgents = new Map<string, ProxyAgent>()
-const httpsProxyAgents = new Map<string, InstanceType<typeof HttpsProxyAgent>>()
-
-export function parsePositiveInteger(
-  name: string,
-  value: string | undefined,
-  defaultValue: number
-): number {
-  const parsed = Number(value ?? defaultValue)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`)
-  }
-  return parsed
-}
 
 export function getProxyUrl(env: TransportEnv = process.env): string | undefined {
   for (const key of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy']) {
@@ -162,23 +148,6 @@ function getProxyAgent(proxyUrl: string): ProxyAgent {
     proxyAgents.set(proxyUrl, agent)
   }
   return agent
-}
-
-function getHttpsProxyAgent(proxyUrl: string): InstanceType<typeof HttpsProxyAgent> {
-  let agent = httpsProxyAgents.get(proxyUrl)
-  if (!agent) {
-    agent = new HttpsProxyAgent(proxyUrl)
-    httpsProxyAgents.set(proxyUrl, agent)
-  }
-  return agent
-}
-
-export function getHttpsProxyAgentForTarget(
-  target: ProxyTarget,
-  env: TransportEnv = process.env
-): InstanceType<typeof HttpsProxyAgent> | undefined {
-  const proxyUrl = getProxyUrlForTarget(target, env)
-  return proxyUrl ? getHttpsProxyAgent(proxyUrl) : undefined
 }
 
 type ProxyAwareRequestInit = RequestInit & { dispatcher?: ProxyAgent }

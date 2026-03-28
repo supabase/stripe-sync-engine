@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getHttpsProxyAgentForTarget,
   getProxyUrl,
   getProxyUrlForTarget,
-  parsePositiveInteger,
   shouldBypassProxy,
   withFetchProxy,
-} from './transport.js'
+} from '../transport.js'
 
 describe('getProxyUrl', () => {
   it('prefers HTTPS_PROXY over HTTP_PROXY', () => {
@@ -65,18 +63,6 @@ describe('shouldBypassProxy', () => {
   })
 })
 
-describe('parsePositiveInteger', () => {
-  it('uses the default value when env is not set', () => {
-    expect(parsePositiveInteger('TEST_TIMEOUT', undefined, 10_000)).toBe(10_000)
-  })
-
-  it('throws on invalid values', () => {
-    expect(() => parsePositiveInteger('TEST_TIMEOUT', '0', 10_000)).toThrow(
-      'TEST_TIMEOUT must be a positive integer'
-    )
-  })
-})
-
 describe('withFetchProxy', () => {
   it('adds a dispatcher when a proxy env var is set', () => {
     const init = withFetchProxy(
@@ -96,21 +82,5 @@ describe('withFetchProxy', () => {
     const init: RequestInit = { method: 'POST' }
 
     expect(withFetchProxy(init, {})).toBe(init)
-  })
-})
-
-describe('getHttpsProxyAgentForTarget', () => {
-  it('returns an agent only when the target should use the proxy', () => {
-    expect(
-      getHttpsProxyAgentForTarget('https://api.stripe.com/v1/customers', {
-        HTTPS_PROXY: 'http://proxy.example.test:8080',
-      })
-    ).toBeDefined()
-
-    expect(
-      getHttpsProxyAgentForTarget('http://localhost:12111/v1/customers', {
-        HTTPS_PROXY: 'http://proxy.example.test:8080',
-      })
-    ).toBeUndefined()
   })
 })

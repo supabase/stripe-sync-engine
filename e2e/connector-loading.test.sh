@@ -6,7 +6,8 @@
 #   1. path     — binary in node_modules/.bin (default, enabled)
 #   2. commandMap — explicit name→command mapping (--connectors-from-command-map)
 #   3. npm      — auto-download via npx (--connectors-from-npm)
-#   4. disabled — --no-connectors-from-path with no other strategy → "not found"
+#   4. disabled — --no-connectors-from-path with no other strategy still loads
+#                 bundled connectors registered in-process
 #   5. unknown  — nonexistent connector name → "not found"
 #
 # Setup:
@@ -180,11 +181,11 @@ echo "  PASS: connectors loaded via npm (npx)"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 7: path disabled, no other strategy → "not found"
+# Step 7: path disabled, no other strategy → bundled connectors still load
 # ---------------------------------------------------------------------------
-echo "--- Step 7: path disabled with no fallback → not found ---"
-check_not_found --no-connectors-from-path
-echo "  PASS: correctly reports 'not found' with path disabled"
+echo "--- Step 7: path disabled with no fallback → bundled connectors still load ---"
+check_loads --no-connectors-from-path
+echo "  PASS: bundled connectors still load with path disabled"
 echo ""
 
 # ---------------------------------------------------------------------------

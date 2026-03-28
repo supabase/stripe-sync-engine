@@ -76,6 +76,40 @@ describe('resolveOpenApiSpec', () => {
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
+  it('uses the configured proxy for GitHub fetches', async () => {
+    const tempDir = await createTempDir('openapi-fetch-proxy')
+    const originalHttpsProxy = process.env.HTTPS_PROXY
+    process.env.HTTPS_PROXY = 'http://proxy.example.test:8080'
+
+    const fetchMock = vi.fn(async (input: URL | string, init?: RequestInit) => {
+      expect(init?.dispatcher).toBeDefined()
+
+      const url = String(input)
+      if (url.includes('/commits')) {
+        return new Response(JSON.stringify([{ sha: 'abc123def456' }]), { status: 200 })
+      }
+      return new Response(JSON.stringify(minimalStripeOpenApiSpec), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const result = await resolveOpenApiSpec({
+        apiVersion: '2020-08-27',
+        cacheDir: tempDir,
+      })
+
+      expect(result.source).toBe('github')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      if (originalHttpsProxy === undefined) {
+        delete process.env.HTTPS_PROXY
+      } else {
+        process.env.HTTPS_PROXY = originalHttpsProxy
+      }
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('throws for malformed explicit spec files', async () => {
     const tempDir = await createTempDir('openapi-malformed')
     const specPath = path.join(tempDir, 'spec3.json')

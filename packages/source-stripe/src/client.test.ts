@@ -41,7 +41,7 @@ describe('buildStripeClientOptions', () => {
     expect(options.timeout).toBe(2500)
   })
 
-  it('keeps base_url overrides direct and does not force the proxy agent', () => {
+  it('bypasses the proxy for localhost base_url overrides', () => {
     const options = buildStripeClientOptions(
       {
         ...config,
@@ -56,6 +56,20 @@ describe('buildStripeClientOptions', () => {
     expect(options.port).toBe(12111)
     expect(options.protocol).toBe('http')
     expect(options.httpAgent).toBeUndefined()
+  })
+
+  it('keeps the proxy for external base_url overrides', () => {
+    const options = buildStripeClientOptions(
+      {
+        ...config,
+        base_url: 'https://api.stripe.com',
+      },
+      {
+        HTTPS_PROXY: 'http://proxy.example.test:8080',
+      }
+    )
+
+    expect(options.httpAgent).toBeInstanceOf(Agent)
   })
 
   it('throws on an invalid timeout override', () => {
