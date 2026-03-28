@@ -80,7 +80,13 @@ export async function setupStateStore(config: {
   connection_string: string
   schema?: string
 }): Promise<void> {
-  const pool = new pg.Pool(withPgConnectProxy({ connectionString: config.connection_string }))
+  const pool = new pg.Pool(
+    withPgConnectProxy({
+      connectionString: config.connection_string,
+      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
+      ssl: { rejectUnauthorized: false },
+    })
+  )
   const schema = config.schema ?? 'public'
   try {
     await pool.query(sql`
@@ -106,7 +112,13 @@ export function createStateStore(
   config: { connection_string: string; schema?: string },
   syncId = 'default'
 ): ScopedStateStore & { close(): Promise<void> } {
-  const pool = new pg.Pool(withPgConnectProxy({ connectionString: config.connection_string }))
+  const pool = new pg.Pool(
+    withPgConnectProxy({
+      connectionString: config.connection_string,
+      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
+      ssl: { rejectUnauthorized: false },
+    })
+  )
   const scoped = createScopedPgStateStore(pool, config.schema ?? 'public', syncId)
   return {
     ...scoped,

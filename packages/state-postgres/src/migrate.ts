@@ -176,7 +176,8 @@ async function runMigrationsWithContent(
   const client = new Client(
     withPgConnectProxy({
       connectionString: config.databaseUrl,
-      ssl: config.ssl,
+      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
+      ssl: config.ssl ?? { rejectUnauthorized: false },
       connectionTimeoutMillis: 10_000,
     })
   )

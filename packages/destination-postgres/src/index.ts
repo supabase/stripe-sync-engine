@@ -54,7 +54,11 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
 
   const connStr = config.connection_string ?? config.url
   if (connStr) {
-    return withPgConnectProxy({ connectionString: connStr })
+    return withPgConnectProxy({
+      connectionString: connStr,
+      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
+      ssl: { rejectUnauthorized: false },
+    })
   }
 
   throw new Error('Either connection_string (or url) or aws config is required')
