@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.0",
   "info": {
     "title": "Stripe Sync Engine",
     "version": "1.0.0",
@@ -7,6 +7,186 @@
   },
   "components": {
     "schemas": {
+      "Message": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RecordMessage"
+          },
+          {
+            "$ref": "#/components/schemas/StateMessage"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogMessage"
+          },
+          {
+            "$ref": "#/components/schemas/LogMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorMessage"
+          },
+          {
+            "$ref": "#/components/schemas/StreamStatusMessage"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "record": "#/components/schemas/RecordMessage",
+            "state": "#/components/schemas/StateMessage",
+            "catalog": "#/components/schemas/CatalogMessage",
+            "log": "#/components/schemas/LogMessage",
+            "error": "#/components/schemas/ErrorMessage",
+            "stream_status": "#/components/schemas/StreamStatusMessage"
+          }
+        }
+      },
+      "RecordMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["record"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "emitted_at": {
+            "type": "number"
+          }
+        },
+        "required": ["type", "stream", "data", "emitted_at"]
+      },
+      "StateMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["state"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          }
+        },
+        "required": ["type", "stream"]
+      },
+      "CatalogMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["catalog"]
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "primary_key": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "required": ["name", "primary_key"]
+            }
+          }
+        },
+        "required": ["type", "streams"]
+      },
+      "LogMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["log"]
+          },
+          "level": {
+            "type": "string",
+            "enum": ["debug", "info", "warn", "error"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "level", "message"]
+      },
+      "ErrorMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "failure_type": {
+            "type": "string",
+            "enum": ["config_error", "system_error", "transient_error", "auth_error"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "stack_trace": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "failure_type", "message"]
+      },
+      "StreamStatusMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["stream_status"]
+          },
+          "stream": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["started", "running", "complete", "incomplete"]
+          }
+        },
+        "required": ["type", "stream", "status"]
+      },
+      "DestinationOutput": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StateMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorMessage"
+          },
+          {
+            "$ref": "#/components/schemas/LogMessage"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "state": "#/components/schemas/StateMessage",
+            "error": "#/components/schemas/ErrorMessage",
+            "log": "#/components/schemas/LogMessage"
+          }
+        }
+      },
       "PipelineParams": {
         "type": "object",
         "required": ["source", "destination"],
@@ -54,160 +234,6 @@
             }
           }
         }
-      },
-      "RecordMessage": {
-        "type": "object",
-        "required": ["type", "stream", "data", "emitted_at"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["record"]
-          },
-          "stream": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "emitted_at": {
-            "type": "number",
-            "description": "Epoch ms when the source emitted this record"
-          }
-        }
-      },
-      "StateMessage": {
-        "type": "object",
-        "required": ["type", "stream", "data"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["state"]
-          },
-          "stream": {
-            "type": "string"
-          },
-          "data": {
-            "description": "Opaque cursor data — only the source reads/writes this"
-          }
-        }
-      },
-      "LogMessage": {
-        "type": "object",
-        "required": ["type", "level", "message"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["log"]
-          },
-          "level": {
-            "type": "string",
-            "enum": ["debug", "info", "warn", "error"]
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      },
-      "ErrorMessage": {
-        "type": "object",
-        "required": ["type", "failure_type", "message"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["error"]
-          },
-          "failure_type": {
-            "type": "string",
-            "enum": ["config_error", "system_error", "transient_error", "auth_error"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "stack_trace": {
-            "type": "string"
-          }
-        }
-      },
-      "CatalogMessage": {
-        "type": "object",
-        "required": ["type", "streams"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["catalog"]
-          },
-          "streams": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
-          }
-        }
-      },
-      "StreamStatusMessage": {
-        "type": "object",
-        "required": ["type", "stream", "status"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["stream_status"]
-          },
-          "stream": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["started", "running", "complete", "incomplete"]
-          }
-        }
-      },
-      "Message": {
-        "description": "Any message flowing through the engine (one per NDJSON line). Discriminated by `type`.",
-        "discriminator": {
-          "propertyName": "type"
-        },
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/RecordMessage"
-          },
-          {
-            "$ref": "#/components/schemas/StateMessage"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogMessage"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessage"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessage"
-          },
-          {
-            "$ref": "#/components/schemas/StreamStatusMessage"
-          }
-        ]
-      },
-      "DestinationOutput": {
-        "description": "Messages the destination yields back (one per NDJSON line). Discriminated by `type`.",
-        "discriminator": {
-          "propertyName": "type"
-        },
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/StateMessage"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessage"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessage"
-          }
-        ]
       }
     },
     "parameters": {}
@@ -249,8 +275,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -290,8 +318,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -331,8 +361,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -408,8 +440,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -419,8 +453,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
-              "example": "{\"products\":{\"cursor\":\"prod_xyz\"}}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Per-stream cursor state keyed by stream name"
+              }
             },
             "required": false,
             "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
@@ -447,9 +485,6 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/Message"
-                },
-                "x-ndjson-item-schema": {
                   "$ref": "#/components/schemas/Message"
                 }
               }
@@ -483,8 +518,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -498,9 +535,6 @@
             "application/x-ndjson": {
               "schema": {
                 "$ref": "#/components/schemas/Message"
-              },
-              "x-ndjson-item-schema": {
-                "$ref": "#/components/schemas/Message"
               }
             }
           }
@@ -511,9 +545,6 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                },
-                "x-ndjson-item-schema": {
                   "$ref": "#/components/schemas/DestinationOutput"
                 }
               }
@@ -547,8 +578,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
-              "example": "{\"source\":{\"name\":\"stripe\",\"api_key\":\"sk_test_...\"},\"destination\":{\"name\":\"postgres\",\"connection_string\":\"postgres://localhost/db\"},\"streams\":[{\"name\":\"products\"}]}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineParams"
+              }
             },
             "required": false,
             "description": "JSON-encoded PipelineParams: { source: { name, ...config }, destination: { name, ...config }, streams }",
@@ -558,8 +591,12 @@
           {
             "schema": {
               "type": "string",
-              "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
-              "example": "{\"products\":{\"cursor\":\"prod_xyz\"}}"
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Per-stream cursor state keyed by stream name"
+              }
             },
             "required": false,
             "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
@@ -586,9 +623,6 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                },
-                "x-ndjson-item-schema": {
                   "$ref": "#/components/schemas/DestinationOutput"
                 }
               }

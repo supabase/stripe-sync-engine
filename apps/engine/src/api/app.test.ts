@@ -82,7 +82,7 @@ describe('GET /openapi.json', () => {
     const res = await app.request('/openapi.json')
     expect(res.status).toBe(200)
     const spec = await res.json()
-    expect(spec.openapi).toBe('3.0.0')
+    expect(spec.openapi).toBe('3.1.0')
     expect(spec.info.title).toBeDefined()
     expect(spec.paths).toBeDefined()
   })
