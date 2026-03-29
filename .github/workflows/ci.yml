@@ -172,18 +172,6 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
       temporal-db:
         image: postgres:16-alpine
         env:
@@ -208,6 +196,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Start Postgres with SSL
+        run: |
+          docker run -d --name ci-postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 55432:5432 \
+            postgres:18 \
+            -c ssl=on \
+            -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem \
+            -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+          for i in $(seq 1 30); do
+            docker exec ci-postgres pg_isready -U postgres && break || sleep 2
+          done
 
       - name: Install pnpm
         uses: pnpm/action-setup@v5
