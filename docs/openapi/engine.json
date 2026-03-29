@@ -250,7 +250,7 @@
             "content": {
               "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/MessageOutput"
+                  "$ref": "#/components/schemas/Message"
                 }
               }
             }
@@ -649,204 +649,24 @@
       "DestinationOutput": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/StateMessageOutput"
+            "$ref": "#/components/schemas/StateMessage"
           },
           {
-            "$ref": "#/components/schemas/ErrorMessageOutput"
+            "$ref": "#/components/schemas/ErrorMessage"
           },
           {
-            "$ref": "#/components/schemas/LogMessageOutput"
+            "$ref": "#/components/schemas/LogMessage"
           }
         ],
         "type": "object",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "state": "#/components/schemas/StateMessageOutput",
-            "error": "#/components/schemas/ErrorMessageOutput",
-            "log": "#/components/schemas/LogMessageOutput"
+            "state": "#/components/schemas/StateMessage",
+            "error": "#/components/schemas/ErrorMessage",
+            "log": "#/components/schemas/LogMessage"
           }
         }
-      },
-      "MessageOutput": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/RecordMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/StateMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/StreamStatusMessageOutput"
-          }
-        ],
-        "type": "object",
-        "discriminator": {
-          "propertyName": "type",
-          "mapping": {
-            "record": "#/components/schemas/RecordMessageOutput",
-            "state": "#/components/schemas/StateMessageOutput",
-            "catalog": "#/components/schemas/CatalogMessageOutput",
-            "log": "#/components/schemas/LogMessageOutput",
-            "error": "#/components/schemas/ErrorMessageOutput",
-            "stream_status": "#/components/schemas/StreamStatusMessageOutput"
-          }
-        }
-      },
-      "RecordMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "record"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "emitted_at": {
-            "type": "number"
-          }
-        },
-        "required": ["type", "stream", "data", "emitted_at"],
-        "additionalProperties": false
-      },
-      "StateMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "state"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "data": {}
-        },
-        "required": ["type", "stream", "data"],
-        "additionalProperties": false
-      },
-      "CatalogMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "catalog"
-          },
-          "streams": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "primary_key": {
-                  "type": "array",
-                  "items": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "json_schema": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {}
-                },
-                "metadata": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {}
-                }
-              },
-              "required": ["name", "primary_key"],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": ["type", "streams"],
-        "additionalProperties": false
-      },
-      "LogMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "log"
-          },
-          "level": {
-            "type": "string",
-            "enum": ["debug", "info", "warn", "error"]
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "level", "message"],
-        "additionalProperties": false
-      },
-      "ErrorMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "error"
-          },
-          "failure_type": {
-            "type": "string",
-            "enum": ["config_error", "system_error", "transient_error", "auth_error"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "stack_trace": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "failure_type", "message"],
-        "additionalProperties": false
-      },
-      "StreamStatusMessageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "stream_status"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["started", "running", "complete", "incomplete"]
-          }
-        },
-        "required": ["type", "stream", "status"],
-        "additionalProperties": false
       },
       "PipelineConfig": {
         "type": "object",
