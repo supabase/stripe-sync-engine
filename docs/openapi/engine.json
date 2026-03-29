@@ -5,6 +5,472 @@
     "version": "1.0.0",
     "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineConfig). Optional cursor state can be provided via `X-State`.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /setup | Set up destination schema |\n| POST | /teardown | Tear down destination schema |\n| GET | /check | Check connector connection |\n| POST | /read | Read records from source |\n| POST | /write | Write records to destination |\n| POST | /sync | Run sync pipeline (read → write) |\n| GET | /connectors | List available connectors and their config schemas |"
   },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "tags": ["Status"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/setup": {
+      "post": {
+        "operationId": "setup",
+        "tags": ["Stateless Sync API"],
+        "summary": "Set up destination schema",
+        "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Setup complete"
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teardown": {
+      "post": {
+        "operationId": "teardown",
+        "tags": ["Stateless Sync API"],
+        "summary": "Tear down destination schema",
+        "description": "Drops destination tables. Irreversible.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Teardown complete"
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/check": {
+      "get": {
+        "operationId": "check",
+        "tags": ["Stateless Sync API"],
+        "summary": "Check connector connection",
+        "description": "Validates the source/destination config and tests connectivity.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connection check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "additionalProperties": false
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["succeeded", "failed"]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["source", "destination"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/read": {
+      "post": {
+        "operationId": "read",
+        "tags": ["Stateless Sync API"],
+        "summary": "Read records from source",
+        "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          },
+          {
+            "in": "header",
+            "name": "x-state",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Per-stream cursor state keyed by stream name"
+              }
+            },
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore."
+          },
+          {
+            "in": "header",
+            "name": "x-state-checkpoint-limit",
+            "schema": {
+              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+              "example": "1",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/write": {
+      "post": {
+        "operationId": "write",
+        "tags": ["Stateless Sync API"],
+        "summary": "Write records to destination",
+        "description": "Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "$ref": "#/components/schemas/Message"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of write result messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync": {
+      "post": {
+        "operationId": "sync",
+        "tags": ["Stateless Sync API"],
+        "summary": "Run sync pipeline (read → write)",
+        "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-pipeline",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/PipelineConfig"
+              }
+            },
+            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }"
+          },
+          {
+            "in": "header",
+            "name": "x-state",
+            "schema": {
+              "type": "string",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Per-stream cursor state keyed by stream name"
+              }
+            },
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore."
+          },
+          {
+            "in": "header",
+            "name": "x-state-checkpoint-limit",
+            "schema": {
+              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
+              "example": "1",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "NDJSON stream of sync messages",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connectors": {
+      "get": {
+        "operationId": "listConnectors",
+        "tags": ["Connectors"],
+        "summary": "List available connectors and their config schemas",
+        "responses": {
+          "200": {
+            "description": "Available connectors with their JSON Schema configs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sources": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "config_schema": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": ["config_schema"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "destinations": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "config_schema": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": ["config_schema"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["sources", "destinations"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
       "Message": {
@@ -28,6 +494,7 @@
             "$ref": "#/components/schemas/StreamStatusMessage"
           }
         ],
+        "type": "object",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
@@ -45,16 +512,17 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["record"]
+            "const": "record"
           },
           "stream": {
             "type": "string"
           },
           "data": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
           },
           "emitted_at": {
             "type": "number"
@@ -67,23 +535,21 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["state"]
+            "const": "state"
           },
           "stream": {
             "type": "string"
           },
-          "data": {
-            "nullable": true
-          }
+          "data": {}
         },
-        "required": ["type", "stream"]
+        "required": ["type", "stream", "data"]
       },
       "CatalogMessage": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["catalog"]
+            "const": "catalog"
           },
           "streams": {
             "type": "array",
@@ -101,6 +567,20 @@
                       "type": "string"
                     }
                   }
+                },
+                "json_schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "metadata": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
                 }
               },
               "required": ["name", "primary_key"]
@@ -114,7 +594,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["log"]
+            "const": "log"
           },
           "level": {
             "type": "string",
@@ -131,7 +611,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["error"]
+            "const": "error"
           },
           "failure_type": {
             "type": "string",
@@ -154,7 +634,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["stream_status"]
+            "const": "stream_status"
           },
           "stream": {
             "type": "string"
@@ -169,23 +649,204 @@
       "DestinationOutput": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/StateMessage"
+            "$ref": "#/components/schemas/StateMessageOutput"
           },
           {
-            "$ref": "#/components/schemas/ErrorMessage"
+            "$ref": "#/components/schemas/ErrorMessageOutput"
           },
           {
-            "$ref": "#/components/schemas/LogMessage"
+            "$ref": "#/components/schemas/LogMessageOutput"
           }
         ],
+        "type": "object",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "state": "#/components/schemas/StateMessage",
-            "error": "#/components/schemas/ErrorMessage",
-            "log": "#/components/schemas/LogMessage"
+            "state": "#/components/schemas/StateMessageOutput",
+            "error": "#/components/schemas/ErrorMessageOutput",
+            "log": "#/components/schemas/LogMessageOutput"
           }
         }
+      },
+      "MessageOutput": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RecordMessageOutput"
+          },
+          {
+            "$ref": "#/components/schemas/StateMessageOutput"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogMessageOutput"
+          },
+          {
+            "$ref": "#/components/schemas/LogMessageOutput"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorMessageOutput"
+          },
+          {
+            "$ref": "#/components/schemas/StreamStatusMessageOutput"
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "record": "#/components/schemas/RecordMessageOutput",
+            "state": "#/components/schemas/StateMessageOutput",
+            "catalog": "#/components/schemas/CatalogMessageOutput",
+            "log": "#/components/schemas/LogMessageOutput",
+            "error": "#/components/schemas/ErrorMessageOutput",
+            "stream_status": "#/components/schemas/StreamStatusMessageOutput"
+          }
+        }
+      },
+      "RecordMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "record"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "emitted_at": {
+            "type": "number"
+          }
+        },
+        "required": ["type", "stream", "data", "emitted_at"],
+        "additionalProperties": false
+      },
+      "StateMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "state"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "data": {}
+        },
+        "required": ["type", "stream", "data"],
+        "additionalProperties": false
+      },
+      "CatalogMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "catalog"
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "primary_key": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "json_schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "metadata": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["name", "primary_key"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["type", "streams"],
+        "additionalProperties": false
+      },
+      "LogMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "log"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["debug", "info", "warn", "error"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "level", "message"],
+        "additionalProperties": false
+      },
+      "ErrorMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error"
+          },
+          "failure_type": {
+            "type": "string",
+            "enum": ["config_error", "system_error", "transient_error", "auth_error"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "stack_trace": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "failure_type", "message"],
+        "additionalProperties": false
+      },
+      "StreamStatusMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "stream_status"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["started", "running", "complete", "incomplete"]
+          }
+        },
+        "required": ["type", "stream", "status"],
+        "additionalProperties": false
       },
       "PipelineConfig": {
         "type": "object",
@@ -229,468 +890,6 @@
                   "items": {
                     "type": "string"
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "parameters": {}
-  },
-  "paths": {
-    "/health": {
-      "get": {
-        "operationId": "health",
-        "tags": ["Status"],
-        "summary": "Health check",
-        "responses": {
-          "200": {
-            "description": "Server is healthy",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [true]
-                    }
-                  },
-                  "required": ["ok"]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/setup": {
-      "post": {
-        "operationId": "setup",
-        "tags": ["Stateless Sync API"],
-        "summary": "Set up destination schema",
-        "description": "Creates destination tables and applies migrations. Safe to call multiple times.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Setup complete"
-          },
-          "400": {
-            "description": "Invalid params",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/teardown": {
-      "post": {
-        "operationId": "teardown",
-        "tags": ["Stateless Sync API"],
-        "summary": "Tear down destination schema",
-        "description": "Drops destination tables. Irreversible.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Teardown complete"
-          },
-          "400": {
-            "description": "Invalid params",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/check": {
-      "get": {
-        "operationId": "check",
-        "tags": ["Stateless Sync API"],
-        "summary": "Check connector connection",
-        "description": "Validates the source/destination config and tests connectivity.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Connection check result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "source": {
-                      "type": "object",
-                      "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": ["succeeded", "failed"]
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["status"]
-                    },
-                    "destination": {
-                      "type": "object",
-                      "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": ["succeeded", "failed"]
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["status"]
-                    }
-                  },
-                  "required": ["source", "destination"]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid params",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/read": {
-      "post": {
-        "operationId": "read",
-        "tags": ["Stateless Sync API"],
-        "summary": "Read records from source",
-        "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides catalog/state as input.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Per-stream cursor state keyed by stream name"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
-            "name": "x-state",
-            "in": "header"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "exclusiveMinimum": true,
-              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-              "example": "1"
-            },
-            "required": false,
-            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-            "name": "x-state-checkpoint-limit",
-            "in": "header"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "NDJSON stream of sync messages",
-            "content": {
-              "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/Message"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid params",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/write": {
-      "post": {
-        "operationId": "write",
-        "tags": ["Stateless Sync API"],
-        "summary": "Write records to destination",
-        "description": "Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-ndjson": {
-              "schema": {
-                "$ref": "#/components/schemas/Message"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "NDJSON stream of write result messages",
-            "content": {
-              "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid params or missing body",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/sync": {
-      "post": {
-        "operationId": "sync",
-        "tags": ["Stateless Sync API"],
-        "summary": "Run sync pipeline (read → write)",
-        "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded PipelineConfig: { source: { name, ...config }, destination: { name, ...config }, streams }",
-            "name": "x-pipeline",
-            "in": "header"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Per-stream cursor state keyed by stream name"
-              }
-            },
-            "required": false,
-            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
-            "name": "x-state",
-            "in": "header"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "exclusiveMinimum": true,
-              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-              "example": "1"
-            },
-            "required": false,
-            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-            "name": "x-state-checkpoint-limit",
-            "in": "header"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "NDJSON stream of sync messages",
-            "content": {
-              "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid params",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/connectors": {
-      "get": {
-        "operationId": "listConnectors",
-        "tags": ["Connectors"],
-        "summary": "List available connectors and their config schemas",
-        "responses": {
-          "200": {
-            "description": "Available connectors with their JSON Schema configs",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sources": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "config_schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "nullable": true
-                            }
-                          }
-                        },
-                        "required": ["config_schema"]
-                      }
-                    },
-                    "destinations": {
-                      "type": "object",
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "config_schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "nullable": true
-                            }
-                          }
-                        },
-                        "required": ["config_schema"]
-                      }
-                    }
-                  },
-                  "required": ["sources", "destinations"]
                 }
               }
             }

@@ -58,9 +58,6 @@ importers:
       '@hono/node-server':
         specifier: ^1
         version: 1.19.11(hono@4.12.8)
-      '@hono/zod-openapi':
-        specifier: ^1.2
-        version: 1.2.2(hono@4.12.8)(zod@4.3.6)
       '@scalar/hono-api-reference':
         specifier: ^0.6
         version: 0.6.0(hono@4.12.8)
@@ -112,6 +109,9 @@ importers:
       zod:
         specifier: ^4.3.6
         version: 4.3.6
+      zod-openapi:
+        specifier: ^5
+        version: 5.4.6(zod@4.3.6)
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -3924,6 +3924,12 @@ packages:
   zhead@2.2.4:
     resolution: {integrity: sha512-8F0OI5dpWIA5IGG5NHUg9staDwz/ZPxZtvGVf01j7vHqSyZ0raHY+78atOVxRqb73AotX22uV1pXt3gYSstGag==}
 
+  zod-openapi@5.4.6:
+    resolution: {integrity: sha512-P2jsOOBAq/6hCwUsMCjUATZ8szkMsV5VAwZENfyxp2Hc/XPJQpVwAgevWZc65xZauCwWB9LAn7zYeiCJFAEL+A==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      zod: ^3.25.74 || ^4.0.0
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -7702,6 +7708,10 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   zhead@2.2.4: {}
+
+  zod-openapi@5.4.6(zod@4.3.6):
+    dependencies:
+      zod: 4.3.6
 
   zod@3.25.76: {}
 

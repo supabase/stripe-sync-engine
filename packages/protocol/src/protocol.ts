@@ -102,15 +102,14 @@ export type CheckResult = z.infer<typeof CheckResult>
 // MARK: - Messages
 
 /** One record for one stream. */
-export const RecordMessage = z.object({
-  type: z.literal('record'),
-  /** The stream this record belongs to. */
-  stream: z.string(),
-  /** Record payload. Schema varies by stream. */
-  data: z.record(z.string(), z.unknown()),
-  /** When this record was emitted by the source (epoch ms). */
-  emitted_at: z.number(),
-})
+export const RecordMessage = z
+  .object({
+    type: z.literal('record'),
+    stream: z.string(),
+    data: z.record(z.string(), z.unknown()),
+    emitted_at: z.number(),
+  })
+  .meta({ id: 'RecordMessage' })
 export type RecordMessage = z.infer<typeof RecordMessage>
 
 /**
@@ -121,53 +120,60 @@ export type RecordMessage = z.infer<typeof RecordMessage>
  * The orchestrator persists state keyed by (sync_id, stream) and passes the
  * full map back to the source on resume.
  */
-export const StateMessage = z.object({
-  type: z.literal('state'),
-  /** Which stream this checkpoint is for. */
-  stream: z.string(),
-  /** Opaque cursor data. Only the source reads/writes this. */
-  data: z.unknown(),
-})
+export const StateMessage = z
+  .object({
+    type: z.literal('state'),
+    stream: z.string(),
+    data: z.unknown(),
+  })
+  .meta({ id: 'StateMessage' })
 export type StateMessage = z.infer<typeof StateMessage>
 
 /** Catalog of available streams. Emitted by a source during discover(). */
-export const CatalogMessage = z.object({
-  type: z.literal('catalog'),
-  streams: z.array(Stream),
-})
+export const CatalogMessage = z
+  .object({
+    type: z.literal('catalog'),
+    streams: z.array(Stream),
+  })
+  .meta({ id: 'CatalogMessage' })
 export type CatalogMessage = z.infer<typeof CatalogMessage>
 
 /** Structured log output from a source or destination. */
-export const LogMessage = z.object({
-  type: z.literal('log'),
-  level: z.enum(['debug', 'info', 'warn', 'error']),
-  message: z.string(),
-})
+export const LogMessage = z
+  .object({
+    type: z.literal('log'),
+    level: z.enum(['debug', 'info', 'warn', 'error']),
+    message: z.string(),
+  })
+  .meta({ id: 'LogMessage' })
 export type LogMessage = z.infer<typeof LogMessage>
 
 /**
  * Structured error from a source or destination.
  * failure_type lets the orchestrator decide whether to retry, alert, or abort.
  */
-export const ErrorMessage = z.object({
-  type: z.literal('error'),
-  failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
-  message: z.string(),
-  /** The stream this error is about, if applicable. */
-  stream: z.string().optional(),
-  stack_trace: z.string().optional(),
-})
+export const ErrorMessage = z
+  .object({
+    type: z.literal('error'),
+    failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
+    message: z.string(),
+    stream: z.string().optional(),
+    stack_trace: z.string().optional(),
+  })
+  .meta({ id: 'ErrorMessage' })
 export type ErrorMessage = z.infer<typeof ErrorMessage>
 
 /**
  * Per-stream status update from a source.
  * Enables progress reporting in CLI / dashboard.
  */
-export const StreamStatusMessage = z.object({
-  type: z.literal('stream_status'),
-  stream: z.string(),
-  status: z.enum(['started', 'running', 'complete', 'incomplete']),
-})
+export const StreamStatusMessage = z
+  .object({
+    type: z.literal('stream_status'),
+    stream: z.string(),
+    status: z.enum(['started', 'running', 'complete', 'incomplete']),
+  })
+  .meta({ id: 'StreamStatusMessage' })
 export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
 // MARK: - Pipeline params
@@ -206,23 +212,23 @@ export interface SyncParams {
 export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, StateMessage])
 export type DestinationInput = z.infer<typeof DestinationInput>
 
-/** Messages the destination yields back to the orchestrator. */
-export const DestinationOutput = z.discriminatedUnion('type', [
-  StateMessage,
-  ErrorMessage,
-  LogMessage,
-])
+/** Messages the destination yields back to the orchestrator (one per NDJSON line). */
+export const DestinationOutput = z
+  .discriminatedUnion('type', [StateMessage, ErrorMessage, LogMessage])
+  .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
-/** Any message flowing through the engine. One message per line (NDJSON). */
-export const Message = z.discriminatedUnion('type', [
-  RecordMessage,
-  StateMessage,
-  CatalogMessage,
-  LogMessage,
-  ErrorMessage,
-  StreamStatusMessage,
-])
+/** Any message flowing through the engine. One message per NDJSON line. */
+export const Message = z
+  .discriminatedUnion('type', [
+    RecordMessage,
+    StateMessage,
+    CatalogMessage,
+    LogMessage,
+    ErrorMessage,
+    StreamStatusMessage,
+  ])
+  .meta({ id: 'Message' })
 export type Message = z.infer<typeof Message>
 
 // MARK: - Source

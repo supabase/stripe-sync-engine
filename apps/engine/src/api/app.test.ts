@@ -77,7 +77,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('GET /openapi.json', () => {
-  it('returns a valid OpenAPI 3.0 spec', async () => {
+  it('returns a valid OpenAPI 3.1 spec', async () => {
     const app = createApp(resolver)
     const res = await app.request('/openapi.json')
     expect(res.status).toBe(200)
@@ -131,10 +131,10 @@ describe('GET /openapi.json', () => {
     const spec = (await res.json()) as any
     const schemas = spec.components.schemas
 
-    // Individual message types
-    expect(schemas.RecordMessage.properties.type.enum).toEqual(['record'])
-    expect(schemas.StateMessage.properties.type.enum).toEqual(['state'])
-    expect(schemas.ErrorMessage.properties.type.enum).toEqual(['error'])
+    // Individual message types (Zod v4 / JSON Schema 2020-12 uses `const` for literals)
+    expect(schemas.RecordMessage.properties.type.const).toBe('record')
+    expect(schemas.StateMessage.properties.type.const).toBe('state')
+    expect(schemas.ErrorMessage.properties.type.const).toBe('error')
 
     // Message union
     expect(schemas.Message.discriminator.propertyName).toBe('type')
