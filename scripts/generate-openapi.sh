@@ -45,7 +45,10 @@ node -e "
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
 " > "$outdir/webhook.json"
 
-pnpm prettier --write "$outdir/engine.json" "$outdir/service.json" "$outdir/webhook.json" --log-level warn
+pnpm exec prettier --config .prettierrc --log-level warn --write \
+  "$outdir/engine.json" \
+  "$outdir/service.json" \
+  "$outdir/webhook.json"
 
 if $check_mode; then
   drift=false
