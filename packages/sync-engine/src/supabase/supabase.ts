@@ -148,6 +148,7 @@ export class SupabaseSetupClient {
       -- Store unique worker secret in vault for pg_cron to use
       -- Delete existing secret if it exists, then create new one
       DELETE FROM vault.secrets WHERE name = 'stripe_sync_worker_secret';
+      DELETE FROM vault.secrets WHERE name = 'stripe_sync_skip_until';
       SELECT vault.create_secret('${escapedWorkerSecret}', 'stripe_sync_worker_secret');
 
       -- Delete existing jobs if they exist

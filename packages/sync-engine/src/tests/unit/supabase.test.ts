@@ -157,6 +157,10 @@ describe('SupabaseDeployClient', () => {
       // Get the SQL that was executed (runAQuery(projectRef, { query }))
       const executedSQL = (mockRunQuery.mock.calls[0][1] as { query: string }).query
 
+      expect(executedSQL).toContain(
+        "DELETE FROM vault.secrets WHERE name = 'stripe_sync_skip_until';"
+      )
+
       // Verify it contains the custom base URL
       expect(executedSQL).toContain(
         `https://${mockProjectRef}.test-domain.com/functions/v1/stripe-worker`
