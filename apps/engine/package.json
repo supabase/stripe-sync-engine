@@ -42,6 +42,7 @@
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-state-postgres": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
+    "@stripe/sync-util-postgres": "workspace:*",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",

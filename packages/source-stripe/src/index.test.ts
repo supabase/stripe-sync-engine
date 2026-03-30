@@ -10,11 +10,15 @@ import type {
   StateMessage,
   StreamStatusMessage,
 } from '@stripe/sync-protocol'
-import source from './index.js'
+import source, { createStripeSource } from './index.js'
 import { fromWebhookEvent } from './process-event.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket.js'
+import type { SegmentState, StripeStreamState } from './index.js'
+import { listApiBackfill } from './src-list-api.js'
+import { createInMemoryRateLimiter } from './rate-limiter.js'
+import type { RateLimiter } from './rate-limiter.js'
 
 // Mock the WebSocket module
 const mockClose = vi.fn()
@@ -45,7 +49,7 @@ function makeConfig(
   overrides: Partial<ResourceConfig> & { order: number; tableName: string }
 ): ResourceConfig {
   return {
-    supportsCreatedFilter: true,
+    supportsCreatedFilter: false,
     listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
     retrieveFn: (() => Promise.resolve({})) as ResourceConfig['retrieveFn'],
     ...overrides,
@@ -1590,6 +1594,303 @@ describe('StripeSource', () => {
         .filter((m): m is StateMessage => m.type === 'state')
         .filter((s) => (s.data as { events_cursor?: number }).events_cursor != null)
       expect(statesWithCursor).toHaveLength(0)
+    })
+  })
+
+  describe('read() — parallel backfill (segment checkpoint/resume)', () => {
+    it('resumes only incomplete segments from prior segment state', async () => {
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_resumed', name: 'Resumed' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const priorSegments: SegmentState[] = [
+        { index: 0, gte: 1000000, lt: 1100000, pageCursor: null, status: 'complete' },
+        { index: 1, gte: 1100000, lt: 1200000, pageCursor: 'cus_halfway', status: 'pending' },
+        { index: 2, gte: 1200000, lt: 1300001, pageCursor: null, status: 'complete' },
+      ]
+
+      const mockStripe = {} as unknown as Stripe
+      const rateLimiter: RateLimiter = async () => 0
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'customers' }),
+          state: {
+            customers: { pageCursor: null, status: 'pending', segments: priorSegments },
+          },
+          registry,
+          stripe: mockStripe,
+          rateLimiter,
+          backfillConcurrency: 3,
+        })
+      )
+
+      expect(listFn).toHaveBeenCalledTimes(1)
+      expect(listFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          created: { gte: 1100000, lt: 1200000 },
+          starting_after: 'cus_halfway',
+          limit: 100,
+        })
+      )
+
+      const records = messages.filter((m): m is RecordMessage => m.type === 'record')
+      expect(records).toHaveLength(1)
+      expect(records[0].data).toMatchObject({ id: 'cus_resumed' })
+
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      const lastState = states[states.length - 1]
+      expect(lastState.data).toMatchObject({ status: 'complete' })
+      const segments = (lastState.data as StripeStreamState).segments!
+      expect(segments.every((s) => s.status === 'complete')).toBe(true)
+    })
+
+    it('emits state with full segment snapshots after each page for resumability', async () => {
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'item_1' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const mockStripe = {
+        accounts: { retrieve: vi.fn().mockResolvedValue({ created: 1000000 }) },
+      } as unknown as Stripe
+      const rateLimiter: RateLimiter = async () => 0
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'customers' }),
+          state: undefined,
+          registry,
+          stripe: mockStripe,
+          rateLimiter,
+          backfillConcurrency: 3,
+        })
+      )
+
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      expect(states.length).toBeGreaterThan(0)
+
+      for (const state of states) {
+        const data = state.data as StripeStreamState
+        expect(data.segments).toBeDefined()
+        expect(data.segments!.length).toBeGreaterThan(0)
+      }
+
+      const lastData = states[states.length - 1].data as StripeStreamState
+      expect(lastData.status).toBe('complete')
+      expect(lastData.segments!.every((s) => s.status === 'complete')).toBe(true)
+    })
+  })
+
+  describe('read() — streams without supportsCreatedFilter sync sequentially', () => {
+    it('uses sequential pagination (no created filter) for non-parallel streams', async () => {
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'item_1', name: 'Sequential' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        tax_ids: makeConfig({
+          order: 1,
+          tableName: 'tax_ids',
+          supportsCreatedFilter: false,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const mockStripe = {} as unknown as Stripe
+      const rateLimiter: RateLimiter = async () => 0
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'tax_ids' }),
+          state: undefined,
+          registry,
+          stripe: mockStripe,
+          rateLimiter,
+        })
+      )
+
+      expect(listFn).toHaveBeenCalledTimes(1)
+      expect(listFn).toHaveBeenCalledWith({ limit: 100 })
+
+      const states = messages.filter((m): m is StateMessage => m.type === 'state')
+      for (const state of states) {
+        expect((state.data as StripeStreamState).segments).toBeUndefined()
+      }
+    })
+
+    it('parallel and sequential streams coexist in the same catalog', async () => {
+      const parallelListFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_1' }],
+        has_more: false,
+      })
+      const sequentialListFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'tax_1' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: parallelListFn as ResourceConfig['listFn'],
+        }),
+        tax_ids: makeConfig({
+          order: 2,
+          tableName: 'tax_ids',
+          supportsCreatedFilter: false,
+          listFn: sequentialListFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const mockStripe = {
+        accounts: { retrieve: vi.fn().mockResolvedValue({ created: 1000000 }) },
+      } as unknown as Stripe
+      const rateLimiter: RateLimiter = async () => 0
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: {
+            streams: [{ stream: { name: 'customers' } }, { stream: { name: 'tax_ids' } }],
+          },
+          state: undefined,
+          registry,
+          stripe: mockStripe,
+          rateLimiter,
+          backfillConcurrency: 3,
+        })
+      )
+
+      for (const call of parallelListFn.mock.calls) {
+        expect(call[0]).toHaveProperty('created')
+      }
+
+      for (const call of sequentialListFn.mock.calls) {
+        expect(call[0]).not.toHaveProperty('created')
+      }
+
+      const statusMsgs = messages.filter(
+        (m): m is StreamStatusMessage => m.type === 'stream_status'
+      )
+      const completes = statusMsgs.filter((m) => m.status === 'complete')
+      expect(completes).toHaveLength(2)
+    })
+  })
+
+  describe('rate limiting', () => {
+    describe('createInMemoryRateLimiter', () => {
+      it('returns 0 (no wait) when tokens are available', async () => {
+        const limiter = createInMemoryRateLimiter(10)
+        const wait = await limiter()
+        expect(wait).toBe(0)
+      })
+
+      it('returns positive wait time when tokens are depleted', async () => {
+        const limiter = createInMemoryRateLimiter(2)
+        await limiter()
+        await limiter()
+        const wait = await limiter()
+        expect(wait).toBeGreaterThan(0)
+      })
+
+      it('wait time scales inversely with RPS', async () => {
+        const fastLimiter = createInMemoryRateLimiter(100)
+        const slowLimiter = createInMemoryRateLimiter(1)
+
+        for (let i = 0; i < 100; i++) await fastLimiter()
+        const fastWait = await fastLimiter()
+
+        await slowLimiter()
+        const slowWait = await slowLimiter()
+
+        expect(slowWait).toBeGreaterThan(fastWait)
+      })
+    })
+
+    it('rate limiter is called before each list API page during backfill', async () => {
+      const rateLimiterSpy = vi.fn().mockResolvedValue(0) as unknown as RateLimiter
+
+      const listFn = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: [{ id: 'item_1' }],
+          has_more: true,
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 'item_2' }],
+          has_more: false,
+        })
+
+      const registry: Record<string, ResourceConfig> = {
+        items: makeConfig({
+          order: 1,
+          tableName: 'items',
+          supportsCreatedFilter: false,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'items' }),
+          state: undefined,
+          registry,
+          stripe: {} as unknown as Stripe,
+          rateLimiter: rateLimiterSpy,
+        })
+      )
+
+      expect(rateLimiterSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('createStripeSource uses external rate limiter when provided via deps', async () => {
+      const externalLimiter = vi.fn().mockResolvedValue(0) as unknown as RateLimiter
+      const customSource = createStripeSource({ rateLimiter: externalLimiter })
+
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_1' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+
+      await collect(
+        customSource.read({
+          config: { api_key: 'sk_test_fake' },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+        })
+      )
+
+      expect(externalLimiter).toHaveBeenCalled()
     })
   })
 

@@ -79,6 +79,9 @@ importers:
       '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
+      '@stripe/sync-util-postgres':
+        specifier: workspace:*
+        version: link:../../packages/util-postgres
       citty:
         specifier: ^0.1.6
         version: 0.1.6
