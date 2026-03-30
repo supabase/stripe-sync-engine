@@ -11,17 +11,17 @@ A TypeScript library to synchronize Stripe data into a PostgreSQL database, desi
 ## Installation
 
 ```sh
-npm install @stripe-experiment/sync stripe
+npm install @stripe/sync-engine
 # or
-pnpm add @stripe-experiment/sync stripe
+pnpm add @stripe/sync-engine
 # or
-yarn add @stripe-experiment/sync stripe
+yarn add @stripe/sync-engine
 ```
 
 ## Usage
 
 ```ts
-import { StripeSync } from '@stripe-experiment/sync'
+import { StripeSync } from '@stripe/sync-engine'
 
 const sync = new StripeSync({
   poolConfig: {
@@ -107,7 +107,7 @@ The library will create and manage a `stripe` schema in your PostgreSQL database
 Migrations are included in the `db/migrations` directory. You can run them using the provided `runMigrations` function:
 
 ```ts
-import { runMigrations } from '@stripe-experiment/sync'
+import { runMigrations } from '@stripe/sync-engine'
 
 await runMigrations({ databaseUrl: 'postgres://...' })
 ```
