@@ -2,7 +2,7 @@ import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
-import { sql, upsert, withPgConnectProxy } from '@stripe/sync-util-postgres'
+import { sql, sslConfigFromConnectionString, upsert, withPgConnectProxy } from '@stripe/sync-util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 
 // MARK: - Spec
@@ -27,23 +27,6 @@ export const spec = z.object({
 })
 
 export type Config = z.infer<typeof spec>
-
-/**
- * Map the `sslmode` query parameter from a Postgres connection string to a pg
- * `ssl` option. Defaults to `false` (no SSL) when no sslmode is present — SSL
- * must be opted into explicitly via `sslmode=require` (or `verify-ca`/`verify-full`).
- */
-function sslConfigFromConnectionString(connStr: string): PoolConfig['ssl'] {
-  try {
-    const sslmode = new URL(connStr).searchParams.get('sslmode')
-    if (sslmode === 'disable') return false
-    if (sslmode === 'verify-ca' || sslmode === 'verify-full') return true
-    if (sslmode === 'require') return { rejectUnauthorized: false }
-    return false
-  } catch {
-    return false
-  }
-}
 
 export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   if (config.aws) {

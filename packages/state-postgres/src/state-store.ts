@@ -1,18 +1,5 @@
 import pg from 'pg'
-import type { PoolConfig } from 'pg'
-import { sql, withPgConnectProxy } from '@stripe/sync-util-postgres'
-
-function sslConfigFromConnectionString(connStr: string): PoolConfig['ssl'] {
-  try {
-    const sslmode = new URL(connStr).searchParams.get('sslmode')
-    if (sslmode === 'disable') return false
-    if (sslmode === 'verify-ca' || sslmode === 'verify-full') return true
-    if (sslmode === 'require') return { rejectUnauthorized: false }
-    return false
-  } catch {
-    return false
-  }
-}
+import { sql, sslConfigFromConnectionString, withPgConnectProxy } from '@stripe/sync-util-postgres'
 
 export interface StateStore {
   get(syncId: string): Promise<Record<string, unknown> | undefined>
