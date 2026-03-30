@@ -2,7 +2,12 @@ import pg from 'pg'
 import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
-import { sql, sslConfigFromConnectionString, upsert, withPgConnectProxy } from '@stripe/sync-util-postgres'
+import {
+  sql,
+  sslConfigFromConnectionString,
+  upsert,
+  withPgConnectProxy,
+} from '@stripe/sync-util-postgres'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 
 // MARK: - Spec
