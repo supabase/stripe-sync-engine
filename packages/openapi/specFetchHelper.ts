@@ -1,10 +1,15 @@
 import os from 'node:os'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types.js'
 import { fetchWithProxy } from './transport.js'
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
+
+// The spec bundled into this package at build time.
+// Update this constant and bundled-spec.json together when bumping.
+export const BUNDLED_API_VERSION = '2026-03-25.dahlia'
 
 export async function resolveOpenApiSpec(config: ResolveSpecConfig): Promise<ResolvedOpenApiSpec> {
   const apiVersion = config.apiVersion
@@ -21,6 +26,19 @@ export async function resolveOpenApiSpec(config: ResolveSpecConfig): Promise<Res
       spec: explicitSpec,
       source: 'explicit_path',
       cachePath: config.openApiSpecPath,
+    }
+  }
+
+  // If the requested version matches what's bundled, serve from the filesystem
+  // without any network calls or caching overhead.
+  if (extractDatePart(apiVersion) === extractDatePart(BUNDLED_API_VERSION)) {
+    const bundledPath = fileURLToPath(new URL('./bundled-spec.json', import.meta.url))
+    const spec = await readSpecFromPath(bundledPath)
+    return {
+      apiVersion,
+      spec,
+      source: 'bundled',
+      cachePath: bundledPath,
     }
   }
 
