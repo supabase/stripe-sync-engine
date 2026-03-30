@@ -1,1 +1,1 @@
-ALTER TYPE "stripe"."subscription_status" ADD VALUE 'paused';
+ALTER TYPE "stripe"."subscription_status" ADD VALUE IF NOT EXISTS 'paused';
