@@ -1,9 +1,9 @@
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_type') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = 'pricing_type' AND n.nspname = 'stripe') THEN
         create type "stripe"."pricing_type" as enum ('one_time', 'recurring');
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pricing_tiers') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = 'pricing_tiers' AND n.nspname = 'stripe') THEN
       create type "stripe"."pricing_tiers" as enum ('graduated', 'volume');
     END IF;
     --more types here...

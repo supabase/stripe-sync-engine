@@ -1,7 +1,7 @@
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = 'invoice_status' AND n.nspname = 'stripe') THEN
         create type "stripe"."invoice_status" as enum ('draft', 'open', 'paid', 'uncollectible', 'void');
     END IF;
 END
