@@ -20,7 +20,7 @@ describe('buildPoolConfig', () => {
     vi.unstubAllEnvs()
   })
 
-  it('connection_string → { connectionString } PoolConfig', async () => {
+  it('connection_string without sslmode → ssl: false', async () => {
     const config: Config = {
       connection_string: 'postgres://user:pass@localhost:5432/mydb',
       port: 5432,
@@ -31,9 +31,42 @@ describe('buildPoolConfig', () => {
     const result = await buildPoolConfig(config)
     expect(result).toEqual({
       connectionString: 'postgres://user:pass@localhost:5432/mydb',
-      ssl: { rejectUnauthorized: false },
+      ssl: false,
     })
     expect(mockBuild).not.toHaveBeenCalled()
+  })
+
+  it('sslmode=disable → ssl: false', async () => {
+    const config: Config = {
+      connection_string: 'postgres://user:pass@localhost:5432/mydb?sslmode=disable',
+      port: 5432,
+      schema: 'stripe',
+      batch_size: 100,
+    }
+    const result = await buildPoolConfig(config)
+    expect(result.ssl).toBe(false)
+  })
+
+  it('sslmode=verify-full → ssl: true', async () => {
+    const config: Config = {
+      connection_string: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
+      port: 5432,
+      schema: 'stripe',
+      batch_size: 100,
+    }
+    const result = await buildPoolConfig(config)
+    expect(result.ssl).toBe(true)
+  })
+
+  it('sslmode=require → ssl: { rejectUnauthorized: false }', async () => {
+    const config: Config = {
+      connection_string: 'postgres://user:pass@host:5432/mydb?sslmode=require',
+      port: 5432,
+      schema: 'stripe',
+      batch_size: 100,
+    }
+    const result = await buildPoolConfig(config)
+    expect(result.ssl).toEqual({ rejectUnauthorized: false })
   })
 
   it('adds proxy stream when PG_PROXY_HOST is set', async () => {
@@ -49,7 +82,7 @@ describe('buildPoolConfig', () => {
     const result = await buildPoolConfig(config)
 
     expect(result.connectionString).toBe('postgres://user:pass@localhost:5432/mydb')
-    expect(result.ssl).toEqual({ rejectUnauthorized: false })
+    expect(result.ssl).toBe(false)
     expect(typeof result.stream).toBe('function')
   })
 

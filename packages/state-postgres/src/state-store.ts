@@ -1,5 +1,18 @@
 import pg from 'pg'
+import type { PoolConfig } from 'pg'
 import { sql, withPgConnectProxy } from '@stripe/sync-util-postgres'
+
+function sslConfigFromConnectionString(connStr: string): PoolConfig['ssl'] {
+  try {
+    const sslmode = new URL(connStr).searchParams.get('sslmode')
+    if (sslmode === 'disable') return false
+    if (sslmode === 'verify-ca' || sslmode === 'verify-full') return true
+    if (sslmode === 'require') return { rejectUnauthorized: false }
+    return false
+  } catch {
+    return false
+  }
+}
 
 export interface StateStore {
   get(syncId: string): Promise<Record<string, unknown> | undefined>
@@ -83,8 +96,7 @@ export async function setupStateStore(config: {
   const pool = new pg.Pool(
     withPgConnectProxy({
       connectionString: config.connection_string,
-      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
-      ssl: { rejectUnauthorized: false },
+      ssl: sslConfigFromConnectionString(config.connection_string),
     })
   )
   const schema = config.schema ?? 'public'
@@ -115,8 +127,7 @@ export function createStateStore(
   const pool = new pg.Pool(
     withPgConnectProxy({
       connectionString: config.connection_string,
-      // TODO: Preserve connection-string sslmode semantics here instead of forcing TLS.
-      ssl: { rejectUnauthorized: false },
+      ssl: sslConfigFromConnectionString(config.connection_string),
     })
   )
   const scoped = createScopedPgStateStore(pool, config.schema ?? 'public', syncId)
