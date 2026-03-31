@@ -2,7 +2,7 @@ import path from 'node:path'
 import { builtinModules } from 'node:module'
 import * as esbuild from 'esbuild'
 
-function nodePrefixBuiltinsPlugin() {
+function denoImportsPlugin() {
   const builtins = new Set(builtinModules.map((m) => (m.startsWith('node:') ? m.slice(5) : m)))
 
   const isBare = (spec) =>
@@ -21,28 +21,18 @@ function nodePrefixBuiltinsPlugin() {
         const spec = args.path
         if (!isBare(spec)) return
 
-        let newImport
         if (isBuiltin(spec)) {
-          newImport = spec.startsWith('node:') ? spec : `node:${spec}`
-        } else {
-          newImport = spec.startsWith('npm:') ? spec : `npm:${spec}`
+          return {
+            path: spec.startsWith('node:') ? spec : `node:${spec}`,
+            external: true,
+          }
         }
 
-        return {
-          path: newImport,
-          namespace: 'deno-import',
-        }
-      })
+        // @stripe/* workspace packages are bundled inline from the monorepo.
+        // Everything else is externalized as npm: for Deno resolution.
+        if (spec.startsWith('@stripe/')) return
 
-      build.onLoad({ filter: /.*/, namespace: 'deno-import' }, (args) => {
-        const spec = args.path
-        return {
-          loader: 'js',
-          contents: `
-            export * from ${JSON.stringify(spec)};
-            export { default } from ${JSON.stringify(spec)};
-          `,
-        }
+        return { path: `npm:${spec}`, external: true }
       })
     },
   }
@@ -72,7 +62,7 @@ const rawTsBundledPlugin = {
         sourcemap: false,
         minify: false,
         logLevel: 'silent',
-        plugins: [nodePrefixBuiltinsPlugin()],
+        plugins: [denoImportsPlugin()],
       })
 
       const bundled = result.outputFiles?.[0]?.text ?? ''

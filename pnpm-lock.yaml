@@ -67,6 +67,9 @@ importers:
       '@stripe/sync-destination-postgres':
         specifier: workspace:*
         version: link:../../packages/destination-postgres
+      '@stripe/sync-integration-supabase':
+        specifier: workspace:*
+        version: link:../supabase
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

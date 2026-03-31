@@ -6,6 +6,7 @@ import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import { createConnectorResolver } from '../lib/index.js'
 import { createApp } from '../api/app.js'
 import { serveAction } from '../serve-command.js'
+import { supabaseCmd } from './supabase.js'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
@@ -104,6 +105,6 @@ export async function createProgram() {
 
   return defineCommand({
     ...specCli,
-    subCommands: { serve: serveCmd, ...specCli.subCommands },
+    subCommands: { serve: serveCmd, supabase: supabaseCmd, ...specCli.subCommands },
   })
 }

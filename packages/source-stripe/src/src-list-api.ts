@@ -139,22 +139,7 @@ async function* paginateSegment(opts: {
 
     const wait = await rateLimiter()
     if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000))
-    console.error({
-      msg: 'Starting Stripe list page',
-      stream: streamName,
-      segment: segment.index,
-      pageCursor,
-      created: params.created,
-    })
     const response = await listFn(params as Parameters<typeof listFn>[0])
-    console.error({
-      msg: 'Completed Stripe list page',
-      stream: streamName,
-      segment: segment.index,
-      pageCursor,
-      recordCount: response.data.length,
-      hasMore: response.has_more,
-    })
 
     for (const item of response.data) {
       yield toRecordMessage(streamName, item as Record<string, unknown>)
@@ -217,21 +202,9 @@ async function* sequentialBackfillStream(opts: {
 
     const wait = await rateLimiter()
     if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000))
-    console.error({
-      msg: 'Starting Stripe list page',
-      stream: streamName,
-      pageCursor,
-    })
     const response = await resourceConfig.listFn!(
       params as Parameters<NonNullable<typeof resourceConfig.listFn>>[0]
     )
-    console.error({
-      msg: 'Completed Stripe list page',
-      stream: streamName,
-      pageCursor,
-      recordCount: response.data.length,
-      hasMore: response.has_more,
-    })
 
     for (const item of response.data) {
       yield toRecordMessage(streamName, item as Record<string, unknown>)
