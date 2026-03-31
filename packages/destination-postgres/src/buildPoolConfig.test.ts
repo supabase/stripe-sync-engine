@@ -47,7 +47,7 @@ describe('buildPoolConfig', () => {
     expect(result.ssl).toBe(false)
   })
 
-  it('sslmode=verify-full → ssl: true', async () => {
+  it('sslmode=verify-full → ssl: { rejectUnauthorized: true }', async () => {
     const config: Config = {
       connection_string: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
       port: 5432,
@@ -55,7 +55,9 @@ describe('buildPoolConfig', () => {
       batch_size: 100,
     }
     const result = await buildPoolConfig(config)
-    expect(result.ssl).toBe(true)
+    expect(result.ssl).toEqual({ rejectUnauthorized: true })
+    // stripSslParams removes sslmode from the connection string
+    expect(result.connectionString).toBe('postgres://user:pass@host:5432/mydb')
   })
 
   it('sslmode=require → ssl: { rejectUnauthorized: false }', async () => {

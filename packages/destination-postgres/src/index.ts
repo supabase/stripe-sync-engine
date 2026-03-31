@@ -5,6 +5,7 @@ import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@s
 import {
   sql,
   sslConfigFromConnectionString,
+  stripSslParams,
   upsert,
   withPgConnectProxy,
 } from '@stripe/sync-util-postgres'
@@ -29,6 +30,12 @@ export const spec = z.object({
     })
     .optional()
     .describe('AWS RDS IAM authentication config'),
+  ssl_ca_pem: z
+    .string()
+    .optional()
+    .describe(
+      'PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)'
+    ),
 })
 
 export type Config = z.infer<typeof spec>
@@ -60,8 +67,8 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   const connStr = config.connection_string ?? config.url
   if (connStr) {
     return withPgConnectProxy({
-      connectionString: connStr,
-      ssl: sslConfigFromConnectionString(connStr),
+      connectionString: stripSslParams(connStr),
+      ssl: sslConfigFromConnectionString(connStr, { sslCaPem: config.ssl_ca_pem }),
     })
   }
 
