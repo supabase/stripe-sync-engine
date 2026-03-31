@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname)
-const PAGES_DIR = path.join(ROOT, 'pages')
+const PAGES_DIR = ROOT
 const PUBLIC_DIR = path.join(ROOT, 'public')
 const OPENAPI_DIR = path.join(ROOT, 'openapi')
 const OUT_DIR = path.join(ROOT, 'out')
@@ -29,14 +29,18 @@ if (fs.existsSync(PUBLIC_DIR)) copyDir(PUBLIC_DIR, OUT_DIR)
 // Copy OpenAPI specs
 if (fs.existsSync(OPENAPI_DIR)) copyDir(OPENAPI_DIR, path.join(OUT_DIR, 'openapi'))
 
-// Collect all .md files recursively under PAGES_DIR
+// Collect all .md files recursively, skipping non-content dirs
+const SKIP_DIRS = new Set(['node_modules', 'out', 'openapi', 'public', 'slides'])
+
 function collectPages(dir, base = '') {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   const pages = []
   for (const entry of entries) {
     const rel = base ? `${base}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
-      pages.push(...collectPages(path.join(dir, entry.name), rel))
+      if (!SKIP_DIRS.has(entry.name)) {
+        pages.push(...collectPages(path.join(dir, entry.name), rel))
+      }
     } else if (entry.name.endsWith('.md')) {
       pages.push(rel)
     }

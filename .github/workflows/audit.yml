@@ -1,0 +1,54 @@
+name: Repo Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Every Monday at 9am UTC
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  audit:
+    name: Audit repo health
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check for API key
+        id: check-key
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY secret is not set. Add it to repo secrets to enable automated audits. Go to Settings → Secrets → Actions → New repository secret."
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Claude Code
+        if: steps.check-key.outputs.has_key == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install pnpm
+        if: steps.check-key.outputs.has_key == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        if: steps.check-key.outputs.has_key == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.check-key.outputs.has_key == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run audit
+        if: steps.check-key.outputs.has_key == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: ./scripts/audit-repo.sh --pr
