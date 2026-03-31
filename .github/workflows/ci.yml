@@ -331,6 +331,17 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
+      - name: Smokescreen proxy e2e
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::smokescreen.test.sh skipped — STRIPE_API_KEY not available"
+            exit 0
+          fi
+          bash e2e/smokescreen.test.sh
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          ENGINE_IMAGE: 'ghcr.io/${{ github.repository }}:${{ github.sha }}'
+
       # --- Connector loading test ---
 
       - name: Connector loading test
