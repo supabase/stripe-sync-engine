@@ -233,7 +233,13 @@ export class StripeSync {
       case 'invoice.payment_action_required':
       case 'invoice.payment_failed':
       case 'invoice.payment_succeeded':
-      case 'invoice.upcoming':
+      case 'invoice.upcoming': {
+        // invoice.upcoming is a preview invoice with no id — it cannot be persisted.
+        this.config.logger?.info(
+          `Received webhook ${event.id}: ${event.type} — skipping (preview invoice has no id)`
+        )
+        break
+      }
       case 'invoice.sent':
       case 'invoice.voided':
       case 'invoice.marked_uncollectible':
@@ -529,12 +535,28 @@ export class StripeSync {
           .object as Stripe.Entitlements.ActiveEntitlementSummary
         let entitlements = activeEntitlementSummary.entitlements
         let refetched = false
-        if (this.config.revalidateObjectsViaStripeApi?.includes('entitlements')) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { lastResponse, ...rest } = await this.stripe.entitlements.activeEntitlements.list({
+        if (
+          this.config.revalidateObjectsViaStripeApi?.includes('entitlements') ||
+          entitlements.has_more
+        ) {
+          // Fetch all pages from the API — the webhook payload is capped at 10 items
+          // and has_more signals that there are more entitlements than were included.
+          const allData: Stripe.Entitlements.ActiveEntitlement[] = []
+          let page = await this.stripe.entitlements.activeEntitlements.list({
             customer: activeEntitlementSummary.customer,
-          })
-          entitlements = rest
+            limit: 100,
+          } as Stripe.Entitlements.ActiveEntitlementListParams)
+          allData.push(...page.data)
+          while (page.has_more) {
+            const lastId = page.data[page.data.length - 1].id
+            page = await this.stripe.entitlements.activeEntitlements.list({
+              customer: activeEntitlementSummary.customer,
+              limit: 100,
+              starting_after: lastId,
+            } as Stripe.Entitlements.ActiveEntitlementListParams)
+            allData.push(...page.data)
+          }
+          entitlements = { ...entitlements, data: allData, has_more: false }
           refetched = true
         }
 
