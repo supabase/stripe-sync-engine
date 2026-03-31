@@ -104,10 +104,10 @@ jobs:
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
 
   # ---------------------------------------------------------------------------
-  # Build — publish npm packages & Docker image
+  # Publish npm — publish @stripe/* packages to GitHub Packages
   # ---------------------------------------------------------------------------
-  build:
-    name: Build & push
+  publish_npm:
+    name: Publish npm packages
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -125,8 +125,6 @@ jobs:
       - name: Install dependencies & build
         run: pnpm install --frozen-lockfile && pnpm build
 
-      # --- npm: publish @stripe/* to GitHub Packages ---
-
       - name: Publish to GitHub Packages
         run: |
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
@@ -134,7 +132,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- Docker: build & push to ghcr.io ---
+  # ---------------------------------------------------------------------------
+  # Build arm64 — native arm build
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Docker (arm64)
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
 
       - name: Login to ghcr.io
         uses: docker/login-action@v4
@@ -143,22 +161,83 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
+      - name: Build Docker image (arm64)
         run: |
-          TAG="${GITHUB_REF_NAME//\//-}"
           docker build \
             --build-arg GIT_COMMIT=${{ github.sha }} \
             --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
             --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
-            -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
-            -t ghcr.io/${{ github.repository }}:${TAG} \
+            -t ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64 \
             .
 
-      - name: Push Docker image
+      - name: Push Docker image (arm64)
+        run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+
+  # ---------------------------------------------------------------------------
+  # Build amd64 — native x86 build in parallel with arm64
+  # ---------------------------------------------------------------------------
+  build_amd64:
+    name: Build Docker (amd64)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image (amd64)
+        run: |
+          docker build \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
+            -t ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64 \
+            .
+
+      - name: Push Docker image (amd64)
+        run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
+
+  # ---------------------------------------------------------------------------
+  # Merge — combine arm64 + amd64 into a single multi-arch manifest
+  # ---------------------------------------------------------------------------
+  build_manifest:
+    name: Merge multi-arch manifest
+    needs: [build, build_amd64]
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
         run: |
           TAG="${GITHUB_REF_NAME//\//-}"
-          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository }}:${TAG}
+          docker buildx imagetools create \
+            --tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            --tag ghcr.io/${{ github.repository }}:${TAG} \
+            ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64 \
+            ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
 
       - name: Docker smoke test
         run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
@@ -168,7 +247,7 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e:
     name: E2E tests
-    needs: build
+    needs: build_manifest
     runs-on: ubuntu-24.04-arm
 
     services:
@@ -351,7 +430,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish_dockerhub:
     name: Publish Docker Hub
-    needs: [build]
+    needs: [build_manifest]
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04-arm
 

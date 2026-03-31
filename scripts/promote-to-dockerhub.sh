@@ -54,11 +54,10 @@ for target_tag in "${target_tags[@]}"; do
 done
 echo ""
 
-docker pull "$GHCR_IMAGE"
-
 for target_tag in "${target_tags[@]}"; do
-  docker tag "$GHCR_IMAGE" "stripe/sync-engine:$target_tag"
-  docker push "stripe/sync-engine:$target_tag"
+  docker buildx imagetools create \
+    --tag "stripe/sync-engine:$target_tag" \
+    "$GHCR_IMAGE"
 done
 
 echo ""
