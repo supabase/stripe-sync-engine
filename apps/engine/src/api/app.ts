@@ -22,7 +22,14 @@ import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { logger } from '../logger.js'
 import { createStripeSource, DEFAULT_MAX_RPS } from '@stripe/sync-source-stripe'
 import type { RateLimiter } from '@stripe/sync-source-stripe'
-import { acquire, createRateLimiterTable, ident } from '@stripe/sync-util-postgres'
+import {
+  acquire,
+  createRateLimiterTable,
+  ident,
+  sslConfigFromConnectionString,
+  stripSslParams,
+  withPgConnectProxy,
+} from '@stripe/sync-util-postgres'
 import { createHash } from 'node:crypto'
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -642,6 +649,28 @@ export function createApp(resolver: ConnectorResolver) {
   })
 
   app.get('/docs', apiReference({ url: '/openapi.json' }))
+
+  // ── Internal utilities ───────────────────────────────────────────────────────
+  // NOTE: no HTTP auth on /internal/* — only safe on a trusted private network.
+
+  app.post('/internal/query', async (c) => {
+    const { connection_string, sql } = await c.req.json<{
+      connection_string: string
+      sql: string
+    }>()
+    const pool = new pg.Pool(
+      withPgConnectProxy({
+        connectionString: stripSslParams(connection_string),
+        ssl: sslConfigFromConnectionString(connection_string),
+      })
+    )
+    try {
+      const result = await pool.query(sql)
+      return c.json({ rows: result.rows, rowCount: result.rowCount })
+    } finally {
+      await pool.end()
+    }
+  })
 
   return app
 }

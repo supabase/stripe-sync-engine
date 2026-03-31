@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectorResolver, Message, StateMessage } from '../lib/index.js'
 import { sourceTest, destinationTest } from '../lib/index.js'
 import { createApp } from './app.js'
+import pg from 'pg'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -443,5 +444,59 @@ describe('error handling', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toContain('Invalid JSON')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// POST /internal/query
+// ---------------------------------------------------------------------------
+
+describe('POST /internal/query', () => {
+  it('executes SQL and returns rows and rowCount', async () => {
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [{ n: 1 }], rowCount: 1 })
+    const mockEnd = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(pg, 'Pool').mockImplementation(
+      () => ({ query: mockQuery, end: mockEnd }) as unknown as pg.Pool
+    )
+
+    const app = createApp(resolver)
+    const res = await app.request('/internal/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        connection_string: 'postgres://user:pass@localhost:5432/db',
+        sql: 'SELECT 1 AS n',
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.json<{ rows: unknown[]; rowCount: number }>()
+    expect(body.rows).toEqual([{ n: 1 }])
+    expect(body.rowCount).toBe(1)
+    expect(mockEnd).toHaveBeenCalled()
+  })
+
+  it('closes pool even when query fails', async () => {
+    const mockEnd = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(pg, 'Pool').mockImplementation(
+      () =>
+        ({
+          query: vi.fn().mockRejectedValue(new Error('connection refused')),
+          end: mockEnd,
+        }) as unknown as pg.Pool
+    )
+
+    const app = createApp(resolver)
+    const res = await app.request('/internal/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        connection_string: 'postgres://user:pass@localhost:5432/db',
+        sql: 'SELECT 1',
+      }),
+    })
+
+    expect(res.status).toBe(500)
+    expect(mockEnd).toHaveBeenCalled()
   })
 })

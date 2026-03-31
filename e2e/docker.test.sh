@@ -125,4 +125,17 @@ else
   echo "==> Skipping Postgres write (POSTGRES_URL not set)"
 fi
 
+# --- 4) Internal Query ---
+if [ -n "${POSTGRES_URL:-}" ]; then
+  echo "==> Testing /internal/query"
+  QUERY_OUTPUT=$(curl -sf --max-time 30 -X POST "http://localhost:$PORT/internal/query" \
+    -H "Content-Type: application/json" \
+    -d "{\"connection_string\":\"$DOCKER_PG_URL\",\"sql\":\"SELECT 1 AS n\"}")
+  echo "    $QUERY_OUTPUT"
+  echo "$QUERY_OUTPUT" | grep -q rows || { echo "FAIL: /internal/query missing rows field"; exit 1; }
+  echo "    OK"
+else
+  echo "==> Skipping /internal/query test (POSTGRES_URL not set)"
+fi
+
 echo "==> Done"
