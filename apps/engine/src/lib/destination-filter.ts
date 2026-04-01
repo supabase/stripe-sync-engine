@@ -1,6 +1,13 @@
-import type { Destination, ConfiguredCatalog } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog } from '@stripe/sync-protocol'
 
-function filterCatalog(catalog: ConfiguredCatalog): ConfiguredCatalog {
+export type CatalogMiddleware = (catalog: ConfiguredCatalog) => ConfiguredCatalog
+
+/**
+ * Prune each stream's json_schema.properties down to the fields selected in
+ * ConfiguredStream.fields (plus all primary-key fields).
+ * Streams without fields or without json_schema pass through unchanged.
+ */
+export function applySelection(catalog: ConfiguredCatalog): ConfiguredCatalog {
   return {
     streams: catalog.streams.map((cs) => {
       if (!cs.fields?.length) return cs
@@ -20,29 +27,6 @@ function filterCatalog(catalog: ConfiguredCatalog): ConfiguredCatalog {
           },
         },
       }
-    }),
-  }
-}
-
-/**
- * Wrap a Destination to prune each stream's json_schema.properties
- * down to the fields selected in ConfiguredStream.fields.
- * Streams without fields or without json_schema pass through unchanged.
- */
-export function withCatalogFilter(dest: Destination): Destination {
-  return {
-    spec: () => dest.spec(),
-    check: (params) => dest.check(params),
-    write(params, $stdin) {
-      return dest.write({ ...params, catalog: filterCatalog(params.catalog) }, $stdin)
-    },
-    ...(dest.setup && {
-      async setup(params) {
-        return dest.setup!({ ...params, catalog: filterCatalog(params.catalog) })
-      },
-    }),
-    ...(dest.teardown && {
-      teardown: (params: { config: Record<string, unknown> }) => dest.teardown!(params),
     }),
   }
 }

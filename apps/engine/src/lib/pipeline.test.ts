@@ -36,10 +36,12 @@ async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return result
 }
 
-function catalog(streams: Array<{ name: string; fields?: string[] }>): ConfiguredCatalog {
+function catalog(
+  streams: Array<{ name: string; fields?: string[]; json_schema?: Record<string, unknown> }>
+): ConfiguredCatalog {
   return {
     streams: streams.map((s) => ({
-      stream: { name: s.name, primary_key: [['id']] },
+      stream: { name: s.name, primary_key: [['id']], json_schema: s.json_schema },
       sync_mode: 'full_refresh',
       destination_sync_mode: 'append',
       fields: s.fields,
@@ -65,7 +67,7 @@ describe('enforceCatalog()', () => {
     expect((result[0] as { data: unknown }).data).toEqual({ id: 'cus_1', name: 'Alice' })
   })
 
-  it('does not filter record data even when fields is configured', async () => {
+  it('filters record fields to json_schema.properties when present', async () => {
     const msgs: Message[] = [
       {
         type: 'record',
@@ -75,8 +77,32 @@ describe('enforceCatalog()', () => {
       },
     ]
     const result = await drain(
-      enforceCatalog(catalog([{ name: 'subscriptions', fields: ['id', 'status'] }]))(toAsync(msgs))
+      enforceCatalog(
+        catalog([
+          {
+            name: 'subscriptions',
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, status: { type: 'string' } },
+            },
+          },
+        ])
+      )(toAsync(msgs))
     )
+    expect(result).toHaveLength(1)
+    expect((result[0] as { data: unknown }).data).toEqual({ id: 'sub_1', status: 'active' })
+  })
+
+  it('passes records through unchanged when json_schema is absent', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        stream: 'subscriptions',
+        data: { id: 'sub_1', status: 'active', customer: 'cus_1' },
+        emitted_at: 1,
+      },
+    ]
+    const result = await drain(enforceCatalog(catalog([{ name: 'subscriptions' }]))(toAsync(msgs)))
     expect(result).toHaveLength(1)
     expect((result[0] as { data: unknown }).data).toEqual({
       id: 'sub_1',

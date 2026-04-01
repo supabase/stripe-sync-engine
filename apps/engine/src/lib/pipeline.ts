@@ -20,7 +20,19 @@ export function enforceCatalog(
           logger.error({ stream: msg.stream }, 'Unknown stream not in catalog')
           continue
         }
-        yield msg
+        if (msg.type === 'record') {
+          const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
+          if (props) {
+            yield {
+              ...msg,
+              data: Object.fromEntries(Object.entries(msg.data).filter(([k]) => k in props)),
+            }
+          } else {
+            yield msg
+          }
+        } else {
+          yield msg
+        }
       } else {
         yield msg
       }

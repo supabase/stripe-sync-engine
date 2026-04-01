@@ -10,7 +10,7 @@ import {
 } from '@stripe/sync-protocol'
 import type { Destination, Source } from '@stripe/sync-protocol'
 import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
-import { withCatalogFilter } from './destination-filter.js'
+import { applySelection } from './destination-filter.js'
 import type { StateStore } from './state-store.js'
 import type { ConnectorResolver } from './resolver.js'
 import { logger } from '../logger.js'
@@ -136,7 +136,6 @@ export function createEngine(
     string,
     unknown
   >
-  const destination = withCatalogFilter(connectors.destination)
   const baseContext = engineLogContext(config, metadata)
 
   // Lazy-cached catalog — discover is called at most once per engine instance.
@@ -172,15 +171,16 @@ export function createEngine(
   return {
     async setup() {
       const catalog = await getCatalog()
+      const filteredCatalog = applySelection(catalog)
       await Promise.all([
         connectors.source.setup
           ? withLoggedStep('Engine source setup', baseContext, () =>
               connectors.source.setup!({ config: sourceConfig, catalog })
             )
           : Promise.resolve(),
-        destination.setup
+        connectors.destination.setup
           ? withLoggedStep('Engine destination setup', baseContext, () =>
-              destination.setup!({ config: destConfig, catalog })
+              connectors.destination.setup!({ config: destConfig, catalog: filteredCatalog })
             )
           : Promise.resolve(),
       ])
@@ -189,16 +189,16 @@ export function createEngine(
     async teardown() {
       await Promise.all([
         connectors.source.teardown?.({ config: sourceConfig }),
-        destination.teardown?.({ config: destConfig }),
+        connectors.destination.teardown?.({ config: destConfig }),
       ])
     },
 
     async check() {
-      const [source, dest] = await Promise.all([
+      const [source, destination] = await Promise.all([
         connectors.source.check({ config: sourceConfig }),
-        destination.check({ config: destConfig }),
+        connectors.destination.check({ config: destConfig }),
       ])
-      return { source, destination: dest }
+      return { source, destination }
     },
 
     async *read(input?: AsyncIterable<unknown>) {
@@ -223,8 +223,17 @@ export function createEngine(
 
     async *write(messages: AsyncIterable<Message>) {
       const catalog = await getCatalog()
-      const destInput = pipe(messages, enforceCatalog(catalog), log, filterType('record', 'state'))
-      const destOutput = destination.write({ config: destConfig, catalog }, destInput)
+      const filteredCatalog = applySelection(catalog)
+      const destInput = pipe(
+        messages,
+        enforceCatalog(filteredCatalog),
+        log,
+        filterType('record', 'state')
+      )
+      const destOutput = connectors.destination.write(
+        { config: destConfig, catalog: filteredCatalog },
+        destInput
+      )
       for await (const msg of withLoggedStream(
         'Engine destination write',
         baseContext,
@@ -236,7 +245,7 @@ export function createEngine(
 
     async *sync(input?: AsyncIterable<unknown>) {
       await this.setup()
-      yield* pipe(this.write(this.read(input)), persistState(stateStore))
+      yield* pipe(this.read(input), this.write, persistState(stateStore))
     },
   }
 }
