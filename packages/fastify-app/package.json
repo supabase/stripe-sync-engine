@@ -23,7 +23,7 @@
     "@supabase/stripe-sync-engine": "workspace:",
     "dotenv": "^17.3.1",
     "fastify": "^5.8.4",
-    "stripe": "^20.3.1"
+    "stripe": "^21.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
