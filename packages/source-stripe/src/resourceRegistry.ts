@@ -9,6 +9,10 @@ import {
   resolveTableName,
   OPENAPI_RESOURCE_TABLE_ALIASES,
 } from '@stripe/sync-openapi'
+import { fetchWithProxy } from './transport.js'
+
+const apiFetch: typeof globalThis.fetch = (input, init) =>
+  fetchWithProxy(input as URL | string, init ?? {})
 
 /**
  * The default set of table names synced when no explicit selection is made.
@@ -78,8 +82,8 @@ export function buildResourceRegistry(
       supportsLimit: endpoint.supportsLimit,
       sync: true,
       dependencies: [],
-      listFn: buildListFn(apiKey, endpoint.apiPath, apiVersion, baseUrl),
-      retrieveFn: buildRetrieveFn(apiKey, endpoint.apiPath, apiVersion, baseUrl),
+      listFn: buildListFn(apiKey, endpoint.apiPath, apiFetch, apiVersion, baseUrl),
+      retrieveFn: buildRetrieveFn(apiKey, endpoint.apiPath, apiFetch, apiVersion, baseUrl),
       nestedResources: children.length > 0 ? children : undefined,
     }
     registry[tableName] = config

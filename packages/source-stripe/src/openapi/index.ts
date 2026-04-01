@@ -6,5 +6,4 @@ export {
   RUNTIME_RESOURCE_ALIASES,
 } from './specParser.js'
 export { OPENAPI_COMPATIBILITY_COLUMNS } from './runtimeMappings.js'
-export { resolveOpenApiSpec } from './specFetchHelper.js'
 export { parsedTableToJsonSchema } from './jsonSchemaConverter.js'

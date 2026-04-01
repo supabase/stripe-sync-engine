@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { resolveOpenApiSpec } from '../specFetchHelper'
 import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
 
@@ -10,23 +10,20 @@ async function createTempDir(prefix: string): Promise<string> {
 }
 
 describe('resolveOpenApiSpec', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
   it('prefers explicit local spec path over cache and network', async () => {
     const tempDir = await createTempDir('openapi-explicit')
     const specPath = path.join(tempDir, 'spec3.json')
     await fs.writeFile(specPath, JSON.stringify(minimalStripeOpenApiSpec), 'utf8')
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+    const fetchMock = vi.fn().mockRejectedValue(new Error('fetch should not be called'))
 
-    const result = await resolveOpenApiSpec({
-      apiVersion: '2020-08-27',
-      openApiSpecPath: specPath,
-      cacheDir: tempDir,
-    })
+    const result = await resolveOpenApiSpec(
+      {
+        apiVersion: '2020-08-27',
+        openApiSpecPath: specPath,
+        cacheDir: tempDir,
+      },
+      fetchMock
+    )
 
     expect(result.source).toBe('explicit_path')
     expect(fetchMock).not.toHaveBeenCalled()
@@ -37,13 +34,15 @@ describe('resolveOpenApiSpec', () => {
     const tempDir = await createTempDir('openapi-cache')
     const cachePath = path.join(tempDir, '2020-08-27.spec3.sdk.json')
     await fs.writeFile(cachePath, JSON.stringify(minimalStripeOpenApiSpec), 'utf8')
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+    const fetchMock = vi.fn().mockRejectedValue(new Error('fetch should not be called'))
 
-    const result = await resolveOpenApiSpec({
-      apiVersion: '2020-08-27',
-      cacheDir: tempDir,
-    })
+    const result = await resolveOpenApiSpec(
+      {
+        apiVersion: '2020-08-27',
+        cacheDir: tempDir,
+      },
+      fetchMock
+    )
 
     expect(result.source).toBe('cache')
     expect(result.cachePath).toBe(cachePath)
@@ -60,12 +59,14 @@ describe('resolveOpenApiSpec', () => {
       }
       return new Response(JSON.stringify(minimalStripeOpenApiSpec), { status: 200 })
     })
-    vi.stubGlobal('fetch', fetchMock)
 
-    const result = await resolveOpenApiSpec({
-      apiVersion: '2020-08-27',
-      cacheDir: tempDir,
-    })
+    const result = await resolveOpenApiSpec(
+      {
+        apiVersion: '2020-08-27',
+        cacheDir: tempDir,
+      },
+      fetchMock
+    )
 
     expect(result.source).toBe('github')
     expect(result.commitSha).toBe('abc123def456')
@@ -76,36 +77,23 @@ describe('resolveOpenApiSpec', () => {
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
-  it('uses the configured proxy for GitHub fetches', async () => {
+  it('uses the injected fetch for GitHub fetches', async () => {
     const tempDir = await createTempDir('openapi-fetch-proxy')
-    const originalHttpsProxy = process.env.HTTPS_PROXY
-    process.env.HTTPS_PROXY = 'http://proxy.example.test:8080'
-
-    const fetchMock = vi.fn(async (input: URL | string, init?: RequestInit) => {
-      expect(init?.dispatcher).toBeDefined()
-
+    const fetchMock = vi.fn(async (input: URL | string) => {
       const url = String(input)
       if (url.includes('/commits')) {
         return new Response(JSON.stringify([{ sha: 'abc123def456' }]), { status: 200 })
       }
       return new Response(JSON.stringify(minimalStripeOpenApiSpec), { status: 200 })
     })
-    vi.stubGlobal('fetch', fetchMock)
-
     try {
-      const result = await resolveOpenApiSpec({
-        apiVersion: '2020-08-27',
-        cacheDir: tempDir,
-      })
-
+      const result = await resolveOpenApiSpec(
+        { apiVersion: '2020-08-27', cacheDir: tempDir },
+        fetchMock
+      )
       expect(result.source).toBe('github')
       expect(fetchMock).toHaveBeenCalledTimes(2)
     } finally {
-      if (originalHttpsProxy === undefined) {
-        delete process.env.HTTPS_PROXY
-      } else {
-        process.env.HTTPS_PROXY = originalHttpsProxy
-      }
       await fs.rm(tempDir, { recursive: true, force: true })
     }
   })
@@ -116,10 +104,13 @@ describe('resolveOpenApiSpec', () => {
     await fs.writeFile(specPath, JSON.stringify({ openapi: '3.0.0' }), 'utf8')
 
     await expect(
-      resolveOpenApiSpec({
-        apiVersion: '2020-08-27',
-        openApiSpecPath: specPath,
-      })
+      resolveOpenApiSpec(
+        {
+          apiVersion: '2020-08-27',
+          openApiSpecPath: specPath,
+        },
+        vi.fn().mockRejectedValue(new Error('fetch should not be called'))
+      )
     ).rejects.toThrow(/components|schemas/i)
     await fs.rm(tempDir, { recursive: true, force: true })
   })
@@ -127,13 +118,15 @@ describe('resolveOpenApiSpec', () => {
   it('fails fast when GitHub resolution fails and no explicit spec path is set', async () => {
     const tempDir = await createTempDir('openapi-fail-fast')
     const fetchMock = vi.fn(async () => new Response('boom', { status: 500 }))
-    vi.stubGlobal('fetch', fetchMock)
 
     await expect(
-      resolveOpenApiSpec({
-        apiVersion: '2020-08-27',
-        cacheDir: tempDir,
-      })
+      resolveOpenApiSpec(
+        {
+          apiVersion: '2020-08-27',
+          cacheDir: tempDir,
+        },
+        fetchMock
+      )
     ).rejects.toThrow(/Failed to resolve Stripe OpenAPI commit/)
     await fs.rm(tempDir, { recursive: true, force: true })
   })

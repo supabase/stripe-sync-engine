@@ -364,10 +364,6 @@ importers:
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/openapi:
-    dependencies:
-      undici:
-        specifier: ^7.16.0
-        version: 7.24.6
     devDependencies:
       '@types/node':
         specifier: ^24.5.0

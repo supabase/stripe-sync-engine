@@ -3,7 +3,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types.js'
-import { fetchWithProxy } from './transport.js'
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 
@@ -11,7 +10,10 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 // Update this constant and bundled-spec.json together when bumping.
 export const BUNDLED_API_VERSION = '2026-03-25.dahlia'
 
-export async function resolveOpenApiSpec(config: ResolveSpecConfig): Promise<ResolvedOpenApiSpec> {
+export async function resolveOpenApiSpec(
+  config: ResolveSpecConfig,
+  fetch: typeof globalThis.fetch
+): Promise<ResolvedOpenApiSpec> {
   const apiVersion = config.apiVersion
   if (!apiVersion || !/^\d{4}-\d{2}-\d{2}(\.\w+)?$/.test(apiVersion)) {
     throw new Error(
@@ -54,9 +56,9 @@ export async function resolveOpenApiSpec(config: ResolveSpecConfig): Promise<Res
     }
   }
 
-  let commitSha = await resolveCommitShaForApiVersion(apiVersion)
+  let commitSha = await resolveCommitShaForApiVersion(apiVersion, fetch)
   if (!commitSha) {
-    commitSha = await resolveLatestCommitSha()
+    commitSha = await resolveLatestCommitSha(fetch)
   }
   if (!commitSha) {
     throw new Error(
@@ -64,7 +66,7 @@ export async function resolveOpenApiSpec(config: ResolveSpecConfig): Promise<Res
     )
   }
 
-  const spec = await fetchSpecForCommit(commitSha)
+  const spec = await fetchSpecForCommit(commitSha, fetch)
   validateOpenApiSpec(spec)
   await tryWriteCache(cachePath, spec)
 
@@ -121,12 +123,12 @@ function extractDatePart(apiVersion: string): string {
   return match ? match[1] : apiVersion
 }
 
-async function resolveLatestCommitSha(): Promise<string | null> {
+async function resolveLatestCommitSha(fetch: typeof globalThis.fetch): Promise<string | null> {
   const url = new URL('https://api.github.com/repos/stripe/openapi/commits')
   url.searchParams.set('path', 'latest/openapi.spec3.sdk.json')
   url.searchParams.set('per_page', '1')
 
-  const response = await fetchWithProxy(url, { headers: githubHeaders() })
+  const response = await fetch(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to resolve latest Stripe OpenAPI commit (${response.status} ${response.statusText})`
@@ -138,14 +140,17 @@ async function resolveLatestCommitSha(): Promise<string | null> {
   return typeof commitSha === 'string' && commitSha.length > 0 ? commitSha : null
 }
 
-async function resolveCommitShaForApiVersion(apiVersion: string): Promise<string | null> {
+async function resolveCommitShaForApiVersion(
+  apiVersion: string,
+  fetch: typeof globalThis.fetch
+): Promise<string | null> {
   const until = `${extractDatePart(apiVersion)}T23:59:59Z`
   const url = new URL('https://api.github.com/repos/stripe/openapi/commits')
   url.searchParams.set('path', 'latest/openapi.spec3.sdk.json')
   url.searchParams.set('until', until)
   url.searchParams.set('per_page', '1')
 
-  const response = await fetchWithProxy(url, { headers: githubHeaders() })
+  const response = await fetch(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to resolve Stripe OpenAPI commit (${response.status} ${response.statusText})`
@@ -157,9 +162,12 @@ async function resolveCommitShaForApiVersion(apiVersion: string): Promise<string
   return typeof commitSha === 'string' && commitSha.length > 0 ? commitSha : null
 }
 
-async function fetchSpecForCommit(commitSha: string): Promise<OpenApiSpec> {
+async function fetchSpecForCommit(
+  commitSha: string,
+  fetch: typeof globalThis.fetch
+): Promise<OpenApiSpec> {
   const url = `https://raw.githubusercontent.com/stripe/openapi/${commitSha}/latest/openapi.spec3.sdk.json`
-  const response = await fetchWithProxy(url, { headers: githubHeaders() })
+  const response = await fetch(url, { headers: githubHeaders() })
   if (!response.ok) {
     throw new Error(
       `Failed to download Stripe OpenAPI spec for commit ${commitSha} (${response.status} ${response.statusText})`

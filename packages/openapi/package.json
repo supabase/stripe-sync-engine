@@ -17,9 +17,7 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
-    "undici": "^7.16.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^24.5.0",
     "vitest": "^3.2.4"

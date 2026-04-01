@@ -1,13 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildListFn, buildRetrieveFn, discoverListEndpoints } from '../listFnResolver'
 import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
 
 describe('discoverListEndpoints', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
   it('maps table names to their API paths', () => {
     const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
 
@@ -93,53 +88,33 @@ describe('discoverListEndpoints', () => {
     expect(endpoints.size).toBe(0)
   })
 
-  it('routes list and retrieve fetches through the proxy helper', async () => {
-    const originalHttpsProxy = process.env.HTTPS_PROXY
-    process.env.HTTPS_PROXY = 'http://proxy.example.test:8080'
-
-    const fetchMock = vi.fn(async (_input: URL | string, init?: RequestInit) => {
-      expect(init?.dispatcher).toBeDefined()
-      return new Response(JSON.stringify({ data: [], has_more: false }), { status: 200 })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    try {
-      const list = buildListFn('sk_test_fake', '/v1/customers')
-      const retrieve = buildRetrieveFn('sk_test_fake', '/v1/customers')
-
-      await list({ limit: 1 })
-      await retrieve('cus_123')
-
-      expect(fetchMock).toHaveBeenCalledTimes(2)
-    } finally {
-      if (originalHttpsProxy === undefined) {
-        delete process.env.HTTPS_PROXY
-      } else {
-        process.env.HTTPS_PROXY = originalHttpsProxy
-      }
-    }
+  it('uses the injected fetch for list and retrieve calls', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ data: [], has_more: false }), { status: 200 })
+    )
+    const list = buildListFn('sk_test_fake', '/v1/customers', fetchMock)
+    const retrieve = buildRetrieveFn('sk_test_fake', '/v1/customers', fetchMock)
+    await list({ limit: 1 })
+    await retrieve('cus_123')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('bypasses the proxy for localhost base URLs', async () => {
-    const originalHttpsProxy = process.env.HTTPS_PROXY
-    process.env.HTTPS_PROXY = 'http://proxy.example.test:8080'
-
-    const fetchMock = vi.fn(async (_input: URL | string, init?: RequestInit) => {
-      expect(init?.dispatcher).toBeUndefined()
-      return new Response(JSON.stringify({ data: [], has_more: false }), { status: 200 })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    try {
-      const list = buildListFn('sk_test_fake', '/v1/customers', undefined, 'http://localhost:12111')
-      await list({ limit: 1 })
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-    } finally {
-      if (originalHttpsProxy === undefined) {
-        delete process.env.HTTPS_PROXY
-      } else {
-        process.env.HTTPS_PROXY = originalHttpsProxy
-      }
-    }
+  it('uses the injected fetch for localhost base URLs', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ data: [], has_more: false }), { status: 200 })
+    )
+    const list = buildListFn(
+      'sk_test_fake',
+      '/v1/customers',
+      fetchMock,
+      undefined,
+      'http://localhost:12111'
+    )
+    await list({ limit: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('http://localhost:12111'),
+      expect.anything()
+    )
   })
 })

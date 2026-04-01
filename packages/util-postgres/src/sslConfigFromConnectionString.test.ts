@@ -49,6 +49,24 @@ describe('sslConfigFromConnectionString', () => {
   it('invalid URL → false', () => {
     expect(sslConfigFromConnectionString('not-a-url')).toBe(false)
   })
+
+  it('sslmode=prefer → throws', () => {
+    expect(() =>
+      sslConfigFromConnectionString('postgres://user:pass@host:5432/mydb?sslmode=prefer')
+    ).toThrow(/Unsupported Postgres sslmode "prefer"/)
+  })
+
+  it('sslmode=allow → throws', () => {
+    expect(() =>
+      sslConfigFromConnectionString('postgres://user:pass@host:5432/mydb?sslmode=allow')
+    ).toThrow(/Unsupported Postgres sslmode "allow"/)
+  })
+
+  it('unknown sslmode → throws', () => {
+    expect(() =>
+      sslConfigFromConnectionString('postgres://user:pass@host:5432/mydb?sslmode=bogus')
+    ).toThrow(/Unsupported Postgres sslmode "bogus"/)
+  })
 })
 
 describe('stripSslParams', () => {

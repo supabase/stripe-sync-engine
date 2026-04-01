@@ -22,7 +22,8 @@ export function stripSslParams(connStr: string): string {
 
 /**
  * Maps the `sslmode` query parameter from a Postgres connection string to a pg
- * `ssl` option. Defaults to `false` (no SSL) when no sslmode is present.
+ * `ssl` option. Throws for unrecognised sslmode values instead of silently
+ * disabling SSL.
  *
  * @param sslCaPem - PEM-encoded CA certificate. Required for `verify-ca` /
  *   `verify-full` to trust a private CA (e.g. RDS, internal DBs). If omitted
@@ -32,24 +33,27 @@ export function sslConfigFromConnectionString(
   connStr: string,
   { sslCaPem }: { sslCaPem?: string } = {}
 ): PgSslConfig {
+  let sslmode: string | null
   try {
-    const sslmode = new URL(connStr).searchParams.get('sslmode')
-    if (sslmode === 'disable') return false
-    if (sslmode === 'require') return { rejectUnauthorized: false }
-    if (sslmode === 'verify-full') {
-      return { rejectUnauthorized: true, ...(sslCaPem ? { ca: sslCaPem } : {}) }
-    }
-    if (sslmode === 'verify-ca') {
-      // verify-ca checks CA trust but skips hostname verification — useful when
-      // connecting through a proxy or pgbouncer where the hostname doesn't match.
-      return {
-        rejectUnauthorized: true,
-        ...(sslCaPem ? { ca: sslCaPem } : {}),
-        checkServerIdentity: () => undefined,
-      }
-    }
-    return false
+    sslmode = new URL(connStr).searchParams.get('sslmode')
   } catch {
     return false
   }
+  if (sslmode === null || sslmode === 'disable') return false
+  if (sslmode === 'require') return { rejectUnauthorized: false }
+  if (sslmode === 'verify-full') {
+    return { rejectUnauthorized: true, ...(sslCaPem ? { ca: sslCaPem } : {}) }
+  }
+  if (sslmode === 'verify-ca') {
+    // verify-ca checks CA trust but skips hostname verification — useful when
+    // connecting through a proxy or pgbouncer where the hostname doesn't match.
+    return {
+      rejectUnauthorized: true,
+      ...(sslCaPem ? { ca: sslCaPem } : {}),
+      checkServerIdentity: () => undefined,
+    }
+  }
+  throw new Error(
+    `Unsupported Postgres sslmode "${sslmode}". Use disable, require, verify-ca, or verify-full.`
+  )
 }
