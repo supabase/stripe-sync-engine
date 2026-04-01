@@ -389,12 +389,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Docs — deploy to Vercel (only on push, not PRs)
+  # Docs — deploy to Vercel (always, so e2e_cdn can test the live CDN)
   # ---------------------------------------------------------------------------
   docs:
     name: Deploy Docs
-    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04-arm
+    outputs:
+      deployment_url: ${{ steps.deploy.outputs.url }}
 
     steps:
       - uses: actions/checkout@v5
@@ -403,14 +404,18 @@ jobs:
         run: npm install -g vercel
 
       - name: Pull Vercel config
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          ENV=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+          vercel pull --yes --environment=$ENV --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: docs
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
       - name: Build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          PROD=${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          vercel build $PROD --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: docs
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
@@ -428,13 +433,55 @@ jobs:
         working-directory: docs/slides
 
       - name: Deploy
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        id: deploy
+        run: |
+          PROD=${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          BRANCH_SLUG="${GITHUB_REF_NAME//\//-}"
+          url=$(vercel deploy --prebuilt $PROD \
+            --meta gitBranch="$GITHUB_REF_NAME" \
+            --meta gitCommit="$GITHUB_SHA" \
+            --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### Vercel deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Branch:** \`$GITHUB_REF_NAME\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**URL:** $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "**CDN:** $url/stripe-api-specs/manifest.json" >> "$GITHUB_STEP_SUMMARY"
+          echo ""
+          echo "Deployed: $url  (branch: $GITHUB_REF_NAME)"
         working-directory: docs
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
-      # Deployed to: https://stripe-sync-engine.dev/
+      # main → https://stripe-sync.dev/ | branch → unique preview URL
+
+  # ---------------------------------------------------------------------------
+  # E2E CDN — verify stripe-sync.dev/stripe-api-specs after Vercel deploy
+  # ---------------------------------------------------------------------------
+  e2e_cdn:
+    name: E2E CDN
+    needs: [docs]
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: CDN e2e tests
+        run: pnpm --filter @stripe/sync-e2e run test -- openapi-cdn.test.ts
+        env:
+          STRIPE_SPEC_CDN_BASE_URL: ${{ needs.docs.outputs.deployment_url }}/stripe-api-specs
 
   # ---------------------------------------------------------------------------
   # Docker Hub — promote the built GHCR image to Docker Hub tags

@@ -114,7 +114,7 @@ export type ResolveSpecConfig = {
 export type ResolvedOpenApiSpec = {
   apiVersion: string
   spec: OpenApiSpec
-  source: 'explicit_path' | 'cache' | 'github' | 'bundled'
+  source: 'explicit_path' | 'cache' | 'cdn' | 'github' | 'bundled'
   cachePath?: string
   commitSha?: string
 }

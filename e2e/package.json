@@ -7,6 +7,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1",
+    "@stripe/sync-openapi": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-service": "workspace:*",

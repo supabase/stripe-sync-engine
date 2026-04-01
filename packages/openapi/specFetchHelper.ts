@@ -6,6 +6,13 @@ import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './type
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 
+// CDN mirror of the official Stripe REST API specs (from github.com/stripe/openapi).
+// Served from stripe-sync.dev — no auth, no GitHub rate limits.
+// These are the upstream Stripe API specs, NOT the Sync Engine's own OpenAPI spec.
+// Override with STRIPE_SPEC_CDN_BASE_URL env var (e.g. in tests or self-hosting).
+const STRIPE_SPEC_CDN_BASE_URL =
+  process.env.STRIPE_SPEC_CDN_BASE_URL ?? 'https://stripe-sync.dev/stripe-api-specs'
+
 // The spec bundled into this package at build time.
 // Update this constant and bundled-spec.json together when bumping.
 export const BUNDLED_API_VERSION = '2026-03-25.dahlia'
@@ -52,6 +59,19 @@ export async function resolveOpenApiSpec(
       apiVersion,
       spec: cachedSpec,
       source: 'cache',
+      cachePath,
+    }
+  }
+
+  // Try the Vercel CDN mirror before falling back to the GitHub API.
+  // The CDN serves spec versions without auth or rate limits.
+  const cdnSpec = await tryFetchFromCdn(apiVersion, fetch)
+  if (cdnSpec) {
+    await tryWriteCache(cachePath, cdnSpec)
+    return {
+      apiVersion,
+      spec: cdnSpec,
+      source: 'cdn',
       cachePath,
     }
   }
@@ -110,6 +130,35 @@ async function tryWriteCache(cachePath: string, spec: OpenApiSpec): Promise<void
     await fs.writeFile(cachePath, JSON.stringify(spec), 'utf8')
   } catch {
     // Best effort only. Cache writes should never block migration flow.
+  }
+}
+
+async function tryFetchFromCdn(
+  apiVersion: string,
+  fetch: typeof globalThis.fetch
+): Promise<OpenApiSpec | null> {
+  // The CDN manifest maps "YYYY-MM-DD.codename" → "YYYY-MM-DD.codename.json".
+  // We match by date part so "2026-03-25" resolves to "2026-03-25.dahlia.json".
+  if (!STRIPE_SPEC_CDN_BASE_URL) return null
+  try {
+    const manifestUrl = `${STRIPE_SPEC_CDN_BASE_URL}/manifest.json`
+    const manifestRes = await fetch(manifestUrl)
+    if (!manifestRes.ok) return null
+
+    const manifest = (await manifestRes.json()) as Record<string, string>
+    const datePart = extractDatePart(apiVersion)
+    const filename = Object.keys(manifest).find((v) => extractDatePart(v) === datePart)
+    if (!filename) return null
+
+    const specUrl = `${STRIPE_SPEC_CDN_BASE_URL}/${manifest[filename]}`
+    const specRes = await fetch(specUrl)
+    if (!specRes.ok) return null
+
+    const spec = (await specRes.json()) as unknown
+    validateOpenApiSpec(spec)
+    return spec
+  } catch {
+    return null
   }
 }
 

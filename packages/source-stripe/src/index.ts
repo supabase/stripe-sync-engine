@@ -10,6 +10,7 @@ import { buildResourceRegistry } from './resourceRegistry.js'
 import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
 import {
   resolveOpenApiSpec,
+  BUNDLED_API_VERSION,
   SpecParser,
   OPENAPI_RESOURCE_TABLE_ALIASES,
 } from '@stripe/sync-openapi'
@@ -153,7 +154,7 @@ export function createStripeSource(
 
     async discover({ config }) {
       const resolved = await resolveOpenApiSpec(
-        { apiVersion: config.api_version ?? '2020-08-27' },
+        { apiVersion: config.api_version ?? BUNDLED_API_VERSION },
         apiFetch
       )
       const registry = buildResourceRegistry(
@@ -216,7 +217,7 @@ export function createStripeSource(
         externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
       const stripe = makeClient(config)
       const resolved = await resolveOpenApiSpec(
-        { apiVersion: config.api_version ?? '2020-08-27' },
+        { apiVersion: config.api_version ?? BUNDLED_API_VERSION },
         apiFetch
       )
       const registry = buildResourceRegistry(

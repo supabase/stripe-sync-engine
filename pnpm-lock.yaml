@@ -291,6 +291,9 @@ importers:
       '@stripe/sync-engine':
         specifier: workspace:*
         version: link:../apps/engine
+      '@stripe/sync-openapi':
+        specifier: workspace:*
+        version: link:../packages/openapi
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../packages/protocol

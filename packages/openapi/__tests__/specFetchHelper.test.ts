@@ -9,6 +9,20 @@ async function createTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`))
 }
 
+// Mock fetch that returns 404 for CDN URLs (not deployed in tests) and
+// handles GitHub API calls normally.
+function makeFetchMock(
+  githubHandler: (url: string) => Response | Promise<Response>
+): typeof globalThis.fetch {
+  return vi.fn(async (input: URL | string) => {
+    const url = String(input)
+    if (url.includes('stripe-sync.dev')) {
+      return new Response('not found', { status: 404 })
+    }
+    return githubHandler(url)
+  }) as unknown as typeof globalThis.fetch
+}
+
 describe('resolveOpenApiSpec', () => {
   it('prefers explicit local spec path over cache and network', async () => {
     const tempDir = await createTempDir('openapi-explicit')
@@ -52,8 +66,7 @@ describe('resolveOpenApiSpec', () => {
 
   it('fetches from GitHub when cache misses and persists cache', async () => {
     const tempDir = await createTempDir('openapi-fetch')
-    const fetchMock = vi.fn(async (input: URL | string) => {
-      const url = String(input)
+    const fetchMock = makeFetchMock((url) => {
       if (url.includes('/commits')) {
         return new Response(JSON.stringify([{ sha: 'abc123def456' }]), { status: 200 })
       }
@@ -73,14 +86,14 @@ describe('resolveOpenApiSpec', () => {
 
     const cached = await fs.readFile(path.join(tempDir, '2020-08-27.spec3.sdk.json'), 'utf8')
     expect(JSON.parse(cached)).toMatchObject({ openapi: '3.0.0' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // 1 CDN manifest (404) + 1 GitHub commits + 1 GitHub spec
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
   it('uses the injected fetch for GitHub fetches', async () => {
     const tempDir = await createTempDir('openapi-fetch-proxy')
-    const fetchMock = vi.fn(async (input: URL | string) => {
-      const url = String(input)
+    const fetchMock = makeFetchMock((url) => {
       if (url.includes('/commits')) {
         return new Response(JSON.stringify([{ sha: 'abc123def456' }]), { status: 200 })
       }
@@ -92,7 +105,8 @@ describe('resolveOpenApiSpec', () => {
         fetchMock
       )
       expect(result.source).toBe('github')
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      // 1 CDN manifest (404) + 1 GitHub commits + 1 GitHub spec
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true })
     }
@@ -117,6 +131,7 @@ describe('resolveOpenApiSpec', () => {
 
   it('fails fast when GitHub resolution fails and no explicit spec path is set', async () => {
     const tempDir = await createTempDir('openapi-fail-fast')
+    // CDN returns 500 → tryFetchFromCdn returns null → falls through to GitHub (500) → throws
     const fetchMock = vi.fn(async () => new Response('boom', { status: 500 }))
 
     await expect(

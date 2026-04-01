@@ -36,6 +36,7 @@ npx @stripe/sync-engine sync \
 ## API Reference
 
 - [Engine API](/engine.html) — HTTP API for running syncs
+- [Stripe API Specs](/stripe-api-specs/) — CDN mirror of official Stripe OpenAPI specs (all versions)
 
 ## Slides
 

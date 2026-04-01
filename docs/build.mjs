@@ -1,6 +1,7 @@
 import Markdoc from '@markdoc/markdoc'
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname)
 const PAGES_DIR = ROOT
@@ -26,21 +27,34 @@ fs.mkdirSync(OUT_DIR, { recursive: true })
 // Copy public assets
 if (fs.existsSync(PUBLIC_DIR)) copyDir(PUBLIC_DIR, OUT_DIR)
 
-// Copy OpenAPI specs
+// Copy Sync Engine OpenAPI specs (engine/service/webhook) → /openapi/
 if (fs.existsSync(OPENAPI_DIR)) copyDir(OPENAPI_DIR, path.join(OUT_DIR, 'openapi'))
 
-// Collect all .md files recursively, skipping non-content dirs
-const SKIP_DIRS = new Set(['node_modules', 'out', 'openapi', 'public', 'slides'])
+// Generate official Stripe API specs (from stripe/openapi) → /stripe-api-specs/
+// These are the upstream Stripe REST API specs, NOT the Sync Engine API.
+// Served as a CDN mirror so consumers avoid GitHub rate limits.
+// Skipped when SKIP_STRIPE_SPECS=1 (e.g. quick local builds).
+if (process.env.SKIP_STRIPE_SPECS !== '1') {
+  console.log('Generating Stripe API specs...')
+  const stripeSpecDir = path.join(OUT_DIR, 'stripe-api-specs')
+  const result = spawnSync(
+    process.execPath,
+    [path.join(ROOT, 'scripts', 'generate-stripe-specs.mjs'), stripeSpecDir],
+    { stdio: 'inherit' }
+  )
+  if (result.status !== 0) {
+    console.error('Warning: Stripe API spec generation failed — CDN specs will be unavailable')
+  }
+}
 
+// Collect all .md files recursively under PAGES_DIR
 function collectPages(dir, base = '') {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   const pages = []
   for (const entry of entries) {
     const rel = base ? `${base}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) {
-        pages.push(...collectPages(path.join(dir, entry.name), rel))
-      }
+      pages.push(...collectPages(path.join(dir, entry.name), rel))
     } else if (entry.name.endsWith('.md')) {
       pages.push(rel)
     }
