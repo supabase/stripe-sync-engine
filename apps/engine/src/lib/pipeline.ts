@@ -20,15 +20,7 @@ export function enforceCatalog(
           logger.error({ stream: msg.stream }, 'Unknown stream not in catalog')
           continue
         }
-        if (msg.type === 'record' && cs.fields?.length) {
-          const allowed = new Set(cs.fields)
-          yield {
-            ...msg,
-            data: Object.fromEntries(Object.entries(msg.data).filter(([k]) => allowed.has(k))),
-          }
-        } else {
-          yield msg
-        }
+        yield msg
       } else {
         yield msg
       }

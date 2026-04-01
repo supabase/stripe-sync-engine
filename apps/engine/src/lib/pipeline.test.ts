@@ -65,7 +65,7 @@ describe('enforceCatalog()', () => {
     expect((result[0] as { data: unknown }).data).toEqual({ id: 'cus_1', name: 'Alice' })
   })
 
-  it('filters record fields to the configured allow-list', async () => {
+  it('does not filter record data even when fields is configured', async () => {
     const msgs: Message[] = [
       {
         type: 'record',
@@ -78,7 +78,11 @@ describe('enforceCatalog()', () => {
       enforceCatalog(catalog([{ name: 'subscriptions', fields: ['id', 'status'] }]))(toAsync(msgs))
     )
     expect(result).toHaveLength(1)
-    expect((result[0] as { data: unknown }).data).toEqual({ id: 'sub_1', status: 'active' })
+    expect((result[0] as { data: unknown }).data).toEqual({
+      id: 'sub_1',
+      status: 'active',
+      customer: 'cus_1',
+    })
   })
 
   it('drops record with unknown stream and logs error', async () => {
@@ -117,33 +121,6 @@ describe('enforceCatalog()', () => {
     expect(result[0]).toMatchObject({ type: 'log' })
     expect(result[1]).toMatchObject({ type: 'error' })
     expect(result[2]).toMatchObject({ type: 'stream_status' })
-  })
-
-  it('applies field filtering per-stream independently', async () => {
-    const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1', name: 'Alice' }, emitted_at: 1 },
-      {
-        type: 'record',
-        stream: 'products',
-        data: { id: 'prod_1', name: 'Widget', active: true },
-        emitted_at: 2,
-      },
-    ]
-    const result = await drain(
-      enforceCatalog(
-        catalog([
-          { name: 'customers', fields: ['id'] },
-          { name: 'products' }, // no field filter
-        ])
-      )(toAsync(msgs))
-    )
-    expect(result).toHaveLength(2)
-    expect((result[0] as { data: unknown }).data).toEqual({ id: 'cus_1' })
-    expect((result[1] as { data: unknown }).data).toEqual({
-      id: 'prod_1',
-      name: 'Widget',
-      active: true,
-    })
   })
 })
 

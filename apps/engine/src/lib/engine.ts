@@ -10,6 +10,7 @@ import {
 } from '@stripe/sync-protocol'
 import type { Destination, Source } from '@stripe/sync-protocol'
 import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
+import { withCatalogFilter } from './destination-filter.js'
 import type { StateStore } from './state-store.js'
 import type { ConnectorResolver } from './resolver.js'
 import { logger } from '../logger.js'
@@ -135,6 +136,7 @@ export function createEngine(
     string,
     unknown
   >
+  const destination = withCatalogFilter(connectors.destination)
   const baseContext = engineLogContext(config, metadata)
 
   // Lazy-cached catalog — discover is called at most once per engine instance.
@@ -176,9 +178,9 @@ export function createEngine(
               connectors.source.setup!({ config: sourceConfig, catalog })
             )
           : Promise.resolve(),
-        connectors.destination.setup
+        destination.setup
           ? withLoggedStep('Engine destination setup', baseContext, () =>
-              connectors.destination.setup!({ config: destConfig, catalog })
+              destination.setup!({ config: destConfig, catalog })
             )
           : Promise.resolve(),
       ])
@@ -187,16 +189,16 @@ export function createEngine(
     async teardown() {
       await Promise.all([
         connectors.source.teardown?.({ config: sourceConfig }),
-        connectors.destination.teardown?.({ config: destConfig }),
+        destination.teardown?.({ config: destConfig }),
       ])
     },
 
     async check() {
-      const [source, destination] = await Promise.all([
+      const [source, dest] = await Promise.all([
         connectors.source.check({ config: sourceConfig }),
-        connectors.destination.check({ config: destConfig }),
+        destination.check({ config: destConfig }),
       ])
-      return { source, destination }
+      return { source, destination: dest }
     },
 
     async *read(input?: AsyncIterable<unknown>) {
@@ -222,7 +224,7 @@ export function createEngine(
     async *write(messages: AsyncIterable<Message>) {
       const catalog = await getCatalog()
       const destInput = pipe(messages, enforceCatalog(catalog), log, filterType('record', 'state'))
-      const destOutput = connectors.destination.write({ config: destConfig, catalog }, destInput)
+      const destOutput = destination.write({ config: destConfig, catalog }, destInput)
       for await (const msg of withLoggedStream(
         'Engine destination write',
         baseContext,

@@ -18,6 +18,7 @@ export type {
 } from './resolver.js'
 export { createSourceFromExec } from './source-exec.js'
 export { createDestinationFromExec } from './destination-exec.js'
+export { withCatalogFilter } from './destination-filter.js'
 export { sourceTest, sourceTestSpec } from './source-test.js'
 export type { SourceTestConfig } from './source-test.js'
 export { destinationTest, destinationTestSpec } from './destination-test.js'
