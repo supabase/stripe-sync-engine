@@ -11,11 +11,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/engine': {
-        target: 'http://localhost:4010',
+        target: process.env.ENGINE_URL ?? 'http://localhost:4010',
         rewrite: (p) => p.replace(/^\/api\/engine/, ''),
       },
       '/api/service': {
-        target: 'http://localhost:4020',
+        target: process.env.SERVICE_URL ?? 'http://localhost:4020',
         rewrite: (p) => p.replace(/^\/api\/service/, ''),
       },
     },

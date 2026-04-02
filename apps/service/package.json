@@ -16,7 +16,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
+    "dev:serve": "tsx src/bin/sync-service.ts serve --temporal-address localhost:7233 --port 4020",
+    "dev:worker": "tsx src/bin/sync-service.ts worker --temporal-address localhost:7233",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"

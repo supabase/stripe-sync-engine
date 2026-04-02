@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
@@ -100,9 +99,17 @@ const workerCmd = defineCommand({
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
     const temporalAddress = args['temporal-address']
 
-    // workflowsPath: resolve relative to the package dist directory
-    const pkgDir = path.resolve(import.meta.dirname ?? process.cwd(), '..')
-    const workflowsPath = path.resolve(pkgDir, 'dist/temporal/workflows.js')
+    // tsx strips rootDir:"src" from import.meta.url, so paths differ by context:
+    //   tsx:      file:///.../apps/service/bin/sync-service.ts  → ../src/temporal/workflows.ts
+    //   compiled: file:///.../apps/service/dist/bin/sync-service.js → ../temporal/workflows.js
+    const { fileURLToPath } = await import('node:url')
+    const isTsx = import.meta.url.endsWith('.ts')
+    const workflowsPath = fileURLToPath(
+      new URL(
+        isTsx ? '../src/temporal/workflows.ts' : '../temporal/workflows.js',
+        import.meta.url
+      )
+    )
 
     const worker = await createWorker({
       temporalAddress,

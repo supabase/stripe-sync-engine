@@ -13,6 +13,7 @@
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "dev": "concurrently -n engine,service,worker,dashboard -c cyan,green,yellow,magenta \"pnpm --filter @stripe/sync-engine dev\" \"pnpm --filter @stripe/sync-service dev:serve\" \"pnpm --filter @stripe/sync-service dev:worker\" \"pnpm --filter @stripe/sync-dashboard dev\"",
     "visualizer": "pnpm --filter @stripe/sync-visualizer dev"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
     "@webhooksite/cli": "^0.2.7",
+    "concurrently": "^9.2.1",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",

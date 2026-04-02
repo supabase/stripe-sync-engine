@@ -17,7 +17,7 @@ const POSTGRES_HOST_URL =
   process.env.POSTGRES_URL ?? 'postgresql://postgres:postgres@localhost:55432/postgres'
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..')
-const COMPOSE_CMD = `docker compose -f compose.yml -f compose.service.yml`
+const COMPOSE_CMD = `docker compose -f compose.yml -f compose.dev.yml`
 
 const SKIP_CLEANUP = process.env.SKIP_CLEANUP === '1'
 
