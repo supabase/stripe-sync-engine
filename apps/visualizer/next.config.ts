@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  output: 'export',
+  basePath: '/visualizer',
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -16,23 +18,6 @@ const nextConfig: NextConfig = {
     })
 
     return config
-  },
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
-          },
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-        ],
-      },
-    ]
   },
 }
 

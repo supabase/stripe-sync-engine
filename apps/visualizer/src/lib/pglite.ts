@@ -195,7 +195,8 @@ function buildTableSql(schema: string, table: ParsedResourceTable): string {
 
   for (const col of table.columns) {
     const p = col.name.replace(/'/g, "''")
-    const pg = scalartypeToPg(col.type)
+    // Expandable references always resolve to an id string (text), regardless of declared type
+    const pg = col.expandableReference ? 'text' : scalartypeToPg(col.type)
     let expr: string
     if (col.expandableReference) {
       expr = `CASE WHEN jsonb_typeof(_raw_data->'${p}') = 'object' AND _raw_data->'${p}' ? 'id' THEN (_raw_data->'${p}'->>'id') ELSE (_raw_data->>'${p}') END`

@@ -381,6 +381,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
       - name: Install Vercel CLI
         run: npm install -g vercel
 
@@ -412,6 +421,16 @@ jobs:
             --base /slides/demo/ demo.md \
             --out ../.vercel/output/static/slides/demo
         working-directory: docs/slides
+
+      - name: Build visualizer
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @stripe/sync-protocol build
+          pnpm --filter @stripe/sync-openapi build
+          pnpm --filter @stripe/sync-source-stripe build
+          pnpm --filter @stripe/sync-visualizer build
+          mkdir -p docs/.vercel/output/static/visualizer
+          cp -r apps/visualizer/out/. docs/.vercel/output/static/visualizer/
 
       - name: Deploy
         id: deploy
