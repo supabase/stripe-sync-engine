@@ -38,8 +38,8 @@ const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined
 const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
 const syncParams = JSON.stringify({
-  source: { name: 'test', streams: { customers: {} } },
-  destination: { name: 'test' },
+  source: { type: 'test', streams: { customers: {} } },
+  destination: { type: 'test' },
 })
 
 /** Read an NDJSON response body into an array of parsed lines. */
@@ -117,13 +117,13 @@ describe('GET /openapi.json', () => {
     expect(schemaNames).toContain('PipelineConfig')
 
     // SourceConfig is a discriminated union
-    expect(spec.components.schemas.SourceConfig.discriminator.propertyName).toBe('name')
+    expect(spec.components.schemas.SourceConfig.discriminator.propertyName).toBe('type')
     expect(spec.components.schemas.SourceConfig.oneOf).toHaveLength(1)
 
-    // Each variant has name as required field
+    // Each variant has type as required field
     const testSource = spec.components.schemas.TestSourceConfig
-    expect(testSource.required).toContain('name')
-    expect(testSource.properties.name.enum).toEqual(['test'])
+    expect(testSource.required).toContain('type')
+    expect(testSource.properties.type.enum).toEqual(['test'])
   })
 
   it('defines NDJSON message schemas with discriminated unions', async () => {
@@ -132,7 +132,7 @@ describe('GET /openapi.json', () => {
     const spec = (await res.json()) as any
     const schemas = spec.components.schemas
 
-    // Individual message types (Zod v4 / JSON Schema 2020-12 uses `const` for literals)
+    // Individual message types — zod-openapi uses const for z.literal() in OpenAPI 3.1
     expect(schemas.RecordMessage.properties.type.const).toBe('record')
     expect(schemas.StateMessage.properties.type.const).toBe('state')
     expect(schemas.ErrorMessage.properties.type.const).toBe('error')
@@ -145,10 +145,10 @@ describe('GET /openapi.json', () => {
     expect(schemas.DestinationOutput.discriminator.propertyName).toBe('type')
     expect(schemas.DestinationOutput.oneOf).toHaveLength(3)
 
-    // NDJSON responses reference item schemas (not plain strings)
+    // NDJSON responses reference schemas (zod-openapi adds Output suffix for response-only types)
     const readNdjson =
       spec.paths['/read']?.post?.responses?.['200']?.content?.['application/x-ndjson']
-    expect(readNdjson.schema.$ref).toBe('#/components/schemas/Message')
+    expect(readNdjson.schema.$ref).toBe('#/components/schemas/MessageOutput')
 
     const writeNdjson =
       spec.paths['/write']?.post?.responses?.['200']?.content?.['application/x-ndjson']
@@ -157,6 +157,30 @@ describe('GET /openapi.json', () => {
     const syncNdjson =
       spec.paths['/sync']?.post?.responses?.['200']?.content?.['application/x-ndjson']
     expect(syncNdjson.schema.$ref).toBe('#/components/schemas/DestinationOutput')
+  })
+
+  it('/setup spec documents 200 response (not 204)', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+    const setupOp = spec.paths['/setup']?.post
+    expect(setupOp).toBeDefined()
+    expect(setupOp.responses['200']).toBeDefined()
+    expect(setupOp.responses['204']).toBeUndefined()
+  })
+
+  it('/write spec documents a required NDJSON request body', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+    const writeOp = spec.paths['/write']?.post
+    expect(writeOp).toBeDefined()
+    const body = writeOp.requestBody
+    expect(body).toBeDefined()
+    expect(body.required).toBe(true)
+    const ndjsonContent = body.content?.['application/x-ndjson']
+    expect(ndjsonContent).toBeDefined()
+    expect(ndjsonContent.schema.$ref).toBe('#/components/schemas/Message')
   })
 
   it('documents the X-Pipeline header on sync routes', async () => {
@@ -201,14 +225,16 @@ describe('GET /docs', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /setup', () => {
-  it('returns 204', async () => {
+  it('returns 200 with setup result', async () => {
     const app = createApp(resolver)
 
     const res = await app.request('/setup', {
       method: 'POST',
       headers: { 'X-Pipeline': syncParams },
     })
-    expect(res.status).toBe(204)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({})
   })
 })
 

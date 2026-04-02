@@ -6,7 +6,7 @@ import type {
 } from '@stripe/sync-protocol'
 import { toRecordMessage } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
-import type { SegmentState } from './index.js'
+import type { SegmentState, BackfillState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
 import type Stripe from 'stripe'
 
@@ -19,6 +19,111 @@ const SKIPPABLE_ERROR_PATTERNS = [
 ]
 
 const DEFAULT_BACKFILL_CONCURRENCY = 200
+
+// MARK: - Compact state (generative — O(concurrency) not O(total segments))
+
+/**
+ * Compact the mutable segment array into a BackfillState.
+ * Only stores completed ranges (merged) and in-flight cursors.
+ * Pending segments are derived from gaps on expand.
+ */
+export function compactState(
+  segments: SegmentState[],
+  range: { gte: number; lt: number },
+  numSegments: number
+): BackfillState {
+  const completed: BackfillState['completed'] = []
+  const inFlight: BackfillState['inFlight'] = []
+
+  for (const seg of segments) {
+    if (seg.status === 'complete') {
+      const last = completed.at(-1)
+      if (last && last.lt === seg.gte) {
+        last.lt = seg.lt // merge adjacent completed
+      } else {
+        completed.push({ gte: seg.gte, lt: seg.lt })
+      }
+    } else if (seg.pageCursor) {
+      inFlight.push({ gte: seg.gte, lt: seg.lt, pageCursor: seg.pageCursor })
+    }
+    // pending with null cursor → derived from gaps, not stored
+  }
+
+  return { range, numSegments, completed, inFlight }
+}
+
+/**
+ * Reconstruct the full segment array from a BackfillState.
+ * Completed and in-flight segments are restored directly.
+ * Gaps become pending segments, split to match the original segment granularity.
+ */
+export function expandState(state: BackfillState): SegmentState[] {
+  // Collect all occupied intervals sorted by gte
+  type Interval = {
+    gte: number
+    lt: number
+    status: 'complete' | 'pending'
+    pageCursor: string | null
+  }
+  const occupied: Interval[] = [
+    ...state.completed.map((r) => ({ ...r, status: 'complete' as const, pageCursor: null })),
+    ...state.inFlight.map((r) => ({ ...r, status: 'pending' as const, pageCursor: r.pageCursor })),
+  ].sort((a, b) => a.gte - b.gte)
+
+  const segments: SegmentState[] = []
+  let idx = 0
+  let cursor = state.range.gte
+  const segmentSize = Math.max(1, Math.ceil((state.range.lt - state.range.gte) / state.numSegments))
+
+  for (const interval of occupied) {
+    // Fill gap before this interval with pending segments
+    if (cursor < interval.gte) {
+      for (const seg of splitRange(cursor, interval.gte, segmentSize, idx)) {
+        segments.push(seg)
+        idx++
+      }
+    }
+    // Add the occupied interval itself
+    segments.push({
+      index: idx,
+      gte: interval.gte,
+      lt: interval.lt,
+      pageCursor: interval.pageCursor,
+      status: interval.status,
+    })
+    idx++
+    cursor = interval.lt
+  }
+
+  // Fill trailing gap with pending segments
+  if (cursor < state.range.lt) {
+    for (const seg of splitRange(cursor, state.range.lt, segmentSize, idx)) {
+      segments.push(seg)
+      idx++
+    }
+  }
+
+  return segments
+}
+
+/** Split a range into pending segments of approximately `segmentSize`. */
+function splitRange(
+  gte: number,
+  lt: number,
+  segmentSize: number,
+  startIndex: number
+): SegmentState[] {
+  const segments: SegmentState[] = []
+  let cursor = gte
+  let idx = startIndex
+  while (cursor < lt) {
+    const end = Math.min(cursor + segmentSize, lt)
+    segments.push({ index: idx, gte: cursor, lt: end, pageCursor: null, status: 'pending' })
+    cursor = end
+    idx++
+  }
+  return segments
+}
 
 function isSkippableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err)
@@ -106,6 +211,8 @@ async function* paginateSegment(opts: {
   listFn: NonNullable<ResourceConfig['listFn']>
   segment: SegmentState
   segments: SegmentState[]
+  range: { gte: number; lt: number }
+  numSegments: number
   streamName: string
   supportsLimit: boolean
   backfillLimit?: number
@@ -116,6 +223,8 @@ async function* paginateSegment(opts: {
     listFn,
     segment,
     segments,
+    range,
+    numSegments,
     streamName,
     supportsLimit,
     backfillLimit,
@@ -168,7 +277,7 @@ async function* paginateSegment(opts: {
       data: {
         pageCursor: null,
         status: allComplete ? 'complete' : 'pending',
-        segments: segments.map((s) => ({ ...s })),
+        backfill: compactState(segments, range, numSegments),
       },
     } satisfies StateMessage
   }
@@ -236,9 +345,17 @@ async function* sequentialBackfillStream(opts: {
 // MARK: - Main entry point
 
 export async function* listApiBackfill(opts: {
-  catalog: { streams: Array<{ stream: { name: string } }> }
+  catalog: { streams: Array<{ stream: { name: string }; backfill_limit?: number | undefined }> }
   state:
-    | Record<string, { pageCursor: string | null; status: string; segments?: SegmentState[] }>
+    | Record<
+        string,
+        {
+          pageCursor: string | null
+          status: string
+          segments?: SegmentState[]
+          backfill?: BackfillState
+        }
+      >
     | undefined
   registry: Record<string, ResourceConfig>
   stripe: Stripe
@@ -262,6 +379,8 @@ export async function* listApiBackfill(opts: {
 
   for (const configuredStream of catalog.streams) {
     const stream = configuredStream.stream
+    // Per-stream limit overrides global backfillLimit
+    const streamBackfillLimit = configuredStream.backfill_limit ?? backfillLimit
     const resourceConfig = findConfigByTableName(registry, stream.name)
     if (!resourceConfig) {
       yield {
@@ -288,16 +407,27 @@ export async function* listApiBackfill(opts: {
       // Parallel path: streams that support created filter
       if (resourceConfig.supportsCreatedFilter) {
         let segments: SegmentState[]
+        let range: { gte: number; lt: number }
+        let numSegments: number
 
-        if (streamState?.segments) {
-          // Resume from prior segment state — only run incomplete segments
+        if (streamState?.backfill) {
+          // Resume from compact backfill state
+          segments = expandState(streamState.backfill)
+          range = streamState.backfill.range
+          numSegments = streamState.backfill.numSegments
+        } else if (streamState?.segments) {
+          // Legacy: resume from old segment array format
           segments = streamState.segments.map((s) => ({ ...s }))
+          range = { gte: segments[0].gte, lt: segments[segments.length - 1].lt }
+          numSegments = backfillConcurrency
         } else {
           // First run: fetch account creation date and build segments
           if (accountCreated === null) {
             accountCreated = await getAccountCreatedTimestamp(stripe)
           }
           const now = Math.floor(Date.now() / 1000)
+          range = { gte: accountCreated, lt: now + 1 }
+          numSegments = backfillConcurrency
           segments = buildSegments(accountCreated, now, backfillConcurrency)
         }
 
@@ -309,9 +439,11 @@ export async function* listApiBackfill(opts: {
               listFn: resourceConfig.listFn!,
               segment,
               segments,
+              range,
+              numSegments,
               streamName: stream.name,
               supportsLimit: resourceConfig.supportsLimit !== false,
-              backfillLimit,
+              backfillLimit: streamBackfillLimit,
               totalEmitted,
               rateLimiter,
             })
@@ -326,7 +458,7 @@ export async function* listApiBackfill(opts: {
           resourceConfig,
           streamName: stream.name,
           pageCursor,
-          backfillLimit,
+          backfillLimit: streamBackfillLimit,
           rateLimiter,
           drainQueue,
         })

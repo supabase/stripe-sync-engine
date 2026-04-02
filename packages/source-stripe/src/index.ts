@@ -6,6 +6,8 @@ import type {
 } from '@stripe/sync-protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
+import { configSchema } from './spec.js'
+import type { Config } from './spec.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
 import {
@@ -31,59 +33,7 @@ const apiFetch: typeof globalThis.fetch = (input, init) =>
 
 // MARK: - Spec
 
-export const spec = z.object({
-  api_key: z.string().describe('Stripe API key (sk_test_... or sk_live_...)'),
-  livemode: z.boolean().optional().describe('Whether this is a live mode sync'),
-  api_version: z.string().optional().describe('Stripe API version (e.g. 2025-04-30.basil)'),
-  base_url: z
-    .string()
-    .url()
-    .optional()
-    .describe('Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)'),
-  webhook_url: z
-    .string()
-    .url()
-    .optional()
-    .describe('URL for managed webhook endpoint registration'),
-  webhook_secret: z
-    .string()
-    .optional()
-    .describe('Webhook signing secret (whsec_...) for signature verification'),
-  websocket: z.boolean().optional().describe('Enable WebSocket streaming for live events'),
-  poll_events: z
-    .boolean()
-    .optional()
-    .describe('Enable events API polling for incremental sync after backfill'),
-  webhook_port: z
-    .number()
-    .int()
-    .optional()
-    .describe('Port for built-in webhook HTTP listener (e.g. 4242)'),
-  revalidate_objects: z
-    .array(z.string())
-    .optional()
-    .describe('Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"])'),
-  backfill_limit: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Max objects to backfill per stream (useful for testing)'),
-  rate_limit: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Max Stripe API requests per second (default: 25)'),
-  backfill_concurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of time-range segments for parallel backfill (default: 200)'),
-})
-
-export type Config = z.infer<typeof spec>
+export { configSchema, type Config } from './spec.js'
 
 /** Raw webhook payload requiring signature verification. */
 export type WebhookInput = {
@@ -101,11 +51,21 @@ export type SegmentState = {
   status: 'pending' | 'complete'
 }
 
+/** Compact backfill state — O(concurrency) not O(total segments). */
+export type BackfillState = {
+  range: { gte: number; lt: number }
+  numSegments: number
+  completed: Array<{ gte: number; lt: number }>
+  inFlight: Array<{ gte: number; lt: number; pageCursor: string }>
+}
+
 export type StripeStreamState = {
   pageCursor: string | null
   status: 'pending' | 'complete'
   events_cursor?: number
+  /** @deprecated Legacy — use backfill instead */
   segments?: SegmentState[]
+  backfill?: BackfillState
 }
 
 const segmentStateSpec = z.object({
@@ -116,11 +76,19 @@ const segmentStateSpec = z.object({
   status: z.enum(['pending', 'complete']),
 })
 
+const backfillStateSpec = z.object({
+  range: z.object({ gte: z.number(), lt: z.number() }),
+  numSegments: z.number(),
+  completed: z.array(z.object({ gte: z.number(), lt: z.number() })),
+  inFlight: z.array(z.object({ gte: z.number(), lt: z.number(), pageCursor: z.string() })),
+})
+
 const streamStateSpec = z.object({
   pageCursor: z.string().nullable(),
   status: z.enum(['pending', 'complete']),
   events_cursor: z.number().optional(),
   segments: z.array(segmentStateSpec).optional(),
+  backfill: backfillStateSpec.optional(),
 })
 
 // MARK: - Source
@@ -137,7 +105,7 @@ export function createStripeSource(
   return {
     spec(): ConnectorSpecification {
       return {
-        config: z.toJSONSchema(spec),
+        config: z.toJSONSchema(configSchema),
         stream_state: z.toJSONSchema(streamStateSpec),
       }
     },
@@ -175,13 +143,32 @@ export function createStripeSource(
     },
 
     async setup({ config, catalog }) {
+      const updates: Partial<Config> = {}
+      const stripe = makeClient(config)
+
+      // Resolve account_id if not already set
+      if (!config.account_id) {
+        const account = await stripe.accounts.retrieve()
+        updates.account_id = account.id
+      }
+
+      // Create managed webhook endpoint if webhook_url is set
       if (config.webhook_url) {
-        const stripe = makeClient(config)
         const existing = await stripe.webhookEndpoints.list({ limit: 100 })
         const managed = existing.data.find(
           (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
         )
-        if (!(managed && managed.status === 'enabled')) {
+        if (managed && managed.status === 'enabled') {
+          // Endpoint already exists — ensure we have the secret to verify webhooks
+          if (!config.webhook_secret) {
+            throw new Error(
+              'Existing managed webhook endpoint found for this URL but webhook_secret ' +
+                'is not configured. The secret is only available at endpoint creation time — ' +
+                'provide it in the pipeline config.'
+            )
+          }
+          // Endpoint exists and we have the secret — nothing to do
+        } else {
           // Tradeoff: we subscribe to all events ('*') rather than only the
           // events needed by this sync's catalog. This is not ideal — Stripe
           // will send events we don't need, adding unnecessary network traffic.
@@ -191,23 +178,32 @@ export function createStripeSource(
           // for the same account, each sync filters events by its own catalog
           // inside processStripeEvent(), keeping endpoint usage constant
           // regardless of how many syncs are configured.
-          await stripe.webhookEndpoints.create({
+          const created = await stripe.webhookEndpoints.create({
             url: config.webhook_url,
             enabled_events: ['*'],
             metadata: { managed_by: 'stripe-sync' },
           })
+          // Secret is only available at creation time — not on list/retrieve
+          if (!config.webhook_secret && created.secret) {
+            updates.webhook_secret = created.secret
+          }
         }
       }
+
+      return Object.keys(updates).length > 0 ? updates : undefined
     },
 
     async teardown({ config }) {
       if (config.webhook_url) {
         const stripe = makeClient(config)
         const existing = await stripe.webhookEndpoints.list({ limit: 100 })
-        for (const wh of existing.data) {
-          if (wh.metadata?.managed_by === 'stripe-sync') {
-            await stripe.webhookEndpoints.del(wh.id)
-          }
+        // Only delete the endpoint matching THIS pipeline's URL — not all managed endpoints.
+        // Other pipelines on the same account may share the managed_by tag with different URLs.
+        const target = existing.data.find(
+          (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
+        )
+        if (target) {
+          await stripe.webhookEndpoints.del(target.id)
         }
       }
     },

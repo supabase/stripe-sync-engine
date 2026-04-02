@@ -1,32 +1,23 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import type { ConnectorResolver } from '@stripe/sync-engine'
-import { sourceTest, destinationTest } from '@stripe/sync-engine'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import type { WorkflowClient } from '@temporalio/client'
+import { TestWorkflowEnvironment } from '@temporalio/testing'
+import { Worker } from '@temporalio/worker'
+import path from 'node:path'
+import { createConnectorResolver, sourceTest, destinationTest } from '@stripe/sync-engine'
+import type { SyncActivities, RunResult } from '../temporal/activities.js'
 import { createApp } from './app.js'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const resolver: ConnectorResolver = {
-  resolveSource: async () => sourceTest,
-  resolveDestination: async () => destinationTest,
-}
-
-let dataDir: string
-
-beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), 'sync-service-test-'))
+const resolver = createConnectorResolver({
+  sources: { test: sourceTest },
+  destinations: { test: destinationTest },
 })
 
-afterEach(() => {
-  rmSync(dataDir, { recursive: true, force: true })
-})
-
+// Lightweight app for spec/health tests (no Temporal needed)
 function app() {
-  return createApp({ dataDir, connectors: resolver })
+  return createApp({
+    temporal: { client: {} as WorkflowClient, taskQueue: 'unused' },
+    resolver,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -38,34 +29,21 @@ describe('GET /openapi.json', () => {
     const res = await app().request('/openapi.json')
     expect(res.status).toBe(200)
     const spec = await res.json()
-    expect(spec.openapi).toBe('3.0.0')
+    expect(spec.openapi).toBe('3.1.0')
     expect(spec.info.title).toBeDefined()
     expect(spec.paths).toBeDefined()
   })
 
-  it('includes pipeline and webhook paths', async () => {
+  it('includes pipeline, pause/resume, and webhook paths', async () => {
     const res = await app().request('/openapi.json')
     const spec = (await res.json()) as { paths: Record<string, unknown> }
     const paths = Object.keys(spec.paths)
 
     expect(paths).toContain('/pipelines')
     expect(paths).toContain('/pipelines/{id}')
-    expect(paths).toContain('/pipelines/{id}/sync')
+    expect(paths).toContain('/pipelines/{id}/pause')
+    expect(paths).toContain('/pipelines/{id}/resume')
     expect(paths).toContain('/webhooks/{pipeline_id}')
-  })
-
-  it('tags operations for grouped CLI generation', async () => {
-    const res = await app().request('/openapi.json')
-    const spec = (await res.json()) as any
-    const allTags = new Set<string>()
-    for (const pathItem of Object.values(spec.paths) as any[]) {
-      for (const op of Object.values(pathItem) as any[]) {
-        if (op?.tags) op.tags.forEach((t: string) => allTags.add(t))
-      }
-    }
-    expect(allTags).toContain('Pipelines')
-    expect(allTags).toContain('Pipeline Operations')
-    expect(allTags).toContain('Webhooks')
   })
 })
 
@@ -91,80 +69,142 @@ describe('GET /health', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Pipelines CRUD
+// Pipeline CRUD + pause/resume (in-memory Temporal, stub activities)
 // ---------------------------------------------------------------------------
 
-describe('pipelines', () => {
-  it('create → get → list → update → delete', async () => {
-    const a = app()
+const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows.js')
+const noErrors: RunResult = { errors: [], state: {} }
 
-    // Create pipeline (inline source/destination config)
-    const createRes = await a.request('/pipelines', {
+function stubActivities(): SyncActivities {
+  return {
+    setup: async () => ({}),
+    syncImmediate: async () => noErrors,
+    readIntoQueue: async () => ({ count: 0, state: {} }),
+    writeFromQueue: async () => ({ errors: [], state: {}, written: 0 }),
+    teardown: async () => {},
+  }
+}
+
+let testEnv: TestWorkflowEnvironment
+let worker: Worker
+let workerRunning: Promise<void>
+
+beforeAll(async () => {
+  testEnv = await TestWorkflowEnvironment.createLocal()
+  worker = await Worker.create({
+    connection: testEnv.nativeConnection,
+    taskQueue: 'test-api',
+    workflowsPath,
+    activities: stubActivities(),
+  })
+  workerRunning = worker.run()
+}, 120_000)
+
+afterAll(async () => {
+  worker?.shutdown()
+  await workerRunning
+  await testEnv?.teardown()
+})
+
+function liveApp() {
+  return createApp({
+    temporal: { client: testEnv.client.workflow, taskQueue: 'test-api' },
+    resolver,
+  })
+}
+
+/** Poll GET /pipelines/:id until the workflow is queryable (not 404). */
+async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const res = await a.request(`/pipelines/${id}`)
+    if (res.status === 200) return
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  throw new Error(`Pipeline ${id} not queryable after ${timeoutMs}ms`)
+}
+
+describe('pipeline CRUD', () => {
+  it('create returns full pipeline', async () => {
+    const res = await liveApp().request('/pipelines', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        source: { name: 'test', api_key: 'sk_test_123' },
-        destination: { name: 'test', connection_string: 'postgres://localhost/db' },
+        source: { type: 'test' },
+        destination: { type: 'test' },
         streams: [{ name: 'customers' }],
       }),
     })
-    expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as any
-    expect(created.id).toMatch(/^pipe_/)
-    expect(created.source.name).toBe('test')
-    expect(created.source.api_key).toBe('sk_test_123')
+    expect(res.status).toBe(201)
+    const pipeline = await res.json()
+    expect(pipeline.id).toMatch(/^pipe_/)
+    expect(pipeline.source.type).toBe('test')
+    expect(pipeline.destination.type).toBe('test')
+  })
 
-    const pipelineId = created.id
+  it('update returns updated pipeline with status', async () => {
+    const a = liveApp()
 
-    // Get
-    const getRes = await a.request(`/pipelines/${pipelineId}`)
-    expect(getRes.status).toBe(200)
-
-    // List
-    const listRes = await a.request('/pipelines')
-    expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as any
-    expect(list.data).toHaveLength(1)
-    expect(list.has_more).toBe(false)
-
-    // Update
-    const updateRes = await a.request(`/pipelines/${pipelineId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    // Create
+    const createRes = await a.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        streams: [{ name: 'products' }],
+        source: { type: 'test' },
+        destination: { type: 'test' },
+        streams: [{ name: 'customers' }],
       }),
     })
+    const created = await createRes.json()
+    await waitForPipeline(a, created.id)
+
+    // Update
+    const updateRes = await a.request(`/pipelines/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ streams: [{ name: 'products' }] }),
+    })
     expect(updateRes.status).toBe(200)
-    const updated = (await updateRes.json()) as any
-    expect(updated.streams[0].name).toBe('products')
+    const updated = await updateRes.json()
+    expect(updated.id).toBe(created.id)
+    expect(updated.source.type).toBe('test')
+    expect(updated.status).toBeDefined()
+    expect(updated.status.paused).toBe(false)
 
-    // Delete
-    const deleteRes = await a.request(`/pipelines/${pipelineId}`, {
-      method: 'DELETE',
-    })
-    expect(deleteRes.status).toBe(200)
-    expect(await deleteRes.json()).toEqual({ id: pipelineId, deleted: true })
+    // Cleanup
+    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })
 
-  it('returns 404 for non-existent pipeline', async () => {
-    const res = await app().request('/pipelines/pipe_nope')
-    expect(res.status).toBe(404)
-  })
-})
+  it('pause and resume return pipeline with updated status', async () => {
+    const a = liveApp()
 
-// ---------------------------------------------------------------------------
-// Webhook ingress
-// ---------------------------------------------------------------------------
-
-describe('POST /webhooks/:pipeline_id', () => {
-  it('accepts webhook events and returns ok', async () => {
-    const res = await app().request('/webhooks/pipe_abc123', {
+    // Create
+    const createRes = await a.request('/pipelines', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'checkout.session.completed' }),
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test' },
+        destination: { type: 'test' },
+      }),
     })
-    expect(res.status).toBe(200)
-    expect(await res.text()).toBe('ok')
+    const created = await createRes.json()
+    await waitForPipeline(a, created.id)
+
+    // Pause
+    const pauseRes = await a.request(`/pipelines/${created.id}/pause`, { method: 'POST' })
+    expect(pauseRes.status).toBe(200)
+    const paused = await pauseRes.json()
+    expect(paused.id).toBe(created.id)
+    expect(paused.status.paused).toBe(true)
+
+    // Resume
+    const resumeRes = await a.request(`/pipelines/${created.id}/resume`, { method: 'POST' })
+    expect(resumeRes.status).toBe(200)
+    const resumed = await resumeRes.json()
+    expect(resumed.id).toBe(created.id)
+    expect(resumed.status.paused).toBe(false)
+
+    // Cleanup
+    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })
 })

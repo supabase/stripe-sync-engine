@@ -68,14 +68,14 @@ See [docs/architecture/principles.md](docs/architecture/principles.md) for the c
 - **Service internals:** [docs/service/](docs/service/)
 - **Plans & RFCs:** [docs/plans/](docs/plans/)
 - **Guides (CLI, publishing, tsconfig):** [docs/guides/](docs/guides/)
-- **OpenAPI specs:** [docs/openapi/](docs/openapi/)
+- **OpenAPI specs:** `apps/{engine,service}/src/__generated__/openapi.json`
 - **CI:** [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 ## Conventions
 
 - All serializable inputs/outputs (Zod schemas, JSON wire format) must use **snake_case** field names.
 - Source connectors must use `console.error` for logging (stdout is the NDJSON stream).
-- Generated OpenAPI specs are checked in at `docs/openapi/` — regenerate after route/schema changes.
+- Generated OpenAPI specs live in each package's `src/__generated__/openapi.json` — regenerate after route/schema changes.
 
 ## Key Gotchas
 

@@ -51,7 +51,7 @@ Check docs/architecture/quality.md scorecard:
 ## 5. Convention drift
 - Any Zod schemas using camelCase field names? (should be snake_case)
 - Any new .ts files missing from tsconfig include patterns?
-- OpenAPI specs in docs/openapi/ up to date?
+- OpenAPI specs in apps/{engine,service}/src/__generated__/openapi.json up to date?
 
 ## Output format
 Output a markdown report with sections for each check.

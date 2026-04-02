@@ -41,7 +41,7 @@ const sources = [
     })),
   {
     name: '@stripe/sync-engine (source-test)',
-    mod: { default: sourceTest, spec: sourceTestSpec } as Record<string, unknown>,
+    mod: { default: sourceTest, configSchema: sourceTestSpec } as Record<string, unknown>,
   },
 ]
 const destinations = [
@@ -53,7 +53,7 @@ const destinations = [
     })),
   {
     name: '@stripe/sync-engine (destination-test)',
-    mod: { default: destinationTest, spec: destinationTestSpec } as Record<string, unknown>,
+    mod: { default: destinationTest, configSchema: destinationTestSpec } as Record<string, unknown>,
   },
 ]
 
@@ -98,11 +98,12 @@ describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
     expect(typeof spec.config.properties).toBe('object')
   })
 
-  it('exports a named spec (Zod schema)', () => {
-    expect(mod.spec, 'named export "spec" should exist').toBeDefined()
-    expect(typeof (mod.spec as { parse?: unknown }).parse, 'spec.parse should be a function').toBe(
-      'function'
-    )
+  it('exports a named configSchema (Zod schema)', () => {
+    expect(mod.configSchema, 'named export "configSchema" should exist').toBeDefined()
+    expect(
+      typeof (mod.configSchema as { parse?: unknown }).parse,
+      'configSchema.parse should be a function'
+    ).toBe('function')
   })
 })
 
@@ -147,11 +148,12 @@ describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) =>
     expect(typeof spec.config.properties).toBe('object')
   })
 
-  it('exports a named spec (Zod schema)', () => {
-    expect(mod.spec, 'named export "spec" should exist').toBeDefined()
-    expect(typeof (mod.spec as { parse?: unknown }).parse, 'spec.parse should be a function').toBe(
-      'function'
-    )
+  it('exports a named configSchema (Zod schema)', () => {
+    expect(mod.configSchema, 'named export "configSchema" should exist').toBeDefined()
+    expect(
+      typeof (mod.configSchema as { parse?: unknown }).parse,
+      'configSchema.parse should be a function'
+    ).toBe('function')
   })
 })
 

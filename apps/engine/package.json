@@ -22,13 +22,18 @@
       "bun": "./src/api/app.ts",
       "types": "./dist/api/app.d.ts",
       "import": "./dist/api/app.js"
+    },
+    "./api/openapi-utils": {
+      "bun": "./src/api/openapi-utils.ts",
+      "types": "./dist/api/openapi-utils.d.ts",
+      "import": "./dist/api/openapi-utils.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "generate:types": "openapi-typescript ../../docs/openapi/engine.json -o src/lib/openapi.d.ts"
+    "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },
   "files": [
     "dist",
@@ -48,6 +53,7 @@
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
+    "@stripe/sync-hono-zod-openapi": "workspace:*",
     "hono": "^4",
     "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
@@ -55,8 +61,7 @@
     "pino-pretty": "^13",
     "stripe": "^17.7.0",
     "ws": "^8.18.0",
-    "zod": "^4.3.6",
-    "zod-openapi": "^5"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

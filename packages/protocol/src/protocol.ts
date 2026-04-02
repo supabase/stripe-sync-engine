@@ -67,6 +67,9 @@ export const ConfiguredStream = z.object({
 
   /** If set, only these field names are included in records for this stream. */
   fields: z.array(z.string()).optional(),
+
+  /** Cap backfill to this many records, then mark the stream complete. */
+  backfill_limit: z.number().int().positive().optional(),
 })
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
 
@@ -180,14 +183,15 @@ export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
 /** Parameters for a sync pipeline — source/destination config and optional stream selection. */
 export const PipelineConfig = z.object({
-  source: z.object({ name: z.string() }).catchall(z.unknown()),
-  destination: z.object({ name: z.string() }).catchall(z.unknown()),
+  source: z.object({ type: z.string() }).catchall(z.unknown()),
+  destination: z.object({ type: z.string() }).catchall(z.unknown()),
   streams: z
     .array(
       z.object({
         name: z.string(),
         sync_mode: z.enum(['incremental', 'full_refresh']).optional(),
         fields: z.array(z.string()).optional(),
+        backfill_limit: z.number().int().positive().optional(),
       })
     )
     .optional(),
@@ -280,7 +284,7 @@ export interface Source<
   ): AsyncIterable<Message>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). Called before first read(). */
-  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<Partial<TConfig> | void>
 
   /** Clean up external resources. Called when a sync is deleted. */
   teardown?(params: { config: TConfig }): Promise<void>
@@ -326,7 +330,7 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   ): AsyncIterable<DestinationOutput>
 
   /** Provision downstream resources (schemas, tables, etc.). Called before first write(). */
-  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<void>
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<Partial<TConfig> | void>
 
   /** Clean up downstream resources. Called when a sync is deleted. */
   teardown?(params: { config: TConfig }): Promise<void>

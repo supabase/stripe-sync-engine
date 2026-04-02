@@ -1,4 +1,4 @@
-import type { ConnectionOptions } from 'node:tls'
+import type { ConnectionOptions } from 'tls'
 
 /** Matches `pg` `Client` / `Pool` `ssl` option shape. */
 export type PgSslConfig = boolean | ConnectionOptions

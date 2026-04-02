@@ -1,19 +1,11 @@
 import { heartbeat } from '@temporalio/activity'
 import { createRemoteEngine } from '@stripe/sync-engine'
-import type { PipelineConfig, Message } from '@stripe/sync-engine'
+import type { PipelineConfig, Message, SetupResult } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
-import type { RunResult } from './types.js'
 
-/**
- * Resolve a pipeline's config with credentials inlined from the service.
- */
-async function resolveConfig(serviceUrl: string, pipelineId: string): Promise<PipelineConfig> {
-  const resp = await fetch(`${serviceUrl}/pipelines/${pipelineId}`)
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '')
-    throw new Error(`Failed to resolve pipeline ${pipelineId} (${resp.status}): ${text}`)
-  }
-  return (await resp.json()) as PipelineConfig
+export interface RunResult {
+  errors: Array<{ message: string; failure_type?: string; stream?: string }>
+  state: Record<string, unknown>
 }
 
 /** Convert an array to an async iterable. */
@@ -55,12 +47,8 @@ async function drainMessages(stream: AsyncIterable<Record<string, unknown>>): Pr
   return { errors, state, records }
 }
 
-export function createActivities(opts: {
-  serviceUrl: string
-  engineUrl: string
-  kafkaBroker?: string
-}) {
-  const { serviceUrl, engineUrl, kafkaBroker } = opts
+export function createActivities(opts: { engineUrl: string; kafkaBroker?: string }) {
+  const { engineUrl, kafkaBroker } = opts
 
   // Shared Kafka client + producer (created lazily, reused across activity calls)
   let kafka: Kafka | undefined
@@ -87,17 +75,15 @@ export function createActivities(opts: {
   }
 
   return {
-    async setup(pipelineId: string): Promise<void> {
-      const config = await resolveConfig(serviceUrl, pipelineId)
+    async setup(config: PipelineConfig): Promise<SetupResult> {
       const engine = createRemoteEngine(engineUrl, config)
-      await engine.setup()
+      return await engine.setup()
     },
 
-    async sync(
-      pipelineId: string,
+    async syncImmediate(
+      config: PipelineConfig,
       opts?: { input?: unknown[]; state?: Record<string, unknown>; stateLimit?: number }
     ): Promise<RunResult> {
-      const config = await resolveConfig(serviceUrl, pipelineId)
       const engine = createRemoteEngine(engineUrl, config, {
         state: opts?.state,
         stateLimit: opts?.stateLimit,
@@ -109,11 +95,11 @@ export function createActivities(opts: {
       return { errors, state }
     },
 
-    async read(
+    async readIntoQueue(
+      config: PipelineConfig,
       pipelineId: string,
       opts?: { input?: unknown[]; state?: Record<string, unknown>; stateLimit?: number }
-    ): Promise<{ count: number; records: unknown[]; state: Record<string, unknown> }> {
-      const config = await resolveConfig(serviceUrl, pipelineId)
+    ): Promise<{ count: number; state: Record<string, unknown> }> {
       const engine = createRemoteEngine(engineUrl, config, {
         state: opts?.state,
         stateLimit: opts?.stateLimit,
@@ -132,14 +118,14 @@ export function createActivities(opts: {
         })
       }
 
-      return { count: records.length, records, state }
+      return { count: records.length, state }
     },
 
-    async write(
+    async writeFromQueue(
+      config: PipelineConfig,
       pipelineId: string,
       opts?: { records?: unknown[]; maxBatch?: number }
     ): Promise<RunResult & { written: number }> {
-      const config = await resolveConfig(serviceUrl, pipelineId)
       let records: unknown[]
 
       if (kafkaBroker) {
@@ -185,8 +171,7 @@ export function createActivities(opts: {
       return { errors, state, written: records.length }
     },
 
-    async teardown(pipelineId: string): Promise<void> {
-      const config = await resolveConfig(serviceUrl, pipelineId)
+    async teardown(config: PipelineConfig): Promise<void> {
       const engine = createRemoteEngine(engineUrl, config)
       await engine.teardown()
     },

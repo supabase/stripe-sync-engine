@@ -17,6 +17,9 @@ private/
 
 # Generated diagram outputs
 scripts/*.svg
+
+# OpenAPI publishing copies (source of truth is apps/*/src/__generated__/openapi.json)
+docs/openapi/
 .prose/
 docs/sync2-architecture/
 docs/out/
@@ -30,6 +33,10 @@ private/
 
 # Claude Code local state
 .claude/
+
+# Build artifacts
+*.tsbuildinfo
+test-results/
 
 # Terraform state (contains secrets)
 *.tfstate

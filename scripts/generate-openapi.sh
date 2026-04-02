@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# Generate OpenAPI specs from engine, service, and webhook apps.
-# Output: docs/openapi/{engine,service,webhook}.json
+# Generate OpenAPI specs from engine and service apps.
+# Output: apps/{engine,service}/src/__generated__/openapi.json
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+engine_out=apps/engine/src/__generated__/openapi.json
+service_out=apps/service/src/__generated__/openapi.json
+
 check_mode=false
 if [[ "${1:-}" == "--check" ]]; then
   check_mode=true
-fi
-
-if $check_mode; then
-  outdir=$(mktemp -d)
-  trap 'rm -rf "$outdir"' EXIT
-else
-  outdir=docs/openapi
-  mkdir -p "$outdir"
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' EXIT
+  engine_out="$tmpdir/engine.json"
+  service_out="$tmpdir/service.json"
 fi
 
 echo "Generating engine OpenAPI spec..."
@@ -25,37 +24,43 @@ node -e "
   const res = await app.request('/openapi.json');
   const spec = await res.json();
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
-" > "$outdir/engine.json"
+" > "$engine_out"
 
 echo "Generating service OpenAPI spec..."
 node -e "
   import { createApp } from './apps/service/dist/api/app.js';
-  const app = createApp({ dataDir: '/tmp/sync-openapi-gen' });
+  import { createConnectorResolver } from './apps/engine/dist/index.js';
+  import sourceStripe from './packages/source-stripe/dist/index.js';
+  import destinationPostgres from './packages/destination-postgres/dist/index.js';
+  import destinationGoogleSheets from './packages/destination-google-sheets/dist/index.js';
+  const resolver = createConnectorResolver({
+    sources: { stripe: sourceStripe.default ?? sourceStripe },
+    destinations: { postgres: destinationPostgres.default ?? destinationPostgres, 'google-sheets': destinationGoogleSheets.default ?? destinationGoogleSheets },
+  });
+  const mockClient = {
+    start: async () => {},
+    getHandle: () => ({ signal: async () => {}, query: async () => ({}), terminate: async () => {} }),
+    list: async function* () {},
+  };
+  const app = createApp({ temporal: { client: mockClient, taskQueue: 'gen' }, resolver });
   const res = await app.request('/openapi.json');
   const spec = await res.json();
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
-" > "$outdir/service.json"
-
-echo "Generating webhook OpenAPI spec..."
-node -e "
-  import { createWebhookApp } from './apps/service/dist/api/webhook-app.js';
-  const app = createWebhookApp({ push_event: () => {} });
-  const res = await app.request('/openapi.json');
-  const spec = await res.json();
-  process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
-" > "$outdir/webhook.json"
+" > "$service_out"
 
 pnpm exec prettier --config .prettierrc --log-level warn --write \
-  "$outdir/engine.json" \
-  "$outdir/service.json" \
-  "$outdir/webhook.json"
+  "$engine_out" \
+  "$service_out"
 
 if $check_mode; then
   drift=false
-  for spec in engine.json service.json webhook.json; do
-    if ! diff -q "$outdir/$spec" "docs/openapi/$spec" > /dev/null 2>&1; then
-      echo "DRIFT: docs/openapi/$spec is out of date"
-      diff --unified "$outdir/$spec" "docs/openapi/$spec" || true
+  for pair in "engine:apps/engine/src/__generated__/openapi.json" "service:apps/service/src/__generated__/openapi.json"; do
+    name="${pair%%:*}"
+    checked_in="${pair#*:}"
+    generated="$tmpdir/$name.json"
+    if ! diff -q "$generated" "$checked_in" > /dev/null 2>&1; then
+      echo "DRIFT: $checked_in is out of date"
+      diff --unified "$generated" "$checked_in" || true
       drift=true
     fi
   done
@@ -66,8 +71,13 @@ if $check_mode; then
   fi
   echo "OpenAPI specs are up to date."
 else
+  # Copy to docs/openapi/ for publishing (CDN/static site)
+  mkdir -p docs/openapi
+  cp "$engine_out" docs/openapi/engine.json
+  cp "$service_out" docs/openapi/service.json
+
   echo "Done:"
-  echo "  docs/openapi/engine.json  ($(wc -l < docs/openapi/engine.json) lines)"
-  echo "  docs/openapi/service.json ($(wc -l < docs/openapi/service.json) lines)"
-  echo "  docs/openapi/webhook.json ($(wc -l < docs/openapi/webhook.json) lines)"
+  echo "  $engine_out  ($(wc -l < "$engine_out") lines)"
+  echo "  $service_out ($(wc -l < "$service_out") lines)"
+  echo "  docs/openapi/ (publishing copy)"
 fi

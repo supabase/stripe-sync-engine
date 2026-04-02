@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch'
-import type { paths } from './openapi.js'
-import type { Engine } from './engine.js'
+import type { paths } from '../__generated__/openapi.js'
+import type { Engine, SetupResult } from './engine.js'
 import { parseNdjsonStream, toNdjsonStream } from './ndjson.js'
 import type { CheckResult, DestinationOutput, Message, PipelineConfig } from '@stripe/sync-protocol'
 
@@ -73,8 +73,10 @@ export function createRemoteEngine(
   }
 
   return {
-    async setup() {
-      await post('/setup')
+    async setup(): Promise<SetupResult> {
+      const res = await post('/setup')
+      const text = await res.text()
+      return text ? JSON.parse(text) : {}
     },
 
     async teardown() {

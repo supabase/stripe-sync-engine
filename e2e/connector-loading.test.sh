@@ -33,6 +33,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-sync-state-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-util-postgres-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-ts-cli-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-hono-zod-openapi-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-integration-supabase-*.tgz
 }
 trap cleanup EXIT
@@ -55,10 +56,11 @@ DEST_SHEETS_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-destination-goog
 STATE_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-state-postgres pack 2>/dev/null | tail -1)
 UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2>/dev/null | tail -1)
 TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-ts-cli pack 2>/dev/null | tail -1)
+HONO_ZOD_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-hono-zod-openapi pack 2>/dev/null | tail -1)
 SUPABASE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-integration-supabase pack 2>/dev/null | tail -1)
 
 for tgz in "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$SUPABASE_TGZ"; do
+           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -97,6 +99,7 @@ cat > package.json <<EOF
       "@stripe/sync-state-postgres": "$STATE_PG_TGZ",
       "@stripe/sync-util-postgres": "$UTIL_PG_TGZ",
       "@stripe/sync-ts-cli": "$TSCLI_TGZ",
+      "@stripe/sync-hono-zod-openapi": "$HONO_ZOD_TGZ",
       "@stripe/sync-integration-supabase": "$SUPABASE_TGZ"
     }
   }
@@ -104,7 +107,7 @@ cat > package.json <<EOF
 EOF
 
 pnpm add "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$SUPABASE_TGZ" \
+         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" \
          2>&1 | tail -5
 echo ""
 
@@ -113,7 +116,7 @@ echo ""
 # ---------------------------------------------------------------------------
 
 # JSON-encoded X-Pipeline header value for check requests.
-SYNC_PARAMS='{"source":{"name":"stripe","api_key":"sk_test_fake"},"destination":{"name":"postgres","connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
+SYNC_PARAMS='{"source":{"type":"stripe","api_key":"sk_test_fake"},"destination":{"type":"postgres","connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
 
 # Run `sync-engine check` with fake credentials and given extra flags.
 # Exits non-zero (bad credentials) but must NOT output "not found".
@@ -195,7 +198,7 @@ echo ""
 # Step 8: unknown connector name → "not found"
 # ---------------------------------------------------------------------------
 echo "--- Step 8: unknown connector name → not found ---"
-UNKNOWN_PARAMS='{"source":{"name":"nonexistent-xyz"},"destination":{"name":"nonexistent-xyz"},"streams":[{"name":"x"}]}'
+UNKNOWN_PARAMS='{"source":{"type":"nonexistent-xyz"},"destination":{"type":"nonexistent-xyz"},"streams":[{"name":"x"}]}'
 unknown_output=$(npx sync-engine check \
      --x-pipeline "$UNKNOWN_PARAMS" \
      2>&1 || true)

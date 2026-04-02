@@ -24,6 +24,7 @@
     "@terrastruct/d2": "^0.1.33",
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
+    "@webhooksite/cli": "^0.2.7",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",

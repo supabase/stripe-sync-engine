@@ -1,7 +1,8 @@
 // Barrel — re-exports for consumers of @stripe/sync-service
 
 // Schemas (Zod + inferred types)
-export {
+export { createSchemas } from './lib/createSchemas.js'
+export type {
   SourceConfig,
   DestinationConfig,
   StreamConfig,
@@ -9,37 +10,15 @@ export {
   CreatePipeline,
   UpdatePipeline,
   LogEntry,
-} from './lib/schemas.js'
-
-// Store interfaces
-export type { PipelineStore, LogSink } from './lib/stores.js'
-export type { StateStore } from './lib/stores.js'
-
-// File-system store implementations
-export { filePipelineStore, fileStateStore, fileLogSink } from './lib/stores-fs.js'
-
-// Resolution
-export { resolve } from './lib/resolve.js'
-
-// Service
-export { SyncService } from './lib/service.js'
-export type { SyncServiceOptions } from './lib/service.js'
-
-// Temporal bridge
-export { TemporalBridge } from './temporal/bridge.js'
-export type { TemporalOptions } from './temporal/bridge.js'
+} from './lib/createSchemas.js'
 
 // API app factory
 export { createApp } from './api/app.js'
 export type { AppOptions } from './api/app.js'
 
-// Standalone webhook ingress app
-export { createWebhookApp } from './api/webhook-app.js'
-export type { WebhookAppOptions } from './api/webhook-app.js'
-
 // Temporal workflow types (for consumers that need to reference them)
-export type { RunResult, WorkflowStatus } from './temporal/types.js'
 export { createActivities } from './temporal/activities.js'
-export type { SyncActivities } from './temporal/activities.js'
+export type { SyncActivities, RunResult } from './temporal/activities.js'
+export type { WorkflowStatus } from './temporal/workflows.js'
 export { createWorker } from './temporal/worker.js'
 export type { WorkerOptions } from './temporal/worker.js'

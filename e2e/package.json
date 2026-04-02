@@ -7,18 +7,22 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-openapi": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
-    "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-service": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
-    "@stripe/sync-destination-postgres": "workspace:*",
-    "@stripe/sync-destination-google-sheets": "workspace:*",
     "@temporalio/client": "^1",
     "@temporalio/worker": "^1",
+    "@types/pg": "^8.20.0",
     "googleapis": "^144",
     "pg": "^8.16.0",
     "stripe": "^17.7.0",
     "vitest": "^3.2.1"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
   }
 }

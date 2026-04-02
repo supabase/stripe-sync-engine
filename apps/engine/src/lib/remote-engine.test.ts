@@ -52,8 +52,8 @@ let server: any
 let engineUrl: string
 
 const pipeline: PipelineConfig = {
-  source: { name: 'test', streams: { customers: {} } },
-  destination: { name: 'test' },
+  source: { type: 'test', streams: { customers: {} } },
+  destination: { type: 'test' },
 }
 
 beforeAll(
@@ -96,7 +96,7 @@ describe('createRemoteEngine', () => {
   describe('setup()', () => {
     it('resolves without error', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
-      await expect(engine.setup()).resolves.toBeUndefined()
+      await expect(engine.setup()).resolves.toEqual({})
     })
   })
 
@@ -175,8 +175,8 @@ describe('createRemoteEngine', () => {
   describe('error handling', () => {
     it('throws on HTTP errors (nonexistent connector)', async () => {
       const badPipeline: PipelineConfig = {
-        source: { name: 'nonexistent' },
-        destination: { name: 'nonexistent' },
+        source: { type: 'nonexistent' },
+        destination: { type: 'nonexistent' },
       }
       const engine = createRemoteEngine(engineUrl, badPipeline)
       await expect(engine.setup()).rejects.toThrow(/failed/)

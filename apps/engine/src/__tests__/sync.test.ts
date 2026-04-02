@@ -108,8 +108,8 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   it('run 1: writes records and persists state', async () => {
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
       },
       { source: sourceTest, destination },
       readonlyStateStore()
@@ -157,8 +157,8 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
       },
       { source: sourceTest, destination },
       readonlyStateStore(),

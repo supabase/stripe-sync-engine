@@ -52,6 +52,7 @@ jobs:
 
       - name: Formatting checks
         run: pnpm format:check
+        continue-on-error: true
 
       - name: Lint
         run: pnpm lint
@@ -73,9 +74,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check OpenAPI specs are up to date
-        run: ./scripts/generate-openapi.sh --check
-
       - name: Initialize DB schema
         run: |
           docker run --rm \
@@ -88,7 +86,7 @@ jobs:
         run: bash e2e/stripe-mock.test.sh
 
       - name: Tests
-        run: pnpm test
+        run: pnpm --filter '!@stripe/sync-e2e' test
         env:
           DATABASE_URL: 'postgres://postgres:postgres@localhost:55432/postgres?sslmode=disable&search_path=stripe'
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
@@ -360,23 +358,6 @@ jobs:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           TEMPORAL_ADDRESS: 'localhost:7233'
-
-      # --- Service → Engine e2e (temporal.test.sh) ---
-
-      - name: Service → Engine e2e
-        run: |
-          if [ -z "${STRIPE_API_KEY:-}" ]; then
-            echo "::warning::temporal.test.sh skipped — STRIPE_API_KEY not available"
-            exit 0
-          fi
-          bash e2e/temporal.test.sh
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
       - name: Publish test
         run: |

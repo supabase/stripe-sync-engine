@@ -62,7 +62,7 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
 /** Convert camelCase or snake_case to kebab-case. */
 export function toCliFlag(name: string): string {
   return name
-    .replace(/_/g, '-')
+    .replace(/[._]/g, '-')
     .replace(/([a-z])([A-Z])/g, '$1-$2')
     .toLowerCase()
 }
@@ -88,8 +88,11 @@ export function defaultOperationName(
   operation: OpenAPIOperation
 ): string {
   if (operation.operationId) {
-    // Convert operationId to kebab-case: listSyncs → list-syncs
-    return toCliFlag(operation.operationId)
+    // Dotted operationIds: 'pipelines.delete' → 'delete' (tag grouping provides the prefix)
+    const name = operation.operationId.includes('.')
+      ? operation.operationId.split('.').pop()!
+      : operation.operationId
+    return toCliFlag(name)
   }
   // Strip path params and slashes: POST /syncs/{id}/run → post-syncs-run
   const cleaned = path

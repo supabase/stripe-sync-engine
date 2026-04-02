@@ -76,7 +76,7 @@ done
 
 # --- 1) Read from Stripe ---
 echo "==> Reading from Stripe (/read)"
-READ_PARAMS=$(printf '{"source":{"name":"stripe","api_key":"%s","backfill_limit":5},"destination":{"name":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
+READ_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s","backfill_limit":5},"destination":{"type":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
 
 STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/read" \
   -H "X-Pipeline: $READ_PARAMS")
@@ -89,7 +89,7 @@ echo "$STRIPE_OUTPUT" | head -3 || true
 # --- 2) Write to Google Sheets ---
 if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
   echo "==> Writing to Google Sheets (/write)"
-  SHEETS_PARAMS=$(printf '{"source":{"name":"stripe","api_key":"%s"},"destination":{"name":"google-sheets","client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}' \
+  SHEETS_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"google-sheets","client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}' \
     "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
   SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
@@ -108,7 +108,7 @@ if [ -n "${POSTGRES_URL:-}" ]; then
   # Rewrite localhost for Docker container access
   DOCKER_PG_URL="${POSTGRES_URL//localhost/$DOCKER_HOST_ADDR}"
   echo "==> Setting up Postgres (/setup) → $DOCKER_PG_URL"
-  PG_PARAMS=$(printf '{"source":{"name":"stripe","api_key":"%s"},"destination":{"name":"postgres","url":"%s","schema":"stripe_docker_test"}}' \
+  PG_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"postgres","url":"%s","schema":"stripe_docker_test"}}' \
     "$STRIPE_API_KEY" "$DOCKER_PG_URL")
 
   curl -sf --max-time 30 -X POST "http://localhost:$PORT/setup" \

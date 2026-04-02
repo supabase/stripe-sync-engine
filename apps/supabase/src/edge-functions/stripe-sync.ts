@@ -2,6 +2,11 @@
  * Stripe Sync Edge Function
  *
  *   POST → cron-driven pipeline (source → destination with bounded checkpoints)
+ *
+ * TODO: Rate limiting — the engine no longer provides distributed rate limiting.
+ * source-stripe uses an in-memory token bucket by default (sufficient for single-instance),
+ * but if multiple edge function invocations share a Stripe account, a distributed
+ * rate limiter backed by the destination Postgres should be added here.
  */
 
 import { createScopedPgStateStore } from '@stripe/sync-state-postgres'

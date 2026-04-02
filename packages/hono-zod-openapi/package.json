@@ -1,0 +1,44 @@
+{
+  "name": "@stripe/sync-hono-zod-openapi",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Hono + zod-openapi integration — OpenAPIHono using zod-openapi for spec generation",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest --passWithNoTests"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
+    "hono": "^4",
+    "zod": "^4.3.6",
+    "zod-openapi": "^5.4.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "vitest": "^3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stripe/sync-engine.git"
+  },
+  "keywords": [
+    "hono",
+    "openapi",
+    "zod",
+    "typescript"
+  ],
+  "author": "Stripe <https://stripe.com/>"
+}

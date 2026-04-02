@@ -11,34 +11,15 @@ import type {
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'
+import { configSchema } from './spec.js'
+import type { Config } from './spec.js'
 import { appendRows, ensureSheet, ensureSpreadsheet } from './writer.js'
 
 export { ensureSpreadsheet, ensureSheet, appendRows, readSheet } from './writer.js'
 
 // MARK: - Spec
 
-export const envVars = {
-  client_id: 'GOOGLE_CLIENT_ID',
-  client_secret: 'GOOGLE_CLIENT_SECRET',
-} as const
-
-export const spec = z.object({
-  client_id: z.string().optional().describe('Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)'),
-  client_secret: z
-    .string()
-    .optional()
-    .describe('Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)'),
-  access_token: z.string().describe('OAuth2 access token'),
-  refresh_token: z.string().describe('OAuth2 refresh token'),
-  spreadsheet_id: z.string().describe('Target spreadsheet ID'),
-  spreadsheet_title: z
-    .string()
-    .default('Stripe Sync')
-    .describe('Title when creating a new spreadsheet'),
-  batch_size: z.number().default(50).describe('Rows per Sheets API append call'),
-})
-
-export type Config = z.infer<typeof spec>
+export { configSchema, envVars, type Config } from './spec.js'
 
 // MARK: - Helpers
 
@@ -79,7 +60,9 @@ function isTransient(err: unknown): boolean {
  * Pass a `sheetsClient` to inject a fake for testing; omit it for production
  * (each method creates a real client from config credentials).
  */
-export function createDestination(sheetsClient?: sheets_v4.Sheets) {
+export function createDestination(
+  sheetsClient?: sheets_v4.Sheets
+): Destination<Config> & { readonly spreadsheetId: string | undefined } {
   let spreadsheetId: string | undefined
 
   const destination = {
@@ -89,7 +72,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets) {
     },
 
     spec(): ConnectorSpecification {
-      return { config: z.toJSONSchema(spec) }
+      return { config: z.toJSONSchema(configSchema) }
     },
 
     async check({ config }: { config: Config }): Promise<CheckResult> {
@@ -102,6 +85,13 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets) {
       } catch {
         return { status: 'succeeded', message: 'Sheets client is configured' }
       }
+    },
+
+    async setup({ config }: { config: Config }) {
+      if (config.spreadsheet_id) return
+      const sheets = sheetsClient ?? makeSheetsClient(config)
+      const id = await ensureSpreadsheet(sheets, config.spreadsheet_title)
+      return { spreadsheet_id: id }
     },
 
     async *write(

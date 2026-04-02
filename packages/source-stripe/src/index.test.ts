@@ -1651,8 +1651,9 @@ describe('StripeSource', () => {
       const states = messages.filter((m): m is StateMessage => m.type === 'state')
       const lastState = states[states.length - 1]
       expect(lastState.data).toMatchObject({ status: 'complete' })
-      const segments = (lastState.data as StripeStreamState).segments!
-      expect(segments.every((s) => s.status === 'complete')).toBe(true)
+      const backfill = (lastState.data as StripeStreamState).backfill!
+      expect(backfill.inFlight).toEqual([])
+      expect(backfill.completed.length).toBeGreaterThan(0)
     })
 
     it('emits state with full segment snapshots after each page for resumability', async () => {
@@ -1691,13 +1692,14 @@ describe('StripeSource', () => {
 
       for (const state of states) {
         const data = state.data as StripeStreamState
-        expect(data.segments).toBeDefined()
-        expect(data.segments!.length).toBeGreaterThan(0)
+        expect(data.backfill).toBeDefined()
+        expect(data.backfill!.range).toBeDefined()
       }
 
       const lastData = states[states.length - 1].data as StripeStreamState
       expect(lastData.status).toBe('complete')
-      expect(lastData.segments!.every((s) => s.status === 'complete')).toBe(true)
+      // All work done — completed ranges should cover the full range
+      expect(lastData.backfill!.inFlight).toEqual([])
     })
   })
 

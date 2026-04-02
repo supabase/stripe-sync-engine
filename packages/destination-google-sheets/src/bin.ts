@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import connector, { spec } from './index.js'
+import connector from './index.js'
+import { configSchema } from './spec.js'
 import { runConnectorCli } from '@stripe/sync-protocol/cli'
 
-runConnectorCli(connector, { name: 'destination-google-sheets', configSchema: spec })
+runConnectorCli(connector, { name: 'destination-google-sheets', configSchema })

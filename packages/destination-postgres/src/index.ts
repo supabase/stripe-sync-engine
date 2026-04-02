@@ -1,5 +1,4 @@
 import pg from 'pg'
-import { z } from 'zod'
 import type { PoolConfig } from 'pg'
 import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
 import {
@@ -9,36 +8,14 @@ import {
   upsert,
   withPgConnectProxy,
 } from '@stripe/sync-util-postgres'
+import { z } from 'zod'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
+import { configSchema } from './spec.js'
+import type { Config } from './spec.js'
 
 // MARK: - Spec
 
-export const spec = z.object({
-  url: z.string().optional().describe('Postgres connection string (alias for connection_string)'),
-  connection_string: z.string().optional().describe('Postgres connection string'),
-  host: z.string().optional().describe('Postgres host (required for AWS IAM)'),
-  port: z.number().default(5432).describe('Postgres port'),
-  database: z.string().optional().describe('Database name (required for AWS IAM)'),
-  user: z.string().optional().describe('Database user (required for AWS IAM)'),
-  schema: z.string().describe('Target schema name'),
-  batch_size: z.number().default(100).describe('Records to buffer before flushing'),
-  aws: z
-    .object({
-      region: z.string().describe('AWS region for RDS instance'),
-      role_arn: z.string().optional().describe('IAM role ARN to assume (cross-account)'),
-      external_id: z.string().optional().describe('External ID for STS AssumeRole'),
-    })
-    .optional()
-    .describe('AWS RDS IAM authentication config'),
-  ssl_ca_pem: z
-    .string()
-    .optional()
-    .describe(
-      'PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)'
-    ),
-})
-
-export type Config = z.infer<typeof spec>
+export { configSchema, type Config } from './spec.js'
 
 export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   if (config.aws) {
@@ -125,7 +102,7 @@ function isTransient(err: unknown): boolean {
 
 const destination = {
   spec() {
-    return { config: z.toJSONSchema(spec) }
+    return { config: z.toJSONSchema(configSchema) }
   },
 
   async check({ config }) {
@@ -192,6 +169,12 @@ const destination = {
   },
 
   async teardown({ config }) {
+    const PROTECTED_SCHEMAS = new Set(['public', 'information_schema', 'pg_catalog', 'pg_toast'])
+    if (PROTECTED_SCHEMAS.has(config.schema)) {
+      throw new Error(
+        `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
+      )
+    }
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)

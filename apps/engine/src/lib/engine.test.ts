@@ -282,28 +282,28 @@ describe('protocol schemas', () => {
   describe('SyncEngineParams', () => {
     it('parses minimal params', () => {
       const result = SyncEngineParams.parse({
-        source: { name: 'stripe' },
-        destination: { name: 'postgres' },
+        source: { type: 'stripe' },
+        destination: { type: 'postgres' },
       })
-      expect(result.source).toEqual({ name: 'stripe' })
-      expect(result.destination).toEqual({ name: 'postgres' })
+      expect(result.source).toEqual({ type: 'stripe' })
+      expect(result.destination).toEqual({ type: 'postgres' })
     })
 
     it('parses with all fields', () => {
       const result = SyncEngineParams.parse({
-        source: { name: 'stripe', api_key: 'sk_test' },
-        destination: { name: 'postgres', url: 'pg://...' },
+        source: { type: 'stripe', api_key: 'sk_test' },
+        destination: { type: 'postgres', url: 'pg://...' },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
       })
       expect(result.streams).toHaveLength(1)
     })
 
     it('rejects missing source', () => {
-      expect(() => SyncEngineParams.parse({ destination: { name: 'postgres' } })).toThrow()
+      expect(() => SyncEngineParams.parse({ destination: { type: 'postgres' } })).toThrow()
     })
 
     it('rejects missing destination', () => {
-      expect(() => SyncEngineParams.parse({ source: { name: 'stripe' } })).toThrow()
+      expect(() => SyncEngineParams.parse({ source: { type: 'stripe' } })).toThrow()
     })
   })
 })
@@ -317,8 +317,8 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          source: { name: 'test', streams: {} },
-          destination: { name: 'test' },
+          source: { type: 'test', streams: {} },
+          destination: { type: 'test' },
         },
         { source: sourceTest, destination: destinationTest },
         readonlyStateStore()
@@ -337,7 +337,7 @@ describe('engine config validation', () => {
     }
     expect(() =>
       createEngine(
-        { source: { name: 'test' }, destination: { name: 'test' } },
+        { source: { type: 'test' }, destination: { type: 'test' } },
         { source, destination: destinationTest },
         readonlyStateStore()
       )
@@ -360,8 +360,8 @@ describe('engine config validation', () => {
     expect(() =>
       createEngine(
         {
-          source: { name: 'test', streams: {} },
-          destination: { name: 'test' },
+          source: { type: 'test', streams: {} },
+          destination: { type: 'test' },
         },
         { source: sourceTest, destination },
         readonlyStateStore()
@@ -384,7 +384,7 @@ describe('engine config validation', () => {
     }
 
     const engine = createEngine(
-      { source: { name: 'test' }, destination: { name: 'test' } },
+      { source: { type: 'test' }, destination: { type: 'test' } },
       { source, destination: destinationTest },
       readonlyStateStore()
     )
@@ -409,8 +409,8 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.read()', async () => {
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'test' },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       readonlyStateStore()
@@ -443,7 +443,7 @@ describe('engine message validation', () => {
       },
     }
     const engine = createEngine(
-      { source: { name: 'test' }, destination: { name: 'test' } },
+      { source: { type: 'test' }, destination: { type: 'test' } },
       { source: badSource, destination: destinationTest },
       readonlyStateStore()
     )
@@ -467,8 +467,8 @@ describe('engine message validation', () => {
 
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'test' },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'test' },
       },
       { source: sourceTest, destination: badDest },
       readonlyStateStore()
@@ -495,8 +495,8 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'test' },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       readonlyStateStore()
@@ -533,7 +533,7 @@ describe('engine stream membership validation', () => {
       },
     }
     const engine = createEngine(
-      { source: { name: 'test' }, destination: { name: 'test' } },
+      { source: { type: 'test' }, destination: { type: 'test' } },
       { source, destination: destinationTest },
       readonlyStateStore()
     )
@@ -553,8 +553,8 @@ describe('engine.sync() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {} } },
-        destination: { name: 'test' },
+        source: { type: 'test', streams: { customers: {} } },
+        destination: { type: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
       readonlyStateStore()
@@ -597,8 +597,8 @@ describe('engine.sync() pipeline', () => {
   it('stream filtering: only configures requested streams', async () => {
     const engine = createEngine(
       {
-        source: { name: 'test', streams: { customers: {}, invoices: {} } },
-        destination: { name: 'test' },
+        source: { type: 'test', streams: { customers: {}, invoices: {} } },
+        destination: { type: 'test' },
         streams: [{ name: 'customers' }],
       },
       { source: sourceTest, destination: destinationTest },
@@ -660,7 +660,7 @@ describe('engine.sync() pipeline', () => {
     }
 
     const engine = createEngine(
-      { source: { name: 'test' }, destination: { name: 'test' } },
+      { source: { type: 'test' }, destination: { type: 'test' } },
       { source: mixedSource, destination: destinationTest },
       readonlyStateStore()
     )

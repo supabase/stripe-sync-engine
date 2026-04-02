@@ -78,6 +78,16 @@ services:
       retries: 20
       start_period: 30s
 
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - '8080:8080'
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+
   # --- Kafka (message queue between read and write activities) ---
 
   kafka:

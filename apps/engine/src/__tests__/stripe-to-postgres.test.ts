@@ -81,8 +81,8 @@ function makeEngine(
 ) {
   return createEngine(
     {
-      source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+      source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: overrides.streams,
     },
     { source, destination },
@@ -204,8 +204,8 @@ describe('engine read → write', () => {
 
 describe('resumable sync via state store', () => {
   const params = {
-    source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-    destination: { name: 'postgres', connection_string: '', schema: SCHEMA },
+    source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+    destination: { type: 'postgres', connection_string: '', schema: SCHEMA },
     streams: [{ name: '' }],
   }
 
@@ -232,13 +232,13 @@ describe('resumable sync via state store', () => {
   it('auto-persists state after sync', async () => {
     const store = await maybeDestinationStateStore({
       ...params,
-      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],
     })
     const engine = createEngine(
       {
-        source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+        source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
         streams: [{ name: targetStream }],
       },
       { source, destination },
@@ -252,15 +252,15 @@ describe('resumable sync via state store', () => {
   it('pre-seeded complete state skips backfill', async () => {
     const store = await maybeDestinationStateStore({
       ...params,
-      destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],
     })
     await store.set(targetStream, { pageCursor: null, status: 'complete' })
 
     const engine = createEngine(
       {
-        source: { name: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
+        source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
         streams: [{ name: targetStream }],
       },
       { source, destination },

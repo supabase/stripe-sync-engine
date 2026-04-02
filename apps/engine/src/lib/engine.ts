@@ -17,8 +17,13 @@ import { logger } from '../logger.js'
 
 // MARK: - Engine interface
 
+export interface SetupResult {
+  source?: Record<string, unknown>
+  destination?: Record<string, unknown>
+}
+
 export interface Engine {
-  setup(): Promise<void>
+  setup(): Promise<SetupResult>
   teardown(): Promise<void>
   check(): Promise<{ source: CheckResult; destination: CheckResult }>
   read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
@@ -28,8 +33,8 @@ export interface Engine {
 
 function engineLogContext(config: PipelineConfig): Record<string, unknown> {
   return {
-    sourceName: config.source.name,
-    destinationName: config.destination.name,
+    sourceName: config.source.type,
+    destinationName: config.destination.type,
     configuredStreamCount: config.streams?.length ?? 0,
     configuredStreams: config.streams?.map((stream) => stream.name) ?? [],
   }
@@ -89,12 +94,16 @@ export function buildCatalog(
     const wanted = new Map(configStreams.map((s) => [s.name, s]))
     streams = discovered
       .filter((s) => wanted.has(s.name))
-      .map((s) => ({
-        stream: s,
-        sync_mode: wanted.get(s.name)!.sync_mode ?? 'full_refresh',
-        destination_sync_mode: 'append' as const,
-        fields: wanted.get(s.name)!.fields,
-      }))
+      .map((s) => {
+        const cfg = wanted.get(s.name)!
+        return {
+          stream: s,
+          sync_mode: cfg.sync_mode ?? 'full_refresh',
+          destination_sync_mode: 'append' as const,
+          fields: cfg.fields,
+          backfill_limit: cfg.backfill_limit,
+        }
+      })
   } else {
     streams = discovered.map((s) => ({
       stream: s,
@@ -116,8 +125,8 @@ export function createEngine(
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
   const destSpec = connectors.destination.spec()
-  const { name: _sn, ...rawSourceConfig } = config.source
-  const { name: _dn, ...rawDestConfig } = config.destination
+  const { type: _sn, ...rawSourceConfig } = config.source
+  const { type: _dn, ...rawDestConfig } = config.destination
   const sourceConfig = z.fromJSONSchema(sourceSpec.config).parse(rawSourceConfig) as Record<
     string,
     unknown
@@ -162,18 +171,28 @@ export function createEngine(
     async setup() {
       const catalog = await getCatalog()
       const filteredCatalog = applySelection(catalog)
-      await Promise.all([
+      const [sourceUpdates, destUpdates] = await Promise.all([
         connectors.source.setup
           ? withLoggedStep('Engine source setup', baseContext, () =>
               connectors.source.setup!({ config: sourceConfig, catalog })
             )
-          : Promise.resolve(),
+          : Promise.resolve(undefined),
         connectors.destination.setup
           ? withLoggedStep('Engine destination setup', baseContext, () =>
               connectors.destination.setup!({ config: destConfig, catalog: filteredCatalog })
             )
-          : Promise.resolve(),
+          : Promise.resolve(undefined),
       ])
+      const result: SetupResult = {}
+      if (sourceUpdates) {
+        Object.assign(sourceConfig, sourceUpdates)
+        result.source = sourceUpdates
+      }
+      if (destUpdates) {
+        Object.assign(destConfig, destUpdates)
+        result.destination = destUpdates
+      }
+      return result
     },
 
     async teardown() {
@@ -245,8 +264,8 @@ export async function createEngineFromParams(
   stateStore: StateStore
 ): Promise<Engine> {
   const [source, destination] = await Promise.all([
-    resolver.resolveSource(params.source.name),
-    resolver.resolveDestination(params.destination.name),
+    resolver.resolveSource(params.source.type),
+    resolver.resolveDestination(params.destination.type),
   ])
   return createEngine(params, { source, destination }, stateStore)
 }

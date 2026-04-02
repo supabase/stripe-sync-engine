@@ -2,10 +2,10 @@
   "name": "@stripe/sync-service",
   "version": "0.1.0",
   "private": false,
-  "description": "Stripe Sync Service — stateful sync with credential management and webhook fan-out",
+  "description": "Stripe Sync Service — pipeline management and webhook ingress via Temporal",
   "type": "module",
   "bin": {
-    "sync-service": "./dist/bin/cli.js"
+    "sync-service": "./dist/bin/sync-service.js"
   },
   "exports": {
     ".": {
@@ -17,7 +17,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },
   "files": [
     "dist",
@@ -25,28 +27,33 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
-    "@hono/zod-openapi": "^1.2",
+    "@stripe/sync-hono-zod-openapi": "workspace:*",
     "@scalar/hono-api-reference": "^0.6",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
+    "@temporalio/activity": "^1",
+    "@temporalio/client": "^1",
+    "@temporalio/worker": "^1",
+    "@temporalio/workflow": "^1",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4",
     "kafkajs": "^2.2.4",
+    "openapi-fetch": "^0.13",
     "pino": "^10",
     "pino-pretty": "^13",
     "zod": "^4.3.6"
   },
-  "optionalDependencies": {
-    "@temporalio/activity": "^1",
-    "@temporalio/client": "^1",
-    "@temporalio/worker": "^1",
-    "@temporalio/workflow": "^1"
-  },
   "devDependencies": {
     "@temporalio/testing": "^1",
     "@types/node": "^24.10.1",
+    "openapi-typescript": "^7",
+    "pg": "^8",
+    "stripe": "^21.0.1",
     "vitest": "^3.2.4"
   },
   "repository": {

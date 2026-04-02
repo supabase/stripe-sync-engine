@@ -1,0 +1,44 @@
+{
+  "name": "@stripe/sync-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1",
+    "@radix-ui/react-checkbox": "^1",
+    "@radix-ui/react-label": "^1",
+    "@radix-ui/react-select": "^2",
+    "@radix-ui/react-tabs": "^1",
+    "class-variance-authority": "^0.7",
+    "clsx": "^2",
+    "lucide-react": "^0.511",
+    "openapi-fetch": "^0.13",
+    "react": "^19",
+    "react-dom": "^19",
+    "tailwind-merge": "^3"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1",
+    "@playwright/test": "^1",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-engine": "workspace:*",
+    "@stripe/sync-service": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@tailwindcss/vite": "^4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^6",
+    "vitest": "^3"
+  }
+}

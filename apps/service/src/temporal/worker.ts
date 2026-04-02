@@ -5,7 +5,6 @@ export interface WorkerOptions {
   temporalAddress: string
   namespace?: string
   taskQueue: string
-  serviceUrl: string
   engineUrl: string
   kafkaBroker?: string
   /** Path to compiled workflows.js (Temporal bundles it for V8 sandbox). */
@@ -23,7 +22,6 @@ export async function createWorker(opts: WorkerOptions): Promise<Worker> {
     taskQueue: opts.taskQueue,
     workflowsPath: opts.workflowsPath,
     activities: createActivities({
-      serviceUrl: opts.serviceUrl,
       engineUrl: opts.engineUrl,
       kafkaBroker: opts.kafkaBroker,
     }),

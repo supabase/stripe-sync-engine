@@ -10,17 +10,14 @@ import type { ServerType } from '@hono/node-server'
 import pg from 'pg'
 import Stripe from 'stripe'
 import { google } from 'googleapis'
-import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
 import net from 'node:net'
 import source from '@stripe/sync-source-stripe'
 import pgDestination from '@stripe/sync-destination-postgres'
 import sheetsDestination from '@stripe/sync-destination-google-sheets'
 import { readSheet } from '@stripe/sync-destination-google-sheets'
 import { createConnectorResolver, createApp as createEngineApp } from '@stripe/sync-engine'
-import { createApp as createServiceApp, createActivities } from '@stripe/sync-service'
-import { describeWithEnv as _describeWithEnv } from './test-helpers.js'
+import { createActivities } from '@stripe/sync-service'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,20 +63,15 @@ async function pollUntil(
 }
 
 /**
- * Create shared infra: Temporal client, service API, engine API, Postgres pool.
- *
- * Connects to an external Temporal server (Docker) instead of downloading
- * a test server binary — faster and more reliable in CI.
+ * Create shared infra: Temporal client, engine API, Postgres pool.
+ * Pipeline config is now passed directly to workflows (no service API needed).
  */
 function createTestInfra() {
   let client: Client
   let nativeConnection: NativeConnection
-  let serviceServer: ServerType
   let engineServer: ServerType
-  let serviceUrl: string
   let engineUrl: string
   let pool: pg.Pool
-  let dataDir: string
 
   const workflowsPath = path.resolve(process.cwd(), '../apps/service/dist/temporal/workflows.js')
 
@@ -89,9 +81,6 @@ function createTestInfra() {
     },
     get nativeConnection() {
       return nativeConnection
-    },
-    get serviceUrl() {
-      return serviceUrl
     },
     get engineUrl() {
       return engineUrl
@@ -105,7 +94,6 @@ function createTestInfra() {
 
     async setup() {
       // Connect to external Temporal server (from docker compose or CI service).
-      // Retry connection — the auto-setup container may still be initializing.
       let connection
       for (let i = 0; i < 30; i++) {
         try {
@@ -119,18 +107,10 @@ function createTestInfra() {
       client = new Client({ connection: connection! })
       nativeConnection = await NativeConnection.connect({ address: TEMPORAL_ADDRESS })
 
-      dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temporal-e2e-'))
-
       const connectors = createConnectorResolver({
         sources: { stripe: source },
         destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
       })
-
-      // Start service API (config CRUD)
-      const servicePort = await findFreePort()
-      const serviceApp = createServiceApp({ connectors, dataDir })
-      serviceServer = serve({ fetch: serviceApp.fetch, port: servicePort })
-      serviceUrl = `http://localhost:${servicePort}`
 
       // Start engine API (stateless sync execution)
       const enginePort = await findFreePort()
@@ -142,19 +122,15 @@ function createTestInfra() {
       pool = new pg.Pool({ connectionString: POSTGRES_URL })
       await pool.query('SELECT 1')
 
-      console.log(`\n  Service:  ${serviceUrl}`)
-      console.log(`  Engine:   ${engineUrl}`)
+      console.log(`\n  Engine:   ${engineUrl}`)
       console.log(`  Temporal: ${TEMPORAL_ADDRESS}`)
-      console.log(`  Data dir: ${dataDir}`)
       console.log(`  Postgres: ${POSTGRES_URL}`)
     },
 
     async teardown() {
       await pool?.end().catch(() => {})
-      serviceServer?.close()
       engineServer?.close()
       nativeConnection?.close().catch(() => {})
-      if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true })
     },
   }
 }
@@ -183,24 +159,17 @@ describe.skip('temporal e2e: stripe → postgres', () => {
   })
 
   it('backfills products then processes a live event via signal', async () => {
-    // --- Create sync (api_key inline — no credential_id to avoid infinite queue) ---
-    const syncRes = await fetch(`${infra.serviceUrl}/pipelines`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: { name: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
-        destination: { name: 'postgres', connection_string: POSTGRES_URL, schema },
-        streams: [{ name: 'products' }],
-      }),
-    })
-    expect(syncRes.status).toBe(201)
-    const sync = (await syncRes.json()) as { id: string }
-    console.log(`  Pipeline: ${sync.id}`)
+    const pipeline = {
+      id: `pipe_e2e_${Date.now()}`,
+      source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
+      destination: { type: 'postgres', connection_string: POSTGRES_URL, schema },
+      streams: [{ name: 'products' }],
+    }
+    console.log(`  Pipeline: ${pipeline.id}`)
 
-    // --- Start workflow + worker ---
     const handle = await infra.client.workflow.start('pipelineWorkflow', {
-      args: [sync.id],
-      workflowId: `pipe_${sync.id}`,
+      args: [pipeline],
+      workflowId: `pipe_${pipeline.id}`,
       taskQueue: 'pg-queue',
     })
 
@@ -209,7 +178,6 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       taskQueue: 'pg-queue',
       workflowsPath: infra.workflowsPath,
       activities: createActivities({
-        serviceUrl: infra.serviceUrl,
         engineUrl: infra.engineUrl,
       }),
     })
@@ -333,29 +301,24 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
   })
 
   it('backfills products from Stripe into a Google Sheet tab', async () => {
-    const syncRes = await fetch(`${infra.serviceUrl}/pipelines`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: { name: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
-        destination: {
-          name: 'google-sheets',
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          refresh_token: GOOGLE_REFRESH_TOKEN,
-          access_token: 'placeholder',
-          spreadsheet_id: GOOGLE_SPREADSHEET_ID,
-        },
-        streams: [{ name: streamName }],
-      }),
-    })
-    expect(syncRes.status).toBe(201)
-    const sync = (await syncRes.json()) as { id: string }
-    console.log(`  Pipeline: ${sync.id}`)
+    const pipeline = {
+      id: `pipe_sheets_${Date.now()}`,
+      source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
+      destination: {
+        name: 'google-sheets',
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: GOOGLE_REFRESH_TOKEN,
+        access_token: 'placeholder',
+        spreadsheet_id: GOOGLE_SPREADSHEET_ID,
+      },
+      streams: [{ name: streamName }],
+    }
+    console.log(`  Pipeline: ${pipeline.id}`)
 
     const handle = await infra.client.workflow.start('pipelineWorkflow', {
-      args: [sync.id],
-      workflowId: `pipe_${sync.id}`,
+      args: [pipeline],
+      workflowId: `pipe_${pipeline.id}`,
       taskQueue: 'sheets-queue',
     })
 
@@ -364,7 +327,6 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
       taskQueue: 'sheets-queue',
       workflowsPath: infra.workflowsPath,
       activities: createActivities({
-        serviceUrl: infra.serviceUrl,
         engineUrl: infra.engineUrl,
       }),
     })
