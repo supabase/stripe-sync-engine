@@ -17,7 +17,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@stripe/sync-engine/openapi": ["../engine/src/__generated__/openapi.d.ts"],
+      "@stripe/sync-service/openapi": ["../service/src/__generated__/openapi.d.ts"]
     }
   },
   "include": ["src"]

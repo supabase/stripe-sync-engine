@@ -1,7 +1,10 @@
+import createClient from 'openapi-fetch'
+import type { paths as EnginePaths } from '@stripe/sync-engine/openapi'
+import type { paths as ServicePaths } from '@stripe/sync-service/openapi'
 import type { CatalogStream } from './stream-groups'
 
-const ENGINE_BASE = '/api/engine'
-const SERVICE_BASE = '/api/service'
+const engine = createClient<EnginePaths>({ baseUrl: '/api/engine' })
+const service = createClient<ServicePaths>({ baseUrl: '/api/service' })
 
 // ── Engine API ────────────────────────────────────────────────
 
@@ -15,9 +18,9 @@ export interface ConnectorsResponse {
 }
 
 export async function getConnectors(): Promise<ConnectorsResponse> {
-  const res = await fetch(`${ENGINE_BASE}/connectors`)
-  if (!res.ok) throw new Error(`GET /connectors: ${res.status}`)
-  return res.json()
+  const { data, error, response } = await engine.GET('/connectors')
+  if (error) throw new Error(`GET /connectors: ${(response as Response).status}`)
+  return data as ConnectorsResponse
 }
 
 export interface CatalogResponse {
@@ -26,17 +29,14 @@ export interface CatalogResponse {
 }
 
 export async function discover(source: Record<string, unknown>): Promise<CatalogResponse> {
-  const res = await fetch(`${ENGINE_BASE}/discover`, {
-    method: 'POST',
-    headers: {
-      'x-pipeline': JSON.stringify({ source, destination: { type: '_' } }),
-    },
+  const { data, error, response } = await engine.POST('/discover', {
+    headers: { 'x-pipeline': JSON.stringify({ source, destination: { type: '_' } }) },
   })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error((body as { error?: string }).error ?? `Discover failed: ${res.status}`)
+  if (error) {
+    const msg = (error as { error?: string }).error ?? `Discover failed: ${response.status}`
+    throw new Error(msg)
   }
-  return res.json()
+  return data as CatalogResponse
 }
 
 // ── Service API ───────────────────────────────────────────────
@@ -62,49 +62,47 @@ export interface Pipeline {
 }
 
 export async function listPipelines(): Promise<{ data: Pipeline[]; has_more: boolean }> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines`)
-  if (!res.ok) throw new Error(`GET /pipelines: ${res.status}`)
-  return res.json()
+  const { data, error, response } = await service.GET('/pipelines')
+  if (error) throw new Error(`GET /pipelines: ${(response as Response).status}`)
+  return data as { data: Pipeline[]; has_more: boolean }
 }
 
 export async function getPipeline(id: string): Promise<Pipeline> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines/${encodeURIComponent(id)}`)
-  if (!res.ok) throw new Error(`GET /pipelines/${id}: ${res.status}`)
-  return res.json()
+  const { data, error, response } = await service.GET('/pipelines/{id}', {
+    params: { path: { id } },
+  })
+  if (error) throw new Error(`GET /pipelines/${id}: ${response.status}`)
+  return data as Pipeline
 }
 
 export async function pausePipeline(id: string): Promise<Pipeline> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines/${encodeURIComponent(id)}/pause`, {
-    method: 'POST',
+  const { data, error, response } = await service.POST('/pipelines/{id}/pause', {
+    params: { path: { id } },
   })
-  if (!res.ok) throw new Error(`POST /pipelines/${id}/pause: ${res.status}`)
-  return res.json()
+  if (error) throw new Error(`POST /pipelines/${id}/pause: ${response.status}`)
+  return data as Pipeline
 }
 
 export async function resumePipeline(id: string): Promise<Pipeline> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines/${encodeURIComponent(id)}/resume`, {
-    method: 'POST',
+  const { data, error, response } = await service.POST('/pipelines/{id}/resume', {
+    params: { path: { id } },
   })
-  if (!res.ok) throw new Error(`POST /pipelines/${id}/resume: ${res.status}`)
-  return res.json()
+  if (error) throw new Error(`POST /pipelines/${id}/resume: ${response.status}`)
+  return data as Pipeline
 }
 
 export async function deletePipeline(id: string): Promise<void> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
+  const { error, response } = await service.DELETE('/pipelines/{id}', {
+    params: { path: { id } },
   })
-  if (!res.ok) throw new Error(`DELETE /pipelines/${id}: ${res.status}`)
+  if (error) throw new Error(`DELETE /pipelines/${id}: ${response.status}`)
 }
 
 export async function createPipeline(params: CreatePipelineParams): Promise<Pipeline> {
-  const res = await fetch(`${SERVICE_BASE}/pipelines`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error((body as { error?: string }).error ?? `Create failed: ${res.status}`)
+  const { data, error, response } = await service.POST('/pipelines', { body: params as never })
+  if (error) {
+    const msg = (error as { error?: string }).error ?? `Create failed: ${response.status}`
+    throw new Error(msg)
   }
-  return res.json()
+  return data as Pipeline
 }
