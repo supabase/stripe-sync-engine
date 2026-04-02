@@ -19,7 +19,7 @@ import {
 } from '@stripe/sync-protocol'
 import type { Source, Destination, DestinationInput as DestInput } from '@stripe/sync-protocol'
 import { createEngine, buildCatalog } from './engine.js'
-import { noopStateStore } from './state-store.js'
+import { readonlyStateStore } from './state-store.js'
 import { sourceTest } from './source-test.js'
 import { destinationTest } from './destination-test.js'
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -321,7 +321,7 @@ describe('engine config validation', () => {
           destination: { name: 'test' },
         },
         { source: sourceTest, destination: destinationTest },
-        noopStateStore()
+        readonlyStateStore()
       )
     ).not.toThrow()
   })
@@ -339,7 +339,7 @@ describe('engine config validation', () => {
       createEngine(
         { source: { name: 'test' }, destination: { name: 'test' } },
         { source, destination: destinationTest },
-        noopStateStore()
+        readonlyStateStore()
       )
     ).toThrow()
   })
@@ -364,7 +364,7 @@ describe('engine config validation', () => {
           destination: { name: 'test' },
         },
         { source: sourceTest, destination },
-        noopStateStore()
+        readonlyStateStore()
       )
     ).toThrow()
   })
@@ -386,7 +386,7 @@ describe('engine config validation', () => {
     const engine = createEngine(
       { source: { name: 'test' }, destination: { name: 'test' } },
       { source, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
     // Trigger discover to verify the default was applied
     return drain(engine.sync())
@@ -413,7 +413,7 @@ describe('engine message validation', () => {
         destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     const results = await drain(
@@ -445,7 +445,7 @@ describe('engine message validation', () => {
     const engine = createEngine(
       { source: { name: 'test' }, destination: { name: 'test' } },
       { source: badSource, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     await expect(drain(engine.read())).rejects.toThrow()
@@ -471,7 +471,7 @@ describe('engine message validation', () => {
         destination: { name: 'test' },
       },
       { source: sourceTest, destination: badDest },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     await expect(
@@ -499,7 +499,7 @@ describe('engine stream membership validation', () => {
         destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     const results = await drain(
@@ -535,7 +535,7 @@ describe('engine stream membership validation', () => {
     const engine = createEngine(
       { source: { name: 'test' }, destination: { name: 'test' } },
       { source, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     const results = await drain(engine.read())
@@ -557,7 +557,7 @@ describe('engine.sync() pipeline', () => {
         destination: { name: 'test' },
       },
       { source: sourceTest, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
     const results = await drain(
       engine.sync(
@@ -602,7 +602,7 @@ describe('engine.sync() pipeline', () => {
         streams: [{ name: 'customers' }],
       },
       { source: sourceTest, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
     const results = await drain(
       engine.sync(
@@ -662,7 +662,7 @@ describe('engine.sync() pipeline', () => {
     const engine = createEngine(
       { source: { name: 'test' }, destination: { name: 'test' } },
       { source: mixedSource, destination: destinationTest },
-      noopStateStore()
+      readonlyStateStore()
     )
     const results = await drain(engine.sync())
 

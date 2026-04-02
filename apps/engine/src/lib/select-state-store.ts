@@ -1,21 +1,19 @@
-import { noopStateStore } from './state-store.js'
+import { readonlyStateStore } from './state-store.js'
 import type { StateStore } from './state-store.js'
 import type { PipelineConfig } from '@stripe/sync-protocol'
 
 /**
- * Convention-based state store factory.
+ * Tries to resolve a destination-colocated state store.
  *
- * Tries to import `@stripe/sync-state-${destination.name}` and call its
- * `createStateStore(destConfig)`. If the package is not installed or
- * doesn't export `createStateStore`, falls back to `noopStateStore()`.
+ * Imports `@stripe/sync-state-${destination.name}` and calls its
+ * `createStateStore(destConfig)`. Not all destinations support this —
+ * Postgres does (state table alongside synced data), Google Sheets doesn't.
+ * Falls back to a read-only no-op store when unavailable.
  *
  * If the package exports a `setupStateStore(destConfig)` function,
  * it is called first to ensure the state table exists (runs migrations).
- *
- * Uses `syncId = 'default'` — the HTTP layer has no per-sync identity concept.
- * The service layer, which does have sync UUIDs, calls `createStateStore` directly.
  */
-export async function selectStateStore(
+export async function maybeDestinationStateStore(
   params: PipelineConfig
 ): Promise<StateStore & { close?(): Promise<void> }> {
   try {
@@ -31,7 +29,7 @@ export async function selectStateStore(
       }
     }
   } catch {
-    // Package not installed — fall through to noop
+    // Package not installed — fall through to readonly
   }
-  return noopStateStore()
+  return readonlyStateStore()
 }

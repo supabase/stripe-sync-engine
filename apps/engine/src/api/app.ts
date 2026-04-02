@@ -8,9 +8,9 @@ import type { Message, DestinationOutput, ConnectorResolver, SyncParams } from '
 import {
   createEngine,
   createEngineFromParams,
-  noopStateStore,
+  readonlyStateStore,
+  maybeDestinationStateStore,
   parseNdjsonStream,
-  selectStateStore,
   PipelineConfig,
 } from '../lib/index.js'
 import {
@@ -114,7 +114,7 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.onError((err, c) => {
     if (err instanceof HTTPException) {
-      return c.json({ error: err.message }, err.status as any)
+      return c.json({ error: err.message }, err.status)
     }
     logger.error({ err }, 'Unhandled error')
     return c.json({ error: 'Internal server error' }, 500)
@@ -174,25 +174,16 @@ export function createApp(resolver: ConnectorResolver) {
   /** Resolve connectors, optionally wrapping the source with a Postgres-backed rate limiter. */
   async function resolveEngineWithRateLimiter(
     pipeline: PipelineConfig,
-    stateStore: Parameters<typeof createEngine>[2],
-    state?: Record<string, unknown>
+    stateStore: Parameters<typeof createEngine>[2]
   ) {
     const rl = await createPgRateLimiter(pipeline)
 
-    const sourceName = pipeline.source.name
-    const destName = pipeline.destination.name
     const [resolvedSource, destination] = await Promise.all([
-      resolver.resolveSource(sourceName),
-      resolver.resolveDestination(destName),
+      resolver.resolveSource(pipeline.source.name),
+      resolver.resolveDestination(pipeline.destination.name),
     ])
     const source = rl ? createStripeSource({ rateLimiter: rl.rateLimiter }) : resolvedSource
-    const engine = createEngine(
-      pipeline,
-      { source, destination },
-      stateStore,
-      { sourceName, destinationName: destName },
-      state
-    )
+    const engine = createEngine(pipeline, { source, destination }, stateStore)
 
     return { engine, close: () => rl?.close() }
   }
@@ -206,7 +197,7 @@ export function createApp(resolver: ConnectorResolver) {
     const context = { path: '/setup', ...syncRequestContext(params) }
     const startedAt = Date.now()
     logger.info(context, 'Engine API /setup started')
-    const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
+    const engine = await createEngineFromParams(params.pipeline, resolver, readonlyStateStore())
     try {
       await engine.setup()
       logger.info({ ...context, durationMs: Date.now() - startedAt }, 'Engine API /setup completed')
@@ -222,14 +213,14 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.post('/teardown', async (c) => {
     const params = parseSyncParams(c)
-    const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
+    const engine = await createEngineFromParams(params.pipeline, resolver, readonlyStateStore())
     await engine.teardown()
     return c.body(null, 204)
   })
 
   app.get('/check', async (c) => {
     const params = parseSyncParams(c)
-    const engine = await createEngineFromParams(params.pipeline, resolver, noopStateStore())
+    const engine = await createEngineFromParams(params.pipeline, resolver, readonlyStateStore())
     const result = await engine.check()
     return c.json(result, 200)
   })
@@ -242,8 +233,7 @@ export function createApp(resolver: ConnectorResolver) {
     logger.info(context, 'Engine API /read started')
     const { engine, close } = await resolveEngineWithRateLimiter(
       params.pipeline,
-      noopStateStore(),
-      params.state
+      readonlyStateStore(params.state)
     )
 
     const input = inputPresent ? parseNdjsonStream(c.req.raw.body!) : undefined
@@ -265,7 +255,7 @@ export function createApp(resolver: ConnectorResolver) {
     }
     const startedAt = Date.now()
     logger.info(context, 'Engine API /write started')
-    const stateStore = await selectStateStore(params.pipeline)
+    const stateStore = await maybeDestinationStateStore(params.pipeline)
     const engine = await createEngineFromParams(params.pipeline, resolver, stateStore)
     const messages = parseNdjsonStream<Message>(c.req.raw.body!)
     return ndjsonResponse(
@@ -278,12 +268,8 @@ export function createApp(resolver: ConnectorResolver) {
 
   app.post('/sync', async (c) => {
     const params = parseSyncParams(c)
-    const stateStore = await selectStateStore(params.pipeline)
-    const { engine, close } = await resolveEngineWithRateLimiter(
-      params.pipeline,
-      stateStore,
-      params.state
-    )
+    const stateStore = await maybeDestinationStateStore(params.pipeline)
+    const { engine, close } = await resolveEngineWithRateLimiter(params.pipeline, stateStore)
 
     const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
     let output: AsyncIterable<DestinationOutput> = engine.sync(input)

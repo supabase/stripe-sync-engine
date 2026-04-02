@@ -25,20 +25,22 @@
   ],
   "dependencies": {
     "@hono/node-server": "^1",
-    "pino": "^10",
-    "pino-pretty": "^13",
-    "@scalar/hono-api-reference": "^0.6",
     "@hono/zod-openapi": "^1.2",
+    "@scalar/hono-api-reference": "^0.6",
     "@stripe/sync-engine": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4",
+    "kafkajs": "^2.2.4",
+    "pino": "^10",
+    "pino-pretty": "^13",
     "zod": "^4.3.6"
   },
   "optionalDependencies": {
-    "@temporalio/client": "^1",
     "@temporalio/activity": "^1",
+    "@temporalio/client": "^1",
     "@temporalio/worker": "^1",
     "@temporalio/workflow": "^1"
   },

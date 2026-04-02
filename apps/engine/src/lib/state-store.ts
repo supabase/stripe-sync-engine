@@ -6,13 +6,16 @@ export interface StateStore {
   set(stream: string, data: unknown): Promise<void>
 }
 
-// MARK: - No-op state store (explicit opt-out of persistence)
+// MARK: - Read-only state store
 
-/** A StateStore that discards all writes and returns no stored state. */
-export function noopStateStore(): StateStore {
+/**
+ * A StateStore that returns the provided initial state (if any) and discards all writes.
+ * Use when the caller manages state externally (e.g., via HTTP headers or workflow state).
+ */
+export function readonlyStateStore(state?: Record<string, unknown>): StateStore {
   return {
     async get() {
-      return undefined
+      return state
     },
     async set() {},
   }

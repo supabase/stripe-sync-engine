@@ -5,19 +5,12 @@ import {
   setHandler,
   condition,
   continueAsNew,
+  sleep,
 } from '@temporalio/workflow'
 
-import type { SyncActivities, WorkflowStatus } from './types.js'
-
-const CONTINUE_AS_NEW_THRESHOLD = 500
-const EVENT_BATCH_SIZE = 50
-
-const retryPolicy = {
-  initialInterval: '1s',
-  backoffCoefficient: 2.0,
-  maximumInterval: '5m',
-  maximumAttempts: 10,
-} as const
+import type { SyncActivities } from './activities.js'
+import { deepEqual, CONTINUE_AS_NEW_THRESHOLD, EVENT_BATCH_SIZE, retryPolicy } from './types.js'
+import type { WorkflowStatus } from './types.js'
 
 // Setup/teardown: 2m with retry
 const { setup, teardown } = proxyActivities<SyncActivities>({
@@ -25,8 +18,8 @@ const { setup, teardown } = proxyActivities<SyncActivities>({
   retry: retryPolicy,
 })
 
-// Run: 10m with retry and heartbeat
-const { run } = proxyActivities<SyncActivities>({
+// Data activities: 10m with retry and heartbeat
+const { sync, read, write } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '10m',
   heartbeatTimeout: '2m',
   retry: retryPolicy,
@@ -41,15 +34,28 @@ export const deleteSignal = defineSignal('delete')
 // Query
 export const statusQuery = defineQuery<WorkflowStatus>('status')
 
-export async function syncWorkflow(syncId: string, opts?: { phase?: string }): Promise<void> {
+export async function pipelineWorkflow(
+  pipelineId: string,
+  opts?: {
+    phase?: string
+    state?: Record<string, unknown>
+    mode?: 'sync' | 'read-write'
+    writeRps?: number
+    pendingWrites?: boolean
+    inputQueue?: unknown[]
+  }
+): Promise<void> {
   let paused = false
   let deleted = false
-  const eventBuffer: unknown[] = []
+  const inputQueue: unknown[] = [...(opts?.inputQueue ?? [])]
   let iteration = 0
+  let syncState: Record<string, unknown> = opts?.state ?? {}
+  let readComplete = false
+  let pendingWrites = opts?.pendingWrites ?? false
 
   // Register signal handlers (must be before any await)
   setHandler(stripeEventSignal, (event: unknown) => {
-    eventBuffer.push(event)
+    inputQueue.push(event)
   })
   setHandler(pauseSignal, () => {
     paused = true
@@ -81,39 +87,119 @@ export async function syncWorkflow(syncId: string, opts?: { phase?: string }): P
   async function tickIteration() {
     iteration++
     if (iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof syncWorkflow>(syncId, { phase: 'running' })
+      await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
+        phase: 'running',
+        state: syncState,
+        mode: opts?.mode,
+        writeRps: opts?.writeRps,
+        pendingWrites,
+        inputQueue: inputQueue.length > 0 ? [...inputQueue] : undefined,
+      })
     }
   }
 
-  // --- Setup (first run only) ---
+  // --- Setup (first sync only) ---
 
   if (phase !== 'running') {
-    await setup(syncId)
+    await setup(pipelineId)
     if (deleted) {
-      await teardown(syncId)
+      await teardown(pipelineId)
       return
     }
   }
 
-  // --- Main loop: continuous reconciliation + optimistic updates ---
+  // --- Main loop ---
 
-  while (true) {
-    await waitWhilePaused()
-    if (deleted) break
+  if (opts?.mode === 'read-write') {
+    // Concurrent read/write via Kafka queue — each loop runs at its own pace
+    // writeState: persisted pipeline state, only advanced after successful writes (source of truth)
+    // readState: pagination cursor for source reads, starts from writeState
+    let writeState: Record<string, unknown> = { ...syncState }
+    let readState: Record<string, unknown> = { ...writeState }
 
-    // 1. Drain buffered events
-    if (eventBuffer.length > 0) {
-      const batch = eventBuffer.splice(0, EVENT_BATCH_SIZE)
-      await run(syncId, batch)
-      await tickIteration()
-      continue // Re-check for more events before reconciliation
+    async function readLoop(): Promise<void> {
+      while (!deleted) {
+        await waitWhilePaused()
+        if (deleted) break
+
+        // Resolve events through read → Kafka
+        if (inputQueue.length > 0) {
+          const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
+          const { count } = await read(pipelineId, { input: batch })
+          if (count > 0) pendingWrites = true
+          await tickIteration()
+          continue
+        }
+
+        // Backfill one page → Kafka
+        if (!readComplete) {
+          const before = readState
+          const { count, state: nextReadState } = await read(pipelineId, {
+            state: readState,
+            stateLimit: 1,
+          })
+          if (count > 0) pendingWrites = true
+          readState = { ...readState, ...nextReadState }
+          readComplete = deepEqual(readState, before)
+          await tickIteration()
+          continue
+        }
+
+        // All caught up — wait for new events or delete
+        await condition(() => inputQueue.length > 0 || deleted)
+      }
     }
 
-    // 2. Reconciliation: backfill page (service manages state internally)
-    await run(syncId)
-    await tickIteration()
+    async function writeLoop(): Promise<void> {
+      while (!deleted) {
+        await waitWhilePaused()
+        if (deleted) break
+
+        if (pendingWrites) {
+          const result = await write(pipelineId, { maxBatch: 50 })
+          pendingWrites = result.written > 0
+          writeState = { ...writeState, ...result.state }
+          // Propagate writeState to syncState so continueAsNew carries the persisted truth
+          syncState = writeState
+          if (opts?.writeRps) await sleep(Math.ceil(1000 / opts.writeRps))
+          await tickIteration()
+        } else {
+          await condition(() => pendingWrites || deleted)
+        }
+      }
+    }
+
+    await Promise.all([readLoop(), writeLoop()])
+  } else {
+    // sync mode: combined read+write in a single activity call
+
+    while (true) {
+      await waitWhilePaused()
+      if (deleted) break
+
+      // 1. Drain buffered events
+      if (inputQueue.length > 0) {
+        const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
+        await sync(pipelineId, { input: batch })
+        await tickIteration()
+        continue
+      }
+
+      // 2. Reconciliation page
+      if (!readComplete) {
+        const before = syncState
+        const result = await sync(pipelineId, { state: syncState, stateLimit: 1 })
+        syncState = { ...syncState, ...result.state }
+        readComplete = deepEqual(syncState, before)
+        await tickIteration()
+        continue
+      }
+
+      // 3. Wait
+      await condition(() => inputQueue.length > 0 || deleted)
+    }
   }
 
   // Teardown on delete
-  await teardown(syncId)
+  await teardown(pipelineId)
 }

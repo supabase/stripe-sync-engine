@@ -26,18 +26,10 @@ export interface Engine {
   sync(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
 }
 
-type EngineLogMetadata = {
-  sourceName?: string
-  destinationName?: string
-}
-
-function engineLogContext(
-  config: PipelineConfig,
-  metadata?: EngineLogMetadata
-): Record<string, unknown> {
+function engineLogContext(config: PipelineConfig): Record<string, unknown> {
   return {
-    sourceName: metadata?.sourceName ?? 'unknown',
-    destinationName: metadata?.destinationName ?? 'unknown',
+    sourceName: config.source.name,
+    destinationName: config.destination.name,
     configuredStreamCount: config.streams?.length ?? 0,
     configuredStreams: config.streams?.map((stream) => stream.name) ?? [],
   }
@@ -119,9 +111,7 @@ export function buildCatalog(
 export function createEngine(
   config: PipelineConfig,
   connectors: { source: Source; destination: Destination },
-  stateStore: StateStore,
-  metadata?: EngineLogMetadata,
-  externalState?: Record<string, unknown>
+  stateStore: StateStore
 ): Engine {
   // Validate configs using connector JSON Schemas (fail-fast)
   const sourceSpec = connectors.source.spec()
@@ -136,7 +126,7 @@ export function createEngine(
     string,
     unknown
   >
-  const baseContext = engineLogContext(config, metadata)
+  const baseContext = engineLogContext(config)
 
   // Lazy-cached catalog — discover is called at most once per engine instance.
   let _catalog: ConfiguredCatalog | null = null
@@ -202,8 +192,7 @@ export function createEngine(
     },
 
     async *read(input?: AsyncIterable<unknown>) {
-      const stored = await stateStore.get()
-      const state = stored ?? externalState
+      const state = await stateStore.get()
       const raw = connectors.source.read(
         { config: sourceConfig, catalog: await getCatalog(), state },
         input
@@ -253,20 +242,11 @@ export function createEngine(
 export async function createEngineFromParams(
   params: PipelineConfig,
   resolver: ConnectorResolver,
-  stateStore: StateStore,
-  externalState?: Record<string, unknown>
+  stateStore: StateStore
 ): Promise<Engine> {
-  const sourceName = params.source.name
-  const destName = params.destination.name
   const [source, destination] = await Promise.all([
-    resolver.resolveSource(sourceName),
-    resolver.resolveDestination(destName),
+    resolver.resolveSource(params.source.name),
+    resolver.resolveDestination(params.destination.name),
   ])
-  return createEngine(
-    params,
-    { source, destination },
-    stateStore,
-    { sourceName, destinationName: destName },
-    externalState
-  )
+  return createEngine(params, { source, destination }, stateStore)
 }

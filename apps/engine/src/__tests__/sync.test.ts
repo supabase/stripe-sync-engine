@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createEngine, noopStateStore } from '../lib/index.js'
+import { createEngine, readonlyStateStore } from '../lib/index.js'
 import { sourceTest } from '../lib/index.js'
 import destination from '@stripe/sync-destination-postgres'
 import type { RecordMessage, StateMessage } from '../lib/index.js'
@@ -112,7 +112,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       },
       { source: sourceTest, destination },
-      noopStateStore()
+      readonlyStateStore()
     )
 
     const input = [
@@ -161,7 +161,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
         destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       },
       { source: sourceTest, destination },
-      noopStateStore(),
+      readonlyStateStore(),
       undefined,
       loadedState
     )

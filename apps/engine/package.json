@@ -27,7 +27,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:types": "openapi-typescript ../../docs/openapi/engine.json -o src/lib/openapi.d.ts"
   },
   "files": [
     "dist",
@@ -48,6 +49,7 @@
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
     "hono": "^4",
+    "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
     "pino": "^10",
     "pino-pretty": "^13",
@@ -59,6 +61,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
+    "openapi-typescript": "^7.13.0",
     "vitest": "^3.2.4"
   },
   "repository": {

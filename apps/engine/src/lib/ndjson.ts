@@ -8,6 +8,23 @@ export async function* parseNdjson<T = unknown>(text: string): AsyncIterable<T> 
   }
 }
 
+/** Serialize an AsyncIterable as a streaming NDJSON ReadableStream. */
+export function toNdjsonStream(iter: AsyncIterable<unknown>): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder()
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const item of iter) {
+          controller.enqueue(enc.encode(JSON.stringify(item) + '\n'))
+        }
+        controller.close()
+      } catch (err) {
+        controller.error(err)
+      }
+    },
+  })
+}
+
 /** Parse NDJSON from an AsyncIterable of chunks (e.g. Node process.stdin). */
 export async function* parseNdjsonChunks<T = unknown>(
   chunks: AsyncIterable<Uint8Array | string>

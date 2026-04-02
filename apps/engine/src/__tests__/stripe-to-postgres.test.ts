@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine, noopStateStore, selectStateStore } from '../lib/index.js'
+import { createEngine, readonlyStateStore, maybeDestinationStateStore } from '../lib/index.js'
 import type { Message, DestinationOutput } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ function makeEngine(
       streams: overrides.streams,
     },
     { source, destination },
-    noopStateStore(),
+    readonlyStateStore(),
     undefined,
     overrides.state
   )
@@ -230,7 +230,7 @@ describe('resumable sync via state store', () => {
   })
 
   it('auto-persists state after sync', async () => {
-    const store = await selectStateStore({
+    const store = await maybeDestinationStateStore({
       ...params,
       destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],
@@ -250,7 +250,7 @@ describe('resumable sync via state store', () => {
   })
 
   it('pre-seeded complete state skips backfill', async () => {
-    const store = await selectStateStore({
+    const store = await maybeDestinationStateStore({
       ...params,
       destination: { name: 'postgres', connection_string: connectionString, schema: SCHEMA },
       streams: [{ name: targetStream }],

@@ -38,7 +38,8 @@ export { createWebhookApp } from './api/webhook-app.js'
 export type { WebhookAppOptions } from './api/webhook-app.js'
 
 // Temporal workflow types (for consumers that need to reference them)
-export type { RunResult, SyncActivities, WorkflowStatus } from './temporal/types.js'
+export type { RunResult, WorkflowStatus } from './temporal/types.js'
 export { createActivities } from './temporal/activities.js'
+export type { SyncActivities } from './temporal/activities.js'
 export { createWorker } from './temporal/worker.js'
 export type { WorkerOptions } from './temporal/worker.js'
