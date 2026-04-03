@@ -628,7 +628,7 @@ jobs:
 
       - name: Pull Vercel config
         run: |
-          ENV=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+          ENV=${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && 'production' || 'preview' }}
           vercel pull --yes --environment=$ENV --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: docs
         env:
@@ -647,7 +647,7 @@ jobs:
 
       - name: Build
         run: |
-          PROD=${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          PROD=${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && '--prod' || '' }}
           vercel build $PROD --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: docs
         env:
@@ -685,7 +685,7 @@ jobs:
       - name: Deploy
         id: deploy
         run: |
-          PROD=${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          PROD=${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && '--prod' || '' }}
           BRANCH_SLUG="${GITHUB_REF_NAME//\//-}"
           url=$(vercel deploy --prebuilt $PROD \
             --meta gitBranch="$GITHUB_REF_NAME" \
