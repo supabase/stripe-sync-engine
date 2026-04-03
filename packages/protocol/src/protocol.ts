@@ -110,7 +110,7 @@ export const RecordMessage = z
     type: z.literal('record'),
     stream: z.string(),
     data: z.record(z.string(), z.unknown()),
-    emitted_at: z.number(),
+    emitted_at: z.string().datetime(),
   })
   .meta({ id: 'RecordMessage' })
 export type RecordMessage = z.infer<typeof RecordMessage>

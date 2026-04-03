@@ -375,7 +375,8 @@ describe('ndjsonBodyStream', () => {
       )
     })
 
-    const ndjsonLine = '{"type":"record","stream":"test","data":{"id":"1"},"emitted_at":0}'
+    const ndjsonLine =
+      '{"type":"record","stream":"test","data":{"id":"1"},"emitted_at":"2024-01-01T00:00:00.000Z"}'
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

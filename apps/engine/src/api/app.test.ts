@@ -275,7 +275,7 @@ describe('POST /read', () => {
         type: 'record',
         stream: 'customers',
         data: { id: 'cus_1', name: 'Alice' },
-        emitted_at: Date.now(),
+        emitted_at: new Date().toISOString(),
       },
       { type: 'state', stream: 'customers', data: { status: 'complete' } },
     ])
@@ -304,7 +304,7 @@ describe('POST /write', () => {
         type: 'record',
         stream: 'customers',
         data: { id: 'cus_1' },
-        emitted_at: 1000,
+        emitted_at: '2024-01-01T00:00:00.000Z',
       },
       {
         type: 'state',
@@ -352,7 +352,7 @@ describe('POST /sync', () => {
         type: 'record',
         stream: 'customers',
         data: { id: 'cus_1', name: 'Alice' },
-        emitted_at: Date.now(),
+        emitted_at: new Date().toISOString(),
       },
       { type: 'state', stream: 'customers', data: { status: 'complete' } },
     ])
@@ -380,11 +380,26 @@ describe('X-State-Checkpoint-Limit', () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '1' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '2' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_3' }, emitted_at: 3 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_3' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
     ])
     const res = await app.request('/read', {
       method: 'POST',
@@ -408,9 +423,19 @@ describe('X-State-Checkpoint-Limit', () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '1' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '2' } },
     ])
     const res = await app.request('/sync', {
@@ -434,9 +459,19 @@ describe('X-State-Checkpoint-Limit', () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '1' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '2' } },
     ])
     const res = await app.request('/read', {

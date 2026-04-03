@@ -48,7 +48,7 @@ export const source: Source = {
         type: 'record',
         stream: 'users',
         data,
-        emitted_at: Date.now(),
+        emitted_at: new Date().toISOString(),
       } satisfies RecordMessage
     }
 

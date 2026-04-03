@@ -60,7 +60,12 @@ async function* toAsync<T>(items: T[]): AsyncIterable<T> {
 describe('enforceCatalog()', () => {
   it('passes known record messages through unchanged when no fields configured', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1', name: 'Alice' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1', name: 'Alice' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(1)
@@ -73,7 +78,7 @@ describe('enforceCatalog()', () => {
         type: 'record',
         stream: 'subscriptions',
         data: { id: 'sub_1', status: 'active', customer: 'cus_1' },
-        emitted_at: 1,
+        emitted_at: '2024-01-01T00:00:00.000Z',
       },
     ]
     const result = await drain(
@@ -99,7 +104,7 @@ describe('enforceCatalog()', () => {
         type: 'record',
         stream: 'subscriptions',
         data: { id: 'sub_1', status: 'active', customer: 'cus_1' },
-        emitted_at: 1,
+        emitted_at: '2024-01-01T00:00:00.000Z',
       },
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'subscriptions' }]))(toAsync(msgs)))
@@ -113,7 +118,12 @@ describe('enforceCatalog()', () => {
 
   it('drops record with unknown stream and logs error', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'unknown_stream', data: { id: '1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'unknown_stream',
+        data: { id: '1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
@@ -157,7 +167,12 @@ describe('enforceCatalog()', () => {
 describe('log()', () => {
   it('passes all message types through unchanged', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
       { type: 'log', level: 'info', message: 'hello' },
       { type: 'error', failure_type: 'system_error', message: 'oops' },
@@ -198,7 +213,12 @@ describe('log()', () => {
 
   it('does not log record or state messages', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
     ]
     await drain(log(toAsync(msgs)))
@@ -215,7 +235,12 @@ describe('log()', () => {
 describe('filterType()', () => {
   it('filters to a single type', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
       { type: 'log', level: 'info', message: 'hello' },
     ]
@@ -226,7 +251,12 @@ describe('filterType()', () => {
 
   it('filters to multiple types', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'abc' } },
       { type: 'log', level: 'info', message: 'hello' },
       { type: 'error', failure_type: 'system_error', message: 'oops' },
@@ -324,11 +354,26 @@ describe('persistState()', () => {
 describe('takeStateCheckpoints()', () => {
   it('stops after the Nth state message', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '1' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 2 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '2' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_3' }, emitted_at: 3 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_3' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
     ]
     const result = await drain(takeStateCheckpoints<Message>(1)(toAsync(msgs)))
     expect(result).toHaveLength(2)
@@ -338,7 +383,12 @@ describe('takeStateCheckpoints()', () => {
 
   it('yields everything when limit exceeds state message count', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: '1' } },
     ]
     const result = await drain(takeStateCheckpoints<Message>(5)(toAsync(msgs)))
@@ -347,11 +397,26 @@ describe('takeStateCheckpoints()', () => {
 
   it('counts state messages across multiple streams', async () => {
     const msgs: Message[] = [
-      { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'a' } },
-      { type: 'record', stream: 'products', data: { id: 'prod_1' }, emitted_at: 2 },
+      {
+        type: 'record',
+        stream: 'products',
+        data: { id: 'prod_1' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'products', data: { cursor: 'b' } },
-      { type: 'record', stream: 'customers', data: { id: 'cus_2' }, emitted_at: 3 },
+      {
+        type: 'record',
+        stream: 'customers',
+        data: { id: 'cus_2' },
+        emitted_at: '2024-01-01T00:00:00.000Z',
+      },
       { type: 'state', stream: 'customers', data: { cursor: 'c' } },
     ]
     const result = await drain(takeStateCheckpoints<Message>(2)(toAsync(msgs)))

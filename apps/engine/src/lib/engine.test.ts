@@ -166,7 +166,7 @@ describe('protocol schemas', () => {
         type: 'record',
         stream: 'customers',
         data: { id: 'cus_1' },
-        emitted_at: 1000,
+        emitted_at: '2024-01-01T00:00:00.000Z',
       })
       expect(msg.type).toBe('record')
       expect(msg.data).toEqual({ id: 'cus_1' })
@@ -216,12 +216,19 @@ describe('protocol schemas', () => {
     })
 
     it('rejects missing type', () => {
-      expect(() => RecordMessage.parse({ stream: 'x', data: {}, emitted_at: 1 })).toThrow()
+      expect(() =>
+        RecordMessage.parse({ stream: 'x', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' })
+      ).toThrow()
     })
 
     it('rejects wrong type literal', () => {
       expect(() =>
-        RecordMessage.parse({ type: 'state', stream: 'x', data: {}, emitted_at: 1 })
+        RecordMessage.parse({
+          type: 'state',
+          stream: 'x',
+          data: {},
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        })
       ).toThrow()
     })
   })
@@ -229,7 +236,7 @@ describe('protocol schemas', () => {
   describe('Message discriminated union', () => {
     it('parses all 6 message types', () => {
       const messages = [
-        { type: 'record', stream: 's', data: {}, emitted_at: 1 },
+        { type: 'record', stream: 's', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         { type: 'state', stream: 's', data: null },
         { type: 'catalog', streams: [{ name: 's', primary_key: [['id']] }] },
         { type: 'log', level: 'info', message: 'hi' },
@@ -249,7 +256,12 @@ describe('protocol schemas', () => {
   describe('DestinationInput', () => {
     it('accepts record and state', () => {
       expect(() =>
-        DestinationInput.parse({ type: 'record', stream: 's', data: {}, emitted_at: 1 })
+        DestinationInput.parse({
+          type: 'record',
+          stream: 's',
+          data: {},
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        })
       ).not.toThrow()
       expect(() => DestinationInput.parse({ type: 'state', stream: 's', data: null })).not.toThrow()
     })
@@ -274,7 +286,12 @@ describe('protocol schemas', () => {
 
     it('rejects record message', () => {
       expect(() =>
-        DestinationOutput.parse({ type: 'record', stream: 's', data: {}, emitted_at: 1 })
+        DestinationOutput.parse({
+          type: 'record',
+          stream: 's',
+          data: {},
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        })
       ).toThrow()
     })
   })
@@ -419,7 +436,12 @@ describe('engine message validation', () => {
     const results = await drain(
       engine.read(
         toAsync([
-          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: new Date().toISOString(),
+          },
           { type: 'state', stream: 'customers', data: { status: 'complete' } },
         ])
       )
@@ -478,7 +500,12 @@ describe('engine message validation', () => {
       drain(
         engine.sync(
           toAsync([
-            { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+            {
+              type: 'record',
+              stream: 'customers',
+              data: { id: 'cus_1' },
+              emitted_at: new Date().toISOString(),
+            },
             { type: 'state', stream: 'customers', data: { status: 'complete' } },
           ])
         )
@@ -505,7 +532,12 @@ describe('engine stream membership validation', () => {
     const results = await drain(
       engine.read(
         toAsync([
-          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: new Date().toISOString(),
+          },
           { type: 'state', stream: 'customers', data: { status: 'complete' } },
         ])
       )
@@ -566,19 +598,19 @@ describe('engine.sync() pipeline', () => {
             type: 'record',
             stream: 'customers',
             data: { id: 'cus_1', name: 'Alice' },
-            emitted_at: Date.now(),
+            emitted_at: new Date().toISOString(),
           },
           {
             type: 'record',
             stream: 'customers',
             data: { id: 'cus_2', name: 'Bob' },
-            emitted_at: Date.now(),
+            emitted_at: new Date().toISOString(),
           },
           {
             type: 'record',
             stream: 'customers',
             data: { id: 'cus_3', name: 'Charlie' },
-            emitted_at: Date.now(),
+            emitted_at: new Date().toISOString(),
           },
           { type: 'state', stream: 'customers', data: { status: 'complete' } },
         ])
@@ -607,9 +639,19 @@ describe('engine.sync() pipeline', () => {
     const results = await drain(
       engine.sync(
         toAsync([
-          { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: Date.now() },
+          {
+            type: 'record',
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: new Date().toISOString(),
+          },
           { type: 'state', stream: 'customers', data: { status: 'complete' } },
-          { type: 'record', stream: 'invoices', data: { id: 'inv_1' }, emitted_at: Date.now() },
+          {
+            type: 'record',
+            stream: 'invoices',
+            data: { id: 'inv_1' },
+            emitted_at: new Date().toISOString(),
+          },
           { type: 'state', stream: 'invoices', data: { status: 'complete' } },
         ])
       )
@@ -649,7 +691,7 @@ describe('engine.sync() pipeline', () => {
           type: 'record' as const,
           stream: 'customers',
           data: { id: 'cus_1' },
-          emitted_at: 1000,
+          emitted_at: '2024-01-01T00:00:00.000Z',
         }
         yield {
           type: 'state' as const,

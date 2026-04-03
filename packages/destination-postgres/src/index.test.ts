@@ -74,7 +74,7 @@ beforeEach(async () => {
 // ---------------------------------------------------------------------------
 
 function makeRecord(stream: string, data: Record<string, unknown>): RecordMessage {
-  return { type: 'record', stream, data, emitted_at: Date.now() }
+  return { type: 'record', stream, data, emitted_at: new Date().toISOString() }
 }
 
 function makeState(stream: string, data: unknown): StateMessage {

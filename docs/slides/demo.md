@@ -17,7 +17,7 @@ No SDK. No framework. Just newline-delimited JSON.
 
 ```ts
 type Message =
-  | { type: 'record'; stream: string; data: Record<string, unknown>; emitted_at: number }
+  | { type: 'record'; stream: string; data: Record<string, unknown>; emitted_at: string }
   | { type: 'state'; stream: string; data: unknown } // cursor checkpoint
   | { type: 'log'; level: string; message: string } // diagnostic
   | { type: 'error'; failure_type: string; message: string }
@@ -27,7 +27,7 @@ type Message =
 A source produces this stream. A destination consumes it. The simplest transport is stdio.
 
 ```bash
-{"type":"record","stream":"products","data":{"id":"prod_1","name":"Widget"},"emitted_at":0}
+{"type":"record","stream":"products","data":{"id":"prod_1","name":"Widget"},"emitted_at":"2024-01-01T00:00:00.000Z"}
 {"type":"state","stream":"products","data":{"cursor":"evt_123"}}
 {"type":"log","level":"info","message":"Fetched page 1"}
 ```

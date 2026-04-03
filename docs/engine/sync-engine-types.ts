@@ -43,8 +43,8 @@ export interface RecordMessage {
   stream: string
   /** Record payload. Schema varies by stream. */
   data: Readonly<Record<string, unknown>>
-  /** When this record was emitted by the source (epoch ms). */
-  emitted_at: number
+  /** When this record was emitted by the source (ISO 8601). */
+  emitted_at: string
 }
 
 /**

@@ -81,7 +81,7 @@ function record(stream: string, id: string, data?: Record<string, unknown>): Rec
     type: 'record',
     stream,
     data: { id, ...data },
-    emitted_at: Date.now(),
+    emitted_at: new Date().toISOString(),
   }
 }
 

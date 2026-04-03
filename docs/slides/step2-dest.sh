@@ -8,7 +8,7 @@ CATALOG='{"streams":[{"stream":{"name":"products"},"sync_mode":"full_refresh","d
 DST_CONFIG='{"connection_string":"'"$POSTGRES_URL"'","schema":"'"$SCHEMA"'"}'
 
 dest-postgres setup --config "$DST_CONFIG" --catalog "$CATALOG"
-echo '{"type":"record","stream":"products","data":{"id":"prod_1","name":"Widget"},"emitted_at":0}' \
+echo '{"type":"record","stream":"products","data":{"id":"prod_1","name":"Widget"},"emitted_at":"2024-01-01T00:00:00.000Z"}' \
   | dest-postgres write --config "$DST_CONFIG" --catalog "$CATALOG"
 
 psql "$POSTGRES_URL" -c "SELECT id, _raw_data->>'name' AS name FROM \"$SCHEMA\".products"

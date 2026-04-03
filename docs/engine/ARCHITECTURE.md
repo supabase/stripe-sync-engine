@@ -118,7 +118,7 @@ A single data record. The primary key is not a top-level field — it is extract
   "type": "record",
   "stream": "customers",
   "data": { "id": "cus_123", "name": "Acme" },
-  "emitted_at": 1710700000000
+  "emitted_at": "2024-03-17T00:00:00.000Z"
 }
 ```
 

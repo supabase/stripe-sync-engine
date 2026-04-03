@@ -122,7 +122,12 @@ describe('createRemoteEngine', () => {
     it('streams messages from input iterable', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
       const input: Message[] = [
-        { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
         { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
       ]
       const messages = await collect(engine.read(asIterable(input)))
@@ -143,7 +148,12 @@ describe('createRemoteEngine', () => {
     it('yields only state messages (destinationTest behaviour)', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
       const messages: Message[] = [
-        { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
         { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
       ]
       const output = await collect(engine.write(asIterable(messages)))
@@ -157,7 +167,12 @@ describe('createRemoteEngine', () => {
     it('runs full pipeline and yields state messages', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
       const input: Message[] = [
-        { type: 'record', stream: 'customers', data: { id: 'cus_1' }, emitted_at: 1 },
+        {
+          type: 'record',
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
         { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
       ]
       const output = await collect(engine.sync(asIterable(input)))

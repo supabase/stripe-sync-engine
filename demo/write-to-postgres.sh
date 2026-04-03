@@ -22,8 +22,8 @@ if [ -t 0 ]; then
   CATALOG='{"streams":[{"stream":{"name":"demo","primary_key":[["id"]]},"sync_mode":"full_refresh","destination_sync_mode":"append"}]}'
   $DEST setup --config "$CONFIG" --catalog "$CATALOG"
   printf '%s\n' \
-    '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":0}' \
-    '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":0}' \
+    '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":"2024-01-01T00:00:00.000Z"}' \
+    '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":"2024-01-01T00:00:00.000Z"}' \
   | $DEST write --config "$CONFIG" --catalog "$CATALOG"
 else
   # Piped — buffer stdin, extract stream names, setup, then write

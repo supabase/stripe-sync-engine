@@ -25,8 +25,8 @@ CONFIG="{
 if [ -t 0 ]; then
   # No pipe — use sample data
   printf '%s\n' \
-    '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":0}' \
-    '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":0}' \
+    '{"type":"record","stream":"demo","data":{"id":"1","name":"Alice","email":"alice@example.com"},"emitted_at":"2024-01-01T00:00:00.000Z"}' \
+    '{"type":"record","stream":"demo","data":{"id":"2","name":"Bob","email":"bob@example.com"},"emitted_at":"2024-01-01T00:00:00.000Z"}' \
   | $RUN packages/destination-google-sheets/src/bin.ts write \
     --config "$CONFIG" --catalog '{"streams":[]}'
 else

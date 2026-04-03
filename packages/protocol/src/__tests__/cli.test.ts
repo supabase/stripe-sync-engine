@@ -11,7 +11,12 @@ const mockSource: Source = {
   check: async () => ({ status: 'succeeded' }) as CheckResult,
   discover: async () => ({ type: 'catalog', streams: [] }),
   async *read() {
-    yield { type: 'record', stream: 'test', data: { id: '1' }, emitted_at: Date.now() }
+    yield {
+      type: 'record',
+      stream: 'test',
+      data: { id: '1' },
+      emitted_at: new Date().toISOString(),
+    }
   },
 }
 

@@ -400,7 +400,7 @@ describe('StripeSource', () => {
         object: 'customer',
         name: 'Alice',
       })
-      expect(result!.record.emitted_at).toBeTypeOf('number')
+      expect(result!.record.emitted_at).toBeTypeOf('string')
 
       expect(result!.state.type).toBe('state')
       expect(result!.state.stream).toBe('customers')

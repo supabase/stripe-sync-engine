@@ -17,7 +17,7 @@ export function toRecordMessage(stream: string, data: Record<string, unknown>): 
     type: 'record',
     stream,
     data,
-    emitted_at: Date.now(),
+    emitted_at: new Date().toISOString(),
   }
 }
 

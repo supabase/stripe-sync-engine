@@ -2,3 +2,4 @@
 .next
 .env*.local
 tsconfig.tsbuildinfo
+out/
