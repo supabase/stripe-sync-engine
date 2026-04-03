@@ -91,30 +91,42 @@ const workerCmd = defineCommand({
       default: 'http://localhost:4010',
       description: 'Sync engine URL for sync execution (default: http://localhost:4010)',
     },
+    'kafka-broker': {
+      type: 'string',
+      description:
+        'Kafka broker for queue-backed workflows (for example localhost:9092). Can also be set via KAFKA_BROKER.',
+    },
   },
   async run({ args }) {
     const { createWorker } = await import('./temporal/worker.js')
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const namespace = args['temporal-namespace'] || 'default'
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
+    const kafkaBroker = args['kafka-broker'] || process.env['KAFKA_BROKER']
     const temporalAddress = args['temporal-address']
 
     // import.meta.url is the URL of cli.ts/cli.js, NOT the bin entry point:
-    //   tsx:      file:///.../apps/service/src/cli.ts  → ./temporal/workflows.ts
-    //   compiled: file:///.../apps/service/dist/cli.js → ./temporal/workflows.js
+    //   tsx:      file:///.../apps/service/src/cli.ts  → ./temporal/workflows/index.ts
+    //   compiled: file:///.../apps/service/dist/cli.js → ./temporal/workflows/index.js
     const { fileURLToPath } = await import('node:url')
     const ext = import.meta.url.endsWith('.ts') ? '.ts' : '.js'
-    const workflowsPath = fileURLToPath(new URL(`./temporal/workflows${ext}`, import.meta.url))
+    const workflowsPath = fileURLToPath(
+      new URL(`./temporal/workflows/index${ext}`, import.meta.url)
+    )
 
     const worker = await createWorker({
       temporalAddress,
       namespace,
       taskQueue,
       engineUrl,
+      kafkaBroker,
       workflowsPath,
     })
 
-    logger.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
+    logger.info(
+      { temporalAddress, namespace, taskQueue, engineUrl, kafkaBroker },
+      'Starting Temporal worker'
+    )
 
     await worker.run()
   },

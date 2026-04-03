@@ -25,7 +25,7 @@ export function enforceCatalog(
           if (props) {
             yield {
               ...msg,
-              data: Object.fromEntries(Object.entries(msg.data).filter(([k]) => k in props)),
+              data: Object.fromEntries(Object.entries(msg.data).filter(([key]) => key in props)),
             }
           } else {
             yield msg

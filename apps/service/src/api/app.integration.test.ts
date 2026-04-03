@@ -11,7 +11,7 @@ import Stripe from 'stripe'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import { createApp as createEngineApp, createConnectorResolver } from '@stripe/sync-engine'
-import { createActivities } from '../temporal/activities.js'
+import { createActivities } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 import type { paths } from '../__generated__/openapi.js'
 
@@ -24,7 +24,7 @@ const STRIPE_API_KEY = process.env['STRIPE_API_KEY']!
 const POSTGRES_URL = process.env['POSTGRES_URL'] ?? process.env['DATABASE_URL']!
 const TASK_QUEUE = `test-app-${Date.now()}`
 const SCHEMA = `integration_${Date.now()}`
-const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows.js')
+const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
 
 const SKIP_CLEANUP = process.env['SKIP_CLEANUP'] === '1'
 

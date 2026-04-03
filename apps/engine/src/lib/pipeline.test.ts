@@ -91,6 +91,41 @@ describe('enforceCatalog()', () => {
     expect((result[0] as { data: unknown }).data).toEqual({ id: 'sub_1', status: 'active' })
   })
 
+  it('drops unknown internal fields that are not present in the catalog schema', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        stream: 'subscriptions',
+        data: {
+          id: 'sub_1',
+          status: 'active',
+          customer: 'cus_1',
+          _row_key: '["sub_1"]',
+          _row_number: 12,
+        },
+        emitted_at: 1,
+      },
+    ]
+    const result = await drain(
+      enforceCatalog(
+        catalog([
+          {
+            name: 'subscriptions',
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, status: { type: 'string' } },
+            },
+          },
+        ])
+      )(toAsync(msgs))
+    )
+    expect(result).toHaveLength(1)
+    expect((result[0] as { data: unknown }).data).toEqual({
+      id: 'sub_1',
+      status: 'active',
+    })
+  })
+
   it('passes records through unchanged when json_schema is absent', async () => {
     const msgs: Message[] = [
       {

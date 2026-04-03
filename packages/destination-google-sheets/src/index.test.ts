@@ -1,6 +1,13 @@
-import type { DestinationInput, DestinationOutput } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, DestinationInput, DestinationOutput } from '@stripe/sync-protocol'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createDestination, envVars, type Config } from './index.js'
+import {
+  createDestination,
+  envVars,
+  parseGoogleSheetsMetaLog,
+  ROW_KEY_FIELD,
+  ROW_NUMBER_FIELD,
+  type Config,
+} from './index.js'
 import { readSheet } from './writer.js'
 import { createMemorySheets } from '../__tests__/memory-sheets.js'
 
@@ -246,6 +253,110 @@ describe('destination-google-sheets', () => {
     const logs = output.filter((m) => m.type === 'log')
     expect(logs).toHaveLength(1)
     expect(logs[0]).toMatchObject({ type: 'log', level: 'info' })
+  })
+
+  it('updates existing rows and emits row assignments for new appends', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const configuredCatalog: ConfiguredCatalog = {
+      streams: [
+        {
+          stream: {
+            name: 'customers',
+            primary_key: [['id']],
+            json_schema: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+              },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+      ],
+    }
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: configuredCatalog },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_1',
+            name: 'Alice',
+            [ROW_KEY_FIELD]: '["cus_1"]',
+          }),
+        ])
+      )
+    )
+
+    const output = await collect(
+      dest.write(
+        {
+          config: cfg({ spreadsheet_id: dest.spreadsheetId! }),
+          catalog: configuredCatalog,
+        },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_1',
+            name: 'Alice Updated',
+            [ROW_KEY_FIELD]: '["cus_1"]',
+            [ROW_NUMBER_FIELD]: 2,
+          }),
+          record('customers', {
+            id: 'cus_2',
+            name: 'Bob',
+            [ROW_KEY_FIELD]: '["cus_2"]',
+          }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice Updated'],
+      ['cus_2', 'Bob'],
+    ])
+
+    const metaLog = output.find((message) => message.type === 'log' && message.level === 'debug')
+    expect(metaLog).toBeDefined()
+    const meta = parseGoogleSheetsMetaLog((metaLog as { message: string }).message)
+    expect(meta).toEqual({
+      type: 'row_assignments',
+      assignments: { customers: { '["cus_2"]': 3 } },
+    })
+  })
+
+  it('extends existing headers when a later write introduces new fields', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_2',
+            name: 'Bob',
+            email: 'bob@test.invalid',
+          }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows[0]).toEqual(['id', 'name', 'email'])
+    expect(rows[1]).toEqual(['cus_1', 'Alice'])
+    expect(rows[2]).toEqual(['cus_2', 'Bob', 'bob@test.invalid'])
   })
 })
 

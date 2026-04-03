@@ -1,15 +1,16 @@
-import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest'
 import type { WorkflowClient } from '@temporalio/client'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
 import path from 'node:path'
 import { createConnectorResolver, sourceTest, destinationTest } from '@stripe/sync-engine'
-import type { SyncActivities, RunResult } from '../temporal/activities.js'
+import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
+import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 
 const resolver = createConnectorResolver({
   sources: { test: sourceTest },
-  destinations: { test: destinationTest },
+  destinations: { test: destinationTest, 'google-sheets': destinationGoogleSheets },
 })
 
 // Lightweight app for spec/health tests (no Temporal needed)
@@ -68,18 +69,60 @@ describe('GET /health', () => {
   })
 })
 
+describe('POST /pipelines workflow dispatch', () => {
+  it('starts google-sheets pipelines on the dedicated workflow', async () => {
+    const start = vi.fn(async () => ({}))
+    const res = await createApp({
+      temporal: { client: { start } as unknown as WorkflowClient, taskQueue: 'unused' },
+      resolver,
+    }).request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test' },
+        destination: {
+          type: 'google-sheets',
+          spreadsheet_id: 'sheet_123',
+          spreadsheet_title: 'Test Sheet',
+          client_id: 'client',
+          client_secret: 'secret',
+          access_token: 'token',
+          refresh_token: 'refresh',
+        },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    expect(start).toHaveBeenCalledOnce()
+    expect(start).toHaveBeenCalledWith(
+      'pipelineGoogleSheetsWorkflow',
+      expect.objectContaining({
+        taskQueue: 'unused',
+      })
+    )
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Pipeline CRUD + pause/resume (in-memory Temporal, stub activities)
 // ---------------------------------------------------------------------------
 
-const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows.js')
+const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
 const noErrors: RunResult = { errors: [], state: {} }
 
 function stubActivities(): SyncActivities {
   return {
+    discoverCatalog: async () => ({ streams: [] }),
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
+    readIntoQueueWithState: async () => ({ count: 0, state: {} }),
     readIntoQueue: async () => ({ count: 0, state: {} }),
+    writeGoogleSheetsFromQueue: async () => ({
+      errors: [],
+      state: {},
+      written: 0,
+      rowAssignments: {},
+    }),
     writeFromQueue: async () => ({ errors: [], state: {}, written: 0 }),
     teardown: async () => {},
   }
@@ -172,6 +215,99 @@ describe('pipeline CRUD', () => {
     expect(updated.status.paused).toBe(false)
 
     // Cleanup
+    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
+  })
+
+  it('rejects changing the target spreadsheet for a google-sheets pipeline', async () => {
+    const a = liveApp()
+
+    const createRes = await a.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test' },
+        destination: {
+          type: 'google-sheets',
+          spreadsheet_id: 'sheet_123',
+          spreadsheet_title: 'Original Sheet',
+          client_id: 'client',
+          client_secret: 'secret',
+          access_token: 'token',
+          refresh_token: 'refresh',
+        },
+      }),
+    })
+    const created = await createRes.json()
+    await waitForPipeline(a, created.id)
+
+    const updateRes = await a.request(`/pipelines/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        destination: {
+          type: 'google-sheets',
+          spreadsheet_id: 'sheet_456',
+          spreadsheet_title: 'Replacement Sheet',
+          client_id: 'client',
+          client_secret: 'secret',
+          access_token: 'token',
+          refresh_token: 'refresh',
+        },
+      }),
+    })
+
+    expect(updateRes.status).toBe(400)
+    expect(await updateRes.json()).toEqual({
+      error:
+        'Changing the target spreadsheet for a google-sheets pipeline requires recreating the pipeline',
+    })
+
+    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
+  })
+
+  it('allows changing spreadsheet title when spreadsheet_id is unchanged', async () => {
+    const a = liveApp()
+
+    const createRes = await a.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test' },
+        destination: {
+          type: 'google-sheets',
+          spreadsheet_id: 'sheet_123',
+          spreadsheet_title: 'Original Sheet',
+          client_id: 'client',
+          client_secret: 'secret',
+          access_token: 'token',
+          refresh_token: 'refresh',
+        },
+      }),
+    })
+    const created = await createRes.json()
+    await waitForPipeline(a, created.id)
+
+    const updateRes = await a.request(`/pipelines/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        destination: {
+          type: 'google-sheets',
+          spreadsheet_id: 'sheet_123',
+          spreadsheet_title: 'Renamed Sheet',
+          client_id: 'client',
+          client_secret: 'secret',
+          access_token: 'token',
+          refresh_token: 'refresh',
+        },
+      }),
+    })
+
+    expect(updateRes.status).toBe(200)
+    const updated = await updateRes.json()
+    expect(updated.destination.spreadsheet_id).toBe('sheet_123')
+    expect(updated.destination.spreadsheet_title).toBe('Renamed Sheet')
+
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })
 

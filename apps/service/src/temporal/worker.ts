@@ -1,5 +1,5 @@
 import { NativeConnection, Worker } from '@temporalio/worker'
-import { createActivities } from './activities.js'
+import { createActivities } from './activities/index.js'
 
 export interface WorkerOptions {
   temporalAddress: string
@@ -7,7 +7,7 @@ export interface WorkerOptions {
   taskQueue: string
   engineUrl: string
   kafkaBroker?: string
-  /** Path to compiled workflows.js (Temporal bundles it for V8 sandbox). */
+  /** Path to a compiled workflow module or directory (Temporal bundles it for V8 sandbox). */
   workflowsPath: string
 }
 

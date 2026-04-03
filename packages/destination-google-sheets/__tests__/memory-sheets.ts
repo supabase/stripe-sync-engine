@@ -45,6 +45,22 @@ export function createMemorySheets() {
     return bang >= 0 ? range.slice(0, bang) : range
   }
 
+  function parseStartRow(range: string): number {
+    const match = range.match(/(\d+)/)
+    return match ? Number(match[1]) : 1
+  }
+
+  function columnLabel(index: number): string {
+    let value = index
+    let label = ''
+    while (value > 0) {
+      const remainder = (value - 1) % 26
+      label = String.fromCharCode(65 + remainder) + label
+      value = Math.floor((value - 1) / 26)
+    }
+    return label || 'A'
+  }
+
   function getTab(spreadsheetId: string, range: string): SheetTab {
     const ss = getSpreadsheet(spreadsheetId)
     const name = parseSheetName(range)
@@ -76,6 +92,8 @@ export function createMemorySheets() {
         const ss = getSpreadsheet(params.spreadsheetId)
         const requests = (params.requestBody?.requests ?? []) as Record<string, unknown>[]
 
+        const replies: unknown[] = []
+
         for (const req of requests) {
           if (req.addSheet) {
             const props = (req.addSheet as { properties?: { title?: string } }).properties
@@ -83,10 +101,10 @@ export function createMemorySheets() {
             if (ss.sheets.has(name)) {
               throw Object.assign(new Error(`Sheet already exists: ${name}`), { code: 400 })
             }
-            ss.sheets.set(name, { sheetId: nextSheetId++, values: [] })
-          }
-
-          if (req.updateSheetProperties) {
+            const sheetId = nextSheetId++
+            ss.sheets.set(name, { sheetId, values: [] })
+            replies.push({ addSheet: { properties: { sheetId, title: name } } })
+          } else if (req.updateSheetProperties) {
             const update = req.updateSheetProperties as {
               properties: { sheetId: number; title: string }
               fields: string
@@ -99,10 +117,13 @@ export function createMemorySheets() {
                 break
               }
             }
+            replies.push({})
+          } else {
+            replies.push({})
           }
         }
 
-        return { data: {} }
+        return { data: { replies } }
       },
 
       values: {
@@ -114,9 +135,9 @@ export function createMemorySheets() {
         }) {
           const tab = getTab(params.spreadsheetId, params.range)
           const rows = params.requestBody?.values ?? []
-          // values.update at A1 replaces from the top
+          const startRow = parseStartRow(params.range)
           for (let i = 0; i < rows.length; i++) {
-            tab.values[i] = rows[i]
+            tab.values[startRow - 1 + i] = rows[i]
           }
           return { data: {} }
         },
@@ -130,8 +151,16 @@ export function createMemorySheets() {
         }) {
           const tab = getTab(params.spreadsheetId, params.range)
           const rows = params.requestBody?.values ?? []
+          const startRow = tab.values.length + 1
           tab.values.push(...rows)
-          return { data: {} }
+          const endRow = tab.values.length
+          return {
+            data: {
+              updates: {
+                updatedRange: `'${parseSheetName(params.range)}'!A${startRow}:${columnLabel(rows[0]?.length ?? 1)}${endRow}`,
+              },
+            },
+          }
         },
 
         async get(params: { spreadsheetId: string; range: string }) {

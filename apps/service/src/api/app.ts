@@ -6,7 +6,18 @@ import type { ConnectorResolver } from '@stripe/sync-engine'
 import { endpointTable, addDiscriminators } from '@stripe/sync-engine/api/openapi-utils'
 import { createSchemas } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
-import type { WorkflowStatus } from '../temporal/workflows.js'
+import type { WorkflowStatus } from '../temporal/workflows/_shared.js'
+
+const DEFAULT_PIPELINE_WORKFLOW = 'pipelineWorkflow'
+const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'pipelineGoogleSheetsWorkflow'
+const ACTIVE_PIPELINE_STATUSES =
+  "ExecutionStatus IN ('Running', 'Failed', 'Terminated', 'TimedOut', 'Canceled')"
+
+function workflowTypeForPipeline(pipeline: Pipeline): string {
+  return pipeline.destination.type === 'google-sheets'
+    ? GOOGLE_SHEETS_PIPELINE_WORKFLOW
+    : DEFAULT_PIPELINE_WORKFLOW
+}
 
 // MARK: - Helpers
 
@@ -114,28 +125,30 @@ export function createApp(options: AppOptions) {
       // Completed = soft-deleted (via delete signal). Show everything else
       // including failed/terminated so operators can see broken pipelines.
       const pipelines: Array<Pipeline & { status?: WorkflowStatus }> = []
-      for await (const wf of temporal.list({
-        query: `WorkflowType = 'pipelineWorkflow' AND ExecutionStatus IN ('Running', 'Failed', 'Terminated', 'TimedOut', 'Canceled')`,
-      })) {
-        try {
-          const handle = temporal.getHandle(wf.workflowId)
-          const [pipeline, status] = await Promise.all([
-            handle.query<Pipeline>('config'),
-            handle.query<WorkflowStatus>('status'),
-          ])
-          pipelines.push({ ...pipeline, status })
-        } catch {
-          // Non-queryable (failed/terminated) — fall back to memo with derived status
-          const memo = wf.memo as { pipeline?: Pipeline } | undefined
-          if (memo?.pipeline) {
-            pipelines.push({
-              ...memo.pipeline,
-              status: {
-                phase: wf.status.name.toLowerCase(),
-                paused: false,
-                iteration: 0,
-              },
-            })
+      for (const workflowType of [DEFAULT_PIPELINE_WORKFLOW, GOOGLE_SHEETS_PIPELINE_WORKFLOW]) {
+        for await (const wf of temporal.list({
+          query: `WorkflowType = '${workflowType}' AND ${ACTIVE_PIPELINE_STATUSES}`,
+        })) {
+          try {
+            const handle = temporal.getHandle(wf.workflowId)
+            const [pipeline, status] = await Promise.all([
+              handle.query<Pipeline>('config'),
+              handle.query<WorkflowStatus>('status'),
+            ])
+            pipelines.push({ ...pipeline, status })
+          } catch {
+            // Non-queryable (failed/terminated) — fall back to memo with derived status
+            const memo = wf.memo as { pipeline?: Pipeline } | undefined
+            if (memo?.pipeline) {
+              pipelines.push({
+                ...memo.pipeline,
+                status: {
+                  phase: wf.status.name.toLowerCase(),
+                  paused: false,
+                  iteration: 0,
+                },
+              })
+            }
           }
         }
       }
@@ -168,7 +181,7 @@ export function createApp(options: AppOptions) {
       const body = c.req.valid('json')
       const id = genId('pipe')
       const pipeline = { id, ...(body as Record<string, unknown>) } as Pipeline
-      await temporal.start('pipelineWorkflow', {
+      await temporal.start(workflowTypeForPipeline(pipeline), {
         workflowId: id,
         taskQueue,
         args: [pipeline],
@@ -263,6 +276,34 @@ export function createApp(options: AppOptions) {
       const patch = c.req.valid('json')
       try {
         const handle = temporal.getHandle(id)
+        const current = await handle.query<Pipeline>('config')
+        const next = {
+          ...current,
+          source: patch.source ? patch.source : current.source,
+          destination: patch.destination ? patch.destination : current.destination,
+          streams: patch.streams !== undefined ? patch.streams : current.streams,
+        } as Pipeline
+        if (workflowTypeForPipeline(current) !== workflowTypeForPipeline(next)) {
+          return c.json(
+            {
+              error:
+                'Changing destination.type between google-sheets and non-google-sheets requires recreating the pipeline',
+            },
+            400
+          )
+        }
+        if (
+          current.destination.type === 'google-sheets' &&
+          current.destination.spreadsheet_id !== next.destination.spreadsheet_id
+        ) {
+          return c.json(
+            {
+              error:
+                'Changing the target spreadsheet for a google-sheets pipeline requires recreating the pipeline',
+            },
+            400
+          )
+        }
         await handle.signal('update', patch)
         // Brief wait for signal to be processed before querying
         await new Promise((r) => setTimeout(r, 200))
