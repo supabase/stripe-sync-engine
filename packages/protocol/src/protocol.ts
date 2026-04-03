@@ -8,174 +8,190 @@ import { z } from 'zod'
 
 // MARK: - Data model
 
-/** A named collection of records — analogous to a table or API resource. */
-export const Stream = z.object({
-  /** Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-  name: z.string(),
+export const Stream = z
+  .object({
+    name: z.string().describe('Collection name (e.g. "customers", "invoices", "pg_public.users").'),
 
-  /**
-   * Paths to fields that uniquely identify a record within this stream.
-   * Supports composite keys and nested paths.
-   * e.g. [["id"]] or [["account_id"], ["created"]]
-   */
-  primary_key: z.array(z.array(z.string())),
+    primary_key: z
+      .array(z.array(z.string()))
+      .describe(
+        'Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]]'
+      ),
 
-  /** JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-  json_schema: z.record(z.string(), z.unknown()).optional(),
+    json_schema: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        'JSON Schema describing the record shape. Discovered at runtime or provided by config.'
+      ),
 
-  /**
-   * Source-specific metadata that applies to every record in this stream.
-   * The destination can use these for schema naming, partitioning, etc.
-   *
-   * Examples:
-   *   Stripe source:    { api_version: "2025-04-30.basil", account_id: "acct_123", live_mode: true }
-   *   Metronome source: { account_id: "met_456" }
-   *   Postgres source:  { schema: "public", database: "mydb" }
-   */
-  metadata: z.record(z.string(), z.unknown()).optional(),
-})
+    metadata: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        'Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }.'
+      ),
+  })
+  .describe('A named collection of records — analogous to a table or API resource.')
 export type Stream = z.infer<typeof Stream>
 
 // MARK: - Configured catalog
 
-/** A stream selected by the user with sync settings applied. */
-export const ConfiguredStream = z.object({
-  stream: Stream,
+export const ConfiguredStream = z
+  .object({
+    stream: Stream,
 
-  /** How the source reads this stream. */
-  sync_mode: z.enum(['full_refresh', 'incremental']),
+    sync_mode: z
+      .enum(['full_refresh', 'incremental'])
+      .describe('How the source reads this stream.'),
 
-  /** How the destination writes this stream. */
-  destination_sync_mode: z.enum(['append', 'overwrite', 'append_dedup']),
+    destination_sync_mode: z
+      .enum(['append', 'overwrite', 'append_dedup'])
+      .describe('How the destination writes this stream.'),
 
-  /** Field path used as the cursor for incremental syncs. */
-  cursor_field: z.array(z.string()).optional(),
+    cursor_field: z
+      .array(z.string())
+      .optional()
+      .describe('Field path used as the cursor for incremental syncs.'),
 
-  /** Extra system columns the destination should add to this stream's table. */
-  system_columns: z
-    .array(
-      z.object({
-        /** Column name, e.g. "_account_id". */
-        name: z.string(),
-        /** Postgres type, e.g. "text". */
-        type: z.string().default('text'),
-        /** Whether to create an index on this column. */
-        index: z.boolean().default(false),
-      })
-    )
-    .optional(),
+    system_columns: z
+      .array(
+        z.object({
+          name: z.string().describe('Column name, e.g. "_account_id".'),
+          type: z.string().default('text').describe('Postgres type, e.g. "text".'),
+          index: z.boolean().default(false).describe('Whether to create an index on this column.'),
+        })
+      )
+      .optional()
+      .describe("Extra system columns the destination should add to this stream's table."),
 
-  /** If set, only these field names are included in records for this stream. */
-  fields: z.array(z.string()).optional(),
+    fields: z
+      .array(z.string())
+      .optional()
+      .describe('If set, only these field names are included in records for this stream.'),
 
-  /** Cap backfill to this many records, then mark the stream complete. */
-  backfill_limit: z.number().int().positive().optional(),
-})
+    backfill_limit: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Cap backfill to this many records, then mark the stream complete.'),
+  })
+  .describe('A stream selected by the user with sync settings applied.')
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
 
-/**
- * The user's selected and configured streams.
- * Persisted on the Sync resource. Passed to read() and write().
- */
-export const ConfiguredCatalog = z.object({
-  streams: z.array(ConfiguredStream),
-})
+export const ConfiguredCatalog = z
+  .object({
+    streams: z.array(ConfiguredStream),
+  })
+  .describe(
+    "The user's selected and configured streams. Persisted on the Sync resource. Passed to read() and write()."
+  )
 export type ConfiguredCatalog = z.infer<typeof ConfiguredCatalog>
 
 // MARK: - Connector specification
 
-/** JSON Schema describing the configuration a connector requires. */
-export const ConnectorSpecification = z.object({
-  /** JSON Schema for the connector's configuration object. */
-  config: z.record(z.string(), z.unknown()),
-  /** JSON Schema for per-stream state (cursor/checkpoint shape). */
-  stream_state: z.record(z.string(), z.unknown()).optional(),
-  /** JSON Schema for the read() input parameter (e.g. a webhook event). */
-  input: z.record(z.string(), z.unknown()).optional(),
-})
+export const ConnectorSpecification = z
+  .object({
+    config: z
+      .record(z.string(), z.unknown())
+      .describe("JSON Schema for the connector's configuration object."),
+    stream_state: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('JSON Schema for per-stream state (cursor/checkpoint shape).'),
+    input: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('JSON Schema for the read() input parameter (e.g. a webhook event).'),
+  })
+  .describe('JSON Schema describing the configuration a connector requires.')
 export type ConnectorSpecification = z.infer<typeof ConnectorSpecification>
 
-/** Result of a connection check. */
-export const CheckResult = z.object({
-  status: z.enum(['succeeded', 'failed']),
-  message: z.string().optional(),
-})
+export const CheckResult = z
+  .object({
+    status: z.enum(['succeeded', 'failed']),
+    message: z.string().optional().describe('Human-readable explanation of the check result.'),
+  })
+  .describe('Result of a connection check.')
 export type CheckResult = z.infer<typeof CheckResult>
 
 // MARK: - Messages
 
-/** One record for one stream. */
 export const RecordMessage = z
   .object({
     type: z.literal('record'),
-    stream: z.string(),
-    data: z.record(z.string(), z.unknown()),
-    emitted_at: z.string().datetime(),
+    stream: z.string().describe('Stream (table) name this record belongs to.'),
+    data: z.record(z.string(), z.unknown()).describe('The record payload as a key-value map.'),
+    emitted_at: z
+      .string()
+      .datetime()
+      .describe('ISO 8601 timestamp when the record was emitted by the source.'),
   })
+  .describe('One record for one stream.')
   .meta({ id: 'RecordMessage' })
 export type RecordMessage = z.infer<typeof RecordMessage>
 
-/**
- * Per-stream checkpoint for resumable syncs.
- *
- * The `stream` field tells the orchestrator which stream is being checkpointed.
- * The `data` field is opaque — only the source understands its contents.
- * The orchestrator persists state keyed by (sync_id, stream) and passes the
- * full map back to the source on resume.
- */
 export const StateMessage = z
   .object({
     type: z.literal('state'),
-    stream: z.string(),
-    data: z.unknown(),
+    stream: z.string().describe('Stream being checkpointed.'),
+    data: z
+      .unknown()
+      .describe(
+        'Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume.'
+      ),
   })
+  .describe(
+    'Per-stream checkpoint for resumable syncs. Emitted by the source after each page/batch so the orchestrator can persist progress.'
+  )
   .meta({ id: 'StateMessage' })
 export type StateMessage = z.infer<typeof StateMessage>
 
-/** Catalog of available streams. Emitted by a source during discover(). */
 export const CatalogMessage = z
   .object({
     type: z.literal('catalog'),
-    streams: z.array(Stream),
+    streams: z.array(Stream).describe('All streams available from this source.'),
   })
+  .describe('Catalog of available streams. Emitted by a source during discover().')
   .meta({ id: 'CatalogMessage' })
 export type CatalogMessage = z.infer<typeof CatalogMessage>
 
-/** Structured log output from a source or destination. */
 export const LogMessage = z
   .object({
     type: z.literal('log'),
-    level: z.enum(['debug', 'info', 'warn', 'error']),
-    message: z.string(),
+    level: z.enum(['debug', 'info', 'warn', 'error']).describe('Log severity level.'),
+    message: z.string().describe('Human-readable log message.'),
   })
+  .describe('Structured log output from a source or destination.')
   .meta({ id: 'LogMessage' })
 export type LogMessage = z.infer<typeof LogMessage>
 
-/**
- * Structured error from a source or destination.
- * failure_type lets the orchestrator decide whether to retry, alert, or abort.
- */
 export const ErrorMessage = z
   .object({
     type: z.literal('error'),
-    failure_type: z.enum(['config_error', 'system_error', 'transient_error', 'auth_error']),
-    message: z.string(),
-    stream: z.string().optional(),
-    stack_trace: z.string().optional(),
+    failure_type: z
+      .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
+      .describe('Error category — lets the orchestrator decide whether to retry, alert, or abort.'),
+    message: z.string().describe('Human-readable error description.'),
+    stream: z.string().optional().describe('Stream that triggered the error, if applicable.'),
+    stack_trace: z.string().optional().describe('Full stack trace for debugging.'),
   })
+  .describe('Structured error from a source or destination.')
   .meta({ id: 'ErrorMessage' })
 export type ErrorMessage = z.infer<typeof ErrorMessage>
 
-/**
- * Per-stream status update from a source.
- * Enables progress reporting in CLI / dashboard.
- */
 export const StreamStatusMessage = z
   .object({
     type: z.literal('stream_status'),
-    stream: z.string(),
-    status: z.enum(['started', 'running', 'complete', 'incomplete']),
+    stream: z.string().describe('Stream being reported on.'),
+    status: z
+      .enum(['started', 'running', 'complete', 'incomplete'])
+      .describe('Current phase of the stream within this sync run.'),
   })
+  .describe(
+    'Per-stream status update from a source. Enables progress reporting in CLI / dashboard.'
+  )
   .meta({ id: 'StreamStatusMessage' })
 export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 

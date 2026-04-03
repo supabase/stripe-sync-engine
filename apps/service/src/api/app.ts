@@ -49,11 +49,12 @@ export function createApp(options: AppOptions) {
   const PipelineWithStatusSchema = PipelineSchema.extend({
     status: z
       .object({
-        phase: z.string(),
-        paused: z.boolean(),
-        iteration: z.number(),
+        phase: z.string().describe('Current workflow phase (e.g. "backfill", "live", "idle").'),
+        paused: z.boolean().describe('Whether the pipeline is currently paused.'),
+        iteration: z.number().describe('Number of times this workflow has continued-as-new.'),
       })
-      .optional(),
+      .optional()
+      .describe('Live workflow status. Absent if no workflow is running for this pipeline.'),
   })
 
   const app = new OpenAPIHono({

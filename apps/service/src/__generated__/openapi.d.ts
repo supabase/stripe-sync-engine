@@ -164,6 +164,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: {
+                            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                             id: string;
                             source: {
                                 /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -263,15 +264,25 @@ export interface operations {
                                 /** @constant */
                                 type: "google-sheets";
                             };
+                            /** @description Selected streams to sync. All streams synced if omitted. */
                             streams?: {
+                                /** @description Stream (table) name to sync. */
                                 name: string;
-                                /** @enum {string} */
+                                /**
+                                 * @description How the source reads this stream. Defaults to full_refresh.
+                                 * @enum {string}
+                                 */
                                 sync_mode?: "incremental" | "full_refresh";
+                                /** @description Cap backfill to this many records, then mark the stream complete. */
                                 backfill_limit?: number;
                             }[];
+                            /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
                             status?: {
+                                /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
                                 phase: string;
+                                /** @description Whether the pipeline is currently paused. */
                                 paused: boolean;
+                                /** @description Number of times this workflow has continued-as-new. */
                                 iteration: number;
                             };
                         }[];
@@ -389,10 +400,16 @@ export interface operations {
                         /** @constant */
                         type: "google-sheets";
                     };
+                    /** @description Selected streams to sync. All streams synced if omitted. */
                     streams?: {
+                        /** @description Stream (table) name to sync. */
                         name: string;
-                        /** @enum {string} */
+                        /**
+                         * @description How the source reads this stream. Defaults to full_refresh.
+                         * @enum {string}
+                         */
                         sync_mode?: "incremental" | "full_refresh";
+                        /** @description Cap backfill to this many records, then mark the stream complete. */
                         backfill_limit?: number;
                     }[];
                 };
@@ -406,6 +423,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
                         source: {
                             /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -505,10 +523,16 @@ export interface operations {
                             /** @constant */
                             type: "google-sheets";
                         };
+                        /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
+                            /** @description Stream (table) name to sync. */
                             name: string;
-                            /** @enum {string} */
+                            /**
+                             * @description How the source reads this stream. Defaults to full_refresh.
+                             * @enum {string}
+                             */
                             sync_mode?: "incremental" | "full_refresh";
+                            /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
                     };
@@ -545,6 +569,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
                         source: {
                             /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -644,15 +669,25 @@ export interface operations {
                             /** @constant */
                             type: "google-sheets";
                         };
+                        /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
+                            /** @description Stream (table) name to sync. */
                             name: string;
-                            /** @enum {string} */
+                            /**
+                             * @description How the source reads this stream. Defaults to full_refresh.
+                             * @enum {string}
+                             */
                             sync_mode?: "incremental" | "full_refresh";
+                            /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
+                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
                         status?: {
+                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
                             phase: string;
+                            /** @description Whether the pipeline is currently paused. */
                             paused: boolean;
+                            /** @description Number of times this workflow has continued-as-new. */
                             iteration: number;
                         };
                     };
@@ -829,10 +864,16 @@ export interface operations {
                         /** @constant */
                         type: "google-sheets";
                     };
+                    /** @description Selected streams to sync. All streams synced if omitted. */
                     streams?: {
+                        /** @description Stream (table) name to sync. */
                         name: string;
-                        /** @enum {string} */
+                        /**
+                         * @description How the source reads this stream. Defaults to full_refresh.
+                         * @enum {string}
+                         */
                         sync_mode?: "incremental" | "full_refresh";
+                        /** @description Cap backfill to this many records, then mark the stream complete. */
                         backfill_limit?: number;
                     }[];
                 };
@@ -846,6 +887,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
                         source: {
                             /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -945,15 +987,25 @@ export interface operations {
                             /** @constant */
                             type: "google-sheets";
                         };
+                        /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
+                            /** @description Stream (table) name to sync. */
                             name: string;
-                            /** @enum {string} */
+                            /**
+                             * @description How the source reads this stream. Defaults to full_refresh.
+                             * @enum {string}
+                             */
                             sync_mode?: "incremental" | "full_refresh";
+                            /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
+                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
                         status?: {
+                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
                             phase: string;
+                            /** @description Whether the pipeline is currently paused. */
                             paused: boolean;
+                            /** @description Number of times this workflow has continued-as-new. */
                             iteration: number;
                         };
                     };
@@ -990,6 +1042,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
                         source: {
                             /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -1089,15 +1142,25 @@ export interface operations {
                             /** @constant */
                             type: "google-sheets";
                         };
+                        /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
+                            /** @description Stream (table) name to sync. */
                             name: string;
-                            /** @enum {string} */
+                            /**
+                             * @description How the source reads this stream. Defaults to full_refresh.
+                             * @enum {string}
+                             */
                             sync_mode?: "incremental" | "full_refresh";
+                            /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
+                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
                         status?: {
+                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
                             phase: string;
+                            /** @description Whether the pipeline is currently paused. */
                             paused: boolean;
+                            /** @description Number of times this workflow has continued-as-new. */
                             iteration: number;
                         };
                     };
@@ -1134,6 +1197,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
                         source: {
                             /** @description Stripe API key (sk_test_... or sk_live_...) */
@@ -1233,15 +1297,25 @@ export interface operations {
                             /** @constant */
                             type: "google-sheets";
                         };
+                        /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
+                            /** @description Stream (table) name to sync. */
                             name: string;
-                            /** @enum {string} */
+                            /**
+                             * @description How the source reads this stream. Defaults to full_refresh.
+                             * @enum {string}
+                             */
                             sync_mode?: "incremental" | "full_refresh";
+                            /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
+                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
                         status?: {
+                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
                             phase: string;
+                            /** @description Whether the pipeline is currently paused. */
                             paused: boolean;
+                            /** @description Number of times this workflow has continued-as-new. */
                             iteration: number;
                         };
                     };

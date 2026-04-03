@@ -33,3 +33,7 @@ No silent skips when dependencies (stripe-mock, Docker Postgres) are unavailable
 ## 8. Schema is discovered, not hardcoded
 
 Sources advertise available streams via `CatalogMessage`. Destinations create tables from the catalog. No hardcoded table definitions.
+
+## 9. Use `.describe()` for Zod field descriptions
+
+JSDoc comments on Zod fields (`/** ... */`) are stripped by TypeScript and never reach the OpenAPI generator. Always use `.describe('...')` on Zod schema fields so descriptions appear in the generated spec.

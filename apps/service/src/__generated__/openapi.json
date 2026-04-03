@@ -52,7 +52,8 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                           },
                           "source": {
                             "oneOf": [
@@ -267,18 +268,22 @@
                             }
                           },
                           "streams": {
+                            "description": "Selected streams to sync. All streams synced if omitted.",
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
                                 "name": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "description": "Stream (table) name to sync."
                                 },
                                 "sync_mode": {
+                                  "description": "How the source reads this stream. Defaults to full_refresh.",
                                   "type": "string",
                                   "enum": ["incremental", "full_refresh"]
                                 },
                                 "backfill_limit": {
+                                  "description": "Cap backfill to this many records, then mark the stream complete.",
                                   "type": "integer",
                                   "exclusiveMinimum": 0,
                                   "maximum": 9007199254740991
@@ -289,16 +294,20 @@
                             }
                           },
                           "status": {
+                            "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
                             "type": "object",
                             "properties": {
                               "phase": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
                               },
                               "paused": {
-                                "type": "boolean"
+                                "type": "boolean",
+                                "description": "Whether the pipeline is currently paused."
                               },
                               "iteration": {
-                                "type": "number"
+                                "type": "number",
+                                "description": "Number of times this workflow has continued-as-new."
                               }
                             },
                             "required": ["phase", "paused", "iteration"],
@@ -538,18 +547,22 @@
                     }
                   },
                   "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
                     "type": "array",
                     "items": {
                       "type": "object",
                       "properties": {
                         "name": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
                         },
                         "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
                           "enum": ["incremental", "full_refresh"]
                         },
                         "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
@@ -573,7 +586,8 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
                       "oneOf": [
@@ -788,18 +802,22 @@
                       }
                     },
                     "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "name": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
                           },
                           "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
                             "enum": ["incremental", "full_refresh"]
                           },
                           "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
@@ -859,7 +877,8 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
                       "oneOf": [
@@ -1074,18 +1093,22 @@
                       }
                     },
                     "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "name": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
                           },
                           "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
                             "enum": ["incremental", "full_refresh"]
                           },
                           "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
@@ -1096,16 +1119,20 @@
                       }
                     },
                     "status": {
+                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
                       "type": "object",
                       "properties": {
                         "phase": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
                         },
                         "paused": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether the pipeline is currently paused."
                         },
                         "iteration": {
-                          "type": "number"
+                          "type": "number",
+                          "description": "Number of times this workflow has continued-as-new."
                         }
                       },
                       "required": ["phase", "paused", "iteration"],
@@ -1363,18 +1390,22 @@
                     }
                   },
                   "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
                     "type": "array",
                     "items": {
                       "type": "object",
                       "properties": {
                         "name": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
                         },
                         "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
                           "enum": ["incremental", "full_refresh"]
                         },
                         "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 9007199254740991
@@ -1397,7 +1428,8 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
                       "oneOf": [
@@ -1612,18 +1644,22 @@
                       }
                     },
                     "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "name": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
                           },
                           "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
                             "enum": ["incremental", "full_refresh"]
                           },
                           "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
@@ -1634,16 +1670,20 @@
                       }
                     },
                     "status": {
+                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
                       "type": "object",
                       "properties": {
                         "phase": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
                         },
                         "paused": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether the pipeline is currently paused."
                         },
                         "iteration": {
-                          "type": "number"
+                          "type": "number",
+                          "description": "Number of times this workflow has continued-as-new."
                         }
                       },
                       "required": ["phase", "paused", "iteration"],
@@ -1768,7 +1808,8 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
                       "oneOf": [
@@ -1983,18 +2024,22 @@
                       }
                     },
                     "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "name": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
                           },
                           "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
                             "enum": ["incremental", "full_refresh"]
                           },
                           "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
@@ -2005,16 +2050,20 @@
                       }
                     },
                     "status": {
+                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
                       "type": "object",
                       "properties": {
                         "phase": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
                         },
                         "paused": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether the pipeline is currently paused."
                         },
                         "iteration": {
-                          "type": "number"
+                          "type": "number",
+                          "description": "Number of times this workflow has continued-as-new."
                         }
                       },
                       "required": ["phase", "paused", "iteration"],
@@ -2070,7 +2119,8 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
                       "oneOf": [
@@ -2285,18 +2335,22 @@
                       }
                     },
                     "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "name": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
                           },
                           "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
                             "enum": ["incremental", "full_refresh"]
                           },
                           "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
                             "type": "integer",
                             "exclusiveMinimum": 0,
                             "maximum": 9007199254740991
@@ -2307,16 +2361,20 @@
                       }
                     },
                     "status": {
+                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
                       "type": "object",
                       "properties": {
                         "phase": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
                         },
                         "paused": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether the pipeline is currently paused."
                         },
                         "iteration": {
-                          "type": "number"
+                          "type": "number",
+                          "description": "Number of times this workflow has continued-as-new."
                         }
                       },
                       "required": ["phase", "paused", "iteration"],

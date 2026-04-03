@@ -4,16 +4,24 @@ import type { ConnectorResolver } from '@stripe/sync-engine'
 // MARK: - Static schemas (independent of connector set)
 
 export const StreamConfig = z.object({
-  name: z.string(),
-  sync_mode: z.enum(['incremental', 'full_refresh']).optional(),
-  backfill_limit: z.number().int().positive().optional(),
+  name: z.string().describe('Stream (table) name to sync.'),
+  sync_mode: z
+    .enum(['incremental', 'full_refresh'])
+    .optional()
+    .describe('How the source reads this stream. Defaults to full_refresh.'),
+  backfill_limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Cap backfill to this many records, then mark the stream complete.'),
 })
 
 export const LogEntry = z.object({
-  level: z.enum(['debug', 'info', 'warn', 'error']),
-  message: z.string(),
-  stream: z.string().optional(),
-  timestamp: z.string(),
+  level: z.enum(['debug', 'info', 'warn', 'error']).describe('Log severity level.'),
+  message: z.string().describe('Human-readable log message.'),
+  stream: z.string().optional().describe('Stream that produced this log entry, if applicable.'),
+  timestamp: z.string().describe('ISO 8601 timestamp when the log entry was produced.'),
 })
 
 // MARK: - Dynamic schema factory (depends on registered connectors)
@@ -57,16 +65,22 @@ export function createSchemas(resolver: ConnectorResolver) {
 
   // Composed schemas
   const Pipeline = z.object({
-    id: z.string(),
+    id: z.string().describe('Unique pipeline identifier (e.g. pipe_abc123).'),
     source: SourceConfig,
     destination: DestinationConfig,
-    streams: z.array(StreamConfig).optional(),
+    streams: z
+      .array(StreamConfig)
+      .optional()
+      .describe('Selected streams to sync. All streams synced if omitted.'),
   })
 
   const CreatePipeline = z.object({
     source: SourceConfig,
     destination: DestinationConfig,
-    streams: z.array(StreamConfig).optional(),
+    streams: z
+      .array(StreamConfig)
+      .optional()
+      .describe('Selected streams to sync. All streams synced if omitted.'),
   })
 
   const UpdatePipeline = CreatePipeline.partial()
