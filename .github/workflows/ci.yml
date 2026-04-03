@@ -97,6 +97,9 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
+      - name: Connector loading test
+        run: bash e2e/connector-loading.test.sh
+
       - name: Skipped test warnings
         if: always()
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
@@ -131,7 +134,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Build arm64 — native arm build
+  # Build arm64 — native arm build with BuildKit registry cache
   # ---------------------------------------------------------------------------
   build:
     name: Build Docker (arm64)
@@ -159,23 +162,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image (arm64)
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker images (arm64)
         run: |
-          docker build \
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          docker buildx build \
+            --platform linux/arm64 \
             --build-arg GIT_COMMIT=${{ github.sha }} \
-            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
-            -t ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64 \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --build-arg COMMIT_URL="${COMMIT_URL}" \
+            --cache-from type=registry,ref=ghcr.io/${{ github.repository }}:cache-arm64 \
+            --cache-to type=registry,ref=ghcr.io/${{ github.repository }}:cache-arm64,mode=max \
+            --target engine \
+            --tag ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64 \
+            --push \
+            .
+          docker buildx build \
+            --platform linux/arm64 \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --build-arg COMMIT_URL="${COMMIT_URL}" \
+            --cache-from type=registry,ref=ghcr.io/${{ github.repository }}-service:cache-arm64 \
+            --cache-to type=registry,ref=ghcr.io/${{ github.repository }}-service:cache-arm64,mode=max \
+            --target service \
+            --tag ghcr.io/${{ github.repository }}-service:${{ github.sha }}-arm64 \
+            --push \
             .
 
-      - name: Push Docker image (arm64)
-        run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
-
   # ---------------------------------------------------------------------------
-  # Build amd64 — native x86 build in parallel with arm64
+  # Build amd64 — native x86 build in parallel with arm64 [push only]
   # ---------------------------------------------------------------------------
   build_amd64:
     name: Build Docker (amd64)
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -200,24 +221,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image (amd64)
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker images (amd64)
         run: |
-          docker build \
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          docker buildx build \
+            --platform linux/amd64 \
             --build-arg GIT_COMMIT=${{ github.sha }} \
-            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            --build-arg COMMIT_URL=${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} \
-            -t ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64 \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --build-arg COMMIT_URL="${COMMIT_URL}" \
+            --cache-from type=registry,ref=ghcr.io/${{ github.repository }}:cache-amd64 \
+            --cache-to type=registry,ref=ghcr.io/${{ github.repository }}:cache-amd64,mode=max \
+            --target engine \
+            --tag ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64 \
+            --push \
+            .
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --build-arg COMMIT_URL="${COMMIT_URL}" \
+            --cache-from type=registry,ref=ghcr.io/${{ github.repository }}-service:cache-amd64 \
+            --cache-to type=registry,ref=ghcr.io/${{ github.repository }}-service:cache-amd64,mode=max \
+            --target service \
+            --tag ghcr.io/${{ github.repository }}-service:${{ github.sha }}-amd64 \
+            --push \
             .
 
-      - name: Push Docker image (amd64)
-        run: docker push ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
-
   # ---------------------------------------------------------------------------
-  # Merge — combine arm64 + amd64 into a single multi-arch manifest
+  # Merge — combine arm64 + amd64 into a single multi-arch manifest [push only]
   # ---------------------------------------------------------------------------
   build_manifest:
     name: Merge multi-arch manifest
     needs: [build, build_amd64]
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -228,7 +267,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push multi-arch manifest
+      - name: Create and push multi-arch manifests
         run: |
           TAG="${GITHUB_REF_NAME//\//-}"
           docker buildx imagetools create \
@@ -236,16 +275,90 @@ jobs:
             --tag ghcr.io/${{ github.repository }}:${TAG} \
             ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64 \
             ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+          docker buildx imagetools create \
+            --tag ghcr.io/${{ github.repository }}-service:${{ github.sha }} \
+            --tag ghcr.io/${{ github.repository }}-service:${TAG} \
+            ghcr.io/${{ github.repository }}-service:${{ github.sha }}-amd64 \
+            ghcr.io/${{ github.repository }}-service:${{ github.sha }}-arm64
 
       - name: Docker smoke test
         run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
 
   # ---------------------------------------------------------------------------
-  # E2E — pull Docker image, run e2e & connector-loading tests
+  # E2E Docker — Docker image smoke + engine tests (runs on every push/PR)
   # ---------------------------------------------------------------------------
-  e2e:
-    name: E2E tests
-    needs: build_manifest
+  e2e_docker:
+    name: E2E Docker
+    needs: build
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start Postgres with SSL
+        run: |
+          docker run -d --name ci-postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 55432:5432 \
+            postgres:18 \
+            -c ssl=on \
+            -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem \
+            -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+          for i in $(seq 1 30); do
+            docker exec ci-postgres pg_isready -U postgres && break || sleep 2
+          done
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker tests
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64"
+          docker pull "$IMAGE"
+          if [ -n "${STRIPE_API_KEY:-}" ]; then
+            bash e2e/docker.test.sh "$IMAGE"
+          else
+            echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available. Running smoke only."
+            docker run --rm "$IMAGE" --version
+          fi
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
+
+      - name: Smokescreen proxy e2e
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::smokescreen.test.sh skipped — STRIPE_API_KEY not available"
+            exit 0
+          fi
+          bash e2e/smokescreen.test.sh
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          ENGINE_IMAGE: 'ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64'
+
+      - name: Publish test
+        run: |
+          if [ -z "${STRIPE_NPM_REGISTRY:-}" ]; then
+            echo "::warning::publish.test.sh skipped — STRIPE_NPM_REGISTRY not set"
+            exit 0
+          fi
+          bash e2e/publish.test.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # E2E Stripe — Stripe API + Temporal integration tests (runs on every push/PR)
+  # ---------------------------------------------------------------------------
+  e2e_stripe:
+    name: E2E Stripe
     runs-on: ubuntu-24.04-arm
 
     services:
@@ -296,13 +409,83 @@ jobs:
           node-version-file: ./.nvmrc
           cache: pnpm
 
-      - name: Install psql client
-        run: sudo apt-get update -q && sudo apt-get install -y postgresql-client
-
       - name: Install dependencies & build
         run: pnpm install --frozen-lockfile && pnpm build
 
-      # --- Docker tests ---
+      - name: E2E vitest tests
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::E2E tests skipped — STRIPE_API_KEY not available (fork PR?)"
+            exit 0
+          fi
+          pnpm --filter @stripe/sync-e2e exec vitest run --exclude 'service-docker.test.ts'
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
+          TEMPORAL_ADDRESS: 'localhost:7233'
+
+      - name: Skipped test warnings
+        if: always()
+        run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
+
+  # ---------------------------------------------------------------------------
+  # E2E Service — service + worker Docker containers end-to-end (every push/PR)
+  # ---------------------------------------------------------------------------
+  e2e_service:
+    name: E2E Service Docker
+    needs: build
+    runs-on: ubuntu-24.04-arm
+
+    services:
+      temporal-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: temporal
+          POSTGRES_PASSWORD: temporal
+        options: >-
+          --health-cmd "pg_isready -U temporal"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      temporal:
+        image: temporalio/auto-setup:latest
+        env:
+          DB: postgres12
+          DB_PORT: 5432
+          POSTGRES_USER: temporal
+          POSTGRES_PWD: temporal
+          POSTGRES_SEEDS: temporal-db
+        ports:
+          - 7233:7233
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start Postgres with SSL
+        run: |
+          docker run -d --name ci-postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 55432:5432 \
+            postgres:18 \
+            -c ssl=on \
+            -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem \
+            -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+          for i in $(seq 1 30); do
+            docker exec ci-postgres pg_isready -U postgres && break || sleep 2
+          done
+
+      - name: Start stripe-mock
+        run: |
+          docker run -d --name ci-stripe-mock -p 12111:12111 stripe/stripe-mock:latest
+          for i in $(seq 1 20); do
+            if nc -z localhost 12111 2>/dev/null; then
+              echo "stripe-mock ready after ${i}s"
+              break
+            fi
+            sleep 0.5
+          done
+          nc -z localhost 12111 || (echo "stripe-mock failed to start"; exit 1)
 
       - name: Login to ghcr.io
         uses: docker/login-action@v4
@@ -311,63 +494,96 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker tests
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Pull images and install dependencies in parallel
         run: |
-          IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          docker pull "$IMAGE"
-          if [ -n "${STRIPE_API_KEY:-}" ]; then
-            bash e2e/docker.test.sh "$IMAGE"
-          else
-            echo "::warning::Docker e2e skipped — STRIPE_API_KEY not available. Running smoke only."
-            docker run --rm "$IMAGE" --version
+          ENGINE_IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64"
+          SERVICE_IMAGE="ghcr.io/${{ github.repository }}-service:${{ github.sha }}-arm64"
+          docker pull "$ENGINE_IMAGE" &
+          docker pull "$SERVICE_IMAGE" &
+          pnpm install --frozen-lockfile && pnpm build
+          wait
+        env:
+          ENGINE_IMAGE: ${{ github.repository }}
+          SERVICE_IMAGE: ${{ github.repository }}-service
+
+      - name: Wait for Temporal to be ready
+        run: |
+          echo "Waiting for Temporal gRPC on localhost:7233..."
+          for i in $(seq 1 90); do
+            if nc -z 127.0.0.1 7233 2>/dev/null; then
+              echo "Temporal port open after ${i}s — waiting 5s for schema init"
+              sleep 5
+              break
+            fi
+            sleep 1
+          done
+          nc -z 127.0.0.1 7233 || (echo "Temporal never became ready"; exit 1)
+
+      - name: Start service containers
+        run: |
+          ENGINE_IMAGE="ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64"
+          SERVICE_IMAGE="ghcr.io/${{ github.repository }}-service:${{ github.sha }}-arm64"
+
+          docker run -d --name ci-engine --network=host \
+            -e PORT=3000 \
+            "$ENGINE_IMAGE"
+
+          docker run -d --name ci-service --network=host \
+            "$SERVICE_IMAGE" \
+            serve --temporal-address localhost:7233 --port 4020
+
+          docker run -d --name ci-worker --network=host \
+            "$SERVICE_IMAGE" \
+            worker --temporal-address localhost:7233 --engine-url http://localhost:3000
+
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4020/health > /dev/null 2>&1; then
+              echo "Service healthy after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:4020/health || (echo "Service failed to start"; docker logs ci-service; exit 1)
+
+      - name: Service Docker e2e
+        run: |
+          if [ -z "${STRIPE_API_KEY:-}" ]; then
+            echo "::warning::service-docker.test.ts skipped — STRIPE_API_KEY not available"
+            exit 0
           fi
+          pnpm --filter @stripe/sync-e2e exec vitest run service-docker.test.ts
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
+          POSTGRES_CONTAINER_URL: 'postgresql://postgres:postgres@localhost:55432/postgres'
+          STRIPE_MOCK_URL: 'http://localhost:12111'
+          SERVICE_DOCKER_E2E: '1'
+          SKIP_SETUP: '1'
 
-      - name: Smokescreen proxy e2e
+      - name: Dump container logs
+        if: always()
         run: |
-          if [ -z "${STRIPE_API_KEY:-}" ]; then
-            echo "::warning::smokescreen.test.sh skipped — STRIPE_API_KEY not available"
-            exit 0
-          fi
-          bash e2e/smokescreen.test.sh
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          ENGINE_IMAGE: 'ghcr.io/${{ github.repository }}:${{ github.sha }}'
+          for name in ci-engine ci-service ci-worker; do
+            echo "=== $name ==="
+            docker logs "$name" 2>&1 | tail -100 || true
+          done
 
-      # --- Connector loading test ---
+      - name: Stop service containers
+        if: always()
+        run: docker rm -f ci-engine ci-service ci-worker ci-stripe-mock 2>/dev/null || true
 
-      - name: Connector loading test
-        run: bash e2e/connector-loading.test.sh
-
-      # --- E2E vitest tests (real Stripe API) ---
-
-      - name: E2E vitest tests
-        run: |
-          if [ -z "${STRIPE_API_KEY:-}" ]; then
-            echo "::warning::E2E tests skipped — STRIPE_API_KEY not available (fork PR?)"
-            exit 0
-          fi
-          pnpm --filter @stripe/sync-e2e run test
-        env:
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
-          TEMPORAL_ADDRESS: 'localhost:7233'
-
-      - name: Publish test
-        run: |
-          if [ -z "${STRIPE_NPM_REGISTRY:-}" ]; then
-            echo "::warning::publish.test.sh skipped — STRIPE_NPM_REGISTRY not set"
-            exit 0
-          fi
-          bash e2e/publish.test.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Skipped test warnings
+        if: always()
+        run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
 
   # ---------------------------------------------------------------------------
   # Docs — deploy to Vercel (always, so e2e_cdn can test the live CDN)
@@ -402,6 +618,16 @@ jobs:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
+      - name: Get week number for openapi cache key
+        run: echo "STRIPE_OPENAPI_WEEK=$(date +%Y-W%V)" >> $GITHUB_ENV
+
+      - name: Cache stripe/openapi clone
+        uses: actions/cache@v4
+        with:
+          path: /tmp/stripe-openapi
+          key: stripe-openapi-${{ env.STRIPE_OPENAPI_WEEK }}
+          restore-keys: stripe-openapi-
+
       - name: Build
         run: |
           PROD=${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
@@ -410,6 +636,13 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          STRIPE_OPENAPI_REPO: /tmp/stripe-openapi
+
+      - name: Cache slides node_modules
+        uses: actions/cache@v4
+        with:
+          path: docs/slides/node_modules
+          key: slides-${{ hashFiles('docs/slides/package.json', 'docs/slides/package-lock.json') }}
 
       - name: Build slides
         run: |

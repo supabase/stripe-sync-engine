@@ -8,7 +8,7 @@ services:
   engine:
     build:
       context: .
-      dockerfile: Dockerfile
+      target: engine
     ports:
       - '4010:3000'
     environment:
@@ -23,7 +23,7 @@ services:
   service:
     build:
       context: .
-      dockerfile: Dockerfile.service
+      target: service
     ports:
       - '4020:4020'
     command:
@@ -49,7 +49,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.service
+      target: service
     command:
       - worker
       - --temporal-address
@@ -67,7 +67,7 @@ services:
   dashboard:
     build:
       context: .
-      dockerfile: Dockerfile.dashboard
+      dockerfile: apps/dashboard/Dockerfile
     ports:
       - '5173:5173'
     environment:
