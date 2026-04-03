@@ -44,6 +44,7 @@
     "@scalar/hono-api-reference": "^0.6",
     "@stripe/sync-destination-google-sheets": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-hono-zod-openapi": "workspace:*",
     "@stripe/sync-integration-supabase": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
@@ -53,7 +54,6 @@
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
-    "@stripe/sync-hono-zod-openapi": "workspace:*",
     "hono": "^4",
     "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
@@ -64,6 +64,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@hyperjump/json-schema": "^1.17.5",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
     "openapi-typescript": "^7.13.0",

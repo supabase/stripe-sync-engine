@@ -14,13 +14,13 @@ git worktree add .worktrees/grouped-tables -b tx/grouped-tables v2
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `packages/protocol/src/protocol.ts` | Add `group?: string` to `Stream` schema |
-| `packages/source-stripe/src/catalog.ts` | Populate `group` in both catalog functions |
-| `apps/dashboard/src/lib/stream-groups.ts` | Prefer `stream.group`, expand REFINEMENTS fallback, add ordering |
-| `apps/dashboard/src/lib/stream-groups.test.ts` | Add test cases |
-| `./scripts/generate-openapi.sh` | Run after protocol change to regenerate specs |
+| File                                           | Change                                                           |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `packages/protocol/src/protocol.ts`            | Add `group?: string` to `Stream` schema                          |
+| `packages/source-stripe/src/catalog.ts`        | Populate `group` in both catalog functions                       |
+| `apps/dashboard/src/lib/stream-groups.ts`      | Prefer `stream.group`, expand REFINEMENTS fallback, add ordering |
+| `apps/dashboard/src/lib/stream-groups.test.ts` | Add test cases                                                   |
+| `./scripts/generate-openapi.sh`                | Run after protocol change to regenerate specs                    |
 
 ---
 
@@ -65,20 +65,33 @@ const TWO_WORD: Record<string, string> = {
 
 // Single-word prefix → group
 const PREFIX: Record<string, string> = {
-  payment: 'Payments', charge: 'Payments', refund: 'Payments',
-  dispute: 'Payments', setup: 'Payments', payout: 'Payments',
+  payment: 'Payments',
+  charge: 'Payments',
+  refund: 'Payments',
+  dispute: 'Payments',
+  setup: 'Payments',
+  payout: 'Payments',
   customer: 'Customers',
-  subscription: 'Billing', invoice: 'Billing', credit: 'Billing',
-  price: 'Billing', plan: 'Billing', coupon: 'Billing',
-  quote: 'Billing', promotion: 'Billing',
-  product: 'Products', shipping: 'Products',
-  account: 'Connect', application: 'Connect',
-  transfer: 'Transfers', balance: 'Transfers',
+  subscription: 'Billing',
+  invoice: 'Billing',
+  credit: 'Billing',
+  price: 'Billing',
+  plan: 'Billing',
+  coupon: 'Billing',
+  quote: 'Billing',
+  promotion: 'Billing',
+  product: 'Products',
+  shipping: 'Products',
+  account: 'Connect',
+  application: 'Connect',
+  transfer: 'Transfers',
+  balance: 'Transfers',
   checkout: 'Checkout',
   issuing: 'Issuing',
   treasury: 'Treasury',
   terminal: 'Terminal',
-  radar: 'Radar', early: 'Radar',
+  radar: 'Radar',
+  early: 'Radar',
   identity: 'Identity',
   financial: 'Financial Connections',
   reporting: 'Reporting',
@@ -107,7 +120,7 @@ In both catalog functions, add `group: inferGroup(cfg.tableName)` to each stream
 ```ts
 const stream: Stream = {
   name: cfg.tableName,
-  group: inferGroup(cfg.tableName),   // ← add
+  group: inferGroup(cfg.tableName), // ← add
   primary_key: [['id']],
   metadata: { resource_name: name },
 }
@@ -122,7 +135,7 @@ const stream: Stream = {
 ```ts
 export interface CatalogStream {
   name: string
-  group?: string          // ← add
+  group?: string // ← add
   primary_key: string[][]
   json_schema?: Record<string, unknown>
   metadata?: Record<string, unknown>
@@ -142,10 +155,30 @@ for (const stream of streams) {
 
 ```ts
 const GROUP_ORDER = [
-  'Payments', 'Customers', 'Billing', 'Products', 'Connect', 'Transfers',
-  'Checkout', 'Issuing', 'Treasury', 'Terminal', 'Radar', 'Identity',
-  'Financial Connections', 'Reporting', 'Sigma', 'Climate', 'Entitlements',
-  'Forwarding', 'Apps', 'Tax', 'Billing Portal', 'Events', 'Webhooks', 'Files',
+  'Payments',
+  'Customers',
+  'Billing',
+  'Products',
+  'Connect',
+  'Transfers',
+  'Checkout',
+  'Issuing',
+  'Treasury',
+  'Terminal',
+  'Radar',
+  'Identity',
+  'Financial Connections',
+  'Reporting',
+  'Sigma',
+  'Climate',
+  'Entitlements',
+  'Forwarding',
+  'Apps',
+  'Tax',
+  'Billing Portal',
+  'Events',
+  'Webhooks',
+  'Files',
 ]
 
 function groupOrder(name: string): number {
@@ -171,6 +204,7 @@ Update `REFINEMENTS` in `inferGroupName` with the same mappings as `PREFIX` abov
 ## Step 4 — Tests (`apps/dashboard/src/lib/stream-groups.test.ts`)
 
 Add test cases for:
+
 - `topup` → "Payments" (was "Topup")
 - `quote` → "Billing" (was "Quote")
 - `billing_portal_configuration` → "Billing Portal" (was "Billing")

@@ -2,9 +2,7 @@ import { serve } from '@hono/node-server'
 import { createConnectorResolver } from './lib/index.js'
 import { createApp } from './api/app.js'
 import { parseJsonOrFile } from '@stripe/sync-ts-cli'
-import sourceStripe from '@stripe/sync-source-stripe'
-import destinationPostgres from '@stripe/sync-destination-postgres'
-import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
+import { defaultConnectors } from './lib/default-connectors.js'
 import { logger } from './logger.js'
 
 export function serveAction(opts: {
@@ -14,24 +12,13 @@ export function serveAction(opts: {
   connectorsFromNpm?: boolean
 }) {
   const port = opts.port ?? Number(process.env['PORT'] || 3000)
-  const resolver = createConnectorResolver(
-    {
-      sources: { stripe: sourceStripe },
-      destinations: {
-        postgres: destinationPostgres,
-        'destination-postgres': destinationPostgres,
-        'google-sheets': destinationGoogleSheets,
-        'destination-google-sheets': destinationGoogleSheets,
-      },
-    },
-    {
-      commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
-        | Record<string, string>
-        | undefined,
-      path: opts.connectorsFromPath,
-      npm: opts.connectorsFromNpm ?? false,
-    }
-  )
+  const resolver = createConnectorResolver(defaultConnectors, {
+    commandMap: parseJsonOrFile(opts.connectorsFromCommandMap) as
+      | Record<string, string>
+      | undefined,
+    path: opts.connectorsFromPath,
+    npm: opts.connectorsFromNpm ?? false,
+  })
   const app = createApp(resolver)
   serve({ fetch: app.fetch, port }, (info) => {
     logger.info({ port: info.port }, `Sync Engine listening on http://localhost:${info.port}`)

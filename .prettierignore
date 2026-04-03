@@ -7,5 +7,6 @@ Pulumi.*.yaml
 LICENSE.md
 dist/
 docs/out/
+apps/visualizer/out/
 .claude/
 **/.terraform/

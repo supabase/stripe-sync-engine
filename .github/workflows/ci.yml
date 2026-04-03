@@ -520,13 +520,15 @@ jobs:
           echo "Waiting for Temporal gRPC on localhost:7233..."
           for i in $(seq 1 90); do
             if nc -z 127.0.0.1 7233 2>/dev/null; then
-              echo "Temporal port open after ${i}s — waiting 5s for schema init"
-              sleep 5
+              echo "Temporal port open after ${i}s"
               break
             fi
             sleep 1
           done
           nc -z 127.0.0.1 7233 || (echo "Temporal never became ready"; exit 1)
+
+          # Sleep to allow schema migration + namespace creation to complete after port opens
+          sleep 20
 
       - name: Start service containers
         run: |
@@ -545,6 +547,7 @@ jobs:
             "$SERVICE_IMAGE" \
             worker --temporal-address localhost:7233 --engine-url http://localhost:3000
 
+          # Wait for service API health
           for i in $(seq 1 60); do
             if curl -sf http://localhost:4020/health > /dev/null 2>&1; then
               echo "Service healthy after ${i}s"
@@ -553,6 +556,15 @@ jobs:
             sleep 1
           done
           curl -sf http://localhost:4020/health || (echo "Service failed to start"; docker logs ci-service; exit 1)
+
+          # Verify worker is still running (crashes immediately on misconfiguration)
+          sleep 3
+          if ! docker inspect ci-worker --format='{{.State.Running}}' | grep -q true; then
+            echo "Worker container exited unexpectedly:"
+            docker logs ci-worker 2>&1 | tail -30
+            exit 1
+          fi
+          echo "Worker is running"
 
       - name: Service Docker e2e
         run: |

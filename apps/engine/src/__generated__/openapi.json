@@ -18,12 +18,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "const": true
-                    }
-                  },
+                  "properties": { "ok": { "type": "boolean", "const": true } },
                   "required": ["ok"],
                   "additionalProperties": false
                 }
@@ -43,14 +38,10 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           }
         ],
         "responses": {
@@ -60,9 +51,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
+                  "propertyNames": { "type": "string" },
                   "additionalProperties": {}
                 }
               }
@@ -74,9 +63,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -96,29 +83,21 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           }
         ],
         "responses": {
-          "204": {
-            "description": "Teardown complete"
-          },
+          "204": { "description": "Teardown complete" },
           "400": {
             "description": "Invalid params",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -138,14 +117,10 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           }
         ],
         "responses": {
@@ -159,13 +134,8 @@
                     "source": {
                       "type": "object",
                       "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": ["succeeded", "failed"]
-                        },
-                        "message": {
-                          "type": "string"
-                        }
+                        "status": { "type": "string", "enum": ["succeeded", "failed"] },
+                        "message": { "type": "string" }
                       },
                       "required": ["status"],
                       "additionalProperties": false
@@ -173,13 +143,8 @@
                     "destination": {
                       "type": "object",
                       "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": ["succeeded", "failed"]
-                        },
-                        "message": {
-                          "type": "string"
-                        }
+                        "status": { "type": "string", "enum": ["succeeded", "failed"] },
+                        "message": { "type": "string" }
                       },
                       "required": ["status"],
                       "additionalProperties": false
@@ -197,9 +162,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -219,14 +182,10 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           }
         ],
         "responses": {
@@ -234,9 +193,7 @@
             "description": "Available streams",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogMessageOutput"
-                }
+                "schema": { "$ref": "#/components/schemas/CatalogMessageOutput" }
               }
             }
           },
@@ -246,9 +203,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -268,28 +223,24 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           },
           {
             "in": "header",
             "name": "x-state",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Per-stream cursor state keyed by stream name"
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Per-stream cursor state keyed by stream name"
+                }
               }
-            },
-            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore."
+            }
           },
           {
             "in": "header",
@@ -308,11 +259,7 @@
           "200": {
             "description": "NDJSON stream of sync messages",
             "content": {
-              "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageOutput"
-                }
-              }
+              "application/x-ndjson": { "schema": { "$ref": "#/components/schemas/MessageOutput" } }
             }
           },
           "400": {
@@ -321,9 +268,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -343,24 +288,16 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           }
         ],
         "requestBody": {
           "required": true,
           "content": {
-            "application/x-ndjson": {
-              "schema": {
-                "$ref": "#/components/schemas/Message"
-              }
-            }
+            "application/x-ndjson": { "schema": { "$ref": "#/components/schemas/Message" } }
           }
         },
         "responses": {
@@ -368,9 +305,7 @@
             "description": "NDJSON stream of write result messages",
             "content": {
               "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                }
+                "schema": { "$ref": "#/components/schemas/DestinationOutput" }
               }
             }
           },
@@ -380,9 +315,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -402,28 +335,24 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "$ref": "#/components/schemas/PipelineConfig"
-              }
-            },
-            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }"
+            "description": "JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams }",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/PipelineConfig" } }
+            }
           },
           {
             "in": "header",
             "name": "x-state",
-            "schema": {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Per-stream cursor state keyed by stream name"
+            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Per-stream cursor state keyed by stream name"
+                }
               }
-            },
-            "description": "JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore."
+            }
           },
           {
             "in": "header",
@@ -443,9 +372,7 @@
             "description": "NDJSON stream of sync messages",
             "content": {
               "application/x-ndjson": {
-                "schema": {
-                  "$ref": "#/components/schemas/DestinationOutput"
-                }
+                "schema": { "$ref": "#/components/schemas/DestinationOutput" }
               }
             }
           },
@@ -455,9 +382,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
+                  "properties": { "error": {} },
                   "required": ["error"],
                   "additionalProperties": false
                 }
@@ -482,17 +407,13 @@
                   "properties": {
                     "sources": {
                       "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
+                      "propertyNames": { "type": "string" },
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
                           "config_schema": {
                             "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
+                            "propertyNames": { "type": "string" },
                             "additionalProperties": {}
                           }
                         },
@@ -502,17 +423,13 @@
                     },
                     "destinations": {
                       "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
+                      "propertyNames": { "type": "string" },
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
                           "config_schema": {
                             "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
+                            "propertyNames": { "type": "string" },
                             "additionalProperties": {}
                           }
                         },
@@ -535,24 +452,12 @@
     "schemas": {
       "Message": {
         "oneOf": [
-          {
-            "$ref": "#/components/schemas/RecordMessage"
-          },
-          {
-            "$ref": "#/components/schemas/StateMessage"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogMessage"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessage"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessage"
-          },
-          {
-            "$ref": "#/components/schemas/StreamStatusMessage"
-          }
+          { "$ref": "#/components/schemas/RecordMessage" },
+          { "$ref": "#/components/schemas/StateMessage" },
+          { "$ref": "#/components/schemas/CatalogMessage" },
+          { "$ref": "#/components/schemas/LogMessage" },
+          { "$ref": "#/components/schemas/ErrorMessage" },
+          { "$ref": "#/components/schemas/StreamStatusMessage" }
         ],
         "type": "object",
         "discriminator": {
@@ -570,36 +475,22 @@
       "RecordMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "record"
-          },
-          "stream": {
-            "type": "string"
-          },
+          "type": { "type": "string", "const": "record" },
+          "stream": { "type": "string" },
           "data": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
+            "propertyNames": { "type": "string" },
             "additionalProperties": {}
           },
-          "emitted_at": {
-            "type": "number"
-          }
+          "emitted_at": { "type": "number" }
         },
         "required": ["type", "stream", "data", "emitted_at"]
       },
       "StateMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "state"
-          },
-          "stream": {
-            "type": "string"
-          },
+          "type": { "type": "string", "const": "state" },
+          "stream": { "type": "string" },
           "data": {}
         },
         "required": ["type", "stream", "data"]
@@ -607,39 +498,25 @@
       "CatalogMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "catalog"
-          },
+          "type": { "type": "string", "const": "catalog" },
           "streams": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "name": {
-                  "type": "string"
-                },
+                "name": { "type": "string" },
                 "primary_key": {
                   "type": "array",
-                  "items": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
+                  "items": { "type": "array", "items": { "type": "string" } }
                 },
                 "json_schema": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
+                  "propertyNames": { "type": "string" },
                   "additionalProperties": {}
                 },
                 "metadata": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
+                  "propertyNames": { "type": "string" },
                   "additionalProperties": {}
                 }
               },
@@ -652,71 +529,40 @@
       "LogMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "log"
-          },
-          "level": {
-            "type": "string",
-            "enum": ["debug", "info", "warn", "error"]
-          },
-          "message": {
-            "type": "string"
-          }
+          "type": { "type": "string", "const": "log" },
+          "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+          "message": { "type": "string" }
         },
         "required": ["type", "level", "message"]
       },
       "ErrorMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "error"
-          },
+          "type": { "type": "string", "const": "error" },
           "failure_type": {
             "type": "string",
             "enum": ["config_error", "system_error", "transient_error", "auth_error"]
           },
-          "message": {
-            "type": "string"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "stack_trace": {
-            "type": "string"
-          }
+          "message": { "type": "string" },
+          "stream": { "type": "string" },
+          "stack_trace": { "type": "string" }
         },
         "required": ["type", "failure_type", "message"]
       },
       "StreamStatusMessage": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "stream_status"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["started", "running", "complete", "incomplete"]
-          }
+          "type": { "type": "string", "const": "stream_status" },
+          "stream": { "type": "string" },
+          "status": { "type": "string", "enum": ["started", "running", "complete", "incomplete"] }
         },
         "required": ["type", "stream", "status"]
       },
       "DestinationOutput": {
         "oneOf": [
-          {
-            "$ref": "#/components/schemas/StateMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessageOutput"
-          }
+          { "$ref": "#/components/schemas/StateMessageOutput" },
+          { "$ref": "#/components/schemas/ErrorMessageOutput" },
+          { "$ref": "#/components/schemas/LogMessageOutput" }
         ],
         "type": "object",
         "discriminator": {
@@ -731,39 +577,25 @@
       "CatalogMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "catalog"
-          },
+          "type": { "type": "string", "const": "catalog" },
           "streams": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "name": {
-                  "type": "string"
-                },
+                "name": { "type": "string" },
                 "primary_key": {
                   "type": "array",
-                  "items": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
+                  "items": { "type": "array", "items": { "type": "string" } }
                 },
                 "json_schema": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
+                  "propertyNames": { "type": "string" },
                   "additionalProperties": {}
                 },
                 "metadata": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
+                  "propertyNames": { "type": "string" },
                   "additionalProperties": {}
                 }
               },
@@ -777,24 +609,12 @@
       },
       "MessageOutput": {
         "oneOf": [
-          {
-            "$ref": "#/components/schemas/RecordMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/StateMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/LogMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorMessageOutput"
-          },
-          {
-            "$ref": "#/components/schemas/StreamStatusMessageOutput"
-          }
+          { "$ref": "#/components/schemas/RecordMessageOutput" },
+          { "$ref": "#/components/schemas/StateMessageOutput" },
+          { "$ref": "#/components/schemas/CatalogMessageOutput" },
+          { "$ref": "#/components/schemas/LogMessageOutput" },
+          { "$ref": "#/components/schemas/ErrorMessageOutput" },
+          { "$ref": "#/components/schemas/StreamStatusMessageOutput" }
         ],
         "type": "object",
         "discriminator": {
@@ -812,23 +632,14 @@
       "RecordMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "record"
-          },
-          "stream": {
-            "type": "string"
-          },
+          "type": { "type": "string", "const": "record" },
+          "stream": { "type": "string" },
           "data": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
+            "propertyNames": { "type": "string" },
             "additionalProperties": {}
           },
-          "emitted_at": {
-            "type": "number"
-          }
+          "emitted_at": { "type": "number" }
         },
         "required": ["type", "stream", "data", "emitted_at"],
         "additionalProperties": false
@@ -836,13 +647,8 @@
       "StateMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "state"
-          },
-          "stream": {
-            "type": "string"
-          },
+          "type": { "type": "string", "const": "state" },
+          "stream": { "type": "string" },
           "data": {}
         },
         "required": ["type", "stream", "data"],
@@ -851,17 +657,9 @@
       "LogMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "log"
-          },
-          "level": {
-            "type": "string",
-            "enum": ["debug", "info", "warn", "error"]
-          },
-          "message": {
-            "type": "string"
-          }
+          "type": { "type": "string", "const": "log" },
+          "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+          "message": { "type": "string" }
         },
         "required": ["type", "level", "message"],
         "additionalProperties": false
@@ -869,23 +667,14 @@
       "ErrorMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "error"
-          },
+          "type": { "type": "string", "const": "error" },
           "failure_type": {
             "type": "string",
             "enum": ["config_error", "system_error", "transient_error", "auth_error"]
           },
-          "message": {
-            "type": "string"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "stack_trace": {
-            "type": "string"
-          }
+          "message": { "type": "string" },
+          "stream": { "type": "string" },
+          "stack_trace": { "type": "string" }
         },
         "required": ["type", "failure_type", "message"],
         "additionalProperties": false
@@ -893,64 +682,187 @@
       "StreamStatusMessageOutput": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "const": "stream_status"
-          },
-          "stream": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["started", "running", "complete", "incomplete"]
-          }
+          "type": { "type": "string", "const": "stream_status" },
+          "stream": { "type": "string" },
+          "status": { "type": "string", "enum": ["started", "running", "complete", "incomplete"] }
         },
         "required": ["type", "stream", "status"],
         "additionalProperties": false
+      },
+      "StripeSourceConfig": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["stripe"] },
+          "api_key": {
+            "type": "string",
+            "description": "Stripe API key (sk_test_... or sk_live_...)"
+          },
+          "account_id": {
+            "description": "Stripe account ID (resolved from API if omitted)",
+            "type": "string"
+          },
+          "livemode": { "description": "Whether this is a live mode sync", "type": "boolean" },
+          "api_version": {
+            "description": "Stripe API version (e.g. 2025-04-30.basil)",
+            "type": "string"
+          },
+          "base_url": {
+            "description": "Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)",
+            "type": "string",
+            "format": "uri"
+          },
+          "webhook_url": {
+            "description": "URL for managed webhook endpoint registration",
+            "type": "string",
+            "format": "uri"
+          },
+          "webhook_secret": {
+            "description": "Webhook signing secret (whsec_...) for signature verification",
+            "type": "string"
+          },
+          "websocket": {
+            "description": "Enable WebSocket streaming for live events",
+            "type": "boolean"
+          },
+          "poll_events": {
+            "description": "Enable events API polling for incremental sync after backfill",
+            "type": "boolean"
+          },
+          "webhook_port": {
+            "description": "Port for built-in webhook HTTP listener (e.g. 4242)",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "revalidate_objects": {
+            "description": "Object types to re-fetch from Stripe API on webhook (e.g. [\"subscription\"])",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "backfill_limit": {
+            "description": "Max objects to backfill per stream (useful for testing)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rate_limit": {
+            "description": "Max Stripe API requests per second (default: 25)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "backfill_concurrency": {
+            "description": "Number of time-range segments for parallel backfill (default: 200)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "api_key"],
+        "additionalProperties": false
+      },
+      "PostgresDestinationConfig": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["postgres"] },
+          "url": {
+            "description": "Postgres connection string (alias for connection_string)",
+            "type": "string"
+          },
+          "connection_string": { "description": "Postgres connection string", "type": "string" },
+          "host": { "description": "Postgres host (required for AWS IAM)", "type": "string" },
+          "port": { "default": 5432, "description": "Postgres port", "type": "number" },
+          "database": { "description": "Database name (required for AWS IAM)", "type": "string" },
+          "user": { "description": "Database user (required for AWS IAM)", "type": "string" },
+          "schema": {
+            "type": "string",
+            "description": "Target schema name (e.g. \"stripe_sync\")"
+          },
+          "batch_size": {
+            "default": 100,
+            "description": "Records to buffer before flushing",
+            "type": "number"
+          },
+          "aws": {
+            "description": "AWS RDS IAM authentication config",
+            "type": "object",
+            "properties": {
+              "region": { "type": "string", "description": "AWS region for RDS instance" },
+              "role_arn": {
+                "description": "IAM role ARN to assume (cross-account)",
+                "type": "string"
+              },
+              "external_id": { "description": "External ID for STS AssumeRole", "type": "string" }
+            },
+            "required": ["region"],
+            "additionalProperties": false
+          },
+          "ssl_ca_pem": {
+            "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)",
+            "type": "string"
+          }
+        },
+        "required": ["type", "port", "schema", "batch_size"],
+        "additionalProperties": false
+      },
+      "GoogleSheetsDestinationConfig": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["google-sheets"] },
+          "client_id": {
+            "description": "Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)",
+            "type": "string"
+          },
+          "client_secret": {
+            "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)",
+            "type": "string"
+          },
+          "access_token": { "type": "string", "description": "OAuth2 access token" },
+          "refresh_token": { "type": "string", "description": "OAuth2 refresh token" },
+          "spreadsheet_id": {
+            "description": "Target spreadsheet ID (created if omitted)",
+            "type": "string"
+          },
+          "spreadsheet_title": {
+            "default": "Stripe Sync",
+            "description": "Title when creating a new spreadsheet",
+            "type": "string"
+          },
+          "batch_size": {
+            "default": 50,
+            "description": "Rows per Sheets API append call",
+            "type": "number"
+          }
+        },
+        "required": ["type", "access_token", "refresh_token", "spreadsheet_title", "batch_size"],
+        "additionalProperties": false
+      },
+      "SourceConfig": {
+        "discriminator": { "propertyName": "type" },
+        "oneOf": [{ "$ref": "#/components/schemas/StripeSourceConfig" }]
+      },
+      "DestinationConfig": {
+        "discriminator": { "propertyName": "type" },
+        "oneOf": [
+          { "$ref": "#/components/schemas/PostgresDestinationConfig" },
+          { "$ref": "#/components/schemas/GoogleSheetsDestinationConfig" }
+        ]
       },
       "PipelineConfig": {
         "type": "object",
         "required": ["source", "destination"],
         "properties": {
-          "source": {
-            "type": "object",
-            "required": ["type"],
-            "properties": {
-              "type": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": true
-          },
-          "destination": {
-            "type": "object",
-            "required": ["type"],
-            "properties": {
-              "type": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": true
-          },
+          "source": { "$ref": "#/components/schemas/SourceConfig" },
+          "destination": { "$ref": "#/components/schemas/DestinationConfig" },
           "streams": {
             "type": "array",
             "items": {
               "type": "object",
               "required": ["name"],
               "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "sync_mode": {
-                  "type": "string",
-                  "enum": ["incremental", "full_refresh"]
-                },
-                "fields": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
+                "name": { "type": "string" },
+                "sync_mode": { "type": "string", "enum": ["incremental", "full_refresh"] },
+                "fields": { "type": "array", "items": { "type": "string" } }
               }
             }
           }

@@ -18,13 +18,18 @@ if [[ "${1:-}" == "--check" ]]; then
 fi
 
 echo "Generating engine OpenAPI spec..."
-node -e "
-  import { createApp, createConnectorResolver } from './apps/engine/dist/index.js';
-  const app = createApp(createConnectorResolver({}));
-  const res = await app.request('/openapi.json');
-  const spec = await res.json();
-  process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
-" > "$engine_out"
+engine_port=14444
+node apps/engine/dist/cli/index.js serve --port $engine_port &
+ENGINE_PID=$!
+trap 'kill $ENGINE_PID 2>/dev/null || true' EXIT
+for i in $(seq 1 20); do
+  curl -sf "http://localhost:$engine_port/health" > /dev/null 2>&1 && break
+  sleep 0.3
+done
+curl -sf "http://localhost:$engine_port/openapi.json" > "$engine_out"
+kill $ENGINE_PID
+wait $ENGINE_PID 2>/dev/null || true
+trap - EXIT
 
 echo "Generating service OpenAPI spec..."
 node -e "

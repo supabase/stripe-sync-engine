@@ -146,19 +146,19 @@ export function injectConnectorSchemas(spec: any, resolver: ConnectorResolver): 
       for (const param of op?.parameters ?? []) {
         if (param.in !== 'header') continue
         if (param.name === 'x-pipeline') {
-          param.schema = {
-            type: 'string',
-            contentMediaType: 'application/json',
-            contentSchema: { $ref: '#/components/schemas/PipelineConfig' },
+          delete param.schema
+          param.content = {
+            'application/json': { schema: { $ref: '#/components/schemas/PipelineConfig' } },
           }
         } else if (param.name === 'x-state') {
-          param.schema = {
-            type: 'string',
-            contentMediaType: 'application/json',
-            contentSchema: {
-              type: 'object',
-              additionalProperties: true,
-              description: 'Per-stream cursor state keyed by stream name',
+          delete param.schema
+          param.content = {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: true,
+                description: 'Per-stream cursor state keyed by stream name',
+              },
             },
           }
         }

@@ -214,7 +214,9 @@ function configSchemaFromSpec(connector: { spec(): { config: Record<string, unkn
   configSchema: z.ZodType
   rawConfigJsonSchema: Record<string, unknown>
 } {
-  const rawConfigJsonSchema = connector.spec().config
+  // Connectors may emit `$schema` (e.g. via z.toJSONSchema defaults). Strip it here so
+  // rawConfigJsonSchema is clean for injection into OpenAPI 3.1 component schemas.
+  const { $schema: _unused, ...rawConfigJsonSchema } = connector.spec().config
   const schema = z.fromJSONSchema(rawConfigJsonSchema)
   // fromJSONSchema({}) returns ZodAny — fall back to empty object for composability
   const configSchema = schema instanceof z.ZodObject ? schema : z.object({})

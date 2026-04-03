@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
@@ -100,8 +99,10 @@ const workerCmd = defineCommand({
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
     const temporalAddress = args['temporal-address']
 
-    // Support both compiled mode (dist/cli.js → dist/temporal/workflows.js) and
-    // source/tsx mode (src/cli.ts → src/temporal/workflows.ts)
+    // import.meta.url is the URL of cli.ts/cli.js, NOT the bin entry point:
+    //   tsx:      file:///.../apps/service/src/cli.ts  → ./temporal/workflows.ts
+    //   compiled: file:///.../apps/service/dist/cli.js → ./temporal/workflows.js
+    const { fileURLToPath } = await import('node:url')
     const ext = import.meta.url.endsWith('.ts') ? '.ts' : '.js'
     const workflowsPath = fileURLToPath(new URL(`./temporal/workflows${ext}`, import.meta.url))
 

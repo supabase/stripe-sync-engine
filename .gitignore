@@ -41,3 +41,7 @@ test-results/
 # Terraform state (contains secrets)
 *.tfstate
 *.tfstate.backup
+
+
+apps/visualizer/out/
+
