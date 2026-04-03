@@ -3,8 +3,8 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine, readonlyStateStore, maybeDestinationStateStore } from '../lib/index.js'
-import type { Message, DestinationOutput } from '../lib/index.js'
+import { createEngine } from '../lib/index.js'
+import type { ConnectorResolver, Message, DestinationOutput } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -76,20 +76,27 @@ beforeEach(async () => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeEngine(
-  overrides: { streams?: Array<{ name: string }>; state?: Record<string, unknown> } = {}
-) {
-  return createEngine(
-    {
-      source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-      streams: overrides.streams,
+function makeResolver(): ConnectorResolver {
+  return {
+    resolveSource: async (name) => {
+      if (name !== 'stripe') throw new Error(`Unknown source: ${name}`)
+      return source
     },
-    { source, destination },
-    readonlyStateStore(),
-    undefined,
-    overrides.state
-  )
+    resolveDestination: async (name) => {
+      if (name !== 'postgres') throw new Error(`Unknown destination: ${name}`)
+      return destination
+    },
+    sources: () => new Map(),
+    destinations: () => new Map(),
+  }
+}
+
+function makePipeline(overrides: { streams?: Array<{ name: string }> } = {}) {
+  return {
+    source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+    destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+    streams: overrides.streams,
+  }
 }
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
@@ -105,10 +112,11 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
 let targetStream: string
 
 beforeAll(async () => {
-  const discovered = await source.discover({
-    config: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-    catalog: { streams: [] },
-    state: {},
+  const engine = createEngine(makeResolver())
+  const discovered = await engine.source_discover({
+    type: 'stripe',
+    api_key: 'sk_test_fake',
+    base_url: STRIPE_MOCK_URL,
   })
   targetStream = discovered.streams[0]!.name
 }, 30_000)
@@ -119,8 +127,8 @@ beforeAll(async () => {
 
 describe('selective sync', () => {
   it('syncs only the requested stream — other tables not created', async () => {
-    const engine = makeEngine({ streams: [{ name: targetStream }] })
-    await collect(engine.sync())
+    const engine = createEngine(makeResolver())
+    await collect(engine.pipeline_sync(makePipeline({ streams: [{ name: targetStream }] })))
 
     // Only target table exists
     const { rows: tables } = await pool.query(
@@ -140,11 +148,10 @@ describe('selective sync', () => {
 
 describe('selective backfill', () => {
   it('creates table but skips backfill when state is pre-seeded as complete', async () => {
-    const engine = makeEngine({
-      streams: [{ name: targetStream }],
-      state: { [targetStream]: { pageCursor: null, status: 'complete' } },
-    })
-    await collect(engine.sync())
+    const engine = createEngine(makeResolver())
+    const pipeline = makePipeline({ streams: [{ name: targetStream }] })
+    const preSeededState = { [targetStream]: { pageCursor: null, status: 'complete' } }
+    await collect(engine.pipeline_sync(pipeline, { state: preSeededState }))
 
     // Table WAS created by setup()
     const { rows: tables } = await pool.query(
@@ -163,8 +170,9 @@ describe('selective backfill', () => {
 
 describe('engine read → write', () => {
   it('read returns records and state messages', async () => {
-    const engine = makeEngine({ streams: [{ name: targetStream }] })
-    const messages = await collect<Message>(engine.read())
+    const engine = createEngine(makeResolver())
+    const pipeline = makePipeline({ streams: [{ name: targetStream }] })
+    const messages = await collect<Message>(engine.pipeline_read(pipeline))
 
     const records = messages.filter((m) => m.type === 'record')
     const states = messages.filter((m) => m.type === 'state')
@@ -179,17 +187,20 @@ describe('engine read → write', () => {
   })
 
   it('read | write: read output piped through write stores data', async () => {
-    const engine = makeEngine({ streams: [{ name: targetStream }] })
+    const engine = createEngine(makeResolver())
+    const pipeline = makePipeline({ streams: [{ name: targetStream }] })
 
     // Setup first (creates tables)
-    await engine.setup()
+    await engine.pipeline_setup(pipeline)
 
     // Read → collect → feed into write
-    const readMessages = await collect<Message>(engine.read())
+    const readMessages = await collect<Message>(engine.pipeline_read(pipeline))
     async function* toAsync<T>(arr: T[]): AsyncGenerator<T> {
       for (const item of arr) yield item
     }
-    const writeOutput = await collect<DestinationOutput>(engine.write(toAsync(readMessages)))
+    const writeOutput = await collect<DestinationOutput>(
+      engine.pipeline_write(pipeline, toAsync(readMessages))
+    )
     const stateMessages = writeOutput.filter((s) => s.type === 'state')
 
     expect(stateMessages.length).toBeGreaterThan(0)
@@ -202,77 +213,27 @@ describe('engine read → write', () => {
   })
 })
 
-describe('resumable sync via state store', () => {
-  const params = {
-    source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-    destination: { type: 'postgres', connection_string: '', schema: SCHEMA },
-    streams: [{ name: '' }],
-  }
+describe('resumable sync via state', () => {
+  it('sync emits state messages for persistence', async () => {
+    const engine = createEngine(makeResolver())
+    const pipeline = makePipeline({ streams: [{ name: targetStream }] })
+    const results = await collect(engine.pipeline_sync(pipeline))
 
-  // Keep params.destination.connection_string and streams in sync with runtime values
-  beforeAll(() => {
-    // connectionString is set in the outer beforeAll — access it after that runs
-  })
-
-  beforeEach(async () => {
-    // Outer beforeEach already dropped the schema. Create the _sync_state table in addition
-    // to what the engine's setup() will create for the stream table.
-    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${SCHEMA}"`)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "${SCHEMA}"."_sync_state" (
-        sync_id TEXT NOT NULL,
-        stream TEXT NOT NULL,
-        state JSONB NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        PRIMARY KEY (sync_id, stream)
-      )
-    `)
-  })
-
-  it('auto-persists state after sync', async () => {
-    const store = await maybeDestinationStateStore({
-      ...params,
-      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-      streams: [{ name: targetStream }],
-    })
-    const engine = createEngine(
-      {
-        source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-        streams: [{ name: targetStream }],
-      },
-      { source, destination },
-      store
-    )
-    await collect(engine.sync())
-    expect(await store.get()).toMatchObject({ [targetStream]: expect.any(Object) })
-    await store.close?.()
+    const stateMessages = results.filter((m) => m.type === 'state')
+    expect(stateMessages.length).toBeGreaterThan(0)
+    expect(stateMessages[0]).toMatchObject({ type: 'state', stream: targetStream })
   })
 
   it('pre-seeded complete state skips backfill', async () => {
-    const store = await maybeDestinationStateStore({
-      ...params,
-      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-      streams: [{ name: targetStream }],
-    })
-    await store.set(targetStream, { pageCursor: null, status: 'complete' })
-
-    const engine = createEngine(
-      {
-        source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-        streams: [{ name: targetStream }],
-      },
-      { source, destination },
-      store
-    )
-    await collect(engine.sync())
+    const engine = createEngine(makeResolver())
+    const pipeline = makePipeline({ streams: [{ name: targetStream }] })
+    const preSeededState = { [targetStream]: { pageCursor: null, status: 'complete' } }
+    await collect(engine.pipeline_sync(pipeline, { state: preSeededState }))
 
     // Table created by setup() but no records written (backfill skipped by complete state)
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM "${SCHEMA}"."${targetStream}"`
     )
     expect(rows[0].n).toBe(0)
-    await store.close?.()
   })
 })

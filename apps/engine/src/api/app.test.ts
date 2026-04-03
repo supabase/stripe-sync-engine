@@ -101,7 +101,10 @@ describe('GET /openapi.json', () => {
     expect(paths).toContain('/read')
     expect(paths).toContain('/write')
     expect(paths).toContain('/sync')
-    expect(paths).toContain('/connectors')
+    expect(paths).toContain('/meta/sources')
+    expect(paths).toContain('/meta/sources/:type')
+    expect(paths).toContain('/meta/destinations')
+    expect(paths).toContain('/meta/destinations/:type')
   })
 
   it('injects typed connector schemas into components', async () => {
@@ -201,15 +204,57 @@ describe('GET /openapi.json', () => {
   })
 })
 
-describe('GET /connectors', () => {
-  it('returns available connectors with config schemas', async () => {
+describe('GET /meta/sources', () => {
+  it('returns available source connectors', async () => {
     const app = createApp(resolver)
-    const res = await app.request('/connectors')
+    const res = await app.request('/meta/sources')
     expect(res.status).toBe(200)
     const body = (await res.json()) as any
-    expect(body.sources).toHaveProperty('test')
-    expect(body.destinations).toHaveProperty('test')
-    expect(body.sources.test.config_schema).toBeDefined()
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data.find((c: any) => c.type === 'test')?.config_schema).toBeDefined()
+  })
+})
+
+describe('GET /meta/sources/:type', () => {
+  it('returns spec for a known source type', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/meta/sources/test')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as any
+    expect(body.config_schema).toBeDefined()
+  })
+
+  it('returns 404 for unknown source type', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/meta/sources/nonexistent')
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /meta/destinations', () => {
+  it('returns available destination connectors', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/meta/destinations')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as any
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data.find((c: any) => c.type === 'test')?.config_schema).toBeDefined()
+  })
+})
+
+describe('GET /meta/destinations/:type', () => {
+  it('returns spec for a known destination type', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/meta/destinations/test')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as any
+    expect(body.config_schema).toBeDefined()
+  })
+
+  it('returns 404 for unknown destination type', async () => {
+    const app = createApp(resolver)
+    const res = await app.request('/meta/destinations/nonexistent')
+    expect(res.status).toBe(404)
   })
 })
 

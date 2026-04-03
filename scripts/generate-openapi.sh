@@ -57,10 +57,6 @@ node -e "
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
 " > "$service_out"
 
-pnpm exec prettier --config .prettierrc --log-level warn --write \
-  "$engine_out" \
-  "$service_out"
-
 echo "Generating TypeScript types..."
 # Resolve to absolute paths (needed because pnpm --filter changes cwd)
 abs_engine_out="$(cd "$(dirname "$engine_out")" && pwd)/$(basename "$engine_out")"

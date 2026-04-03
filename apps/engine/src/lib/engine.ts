@@ -7,36 +7,69 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   CheckResult,
+  CatalogMessage,
 } from '@stripe/sync-protocol'
-import type { Destination, Source } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, log, persistState, pipe } from './pipeline.js'
+import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
 import { applySelection } from './destination-filter.js'
-import type { StateStore } from './state-store.js'
 import type { ConnectorResolver } from './resolver.js'
 import { logger } from '../logger.js'
 
 // MARK: - Engine interface
 
-export interface SetupResult {
-  source?: Record<string, unknown>
-  destination?: Record<string, unknown>
-}
+export const SetupResult = z.object({
+  source: z.record(z.string(), z.unknown()).optional(),
+  destination: z.record(z.string(), z.unknown()).optional(),
+})
+export type SetupResult = z.infer<typeof SetupResult>
+
+export const SyncOpts = z.object({
+  state: z.record(z.string(), z.unknown()).optional(),
+  stateLimit: z.number().int().positive().optional(),
+  timeLimit: z.number().positive().optional(),
+})
+export type SyncOpts = z.infer<typeof SyncOpts>
+
+export const ConnectorInfo = z.object({
+  config_schema: z.record(z.string(), z.unknown()),
+})
+export type ConnectorInfo = z.infer<typeof ConnectorInfo>
+
+export const ConnectorListItem = ConnectorInfo.extend({ type: z.string() })
+export type ConnectorListItem = z.infer<typeof ConnectorListItem>
 
 export interface Engine {
-  setup(): Promise<SetupResult>
-  teardown(): Promise<void>
-  check(): Promise<{ source: CheckResult; destination: CheckResult }>
-  read(input?: AsyncIterable<unknown>): AsyncIterable<Message>
-  write(messages: AsyncIterable<Message>): AsyncIterable<DestinationOutput>
-  sync(input?: AsyncIterable<unknown>): AsyncIterable<DestinationOutput>
+  meta_sources_list(): Promise<{ data: ConnectorListItem[] }>
+  meta_source(type: string): Promise<ConnectorInfo>
+  meta_destinations_list(): Promise<{ data: ConnectorListItem[] }>
+  meta_destination(type: string): Promise<ConnectorInfo>
+  pipeline_setup(pipeline: PipelineConfig): Promise<SetupResult>
+  pipeline_teardown(pipeline: PipelineConfig): Promise<void>
+  pipeline_check(
+    pipeline: PipelineConfig
+  ): Promise<{ source: CheckResult; destination: CheckResult }>
+  source_discover(source: PipelineConfig['source']): Promise<CatalogMessage>
+  pipeline_read(
+    pipeline: PipelineConfig,
+    opts?: SyncOpts,
+    input?: AsyncIterable<unknown>
+  ): AsyncIterable<Message>
+  pipeline_write(
+    pipeline: PipelineConfig,
+    messages: AsyncIterable<Message>
+  ): AsyncIterable<DestinationOutput>
+  pipeline_sync(
+    pipeline: PipelineConfig,
+    opts?: SyncOpts,
+    input?: AsyncIterable<unknown>
+  ): AsyncIterable<DestinationOutput>
 }
 
-function engineLogContext(config: PipelineConfig): Record<string, unknown> {
+function engineLogContext(pipeline: PipelineConfig): Record<string, unknown> {
   return {
-    sourceName: config.source.type,
-    destinationName: config.destination.type,
-    configuredStreamCount: config.streams?.length ?? 0,
-    configuredStreams: config.streams?.map((stream) => stream.name) ?? [],
+    sourceName: pipeline.source.type,
+    destinationName: pipeline.destination.type,
+    configuredStreamCount: pipeline.streams?.length ?? 0,
+    configuredStreams: pipeline.streams?.map((stream) => stream.name) ?? [],
   }
 }
 
@@ -117,106 +150,151 @@ export function buildCatalog(
 
 // MARK: - Factory
 
-export function createEngine(
-  config: PipelineConfig,
-  connectors: { source: Source; destination: Destination },
-  stateStore: StateStore
-): Engine {
-  // Validate configs using connector JSON Schemas (fail-fast)
-  const sourceSpec = connectors.source.spec()
-  const destSpec = connectors.destination.spec()
-  const { type: _sn, ...rawSourceConfig } = config.source
-  const { type: _dn, ...rawDestConfig } = config.destination
-  const sourceConfig = z.fromJSONSchema(sourceSpec.config).parse(rawSourceConfig) as Record<
-    string,
-    unknown
-  >
-  const destConfig = z.fromJSONSchema(destSpec.config).parse(rawDestConfig) as Record<
-    string,
-    unknown
-  >
-  const baseContext = engineLogContext(config)
-
-  // Lazy-cached catalog — discover is called at most once per engine instance.
-  let _catalog: ConfiguredCatalog | null = null
-  async function getCatalog(): Promise<ConfiguredCatalog> {
-    if (!_catalog) {
-      const startedAt = Date.now()
-      logger.info(baseContext, 'Engine source discover started')
-      try {
-        const msg = await connectors.source.discover({ config: sourceConfig })
-        _catalog = buildCatalog(msg.streams, config.streams)
-        logger.info(
-          {
-            ...baseContext,
-            durationMs: Date.now() - startedAt,
-            discoveredStreamCount: msg.streams.length,
-            catalogStreamCount: _catalog.streams.length,
-            catalogStreams: _catalog.streams.map((stream) => stream.stream.name),
-          },
-          'Engine source discover completed'
-        )
-      } catch (error) {
-        logger.error(
-          { ...baseContext, durationMs: Date.now() - startedAt, err: error },
-          'Engine source discover failed'
-        )
-        throw error
-      }
-    }
-    return _catalog
-  }
-
+export function createEngine(resolver: ConnectorResolver): Engine {
   return {
-    async setup() {
-      const catalog = await getCatalog()
+    async meta_sources_list() {
+      return {
+        data: [...resolver.sources()].map(([type, r]) => ({
+          type,
+          config_schema: r.rawConfigJsonSchema,
+        })),
+      }
+    },
+
+    async meta_source(type: string): Promise<ConnectorInfo> {
+      const r = resolver.sources().get(type)
+      if (!r) throw new Error(`Unknown source connector: ${type}`)
+      return { config_schema: r.rawConfigJsonSchema }
+    },
+
+    async meta_destinations_list() {
+      return {
+        data: [...resolver.destinations()].map(([type, r]) => ({
+          type,
+          config_schema: r.rawConfigJsonSchema,
+        })),
+      }
+    },
+
+    async meta_destination(type: string): Promise<ConnectorInfo> {
+      const r = resolver.destinations().get(type)
+      if (!r) throw new Error(`Unknown destination connector: ${type}`)
+      return { config_schema: r.rawConfigJsonSchema }
+    },
+
+    async source_discover(sourceInput: PipelineConfig['source']): Promise<CatalogMessage> {
+      const connector = await resolver.resolveSource(sourceInput.type)
+      const { type: _, ...rawConfig } = sourceInput
+      const config = z.fromJSONSchema(connector.spec().config).parse(rawConfig) as Record<
+        string,
+        unknown
+      >
+      return connector.discover({ config })
+    },
+
+    async pipeline_setup(pipeline: PipelineConfig): Promise<SetupResult> {
+      const baseContext = engineLogContext(pipeline)
+      const [srcConnector, destConnector] = await Promise.all([
+        resolver.resolveSource(pipeline.source.type),
+        resolver.resolveDestination(pipeline.destination.type),
+      ])
+      const { type: _s, ...rawSrc } = pipeline.source
+      const { type: _d, ...rawDest } = pipeline.destination
+      const sourceConfig = z.fromJSONSchema(srcConnector.spec().config).parse(rawSrc) as Record<
+        string,
+        unknown
+      >
+      const destConfig = z.fromJSONSchema(destConnector.spec().config).parse(rawDest) as Record<
+        string,
+        unknown
+      >
+
+      const catalogMsg = await this.source_discover(pipeline.source)
+      const catalog = buildCatalog(catalogMsg.streams, pipeline.streams)
       const filteredCatalog = applySelection(catalog)
+
       const [sourceUpdates, destUpdates] = await Promise.all([
-        connectors.source.setup
+        srcConnector.setup
           ? withLoggedStep('Engine source setup', baseContext, () =>
-              connectors.source.setup!({ config: sourceConfig, catalog })
+              srcConnector.setup!({ config: sourceConfig, catalog })
             )
           : Promise.resolve(undefined),
-        connectors.destination.setup
+        destConnector.setup
           ? withLoggedStep('Engine destination setup', baseContext, () =>
-              connectors.destination.setup!({ config: destConfig, catalog: filteredCatalog })
+              destConnector.setup!({ config: destConfig, catalog: filteredCatalog })
             )
           : Promise.resolve(undefined),
       ])
+
       const result: SetupResult = {}
-      if (sourceUpdates) {
-        Object.assign(sourceConfig, sourceUpdates)
-        result.source = sourceUpdates
-      }
-      if (destUpdates) {
-        Object.assign(destConfig, destUpdates)
-        result.destination = destUpdates
-      }
+      if (sourceUpdates) result.source = sourceUpdates
+      if (destUpdates) result.destination = destUpdates
       return result
     },
 
-    async teardown() {
+    async pipeline_teardown(pipeline: PipelineConfig): Promise<void> {
+      const [srcConnector, destConnector] = await Promise.all([
+        resolver.resolveSource(pipeline.source.type),
+        resolver.resolveDestination(pipeline.destination.type),
+      ])
+      const { type: _s, ...rawSrc } = pipeline.source
+      const { type: _d, ...rawDest } = pipeline.destination
+      const sourceConfig = z.fromJSONSchema(srcConnector.spec().config).parse(rawSrc) as Record<
+        string,
+        unknown
+      >
+      const destConfig = z.fromJSONSchema(destConnector.spec().config).parse(rawDest) as Record<
+        string,
+        unknown
+      >
       await Promise.all([
-        connectors.source.teardown?.({ config: sourceConfig }),
-        connectors.destination.teardown?.({ config: destConfig }),
+        srcConnector.teardown?.({ config: sourceConfig }),
+        destConnector.teardown?.({ config: destConfig }),
       ])
     },
 
-    async check() {
+    async pipeline_check(
+      pipeline: PipelineConfig
+    ): Promise<{ source: CheckResult; destination: CheckResult }> {
+      const [srcConnector, destConnector] = await Promise.all([
+        resolver.resolveSource(pipeline.source.type),
+        resolver.resolveDestination(pipeline.destination.type),
+      ])
+      const { type: _s, ...rawSrc } = pipeline.source
+      const { type: _d, ...rawDest } = pipeline.destination
+      const sourceConfig = z.fromJSONSchema(srcConnector.spec().config).parse(rawSrc) as Record<
+        string,
+        unknown
+      >
+      const destConfig = z.fromJSONSchema(destConnector.spec().config).parse(rawDest) as Record<
+        string,
+        unknown
+      >
       const [source, destination] = await Promise.all([
-        connectors.source.check({ config: sourceConfig }),
-        connectors.destination.check({ config: destConfig }),
+        srcConnector.check({ config: sourceConfig }),
+        destConnector.check({ config: destConfig }),
       ])
       return { source, destination }
     },
 
-    async *read(input?: AsyncIterable<unknown>) {
-      const state = await stateStore.get()
-      const raw = connectors.source.read(
-        { config: sourceConfig, catalog: await getCatalog(), state },
-        input
-      )
-      for await (const msg of withLoggedStream(
+    async *pipeline_read(
+      pipeline: PipelineConfig,
+      opts?: SyncOpts,
+      input?: AsyncIterable<unknown>
+    ): AsyncIterable<Message> {
+      const baseContext = engineLogContext(pipeline)
+      const connector = await resolver.resolveSource(pipeline.source.type)
+      const { type: _, ...rawSrc } = pipeline.source
+      const sourceConfig = z.fromJSONSchema(connector.spec().config).parse(rawSrc) as Record<
+        string,
+        unknown
+      >
+      const catalogMsg = await this.source_discover(pipeline.source)
+      const catalog = buildCatalog(catalogMsg.streams, pipeline.streams)
+      const state = opts?.state
+
+      const raw = connector.read({ config: sourceConfig, catalog, state }, input)
+      const logged = withLoggedStream(
         'Engine source read',
         {
           ...baseContext,
@@ -224,21 +302,40 @@ export function createEngine(
           stateProvided: state !== undefined,
         },
         raw
-      )) {
-        yield Message.parse(msg)
-      }
+      )
+      const parsed: AsyncIterable<Message> = (async function* () {
+        for await (const msg of logged) {
+          yield Message.parse(msg)
+        }
+      })()
+      yield* takeLimits<Message>({
+        stateLimit: opts?.stateLimit,
+        timeLimitMs: opts?.timeLimit ? opts.timeLimit * 1000 : undefined,
+      })(parsed)
     },
 
-    async *write(messages: AsyncIterable<Message>) {
-      const catalog = await getCatalog()
+    async *pipeline_write(
+      pipeline: PipelineConfig,
+      messages: AsyncIterable<Message>
+    ): AsyncIterable<DestinationOutput> {
+      const baseContext = engineLogContext(pipeline)
+      const connector = await resolver.resolveDestination(pipeline.destination.type)
+      const { type: _, ...rawDest } = pipeline.destination
+      const destConfig = z.fromJSONSchema(connector.spec().config).parse(rawDest) as Record<
+        string,
+        unknown
+      >
+      const catalogMsg = await this.source_discover(pipeline.source)
+      const catalog = buildCatalog(catalogMsg.streams, pipeline.streams)
       const filteredCatalog = applySelection(catalog)
+
       const destInput = pipe(
         messages,
         enforceCatalog(filteredCatalog),
         log,
         filterType('record', 'state')
       )
-      const destOutput = connectors.destination.write(
+      const destOutput = connector.write(
         { config: destConfig, catalog: filteredCatalog },
         destInput
       )
@@ -251,21 +348,21 @@ export function createEngine(
       }
     },
 
-    async *sync(input?: AsyncIterable<unknown>) {
-      await this.setup()
-      yield* pipe(this.read(input), this.write, persistState(stateStore))
+    async *pipeline_sync(
+      pipeline: PipelineConfig,
+      opts?: SyncOpts,
+      input?: AsyncIterable<unknown>
+    ): AsyncIterable<DestinationOutput> {
+      await this.pipeline_setup(pipeline)
+      // Pass state to read() but not stateLimit — stateLimit on sync controls destination output
+      const writeOutput = this.pipeline_write(
+        pipeline,
+        this.pipeline_read(pipeline, { state: opts?.state }, input)
+      )
+      yield* takeLimits<DestinationOutput>({
+        stateLimit: opts?.stateLimit,
+        timeLimitMs: opts?.timeLimit ? opts.timeLimit * 1000 : undefined,
+      })(writeOutput)
     },
   }
-}
-
-export async function createEngineFromParams(
-  params: PipelineConfig,
-  resolver: ConnectorResolver,
-  stateStore: StateStore
-): Promise<Engine> {
-  const [source, destination] = await Promise.all([
-    resolver.resolveSource(params.source.type),
-    resolver.resolveDestination(params.destination.type),
-  ])
-  return createEngine(params, { source, destination }, stateStore)
 }

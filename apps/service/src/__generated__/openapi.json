@@ -9,7 +9,9 @@
     "/health": {
       "get": {
         "operationId": "health",
-        "tags": ["Status"],
+        "tags": [
+          "Status"
+        ],
         "summary": "Health check",
         "responses": {
           "200": {
@@ -24,7 +26,9 @@
                       "const": true
                     }
                   },
-                  "required": ["ok"],
+                  "required": [
+                    "ok"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -36,7 +40,9 @@
     "/pipelines": {
       "get": {
         "operationId": "pipelines.list",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "List pipelines",
         "responses": {
           "200": {
@@ -134,7 +140,10 @@
                                     "const": "stripe"
                                   }
                                 },
-                                "required": ["api_key", "type"],
+                                "required": [
+                                  "api_key",
+                                  "type"
+                                ],
                                 "additionalProperties": false
                               }
                             ],
@@ -198,7 +207,9 @@
                                         "description": "External ID for STS AssumeRole"
                                       }
                                     },
-                                    "required": ["region"],
+                                    "required": [
+                                      "region"
+                                    ],
                                     "additionalProperties": false,
                                     "description": "AWS RDS IAM authentication config"
                                   },
@@ -211,7 +222,12 @@
                                     "const": "postgres"
                                   }
                                 },
-                                "required": ["port", "schema", "batch_size", "type"],
+                                "required": [
+                                  "port",
+                                  "schema",
+                                  "batch_size",
+                                  "type"
+                                ],
                                 "additionalProperties": false
                               },
                               {
@@ -280,7 +296,10 @@
                                 "sync_mode": {
                                   "description": "How the source reads this stream. Defaults to full_refresh.",
                                   "type": "string",
-                                  "enum": ["incremental", "full_refresh"]
+                                  "enum": [
+                                    "incremental",
+                                    "full_refresh"
+                                  ]
                                 },
                                 "backfill_limit": {
                                   "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -289,7 +308,9 @@
                                   "maximum": 9007199254740991
                                 }
                               },
-                              "required": ["name"],
+                              "required": [
+                                "name"
+                              ],
                               "additionalProperties": false
                             }
                           },
@@ -310,11 +331,19 @@
                                 "description": "Number of times this workflow has continued-as-new."
                               }
                             },
-                            "required": ["phase", "paused", "iteration"],
+                            "required": [
+                              "phase",
+                              "paused",
+                              "iteration"
+                            ],
                             "additionalProperties": false
                           }
                         },
-                        "required": ["id", "source", "destination"],
+                        "required": [
+                          "id",
+                          "source",
+                          "destination"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -322,7 +351,10 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["data", "has_more"],
+                  "required": [
+                    "data",
+                    "has_more"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -332,7 +364,9 @@
       },
       "post": {
         "operationId": "pipelines.create",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Create pipeline",
         "requestBody": {
           "content": {
@@ -419,7 +453,10 @@
                             "const": "stripe"
                           }
                         },
-                        "required": ["api_key", "type"],
+                        "required": [
+                          "api_key",
+                          "type"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -483,7 +520,9 @@
                                 "description": "External ID for STS AssumeRole"
                               }
                             },
-                            "required": ["region"],
+                            "required": [
+                              "region"
+                            ],
                             "additionalProperties": false,
                             "description": "AWS RDS IAM authentication config"
                           },
@@ -496,7 +535,10 @@
                             "const": "postgres"
                           }
                         },
-                        "required": ["schema", "type"],
+                        "required": [
+                          "schema",
+                          "type"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -537,7 +579,11 @@
                             "const": "google-sheets"
                           }
                         },
-                        "required": ["access_token", "refresh_token", "type"],
+                        "required": [
+                          "access_token",
+                          "refresh_token",
+                          "type"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -559,7 +605,10 @@
                         "sync_mode": {
                           "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
-                          "enum": ["incremental", "full_refresh"]
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
                         },
                         "backfill_limit": {
                           "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -568,11 +617,16 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": ["name"]
+                      "required": [
+                        "name"
+                      ]
                     }
                   }
                 },
-                "required": ["source", "destination"]
+                "required": [
+                  "source",
+                  "destination"
+                ]
               }
             }
           }
@@ -668,7 +722,10 @@
                               "const": "stripe"
                             }
                           },
-                          "required": ["api_key", "type"],
+                          "required": [
+                            "api_key",
+                            "type"
+                          ],
                           "additionalProperties": false
                         }
                       ],
@@ -732,7 +789,9 @@
                                   "description": "External ID for STS AssumeRole"
                                 }
                               },
-                              "required": ["region"],
+                              "required": [
+                                "region"
+                              ],
                               "additionalProperties": false,
                               "description": "AWS RDS IAM authentication config"
                             },
@@ -745,7 +804,12 @@
                               "const": "postgres"
                             }
                           },
-                          "required": ["port", "schema", "batch_size", "type"],
+                          "required": [
+                            "port",
+                            "schema",
+                            "batch_size",
+                            "type"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -814,7 +878,10 @@
                           "sync_mode": {
                             "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           },
                           "backfill_limit": {
                             "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -823,12 +890,18 @@
                             "maximum": 9007199254740991
                           }
                         },
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "additionalProperties": false
                       }
                     }
                   },
-                  "required": ["id", "source", "destination"],
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -843,7 +916,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -855,7 +930,9 @@
     "/pipelines/{id}": {
       "get": {
         "operationId": "pipelines.get",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Retrieve pipeline",
         "parameters": [
           {
@@ -959,7 +1036,10 @@
                               "const": "stripe"
                             }
                           },
-                          "required": ["api_key", "type"],
+                          "required": [
+                            "api_key",
+                            "type"
+                          ],
                           "additionalProperties": false
                         }
                       ],
@@ -1023,7 +1103,9 @@
                                   "description": "External ID for STS AssumeRole"
                                 }
                               },
-                              "required": ["region"],
+                              "required": [
+                                "region"
+                              ],
                               "additionalProperties": false,
                               "description": "AWS RDS IAM authentication config"
                             },
@@ -1036,7 +1118,12 @@
                               "const": "postgres"
                             }
                           },
-                          "required": ["port", "schema", "batch_size", "type"],
+                          "required": [
+                            "port",
+                            "schema",
+                            "batch_size",
+                            "type"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -1105,7 +1192,10 @@
                           "sync_mode": {
                             "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           },
                           "backfill_limit": {
                             "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -1114,7 +1204,9 @@
                             "maximum": 9007199254740991
                           }
                         },
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -1135,11 +1227,19 @@
                           "description": "Number of times this workflow has continued-as-new."
                         }
                       },
-                      "required": ["phase", "paused", "iteration"],
+                      "required": [
+                        "phase",
+                        "paused",
+                        "iteration"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["id", "source", "destination"],
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1154,7 +1254,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1164,7 +1266,9 @@
       },
       "patch": {
         "operationId": "pipelines.update",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Update pipeline",
         "parameters": [
           {
@@ -1262,7 +1366,10 @@
                             "const": "stripe"
                           }
                         },
-                        "required": ["api_key", "type"],
+                        "required": [
+                          "api_key",
+                          "type"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -1326,7 +1433,9 @@
                                 "description": "External ID for STS AssumeRole"
                               }
                             },
-                            "required": ["region"],
+                            "required": [
+                              "region"
+                            ],
                             "additionalProperties": false,
                             "description": "AWS RDS IAM authentication config"
                           },
@@ -1339,7 +1448,10 @@
                             "const": "postgres"
                           }
                         },
-                        "required": ["schema", "type"],
+                        "required": [
+                          "schema",
+                          "type"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -1380,7 +1492,11 @@
                             "const": "google-sheets"
                           }
                         },
-                        "required": ["access_token", "refresh_token", "type"],
+                        "required": [
+                          "access_token",
+                          "refresh_token",
+                          "type"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -1402,7 +1518,10 @@
                         "sync_mode": {
                           "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
-                          "enum": ["incremental", "full_refresh"]
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
                         },
                         "backfill_limit": {
                           "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -1411,7 +1530,9 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": ["name"]
+                      "required": [
+                        "name"
+                      ]
                     }
                   }
                 }
@@ -1510,7 +1631,10 @@
                               "const": "stripe"
                             }
                           },
-                          "required": ["api_key", "type"],
+                          "required": [
+                            "api_key",
+                            "type"
+                          ],
                           "additionalProperties": false
                         }
                       ],
@@ -1574,7 +1698,9 @@
                                   "description": "External ID for STS AssumeRole"
                                 }
                               },
-                              "required": ["region"],
+                              "required": [
+                                "region"
+                              ],
                               "additionalProperties": false,
                               "description": "AWS RDS IAM authentication config"
                             },
@@ -1587,7 +1713,12 @@
                               "const": "postgres"
                             }
                           },
-                          "required": ["port", "schema", "batch_size", "type"],
+                          "required": [
+                            "port",
+                            "schema",
+                            "batch_size",
+                            "type"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -1656,7 +1787,10 @@
                           "sync_mode": {
                             "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           },
                           "backfill_limit": {
                             "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -1665,7 +1799,9 @@
                             "maximum": 9007199254740991
                           }
                         },
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -1686,11 +1822,19 @@
                           "description": "Number of times this workflow has continued-as-new."
                         }
                       },
-                      "required": ["phase", "paused", "iteration"],
+                      "required": [
+                        "phase",
+                        "paused",
+                        "iteration"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["id", "source", "destination"],
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1705,7 +1849,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1715,7 +1861,9 @@
       },
       "delete": {
         "operationId": "pipelines.delete",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Delete pipeline",
         "parameters": [
           {
@@ -1744,7 +1892,10 @@
                       "const": true
                     }
                   },
-                  "required": ["id", "deleted"],
+                  "required": [
+                    "id",
+                    "deleted"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1759,7 +1910,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1774,7 +1927,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1786,7 +1941,9 @@
     "/pipelines/{id}/pause": {
       "post": {
         "operationId": "pipelines.pause",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Pause pipeline",
         "parameters": [
           {
@@ -1890,7 +2047,10 @@
                               "const": "stripe"
                             }
                           },
-                          "required": ["api_key", "type"],
+                          "required": [
+                            "api_key",
+                            "type"
+                          ],
                           "additionalProperties": false
                         }
                       ],
@@ -1954,7 +2114,9 @@
                                   "description": "External ID for STS AssumeRole"
                                 }
                               },
-                              "required": ["region"],
+                              "required": [
+                                "region"
+                              ],
                               "additionalProperties": false,
                               "description": "AWS RDS IAM authentication config"
                             },
@@ -1967,7 +2129,12 @@
                               "const": "postgres"
                             }
                           },
-                          "required": ["port", "schema", "batch_size", "type"],
+                          "required": [
+                            "port",
+                            "schema",
+                            "batch_size",
+                            "type"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -2036,7 +2203,10 @@
                           "sync_mode": {
                             "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           },
                           "backfill_limit": {
                             "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -2045,7 +2215,9 @@
                             "maximum": 9007199254740991
                           }
                         },
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -2066,11 +2238,19 @@
                           "description": "Number of times this workflow has continued-as-new."
                         }
                       },
-                      "required": ["phase", "paused", "iteration"],
+                      "required": [
+                        "phase",
+                        "paused",
+                        "iteration"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["id", "source", "destination"],
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2085,7 +2265,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2097,7 +2279,9 @@
     "/pipelines/{id}/resume": {
       "post": {
         "operationId": "pipelines.resume",
-        "tags": ["Pipelines"],
+        "tags": [
+          "Pipelines"
+        ],
         "summary": "Resume pipeline",
         "parameters": [
           {
@@ -2201,7 +2385,10 @@
                               "const": "stripe"
                             }
                           },
-                          "required": ["api_key", "type"],
+                          "required": [
+                            "api_key",
+                            "type"
+                          ],
                           "additionalProperties": false
                         }
                       ],
@@ -2265,7 +2452,9 @@
                                   "description": "External ID for STS AssumeRole"
                                 }
                               },
-                              "required": ["region"],
+                              "required": [
+                                "region"
+                              ],
                               "additionalProperties": false,
                               "description": "AWS RDS IAM authentication config"
                             },
@@ -2278,7 +2467,12 @@
                               "const": "postgres"
                             }
                           },
-                          "required": ["port", "schema", "batch_size", "type"],
+                          "required": [
+                            "port",
+                            "schema",
+                            "batch_size",
+                            "type"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -2347,7 +2541,10 @@
                           "sync_mode": {
                             "description": "How the source reads this stream. Defaults to full_refresh.",
                             "type": "string",
-                            "enum": ["incremental", "full_refresh"]
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
                           },
                           "backfill_limit": {
                             "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -2356,7 +2553,9 @@
                             "maximum": 9007199254740991
                           }
                         },
-                        "required": ["name"],
+                        "required": [
+                          "name"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -2377,11 +2576,19 @@
                           "description": "Number of times this workflow has continued-as-new."
                         }
                       },
-                      "required": ["phase", "paused", "iteration"],
+                      "required": [
+                        "phase",
+                        "paused",
+                        "iteration"
+                      ],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["id", "source", "destination"],
+                  "required": [
+                    "id",
+                    "source",
+                    "destination"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2396,7 +2603,9 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2408,7 +2617,9 @@
     "/webhooks/{pipeline_id}": {
       "post": {
         "operationId": "webhooks.push",
-        "tags": ["Webhooks"],
+        "tags": [
+          "Webhooks"
+        ],
         "summary": "Ingest a Stripe webhook event",
         "description": "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
         "parameters": [

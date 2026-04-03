@@ -9,18 +9,20 @@ const service = createClient<ServicePaths>({ baseUrl: '/api/service' })
 // ── Engine API ────────────────────────────────────────────────
 
 export interface ConnectorInfo {
+  type: string
   config_schema: Record<string, unknown>
 }
 
-export interface ConnectorsResponse {
-  sources: Record<string, ConnectorInfo>
-  destinations: Record<string, ConnectorInfo>
+export async function getSources(): Promise<{ data: ConnectorInfo[] }> {
+  const { data, error, response } = await engine.GET('/meta/sources')
+  if (error) throw new Error(`GET /meta/sources: ${(response as Response).status}`)
+  return data as { data: ConnectorInfo[] }
 }
 
-export async function getConnectors(): Promise<ConnectorsResponse> {
-  const { data, error, response } = await engine.GET('/connectors')
-  if (error) throw new Error(`GET /connectors: ${(response as Response).status}`)
-  return data as ConnectorsResponse
+export async function getDestinations(): Promise<{ data: ConnectorInfo[] }> {
+  const { data, error, response } = await engine.GET('/meta/destinations')
+  if (error) throw new Error(`GET /meta/destinations: ${(response as Response).status}`)
+  return data as { data: ConnectorInfo[] }
 }
 
 export interface CatalogResponse {

@@ -226,17 +226,12 @@ export const PipelineConfig = z.object({
 })
 export type PipelineConfig = z.infer<typeof PipelineConfig>
 
-/** @deprecated Use PipelineConfig */
-export const SyncEngineParams = PipelineConfig
-/** @deprecated Use PipelineConfig */
-export type SyncEngineParams = PipelineConfig
-
 /** The full set of parsed sync request params: pipeline config + cursor state + stream limits. */
 export interface SyncParams {
   pipeline: PipelineConfig
   state?: Record<string, unknown>
   stateLimit?: number
-  timeLimitMs?: number
+  timeLimit?: number
 }
 
 // MARK: - Message unions

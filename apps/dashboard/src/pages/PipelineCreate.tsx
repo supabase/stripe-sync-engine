@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react'
-import { getConnectors, discover, createPipeline, type ConnectorInfo } from '@/lib/api'
+import {
+  getSources,
+  getDestinations,
+  discover,
+  createPipeline,
+  type ConnectorInfo,
+} from '@/lib/api'
 import { JsonSchemaForm } from '@/components/JsonSchemaForm'
 import { StreamSelector } from '@/components/StreamSelector'
 import type { CatalogStream } from '@/lib/stream-groups'
@@ -28,13 +34,13 @@ export function PipelineCreate({ onDone }: { onDone?: () => void }) {
 
   // Load available connectors on mount
   useEffect(() => {
-    getConnectors().then((data) => {
-      setSources(data.sources)
-      setDestinations(data.destinations)
-      const sourceKeys = Object.keys(data.sources)
-      const destKeys = Object.keys(data.destinations)
-      if (sourceKeys.length === 1) setSourceType(sourceKeys[0])
-      if (destKeys.length === 1) setDestType(destKeys[0])
+    Promise.all([getSources(), getDestinations()]).then(([srcs, dests]) => {
+      const srcMap = Object.fromEntries(srcs.data.map((c) => [c.type, c]))
+      const destMap = Object.fromEntries(dests.data.map((c) => [c.type, c]))
+      setSources(srcMap)
+      setDestinations(destMap)
+      if (srcs.data.length === 1) setSourceType(srcs.data[0].type)
+      if (dests.data.length === 1) setDestType(dests.data[0].type)
     })
   }, [])
 

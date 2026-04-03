@@ -1,7 +1,8 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createEngine, readonlyStateStore } from '../lib/index.js'
+import { createEngine } from '../lib/index.js'
+import type { ConnectorResolver } from '../lib/index.js'
 import { sourceTest } from '../lib/index.js'
 import destination from '@stripe/sync-destination-postgres'
 import type { RecordMessage, StateMessage } from '../lib/index.js'
@@ -89,6 +90,21 @@ function state(stream: string, data: unknown): StateMessage {
   return { type: 'state', stream, data }
 }
 
+function makeResolver(): ConnectorResolver {
+  return {
+    resolveSource: async (name) => {
+      if (name !== 'test') throw new Error(`Unknown source: ${name}`)
+      return sourceTest
+    },
+    resolveDestination: async (name) => {
+      if (name !== 'postgres') throw new Error(`Unknown destination: ${name}`)
+      return destination
+    },
+    sources: () => new Map(),
+    destinations: () => new Map(),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -106,14 +122,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   })
 
   it('run 1: writes records and persists state', async () => {
-    const engine = createEngine(
-      {
-        source: { type: 'test', streams: { customers: {} } },
-        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-      },
-      { source: sourceTest, destination },
-      readonlyStateStore()
-    )
+    const engine = createEngine(makeResolver())
+    const pipeline = {
+      source: { type: 'test', streams: { customers: {} } },
+      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+    }
 
     const input = [
       record('customers', 'cus_1', { name: 'Alice' }),
@@ -123,7 +136,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     ]
 
     // Run pipeline with $stdin passthrough, persist each state checkpoint
-    for await (const msg of engine.sync(toAsync(input))) {
+    for await (const msg of engine.pipeline_sync(pipeline, undefined, toAsync(input))) {
       if (msg.type === 'state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
@@ -155,16 +168,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       rows.map((r: { stream: string; data: unknown }) => [r.stream, r.data])
     )
 
-    const engine = createEngine(
-      {
-        source: { type: 'test', streams: { customers: {} } },
-        destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
-      },
-      { source: sourceTest, destination },
-      readonlyStateStore(),
-      undefined,
-      loadedState
-    )
+    const engine = createEngine(makeResolver())
+    const pipeline = {
+      source: { type: 'test', streams: { customers: {} } },
+      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+    }
 
     const input = [
       record('customers', 'cus_4', { name: 'Diana' }),
@@ -172,7 +180,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       state('customers', { after: 'cus_5' }),
     ]
 
-    for await (const msg of engine.sync(toAsync(input))) {
+    for await (const msg of engine.pipeline_sync(
+      pipeline,
+      { state: loadedState },
+      toAsync(input)
+    )) {
       if (msg.type === 'state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
