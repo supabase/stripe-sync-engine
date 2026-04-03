@@ -243,16 +243,27 @@
             }
           },
           {
-            "in": "header",
-            "name": "x-state-checkpoint-limit",
+            "in": "query",
+            "name": "state_limit",
             "schema": {
-              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-              "example": "1",
+              "description": "Stop streaming after N state messages.",
+              "example": "100",
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 9007199254740991
             },
-            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync."
+            "description": "Stop streaming after N state messages."
+          },
+          {
+            "in": "query",
+            "name": "time_limit",
+            "schema": {
+              "description": "Stop streaming after N seconds.",
+              "example": "10",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "description": "Stop streaming after N seconds."
           }
         ],
         "responses": {
@@ -355,16 +366,27 @@
             }
           },
           {
-            "in": "header",
-            "name": "x-state-checkpoint-limit",
+            "in": "query",
+            "name": "state_limit",
             "schema": {
-              "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.",
-              "example": "1",
+              "description": "Stop streaming after N state messages.",
+              "example": "100",
               "type": "integer",
               "exclusiveMinimum": 0,
               "maximum": 9007199254740991
             },
-            "description": "When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync."
+            "description": "Stop streaming after N state messages."
+          },
+          {
+            "in": "query",
+            "name": "time_limit",
+            "schema": {
+              "description": "Stop streaming after N seconds.",
+              "example": "10",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "description": "Stop streaming after N seconds."
           }
         ],
         "responses": {
@@ -457,7 +479,8 @@
           { "$ref": "#/components/schemas/CatalogMessage" },
           { "$ref": "#/components/schemas/LogMessage" },
           { "$ref": "#/components/schemas/ErrorMessage" },
-          { "$ref": "#/components/schemas/StreamStatusMessage" }
+          { "$ref": "#/components/schemas/StreamStatusMessage" },
+          { "$ref": "#/components/schemas/EofMessage" }
         ],
         "type": "object",
         "discriminator": {
@@ -468,7 +491,8 @@
             "catalog": "#/components/schemas/CatalogMessage",
             "log": "#/components/schemas/LogMessage",
             "error": "#/components/schemas/ErrorMessage",
-            "stream_status": "#/components/schemas/StreamStatusMessage"
+            "stream_status": "#/components/schemas/StreamStatusMessage",
+            "eof": "#/components/schemas/EofMessage"
           }
         }
       },
@@ -482,7 +506,11 @@
             "propertyNames": { "type": "string" },
             "additionalProperties": {}
           },
-          "emitted_at": { "type": "number" }
+          "emitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
         },
         "required": ["type", "stream", "data", "emitted_at"]
       },
@@ -558,11 +586,20 @@
         },
         "required": ["type", "stream", "status"]
       },
+      "EofMessage": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "eof" },
+          "reason": { "type": "string", "enum": ["complete", "state_limit", "time_limit", "error"] }
+        },
+        "required": ["type", "reason"]
+      },
       "DestinationOutput": {
         "oneOf": [
           { "$ref": "#/components/schemas/StateMessageOutput" },
           { "$ref": "#/components/schemas/ErrorMessageOutput" },
-          { "$ref": "#/components/schemas/LogMessageOutput" }
+          { "$ref": "#/components/schemas/LogMessageOutput" },
+          { "$ref": "#/components/schemas/EofMessageOutput" }
         ],
         "type": "object",
         "discriminator": {
@@ -570,7 +607,8 @@
           "mapping": {
             "state": "#/components/schemas/StateMessageOutput",
             "error": "#/components/schemas/ErrorMessageOutput",
-            "log": "#/components/schemas/LogMessageOutput"
+            "log": "#/components/schemas/LogMessageOutput",
+            "eof": "#/components/schemas/EofMessageOutput"
           }
         }
       },
@@ -614,7 +652,8 @@
           { "$ref": "#/components/schemas/CatalogMessageOutput" },
           { "$ref": "#/components/schemas/LogMessageOutput" },
           { "$ref": "#/components/schemas/ErrorMessageOutput" },
-          { "$ref": "#/components/schemas/StreamStatusMessageOutput" }
+          { "$ref": "#/components/schemas/StreamStatusMessageOutput" },
+          { "$ref": "#/components/schemas/EofMessageOutput" }
         ],
         "type": "object",
         "discriminator": {
@@ -625,7 +664,8 @@
             "catalog": "#/components/schemas/CatalogMessageOutput",
             "log": "#/components/schemas/LogMessageOutput",
             "error": "#/components/schemas/ErrorMessageOutput",
-            "stream_status": "#/components/schemas/StreamStatusMessageOutput"
+            "stream_status": "#/components/schemas/StreamStatusMessageOutput",
+            "eof": "#/components/schemas/EofMessageOutput"
           }
         }
       },
@@ -639,7 +679,11 @@
             "propertyNames": { "type": "string" },
             "additionalProperties": {}
           },
-          "emitted_at": { "type": "number" }
+          "emitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
         },
         "required": ["type", "stream", "data", "emitted_at"],
         "additionalProperties": false
@@ -687,6 +731,15 @@
           "status": { "type": "string", "enum": ["started", "running", "complete", "incomplete"] }
         },
         "required": ["type", "stream", "status"],
+        "additionalProperties": false
+      },
+      "EofMessageOutput": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "const": "eof" },
+          "reason": { "type": "string", "enum": ["complete", "state_limit", "time_limit", "error"] }
+        },
+        "required": ["type", "reason"],
         "additionalProperties": false
       },
       "StripeSourceConfig": {

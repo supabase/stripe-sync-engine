@@ -4,790 +4,799 @@
  */
 
 export interface paths {
-  '/health': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Health check */
-    get: operations['health']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/setup': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Set up destination schema
-     * @description Creates destination tables and applies migrations. Safe to call multiple times.
-     */
-    post: operations['setup']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/teardown': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Tear down destination schema
-     * @description Drops destination tables. Irreversible.
-     */
-    post: operations['teardown']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/check': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * Check connector connection
-     * @description Validates the source/destination config and tests connectivity.
-     */
-    get: operations['check']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/discover': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Discover available streams
-     * @description Returns the catalog of available streams for the configured source. Each stream includes its name, primary key, and optional JSON schema.
-     */
-    post: operations['discover']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/read': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Read records from source
-     * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.
-     */
-    post: operations['read']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/write': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Write records to destination
-     * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.
-     */
-    post: operations['write']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sync': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Run sync pipeline (read → write)
-     * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).
-     */
-    post: operations['sync']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/connectors': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** List available connectors and their config schemas */
-    get: operations['listConnectors']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health check */
+        get: operations["health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set up destination schema
+         * @description Creates destination tables and applies migrations. Safe to call multiple times.
+         */
+        post: operations["setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tear down destination schema
+         * @description Drops destination tables. Irreversible.
+         */
+        post: operations["teardown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check connector connection
+         * @description Validates the source/destination config and tests connectivity.
+         */
+        get: operations["check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover available streams
+         * @description Returns the catalog of available streams for the configured source. Each stream includes its name, primary key, and optional JSON schema.
+         */
+        post: operations["discover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read records from source
+         * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.
+         */
+        post: operations["read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write records to destination
+         * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.
+         */
+        post: operations["write"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync pipeline (read → write)
+         * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).
+         */
+        post: operations["sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available connectors and their config schemas */
+        get: operations["listConnectors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
-export type webhooks = Record<string, never>
+export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    Message:
-      | components['schemas']['RecordMessage']
-      | components['schemas']['StateMessage']
-      | components['schemas']['CatalogMessage']
-      | components['schemas']['LogMessage']
-      | components['schemas']['ErrorMessage']
-      | components['schemas']['StreamStatusMessage']
-    RecordMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'record'
-      stream: string
-      data: {
-        [key: string]: unknown
-      }
-      emitted_at: number
-    }
-    StateMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'state'
-      stream: string
-      data: unknown
-    }
-    CatalogMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'catalog'
-      streams: {
-        name: string
-        primary_key: string[][]
-        json_schema?: {
-          [key: string]: unknown
-        }
-        metadata?: {
-          [key: string]: unknown
-        }
-      }[]
-    }
-    LogMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'log'
-      /** @enum {string} */
-      level: 'debug' | 'info' | 'warn' | 'error'
-      message: string
-    }
-    ErrorMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'error'
-      /** @enum {string} */
-      failure_type: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
-      message: string
-      stream?: string
-      stack_trace?: string
-    }
-    StreamStatusMessage: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'stream_status'
-      stream: string
-      /** @enum {string} */
-      status: 'started' | 'running' | 'complete' | 'incomplete'
-    }
-    DestinationOutput:
-      | components['schemas']['StateMessageOutput']
-      | components['schemas']['ErrorMessageOutput']
-      | components['schemas']['LogMessageOutput']
-    CatalogMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'catalog'
-      streams: {
-        name: string
-        primary_key: string[][]
-        json_schema?: {
-          [key: string]: unknown
-        }
-        metadata?: {
-          [key: string]: unknown
-        }
-      }[]
-    }
-    MessageOutput:
-      | components['schemas']['RecordMessageOutput']
-      | components['schemas']['StateMessageOutput']
-      | components['schemas']['CatalogMessageOutput']
-      | components['schemas']['LogMessageOutput']
-      | components['schemas']['ErrorMessageOutput']
-      | components['schemas']['StreamStatusMessageOutput']
-    RecordMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'record'
-      stream: string
-      data: {
-        [key: string]: unknown
-      }
-      emitted_at: number
-    }
-    StateMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'state'
-      stream: string
-      data: unknown
-    }
-    LogMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'log'
-      /** @enum {string} */
-      level: 'debug' | 'info' | 'warn' | 'error'
-      message: string
-    }
-    ErrorMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'error'
-      /** @enum {string} */
-      failure_type: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
-      message: string
-      stream?: string
-      stack_trace?: string
-    }
-    StreamStatusMessageOutput: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'stream_status'
-      stream: string
-      /** @enum {string} */
-      status: 'started' | 'running' | 'complete' | 'incomplete'
-    }
-    StripeSourceConfig: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'StripeSourceConfig'
-      /** @description Stripe API key (sk_test_... or sk_live_...) */
-      api_key: string
-      /** @description Stripe account ID (resolved from API if omitted) */
-      account_id?: string
-      /** @description Whether this is a live mode sync */
-      livemode?: boolean
-      /** @description Stripe API version (e.g. 2025-04-30.basil) */
-      api_version?: string
-      /**
-       * Format: uri
-       * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-       */
-      base_url?: string
-      /**
-       * Format: uri
-       * @description URL for managed webhook endpoint registration
-       */
-      webhook_url?: string
-      /** @description Webhook signing secret (whsec_...) for signature verification */
-      webhook_secret?: string
-      /** @description Enable WebSocket streaming for live events */
-      websocket?: boolean
-      /** @description Enable events API polling for incremental sync after backfill */
-      poll_events?: boolean
-      /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-      webhook_port?: number
-      /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-      revalidate_objects?: string[]
-      /** @description Max objects to backfill per stream (useful for testing) */
-      backfill_limit?: number
-      /** @description Max Stripe API requests per second (default: 25) */
-      rate_limit?: number
-      /** @description Number of time-range segments for parallel backfill (default: 200) */
-      backfill_concurrency?: number
-    }
-    PostgresDestinationConfig: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'PostgresDestinationConfig'
-      /** @description Postgres connection string (alias for connection_string) */
-      url?: string
-      /** @description Postgres connection string */
-      connection_string?: string
-      /** @description Postgres host (required for AWS IAM) */
-      host?: string
-      /**
-       * @description Postgres port
-       * @default 5432
-       */
-      port: number
-      /** @description Database name (required for AWS IAM) */
-      database?: string
-      /** @description Database user (required for AWS IAM) */
-      user?: string
-      /** @description Target schema name (e.g. "stripe_sync") */
-      schema: string
-      /**
-       * @description Records to buffer before flushing
-       * @default 100
-       */
-      batch_size: number
-      /** @description AWS RDS IAM authentication config */
-      aws?: {
-        /** @description AWS region for RDS instance */
-        region: string
-        /** @description IAM role ARN to assume (cross-account) */
-        role_arn?: string
-        /** @description External ID for STS AssumeRole */
-        external_id?: string
-      }
-      /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-      ssl_ca_pem?: string
-    }
-    GoogleSheetsDestinationConfig: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      type: 'GoogleSheetsDestinationConfig'
-      /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-      client_id?: string
-      /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-      client_secret?: string
-      /** @description OAuth2 access token */
-      access_token: string
-      /** @description OAuth2 refresh token */
-      refresh_token: string
-      /** @description Target spreadsheet ID (created if omitted) */
-      spreadsheet_id?: string
-      /**
-       * @description Title when creating a new spreadsheet
-       * @default Stripe Sync
-       */
-      spreadsheet_title: string
-      /**
-       * @description Rows per Sheets API append call
-       * @default 50
-       */
-      batch_size: number
-    }
-    SourceConfig: components['schemas']['StripeSourceConfig']
-    DestinationConfig:
-      | components['schemas']['PostgresDestinationConfig']
-      | components['schemas']['GoogleSheetsDestinationConfig']
-    PipelineConfig: {
-      source: components['schemas']['SourceConfig']
-      destination: components['schemas']['DestinationConfig']
-      streams?: {
-        name: string
-        /** @enum {string} */
-        sync_mode?: 'incremental' | 'full_refresh'
-        fields?: string[]
-      }[]
-    }
-  }
-  responses: never
-  parameters: never
-  requestBodies: never
-  headers: never
-  pathItems: never
+    schemas: {
+        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["ErrorMessage"] | components["schemas"]["StreamStatusMessage"] | components["schemas"]["EofMessage"];
+        RecordMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "record";
+            stream: string;
+            data: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            emitted_at: string;
+        };
+        StateMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "state";
+            stream: string;
+            data: unknown;
+        };
+        CatalogMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "catalog";
+            streams: {
+                name: string;
+                primary_key: string[][];
+                json_schema?: {
+                    [key: string]: unknown;
+                };
+                metadata?: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        LogMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "log";
+            /** @enum {string} */
+            level: "debug" | "info" | "warn" | "error";
+            message: string;
+        };
+        ErrorMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** @enum {string} */
+            failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
+            message: string;
+            stream?: string;
+            stack_trace?: string;
+        };
+        StreamStatusMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stream_status";
+            stream: string;
+            /** @enum {string} */
+            status: "started" | "running" | "complete" | "incomplete";
+        };
+        EofMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "eof";
+            /** @enum {string} */
+            reason: "complete" | "state_limit" | "time_limit" | "error";
+        };
+        DestinationOutput: components["schemas"]["StateMessageOutput"] | components["schemas"]["ErrorMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["EofMessageOutput"];
+        CatalogMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "catalog";
+            streams: {
+                name: string;
+                primary_key: string[][];
+                json_schema?: {
+                    [key: string]: unknown;
+                };
+                metadata?: {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        MessageOutput: components["schemas"]["RecordMessageOutput"] | components["schemas"]["StateMessageOutput"] | components["schemas"]["CatalogMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["ErrorMessageOutput"] | components["schemas"]["StreamStatusMessageOutput"] | components["schemas"]["EofMessageOutput"];
+        RecordMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "record";
+            stream: string;
+            data: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            emitted_at: string;
+        };
+        StateMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "state";
+            stream: string;
+            data: unknown;
+        };
+        LogMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "log";
+            /** @enum {string} */
+            level: "debug" | "info" | "warn" | "error";
+            message: string;
+        };
+        ErrorMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** @enum {string} */
+            failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
+            message: string;
+            stream?: string;
+            stack_trace?: string;
+        };
+        StreamStatusMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stream_status";
+            stream: string;
+            /** @enum {string} */
+            status: "started" | "running" | "complete" | "incomplete";
+        };
+        EofMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "eof";
+            /** @enum {string} */
+            reason: "complete" | "state_limit" | "time_limit" | "error";
+        };
+        StripeSourceConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "StripeSourceConfig";
+            /** @description Stripe API key (sk_test_... or sk_live_...) */
+            api_key: string;
+            /** @description Stripe account ID (resolved from API if omitted) */
+            account_id?: string;
+            /** @description Whether this is a live mode sync */
+            livemode?: boolean;
+            /** @description Stripe API version (e.g. 2025-04-30.basil) */
+            api_version?: string;
+            /**
+             * Format: uri
+             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+             */
+            base_url?: string;
+            /**
+             * Format: uri
+             * @description URL for managed webhook endpoint registration
+             */
+            webhook_url?: string;
+            /** @description Webhook signing secret (whsec_...) for signature verification */
+            webhook_secret?: string;
+            /** @description Enable WebSocket streaming for live events */
+            websocket?: boolean;
+            /** @description Enable events API polling for incremental sync after backfill */
+            poll_events?: boolean;
+            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+            webhook_port?: number;
+            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+            revalidate_objects?: string[];
+            /** @description Max objects to backfill per stream (useful for testing) */
+            backfill_limit?: number;
+            /** @description Max Stripe API requests per second (default: 25) */
+            rate_limit?: number;
+            /** @description Number of time-range segments for parallel backfill (default: 200) */
+            backfill_concurrency?: number;
+        };
+        PostgresDestinationConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "PostgresDestinationConfig";
+            /** @description Postgres connection string (alias for connection_string) */
+            url?: string;
+            /** @description Postgres connection string */
+            connection_string?: string;
+            /** @description Postgres host (required for AWS IAM) */
+            host?: string;
+            /**
+             * @description Postgres port
+             * @default 5432
+             */
+            port: number;
+            /** @description Database name (required for AWS IAM) */
+            database?: string;
+            /** @description Database user (required for AWS IAM) */
+            user?: string;
+            /** @description Target schema name (e.g. "stripe_sync") */
+            schema: string;
+            /**
+             * @description Records to buffer before flushing
+             * @default 100
+             */
+            batch_size: number;
+            /** @description AWS RDS IAM authentication config */
+            aws?: {
+                /** @description AWS region for RDS instance */
+                region: string;
+                /** @description IAM role ARN to assume (cross-account) */
+                role_arn?: string;
+                /** @description External ID for STS AssumeRole */
+                external_id?: string;
+            };
+            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+            ssl_ca_pem?: string;
+        };
+        GoogleSheetsDestinationConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "GoogleSheetsDestinationConfig";
+            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+            client_id?: string;
+            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+            client_secret?: string;
+            /** @description OAuth2 access token */
+            access_token: string;
+            /** @description OAuth2 refresh token */
+            refresh_token: string;
+            /** @description Target spreadsheet ID (created if omitted) */
+            spreadsheet_id?: string;
+            /**
+             * @description Title when creating a new spreadsheet
+             * @default Stripe Sync
+             */
+            spreadsheet_title: string;
+            /**
+             * @description Rows per Sheets API append call
+             * @default 50
+             */
+            batch_size: number;
+        };
+        SourceConfig: components["schemas"]["StripeSourceConfig"];
+        DestinationConfig: components["schemas"]["PostgresDestinationConfig"] | components["schemas"]["GoogleSheetsDestinationConfig"];
+        PipelineConfig: {
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            streams?: {
+                name: string;
+                /** @enum {string} */
+                sync_mode?: "incremental" | "full_refresh";
+                fields?: string[];
+            }[];
+        };
+    };
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
-export type $defs = Record<string, never>
+export type $defs = Record<string, never>;
 export interface operations {
-  health: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Server is healthy */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            /** @constant */
-            ok: true
-          }
-        }
-      }
-    }
-  }
-  setup: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Setup complete */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            [key: string]: unknown
-          }
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  teardown: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Teardown complete */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  check: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Connection check result */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            source: {
-              /** @enum {string} */
-              status: 'succeeded' | 'failed'
-              message?: string
-            }
-            destination: {
-              /** @enum {string} */
-              status: 'succeeded' | 'failed'
-              message?: string
-            }
-          }
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  discover: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Available streams */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['CatalogMessageOutput']
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  read: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-        /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
-        'x-state'?: string
-        /** @description When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync. */
-        'x-state-checkpoint-limit'?: number
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description NDJSON stream of sync messages */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/x-ndjson': components['schemas']['MessageOutput']
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  write: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/x-ndjson': components['schemas']['Message']
-      }
-    }
-    responses: {
-      /** @description NDJSON stream of write result messages */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/x-ndjson': components['schemas']['DestinationOutput']
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  sync: {
-    parameters: {
-      query?: never
-      header?: {
-        /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-        'x-pipeline'?: string
-        /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
-        'x-state'?: string
-        /** @description When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync. */
-        'x-state-checkpoint-limit'?: number
-      }
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description NDJSON stream of sync messages */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/x-ndjson': components['schemas']['DestinationOutput']
-        }
-      }
-      /** @description Invalid params */
-      400: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            error: unknown
-          }
-        }
-      }
-    }
-  }
-  listConnectors: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Available connectors with their JSON Schema configs */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': {
-            sources: {
-              [key: string]: {
-                config_schema: {
-                  [key: string]: unknown
-                }
-              }
-            }
-            destinations: {
-              [key: string]: {
-                config_schema: {
-                  [key: string]: unknown
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+    health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server is healthy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                    };
+                };
+            };
+        };
+    };
+    setup: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup complete */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    teardown: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teardown complete */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection check result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        source: {
+                            /** @enum {string} */
+                            status: "succeeded" | "failed";
+                            message?: string;
+                        };
+                        destination: {
+                            /** @enum {string} */
+                            status: "succeeded" | "failed";
+                            message?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    discover: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Available streams */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMessageOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    read: {
+        parameters: {
+            query?: {
+                /** @description Stop streaming after N state messages. */
+                state_limit?: number;
+                /** @description Stop streaming after N seconds. */
+                time_limit?: number;
+            };
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+                /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
+                "x-state"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description NDJSON stream of sync messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["MessageOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    write: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-ndjson": components["schemas"]["Message"];
+            };
+        };
+        responses: {
+            /** @description NDJSON stream of write result messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["DestinationOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    sync: {
+        parameters: {
+            query?: {
+                /** @description Stop streaming after N state messages. */
+                state_limit?: number;
+                /** @description Stop streaming after N seconds. */
+                time_limit?: number;
+            };
+            header?: {
+                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
+                "x-pipeline"?: string;
+                /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
+                "x-state"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description NDJSON stream of sync messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["DestinationOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    listConnectors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Available connectors with their JSON Schema configs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sources: {
+                            [key: string]: {
+                                config_schema: {
+                                    [key: string]: unknown;
+                                };
+                            };
+                        };
+                        destinations: {
+                            [key: string]: {
+                                config_schema: {
+                                    [key: string]: unknown;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
 }

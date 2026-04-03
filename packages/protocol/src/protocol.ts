@@ -179,6 +179,18 @@ export const StreamStatusMessage = z
   .meta({ id: 'StreamStatusMessage' })
 export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
 
+/**
+ * Terminal message — always the last line in an NDJSON streaming response.
+ * Tells the client why the stream ended so it can decide whether to call again.
+ */
+export const EofMessage = z
+  .object({
+    type: z.literal('eof'),
+    reason: z.enum(['complete', 'state_limit', 'time_limit', 'error']),
+  })
+  .meta({ id: 'EofMessage' })
+export type EofMessage = z.infer<typeof EofMessage>
+
 // MARK: - Pipeline params
 
 /** Parameters for a sync pipeline — source/destination config and optional stream selection. */
@@ -203,11 +215,12 @@ export const SyncEngineParams = PipelineConfig
 /** @deprecated Use PipelineConfig */
 export type SyncEngineParams = PipelineConfig
 
-/** The full set of parsed sync request params: pipeline config + cursor state + pagination. */
+/** The full set of parsed sync request params: pipeline config + cursor state + stream limits. */
 export interface SyncParams {
   pipeline: PipelineConfig
   state?: Record<string, unknown>
-  stateCheckpointLimit?: number
+  stateLimit?: number
+  timeLimitMs?: number
 }
 
 // MARK: - Message unions
@@ -218,7 +231,7 @@ export type DestinationInput = z.infer<typeof DestinationInput>
 
 /** Messages the destination yields back to the orchestrator (one per NDJSON line). */
 export const DestinationOutput = z
-  .discriminatedUnion('type', [StateMessage, ErrorMessage, LogMessage])
+  .discriminatedUnion('type', [StateMessage, ErrorMessage, LogMessage, EofMessage])
   .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
@@ -231,6 +244,7 @@ export const Message = z
     LogMessage,
     ErrorMessage,
     StreamStatusMessage,
+    EofMessage,
   ])
   .meta({ id: 'Message' })
 export type Message = z.infer<typeof Message>

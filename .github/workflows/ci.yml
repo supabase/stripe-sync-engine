@@ -60,6 +60,11 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check generated OpenAPI files
+        run: ./scripts/generate-openapi.sh --check
+        env:
+          STRIPE_API_KEY: 'sk_test_placeholder'
+
       - name: Ensure all shell tests are wired up
         run: |
           missing=()

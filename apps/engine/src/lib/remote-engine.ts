@@ -28,7 +28,7 @@ type StreamPost = (path: string, init: Record<string, unknown>) => Promise<{ res
 export function createRemoteEngine(
   engineUrl: string,
   pipeline: PipelineConfig,
-  opts?: { state?: Record<string, unknown>; stateLimit?: number }
+  opts?: { state?: Record<string, unknown>; stateLimit?: number; timeLimit?: number }
 ): Engine {
   const client = createClient<paths>({ baseUrl: engineUrl })
   const ph = JSON.stringify(pipeline)
@@ -41,10 +41,14 @@ export function createRemoteEngine(
     if (opts?.state && Object.keys(opts.state).length > 0) {
       h['x-state'] = JSON.stringify(opts.state)
     }
-    if (opts?.stateLimit != null) {
-      h['x-state-checkpoint-limit'] = String(opts.stateLimit)
-    }
     return h
+  }
+
+  function queryParams(): Record<string, string> {
+    const q: Record<string, string> = {}
+    if (opts?.stateLimit != null) q.state_limit = String(opts.stateLimit)
+    if (opts?.timeLimit != null) q.time_limit = String(opts.timeLimit)
+    return q
   }
 
   async function post(
@@ -53,7 +57,7 @@ export function createRemoteEngine(
   ): Promise<Response> {
     const headers = { ...extraHeaders() }
     const { response } = await streamPost(path, {
-      params: { header: { 'x-pipeline': ph } },
+      params: { header: { 'x-pipeline': ph }, query: queryParams() },
       parseAs: 'stream',
       headers,
       ...(body

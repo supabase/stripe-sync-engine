@@ -13,20 +13,24 @@ async function* asIterable<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item
 }
 
-/** Iterate a message stream, collecting errors/state/records and heartbeating. */
+/** Iterate a message stream, collecting errors/state/records/eof and heartbeating. */
 async function drainMessages(stream: AsyncIterable<Record<string, unknown>>): Promise<{
   errors: RunResult['errors']
   state: Record<string, unknown>
   records: unknown[]
+  eof?: { reason: string }
 }> {
   const errors: RunResult['errors'] = []
   const state: Record<string, unknown> = {}
   const records: unknown[] = []
+  let eof: { reason: string } | undefined
   let count = 0
 
   for await (const m of stream) {
     count++
-    if (m.type === 'error') {
+    if (m.type === 'eof') {
+      eof = { reason: m.reason as string }
+    } else if (m.type === 'error') {
       errors.push({
         message:
           (m.message as string) ||
@@ -44,7 +48,7 @@ async function drainMessages(stream: AsyncIterable<Record<string, unknown>>): Pr
   }
   if (count % 50 !== 0) heartbeat({ messages: count })
 
-  return { errors, state, records }
+  return { errors, state, records, eof }
 }
 
 export function createActivities(opts: { engineUrl: string; kafkaBroker?: string }) {
@@ -82,30 +86,42 @@ export function createActivities(opts: { engineUrl: string; kafkaBroker?: string
 
     async syncImmediate(
       config: PipelineConfig,
-      opts?: { input?: unknown[]; state?: Record<string, unknown>; stateLimit?: number }
-    ): Promise<RunResult> {
+      opts?: {
+        input?: unknown[]
+        state?: Record<string, unknown>
+        stateLimit?: number
+        timeLimit?: number
+      }
+    ): Promise<RunResult & { eof?: { reason: string } }> {
       const engine = createRemoteEngine(engineUrl, config, {
         state: opts?.state,
         stateLimit: opts?.stateLimit,
+        timeLimit: opts?.timeLimit,
       })
       const input = opts?.input?.length ? asIterable(opts.input) : undefined
-      const { errors, state } = await drainMessages(
+      const { errors, state, eof } = await drainMessages(
         engine.sync(input) as AsyncIterable<Record<string, unknown>>
       )
-      return { errors, state }
+      return { errors, state, eof }
     },
 
     async readIntoQueue(
       config: PipelineConfig,
       pipelineId: string,
-      opts?: { input?: unknown[]; state?: Record<string, unknown>; stateLimit?: number }
-    ): Promise<{ count: number; state: Record<string, unknown> }> {
+      opts?: {
+        input?: unknown[]
+        state?: Record<string, unknown>
+        stateLimit?: number
+        timeLimit?: number
+      }
+    ): Promise<{ count: number; state: Record<string, unknown>; eof?: { reason: string } }> {
       const engine = createRemoteEngine(engineUrl, config, {
         state: opts?.state,
         stateLimit: opts?.stateLimit,
+        timeLimit: opts?.timeLimit,
       })
       const input = opts?.input?.length ? asIterable(opts.input) : undefined
-      const { records, state } = await drainMessages(
+      const { records, state, eof } = await drainMessages(
         engine.read(input) as AsyncIterable<Record<string, unknown>>
       )
 
@@ -118,7 +134,7 @@ export function createActivities(opts: { engineUrl: string; kafkaBroker?: string
         })
       }
 
-      return { count: records.length, state }
+      return { count: records.length, state, eof }
     },
 
     async writeFromQueue(

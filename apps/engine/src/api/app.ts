@@ -16,7 +16,7 @@ import {
   DestinationOutput as DestinationOutputSchema,
   CatalogMessage as CatalogMessageSchema,
 } from '@stripe/sync-protocol'
-import { takeStateCheckpoints } from '../lib/pipeline.js'
+import { takeLimits } from '../lib/pipeline.js'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { logger } from '../logger.js'
 import {
@@ -85,9 +85,12 @@ export function createApp(resolver: ConnectorResolver) {
     return false
   }
 
-  /** Parse all sync headers (X-Pipeline, X-State, X-State-Checkpoint-Limit) into SyncParams. */
+  /** Parse sync headers (X-Pipeline, X-State) and query params (state_limit, time_limit) into SyncParams. */
   function parseSyncParams(c: {
-    req: { header: (name: string) => string | undefined }
+    req: {
+      header: (name: string) => string | undefined
+      query: (name: string) => string | undefined
+    }
   }): SyncParams {
     const pipelineHeader = c.req.header('X-Pipeline')
     if (!pipelineHeader) {
@@ -110,10 +113,12 @@ export function createApp(resolver: ConnectorResolver) {
       }
     }
 
-    const limitHeader = c.req.header('X-State-Checkpoint-Limit')
-    const stateCheckpointLimit = limitHeader ? Number(limitHeader) : undefined
+    const stateLimitStr = c.req.query('state_limit')
+    const stateLimit = stateLimitStr ? Number(stateLimitStr) : undefined
+    const timeLimitStr = c.req.query('time_limit')
+    const timeLimitMs = timeLimitStr ? Number(timeLimitStr) * 1000 : undefined
 
-    return { pipeline, state, stateCheckpointLimit }
+    return { pipeline, state, stateLimit, timeLimitMs }
   }
 
   /** Wraps an async iterable to call `fn()` after iteration completes or throws. */
@@ -152,17 +157,21 @@ export function createApp(resolver: ConnectorResolver) {
       example: JSON.stringify({ products: { cursor: 'prod_xyz' } }),
     })
 
-  const xCheckpointLimitHeader = z.coerce.number().int().positive().optional().meta({
-    description:
-      'When set, stops streaming after N state checkpoint messages. Enables page-at-a-time sync.',
-    example: '1',
-  })
-
   const pipelineHeaders = z.object({ 'x-pipeline': xPipelineHeader })
   const allSyncHeaders = z.object({
     'x-pipeline': xPipelineHeader,
     'x-state': xStateHeader,
-    'x-state-checkpoint-limit': xCheckpointLimitHeader,
+  })
+
+  const syncQueryParams = z.object({
+    state_limit: z.coerce.number().int().positive().optional().meta({
+      description: 'Stop streaming after N state messages.',
+      example: '100',
+    }),
+    time_limit: z.coerce.number().positive().optional().meta({
+      description: 'Stop streaming after N seconds.',
+      example: '10',
+    }),
   })
 
   const errorResponse = {
@@ -336,7 +345,7 @@ export function createApp(resolver: ConnectorResolver) {
       summary: 'Read records from source',
       description:
         'Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.',
-      requestParams: { header: allSyncHeaders },
+      requestParams: { header: allSyncHeaders, query: syncQueryParams },
       responses: {
         200: {
           description: 'NDJSON stream of sync messages',
@@ -359,10 +368,10 @@ export function createApp(resolver: ConnectorResolver) {
       )
 
       const input = inputPresent ? parseNdjsonStream(c.req.raw.body!) : undefined
-      let output: AsyncIterable<Message> = engine.read(input)
-      if (params.stateCheckpointLimit) {
-        output = takeStateCheckpoints<Message>(params.stateCheckpointLimit)(output)
-      }
+      const output = takeLimits<Message>({
+        stateLimit: params.stateLimit,
+        timeLimitMs: params.timeLimitMs,
+      })(engine.read(input))
       return ndjsonResponse(logApiStream('Engine API /read', output, context, startedAt))
     }) as any
   )
@@ -417,7 +426,7 @@ export function createApp(resolver: ConnectorResolver) {
       description:
         'Without a request body, reads from the source connector and writes to the destination (backfill mode). ' +
         'With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).',
-      requestParams: { header: allSyncHeaders },
+      requestParams: { header: allSyncHeaders, query: syncQueryParams },
       responses: {
         200: {
           description: 'NDJSON stream of sync messages',
@@ -433,10 +442,10 @@ export function createApp(resolver: ConnectorResolver) {
       const engine = await createEngineFromParams(params.pipeline, resolver, stateStore)
 
       const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
-      let output: AsyncIterable<DestinationOutput> = engine.sync(input)
-      if (params.stateCheckpointLimit) {
-        output = takeStateCheckpoints<DestinationOutput>(params.stateCheckpointLimit)(output)
-      }
+      const output = takeLimits<DestinationOutput>({
+        stateLimit: params.stateLimit,
+        timeLimitMs: params.timeLimitMs,
+      })(engine.sync(input))
       return ndjsonResponse(output)
     }) as any
   )

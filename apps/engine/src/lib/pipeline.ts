@@ -89,21 +89,35 @@ export function persistState(
   }
 }
 
-// MARK: - takeStateCheckpoints
+// MARK: - takeLimits
 
 /**
- * Stops streaming after yielding `limit` state messages (across all streams).
- * All non-state messages before and between state messages pass through.
+ * Applies stream limits and emits an `eof` terminal message as the final item.
+ *
+ * - `stateLimit`: stop after N state messages (state message boundary)
+ * - `timeLimitMs`: stop after N milliseconds (any message boundary)
+ *
+ * When both are set, whichever fires first wins. All non-matching messages
+ * pass through unchanged. The last yielded item is always `{ type: 'eof', reason }`.
  */
-export function takeStateCheckpoints<T extends { type: string }>(
-  limit: number
+export function takeLimits<T extends { type: string }>(
+  opts: { stateLimit?: number; timeLimitMs?: number } = {}
 ): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
   return async function* (messages) {
-    let count = 0
+    const deadline = opts.timeLimitMs ? Date.now() + opts.timeLimitMs : undefined
+    let stateCount = 0
     for await (const msg of messages) {
       yield msg
-      if (msg.type === 'state' && ++count >= limit) return
+      if (deadline && Date.now() >= deadline) {
+        yield { type: 'eof', reason: 'time_limit' } as unknown as T
+        return
+      }
+      if (msg.type === 'state' && opts.stateLimit && ++stateCount >= opts.stateLimit) {
+        yield { type: 'eof', reason: 'state_limit' } as unknown as T
+        return
+      }
     }
+    yield { type: 'eof', reason: 'complete' } as unknown as T
   }
 }
 

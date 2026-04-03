@@ -22,7 +22,7 @@ Short records of key architectural choices and why they were made.
 
 **Decision:** State is a message type in the protocol, not a separate storage API.
 
-**Rationale:** Keeps connectors stateless and testable. State messages flow through the same async iterable pipeline as data, making them composable with `takeStateCheckpoints()` and other stream utilities.
+**Rationale:** Keeps connectors stateless and testable. State messages flow through the same async iterable pipeline as data, making them composable with `takeLimits()` and other stream utilities.
 
 **Consequence:** Connectors yield `StateMessage` when they want to checkpoint. They receive state via `cursor_in` parameter, never by querying a store.
 

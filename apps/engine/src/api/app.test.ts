@@ -139,11 +139,14 @@ describe('GET /openapi.json', () => {
 
     // Message union
     expect(schemas.Message.discriminator.propertyName).toBe('type')
-    expect(schemas.Message.oneOf).toHaveLength(6)
+    expect(schemas.Message.oneOf).toHaveLength(7)
 
-    // DestinationOutput union
+    // DestinationOutput union (state, error, log, eof)
     expect(schemas.DestinationOutput.discriminator.propertyName).toBe('type')
-    expect(schemas.DestinationOutput.oneOf).toHaveLength(3)
+    expect(schemas.DestinationOutput.oneOf).toHaveLength(4)
+
+    // EofMessage
+    expect(schemas.EofMessage.properties.type.const).toBe('eof')
 
     // NDJSON responses reference schemas (zod-openapi adds Output suffix for response-only types)
     const readNdjson =
@@ -289,9 +292,10 @@ describe('POST /read', () => {
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
     const events = await readNdjson<Message>(res)
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('state')
+    expect(events[2]).toMatchObject({ type: 'eof', reason: 'complete' })
   })
 })
 
@@ -365,18 +369,19 @@ describe('POST /sync', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readNdjson<StateMessage>(res)
-    expect(events).toHaveLength(1)
+    const events = await readNdjson<Record<string, unknown>>(res)
+    expect(events).toHaveLength(2)
     expect(events[0]!.type).toBe('state')
+    expect(events[1]).toMatchObject({ type: 'eof', reason: 'complete' })
   })
 })
 
 // ---------------------------------------------------------------------------
-// X-State-Checkpoint-Limit
+// state_limit and time_limit query params
 // ---------------------------------------------------------------------------
 
-describe('X-State-Checkpoint-Limit', () => {
-  it('POST /read stops after N state messages', async () => {
+describe('state_limit and time_limit', () => {
+  it('POST /read?state_limit=1 stops after 1 state message and emits eof', async () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
@@ -401,11 +406,10 @@ describe('X-State-Checkpoint-Limit', () => {
         emitted_at: '2024-01-01T00:00:00.000Z',
       },
     ])
-    const res = await app.request('/read', {
+    const res = await app.request('/read?state_limit=1', {
       method: 'POST',
       headers: {
         'X-Pipeline': syncParams,
-        'X-State-Checkpoint-Limit': '1',
         ...bodyHeaders(body),
       },
       body,
@@ -413,13 +417,14 @@ describe('X-State-Checkpoint-Limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    // Should get 1 record + 1 state, then stop
-    expect(events).toHaveLength(2)
+    // 1 record + 1 state + 1 eof
+    expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('state')
+    expect(events[2]).toMatchObject({ type: 'eof', reason: 'state_limit' })
   })
 
-  it('POST /sync stops after N state messages', async () => {
+  it('POST /sync?state_limit=1 stops after 1 state message and emits eof', async () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
@@ -438,11 +443,10 @@ describe('X-State-Checkpoint-Limit', () => {
       },
       { type: 'state', stream: 'customers', data: { cursor: '2' } },
     ])
-    const res = await app.request('/sync', {
+    const res = await app.request('/sync?state_limit=1', {
       method: 'POST',
       headers: {
         'X-Pipeline': syncParams,
-        'X-State-Checkpoint-Limit': '1',
         ...bodyHeaders(body),
       },
       body,
@@ -450,12 +454,13 @@ describe('X-State-Checkpoint-Limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    // destinationTest only yields state messages, so we get 1 state then stop
-    expect(events).toHaveLength(1)
+    // destinationTest only yields state messages, so we get 1 state + 1 eof
+    expect(events).toHaveLength(2)
     expect(events[0]!.type).toBe('state')
+    expect(events[1]).toMatchObject({ type: 'eof', reason: 'state_limit' })
   })
 
-  it('POST /read without limit returns all messages', async () => {
+  it('POST /read without limits returns all messages plus eof:complete', async () => {
     const app = createApp(resolver)
 
     const body = toNdjson([
@@ -482,7 +487,9 @@ describe('X-State-Checkpoint-Limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    expect(events).toHaveLength(4)
+    // 4 original messages + eof
+    expect(events).toHaveLength(5)
+    expect(events[4]).toMatchObject({ type: 'eof', reason: 'complete' })
   })
 })
 

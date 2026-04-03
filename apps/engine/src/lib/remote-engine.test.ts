@@ -131,16 +131,18 @@ describe('createRemoteEngine', () => {
         { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
       ]
       const messages = await collect(engine.read(asIterable(input)))
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       expect(messages[0]!.type).toBe('record')
       expect(messages[1]!.type).toBe('state')
+      expect(messages[2]).toMatchObject({ type: 'eof', reason: 'complete' })
     })
 
-    it('returns empty stream when called without input', async () => {
+    it('returns eof:complete when called without input', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
-      // sourceTest yields nothing when $stdin is absent
+      // sourceTest yields nothing when $stdin is absent — only eof
       const messages = await collect(engine.read())
-      expect(messages).toHaveLength(0)
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toMatchObject({ type: 'eof', reason: 'complete' })
     })
   })
 
@@ -176,14 +178,16 @@ describe('createRemoteEngine', () => {
         { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
       ]
       const output = await collect(engine.sync(asIterable(input)))
-      expect(output).toHaveLength(1)
+      expect(output).toHaveLength(2)
       expect(output[0]!.type).toBe('state')
+      expect(output[1]).toMatchObject({ type: 'eof', reason: 'complete' })
     })
 
-    it('returns empty stream without input (no source data)', async () => {
+    it('returns eof:complete without input (no source data)', async () => {
       const engine = createRemoteEngine(engineUrl, pipeline)
       const output = await collect(engine.sync())
-      expect(output).toHaveLength(0)
+      expect(output).toHaveLength(1)
+      expect(output[0]).toMatchObject({ type: 'eof', reason: 'complete' })
     })
   })
 
