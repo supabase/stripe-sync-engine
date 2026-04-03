@@ -7,13 +7,13 @@ export function createSyncImmediateActivity(context: ActivitiesContext) {
   return async function syncImmediate(
     config: PipelineConfig,
     opts?: SyncOpts & { input?: unknown[] }
-  ): Promise<RunResult> {
+  ): Promise<RunResult & { eof?: { reason: string } }> {
     const engine = createRemoteEngine(context.engineUrl)
     const { input: inputArr, ...syncOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
-    const { errors, state } = await drainMessages(
+    const { errors, state, eof } = await drainMessages(
       engine.pipeline_sync(config, syncOpts, input) as AsyncIterable<Record<string, unknown>>
     )
-    return { errors, state }
+    return { errors, state, eof }
   }
 }

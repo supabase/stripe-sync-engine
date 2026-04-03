@@ -26,10 +26,25 @@ type StreamPost = (path: string, init: Record<string, unknown>) => Promise<{ res
  * Streaming NDJSON endpoints use `client.POST` with targeted casts due to
  * openapi-typescript generator limitations with streaming bodies.
  *
+ * ### Half-duplex streaming
+ *
+ * Streaming endpoints (/read, /sync, /write) send the request body as a
+ * `ReadableStream` with `duplex: 'half'`. This means the full request body is
+ * sent before the response starts — not a simultaneous two-way stream.
+ *
+ * True full-duplex (piping request in while reading response out) requires
+ * HTTP/2 and `duplex: 'full'`, which is non-standard and not exposed by
+ * Node.js's built-in fetch (undici). See DDR-007 in docs/architecture/decisions.md.
+ *
+ * This is intentional and sufficient: inputs to /read and /sync are small,
+ * bounded event batches. No current use case needs to stream input and output
+ * concurrently. If that changes, replace the fetch-based transport here with a
+ * raw HTTP/2 client for these endpoints.
+ *
  * Usage:
  *   const engine = createRemoteEngine('http://localhost:3001')
- *   await engine.pipelineSetup(pipeline)
- *   for await (const msg of engine.pipelineSync(pipeline)) { ... }
+ *   await engine.pipeline_setup(pipeline)
+ *   for await (const msg of engine.pipeline_sync(pipeline)) { ... }
  */
 export function createRemoteEngine(engineUrl: string): Engine {
   const client = createClient<paths>({ baseUrl: engineUrl })

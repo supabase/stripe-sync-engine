@@ -8,11 +8,11 @@ export function createReadIntoQueueActivity(context: ActivitiesContext) {
     config: PipelineConfig,
     pipelineId: string,
     opts?: SyncOpts & { input?: unknown[] }
-  ): Promise<{ count: number; state: Record<string, unknown> }> {
+  ): Promise<{ count: number; state: Record<string, unknown>; eof?: { reason: string } }> {
     const engine = createRemoteEngine(context.engineUrl)
     const { input: inputArr, ...syncOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
-    const { records, state } = await drainMessages(
+    const { records, state, eof } = await drainMessages(
       engine.pipeline_read(config, syncOpts, input) as AsyncIterable<Record<string, unknown>>
     )
 
@@ -24,6 +24,6 @@ export function createReadIntoQueueActivity(context: ActivitiesContext) {
       })
     }
 
-    return { count: records.length, state }
+    return { count: records.length, state, eof }
   }
 }
