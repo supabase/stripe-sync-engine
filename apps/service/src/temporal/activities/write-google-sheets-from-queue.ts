@@ -1,19 +1,107 @@
 import { enforceCatalog } from '@stripe/sync-engine'
-import type { ConfiguredCatalog, DestinationInput, PipelineConfig } from '@stripe/sync-engine'
+import type { ConfiguredCatalog, DestinationInput, Message, PipelineConfig, RecordMessage } from '@stripe/sync-engine'
 import {
   configSchema as googleSheetsConfigSchema,
   createDestination as createGoogleSheetsDestination,
   parseGoogleSheetsMetaLog,
+  ROW_KEY_FIELD,
+  ROW_NUMBER_FIELD,
+  serializeRowKey,
 } from '@stripe/sync-destination-google-sheets'
 import type { ActivitiesContext } from './_shared.js'
-import {
-  addRowNumbers,
-  asIterable,
-  augmentGoogleSheetsCatalog,
-  collectError,
-  compactGoogleSheetsMessages,
-  type RunResult,
-} from './_shared.js'
+import { asIterable, collectError, type RunResult } from './_shared.js'
+
+function compactGoogleSheetsMessages(messages: Message[]): Message[] {
+  const compacted: Message[] = []
+  let pendingOrder: string[] = []
+  let pending = new Map<string, RecordMessage>()
+
+  const flushPending = () => {
+    for (const key of pendingOrder) {
+      const message = pending.get(key)
+      if (message) compacted.push(message)
+    }
+    pendingOrder = []
+    pending = new Map()
+  }
+
+  for (const message of messages) {
+    if (message.type === 'record') {
+      const rowKey =
+        typeof message.record.data[ROW_KEY_FIELD] === 'string'
+          ? message.record.data[ROW_KEY_FIELD]
+          : undefined
+      if (!rowKey) {
+        compacted.push(message)
+        continue
+      }
+      const dedupeKey = `${message.record.stream}:${rowKey}`
+      if (!pending.has(dedupeKey)) pendingOrder.push(dedupeKey)
+      pending.set(dedupeKey, message)
+      continue
+    }
+
+    if (message.type === 'state') {
+      flushPending()
+      compacted.push(message)
+    }
+  }
+
+  flushPending()
+  return compacted
+}
+
+function addRowNumbers(
+  messages: Message[],
+  rowIndex: Record<string, Record<string, number>>
+): Message[] {
+  return messages.map((message) => {
+    if (message.type !== 'record') return message
+    const rowKey =
+      typeof message.record.data[ROW_KEY_FIELD] === 'string'
+        ? message.record.data[ROW_KEY_FIELD]
+        : undefined
+    const rowNumber = rowKey ? rowIndex[message.record.stream]?.[rowKey] : undefined
+    if (rowNumber === undefined) return message
+    return {
+      ...message,
+      record: {
+        ...message.record,
+        data: {
+          ...message.record.data,
+          [ROW_NUMBER_FIELD]: rowNumber,
+        },
+      },
+    }
+  })
+}
+
+function augmentGoogleSheetsCatalog(catalog: ConfiguredCatalog): ConfiguredCatalog {
+  return {
+    streams: catalog.streams.map((configuredStream) => {
+      const props = configuredStream.stream.json_schema?.properties as
+        | Record<string, unknown>
+        | undefined
+
+      if (!props) return configuredStream
+
+      return {
+        ...configuredStream,
+        stream: {
+          ...configuredStream.stream,
+          json_schema: {
+            ...configuredStream.stream.json_schema,
+            properties: {
+              ...props,
+              [ROW_KEY_FIELD]: { type: 'string' },
+              [ROW_NUMBER_FIELD]: { type: 'number' },
+            },
+          },
+        },
+      }
+    }),
+  }
+}
 
 export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesContext) {
   return async function writeGoogleSheetsFromQueue(

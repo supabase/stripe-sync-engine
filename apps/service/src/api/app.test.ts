@@ -104,7 +104,7 @@ describe('POST /pipelines workflow dispatch', () => {
     expect(res.status).toBe(201)
     expect(start).toHaveBeenCalledOnce()
     expect(start).toHaveBeenCalledWith(
-      'pipelineGoogleSheetsWorkflow',
+      'googleSheetPipelineWorkflow',
       expect.objectContaining({
         taskQueue: 'unused',
       })
@@ -124,7 +124,7 @@ function stubActivities(): SyncActivities {
     discoverCatalog: async () => ({ streams: [] }),
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
-    readIntoQueueWithState: async () => ({ count: 0, state: {} }),
+    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: {} }),
     readIntoQueue: async () => ({ count: 0, state: {} }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],

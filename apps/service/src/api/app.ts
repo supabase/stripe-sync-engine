@@ -9,7 +9,7 @@ import type { Pipeline } from '../lib/createSchemas.js'
 import type { WorkflowStatus } from '../temporal/workflows/_shared.js'
 
 const DEFAULT_PIPELINE_WORKFLOW = 'pipelineWorkflow'
-const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'pipelineGoogleSheetsWorkflow'
+const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'googleSheetPipelineWorkflow'
 const ACTIVE_PIPELINE_STATUSES =
   "ExecutionStatus IN ('Running', 'Failed', 'Terminated', 'TimedOut', 'Canceled')"
 

@@ -1,7 +1,7 @@
 import { createActivitiesContext } from './_shared.js'
 import { createDiscoverCatalogActivity } from './discover-catalog.js'
 import { createReadIntoQueueActivity } from './read-into-queue.js'
-import { createReadIntoQueueWithStateActivity } from './read-into-queue-with-state.js'
+import { createReadGoogleSheetsIntoQueueActivity } from './read-google-sheets-into-queue.js'
 import { createSetupActivity } from './setup.js'
 import { createSyncImmediateActivity } from './sync-immediate.js'
 import { createTeardownActivity } from './teardown.js'
@@ -17,7 +17,7 @@ export function createActivities(opts: { engineUrl: string; kafkaBroker?: string
     discoverCatalog: createDiscoverCatalogActivity(context),
     setup: createSetupActivity(context),
     syncImmediate: createSyncImmediateActivity(context),
-    readIntoQueueWithState: createReadIntoQueueWithStateActivity(context),
+    readGoogleSheetsIntoQueue: createReadGoogleSheetsIntoQueueActivity(context),
     readIntoQueue: createReadIntoQueueActivity(context),
     writeGoogleSheetsFromQueue: createWriteGoogleSheetsFromQueueActivity(context),
     writeFromQueue: createWriteFromQueueActivity(context),

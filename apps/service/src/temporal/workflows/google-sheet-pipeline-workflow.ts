@@ -6,7 +6,7 @@ import {
   deleteSignal,
   discoverCatalog,
   Pipeline,
-  readIntoQueueWithState,
+  readGoogleSheetsIntoQueue,
   RowIndex,
   setup,
   stateQuery,
@@ -20,7 +20,7 @@ import {
 } from './_shared.js'
 import { CONTINUE_AS_NEW_THRESHOLD, deepEqual, EVENT_BATCH_SIZE } from '../../lib/utils.js'
 
-export interface PipelineGoogleSheetsWorkflowOpts {
+export interface GoogleSheetPipelineWorkflowOpts {
   phase?: string
   sourceState?: Record<string, unknown>
   readState?: Record<string, unknown>
@@ -32,9 +32,9 @@ export interface PipelineGoogleSheetsWorkflowOpts {
   writeRps?: number
 }
 
-export async function pipelineGoogleSheetsWorkflow(
+export async function googleSheetPipelineWorkflow(
   pipeline: Pipeline,
-  opts?: PipelineGoogleSheetsWorkflowOpts
+  opts?: GoogleSheetPipelineWorkflowOpts
 ): Promise<void> {
   let paused = false
   let deleted = false
@@ -91,7 +91,7 @@ export async function pipelineGoogleSheetsWorkflow(
   async function tickIteration() {
     iteration++
     if (iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof pipelineGoogleSheetsWorkflow>(pipeline, {
+      await continueAsNew<typeof googleSheetPipelineWorkflow>(pipeline, {
         phase: 'running',
         sourceState,
         readState,
@@ -133,7 +133,7 @@ export async function pipelineGoogleSheetsWorkflow(
 
       if (inputQueue.length > 0) {
         const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
-        const { count } = await readIntoQueueWithState(config, pipeline.id, {
+        const { count } = await readGoogleSheetsIntoQueue(config, pipeline.id, {
           input: batch,
           catalog,
         })
@@ -144,11 +144,15 @@ export async function pipelineGoogleSheetsWorkflow(
 
       if (!readComplete) {
         const before = readState
-        const { count, state: nextReadState } = await readIntoQueueWithState(config, pipeline.id, {
-          state: readState,
-          stateLimit: 1,
-          catalog,
-        })
+        const { count, state: nextReadState } = await readGoogleSheetsIntoQueue(
+          config,
+          pipeline.id,
+          {
+            state: readState,
+            stateLimit: 1,
+            catalog,
+          }
+        )
         if (count > 0) pendingWrites = true
         readState = { ...readState, ...nextReadState }
         readComplete = deepEqual(readState, before)

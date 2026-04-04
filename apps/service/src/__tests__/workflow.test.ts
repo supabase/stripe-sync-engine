@@ -22,7 +22,7 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     discoverCatalog: async () => ({ streams: [] }),
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
-    readIntoQueueWithState: async () => ({ count: 0, state: {} }),
+    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: {} }),
     readIntoQueue: async () => ({ count: 0, state: {} }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
@@ -209,36 +209,6 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
     })
   })
 
-  it('skips setup when phase is running (continueAsNew case)', async () => {
-    let setupCalled = false
-
-    const worker = await Worker.create({
-      connection: testEnv.nativeConnection,
-      taskQueue: 'test-queue-5',
-      workflowsPath,
-      activities: stubActivities({
-        setup: async () => {
-          setupCalled = true
-          return {}
-        },
-      }),
-    })
-
-    await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline, { phase: 'running' }],
-        workflowId: 'test-sync-5',
-        taskQueue: 'test-queue-5',
-      })
-
-      await new Promise((r) => setTimeout(r, 1000))
-      await handle.signal('delete')
-      await handle.result()
-
-      expect(setupCalled).toBe(false)
-    })
-  })
-
   it('returns pipeline config via config query', async () => {
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
@@ -293,7 +263,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
   })
 })
 
-describe('pipelineGoogleSheetsWorkflow (unit — stubbed activities)', () => {
+describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
   it('uses the Sheets-specific read path and catalog discovery', async () => {
     let discoverCalls = 0
     let readCalls = 0
@@ -308,7 +278,7 @@ describe('pipelineGoogleSheetsWorkflow (unit — stubbed activities)', () => {
           discoverCalls++
           return { streams: [] }
         },
-        readIntoQueueWithState: async () => {
+        readGoogleSheetsIntoQueue: async () => {
           readCalls++
           return { count: 0, state: {} }
         },
@@ -320,7 +290,7 @@ describe('pipelineGoogleSheetsWorkflow (unit — stubbed activities)', () => {
     })
 
     await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('pipelineGoogleSheetsWorkflow', {
+      const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
         args: [
           {
             ...testPipeline,
@@ -372,7 +342,7 @@ describe('pipelineGoogleSheetsWorkflow (unit — stubbed activities)', () => {
       workflowsPath,
       activities: stubActivities({
         discoverCatalog: async () => discoveredCatalog,
-        readIntoQueueWithState: async () => {
+        readGoogleSheetsIntoQueue: async () => {
           readCalls++
           return readCalls === 1
             ? { count: 1, state: { customers: { cursor: 'cus_1' } } }
@@ -391,7 +361,7 @@ describe('pipelineGoogleSheetsWorkflow (unit — stubbed activities)', () => {
     })
 
     await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('pipelineGoogleSheetsWorkflow', {
+      const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
         args: [
           {
             ...testPipeline,

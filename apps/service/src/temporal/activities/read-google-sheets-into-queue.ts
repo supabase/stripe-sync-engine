@@ -7,11 +7,31 @@ import type {
   RecordMessage,
   SourceReadOptions,
 } from '@stripe/sync-engine'
+import {
+  ROW_KEY_FIELD,
+  serializeRowKey,
+} from '@stripe/sync-destination-google-sheets'
 import type { ActivitiesContext } from './_shared.js'
-import { asIterable, collectError, type RunResult, withRowKey } from './_shared.js'
+import { asIterable, collectError, type RunResult } from './_shared.js'
 
-export function createReadIntoQueueWithStateActivity(context: ActivitiesContext) {
-  return async function readIntoQueueWithState(
+function withRowKey(record: RecordMessage, catalog?: ConfiguredCatalog): RecordMessage {
+  const primaryKey = catalog?.streams.find((stream) => stream.stream.name === record.record.stream)
+    ?.stream.primary_key
+  if (!primaryKey) return record
+  return {
+    ...record,
+    record: {
+      ...record.record,
+      data: {
+        ...record.record.data,
+        [ROW_KEY_FIELD]: serializeRowKey(primaryKey, record.record.data),
+      },
+    },
+  }
+}
+
+export function createReadGoogleSheetsIntoQueueActivity(context: ActivitiesContext) {
+  return async function readGoogleSheetsIntoQueue(
     config: PipelineConfig,
     pipelineId: string,
     opts?: SourceReadOptions & {
