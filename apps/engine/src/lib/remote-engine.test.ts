@@ -214,8 +214,8 @@ describe('createRemoteEngine', () => {
     it('returns available source connectors as array', async () => {
       const engine = createRemoteEngine(engineUrl)
       const result = await engine.meta_sources_list()
-      expect(Array.isArray(result.data)).toBe(true)
-      expect(result.data.find((c) => c.type === 'test')).toHaveProperty('config_schema')
+      expect(Array.isArray(result.items)).toBe(true)
+      expect(result.items.find((c) => c.type === 'test')).toHaveProperty('config_schema')
     })
   })
 
@@ -236,8 +236,8 @@ describe('createRemoteEngine', () => {
     it('returns available destination connectors as array', async () => {
       const engine = createRemoteEngine(engineUrl)
       const result = await engine.meta_destinations_list()
-      expect(Array.isArray(result.data)).toBe(true)
-      expect(result.data.find((c) => c.type === 'test')).toHaveProperty('config_schema')
+      expect(Array.isArray(result.items)).toBe(true)
+      expect(result.items.find((c) => c.type === 'test')).toHaveProperty('config_schema')
     })
   })
 

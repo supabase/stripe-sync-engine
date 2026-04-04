@@ -139,12 +139,12 @@ echo "==> src-stripe: read through smokescreen"
 READ_PARAMS=$(printf \
   '{"source":{"type":"stripe","api_key":"%s","backfill_limit":5},"destination":{"type":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' \
   "$STRIPE_API_KEY")
-OUTPUT=$(ecurl -s --max-time 90 -w '\n%{http_code}' -X POST "${ENGINE_URL}/read" \
+OUTPUT=$(ecurl -s --max-time 90 -w '\n%{http_code}' -X POST "${ENGINE_URL}/pipeline_read" \
   -H "X-Pipeline: $READ_PARAMS")
 HTTP_CODE=$(echo "$OUTPUT" | tail -1)
 OUTPUT=$(echo "$OUTPUT" | sed '$d')
 if [ "$HTTP_CODE" != "200" ]; then
-  echo "FAIL: /read returned HTTP $HTTP_CODE"
+  echo "FAIL: /pipeline_read returned HTTP $HTTP_CODE"
   echo "$OUTPUT" | tail -20
   exit 1
 fi
@@ -158,9 +158,9 @@ echo "==> dest-pg: setup + write"
 PG_PARAMS=$(printf \
   '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"postgres","url":"%s","schema":"stripe_smokescreen_test"}}' \
   "$STRIPE_API_KEY" "$PG_URL")
-ecurl -sf --max-time 30 -X POST "${ENGINE_URL}/setup" \
+ecurl -sf --max-time 30 -X POST "${ENGINE_URL}/pipeline_setup" \
   -H "X-Pipeline: $PG_PARAMS" && echo "    setup OK" || echo "    setup returned non-204 (may be fine)"
-echo "$OUTPUT" | ecurl -sf --max-time 90 -X POST "${ENGINE_URL}/write" \
+echo "$OUTPUT" | ecurl -sf --max-time 90 -X POST "${ENGINE_URL}/pipeline_write" \
   -H "X-Pipeline: $PG_PARAMS" \
   -H "Content-Type: application/x-ndjson" \
   --data-binary @- | head -3 || true

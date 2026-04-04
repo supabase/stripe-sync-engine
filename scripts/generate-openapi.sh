@@ -30,7 +30,7 @@ for i in $(seq 1 20); do
   curl -sf "http://localhost:$engine_port/health" > /dev/null 2>&1 && break
   sleep 0.3
 done
-curl -sf "http://localhost:$engine_port/openapi.json" > "$engine_out"
+curl -sf "http://localhost:$engine_port/openapi.json" | pnpm prettier --stdin-filepath openapi.json > "$engine_out"
 kill $ENGINE_PID
 wait $ENGINE_PID 2>/dev/null || true
 trap - EXIT
@@ -55,7 +55,7 @@ node -e "
   const res = await app.request('/openapi.json');
   const spec = await res.json();
   process.stdout.write(JSON.stringify(spec, null, 2) + '\n');
-" > "$service_out"
+" | pnpm prettier --stdin-filepath openapi.json > "$service_out"
 
 echo "Generating TypeScript types..."
 # Resolve to absolute paths (needed because pnpm --filter changes cwd)

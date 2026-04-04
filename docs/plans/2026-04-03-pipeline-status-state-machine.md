@@ -87,31 +87,31 @@ Note: during `backfilling`, webhook events are still received and processed (int
 
 ```jsonc
 {
-  "status": "running",           // user-facing
-  "sub_status": "backfilling",   // internal, exposed for observability
+  "status": "running", // user-facing
+  "sub_status": "backfilling", // internal, exposed for observability
   "backfill_complete": false,
   "error": null,
   "started_at": "2024-01-15T10:00:00Z",
   "last_synced_at": "2024-01-15T10:05:30Z",
-  "iteration": 42
+  "iteration": 42,
 }
 ```
 
 ### Transition Table
 
-| From | To | Trigger | Webhook Event | API Action |
-|------|----|---------|---------------|------------|
-| — | starting | Pipeline created | `pipeline.created` | `POST /pipelines` |
-| starting | running | Setup activity completes | `pipeline.running` | (automatic) |
-| starting | error | auth_error / config_error from setup | `pipeline.error` | (automatic) |
-| running | paused | User pauses | `pipeline.paused` | `POST /:id/pause` |
-| running | error | Permanent error detected | `pipeline.error` | (automatic) |
-| paused | running | User resumes | `pipeline.running` | `POST /:id/resume` |
-| error | running | User resumes after fixing | `pipeline.running` | `POST /:id/resume` |
-| * | deleting | User deletes | `pipeline.deleting` | `DELETE /:id` |
-| deleting | deleted | Teardown completes | `pipeline.deleted` | (automatic) |
-| running | failed | Temporal workflow crash | `pipeline.failed` | (none — terminal) |
-| running(backfilling) | running(streaming) | All streams backfill done | `pipeline.backfill_complete` | (automatic) |
+| From                 | To                 | Trigger                              | Webhook Event                | API Action         |
+| -------------------- | ------------------ | ------------------------------------ | ---------------------------- | ------------------ |
+| —                    | starting           | Pipeline created                     | `pipeline.created`           | `POST /pipelines`  |
+| starting             | running            | Setup activity completes             | `pipeline.running`           | (automatic)        |
+| starting             | error              | auth_error / config_error from setup | `pipeline.error`             | (automatic)        |
+| running              | paused             | User pauses                          | `pipeline.paused`            | `POST /:id/pause`  |
+| running              | error              | Permanent error detected             | `pipeline.error`             | (automatic)        |
+| paused               | running            | User resumes                         | `pipeline.running`           | `POST /:id/resume` |
+| error                | running            | User resumes after fixing            | `pipeline.running`           | `POST /:id/resume` |
+| \*                   | deleting           | User deletes                         | `pipeline.deleting`          | `DELETE /:id`      |
+| deleting             | deleted            | Teardown completes                   | `pipeline.deleted`           | (automatic)        |
+| running              | failed             | Temporal workflow crash              | `pipeline.failed`            | (none — terminal)  |
+| running(backfilling) | running(streaming) | All streams backfill done            | `pipeline.backfill_complete` | (automatic)        |
 
 ### Invalid Transitions (enforced)
 
@@ -127,56 +127,57 @@ Note: during `backfilling`, webhook events are still received and processed (int
 ```typescript
 // User-facing pipeline status (top-level)
 type PipelineStatus =
-  | 'starting'    // setup activity running
-  | 'running'     // actively syncing
-  | 'paused'      // user-initiated pause
-  | 'error'       // auto-paused on permanent error
-  | 'deleting'    // teardown in progress
-  | 'deleted'     // terminal: cleaned up
-  | 'failed'      // terminal: workflow crashed
+  | 'starting' // setup activity running
+  | 'running' // actively syncing
+  | 'paused' // user-initiated pause
+  | 'error' // auto-paused on permanent error
+  | 'deleting' // teardown in progress
+  | 'deleted' // terminal: cleaned up
+  | 'failed' // terminal: workflow crashed
 
 // Internal sub-status (within "running")
 type PipelineSubStatus =
-  | 'backfilling'   // initial historical data load
-  | 'streaming'     // processing live events
-  | 'reconciling'   // periodic full-refresh pass
-  | 'idle'          // waiting for next event or schedule
+  | 'backfilling' // initial historical data load
+  | 'streaming' // processing live events
+  | 'reconciling' // periodic full-refresh pass
+  | 'idle' // waiting for next event or schedule
 
 // Error details
 interface PipelineError {
   failure_type: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
   message: string
-  stream?: string          // which stream errored, if applicable
-  occurred_at: string      // ISO 8601
+  stream?: string // which stream errored, if applicable
+  occurred_at: string // ISO 8601
 }
 
 // Full status shape returned by API
 interface PipelineStatusResponse {
   status: PipelineStatus
-  sub_status?: PipelineSubStatus    // only when status === 'running'
+  sub_status?: PipelineSubStatus // only when status === 'running'
   backfill_complete: boolean
-  error?: PipelineError             // only when status === 'error'
+  error?: PipelineError // only when status === 'error'
   iteration: number
-  started_at?: string               // ISO 8601
-  last_synced_at?: string           // ISO 8601, last successful activity
+  started_at?: string // ISO 8601
+  last_synced_at?: string // ISO 8601, last successful activity
 }
 ```
 
 ## API Surface for User Control
 
-| Endpoint | Allowed From States | Transitions To |
-|----------|-------------------|----------------|
-| `POST /pipelines` | (none) | `starting` |
-| `POST /pipelines/:id/pause` | `running` | `paused` |
-| `POST /pipelines/:id/resume` | `paused`, `error` | `running` |
-| `DELETE /pipelines/:id` | `starting`, `running`, `paused`, `error` | `deleting` |
-| `PATCH /pipelines/:id` | `running`, `paused`, `error` | (same — config update, no status change) |
+| Endpoint                     | Allowed From States                      | Transitions To                           |
+| ---------------------------- | ---------------------------------------- | ---------------------------------------- |
+| `POST /pipelines`            | (none)                                   | `starting`                               |
+| `POST /pipelines/:id/pause`  | `running`                                | `paused`                                 |
+| `POST /pipelines/:id/resume` | `paused`, `error`                        | `running`                                |
+| `DELETE /pipelines/:id`      | `starting`, `running`, `paused`, `error` | `deleting`                               |
+| `PATCH /pipelines/:id`       | `running`, `paused`, `error`             | (same — config update, no status change) |
 
 Resume from `error` clears the error and restarts the sync loop. If the underlying issue isn't fixed, the next activity will re-error and auto-pause again.
 
 ## Auto-Pause Rules
 
 After each activity returns, inspect `result.errors`:
+
 - `auth_error` or `config_error` → set `status = 'error'`, populate `error`, enter wait loop
 - `transient_error` → log, continue (Temporal retry policy handles retries)
 - `system_error` → log, continue (future: auto-pause after N consecutive)
@@ -187,12 +188,12 @@ Every status transition fires a webhook. Payload shape:
 
 ```typescript
 interface PipelineWebhookEvent {
-  event: string                      // e.g. 'pipeline.running', 'pipeline.error'
+  event: string // e.g. 'pipeline.running', 'pipeline.error'
   pipeline_id: string
   status: PipelineStatus
   sub_status?: PipelineSubStatus
   previous_status: PipelineStatus
-  error?: PipelineError              // for pipeline.error events
-  occurred_at: string                // ISO 8601
+  error?: PipelineError // for pipeline.error events
+  occurred_at: string // ISO 8601
 }
 ```

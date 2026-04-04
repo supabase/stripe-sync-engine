@@ -137,7 +137,8 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       state('customers', { after: 'cus_3' }),
     ]
 
-    // Run pipeline with $stdin passthrough, persist each state checkpoint
+    // Set up destination schema/tables, then run pipeline
+    await engine.pipeline_setup(pipeline)
     for await (const msg of engine.pipeline_sync(pipeline, undefined, toAsync(input))) {
       if (msg.type === 'state') {
         await pool.query(

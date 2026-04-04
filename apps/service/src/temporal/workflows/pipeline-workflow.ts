@@ -87,7 +87,10 @@ export async function pipelineWorkflow(
 
     if (readComplete && inputQueue.length === 0) {
       // Idle — wait up to one week; timeout means recon is due.
-      const timedOut = !(await condition(() => paused || deleted || inputQueue.length > 0, ONE_WEEK_MS))
+      const timedOut = !(await condition(
+        () => paused || deleted || inputQueue.length > 0,
+        ONE_WEEK_MS
+      ))
       if (timedOut) readComplete = false
       continue
     }

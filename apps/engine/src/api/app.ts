@@ -193,7 +193,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_setup',
       method: 'post',
-      path: '/setup',
+      path: '/pipeline_setup',
       tags: ['Stateless Sync API'],
       summary: 'Set up destination schema',
       description:
@@ -209,7 +209,7 @@ export async function createApp(resolver: ConnectorResolver) {
     }),
     async (c) => {
       const params = parseSyncParams(c)
-      const context = { path: '/setup', ...syncRequestContext(params) }
+      const context = { path: '/pipeline_setup', ...syncRequestContext(params) }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /setup started')
       try {
@@ -233,7 +233,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_teardown',
       method: 'post',
-      path: '/teardown',
+      path: '/pipeline_teardown',
       tags: ['Stateless Sync API'],
       summary: 'Tear down destination schema',
       description: 'Drops destination tables. Irreversible.',
@@ -254,7 +254,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_check',
       method: 'get',
-      path: '/check',
+      path: '/pipeline_check',
       tags: ['Stateless Sync API'],
       summary: 'Check connector connection',
       description: 'Validates the source/destination config and tests connectivity.',
@@ -291,7 +291,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'source_discover',
       method: 'post',
-      path: '/discover',
+      path: '/source_discover',
       tags: ['Stateless Sync API'],
       summary: 'Discover available streams',
       description: 'Streams NDJSON messages (catalog, logs, traces) for the configured source.',
@@ -318,7 +318,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_read',
       method: 'post',
-      path: '/read',
+      path: '/pipeline_read',
       tags: ['Stateless Sync API'],
       summary: 'Read records from source',
       description:
@@ -336,7 +336,7 @@ export async function createApp(resolver: ConnectorResolver) {
     (async (c: any) => {
       const params = parseSyncParams(c)
       const inputPresent = hasBody(c)
-      const context = { path: '/read', inputPresent, ...syncRequestContext(params) }
+      const context = { path: '/pipeline_read', inputPresent, ...syncRequestContext(params) }
       const startedAt = Date.now()
       logger.info(context, 'Engine API /read started')
 
@@ -354,7 +354,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_write',
       method: 'post',
-      path: '/write',
+      path: '/pipeline_write',
       tags: ['Stateless Sync API'],
       summary: 'Write records to destination',
       description:
@@ -375,7 +375,7 @@ export async function createApp(resolver: ConnectorResolver) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (async (c: any) => {
       const params = parseSyncParams(c)
-      const context = { path: '/write', ...syncRequestContext(params) }
+      const context = { path: '/pipeline_write', ...syncRequestContext(params) }
       if (!hasBody(c)) {
         logger.error(context, 'Engine API /write missing request body')
         return c.json({ error: 'Request body required for /write' }, 400)
@@ -398,7 +398,7 @@ export async function createApp(resolver: ConnectorResolver) {
     createRoute({
       operationId: 'pipeline_sync',
       method: 'post',
-      path: '/sync',
+      path: '/pipeline_sync',
       tags: ['Stateless Sync API'],
       summary: 'Run sync pipeline (read → write)',
       description:
@@ -438,7 +438,7 @@ export async function createApp(resolver: ConnectorResolver) {
           description: 'Available source connectors with their JSON Schema configs',
           content: {
             'application/json': {
-              schema: z.object({ data: z.array(ConnectorListItem) }),
+              schema: z.object({ items: z.array(ConnectorListItem) }),
             },
           },
         },
@@ -451,9 +451,9 @@ export async function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
-      operationId: 'meta_source',
+      operationId: 'meta_sources_get',
       method: 'get',
-      path: '/meta/sources/:type',
+      path: '/meta/sources/{type}',
       tags: ['Meta'],
       summary: 'Get source connector spec',
       requestParams: { path: z.object({ type: z.string() }) },
@@ -487,7 +487,7 @@ export async function createApp(resolver: ConnectorResolver) {
           description: 'Available destination connectors with their JSON Schema configs',
           content: {
             'application/json': {
-              schema: z.object({ data: z.array(ConnectorListItem) }),
+              schema: z.object({ items: z.array(ConnectorListItem) }),
             },
           },
         },
@@ -500,9 +500,9 @@ export async function createApp(resolver: ConnectorResolver) {
 
   app.openapi(
     createRoute({
-      operationId: 'meta_destination',
+      operationId: 'meta_destinations_get',
       method: 'get',
-      path: '/meta/destinations/:type',
+      path: '/meta/destinations/{type}',
       tags: ['Meta'],
       summary: 'Get destination connector spec',
       requestParams: { path: z.object({ type: z.string() }) },

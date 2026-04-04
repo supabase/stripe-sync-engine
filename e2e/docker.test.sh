@@ -75,10 +75,10 @@ for i in $(seq 1 20); do
 done
 
 # --- 1) Read from Stripe ---
-echo "==> Reading from Stripe (/read)"
+echo "==> Reading from Stripe (/pipeline_read)"
 READ_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s","backfill_limit":5},"destination":{"type":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
 
-STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/read" \
+STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_read" \
   -H "X-Pipeline: $READ_PARAMS")
 
 RECORD_COUNT=$(echo "$STRIPE_OUTPUT" | grep -c '"type":"record"' || true)
@@ -88,11 +88,11 @@ echo "$STRIPE_OUTPUT" | head -3 || true
 
 # --- 2) Write to Google Sheets ---
 if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
-  echo "==> Writing to Google Sheets (/write)"
+  echo "==> Writing to Google Sheets (/pipeline_write)"
   SHEETS_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"google-sheets","client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}' \
     "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
-  SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
+  SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
     -H "X-Pipeline: $SHEETS_PARAMS" \
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)
@@ -107,15 +107,15 @@ fi
 if [ -n "${POSTGRES_URL:-}" ]; then
   # Rewrite localhost for Docker container access
   DOCKER_PG_URL="${POSTGRES_URL//localhost/$DOCKER_HOST_ADDR}"
-  echo "==> Setting up Postgres (/setup) → $DOCKER_PG_URL"
+  echo "==> Setting up Postgres (/pipeline_setup) → $DOCKER_PG_URL"
   PG_PARAMS=$(printf '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"postgres","url":"%s","schema":"stripe_docker_test"}}' \
     "$STRIPE_API_KEY" "$DOCKER_PG_URL")
 
-  curl -sf --max-time 30 -X POST "http://localhost:$PORT/setup" \
+  curl -sf --max-time 30 -X POST "http://localhost:$PORT/pipeline_setup" \
     -H "X-Pipeline: $PG_PARAMS" && echo "    OK" || echo "    setup returned non-204 (may be fine)"
 
-  echo "==> Writing to Postgres (/write)"
-  PG_WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/write" \
+  echo "==> Writing to Postgres (/pipeline_write)"
+  PG_WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
     -H "X-Pipeline: $PG_PARAMS" \
     -H "Content-Type: application/x-ndjson" \
     --data-binary @-)

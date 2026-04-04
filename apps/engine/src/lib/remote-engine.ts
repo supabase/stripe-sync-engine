@@ -1,6 +1,12 @@
 import createClient from 'openapi-fetch'
 import type { paths } from '../__generated__/openapi.js'
-import type { Engine, SetupResult, SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
+import type {
+  Engine,
+  SetupResult,
+  SourceReadOptions,
+  ConnectorInfo,
+  ConnectorListItem,
+} from './engine.js'
 import { parseNdjsonStream, toNdjsonStream } from './ndjson.js'
 import type {
   ConnectionStatusPayload,
@@ -68,7 +74,13 @@ export function createRemoteEngine(engineUrl: string): Engine {
   }
 
   async function post(
-    path: '/read' | '/write' | '/sync' | '/setup' | '/teardown' | '/discover',
+    path:
+      | '/pipeline_read'
+      | '/pipeline_write'
+      | '/pipeline_sync'
+      | '/pipeline_setup'
+      | '/pipeline_teardown'
+      | '/source_discover',
     pipeline: PipelineConfig,
     opts?: SourceReadOptions,
     body?: ReadableStream<Uint8Array>
@@ -96,11 +108,11 @@ export function createRemoteEngine(engineUrl: string): Engine {
   }
 
   return {
-    async meta_sources_list(): Promise<{ data: ConnectorListItem[] }> {
+    async meta_sources_list(): Promise<{ items: ConnectorListItem[] }> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (client.GET as any)('/meta/sources')
       if (error) throw new Error(`Engine /meta/sources failed: ${JSON.stringify(error)}`)
-      return data as { data: ConnectorListItem[] }
+      return data as { items: ConnectorListItem[] }
     },
 
     async meta_source(type: string): Promise<ConnectorInfo> {
@@ -112,11 +124,11 @@ export function createRemoteEngine(engineUrl: string): Engine {
       return data as ConnectorInfo
     },
 
-    async meta_destinations_list(): Promise<{ data: ConnectorListItem[] }> {
+    async meta_destinations_list(): Promise<{ items: ConnectorListItem[] }> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (client.GET as any)('/meta/destinations')
       if (error) throw new Error(`Engine /meta/destinations failed: ${JSON.stringify(error)}`)
-      return data as { data: ConnectorListItem[] }
+      return data as { items: ConnectorListItem[] }
     },
 
     async meta_destination(type: string): Promise<ConnectorInfo> {
@@ -130,20 +142,21 @@ export function createRemoteEngine(engineUrl: string): Engine {
     },
 
     async pipeline_setup(pipeline: PipelineConfig): Promise<SetupResult> {
-      const res = await post('/setup', pipeline)
+      const res = await post('/pipeline_setup', pipeline)
       const text = await res.text()
       return text ? JSON.parse(text) : {}
     },
 
     async pipeline_teardown(pipeline: PipelineConfig) {
-      await post('/teardown', pipeline)
+      await post('/pipeline_teardown', pipeline)
     },
 
     async pipeline_check(pipeline: PipelineConfig) {
-      const { data, error } = await client.GET('/check', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (client.GET as any)('/pipeline_check', {
         params: { header: { 'x-pipeline': JSON.stringify(pipeline) } },
       })
-      if (error) throw new Error(`Engine /check failed: ${JSON.stringify(error)}`)
+      if (error) throw new Error(`Engine /pipeline_check failed: ${JSON.stringify(error)}`)
       return data as {
         source: ConnectionStatusPayload
         destination: ConnectionStatusPayload
@@ -152,7 +165,10 @@ export function createRemoteEngine(engineUrl: string): Engine {
 
     async *source_discover(source: PipelineConfig['source']): AsyncIterable<DiscoverOutput> {
       // Only source config is needed for discover — pass a minimal pipeline header
-      const res = await post('/discover', { source, destination: { type: '_' } } as PipelineConfig)
+      const res = await post('/source_discover', {
+        source,
+        destination: { type: '_' },
+      } as PipelineConfig)
       yield* parseNdjsonStream<DiscoverOutput>(res.body!)
     },
 
@@ -162,7 +178,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       input?: AsyncIterable<unknown>
     ): AsyncIterable<Message> {
       const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/read', pipeline, opts, body)
+      const res = await post('/pipeline_read', pipeline, opts, body)
       yield* parseNdjsonStream<Message>(res.body!)
     },
 
@@ -170,7 +186,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       pipeline: PipelineConfig,
       messages: AsyncIterable<Message>
     ): AsyncIterable<DestinationOutput> {
-      const res = await post('/write', pipeline, undefined, toNdjsonStream(messages))
+      const res = await post('/pipeline_write', pipeline, undefined, toNdjsonStream(messages))
       yield* parseNdjsonStream<DestinationOutput>(res.body!)
     },
 
@@ -180,7 +196,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       input?: AsyncIterable<unknown>
     ): AsyncIterable<DestinationOutput> {
       const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/sync', pipeline, opts, body)
+      const res = await post('/pipeline_sync', pipeline, opts, body)
       yield* parseNdjsonStream<DestinationOutput>(res.body!)
     },
   }

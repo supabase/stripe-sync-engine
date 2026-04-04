@@ -1,9 +1,6 @@
-
 # Todos
 
-
-* ❯ make sure we are able to get control messages to actually result in updates the config store
-
+- ❯ make sure we are able to get control messages to actually result in updates the config store
 
 Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
@@ -46,6 +43,5 @@ Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 - Source/destination test ergonomics for connector authors
 - Replit integration (skills file, package ergonomics)
-
 
 - https://tasknotes.dev/features/inline-tasks/

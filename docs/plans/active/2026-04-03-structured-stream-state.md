@@ -7,7 +7,7 @@
 `pipelineWorkflow` tracks sync progress as a single flat map:
 
 ```ts
-let syncState: Record<string, unknown> = {}  // { "invoices": { cursor: "..." }, "customers": { ... } }
+let syncState: Record<string, unknown> = {} // { "invoices": { cursor: "..." }, "customers": { ... } }
 ```
 
 `StateStore` mirrors this — `get()` returns the full flat map; `set(stream, data)` updates one entry.
@@ -22,9 +22,9 @@ This works for REST API sources like Stripe (each stream has an independent curs
 
 Airbyte Protocol v2 (`AirbyteStateMessage`) distinguishes three envelope types:
 
-| type | contents |
-|------|----------|
-| `STREAM` | `{ stream_descriptor, stream_state }` — independent per-stream cursor |
+| type     | contents                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| `STREAM` | `{ stream_descriptor, stream_state }` — independent per-stream cursor                          |
 | `GLOBAL` | `{ shared_state, stream_states[] }` — one shared cursor (e.g. CDC LSN) plus per-stream offsets |
 
 We don't need to copy Airbyte byte-for-byte, but the two-way distinction is the right conceptual model.
@@ -90,7 +90,11 @@ export function toFlatState(state: SyncState): Record<string, unknown> {
 }
 
 /** Upsert one stream's cursor into a SyncState, returning a new SyncState. */
-export function updateStreamState(state: SyncState, streamName: string, cursor: unknown): SyncState {
+export function updateStreamState(
+  state: SyncState,
+  streamName: string,
+  cursor: unknown
+): SyncState {
   const entries = state.type === 'per_stream' ? state.states : state.stream_states
   const next = upsertStream(entries, streamName, cursor)
   if (state.type === 'global') return { ...state, stream_states: next }
@@ -105,7 +109,11 @@ export function resetStreamState(state: SyncState, streamName: string): SyncStat
   return { type: 'per_stream', states: next }
 }
 
-function upsertStream(entries: StreamStateEntry[], name: string, cursor: unknown): StreamStateEntry[] {
+function upsertStream(
+  entries: StreamStateEntry[],
+  name: string,
+  cursor: unknown
+): StreamStateEntry[] {
   const idx = entries.findIndex((e) => e.stream_descriptor.name === name)
   const entry: StreamStateEntry = { stream_descriptor: { name }, stream_state: cursor }
   if (idx === -1) return [...entries, entry]
@@ -128,7 +136,7 @@ Handler (registered before any `await`):
 ```ts
 setHandler(resetStreamSignal, (streamName: string) => {
   syncState = resetStreamState(syncState, streamName)
-  readComplete = false  // force the read loop to re-check this stream
+  readComplete = false // force the read loop to re-check this stream
 })
 ```
 
@@ -163,7 +171,7 @@ The `readComplete` convergence check uses `toFlatState` for the deep-equal compa
 ```ts
 await continueAsNew<typeof pipelineWorkflow>(pipeline, {
   ...opts,
-  state: syncState,   // typed SyncState, not Record<string, unknown>
+  state: syncState, // typed SyncState, not Record<string, unknown>
 })
 ```
 
@@ -182,7 +190,7 @@ export async function pipelineWorkflow(
   pipeline: Pipeline,
   opts?: {
     phase?: string
-    state?: SyncState           // was Record<string, unknown>
+    state?: SyncState // was Record<string, unknown>
     mode?: 'sync' | 'read-write'
     writeRps?: number
     pendingWrites?: boolean
@@ -219,14 +227,14 @@ No body needed; the signal name and the stream path param carry all the informat
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `packages/protocol/src/protocol.ts` | Add `StreamStateEntry`, `SyncState`, and helper functions |
-| `apps/service/src/temporal/workflows.ts` | Change `syncState` type, add `resetStreamSignal`, adapt merging |
-| `apps/service/src/api/app.ts` (or routes file) | Add `POST /pipelines/:id/streams/:stream/reset` endpoint |
-| `apps/engine/src/lib/state-store.ts` | No change needed (engine still uses flat map internally) |
-| `packages/state-postgres/src/state-store.ts` | No schema change — rows already keyed by `(sync_id, stream)` |
-| `./scripts/generate-openapi.sh` | Run after any route changes |
+| File                                           | Change                                                          |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `packages/protocol/src/protocol.ts`            | Add `StreamStateEntry`, `SyncState`, and helper functions       |
+| `apps/service/src/temporal/workflows.ts`       | Change `syncState` type, add `resetStreamSignal`, adapt merging |
+| `apps/service/src/api/app.ts` (or routes file) | Add `POST /pipelines/:id/streams/:stream/reset` endpoint        |
+| `apps/engine/src/lib/state-store.ts`           | No change needed (engine still uses flat map internally)        |
+| `packages/state-postgres/src/state-store.ts`   | No schema change — rows already keyed by `(sync_id, stream)`    |
+| `./scripts/generate-openapi.sh`                | Run after any route changes                                     |
 
 ---
 

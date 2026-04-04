@@ -104,11 +104,12 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
   // -- Live update via WebSocket --------------------------------------------
 
   it('receives live product update via websocket', async () => {
-    // Clean slate — drop and let engine.pipelineSetup() recreate
+    // Clean slate — drop and recreate via pipeline_setup
     await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
 
     const engine = await createEngine(resolver)
     const pipeline = makePipeline({ websocket: true })
+    await engine.pipeline_setup(pipeline)
     const iter = engine.pipeline_sync(pipeline)[Symbol.asyncIterator]()
 
     try {

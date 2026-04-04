@@ -58,11 +58,11 @@ export type ConnectorListItem = z.infer<typeof ConnectorListItem>
  */
 export interface Engine {
   /** List all registered source connector types with their config schemas. */
-  meta_sources_list(): Promise<{ data: ConnectorListItem[] }>
+  meta_sources_list(): Promise<{ items: ConnectorListItem[] }>
   /** Fetch metadata (config schema) for a single source connector type. */
   meta_source(type: string): Promise<ConnectorInfo>
   /** List all registered destination connector types with their config schemas. */
-  meta_destinations_list(): Promise<{ data: ConnectorListItem[] }>
+  meta_destinations_list(): Promise<{ items: ConnectorListItem[] }>
   /** Fetch metadata (config schema) for a single destination connector type. */
   meta_destination(type: string): Promise<ConnectorInfo>
 
@@ -225,7 +225,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
   const engine: Engine = {
     async meta_sources_list() {
       return {
-        data: [...resolver.sources()].map(([type, r]) => ({
+        items: [...resolver.sources()].map(([type, r]) => ({
           type,
           config_schema: r.rawConfigJsonSchema,
         })),
@@ -240,7 +240,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
     async meta_destinations_list() {
       return {
-        data: [...resolver.destinations()].map(([type, r]) => ({
+        items: [...resolver.destinations()].map(([type, r]) => ({
           type,
           config_schema: r.rawConfigJsonSchema,
         })),

@@ -7,10 +7,7 @@ import type {
   RecordMessage,
   SourceReadOptions,
 } from '@stripe/sync-engine'
-import {
-  ROW_KEY_FIELD,
-  serializeRowKey,
-} from '@stripe/sync-destination-google-sheets'
+import { ROW_KEY_FIELD, serializeRowKey } from '@stripe/sync-destination-google-sheets'
 import type { ActivitiesContext } from './_shared.js'
 import { asIterable, collectError, type RunResult } from './_shared.js'
 

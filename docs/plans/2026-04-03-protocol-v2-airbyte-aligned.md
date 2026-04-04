@@ -9,11 +9,13 @@ Align the sync-engine protocol with Airbyte's design: wrapper envelope messages,
 ### 1. Wrapper Envelope (Airbyte-style)
 
 **Before (flat):**
+
 ```json
 {"type":"record","stream":"customers","data":{...},"emitted_at":"..."}
 ```
 
 **After (envelope):**
+
 ```json
 {"type":"record","record":{"stream":"customers","data":{...},"emitted_at":"..."}}
 ```
@@ -64,15 +66,15 @@ Trace            = discriminated on trace_type:
 
 ```typescript
 Message = discriminatedUnion('type', [
-  { type: 'record',            record: Record },
-  { type: 'state',             state: State },
-  { type: 'catalog',           catalog: Catalog },
-  { type: 'log',               log: Log },
-  { type: 'trace',             trace: Trace },
-  { type: 'spec',              spec: Spec },
+  { type: 'record', record: Record },
+  { type: 'state', state: State },
+  { type: 'catalog', catalog: Catalog },
+  { type: 'log', log: Log },
+  { type: 'trace', trace: Trace },
+  { type: 'spec', spec: Spec },
   { type: 'connection_status', connection_status: ConnectionStatus },
-  { type: 'control',           control: Control },
-  { type: 'eof',               eof: Eof },
+  { type: 'control', control: Control },
+  { type: 'eof', eof: Eof },
 ])
 ```
 
@@ -94,25 +96,27 @@ DestinationOutput    = Message where type in [state, trace, log, eof]
 ## Interface Changes
 
 ### Source
+
 ```typescript
 interface Source<TConfig, TStreamState, TInput> {
-  spec():                                          AsyncIterable<SpecOutput>
-  check(p: {config}):                              AsyncIterable<CheckOutput>
-  discover(p: {config}):                           AsyncIterable<DiscoverOutput>
-  read(p: {config, catalog, state?}, $stdin?):     AsyncIterable<Message>
-  setup?(p: {config, catalog}):                    AsyncIterable<SetupOutput>
-  teardown?(p: {config}):                          AsyncIterable<TeardownOutput>
+  spec(): AsyncIterable<SpecOutput>
+  check(p: { config }): AsyncIterable<CheckOutput>
+  discover(p: { config }): AsyncIterable<DiscoverOutput>
+  read(p: { config; catalog; state? }, $stdin?): AsyncIterable<Message>
+  setup?(p: { config; catalog }): AsyncIterable<SetupOutput>
+  teardown?(p: { config }): AsyncIterable<TeardownOutput>
 }
 ```
 
 ### Destination
+
 ```typescript
 interface Destination<TConfig> {
-  spec():                                          AsyncIterable<SpecOutput>
-  check(p: {config}):                              AsyncIterable<CheckOutput>
-  write(p: {config, catalog}, $stdin):             AsyncIterable<DestinationOutput>
-  setup?(p: {config, catalog}):                    AsyncIterable<SetupOutput>
-  teardown?(p: {config}):                          AsyncIterable<TeardownOutput>
+  spec(): AsyncIterable<SpecOutput>
+  check(p: { config }): AsyncIterable<CheckOutput>
+  write(p: { config; catalog }, $stdin): AsyncIterable<DestinationOutput>
+  setup?(p: { config; catalog }): AsyncIterable<SetupOutput>
+  teardown?(p: { config }): AsyncIterable<TeardownOutput>
 }
 ```
 
@@ -123,6 +127,7 @@ interface Destination<TConfig> {
 ### Phase 1: Protocol package
 
 **`packages/protocol/src/protocol.ts`** — the core change
+
 - Replace all flat message schemas with payload schemas + envelope wrappers
 - Add `Trace` discriminated union (error | stream_status | estimate subtypes)
 - Add `Spec`, `ConnectionStatus`, `Control` payload schemas
@@ -132,24 +137,29 @@ interface Destination<TConfig> {
 - Remove/deprecate `CheckResult`, `ErrorMessage`, `StreamStatusMessage`
 
 **`packages/protocol/src/helpers.ts`**
+
 - Update all type guards to use envelope shape: `isRecord(m)` checks `m.type === 'record'`
 - Update `toRecordMessage` → wraps in envelope
 - Add `collectFirst<T>(stream, typeName)` helper — drains a message stream, returns first message of given type, logs logs, throws on trace errors
 
 **`packages/protocol/src/cli.ts`**
+
 - All subcommands become: iterate async iterable, `writeLine` each message
 - Remove per-command special handling (no more `writeLine(spec)` vs `for await`)
 - Uniform: `for await (const msg of connector.spec()) writeLine(msg)`
 
 **`packages/protocol/src/ndjson.ts`**
+
 - No changes needed (already generic)
 
 **`packages/protocol/src/index.ts`**
+
 - Update exports
 
 ### Phase 2: Engine
 
 **`apps/engine/src/lib/source-exec.ts`**
+
 - All commands use `spawnAndStream` (uniform NDJSON)
 - `spec()`: returns async iterable of spec messages from subprocess
 - `check()`: returns async iterable of connection_status messages
@@ -160,10 +170,12 @@ interface Destination<TConfig> {
 - Remove `spawnSync` for spec (now async)
 
 **`apps/engine/src/lib/destination-exec.ts`**
+
 - Same changes as source-exec for spec, check, setup, teardown
 - `write()`: unchanged
 
 **`apps/engine/src/lib/engine.ts`**
+
 - `Engine` interface: `setup()` → returns `SetupResult` (extracted from streams internally)
 - `createEngine()`: uses `collectFirst` to extract primary payloads from connector streams
 - `spec()` becomes async — engine construction needs adjustment (lazy spec validation or async factory)
@@ -172,6 +184,7 @@ interface Destination<TConfig> {
 - `discover()` (via `getCatalog`): iterate discover stream, extract catalog
 
 **`apps/engine/src/api/app.ts`**
+
 - ALL routes return NDJSON (`application/x-ndjson`)
 - `/check`: stream connection_status + logs
 - `/discover`: stream catalog + logs
@@ -180,12 +193,14 @@ interface Destination<TConfig> {
 - `/read`, `/write`, `/sync`: already NDJSON, just update message shapes
 
 **`apps/engine/src/lib/remote-engine.ts`**
+
 - All methods now parse NDJSON responses (including check, discover, setup, teardown)
 - Use `collectFirst` pattern for non-streaming consumers
 
 ### Phase 3: Connectors (hard cutover)
 
 **`packages/source-stripe/src/index.ts`**
+
 - All methods become `async *` generators yielding envelope messages
 - `spec()` → `yield { type: 'spec', spec: { config: ... } }`
 - `check()` → `yield { type: 'connection_status', connection_status: { status: 'succeeded' } }`
@@ -203,6 +218,7 @@ interface Destination<TConfig> {
 **`apps/service/`** — update any direct protocol message references
 
 **Test files:**
+
 - `packages/protocol/src/__tests__/cli.test.ts`
 - `apps/engine/src/lib/exec.test.ts`
 - `apps/engine/src/lib/engine.test.ts` (if exists)
