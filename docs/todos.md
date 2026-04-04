@@ -1,18 +1,19 @@
 # Todos
 
-- ❯ make sure we are able to get control messages to actually result in updates the config store
-
 Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 ## Now
 
-- Land grouped Stripe tables in stream selector (`docs/plans/2026-04-03-grouped-tables.md`)
+- Land grouped Stripe tables in stream selector (`docs/plans/active/2026-04-03-grouped-tables.md`)
+- Structured stream state + per-stream reset signal (`docs/plans/active/2026-04-03-structured-stream-state.md`)
 
 ## Soon
 
-- CLI backfill progress display (`2026-03-20-plan-005-cli-progress-display`) — progress bars with row counts
-- Scope rename: `@stripe/` → `@stripe-sync/` (`2026-03-20-plan-008-scope-rename-stripe-sync`) — blocked on npm org approval
-- Move openapi fully into `source-stripe` (`2026-03-18-plan-002-move-openapi-to-source-stripe`) — `packages/openapi` is now pure but still separate
+- Pipeline status state machine — implementation (`docs/plans/2026-04-03-pipeline-status-state-machine.md`)
+- Control messages → config store updates (unscoped)
+- CLI backfill progress display (`docs/plans/active/2026-03-20-plan-005-cli-progress-display.md`) — progress bars with row counts
+- Scope rename: `@stripe/` → `@stripe-sync/` (`docs/plans/active/2026-03-20-plan-008-scope-rename-stripe-sync.md`) — blocked on npm org approval
+- Move openapi fully into `source-stripe` (`docs/plans/active/2026-03-18-plan-002-move-openapi-to-source-stripe.md`) — `packages/openapi` is now pure but still separate
 
 ## Connectors
 
@@ -43,5 +44,4 @@ Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 - Source/destination test ergonomics for connector authors
 - Replit integration (skills file, package ergonomics)
-
 - https://tasknotes.dev/features/inline-tasks/
