@@ -1,8 +1,12 @@
 import type {
   ConfiguredCatalog,
-  ConnectorSpecification,
   Message,
   Source,
+  SpecOutput,
+  CheckOutput,
+  DiscoverOutput,
+  SetupOutput,
+  TeardownOutput,
 } from '@stripe/sync-protocol'
 import Stripe from 'stripe'
 import { z } from 'zod'
@@ -103,24 +107,33 @@ export function createStripeSource(
   const externalRateLimiter = deps?.rateLimiter
 
   return {
-    spec(): ConnectorSpecification {
-      return {
-        config: z.toJSONSchema(configSchema),
-        stream_state: z.toJSONSchema(streamStateSpec),
+    async *spec(): AsyncGenerator<SpecOutput> {
+      yield {
+        type: 'spec' as const,
+        spec: {
+          config: z.toJSONSchema(configSchema),
+          stream_state: z.toJSONSchema(streamStateSpec),
+        },
       }
     },
 
-    async check({ config }) {
+    async *check({ config }): AsyncGenerator<CheckOutput> {
       try {
         const s = makeClient(config)
         await s.accounts.retrieve()
-        return { status: 'succeeded' }
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'succeeded' as const },
+        }
       } catch (err: any) {
-        return { status: 'failed', message: err.message }
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'failed' as const, message: err.message },
+        }
       }
     },
 
-    async discover({ config }) {
+    async *discover({ config }): AsyncGenerator<DiscoverOutput> {
       const resolved = await resolveOpenApiSpec(
         { apiVersion: config.api_version ?? BUNDLED_API_VERSION },
         apiFetch
@@ -136,13 +149,19 @@ export function createStripeSource(
         const parsed = parser.parse(resolved.spec, {
           resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
         })
-        return catalogFromOpenApi(parsed.tables, registry)
+        yield {
+          type: 'catalog' as const,
+          catalog: catalogFromOpenApi(parsed.tables, registry),
+        }
       } catch {
-        return catalogFromRegistry(registry)
+        yield {
+          type: 'catalog' as const,
+          catalog: catalogFromRegistry(registry),
+        }
       }
     },
 
-    async setup({ config, catalog }) {
+    async *setup({ config, catalog }): AsyncGenerator<SetupOutput> {
       const updates: Partial<Config> = {}
       const stripe = makeClient(config)
 
@@ -190,10 +209,18 @@ export function createStripeSource(
         }
       }
 
-      return Object.keys(updates).length > 0 ? updates : undefined
+      if (Object.keys(updates).length > 0) {
+        yield {
+          type: 'control' as const,
+          control: {
+            control_type: 'config_update' as const,
+            config: updates as Record<string, unknown>,
+          },
+        }
+      }
     },
 
-    async teardown({ config }) {
+    async *teardown({ config }): AsyncGenerator<TeardownOutput> {
       if (config.webhook_url) {
         const stripe = makeClient(config)
         const existing = await stripe.webhookEndpoints.list({ limit: 100 })

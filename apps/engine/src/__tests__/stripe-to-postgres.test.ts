@@ -3,7 +3,7 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine } from '../lib/index.js'
+import { createEngine, collectCatalog } from '../lib/index.js'
 import type { ConnectorResolver, Message, DestinationOutput } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
@@ -113,11 +113,13 @@ let targetStream: string
 
 beforeAll(async () => {
   const engine = createEngine(makeResolver())
-  const discovered = await engine.source_discover({
-    type: 'stripe',
-    api_key: 'sk_test_fake',
-    base_url: STRIPE_MOCK_URL,
-  })
+  const { catalog: discovered } = await collectCatalog(
+    engine.source_discover({
+      type: 'stripe',
+      api_key: 'sk_test_fake',
+      base_url: STRIPE_MOCK_URL,
+    })
+  )
   targetStream = discovered.streams[0]!.name
 }, 30_000)
 

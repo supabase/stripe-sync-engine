@@ -4,10 +4,13 @@ import type { Json } from '@hyperjump/json-pointer'
 import { createApp, createConnectorResolver } from '../index.js'
 import { defaultConnectors } from '../lib/default-connectors.js'
 
-const resolver = createConnectorResolver(defaultConnectors)
-const app = createApp(resolver)
+async function getApp() {
+  const resolver = await createConnectorResolver(defaultConnectors)
+  return createApp(resolver)
+}
 
 async function getSpec(): Promise<OpenApi> {
+  const app = await getApp()
   const res = await app.request('/openapi.json')
   return (await res.json()) as OpenApi
 }

@@ -1,13 +1,14 @@
-import { spawnSync } from 'node:child_process'
 import type {
   Destination,
-  ConnectorSpecification,
-  CheckResult,
+  SpecOutput,
+  CheckOutput,
+  SetupOutput,
+  TeardownOutput,
   ConfiguredCatalog,
   DestinationInput,
   DestinationOutput,
 } from '@stripe/sync-protocol'
-import { splitCmd, spawnAndCollect, spawnWithStdin } from './exec-helpers.js'
+import { splitCmd, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
 
 /**
  * Wrap a connector CLI command as a Destination.
@@ -18,28 +19,19 @@ import { splitCmd, spawnAndCollect, spawnWithStdin } from './exec-helpers.js'
  */
 export function createDestinationFromExec(cmd: string): Destination {
   const [bin, baseArgs] = splitCmd(cmd)
-  let cachedSpec: ConnectorSpecification | undefined
 
   return {
-    spec(): ConnectorSpecification {
-      if (!cachedSpec) {
-        const result = spawnSync(bin, [...baseArgs, 'spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
-        if (result.status !== 0) {
-          throw new Error(`${cmd} spec exited with code ${result.status}: ${result.stderr}`)
-        }
-        cachedSpec = JSON.parse(result.stdout.toString()) as ConnectorSpecification
-      }
-      return cachedSpec
+    async *spec(): AsyncIterable<SpecOutput> {
+      yield* spawnAndStream<SpecOutput>(bin, [...baseArgs, 'spec'])
     },
 
-    async check(params: { config: Record<string, unknown> }): Promise<CheckResult> {
-      const stdout = await spawnAndCollect(bin, [
+    async *check(params: { config: Record<string, unknown> }): AsyncIterable<CheckOutput> {
+      yield* spawnAndStream<CheckOutput>(bin, [
         ...baseArgs,
         'check',
         '--config',
         JSON.stringify(params.config),
       ])
-      return JSON.parse(stdout) as CheckResult
     },
 
     write(
@@ -60,12 +52,12 @@ export function createDestinationFromExec(cmd: string): Destination {
       )
     },
 
-    async setup(params: {
+    async *setup(params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-    }): Promise<void> {
+    }): AsyncIterable<SetupOutput> {
       try {
-        await spawnAndCollect(bin, [
+        yield* spawnAndStream<SetupOutput>(bin, [
           ...baseArgs,
           'setup',
           '--config',
@@ -79,9 +71,9 @@ export function createDestinationFromExec(cmd: string): Destination {
       }
     },
 
-    async teardown(params: { config: Record<string, unknown> }): Promise<void> {
+    async *teardown(params: { config: Record<string, unknown> }): AsyncIterable<TeardownOutput> {
       try {
-        await spawnAndCollect(bin, [
+        yield* spawnAndStream<TeardownOutput>(bin, [
           ...baseArgs,
           'teardown',
           '--config',

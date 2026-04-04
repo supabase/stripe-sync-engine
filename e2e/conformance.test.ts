@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ConnectorSpecification } from '@stripe/sync-protocol'
+import { ConnectorSpecification, collectSpec } from '@stripe/sync-protocol'
 import { createConnectorCli } from '@stripe/sync-protocol/cli'
 import {
   sourceTest,
@@ -85,15 +85,16 @@ describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
     }
   })
 
-  it('spec() returns valid ConnectorSpecification', () => {
+  it('spec() returns valid ConnectorSpecification', async () => {
     const src = mod.default as Record<string, Function>
-    const result = ConnectorSpecification.safeParse(src.spec())
+    const { spec } = await collectSpec(src.spec())
+    const result = ConnectorSpecification.safeParse(spec)
     expect(result.success, result.success ? '' : result.error.message).toBe(true)
   })
 
-  it('spec().config is a valid JSON Schema object', () => {
+  it('spec().config is a valid JSON Schema object', async () => {
     const src = mod.default as Record<string, Function>
-    const spec = src.spec() as { config: Record<string, unknown> }
+    const { spec } = await collectSpec(src.spec())
     expect(spec.config.type).toBe('object')
     expect(typeof spec.config.properties).toBe('object')
   })
@@ -135,15 +136,16 @@ describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) =>
     }
   })
 
-  it('spec() returns valid ConnectorSpecification', () => {
+  it('spec() returns valid ConnectorSpecification', async () => {
     const dest = mod.default as Record<string, Function>
-    const result = ConnectorSpecification.safeParse(dest.spec())
+    const { spec } = await collectSpec(dest.spec())
+    const result = ConnectorSpecification.safeParse(spec)
     expect(result.success, result.success ? '' : result.error.message).toBe(true)
   })
 
-  it('spec().config is a valid JSON Schema object', () => {
+  it('spec().config is a valid JSON Schema object', async () => {
     const dest = mod.default as Record<string, Function>
-    const spec = dest.spec() as { config: Record<string, unknown> }
+    const { spec } = await collectSpec(dest.spec())
     expect(spec.config.type).toBe('object')
     expect(typeof spec.config.properties).toBe('object')
   })

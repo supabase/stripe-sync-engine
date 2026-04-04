@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { resolveBin } from './resolver.js'
 import { createSourceFromExec } from './source-exec.js'
 import { createDestinationFromExec } from './destination-exec.js'
+import { collectSpec, collectConnectionStatus } from '@stripe/sync-protocol'
+import type { Message } from '@stripe/sync-protocol'
 
 // These tests use real connector binaries (built by `pnpm build`).
 
@@ -23,8 +25,8 @@ describe('createSourceFromExec', () => {
     expect(typeof source.teardown).toBe('function')
   })
 
-  it('spec() returns a valid ConnectorSpecification', () => {
-    const spec = source.spec()
+  it('spec() returns a valid ConnectorSpecification via async iterable', async () => {
+    const { spec } = await collectSpec(source.spec() as AsyncIterable<Message>)
     expect(spec).toBeDefined()
     expect(spec.config).toBeDefined()
     expect(typeof spec.config).toBe('object')
@@ -53,8 +55,8 @@ describe('createDestinationFromExec', () => {
     expect(typeof dest.teardown).toBe('function')
   })
 
-  it('spec() returns a valid ConnectorSpecification', () => {
-    const spec = dest.spec()
+  it('spec() returns a valid ConnectorSpecification via async iterable', async () => {
+    const { spec } = await collectSpec(dest.spec() as AsyncIterable<Message>)
     expect(spec).toBeDefined()
     expect(spec.config).toBeDefined()
     expect(typeof spec.config).toBe('object')
@@ -67,7 +69,9 @@ describe('error propagation', () => {
     if (!bin) throw new Error('source-stripe bin not found')
 
     const source = createSourceFromExec(bin)
-    // check with invalid config should fail
-    await expect(source.check({ config: {} })).rejects.toThrow()
+    // check with invalid config should fail — collect the async iterable
+    await expect(
+      collectConnectionStatus(source.check({ config: {} }) as AsyncIterable<Message>)
+    ).rejects.toThrow()
   })
 })

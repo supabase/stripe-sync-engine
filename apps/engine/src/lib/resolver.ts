@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import type { Source, Destination } from '@stripe/sync-protocol'
-import { ConnectorSpecification } from '@stripe/sync-protocol'
+import type { Source, Destination, ConnectorSpecification } from '@stripe/sync-protocol'
+import { collectSpec } from '@stripe/sync-protocol'
 import { createSourceFromExec } from './source-exec.js'
 import { createDestinationFromExec } from './destination-exec.js'
 
@@ -34,10 +34,8 @@ export function validateSource(obj: unknown): ValidationResult {
     }
   }
 
-  // Validate spec() output
-  if (typeof o['spec'] === 'function') {
-    validateSpec(o['spec'] as () => unknown, errors)
-  }
+  // Validate spec() output — spec() now returns AsyncIterable, so we can't
+  // validate synchronously. Just check the method exists (checked above).
 
   return errors.length === 0 ? { valid: true } : { valid: false, errors }
 }
@@ -66,27 +64,10 @@ export function validateDestination(obj: unknown): ValidationResult {
     }
   }
 
-  // Validate spec() output
-  if (typeof o['spec'] === 'function') {
-    validateSpec(o['spec'] as () => unknown, errors)
-  }
+  // Validate spec() output — spec() now returns AsyncIterable, so we can't
+  // validate synchronously. Just check the method exists (checked above).
 
   return errors.length === 0 ? { valid: true } : { valid: false, errors }
-}
-
-function validateSpec(specFn: () => unknown, errors: string[]) {
-  let specResult: unknown
-  try {
-    specResult = specFn()
-  } catch (err) {
-    errors.push(`spec() threw: ${err}`)
-    return
-  }
-
-  const parsed = ConnectorSpecification.safeParse(specResult)
-  if (!parsed.success) {
-    errors.push(`spec() returned invalid ConnectorSpecification: ${parsed.error.message}`)
-  }
 }
 
 // MARK: - Specifier resolution
@@ -209,14 +190,19 @@ export interface ConnectorResolver {
   destinations(): ReadonlyMap<string, ResolvedConnector<Destination>>
 }
 
-/** Convert a connector's spec().config JSON Schema to a Zod object schema + raw JSON Schema. */
-function configSchemaFromSpec(connector: { spec(): { config: Record<string, unknown> } }): {
+/** Convert a connector's spec() async iterable output to a Zod object schema + raw JSON Schema. */
+async function configSchemaFromSpec(connector: {
+  spec(): AsyncIterable<{ type: string; [k: string]: unknown }>
+}): Promise<{
   configSchema: z.ZodType
   rawConfigJsonSchema: Record<string, unknown>
-} {
+}> {
+  const { spec: specPayload } = await collectSpec(
+    connector.spec() as AsyncIterable<import('@stripe/sync-protocol').Message>
+  )
   // Connectors may emit `$schema` (e.g. via z.toJSONSchema defaults). Strip it here so
   // rawConfigJsonSchema is clean for injection into OpenAPI 3.1 component schemas.
-  const { $schema: _unused, ...rawConfigJsonSchema } = connector.spec().config
+  const { $schema: _unused, ...rawConfigJsonSchema } = specPayload.config
   const schema = z.fromJSONSchema(rawConfigJsonSchema)
   // fromJSONSchema({}) returns ZodAny — fall back to empty object for composability
   const configSchema = schema instanceof z.ZodObject ? schema : z.object({})
@@ -233,21 +219,21 @@ function configSchemaFromSpec(connector: { spec(): { config: Record<string, unkn
  * 4. **npm** — `npx @stripe/sync-source-<name>` auto-download (disabled unless `connectorsFrom.npm`).
  * 5. **Error** — connector not found.
  */
-export function createConnectorResolver(
+export async function createConnectorResolver(
   registered: RegisteredConnectors,
   connectorsFrom?: ConnectorsFrom
-): ConnectorResolver {
+): Promise<ConnectorResolver> {
   const sourceCache = new Map<string, Source>(Object.entries(registered.sources ?? {}))
   const destCache = new Map<string, Destination>(Object.entries(registered.destinations ?? {}))
 
-  // Build schema maps from all known connectors
+  // Build schema maps from all known connectors (async because spec() is now async iterable)
   const _sources = new Map<string, ResolvedConnector<Source>>()
   for (const [name, connector] of sourceCache) {
-    _sources.set(name, { connector, ...configSchemaFromSpec(connector) })
+    _sources.set(name, { connector, ...(await configSchemaFromSpec(connector)) })
   }
   const _destinations = new Map<string, ResolvedConnector<Destination>>()
   for (const [name, connector] of destCache) {
-    _destinations.set(name, { connector, ...configSchemaFromSpec(connector) })
+    _destinations.set(name, { connector, ...(await configSchemaFromSpec(connector)) })
   }
 
   /**
@@ -286,7 +272,7 @@ export function createConnectorResolver(
       if (cmd) {
         const connector = createSourceFromExec(cmd)
         sourceCache.set(name, connector)
-        _sources.set(name, { connector, ...configSchemaFromSpec(connector) })
+        _sources.set(name, { connector, ...(await configSchemaFromSpec(connector)) })
         return connector
       }
 
@@ -303,7 +289,7 @@ export function createConnectorResolver(
       if (cmd) {
         const connector = createDestinationFromExec(cmd)
         destCache.set(name, connector)
-        _destinations.set(name, { connector, ...configSchemaFromSpec(connector) })
+        _destinations.set(name, { connector, ...(await configSchemaFromSpec(connector)) })
         return connector
       }
 

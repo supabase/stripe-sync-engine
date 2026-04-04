@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import type { Source } from '@stripe/sync-protocol'
+import type {
+  Source,
+  SpecOutput,
+  CheckOutput,
+  DiscoverOutput,
+  Message,
+} from '@stripe/sync-protocol'
 
 export const spec = z.object({
   /** Stream definitions: name -> { primary_key? }. Used for catalog discovery only. */
@@ -19,33 +25,44 @@ export { spec as sourceTestSpec }
 export type SourceTestConfig = z.infer<typeof spec>
 
 export const sourceTest = {
-  spec() {
-    return { config: z.toJSONSchema(spec) }
+  async *spec(): AsyncIterable<SpecOutput> {
+    yield { type: 'spec', spec: { config: z.toJSONSchema(spec) } }
   },
 
-  async check() {
-    return { status: 'succeeded' as const }
+  async *check(): AsyncIterable<CheckOutput> {
+    yield {
+      type: 'connection_status',
+      connection_status: { status: 'succeeded' as const },
+    }
   },
 
-  async discover({ config }: { config: SourceTestConfig }) {
+  async *discover({ config }: { config: SourceTestConfig }): AsyncIterable<DiscoverOutput> {
     const streams = config.streams
       ? Object.entries(config.streams).map(([name, def]) => ({
           name,
           primary_key: def.primary_key ?? [['id']],
         }))
       : []
-    return { type: 'catalog' as const, streams }
+    yield { type: 'catalog', catalog: { streams } }
   },
 
-  async *read({ config }: { config: SourceTestConfig }, $stdin?: AsyncIterable<unknown>) {
+  async *read(
+    { config }: { config: SourceTestConfig },
+    $stdin?: AsyncIterable<unknown>
+  ): AsyncIterable<Message> {
     if (!$stdin) return
     let recordCount = 0
-    for await (const msg of $stdin as AsyncIterable<any>) {
+    for await (const msg of $stdin as AsyncIterable<Message>) {
       if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
         yield {
-          type: 'error' as const,
-          failure_type: 'auth_error' as const,
-          message: 'Simulated auth error',
+          type: 'trace' as const,
+          trace: {
+            trace_type: 'error' as const,
+            error: {
+              failure_type: 'auth_error' as const,
+              message: 'Simulated auth error',
+            },
+          },
         }
         return
       }

@@ -10,7 +10,7 @@ import { createApp } from './api/app.js'
 import type { WorkflowClient } from '@temporalio/client'
 import { logger } from './logger.js'
 
-const resolver = createConnectorResolver({
+const resolverPromise = createConnectorResolver({
   sources: { stripe: sourceStripe },
   destinations: { postgres: destinationPostgres, 'google-sheets': destinationGoogleSheets },
 })
@@ -58,6 +58,7 @@ const serveCmd = defineCommand({
       'Temporal mode enabled'
     )
 
+    const resolver = await resolverPromise
     const app = createApp({ temporal, resolver })
 
     serve({ fetch: app.fetch, port }, () => {
@@ -156,6 +157,7 @@ const webhookCmd = defineCommand({
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
+    const resolver = await resolverPromise
     const app = createApp({ temporal, resolver })
 
     serve({ fetch: app.fetch, port }, () => {
@@ -179,6 +181,7 @@ export async function createProgram() {
     list: async function* () {},
   } as any
 
+  const resolver = await resolverPromise
   const mockApp = createApp({ temporal: { client: mockClient, taskQueue: 'cli' }, resolver })
   const res = await mockApp.request('/openapi.json')
   const spec = await res.json()
@@ -190,7 +193,8 @@ export async function createProgram() {
       const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233'
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
       const temporal = await createTemporalClient(address, taskQueue)
-      realApp = createApp({ temporal, resolver })
+      const r = await resolverPromise
+      realApp = createApp({ temporal, resolver: r })
     }
     return realApp
   }

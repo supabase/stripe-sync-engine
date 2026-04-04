@@ -1,13 +1,4 @@
-import type {
-  CheckResult,
-  ConfiguredCatalog,
-  ConnectorSpecification,
-  Destination,
-  DestinationInput,
-  DestinationOutput,
-  ErrorMessage,
-  LogMessage,
-} from '@stripe/sync-protocol'
+import type { Destination, DestinationInput } from '@stripe/sync-protocol'
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'
@@ -131,11 +122,14 @@ export function createDestination(
       return spreadsheetId
     },
 
-    spec(): ConnectorSpecification {
-      return { config: z.toJSONSchema(configSchema) }
+    async *spec() {
+      yield {
+        type: 'spec' as const,
+        spec: { config: z.toJSONSchema(configSchema) },
+      }
     },
 
-    async setup({ config, catalog }: { config: Config; catalog: ConfiguredCatalog }) {
+    async *setup({ config, catalog }) {
       if (config.spreadsheet_id) {
         spreadsheetId = config.spreadsheet_id
         return
@@ -159,34 +153,43 @@ export function createDestination(
       // Protect all data tabs with a warning so users know edits may be overwritten
       await protectSheets(sheets, spreadsheetId, sheetIds)
 
-      return { spreadsheet_id: spreadsheetId }
+      yield {
+        type: 'control' as const,
+        control: {
+          control_type: 'config_update' as const,
+          config: { spreadsheet_id: spreadsheetId },
+        },
+      }
     },
 
-    async teardown({ config }: { config: Config }) {
+    async *teardown({ config }) {
       const id = config.spreadsheet_id
       if (!id) throw new Error('spreadsheet_id is required for teardown')
       const drive = makeDriveClient(config)
       await deleteSpreadsheet(drive, id)
     },
 
-    async check({ config }: { config: Config }): Promise<CheckResult> {
+    async *check({ config }) {
       const sheets = sheetsClient ?? makeSheetsClient(config)
       if (!config.spreadsheet_id) throw new Error('spreadsheet_id is required for check')
       try {
         await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheet_id })
-        return { status: 'succeeded' }
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'succeeded' as const },
+        }
       } catch (err) {
-        return {
-          status: 'failed',
-          message: err instanceof Error ? err.message : String(err),
+        yield {
+          type: 'connection_status' as const,
+          connection_status: {
+            status: 'failed' as const,
+            message: err instanceof Error ? err.message : String(err),
+          },
         }
       }
     },
 
-    async *write(
-      { config, catalog }: { config: Config; catalog: ConfiguredCatalog },
-      $stdin: AsyncIterable<DestinationInput>
-    ): AsyncIterable<DestinationOutput> {
+    async *write({ config, catalog }, $stdin) {
       const sheets = sheetsClient ?? makeSheetsClient(config)
       const batchSize = config.batch_size ?? 50
       const primaryKeys = new Map<string, string[][]>(
@@ -286,9 +289,9 @@ export function createDestination(
       }
 
       try {
-        for await (const msg of $stdin) {
+        for await (const msg of $stdin as AsyncIterable<DestinationInput>) {
           if (msg.type === 'record') {
-            const { stream, data } = msg
+            const { stream, data } = msg.record
             const cleanData = stripSystemFields(data)
             const headers = await ensureHeadersForRecord(stream, cleanData)
             const row = headers.map((header) => stringify(cleanData[header]))
@@ -315,7 +318,7 @@ export function createDestination(
             }
           } else if (msg.type === 'state') {
             // Flush the stream's pending rows, then re-emit the state checkpoint
-            await flushStream(msg.stream)
+            await flushStream(msg.state.stream)
             yield msg
           }
         }
@@ -330,33 +333,42 @@ export function createDestination(
           // ignore flush errors during error handling
         }
 
-        const errorMsg: ErrorMessage = {
-          type: 'error',
-          failure_type: isTransient(err) ? 'transient_error' : 'system_error',
-          message: err instanceof Error ? err.message : String(err),
-          stack_trace: err instanceof Error ? err.stack : undefined,
+        yield {
+          type: 'trace' as const,
+          trace: {
+            trace_type: 'error' as const,
+            error: {
+              failure_type: isTransient(err)
+                ? ('transient_error' as const)
+                : ('system_error' as const),
+              message: err instanceof Error ? err.message : String(err),
+              stack_trace: err instanceof Error ? err.stack : undefined,
+            },
+          },
         }
-        yield errorMsg
         return
       }
 
       if (Object.keys(rowAssignments).length > 0) {
         yield {
-          type: 'log',
-          level: 'debug',
-          message: formatGoogleSheetsMetaLog({
-            type: 'row_assignments',
-            assignments: rowAssignments,
-          }),
+          type: 'log' as const,
+          log: {
+            level: 'debug' as const,
+            message: formatGoogleSheetsMetaLog({
+              type: 'row_assignments',
+              assignments: rowAssignments,
+            }),
+          },
         }
       }
 
-      const logMsg: LogMessage = {
-        type: 'log',
-        level: 'info',
-        message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
+      yield {
+        type: 'log' as const,
+        log: {
+          level: 'info' as const,
+          message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
+        },
       }
-      yield logMsg
     },
   } satisfies Destination<Config> & { spreadsheetId?: string }
 

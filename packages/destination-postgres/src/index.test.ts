@@ -9,6 +9,7 @@ import type {
   RecordMessage,
   StateMessage,
 } from '@stripe/sync-protocol'
+import { collectConnectionStatus, drainStream } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle
@@ -74,11 +75,11 @@ beforeEach(async () => {
 // ---------------------------------------------------------------------------
 
 function makeRecord(stream: string, data: Record<string, unknown>): RecordMessage {
-  return { type: 'record', stream, data, emitted_at: new Date().toISOString() }
+  return { type: 'record', record: { stream, data, emitted_at: new Date().toISOString() } }
 }
 
 function makeState(stream: string, data: unknown): StateMessage {
-  return { type: 'state', stream, data }
+  return { type: 'state', state: { stream, data } }
 }
 
 async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterable<DestinationInput> {
@@ -114,21 +115,25 @@ const catalog: ConfiguredCatalog = {
 describe('destination default export', () => {
   describe('check()', () => {
     it('succeeds against a live Postgres', async () => {
-      const result = await destination.check({ config: makeConfig() })
-      expect(result.status).toBe('succeeded')
+      const { connection_status } = await collectConnectionStatus(
+        destination.check({ config: makeConfig() })
+      )
+      expect(connection_status.status).toBe('succeeded')
     })
 
     it('fails with bad connection string', async () => {
-      const result = await destination.check({
-        config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
-      })
-      expect(result.status).toBe('failed')
+      const { connection_status } = await collectConnectionStatus(
+        destination.check({
+          config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
+        })
+      )
+      expect(connection_status.status).toBe('failed')
     })
   })
 
   describe('setup()', () => {
     it('creates schema and table', async () => {
-      await destination.setup({ config: makeConfig(), catalog })
+      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
 
       const { rows } = await pool.query(
         `SELECT table_name FROM information_schema.tables WHERE table_schema = $1`,
@@ -140,8 +145,8 @@ describe('destination default export', () => {
 
   describe('teardown()', () => {
     it('drops schema CASCADE', async () => {
-      await destination.setup({ config: makeConfig(), catalog })
-      await destination.teardown({ config: makeConfig() })
+      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
+      await drainStream(destination.teardown!({ config: makeConfig() }))
 
       const { rows } = await pool.query(
         `SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`,
@@ -153,7 +158,7 @@ describe('destination default export', () => {
 
   describe('write()', () => {
     beforeEach(async () => {
-      await destination.setup({ config: makeConfig(), catalog })
+      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
     })
 
     it('upserts records and emits log on completion', async () => {
@@ -205,7 +210,10 @@ describe('destination default export', () => {
 
       const stateOutputs = outputs.filter((m) => m.type === 'state')
       expect(stateOutputs).toHaveLength(1)
-      expect(stateOutputs[0]).toEqual({ type: 'state', stream: 'customers', data: stateData })
+      expect(stateOutputs[0]).toEqual({
+        type: 'state',
+        state: { stream: 'customers', data: stateData },
+      })
 
       // Records should be in DB (flushed before state was yielded)
       const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
@@ -231,7 +239,7 @@ describe('destination default export', () => {
 
 describe('upsertMany standalone', () => {
   beforeEach(async () => {
-    await destination.setup({ config: makeConfig(), catalog })
+    await drainStream(destination.setup!({ config: makeConfig(), catalog }))
   })
 
   it('inserts records directly via pool', async () => {

@@ -2,46 +2,23 @@ import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest'
 import type { AddressInfo } from 'node:net'
 import { serve } from '@hono/node-server'
 import type { ConnectorResolver, Message } from './index.js'
-import { sourceTest, destinationTest } from './index.js'
+import { sourceTest, destinationTest, collectSpec } from './index.js'
 import { createApp } from '../api/app.js'
 import { createRemoteEngine } from './remote-engine.js'
-import type { PipelineConfig } from '@stripe/sync-protocol'
+import type { PipelineConfig, StateMessage } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Server setup
 // ---------------------------------------------------------------------------
 
-const resolver: ConnectorResolver = {
-  resolveSource: async (name) => {
-    if (name !== 'test') throw new Error(`Unknown source connector: ${name}`)
-    return sourceTest
-  },
-  resolveDestination: async (name) => {
-    if (name !== 'test') throw new Error(`Unknown destination connector: ${name}`)
-    return destinationTest
-  },
-  sources: () =>
-    new Map([
-      [
-        'test',
-        {
-          connector: sourceTest,
-          configSchema: {} as any,
-          rawConfigJsonSchema: sourceTest.spec().config,
-        },
-      ],
-    ]),
-  destinations: () =>
-    new Map([
-      [
-        'test',
-        {
-          connector: destinationTest,
-          configSchema: {} as any,
-          rawConfigJsonSchema: destinationTest.spec().config,
-        },
-      ],
-    ]),
+/** Extract the raw config JSON Schema from a connector's async iterable spec(). */
+async function getRawConfigJsonSchema(
+  connector: typeof sourceTest | typeof destinationTest
+): Promise<Record<string, unknown>> {
+  const { spec } = await collectSpec(
+    connector.spec() as AsyncIterable<import('@stripe/sync-protocol').Message>
+  )
+  return spec.config
 }
 
 vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -56,16 +33,52 @@ const pipeline: PipelineConfig = {
   destination: { type: 'test' },
 }
 
-beforeAll(
-  () =>
-    new Promise<void>((resolve) => {
-      const app = createApp(resolver)
-      server = serve({ fetch: app.fetch, port: 0 }, (info) => {
-        engineUrl = `http://localhost:${(info as AddressInfo).port}`
-        resolve()
-      })
+beforeAll(async () => {
+  const [srcConfigSchema, destConfigSchema] = await Promise.all([
+    getRawConfigJsonSchema(sourceTest),
+    getRawConfigJsonSchema(destinationTest),
+  ])
+  const resolver: ConnectorResolver = {
+    resolveSource: async (name) => {
+      if (name !== 'test') throw new Error(`Unknown source connector: ${name}`)
+      return sourceTest
+    },
+    resolveDestination: async (name) => {
+      if (name !== 'test') throw new Error(`Unknown destination connector: ${name}`)
+      return destinationTest
+    },
+    sources: () =>
+      new Map([
+        [
+          'test',
+          {
+            connector: sourceTest,
+            configSchema: {} as any,
+            rawConfigJsonSchema: srcConfigSchema,
+          },
+        ],
+      ]),
+    destinations: () =>
+      new Map([
+        [
+          'test',
+          {
+            connector: destinationTest,
+            configSchema: {} as any,
+            rawConfigJsonSchema: destConfigSchema,
+          },
+        ],
+      ]),
+  }
+
+  const app = await createApp(resolver)
+  await new Promise<void>((resolve) => {
+    server = serve({ fetch: app.fetch, port: 0 }, (info) => {
+      engineUrl = `http://localhost:${(info as AddressInfo).port}`
+      resolve()
     })
-)
+  })
+})
 
 afterAll(
   () =>
@@ -124,17 +137,19 @@ describe('createRemoteEngine', () => {
       const input: Message[] = [
         {
           type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         },
-        { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
+        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
       ]
       const messages = await collect(engine.pipeline_read(pipeline, undefined, asIterable(input)))
       expect(messages).toHaveLength(3)
       expect(messages[0]!.type).toBe('record')
       expect(messages[1]!.type).toBe('state')
-      expect(messages[2]).toMatchObject({ type: 'eof', reason: 'complete' })
+      expect(messages[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
 
     it('returns eof:complete when called without input', async () => {
@@ -142,7 +157,7 @@ describe('createRemoteEngine', () => {
       // sourceTest yields nothing when $stdin is absent — only eof
       const messages = await collect(engine.pipeline_read(pipeline))
       expect(messages).toHaveLength(1)
-      expect(messages[0]).toMatchObject({ type: 'eof', reason: 'complete' })
+      expect(messages[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
   })
 
@@ -152,16 +167,18 @@ describe('createRemoteEngine', () => {
       const messages: Message[] = [
         {
           type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         },
-        { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
+        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
       ]
       const output = await collect(engine.pipeline_write(pipeline, asIterable(messages)))
       expect(output).toHaveLength(1)
       expect(output[0]!.type).toBe('state')
-      expect((output[0] as { stream: string }).stream).toBe('customers')
+      expect((output[0] as StateMessage).state.stream).toBe('customers')
     })
   })
 
@@ -171,23 +188,25 @@ describe('createRemoteEngine', () => {
       const input: Message[] = [
         {
           type: 'record',
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         },
-        { type: 'state', stream: 'customers', data: { cursor: 'cus_1' } },
+        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
       ]
       const output = await collect(engine.pipeline_sync(pipeline, undefined, asIterable(input)))
       expect(output).toHaveLength(2)
       expect(output[0]!.type).toBe('state')
-      expect(output[1]).toMatchObject({ type: 'eof', reason: 'complete' })
+      expect(output[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
 
     it('returns eof:complete without input (no source data)', async () => {
       const engine = createRemoteEngine(engineUrl)
       const output = await collect(engine.pipeline_sync(pipeline))
       expect(output).toHaveLength(1)
-      expect(output[0]).toMatchObject({ type: 'eof', reason: 'complete' })
+      expect(output[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
   })
 

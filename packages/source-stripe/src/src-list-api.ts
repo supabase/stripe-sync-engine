@@ -1,10 +1,5 @@
-import type {
-  ErrorMessage,
-  Message,
-  StateMessage,
-  StreamStatusMessage,
-} from '@stripe/sync-protocol'
-import { toRecordMessage } from '@stripe/sync-protocol'
+import type { Message, TraceMessage } from '@stripe/sync-protocol'
+import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
 import type { SegmentState, BackfillState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
@@ -271,15 +266,14 @@ async function* paginateSegment(opts: {
     segment.status = hasMore ? 'pending' : 'complete'
 
     const allComplete = segments.every((s) => s.status === 'complete')
-    yield {
-      type: 'state',
+    yield stateMsg({
       stream: streamName,
       data: {
         pageCursor: null,
         status: allComplete ? 'complete' : 'pending',
         backfill: compactState(segments, range, numSegments),
       },
-    } satisfies StateMessage
+    })
   }
 }
 
@@ -331,14 +325,13 @@ async function* sequentialBackfillStream(opts: {
       hasMore = false
     }
 
-    yield {
-      type: 'state',
+    yield stateMsg({
       stream: streamName,
       data: {
         pageCursor: hasMore ? pageCursor : null,
         status: hasMore ? 'pending' : 'complete',
       },
-    } satisfies StateMessage
+    })
   }
 }
 
@@ -384,11 +377,16 @@ export async function* listApiBackfill(opts: {
     const resourceConfig = findConfigByTableName(registry, stream.name)
     if (!resourceConfig) {
       yield {
-        type: 'error',
-        failure_type: 'config_error',
-        message: `Unknown stream: ${stream.name}`,
-        stream: stream.name,
-      } satisfies ErrorMessage
+        type: 'trace',
+        trace: {
+          trace_type: 'error',
+          error: {
+            failure_type: 'config_error',
+            message: `Unknown stream: ${stream.name}`,
+            stream: stream.name,
+          },
+        },
+      } satisfies TraceMessage
       continue
     }
 
@@ -398,10 +396,12 @@ export async function* listApiBackfill(opts: {
     if (streamState?.status === 'complete') continue
 
     yield {
-      type: 'stream_status',
-      stream: stream.name,
-      status: 'started',
-    } satisfies StreamStatusMessage
+      type: 'trace',
+      trace: {
+        trace_type: 'stream_status',
+        stream_status: { stream: stream.name, status: 'started' },
+      },
+    } satisfies TraceMessage
 
     try {
       // Parallel path: streams that support created filter
@@ -465,17 +465,21 @@ export async function* listApiBackfill(opts: {
       }
 
       yield {
-        type: 'stream_status',
-        stream: stream.name,
-        status: 'complete',
-      } satisfies StreamStatusMessage
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: stream.name, status: 'complete' },
+        },
+      } satisfies TraceMessage
     } catch (err) {
       if (isSkippableError(err)) {
         yield {
-          type: 'stream_status',
-          stream: stream.name,
-          status: 'complete',
-        } satisfies StreamStatusMessage
+          type: 'trace',
+          trace: {
+            trace_type: 'stream_status',
+            stream_status: { stream: stream.name, status: 'complete' },
+          },
+        } satisfies TraceMessage
         continue
       }
       console.error({
@@ -485,12 +489,17 @@ export async function* listApiBackfill(opts: {
       })
       const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
       yield {
-        type: 'error',
-        failure_type: isRateLimit ? 'transient_error' : 'system_error',
-        message: String(err),
-        stream: stream.name,
-        ...(err instanceof Error ? { stack_trace: err.stack } : {}),
-      } satisfies ErrorMessage
+        type: 'trace',
+        trace: {
+          trace_type: 'error',
+          error: {
+            failure_type: isRateLimit ? 'transient_error' : 'system_error',
+            message: String(err),
+            stream: stream.name,
+            ...(err instanceof Error ? { stack_trace: err.stack } : {}),
+          },
+        },
+      } satisfies TraceMessage
     }
   }
 }

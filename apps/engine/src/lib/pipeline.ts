@@ -6,7 +6,7 @@ import { logger } from '../logger.js'
 
 /**
  * Drop messages for streams not in the catalog and apply per-stream field filtering.
- * Passes non-data messages (log, error, stream_status, catalog) through unchanged.
+ * Passes non-data messages (log, trace, catalog) through unchanged.
  */
 export function enforceCatalog(
   catalog: ConfiguredCatalog
@@ -14,25 +14,33 @@ export function enforceCatalog(
   const streamMap = new Map(catalog.streams.map((cs) => [cs.stream.name, cs]))
   return async function* (messages) {
     for await (const msg of messages) {
-      if (msg.type === 'record' || msg.type === 'state') {
-        const cs = streamMap.get(msg.stream)
+      if (msg.type === 'record') {
+        const cs = streamMap.get(msg.record.stream)
         if (!cs) {
-          logger.error({ stream: msg.stream }, 'Unknown stream not in catalog')
+          logger.error({ stream: msg.record.stream }, 'Unknown stream not in catalog')
           continue
         }
-        if (msg.type === 'record') {
-          const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
-          if (props) {
-            yield {
-              ...msg,
-              data: Object.fromEntries(Object.entries(msg.data).filter(([key]) => key in props)),
-            }
-          } else {
-            yield msg
+        const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
+        if (props) {
+          yield {
+            ...msg,
+            record: {
+              ...msg.record,
+              data: Object.fromEntries(
+                Object.entries(msg.record.data).filter(([key]) => key in props)
+              ),
+            },
           }
         } else {
           yield msg
         }
+      } else if (msg.type === 'state') {
+        const cs = streamMap.get(msg.state.stream)
+        if (!cs) {
+          logger.error({ stream: msg.state.stream }, 'Unknown stream not in catalog')
+          continue
+        }
+        yield msg
       } else {
         yield msg
       }
@@ -47,11 +55,20 @@ export function enforceCatalog(
  */
 export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
   for await (const msg of messages) {
-    if (msg.type === 'log') logger[msg.level](msg.message)
-    else if (msg.type === 'error')
-      logger.error({ stream: msg.stream, failure_type: msg.failure_type }, msg.message)
-    else if (msg.type === 'stream_status')
-      logger.info({ stream: msg.stream, status: msg.status }, 'stream_status')
+    if (msg.type === 'log') logger[msg.log.level](msg.log.message)
+    else if (msg.type === 'trace') {
+      if (msg.trace.trace_type === 'error') {
+        logger.error(
+          { stream: msg.trace.error.stream, failure_type: msg.trace.error.failure_type },
+          msg.trace.error.message
+        )
+      } else if (msg.trace.trace_type === 'stream_status') {
+        logger.info(
+          { stream: msg.trace.stream_status.stream, status: msg.trace.stream_status.status },
+          'stream_status'
+        )
+      }
+    }
     yield msg
   }
 }
@@ -83,7 +100,7 @@ export function persistState(
 ): (msgs: AsyncIterable<DestinationOutput>) => AsyncIterable<DestinationOutput> {
   return async function* (messages) {
     for await (const msg of messages) {
-      if (msg.type === 'state') await store.set(msg.stream, msg.data)
+      if (msg.type === 'state') await store.set(msg.state.stream, msg.state.data)
       yield msg
     }
   }
@@ -98,7 +115,7 @@ export function persistState(
  * - `timeLimitMs`: stop after N milliseconds (any message boundary)
  *
  * When both are set, whichever fires first wins. All non-matching messages
- * pass through unchanged. The last yielded item is always `{ type: 'eof', reason }`.
+ * pass through unchanged. The last yielded item is always `{ type: 'eof', eof: { reason } }`.
  */
 export function takeLimits<T extends { type: string }>(
   opts: { stateLimit?: number; timeLimitMs?: number } = {}
@@ -109,15 +126,15 @@ export function takeLimits<T extends { type: string }>(
     for await (const msg of messages) {
       yield msg
       if (deadline && Date.now() >= deadline) {
-        yield { type: 'eof', reason: 'time_limit' } as unknown as T
+        yield { type: 'eof', eof: { reason: 'time_limit' } } as unknown as T
         return
       }
       if (msg.type === 'state' && opts.stateLimit && ++stateCount >= opts.stateLimit) {
-        yield { type: 'eof', reason: 'state_limit' } as unknown as T
+        yield { type: 'eof', eof: { reason: 'state_limit' } } as unknown as T
         return
       }
     }
-    yield { type: 'eof', reason: 'complete' } as unknown as T
+    yield { type: 'eof', eof: { reason: 'complete' } } as unknown as T
   }
 }
 

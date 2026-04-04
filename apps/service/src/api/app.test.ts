@@ -3,14 +3,23 @@ import type { WorkflowClient } from '@temporalio/client'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
 import path from 'node:path'
-import { createConnectorResolver, sourceTest, destinationTest } from '@stripe/sync-engine'
+import {
+  createConnectorResolver,
+  sourceTest,
+  destinationTest,
+  type ConnectorResolver,
+} from '@stripe/sync-engine'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 
-const resolver = createConnectorResolver({
-  sources: { test: sourceTest },
-  destinations: { test: destinationTest, 'google-sheets': destinationGoogleSheets },
+let resolver: ConnectorResolver
+
+beforeAll(async () => {
+  resolver = await createConnectorResolver({
+    sources: { test: sourceTest },
+    destinations: { test: destinationTest, 'google-sheets': destinationGoogleSheets },
+  })
 })
 
 // Lightweight app for spec/health tests (no Temporal needed)

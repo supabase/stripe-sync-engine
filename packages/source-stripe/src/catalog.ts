@@ -1,10 +1,10 @@
-import type { CatalogMessage, Stream } from '@stripe/sync-protocol'
+import type { CatalogPayload, Stream } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
 import type { ParsedResourceTable } from '@stripe/sync-openapi'
 import { parsedTableToJsonSchema } from '@stripe/sync-openapi'
 
-/** Derive a CatalogMessage from the existing resource registry (no json_schema). */
-export function catalogFromRegistry(registry: Record<string, ResourceConfig>): CatalogMessage {
+/** Derive a CatalogPayload from the existing resource registry (no json_schema). */
+export function catalogFromRegistry(registry: Record<string, ResourceConfig>): CatalogPayload {
   const streams: Stream[] = Object.entries(registry)
     .filter(([, cfg]) => cfg.sync !== false)
     .sort(([, a], [, b]) => a.order - b.order)
@@ -14,17 +14,17 @@ export function catalogFromRegistry(registry: Record<string, ResourceConfig>): C
       metadata: { resource_name: name },
     }))
 
-  return { type: 'catalog', streams }
+  return { streams }
 }
 
 /**
- * Derive a CatalogMessage by merging OpenAPI-parsed tables with registry metadata.
+ * Derive a CatalogPayload by merging OpenAPI-parsed tables with registry metadata.
  * Each stream gets json_schema from the parsed OpenAPI spec.
  */
 export function catalogFromOpenApi(
   tables: ParsedResourceTable[],
   registry: Record<string, ResourceConfig>
-): CatalogMessage {
+): CatalogPayload {
   const tableMap = new Map(tables.map((t) => [t.tableName, t]))
 
   const streams: Stream[] = Object.entries(registry)
@@ -43,5 +43,5 @@ export function catalogFromOpenApi(
       return stream
     })
 
-  return { type: 'catalog', streams }
+  return { streams }
 }

@@ -92,7 +92,7 @@ export interface paths {
         put?: never;
         /**
          * Discover available streams
-         * @description Returns the catalog of available streams for the configured source. Each stream includes its name, primary key, and optional JSON schema.
+         * @description Streams NDJSON messages (catalog, logs, traces) for the configured source.
          */
         post: operations["source_discover"];
         delete?: never;
@@ -233,109 +233,192 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["ErrorMessage"] | components["schemas"]["StreamStatusMessage"] | components["schemas"]["EofMessage"];
-        /** @description One record for one stream. */
+        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
         RecordMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "record";
-            /** @description Stream (table) name this record belongs to. */
-            stream: string;
-            /** @description The record payload as a key-value map. */
-            data: {
-                [key: string]: unknown;
+            /** @description One record for one stream. */
+            record: {
+                /** @description Stream (table) name this record belongs to. */
+                stream: string;
+                /** @description The record payload as a key-value map. */
+                data: {
+                    [key: string]: unknown;
+                };
+                /**
+                 * Format: date-time
+                 * @description ISO 8601 timestamp when the record was emitted by the source.
+                 */
+                emitted_at: string;
             };
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the record was emitted by the source.
-             */
-            emitted_at: string;
         };
-        /** @description Per-stream checkpoint for resumable syncs. Emitted by the source after each page/batch so the orchestrator can persist progress. */
         StateMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "state";
-            /** @description Stream being checkpointed. */
-            stream: string;
-            /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
-            data: unknown;
+            /** @description Per-stream checkpoint for resumable syncs. */
+            state: {
+                /** @description Stream being checkpointed. */
+                stream: string;
+                /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
+                data: unknown;
+            };
         };
-        /** @description Catalog of available streams. Emitted by a source during discover(). */
         CatalogMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "catalog";
-            /** @description All streams available from this source. */
-            streams: {
-                /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-                name: string;
-                /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
-                primary_key: string[][];
-                /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-                json_schema?: {
-                    [key: string]: unknown;
-                };
-                /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
-                metadata?: {
-                    [key: string]: unknown;
-                };
-            }[];
+            /** @description Catalog of available streams. */
+            catalog: {
+                /** @description All streams available from this source. */
+                streams: {
+                    /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
+                    name: string;
+                    /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
+                    primary_key: string[][];
+                    /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
+                    json_schema?: {
+                        [key: string]: unknown;
+                    };
+                    /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
+                    metadata?: {
+                        [key: string]: unknown;
+                    };
+                }[];
+            };
         };
-        /** @description Structured log output from a source or destination. */
         LogMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "log";
-            /**
-             * @description Log severity level.
-             * @enum {string}
-             */
-            level: "debug" | "info" | "warn" | "error";
-            /** @description Human-readable log message. */
-            message: string;
+            /** @description Structured log output from a connector. */
+            log: {
+                /**
+                 * @description Log severity level.
+                 * @enum {string}
+                 */
+                level: "debug" | "info" | "warn" | "error";
+                /** @description Human-readable log message. */
+                message: string;
+            };
         };
-        /** @description Structured error from a source or destination. */
-        ErrorMessage: {
+        TraceMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "error";
-            /**
-             * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
-             * @enum {string}
-             */
-            failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
-            /** @description Human-readable error description. */
-            message: string;
-            /** @description Stream that triggered the error, if applicable. */
-            stream?: string;
-            /** @description Full stack trace for debugging. */
-            stack_trace?: string;
+            type: "trace";
+            /** @description Diagnostic/status payload with subtypes for error, stream status, and estimates. */
+            trace: {
+                /** @constant */
+                trace_type: "error";
+                /** @description Structured error from a connector. */
+                error: {
+                    /**
+                     * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
+                     * @enum {string}
+                     */
+                    failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
+                    /** @description Human-readable error description. */
+                    message: string;
+                    /** @description Stream that triggered the error, if applicable. */
+                    stream?: string;
+                    /** @description Full stack trace for debugging. */
+                    stack_trace?: string;
+                };
+            } | {
+                /** @constant */
+                trace_type: "stream_status";
+                /** @description Per-stream status update. */
+                stream_status: {
+                    /** @description Stream being reported on. */
+                    stream: string;
+                    /**
+                     * @description Current phase of the stream within this sync run.
+                     * @enum {string}
+                     */
+                    status: "started" | "running" | "complete" | "incomplete";
+                };
+            } | {
+                /** @constant */
+                trace_type: "estimate";
+                /** @description Sync progress estimate for a stream. */
+                estimate: {
+                    /** @description Stream being estimated. */
+                    stream: string;
+                    /** @description Estimated total row count for this stream. */
+                    row_count?: number;
+                    /** @description Estimated total byte count for this stream. */
+                    byte_count?: number;
+                };
+            };
         };
-        /** @description Per-stream status update from a source. Enables progress reporting in CLI / dashboard. */
-        StreamStatusMessage: {
+        SpecMessage: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "stream_status";
-            /** @description Stream being reported on. */
-            stream: string;
+            type: "spec";
+            /** @description JSON Schema describing the configuration a connector requires. */
+            spec: {
+                /** @description JSON Schema for the connector's configuration object. */
+                config: {
+                    [key: string]: unknown;
+                };
+                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). */
+                stream_state?: {
+                    [key: string]: unknown;
+                };
+                /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
+                input?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        ConnectionStatusMessage: {
             /**
-             * @description Current phase of the stream within this sync run.
+             * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            status: "started" | "running" | "complete" | "incomplete";
+            type: "connection_status";
+            /** @description Result of a connection check. */
+            connection_status: {
+                /**
+                 * @description Whether the connection check passed.
+                 * @enum {string}
+                 */
+                status: "succeeded" | "failed";
+                /** @description Human-readable explanation of the check result. */
+                message?: string;
+            };
+        };
+        ControlMessage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "control";
+            /** @description Control signal from a connector to the orchestrator. */
+            control: {
+                /**
+                 * @description What kind of control action the connector is requesting.
+                 * @enum {string}
+                 */
+                control_type: "config_update";
+                /** @description Config fields to merge into the active connector configuration. */
+                config: {
+                    [key: string]: unknown;
+                };
+            };
         };
         EofMessage: {
             /**
@@ -343,113 +426,202 @@ export interface components {
              * @enum {string}
              */
             type: "eof";
-            /** @enum {string} */
-            reason: "complete" | "state_limit" | "time_limit" | "error";
+            /** @description Terminal payload — tells the client why the stream ended. */
+            eof: {
+                /**
+                 * @description Why the stream ended.
+                 * @enum {string}
+                 */
+                reason: "complete" | "state_limit" | "time_limit" | "error";
+            };
         };
-        DestinationOutput: components["schemas"]["StateMessageOutput"] | components["schemas"]["ErrorMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["EofMessageOutput"];
-        /** @description Catalog of available streams. Emitted by a source during discover(). */
-        CatalogMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "catalog";
-            /** @description All streams available from this source. */
-            streams: {
-                /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-                name: string;
-                /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
-                primary_key: string[][];
-                /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-                json_schema?: {
-                    [key: string]: unknown;
-                };
-                /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
-                metadata?: {
-                    [key: string]: unknown;
-                };
-            }[];
-        };
-        MessageOutput: components["schemas"]["RecordMessageOutput"] | components["schemas"]["StateMessageOutput"] | components["schemas"]["CatalogMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["ErrorMessageOutput"] | components["schemas"]["StreamStatusMessageOutput"] | components["schemas"]["EofMessageOutput"];
-        /** @description One record for one stream. */
+        DestinationOutput: components["schemas"]["StateMessageOutput"] | components["schemas"]["TraceMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["EofMessageOutput"];
+        MessageOutput: components["schemas"]["RecordMessageOutput"] | components["schemas"]["StateMessageOutput"] | components["schemas"]["CatalogMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["TraceMessageOutput"] | components["schemas"]["SpecMessageOutput"] | components["schemas"]["ConnectionStatusMessageOutput"] | components["schemas"]["ControlMessageOutput"] | components["schemas"]["EofMessageOutput"];
         RecordMessageOutput: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "record";
-            /** @description Stream (table) name this record belongs to. */
-            stream: string;
-            /** @description The record payload as a key-value map. */
-            data: {
-                [key: string]: unknown;
+            /** @description One record for one stream. */
+            record: {
+                /** @description Stream (table) name this record belongs to. */
+                stream: string;
+                /** @description The record payload as a key-value map. */
+                data: {
+                    [key: string]: unknown;
+                };
+                /**
+                 * Format: date-time
+                 * @description ISO 8601 timestamp when the record was emitted by the source.
+                 */
+                emitted_at: string;
             };
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the record was emitted by the source.
-             */
-            emitted_at: string;
         };
-        /** @description Per-stream checkpoint for resumable syncs. Emitted by the source after each page/batch so the orchestrator can persist progress. */
         StateMessageOutput: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "state";
-            /** @description Stream being checkpointed. */
-            stream: string;
-            /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
-            data: unknown;
+            /** @description Per-stream checkpoint for resumable syncs. */
+            state: {
+                /** @description Stream being checkpointed. */
+                stream: string;
+                /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
+                data: unknown;
+            };
         };
-        /** @description Structured log output from a source or destination. */
+        CatalogMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "catalog";
+            /** @description Catalog of available streams. */
+            catalog: {
+                /** @description All streams available from this source. */
+                streams: {
+                    /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
+                    name: string;
+                    /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
+                    primary_key: string[][];
+                    /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
+                    json_schema?: {
+                        [key: string]: unknown;
+                    };
+                    /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
+                    metadata?: {
+                        [key: string]: unknown;
+                    };
+                }[];
+            };
+        };
         LogMessageOutput: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "log";
-            /**
-             * @description Log severity level.
-             * @enum {string}
-             */
-            level: "debug" | "info" | "warn" | "error";
-            /** @description Human-readable log message. */
-            message: string;
+            /** @description Structured log output from a connector. */
+            log: {
+                /**
+                 * @description Log severity level.
+                 * @enum {string}
+                 */
+                level: "debug" | "info" | "warn" | "error";
+                /** @description Human-readable log message. */
+                message: string;
+            };
         };
-        /** @description Structured error from a source or destination. */
-        ErrorMessageOutput: {
+        TraceMessageOutput: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "error";
-            /**
-             * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
-             * @enum {string}
-             */
-            failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
-            /** @description Human-readable error description. */
-            message: string;
-            /** @description Stream that triggered the error, if applicable. */
-            stream?: string;
-            /** @description Full stack trace for debugging. */
-            stack_trace?: string;
+            type: "trace";
+            /** @description Diagnostic/status payload with subtypes for error, stream status, and estimates. */
+            trace: {
+                /** @constant */
+                trace_type: "error";
+                /** @description Structured error from a connector. */
+                error: {
+                    /**
+                     * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
+                     * @enum {string}
+                     */
+                    failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
+                    /** @description Human-readable error description. */
+                    message: string;
+                    /** @description Stream that triggered the error, if applicable. */
+                    stream?: string;
+                    /** @description Full stack trace for debugging. */
+                    stack_trace?: string;
+                };
+            } | {
+                /** @constant */
+                trace_type: "stream_status";
+                /** @description Per-stream status update. */
+                stream_status: {
+                    /** @description Stream being reported on. */
+                    stream: string;
+                    /**
+                     * @description Current phase of the stream within this sync run.
+                     * @enum {string}
+                     */
+                    status: "started" | "running" | "complete" | "incomplete";
+                };
+            } | {
+                /** @constant */
+                trace_type: "estimate";
+                /** @description Sync progress estimate for a stream. */
+                estimate: {
+                    /** @description Stream being estimated. */
+                    stream: string;
+                    /** @description Estimated total row count for this stream. */
+                    row_count?: number;
+                    /** @description Estimated total byte count for this stream. */
+                    byte_count?: number;
+                };
+            };
         };
-        /** @description Per-stream status update from a source. Enables progress reporting in CLI / dashboard. */
-        StreamStatusMessageOutput: {
+        SpecMessageOutput: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "stream_status";
-            /** @description Stream being reported on. */
-            stream: string;
+            type: "spec";
+            /** @description JSON Schema describing the configuration a connector requires. */
+            spec: {
+                /** @description JSON Schema for the connector's configuration object. */
+                config: {
+                    [key: string]: unknown;
+                };
+                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). */
+                stream_state?: {
+                    [key: string]: unknown;
+                };
+                /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
+                input?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        ConnectionStatusMessageOutput: {
             /**
-             * @description Current phase of the stream within this sync run.
+             * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            status: "started" | "running" | "complete" | "incomplete";
+            type: "connection_status";
+            /** @description Result of a connection check. */
+            connection_status: {
+                /**
+                 * @description Whether the connection check passed.
+                 * @enum {string}
+                 */
+                status: "succeeded" | "failed";
+                /** @description Human-readable explanation of the check result. */
+                message?: string;
+            };
+        };
+        ControlMessageOutput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "control";
+            /** @description Control signal from a connector to the orchestrator. */
+            control: {
+                /**
+                 * @description What kind of control action the connector is requesting.
+                 * @enum {string}
+                 */
+                control_type: "config_update";
+                /** @description Config fields to merge into the active connector configuration. */
+                config: {
+                    [key: string]: unknown;
+                };
+            };
         };
         EofMessageOutput: {
             /**
@@ -457,8 +629,14 @@ export interface components {
              * @enum {string}
              */
             type: "eof";
-            /** @enum {string} */
-            reason: "complete" | "state_limit" | "time_limit" | "error";
+            /** @description Terminal payload — tells the client why the stream ended. */
+            eof: {
+                /**
+                 * @description Why the stream ended.
+                 * @enum {string}
+                 */
+                reason: "complete" | "state_limit" | "time_limit" | "error";
+            };
         };
         StripeSourceConfig: {
             /**
@@ -737,13 +915,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Available streams */
+            /** @description NDJSON stream of discover messages */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CatalogMessageOutput"];
+                    "application/x-ndjson": components["schemas"]["MessageOutput"];
                 };
             };
             /** @description Invalid params */

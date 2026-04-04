@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineCommand, runMain } from 'citty'
 import type { CommandDef } from 'citty'
-import type { Source, Destination, ConnectorSpecification, DestinationInput } from './protocol.js'
+import type { Source, Destination, DestinationInput } from './protocol.js'
 import { parseNdjsonChunks, writeLine } from './ndjson.js'
 
 // MARK: - Config parsing
@@ -52,9 +52,16 @@ function parseConfig(
   return config
 }
 
+/** Stream all messages from an async iterable to stdout as NDJSON. */
+async function streamToStdout(iter: AsyncIterable<unknown>): Promise<void> {
+  for await (const msg of iter) {
+    writeLine(msg)
+  }
+}
+
 /**
  * Build a citty CommandDef for a connector.
- * Subcommands are auto-detected from the connector's methods.
+ * All subcommands stream NDJSON to stdout — everything is a stream.
  */
 export function createConnectorCli(
   connector: AnyConnector,
@@ -65,16 +72,15 @@ export function createConnectorCli(
 
   // spec — universal
   cmds['spec'] = defineCommand({
-    meta: { name: 'spec', description: 'Print connector specification as JSON' },
+    meta: { name: 'spec', description: 'Print connector specification (NDJSON)' },
     async run() {
-      const spec: ConnectorSpecification = connector.spec()
-      writeLine(spec)
+      await streamToStdout(connector.spec())
     },
   })
 
   // check — universal
   cmds['check'] = defineCommand({
-    meta: { name: 'check', description: 'Validate connector configuration' },
+    meta: { name: 'check', description: 'Check connector configuration (NDJSON)' },
     args: {
       config: {
         type: 'string',
@@ -84,9 +90,7 @@ export function createConnectorCli(
     },
     async run({ args }) {
       const config = parseConfig(args.config, opts?.configSchema)
-      const result = await connector.check({ config })
-      writeLine(result)
-      if (result.status === 'failed') process.exitCode = 1
+      await streamToStdout(connector.check({ config }))
     },
   })
 
@@ -94,7 +98,7 @@ export function createConnectorCli(
   if (typeof connector.setup === 'function') {
     const setupFn = connector.setup.bind(connector)
     cmds['setup'] = defineCommand({
-      meta: { name: 'setup', description: 'Provision external resources' },
+      meta: { name: 'setup', description: 'Provision external resources (NDJSON)' },
       args: {
         config: {
           type: 'string',
@@ -110,8 +114,7 @@ export function createConnectorCli(
       async run({ args }) {
         const config = parseConfig(args.config, opts?.configSchema)
         const catalog = parseJsonOrFile(args.catalog)
-        await setupFn({ config, catalog } as Parameters<typeof setupFn>[0])
-        process.stderr.write('Setup complete\n')
+        await streamToStdout(setupFn({ config, catalog } as Parameters<typeof setupFn>[0]))
       },
     })
   }
@@ -120,7 +123,7 @@ export function createConnectorCli(
   if (typeof connector.teardown === 'function') {
     const teardownFn = connector.teardown.bind(connector)
     cmds['teardown'] = defineCommand({
-      meta: { name: 'teardown', description: 'Clean up external resources' },
+      meta: { name: 'teardown', description: 'Clean up external resources (NDJSON)' },
       args: {
         config: {
           type: 'string',
@@ -130,8 +133,7 @@ export function createConnectorCli(
       },
       async run({ args }) {
         const config = parseConfig(args.config, opts?.configSchema)
-        await teardownFn({ config } as Parameters<typeof teardownFn>[0])
-        process.stderr.write('Teardown complete\n')
+        await streamToStdout(teardownFn({ config } as Parameters<typeof teardownFn>[0]))
       },
     })
   }
@@ -141,7 +143,7 @@ export function createConnectorCli(
     const src = connector
 
     cmds['discover'] = defineCommand({
-      meta: { name: 'discover', description: 'Discover available streams' },
+      meta: { name: 'discover', description: 'Discover available streams (NDJSON)' },
       args: {
         config: {
           type: 'string',
@@ -151,13 +153,12 @@ export function createConnectorCli(
       },
       async run({ args }) {
         const config = parseConfig(args.config, opts?.configSchema)
-        const catalog = await src.discover({ config })
-        writeLine(catalog)
+        await streamToStdout(src.discover({ config }))
       },
     })
 
     cmds['read'] = defineCommand({
-      meta: { name: 'read', description: 'Read records from source (emits NDJSON to stdout)' },
+      meta: { name: 'read', description: 'Read records from source (NDJSON)' },
       args: {
         config: {
           type: 'string',
@@ -175,14 +176,13 @@ export function createConnectorCli(
         const config = parseConfig(args.config, opts?.configSchema)
         const catalog = parseJsonOrFile(args.catalog)
         const state = args.state ? parseJsonOrFile(args.state) : undefined
-        const messages = src.read({
-          config,
-          catalog: catalog as Parameters<typeof src.read>[0]['catalog'],
-          state,
-        })
-        for await (const msg of messages) {
-          writeLine(msg)
-        }
+        await streamToStdout(
+          src.read({
+            config,
+            catalog: catalog as Parameters<typeof src.read>[0]['catalog'],
+            state,
+          })
+        )
       },
     })
   }
@@ -212,13 +212,12 @@ export function createConnectorCli(
         const config = parseConfig(args.config, opts?.configSchema)
         const catalog = parseJsonOrFile(args.catalog)
         const stdin = parseNdjsonChunks<DestinationInput>(process.stdin)
-        const output = dest.write(
-          { config, catalog: catalog as Parameters<typeof dest.write>[0]['catalog'] },
-          stdin
+        await streamToStdout(
+          dest.write(
+            { config, catalog: catalog as Parameters<typeof dest.write>[0]['catalog'] },
+            stdin
+          )
         )
-        for await (const msg of output) {
-          writeLine(msg)
-        }
       },
     })
   }
@@ -231,7 +230,7 @@ export function createConnectorCli(
 
 /**
  * Create and run a connector CLI, parsing process.argv.
- * Catches errors and emits them as ErrorMessage on stderr before exiting.
+ * Catches errors and emits them as trace error messages on stderr before exiting.
  */
 export async function runConnectorCli(
   connector: AnyConnector,
@@ -243,10 +242,15 @@ export async function runConnectorCli(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     const errorMsg = {
-      type: 'error' as const,
-      failure_type: 'system_error' as const,
-      message,
-      stack_trace: err instanceof Error ? err.stack : undefined,
+      type: 'trace' as const,
+      trace: {
+        trace_type: 'error' as const,
+        error: {
+          failure_type: 'system_error' as const,
+          message,
+          stack_trace: err instanceof Error ? err.stack : undefined,
+        },
+      },
     }
     process.stderr.write(JSON.stringify(errorMsg) + '\n')
     process.exitCode = 1

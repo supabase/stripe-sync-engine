@@ -9,12 +9,17 @@ import { createApp } from './app.js'
 import { logger } from '../logger.js'
 
 const port = Number(process.env.PORT || 3001)
-const resolver = createConnectorResolver({
-  sources: { stripe: source },
-  destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
-})
-const app = createApp(resolver)
 
-serve({ fetch: app.fetch, port }, (info) => {
-  logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
-})
+async function main() {
+  const resolver = await createConnectorResolver({
+    sources: { stripe: source },
+    destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
+  })
+  const app = await createApp(resolver)
+
+  serve({ fetch: app.fetch, port }, (info) => {
+    logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
+  })
+}
+
+main()

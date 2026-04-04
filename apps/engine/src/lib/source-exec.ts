@@ -1,13 +1,14 @@
-import { spawnSync } from 'node:child_process'
 import type {
   Source,
-  ConnectorSpecification,
-  CheckResult,
-  CatalogMessage,
+  SpecOutput,
+  CheckOutput,
+  DiscoverOutput,
+  SetupOutput,
+  TeardownOutput,
   ConfiguredCatalog,
   Message,
 } from '@stripe/sync-protocol'
-import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
+import { splitCmd, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
 
 /**
  * Wrap a connector CLI command as a Source.
@@ -21,40 +22,28 @@ import { splitCmd, spawnAndCollect, spawnAndStream, spawnWithStdin } from './exe
  */
 export function createSourceFromExec(cmd: string): Source {
   const [bin, baseArgs] = splitCmd(cmd)
-  let cachedSpec: ConnectorSpecification | undefined
 
   return {
-    spec(): ConnectorSpecification {
-      if (!cachedSpec) {
-        // spec() is synchronous in the interface but we need to spawn.
-        // The CLI outputs JSON synchronously, so we use spawnSync.
-        const result = spawnSync(bin, [...baseArgs, 'spec'], { stdio: ['ignore', 'pipe', 'pipe'] })
-        if (result.status !== 0) {
-          throw new Error(`${cmd} spec exited with code ${result.status}: ${result.stderr}`)
-        }
-        cachedSpec = JSON.parse(result.stdout.toString()) as ConnectorSpecification
-      }
-      return cachedSpec
+    async *spec(): AsyncIterable<SpecOutput> {
+      yield* spawnAndStream<SpecOutput>(bin, [...baseArgs, 'spec'])
     },
 
-    async check(params: { config: Record<string, unknown> }): Promise<CheckResult> {
-      const stdout = await spawnAndCollect(bin, [
+    async *check(params: { config: Record<string, unknown> }): AsyncIterable<CheckOutput> {
+      yield* spawnAndStream<CheckOutput>(bin, [
         ...baseArgs,
         'check',
         '--config',
         JSON.stringify(params.config),
       ])
-      return JSON.parse(stdout) as CheckResult
     },
 
-    async discover(params: { config: Record<string, unknown> }): Promise<CatalogMessage> {
-      const stdout = await spawnAndCollect(bin, [
+    async *discover(params: { config: Record<string, unknown> }): AsyncIterable<DiscoverOutput> {
+      yield* spawnAndStream<DiscoverOutput>(bin, [
         ...baseArgs,
         'discover',
         '--config',
         JSON.stringify(params.config),
       ])
-      return JSON.parse(stdout) as CatalogMessage
     },
 
     read(
@@ -82,12 +71,12 @@ export function createSourceFromExec(cmd: string): Source {
       return spawnAndStream<Message>(bin, args)
     },
 
-    async setup(params: {
+    async *setup(params: {
       config: Record<string, unknown>
       catalog: ConfiguredCatalog
-    }): Promise<void> {
+    }): AsyncIterable<SetupOutput> {
       try {
-        await spawnAndCollect(bin, [
+        yield* spawnAndStream<SetupOutput>(bin, [
           ...baseArgs,
           'setup',
           '--config',
@@ -101,9 +90,9 @@ export function createSourceFromExec(cmd: string): Source {
       }
     },
 
-    async teardown(params: { config: Record<string, unknown> }): Promise<void> {
+    async *teardown(params: { config: Record<string, unknown> }): AsyncIterable<TeardownOutput> {
       try {
-        await spawnAndCollect(bin, [
+        yield* spawnAndStream<TeardownOutput>(bin, [
           ...baseArgs,
           'teardown',
           '--config',

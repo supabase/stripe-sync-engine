@@ -35,7 +35,7 @@ const serveCmd = defineCommand({
     ...connectorArgs,
   },
   async run({ args }) {
-    serveAction({
+    await serveAction({
       port: args.port ? parseInt(args.port) : undefined,
       connectorsFromCommandMap: args.connectorsFromCommandMap,
       connectorsFromPath: !args.noConnectorsFromPath,
@@ -70,14 +70,14 @@ function parseConnectorFlags(): {
 
 export async function createProgram() {
   const flags = parseConnectorFlags()
-  const resolver = createConnectorResolver(defaultConnectors, {
+  const resolver = await createConnectorResolver(defaultConnectors, {
     path: flags.connectorsFromPath,
     npm: flags.connectorsFromNpm,
     commandMap: parseJsonOrFile(flags.connectorsFromCommandMap) as
       | Record<string, string>
       | undefined,
   })
-  const app = createApp(resolver)
+  const app = await createApp(resolver)
   const res = await app.request('/openapi.json')
   const spec = await res.json()
 

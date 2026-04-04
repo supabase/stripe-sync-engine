@@ -1,5 +1,5 @@
 import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
-import { toRecordMessage } from '@stripe/sync-protocol'
+import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
 import type Stripe from 'stripe'
 import type { Config } from './index.js'
 import type { ResourceConfig } from './types.js'
@@ -55,14 +55,13 @@ export function fromWebhookEvent(
   if (!dataObject.id) return null
 
   const record = toRecordMessage(config.tableName, dataObject as Record<string, unknown>)
-  const state: StateMessage = {
-    type: 'state',
+  const state: StateMessage = stateMsg({
     stream: config.tableName,
     data: {
       eventId: event.id,
       eventCreated: event.created,
     },
-  }
+  })
 
   return { record, state }
 }
@@ -117,11 +116,10 @@ export async function* processStripeEvent(
         lookup_key: e.lookup_key,
       })
     }
-    yield {
-      type: 'state',
+    yield stateMsg({
       stream: 'active_entitlements',
       data: { eventId: event.id, eventCreated: event.created },
-    } satisfies StateMessage
+    })
     return
   }
 
@@ -135,11 +133,10 @@ export async function* processStripeEvent(
   // 4. Delete events — yield record with deleted: true
   if (isDeleteEvent(event)) {
     yield toRecordMessage(resourceConfig.tableName, { ...dataObject, deleted: true })
-    yield {
-      type: 'state',
+    yield stateMsg({
       stream: resourceConfig.tableName,
       data: { eventId: event.id, eventCreated: event.created },
-    } satisfies StateMessage
+    })
     return
   }
 
@@ -163,9 +160,8 @@ export async function* processStripeEvent(
     }
   }
 
-  yield {
-    type: 'state',
+  yield stateMsg({
     stream: resourceConfig.tableName,
     data: { eventId: event.id, eventCreated: event.created },
-  } satisfies StateMessage
+  })
 }

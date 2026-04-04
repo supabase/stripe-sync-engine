@@ -80,14 +80,16 @@ async function* toAsync<T>(items: T[]): AsyncIterable<T> {
 function record(stream: string, id: string, data?: Record<string, unknown>): RecordMessage {
   return {
     type: 'record',
-    stream,
-    data: { id, ...data },
-    emitted_at: new Date().toISOString(),
+    record: {
+      stream,
+      data: { id, ...data },
+      emitted_at: new Date().toISOString(),
+    },
   }
 }
 
 function state(stream: string, data: unknown): StateMessage {
-  return { type: 'state', stream, data }
+  return { type: 'state', state: { stream, data } }
 }
 
 function makeResolver(): ConnectorResolver {
@@ -122,7 +124,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   })
 
   it('run 1: writes records and persists state', async () => {
-    const engine = createEngine(makeResolver())
+    const engine = await createEngine(makeResolver())
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
@@ -142,7 +144,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
            VALUES ($1, $2)
            ON CONFLICT (stream) DO UPDATE SET data = $2`,
-          [msg.stream, JSON.stringify(msg.data)]
+          [msg.state.stream, JSON.stringify(msg.state.data)]
         )
       }
     }
@@ -168,7 +170,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       rows.map((r: { stream: string; data: unknown }) => [r.stream, r.data])
     )
 
-    const engine = createEngine(makeResolver())
+    const engine = await createEngine(makeResolver())
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
@@ -190,7 +192,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
            VALUES ($1, $2)
            ON CONFLICT (stream) DO UPDATE SET data = $2`,
-          [msg.stream, JSON.stringify(msg.data)]
+          [msg.state.stream, JSON.stringify(msg.state.data)]
         )
       }
     }

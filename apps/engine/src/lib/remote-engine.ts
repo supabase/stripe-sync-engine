@@ -1,11 +1,11 @@
 import createClient from 'openapi-fetch'
 import type { paths } from '../__generated__/openapi.js'
-import type { Engine, SetupResult, SyncOpts, ConnectorInfo, ConnectorListItem } from './engine.js'
+import type { Engine, SetupResult, SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
 import { parseNdjsonStream, toNdjsonStream } from './ndjson.js'
 import type {
-  CheckResult,
-  CatalogMessage,
+  ConnectionStatusPayload,
   DestinationOutput,
+  DiscoverOutput,
   Message,
   PipelineConfig,
 } from '@stripe/sync-protocol'
@@ -52,7 +52,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
   // Cast once: streaming endpoints need untyped POST due to generator limitations (see above)
   const streamPost = client.POST as unknown as StreamPost
 
-  function stateHeaders(opts?: SyncOpts): Record<string, string> {
+  function stateHeaders(opts?: SourceReadOptions): Record<string, string> {
     const h: Record<string, string> = {}
     if (opts?.state && Object.keys(opts.state).length > 0) {
       h['x-state'] = JSON.stringify(opts.state)
@@ -60,7 +60,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
     return h
   }
 
-  function queryParams(opts?: SyncOpts): Record<string, string> {
+  function queryParams(opts?: SourceReadOptions): Record<string, string> {
     const q: Record<string, string> = {}
     if (opts?.stateLimit != null) q.state_limit = String(opts.stateLimit)
     if (opts?.timeLimit != null) q.time_limit = String(opts.timeLimit)
@@ -68,9 +68,9 @@ export function createRemoteEngine(engineUrl: string): Engine {
   }
 
   async function post(
-    path: '/read' | '/write' | '/sync' | '/setup' | '/teardown',
+    path: '/read' | '/write' | '/sync' | '/setup' | '/teardown' | '/discover',
     pipeline: PipelineConfig,
-    opts?: SyncOpts,
+    opts?: SourceReadOptions,
     body?: ReadableStream<Uint8Array>
   ): Promise<Response> {
     const ph = JSON.stringify(pipeline)
@@ -144,23 +144,21 @@ export function createRemoteEngine(engineUrl: string): Engine {
         params: { header: { 'x-pipeline': JSON.stringify(pipeline) } },
       })
       if (error) throw new Error(`Engine /check failed: ${JSON.stringify(error)}`)
-      return data as { source: CheckResult; destination: CheckResult }
+      return data as {
+        source: ConnectionStatusPayload
+        destination: ConnectionStatusPayload
+      }
     },
 
-    async source_discover(source: PipelineConfig['source']): Promise<CatalogMessage> {
+    async *source_discover(source: PipelineConfig['source']): AsyncIterable<DiscoverOutput> {
       // Only source config is needed for discover — pass a minimal pipeline header
-      const ph = JSON.stringify({ source, destination: { type: '_' } })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (client.POST as any)('/discover', {
-        params: { header: { 'x-pipeline': ph } },
-      })
-      if (error) throw new Error(`Engine /discover failed: ${JSON.stringify(error)}`)
-      return data as CatalogMessage
+      const res = await post('/discover', { source, destination: { type: '_' } } as PipelineConfig)
+      yield* parseNdjsonStream<DiscoverOutput>(res.body!)
     },
 
     async *pipeline_read(
       pipeline: PipelineConfig,
-      opts?: SyncOpts,
+      opts?: SourceReadOptions,
       input?: AsyncIterable<unknown>
     ): AsyncIterable<Message> {
       const body = input ? toNdjsonStream(input) : undefined
@@ -178,7 +176,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
 
     async *pipeline_sync(
       pipeline: PipelineConfig,
-      opts?: SyncOpts,
+      opts?: SourceReadOptions,
       input?: AsyncIterable<unknown>
     ): AsyncIterable<DestinationOutput> {
       const body = input ? toNdjsonStream(input) : undefined

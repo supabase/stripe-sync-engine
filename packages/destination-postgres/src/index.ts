@@ -1,6 +1,6 @@
 import pg from 'pg'
 import type { PoolConfig } from 'pg'
-import type { Destination, DestinationInput, ErrorMessage, LogMessage } from '@stripe/sync-protocol'
+import type { Destination, DestinationInput } from '@stripe/sync-protocol'
 import {
   sql,
   sslConfigFromConnectionString,
@@ -101,26 +101,35 @@ function isTransient(err: unknown): boolean {
 }
 
 const destination = {
-  spec() {
-    return { config: z.toJSONSchema(configSchema) }
+  async *spec() {
+    yield {
+      type: 'spec' as const,
+      spec: { config: z.toJSONSchema(configSchema) },
+    }
   },
 
-  async check({ config }) {
+  async *check({ config }) {
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
       await pool.query('SELECT 1')
-      return { status: 'succeeded' as const }
+      yield {
+        type: 'connection_status' as const,
+        connection_status: { status: 'succeeded' as const },
+      }
     } catch (err) {
-      return {
-        status: 'failed' as const,
-        message: err instanceof Error ? err.message : String(err),
+      yield {
+        type: 'connection_status' as const,
+        connection_status: {
+          status: 'failed' as const,
+          message: err instanceof Error ? err.message : String(err),
+        },
       }
     } finally {
       await pool.end()
     }
   },
 
-  async setup({ config, catalog }) {
+  async *setup({ config, catalog }) {
     const pool = new pg.Pool(await buildPoolConfig(config))
     try {
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
@@ -168,7 +177,7 @@ const destination = {
     }
   },
 
-  async teardown({ config }) {
+  async *teardown({ config }) {
     const PROTECTED_SCHEMAS = new Set(['public', 'information_schema', 'pg_catalog', 'pg_toast'])
     if (PROTECTED_SCHEMAS.has(config.schema)) {
       throw new Error(
@@ -205,7 +214,7 @@ const destination = {
     try {
       for await (const msg of $stdin as AsyncIterable<DestinationInput>) {
         if (msg.type === 'record') {
-          const { stream, data } = msg
+          const { stream, data } = msg.record
 
           if (!streamBuffers.has(stream)) {
             streamBuffers.set(stream, [])
@@ -218,7 +227,7 @@ const destination = {
             await flushStream(stream)
           }
         } else if (msg.type === 'state') {
-          await flushStream(msg.stream)
+          await flushStream(msg.state.stream)
           yield msg
         }
       }
@@ -231,23 +240,30 @@ const destination = {
         // ignore flush errors during error handling
       }
 
-      const errorMsg: ErrorMessage = {
-        type: 'error',
-        failure_type: isTransient(err) ? 'transient_error' : 'system_error',
-        message: err instanceof Error ? err.message : String(err),
-        stack_trace: err instanceof Error ? err.stack : undefined,
+      yield {
+        type: 'trace' as const,
+        trace: {
+          trace_type: 'error' as const,
+          error: {
+            failure_type: isTransient(err)
+              ? ('transient_error' as const)
+              : ('system_error' as const),
+            message: err instanceof Error ? err.message : String(err),
+            stack_trace: err instanceof Error ? err.stack : undefined,
+          },
+        },
       }
-      yield errorMsg
     } finally {
       await pool.end()
     }
 
-    const logMsg: LogMessage = {
-      type: 'log',
-      level: 'info',
-      message: `Postgres destination: wrote to schema "${config.schema}"`,
+    yield {
+      type: 'log' as const,
+      log: {
+        level: 'info' as const,
+        message: `Postgres destination: wrote to schema "${config.schema}"`,
+      },
     }
-    yield logMsg
   },
 } satisfies Destination<Config>
 

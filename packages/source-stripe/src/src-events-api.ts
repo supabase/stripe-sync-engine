@@ -1,4 +1,5 @@
-import type { ConfiguredCatalog, LogMessage, Message, StateMessage } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, LogMessage, Message } from '@stripe/sync-protocol'
+import { stateMsg } from '@stripe/sync-protocol'
 import type Stripe from 'stripe'
 import type { Config, StripeStreamState } from './index.js'
 import type { ResourceConfig } from './types.js'
@@ -36,15 +37,14 @@ export async function* pollEvents(opts: {
   if (cursors.length === 0) {
     for (const cs of catalog.streams) {
       const existing = state?.[cs.stream.name]
-      yield {
-        type: 'state',
+      yield stateMsg({
         stream: cs.stream.name,
         data: {
           pageCursor: existing?.pageCursor ?? null,
           status: 'complete' as const,
           events_cursor: startTimestamp,
         },
-      } satisfies StateMessage
+      })
     }
     return
   }
@@ -56,8 +56,10 @@ export async function* pollEvents(opts: {
   if (ageInDays > EVENTS_MAX_AGE_DAYS) {
     yield {
       type: 'log',
-      level: 'warn',
-      message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
+      log: {
+        level: 'warn',
+        message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
+      },
     } satisfies LogMessage
   }
 
@@ -81,16 +83,15 @@ export async function* pollEvents(opts: {
     )) {
       if (msg.type === 'state') {
         // Intercept state messages to preserve complete status + update events_cursor
-        const existing = state?.[msg.stream]
-        yield {
-          type: 'state',
-          stream: msg.stream,
+        const existing = state?.[msg.state.stream]
+        yield stateMsg({
+          stream: msg.state.stream,
           data: {
             pageCursor: existing?.pageCursor ?? null,
             status: 'complete' as const,
             events_cursor: event.created,
           },
-        } satisfies StateMessage
+        })
       } else {
         yield msg
       }

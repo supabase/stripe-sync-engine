@@ -42,7 +42,7 @@ node -e "
   import sourceStripe from './packages/source-stripe/dist/index.js';
   import destinationPostgres from './packages/destination-postgres/dist/index.js';
   import destinationGoogleSheets from './packages/destination-google-sheets/dist/index.js';
-  const resolver = createConnectorResolver({
+  const resolver = await createConnectorResolver({
     sources: { stripe: sourceStripe.default ?? sourceStripe },
     destinations: { postgres: destinationPostgres.default ?? destinationPostgres, 'google-sheets': destinationGoogleSheets.default ?? destinationGoogleSheets },
   });

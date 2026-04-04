@@ -64,13 +64,13 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
       },
       input
     )) {
-      const error = collectError(raw)
+      const error = collectError(raw as unknown as Record<string, unknown>)
       if (error) {
         errors.push(error)
-      } else if (raw.type === 'state' && typeof raw.stream === 'string') {
-        state[raw.stream] = raw.data
-      } else if (raw.type === 'log' && typeof raw.message === 'string') {
-        const meta = parseGoogleSheetsMetaLog(raw.message)
+      } else if (raw.type === 'state') {
+        state[raw.state.stream] = raw.state.data
+      } else if (raw.type === 'log') {
+        const meta = parseGoogleSheetsMetaLog(raw.log.message)
         if (meta?.type === 'row_assignments') {
           for (const [stream, assignments] of Object.entries(meta.assignments)) {
             rowAssignments[stream] ??= {}

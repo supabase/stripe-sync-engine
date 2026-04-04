@@ -5,8 +5,7 @@ import {
   StateMessage,
   CatalogMessage,
   LogMessage,
-  ErrorMessage,
-  StreamStatusMessage,
+  TraceMessage,
   DestinationInput,
   DestinationOutput,
   Message,
@@ -14,10 +13,19 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   ConnectorSpecification,
-  CheckResult,
+  ConnectionStatusPayload,
   PipelineConfig,
 } from '@stripe/sync-protocol'
-import type { Source, Destination, DestinationInput as DestInput } from '@stripe/sync-protocol'
+import type {
+  Source,
+  Destination,
+  DestinationInput as DestInput,
+  SpecOutput,
+  CheckOutput,
+  DiscoverOutput,
+  SetupOutput,
+  TeardownOutput,
+} from '@stripe/sync-protocol'
 import { createEngine, buildCatalog } from './engine.js'
 import type { ConnectorResolver } from './resolver.js'
 import { sourceTest } from './source-test.js'
@@ -154,20 +162,22 @@ describe('protocol schemas', () => {
     })
   })
 
-  describe('CheckResult', () => {
+  describe('ConnectionStatusPayload', () => {
     it('parses succeeded', () => {
-      expect(CheckResult.parse({ status: 'succeeded' })).toEqual({ status: 'succeeded' })
+      expect(ConnectionStatusPayload.parse({ status: 'succeeded' })).toEqual({
+        status: 'succeeded',
+      })
     })
 
     it('parses failed with message', () => {
-      expect(CheckResult.parse({ status: 'failed', message: 'bad creds' })).toEqual({
+      expect(ConnectionStatusPayload.parse({ status: 'failed', message: 'bad creds' })).toEqual({
         status: 'failed',
         message: 'bad creds',
       })
     })
 
     it('rejects invalid status', () => {
-      expect(() => CheckResult.parse({ status: 'unknown' })).toThrow()
+      expect(() => ConnectionStatusPayload.parse({ status: 'unknown' })).toThrow()
     })
   })
 
@@ -175,19 +185,23 @@ describe('protocol schemas', () => {
     it('RecordMessage', () => {
       const msg = RecordMessage.parse({
         type: 'record',
-        stream: 'customers',
-        data: { id: 'cus_1' },
-        emitted_at: '2024-01-01T00:00:00.000Z',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
       })
       expect(msg.type).toBe('record')
-      expect(msg.data).toEqual({ id: 'cus_1' })
+      expect(msg.record.data).toEqual({ id: 'cus_1' })
     })
 
     it('StateMessage', () => {
       const msg = StateMessage.parse({
         type: 'state',
-        stream: 'customers',
-        data: { cursor: 'abc' },
+        state: {
+          stream: 'customers',
+          data: { cursor: 'abc' },
+        },
       })
       expect(msg.type).toBe('state')
     })
@@ -195,40 +209,60 @@ describe('protocol schemas', () => {
     it('CatalogMessage', () => {
       const msg = CatalogMessage.parse({
         type: 'catalog',
-        streams: [{ name: 'users', primary_key: [['id']] }],
+        catalog: {
+          streams: [{ name: 'users', primary_key: [['id']] }],
+        },
       })
-      expect(msg.streams).toHaveLength(1)
+      expect(msg.catalog.streams).toHaveLength(1)
     })
 
     it('LogMessage', () => {
-      const msg = LogMessage.parse({ type: 'log', level: 'info', message: 'hello' })
-      expect(msg.level).toBe('info')
+      const msg = LogMessage.parse({
+        type: 'log',
+        log: { level: 'info', message: 'hello' },
+      })
+      expect(msg.log.level).toBe('info')
     })
 
-    it('ErrorMessage', () => {
-      const msg = ErrorMessage.parse({
-        type: 'error',
-        failure_type: 'transient_error',
-        message: 'retry',
-        stream: 'customers',
-        stack_trace: 'Error at ...',
+    it('TraceMessage (error)', () => {
+      const msg = TraceMessage.parse({
+        type: 'trace',
+        trace: {
+          trace_type: 'error',
+          error: {
+            failure_type: 'transient_error',
+            message: 'retry',
+            stream: 'customers',
+            stack_trace: 'Error at ...',
+          },
+        },
       })
-      expect(msg.failure_type).toBe('transient_error')
-      expect(msg.stream).toBe('customers')
+      expect(msg.trace.trace_type).toBe('error')
+      if (msg.trace.trace_type === 'error') {
+        expect(msg.trace.error.failure_type).toBe('transient_error')
+        expect(msg.trace.error.stream).toBe('customers')
+      }
     })
 
-    it('StreamStatusMessage', () => {
-      const msg = StreamStatusMessage.parse({
-        type: 'stream_status',
-        stream: 'customers',
-        status: 'running',
+    it('TraceMessage (stream_status)', () => {
+      const msg = TraceMessage.parse({
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: {
+            stream: 'customers',
+            status: 'running',
+          },
+        },
       })
-      expect(msg.status).toBe('running')
+      expect(msg.trace.trace_type).toBe('stream_status')
     })
 
     it('rejects missing type', () => {
       expect(() =>
-        RecordMessage.parse({ stream: 'x', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' })
+        RecordMessage.parse({
+          record: { stream: 'x', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        })
       ).toThrow()
     })
 
@@ -236,23 +270,40 @@ describe('protocol schemas', () => {
       expect(() =>
         RecordMessage.parse({
           type: 'state',
-          stream: 'x',
-          data: {},
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 'x',
+            data: {},
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         })
       ).toThrow()
     })
   })
 
   describe('Message discriminated union', () => {
-    it('parses all 6 message types', () => {
+    it('parses all message types', () => {
       const messages = [
-        { type: 'record', stream: 's', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
-        { type: 'state', stream: 's', data: null },
-        { type: 'catalog', streams: [{ name: 's', primary_key: [['id']] }] },
-        { type: 'log', level: 'info', message: 'hi' },
-        { type: 'error', failure_type: 'system_error', message: 'bad' },
-        { type: 'stream_status', stream: 's', status: 'complete' },
+        {
+          type: 'record',
+          record: { stream: 's', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        },
+        { type: 'state', state: { stream: 's', data: null } },
+        { type: 'catalog', catalog: { streams: [{ name: 's', primary_key: [['id']] }] } },
+        { type: 'log', log: { level: 'info', message: 'hi' } },
+        {
+          type: 'trace',
+          trace: {
+            trace_type: 'error',
+            error: { failure_type: 'system_error', message: 'bad' },
+          },
+        },
+        {
+          type: 'trace',
+          trace: {
+            trace_type: 'stream_status',
+            stream_status: { stream: 's', status: 'complete' },
+          },
+        },
       ]
       for (const msg of messages) {
         expect(() => Message.parse(msg)).not.toThrow()
@@ -269,29 +320,41 @@ describe('protocol schemas', () => {
       expect(() =>
         DestinationInput.parse({
           type: 'record',
-          stream: 's',
-          data: {},
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 's',
+            data: {},
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         })
       ).not.toThrow()
-      expect(() => DestinationInput.parse({ type: 'state', stream: 's', data: null })).not.toThrow()
+      expect(() =>
+        DestinationInput.parse({ type: 'state', state: { stream: 's', data: null } })
+      ).not.toThrow()
     })
 
     it('rejects log message', () => {
-      expect(() => DestinationInput.parse({ type: 'log', level: 'info', message: 'hi' })).toThrow()
+      expect(() =>
+        DestinationInput.parse({ type: 'log', log: { level: 'info', message: 'hi' } })
+      ).toThrow()
     })
   })
 
   describe('DestinationOutput', () => {
-    it('accepts state, error, and log', () => {
+    it('accepts state, trace, and log', () => {
       expect(() =>
-        DestinationOutput.parse({ type: 'state', stream: 's', data: null })
+        DestinationOutput.parse({ type: 'state', state: { stream: 's', data: null } })
       ).not.toThrow()
       expect(() =>
-        DestinationOutput.parse({ type: 'error', failure_type: 'system_error', message: 'x' })
+        DestinationOutput.parse({
+          type: 'trace',
+          trace: {
+            trace_type: 'error',
+            error: { failure_type: 'system_error', message: 'x' },
+          },
+        })
       ).not.toThrow()
       expect(() =>
-        DestinationOutput.parse({ type: 'log', level: 'warn', message: 'x' })
+        DestinationOutput.parse({ type: 'log', log: { level: 'warn', message: 'x' } })
       ).not.toThrow()
     })
 
@@ -299,9 +362,11 @@ describe('protocol schemas', () => {
       expect(() =>
         DestinationOutput.parse({
           type: 'record',
-          stream: 's',
-          data: {},
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 's',
+            data: {},
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         })
       ).toThrow()
     })
@@ -341,8 +406,8 @@ describe('protocol schemas', () => {
 // ---------------------------------------------------------------------------
 
 describe('engine config validation', () => {
-  it('creates engine with valid configs', () => {
-    const engine = createEngine(makeResolver(sourceTest, destinationTest))
+  it('creates engine with valid configs', async () => {
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     expect(engine).toBeDefined()
     expect(typeof engine.pipeline_read).toBe('function')
     expect(typeof engine.pipeline_write).toBe('function')
@@ -353,55 +418,73 @@ describe('engine config validation', () => {
 
   it('throws on invalid source config', async () => {
     const source: Source = {
-      spec: () => ({
-        config: z.toJSONSchema(z.object({ api_key: z.string() })),
-      }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({ type: 'catalog', streams: [] }),
-      read: async function* () {},
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield {
+          type: 'spec',
+          spec: { config: z.toJSONSchema(z.object({ api_key: z.string() })) },
+        }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield { type: 'catalog', catalog: { streams: [] } }
+      },
+      async *read() {},
     }
     const pipeline = { source: { type: 'test' }, destination: { type: 'test' } }
-    const engine = createEngine(makeResolver(source, destinationTest))
+    const engine = await createEngine(makeResolver(source, destinationTest))
     await expect(drain(engine.pipeline_read(pipeline))).rejects.toThrow()
   })
 
   it('throws on invalid destination config', async () => {
     const destination: Destination = {
-      spec: () => ({
-        config: z.toJSONSchema(z.object({ url: z.string() })),
-      }),
-      check: async () => ({ status: 'succeeded' }),
-      write: (_params, $stdin) =>
-        (async function* () {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield {
+          type: 'spec',
+          spec: { config: z.toJSONSchema(z.object({ url: z.string() })) },
+        }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      *write(_params, $stdin) {
+        ;(async () => {
           for await (const _ of $stdin) {
             /* drain */
           }
-        })(),
+        })()
+      },
     }
     const pipeline = {
       source: { type: 'test', streams: {} },
       destination: { type: 'test' },
     }
-    const engine = createEngine(makeResolver(sourceTest, destination))
+    const engine = await createEngine(makeResolver(sourceTest, destination))
     await expect(drain(engine.pipeline_write(pipeline, toAsync([])))).rejects.toThrow()
   })
 
   it('applies defaults from connector spec', async () => {
     const source: Source = {
-      spec: () => ({
-        config: z.toJSONSchema(z.object({ schema: z.string().default('stripe') })),
-      }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async ({ config }) => {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield {
+          type: 'spec',
+          spec: { config: z.toJSONSchema(z.object({ schema: z.string().default('stripe') })) },
+        }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover({ config }): AsyncIterable<DiscoverOutput> {
         // The engine should pass config with defaults applied
         expect(config).toEqual({ schema: 'stripe' })
-        return { type: 'catalog', streams: [] }
+        yield { type: 'catalog', catalog: { streams: [] } }
       },
-      read: async function* () {},
+      async *read() {},
     }
 
     const pipeline = { source: { type: 'test' }, destination: { type: 'test' } }
-    const engine = createEngine(makeResolver(source, destinationTest))
+    const engine = await createEngine(makeResolver(source, destinationTest))
     return drain(engine.pipeline_sync(pipeline))
   })
 
@@ -420,7 +503,7 @@ describe('engine config validation', () => {
 
 describe('engine message validation', () => {
   it('valid messages pass through engine.pipeline_read()', async () => {
-    const engine = createEngine(makeResolver(sourceTest, destinationTest))
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'test' },
@@ -433,57 +516,70 @@ describe('engine message validation', () => {
         toAsync([
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_1' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_1' },
+              emitted_at: new Date().toISOString(),
+            },
           },
-          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
         ])
       )
     )
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('record')
     expect(results[1]!.type).toBe('state')
-    expect(results[2]).toMatchObject({ type: 'eof', reason: 'complete' })
+    expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
   it('malformed source message throws', async () => {
     const badSource: Source = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({
-        type: 'catalog',
-        streams: [{ name: 'customers', primary_key: [['id']] }],
-      }),
-      read: async function* () {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [{ name: 'customers', primary_key: [['id']] }],
+          },
+        }
+      },
+      async *read() {
         // Missing required fields — not a valid Message
         yield { type: 'record', stream: 'customers' } as unknown as Message
       },
     }
-    const engine = createEngine(makeResolver(badSource, destinationTest))
+    const engine = await createEngine(makeResolver(badSource, destinationTest))
 
     await expect(drain(engine.pipeline_read(defaultPipeline))).rejects.toThrow()
   })
 
   it('destination output validation catches malformed messages', async () => {
     const badDest: Destination = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      write: (_params, $stdin) =>
-        (async function* () {
-          for await (const _ of $stdin) {
-            /* drain */
-          }
-          // Yield a malformed message
-          yield { type: 'bad' } as unknown as DestinationOutput
-        })(),
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *write(_params, $stdin) {
+        for await (const _ of $stdin) {
+          /* drain */
+        }
+        // Yield a malformed message
+        yield { type: 'bad' } as unknown as DestinationOutput
+      },
     }
 
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'test' },
     }
-    const engine = createEngine(makeResolver(sourceTest, badDest))
+    const engine = await createEngine(makeResolver(sourceTest, badDest))
 
     await expect(
       drain(
@@ -493,11 +589,13 @@ describe('engine message validation', () => {
           toAsync([
             {
               type: 'record',
-              stream: 'customers',
-              data: { id: 'cus_1' },
-              emitted_at: new Date().toISOString(),
+              record: {
+                stream: 'customers',
+                data: { id: 'cus_1' },
+                emitted_at: new Date().toISOString(),
+              },
             },
-            { type: 'state', stream: 'customers', data: { status: 'complete' } },
+            { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
           ])
         )
       )
@@ -511,7 +609,7 @@ describe('engine message validation', () => {
 
 describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
-    const engine = createEngine(makeResolver(sourceTest, destinationTest))
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'test' },
@@ -524,11 +622,13 @@ describe('engine stream membership validation', () => {
         toAsync([
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_1' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_1' },
+              emitted_at: new Date().toISOString(),
+            },
           },
-          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
         ])
       )
     )
@@ -536,31 +636,44 @@ describe('engine stream membership validation', () => {
   })
 
   it('non-stream messages pass through regardless of stream field', async () => {
-    // Source that emits log + error messages (which don't require stream membership)
+    // Source that emits log + trace error messages (which don't require stream membership)
     const source: Source = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({
-        type: 'catalog',
-        streams: [{ name: 'customers', primary_key: [['id']] }],
-      }),
-      read: async function* () {
-        yield { type: 'log' as const, level: 'info' as const, message: 'hello' }
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
         yield {
-          type: 'error' as const,
-          failure_type: 'system_error' as const,
-          message: 'oops',
-          stream: 'nonexistent',
+          type: 'catalog',
+          catalog: {
+            streams: [{ name: 'customers', primary_key: [['id']] }],
+          },
+        }
+      },
+      async *read() {
+        yield { type: 'log' as const, log: { level: 'info' as const, message: 'hello' } }
+        yield {
+          type: 'trace' as const,
+          trace: {
+            trace_type: 'error' as const,
+            error: {
+              failure_type: 'system_error' as const,
+              message: 'oops',
+              stream: 'nonexistent',
+            },
+          },
         }
       },
     }
-    const engine = createEngine(makeResolver(source, destinationTest))
+    const engine = await createEngine(makeResolver(source, destinationTest))
 
     const results = await drain(engine.pipeline_read(defaultPipeline))
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('log')
-    expect(results[1]!.type).toBe('error')
-    expect(results[2]).toMatchObject({ type: 'eof', reason: 'complete' })
+    expect(results[1]!.type).toBe('trace')
+    expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 })
 
@@ -570,7 +683,7 @@ describe('engine stream membership validation', () => {
 
 describe('engine.pipeline_sync() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
-    const engine = createEngine(makeResolver(sourceTest, destinationTest))
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
       source: { type: 'test', streams: { customers: {} } },
       destination: { type: 'test' },
@@ -582,23 +695,29 @@ describe('engine.pipeline_sync() pipeline', () => {
         toAsync([
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_1', name: 'Alice' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_1', name: 'Alice' },
+              emitted_at: new Date().toISOString(),
+            },
           },
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_2', name: 'Bob' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_2', name: 'Bob' },
+              emitted_at: new Date().toISOString(),
+            },
           },
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_3', name: 'Charlie' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_3', name: 'Charlie' },
+              emitted_at: new Date().toISOString(),
+            },
           },
-          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
         ])
       )
     )
@@ -607,14 +726,13 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(results).toHaveLength(2)
     expect(results[0]).toMatchObject({
       type: 'state',
-      stream: 'customers',
-      data: { status: 'complete' },
+      state: { stream: 'customers', data: { status: 'complete' } },
     })
-    expect(results[1]).toMatchObject({ type: 'eof', reason: 'complete' })
+    expect(results[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
   it('stream filtering: only configures requested streams', async () => {
-    const engine = createEngine(makeResolver(sourceTest, destinationTest))
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
       source: { type: 'test', streams: { customers: {}, invoices: {} } },
       destination: { type: 'test' },
@@ -627,18 +745,22 @@ describe('engine.pipeline_sync() pipeline', () => {
         toAsync([
           {
             type: 'record',
-            stream: 'customers',
-            data: { id: 'cus_1' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_1' },
+              emitted_at: new Date().toISOString(),
+            },
           },
-          { type: 'state', stream: 'customers', data: { status: 'complete' } },
+          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
           {
             type: 'record',
-            stream: 'invoices',
-            data: { id: 'inv_1' },
-            emitted_at: new Date().toISOString(),
+            record: {
+              stream: 'invoices',
+              data: { id: 'inv_1' },
+              emitted_at: new Date().toISOString(),
+            },
           },
-          { type: 'state', stream: 'invoices', data: { status: 'complete' } },
+          { type: 'state', state: { stream: 'invoices', data: { status: 'complete' } } },
         ])
       )
     )
@@ -646,55 +768,77 @@ describe('engine.pipeline_sync() pipeline', () => {
     // Only the customers stream state should come through
     const states = results.filter((r) => r.type === 'state')
     expect(states).toHaveLength(1)
-    expect(states[0]!.stream).toBe('customers')
+    expect((states[0] as StateMessage).state.stream).toBe('customers')
   })
 
   it('non-data messages filtered: only record + state reach destination', async () => {
-    // Source that emits log, error, stream_status, record, and state —
+    // Source that emits log, trace error, trace stream_status, record, and state —
     // only record + state should reach the destination (non-data messages are routed to callbacks)
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const mixedSource: Source = {
-      spec: () => ({ config: {} }),
-      check: async () => ({ status: 'succeeded' }),
-      discover: async () => ({
-        type: 'catalog',
-        streams: [{ name: 'customers', primary_key: [['id']] }],
-      }),
-      read: async function* () {
-        yield { type: 'log' as const, level: 'info' as const, message: 'starting' }
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
         yield {
-          type: 'error' as const,
-          failure_type: 'transient_error' as const,
-          message: 'rate limited',
+          type: 'catalog',
+          catalog: {
+            streams: [{ name: 'customers', primary_key: [['id']] }],
+          },
+        }
+      },
+      async *read() {
+        yield { type: 'log' as const, log: { level: 'info' as const, message: 'starting' } }
+        yield {
+          type: 'trace' as const,
+          trace: {
+            trace_type: 'error' as const,
+            error: {
+              failure_type: 'transient_error' as const,
+              message: 'rate limited',
+            },
+          },
         }
         yield {
-          type: 'stream_status' as const,
-          stream: 'customers',
-          status: 'running' as const,
+          type: 'trace' as const,
+          trace: {
+            trace_type: 'stream_status' as const,
+            stream_status: {
+              stream: 'customers',
+              status: 'running' as const,
+            },
+          },
         }
         yield {
           type: 'record' as const,
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
         }
         yield {
           type: 'state' as const,
-          stream: 'customers',
-          data: { after: 'cus_1' },
+          state: {
+            stream: 'customers',
+            data: { after: 'cus_1' },
+          },
         }
       },
     }
 
-    const engine = createEngine(makeResolver(mixedSource, destinationTest))
+    const engine = await createEngine(makeResolver(mixedSource, destinationTest))
     const results = await drain(engine.pipeline_sync(defaultPipeline))
 
     // Only the state message passes through engine.pipeline_sync() (record goes to dest but
-    // dest only yields state back; log/error/stream_status are routed to callbacks) + eof:complete
+    // dest only yields state back; log/trace are routed to callbacks) + eof:complete
     expect(results).toHaveLength(2)
     expect(results[0]!.type).toBe('state')
-    expect(results[1]).toMatchObject({ type: 'eof', reason: 'complete' })
+    expect(results[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
 
     vi.restoreAllMocks()
   })

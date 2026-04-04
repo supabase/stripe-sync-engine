@@ -56,7 +56,7 @@ describe('resolveBin', () => {
 
 describe('createConnectorResolver', () => {
   it('returns preloaded source immediately', async () => {
-    const resolver = createConnectorResolver({
+    const resolver = await createConnectorResolver({
       sources: { stripe: sourceTest },
     })
     const source = await resolver.resolveSource('stripe')
@@ -64,7 +64,7 @@ describe('createConnectorResolver', () => {
   })
 
   it('returns preloaded destination immediately', async () => {
-    const resolver = createConnectorResolver({
+    const resolver = await createConnectorResolver({
       destinations: { postgres: destinationTest },
     })
     const dest = await resolver.resolveDestination('postgres')
@@ -72,7 +72,7 @@ describe('createConnectorResolver', () => {
   })
 
   it('caches resolved connectors — same instance on second call', async () => {
-    const resolver = createConnectorResolver({
+    const resolver = await createConnectorResolver({
       sources: { stripe: sourceTest },
     })
     const first = await resolver.resolveSource('stripe')
@@ -81,7 +81,7 @@ describe('createConnectorResolver', () => {
   })
 
   it('preloaded connectors take priority over subprocess fallback', async () => {
-    const resolver = createConnectorResolver({
+    const resolver = await createConnectorResolver({
       sources: { stripe: sourceTest },
     })
     // Should return preloaded sourceTest, not spawn a subprocess
@@ -90,7 +90,7 @@ describe('createConnectorResolver', () => {
   })
 
   it('falls back to subprocess for installed connector without preload', async () => {
-    const resolver = createConnectorResolver({})
+    const resolver = await createConnectorResolver({})
     // source-stripe bin is installed in this monorepo
     const source = await resolver.resolveSource('stripe')
     expect(source).toBeDefined()
@@ -101,7 +101,7 @@ describe('createConnectorResolver', () => {
   })
 
   it('throws for unknown connector', async () => {
-    const resolver = createConnectorResolver({})
+    const resolver = await createConnectorResolver({})
     await expect(resolver.resolveDestination('nonexistent')).rejects.toThrow(/not found/)
   })
 })

@@ -159,9 +159,14 @@ Deno.serve(async (req) => {
     }
 
     const defaultSet = new Set(DEFAULT_SYNC_OBJECTS)
-    const discovered = await sourceStripe.discover({ config: sourceConfig })
+    let discoveredStreams: Array<{ name: string; primary_key?: string[][] }> = []
+    for await (const msg of sourceStripe.discover({ config: sourceConfig })) {
+      if (msg.type === 'catalog') {
+        discoveredStreams = msg.catalog.streams
+      }
+    }
     const catalog = {
-      streams: discovered.streams
+      streams: discoveredStreams
         .filter((s) => defaultSet.has(s.name))
         .map((s) => ({
           stream: s,
@@ -170,7 +175,11 @@ Deno.serve(async (req) => {
         })),
     }
 
-    await destinationPostgres.setup({ config: destConfig, catalog })
+    // Consume setup generator to run migrations/table creation
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _msg of destinationPostgres.setup({ config: destConfig, catalog })) {
+      // setup yields control messages; we don't need them here
+    }
 
     let records = 0
     const sourceMessages = sourceStripe.read({ config: sourceConfig, catalog, state })
@@ -187,8 +196,8 @@ Deno.serve(async (req) => {
     let checkpoints = 0
     let stopReason = 'complete'
     for await (const msg of destOutput) {
-      if (msg.type === 'state' && msg.stream) {
-        await stateStore.set(msg.stream, msg.data)
+      if (msg.type === 'state' && msg.state.stream) {
+        await stateStore.set(msg.state.stream, msg.state.data)
         checkpoints++
         if (Date.now() - startedAt >= MAX_WALL_MS) {
           stopReason = 'time_limit'

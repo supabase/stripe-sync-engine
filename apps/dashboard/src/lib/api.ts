@@ -26,19 +26,26 @@ export async function getDestinations(): Promise<{ data: ConnectorInfo[] }> {
 }
 
 export interface CatalogResponse {
-  type: 'catalog'
   streams: CatalogStream[]
 }
 
 export async function discover(source: Record<string, unknown>): Promise<CatalogResponse> {
-  const { data, error, response } = await engine.POST('/discover', {
+  // /discover streams NDJSON — read line-by-line and find the catalog message
+  const response = await fetch('/api/engine/discover', {
+    method: 'POST',
     headers: { 'x-pipeline': JSON.stringify({ source, destination: { type: '_' } }) },
   })
-  if (error) {
-    const msg = (error as { error?: string }).error ?? `Discover failed: ${response.status}`
-    throw new Error(msg)
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Discover failed (${response.status}): ${text}`)
   }
-  return data as CatalogResponse
+  const text = await response.text()
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    const msg = JSON.parse(line) as { type: string; catalog?: { streams: CatalogStream[] } }
+    if (msg.type === 'catalog' && msg.catalog) return { streams: msg.catalog.streams }
+  }
+  throw new Error('Discover stream ended without a catalog message')
 }
 
 // ── Service API ───────────────────────────────────────────────

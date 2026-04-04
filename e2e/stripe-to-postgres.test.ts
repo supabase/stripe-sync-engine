@@ -91,7 +91,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
   // -- Backfill (no websocket — runs to natural completion) -----------------
 
   it('backfills product and price data to postgres', async () => {
-    const engine = createEngine(resolver)
+    const engine = await createEngine(resolver)
     await collectStates(engine.pipeline_sync(makePipeline()))
 
     for (const stream of STREAMS) {
@@ -107,7 +107,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
     // Clean slate — drop and let engine.pipelineSetup() recreate
     await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
 
-    const engine = createEngine(resolver)
+    const engine = await createEngine(resolver)
     const pipeline = makePipeline({ websocket: true })
     const iter = engine.pipeline_sync(pipeline)[Symbol.asyncIterator]()
 
@@ -117,8 +117,8 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
       while (completed.size < STREAMS.length) {
         const { value, done } = await iter.next()
         if (done) throw new Error('Pipeline ended before backfill completed')
-        if (value.type === 'state' && (value.data as any)?.status === 'complete') {
-          completed.add(value.stream)
+        if (value.type === 'state' && (value.state.data as any)?.status === 'complete') {
+          completed.add(value.state.stream)
         }
       }
       console.log('    Backfill complete, sending product update…')
@@ -142,7 +142,11 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         if ('timeout' in result) break
         const { value, done } = result as IteratorResult<DestinationOutput>
         if (done) break
-        if (value.type === 'state' && value.stream === 'products' && (value.data as any)?.eventId)
+        if (
+          value.type === 'state' &&
+          value.state.stream === 'products' &&
+          (value.state.data as any)?.eventId
+        )
           break
       }
 

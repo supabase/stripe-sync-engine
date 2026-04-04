@@ -116,26 +116,32 @@ export function pipelineHeader(config: Record<string, unknown>): string {
 }
 
 export function collectError(message: Record<string, unknown>): RunResult['errors'][number] | null {
-  if (message.type !== 'error') return null
-  return {
-    message:
-      (message.message as string) ||
-      ((message.data as Record<string, unknown>)?.message as string) ||
-      'Unknown error',
-    failure_type: message.failure_type as string | undefined,
-    stream: message.stream as string | undefined,
+  if (message.type === 'trace') {
+    const trace = message.trace as Record<string, unknown> | undefined
+    if (trace?.trace_type === 'error') {
+      const error = trace.error as Record<string, unknown>
+      return {
+        message: (error.message as string) || 'Unknown error',
+        failure_type: error.failure_type as string | undefined,
+        stream: error.stream as string | undefined,
+      }
+    }
   }
+  return null
 }
 
 export function withRowKey(record: RecordMessage, catalog?: ConfiguredCatalog): RecordMessage {
-  const primaryKey = catalog?.streams.find((stream) => stream.stream.name === record.stream)?.stream
-    .primary_key
+  const primaryKey = catalog?.streams.find((stream) => stream.stream.name === record.record.stream)
+    ?.stream.primary_key
   if (!primaryKey) return record
   return {
     ...record,
-    data: {
-      ...record.data,
-      [ROW_KEY_FIELD]: serializeRowKey(primaryKey, record.data),
+    record: {
+      ...record.record,
+      data: {
+        ...record.record.data,
+        [ROW_KEY_FIELD]: serializeRowKey(primaryKey, record.record.data),
+      },
     },
   }
 }
@@ -157,12 +163,14 @@ export function compactGoogleSheetsMessages(messages: Message[]): Message[] {
   for (const message of messages) {
     if (message.type === 'record') {
       const rowKey =
-        typeof message.data[ROW_KEY_FIELD] === 'string' ? message.data[ROW_KEY_FIELD] : undefined
+        typeof message.record.data[ROW_KEY_FIELD] === 'string'
+          ? message.record.data[ROW_KEY_FIELD]
+          : undefined
       if (!rowKey) {
         compacted.push(message)
         continue
       }
-      const dedupeKey = `${message.stream}:${rowKey}`
+      const dedupeKey = `${message.record.stream}:${rowKey}`
       if (!pending.has(dedupeKey)) pendingOrder.push(dedupeKey)
       pending.set(dedupeKey, message)
       continue
@@ -185,14 +193,19 @@ export function addRowNumbers(
   return messages.map((message) => {
     if (message.type !== 'record') return message
     const rowKey =
-      typeof message.data[ROW_KEY_FIELD] === 'string' ? message.data[ROW_KEY_FIELD] : undefined
-    const rowNumber = rowKey ? rowIndex[message.stream]?.[rowKey] : undefined
+      typeof message.record.data[ROW_KEY_FIELD] === 'string'
+        ? message.record.data[ROW_KEY_FIELD]
+        : undefined
+    const rowNumber = rowKey ? rowIndex[message.record.stream]?.[rowKey] : undefined
     if (rowNumber === undefined) return message
     return {
       ...message,
-      data: {
-        ...message.data,
-        [ROW_NUMBER_FIELD]: rowNumber,
+      record: {
+        ...message.record,
+        data: {
+          ...message.record.data,
+          [ROW_NUMBER_FIELD]: rowNumber,
+        },
       },
     }
   })
@@ -240,13 +253,15 @@ export async function drainMessages(stream: AsyncIterable<Record<string, unknown
   for await (const message of stream) {
     count++
     if (message.type === 'eof') {
-      eof = { reason: message.reason as string }
+      const eofPayload = message.eof as Record<string, unknown>
+      eof = { reason: eofPayload.reason as string }
     } else {
       const error = collectError(message)
       if (error) {
         errors.push(error)
-      } else if (message.type === 'state' && typeof message.stream === 'string') {
-        state[message.stream] = message.data
+      } else if (message.type === 'state') {
+        const statePayload = message.state as Record<string, unknown>
+        state[statePayload.stream as string] = statePayload.data
       } else if (message.type === 'record') {
         records.push(message)
       }

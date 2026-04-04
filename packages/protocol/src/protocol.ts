@@ -3,6 +3,10 @@
 // Zod schemas and inferred types for the sync protocol. Data shapes (messages,
 // catalog, config) are runtime-validatable via Zod. Source and Destination
 // contracts remain as TS interfaces (generic, method-bearing).
+//
+// Wire format: Airbyte-aligned envelope messages. Every message is a JSON object
+// with a `type` discriminator and a single payload field matching the type name.
+// All commands return AsyncIterable<Message> — everything is a stream.
 
 import { z } from 'zod'
 
@@ -89,8 +93,9 @@ export const ConfiguredCatalog = z
   )
 export type ConfiguredCatalog = z.infer<typeof ConfiguredCatalog>
 
-// MARK: - Connector specification
+// MARK: - Payload schemas (inner objects — no `type` field)
 
+/** JSON Schema describing the configuration a connector requires. Also the payload of a spec message. */
 export const ConnectorSpecification = z
   .object({
     config: z
@@ -108,19 +113,8 @@ export const ConnectorSpecification = z
   .describe('JSON Schema describing the configuration a connector requires.')
 export type ConnectorSpecification = z.infer<typeof ConnectorSpecification>
 
-export const CheckResult = z
+export const RecordPayload = z
   .object({
-    status: z.enum(['succeeded', 'failed']),
-    message: z.string().optional().describe('Human-readable explanation of the check result.'),
-  })
-  .describe('Result of a connection check.')
-export type CheckResult = z.infer<typeof CheckResult>
-
-// MARK: - Messages
-
-export const RecordMessage = z
-  .object({
-    type: z.literal('record'),
     stream: z.string().describe('Stream (table) name this record belongs to.'),
     data: z.record(z.string(), z.unknown()).describe('The record payload as a key-value map.'),
     emitted_at: z
@@ -129,12 +123,10 @@ export const RecordMessage = z
       .describe('ISO 8601 timestamp when the record was emitted by the source.'),
   })
   .describe('One record for one stream.')
-  .meta({ id: 'RecordMessage' })
-export type RecordMessage = z.infer<typeof RecordMessage>
+export type RecordPayload = z.infer<typeof RecordPayload>
 
-export const StateMessage = z
+export const StatePayload = z
   .object({
-    type: z.literal('state'),
     stream: z.string().describe('Stream being checkpointed.'),
     data: z
       .unknown()
@@ -142,34 +134,57 @@ export const StateMessage = z
         'Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume.'
       ),
   })
-  .describe(
-    'Per-stream checkpoint for resumable syncs. Emitted by the source after each page/batch so the orchestrator can persist progress.'
-  )
-  .meta({ id: 'StateMessage' })
-export type StateMessage = z.infer<typeof StateMessage>
+  .describe('Per-stream checkpoint for resumable syncs.')
+export type StatePayload = z.infer<typeof StatePayload>
 
-export const CatalogMessage = z
+export const CatalogPayload = z
   .object({
-    type: z.literal('catalog'),
     streams: z.array(Stream).describe('All streams available from this source.'),
   })
-  .describe('Catalog of available streams. Emitted by a source during discover().')
-  .meta({ id: 'CatalogMessage' })
-export type CatalogMessage = z.infer<typeof CatalogMessage>
+  .describe('Catalog of available streams.')
+export type CatalogPayload = z.infer<typeof CatalogPayload>
 
-export const LogMessage = z
+export const LogPayload = z
   .object({
-    type: z.literal('log'),
     level: z.enum(['debug', 'info', 'warn', 'error']).describe('Log severity level.'),
     message: z.string().describe('Human-readable log message.'),
   })
-  .describe('Structured log output from a source or destination.')
-  .meta({ id: 'LogMessage' })
-export type LogMessage = z.infer<typeof LogMessage>
+  .describe('Structured log output from a connector.')
+export type LogPayload = z.infer<typeof LogPayload>
 
-export const ErrorMessage = z
+export const EofPayload = z
   .object({
-    type: z.literal('error'),
+    reason: z
+      .enum(['complete', 'state_limit', 'time_limit', 'error'])
+      .describe('Why the stream ended.'),
+  })
+  .describe('Terminal payload — tells the client why the stream ended.')
+export type EofPayload = z.infer<typeof EofPayload>
+
+export const ConnectionStatusPayload = z
+  .object({
+    status: z.enum(['succeeded', 'failed']).describe('Whether the connection check passed.'),
+    message: z.string().optional().describe('Human-readable explanation of the check result.'),
+  })
+  .describe('Result of a connection check.')
+export type ConnectionStatusPayload = z.infer<typeof ConnectionStatusPayload>
+
+export const ControlPayload = z
+  .object({
+    control_type: z
+      .enum(['config_update'])
+      .describe('What kind of control action the connector is requesting.'),
+    config: z
+      .record(z.string(), z.unknown())
+      .describe('Config fields to merge into the active connector configuration.'),
+  })
+  .describe('Control signal from a connector to the orchestrator.')
+export type ControlPayload = z.infer<typeof ControlPayload>
+
+// Trace subtypes
+
+export const TraceError = z
+  .object({
     failure_type: z
       .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
       .describe('Error category — lets the orchestrator decide whether to retry, alert, or abort.'),
@@ -177,33 +192,96 @@ export const ErrorMessage = z
     stream: z.string().optional().describe('Stream that triggered the error, if applicable.'),
     stack_trace: z.string().optional().describe('Full stack trace for debugging.'),
   })
-  .describe('Structured error from a source or destination.')
-  .meta({ id: 'ErrorMessage' })
-export type ErrorMessage = z.infer<typeof ErrorMessage>
+  .describe('Structured error from a connector.')
+export type TraceError = z.infer<typeof TraceError>
 
-export const StreamStatusMessage = z
+export const TraceStreamStatus = z
   .object({
-    type: z.literal('stream_status'),
     stream: z.string().describe('Stream being reported on.'),
     status: z
       .enum(['started', 'running', 'complete', 'incomplete'])
       .describe('Current phase of the stream within this sync run.'),
   })
-  .describe(
-    'Per-stream status update from a source. Enables progress reporting in CLI / dashboard.'
-  )
-  .meta({ id: 'StreamStatusMessage' })
-export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
+  .describe('Per-stream status update.')
+export type TraceStreamStatus = z.infer<typeof TraceStreamStatus>
 
-/**
- * Terminal message — always the last line in an NDJSON streaming response.
- * Tells the client why the stream ended so it can decide whether to call again.
- */
-export const EofMessage = z
+export const TraceEstimate = z
   .object({
-    type: z.literal('eof'),
-    reason: z.enum(['complete', 'state_limit', 'time_limit', 'error']),
+    stream: z.string().describe('Stream being estimated.'),
+    row_count: z.number().int().optional().describe('Estimated total row count for this stream.'),
+    byte_count: z.number().int().optional().describe('Estimated total byte count for this stream.'),
   })
+  .describe('Sync progress estimate for a stream.')
+export type TraceEstimate = z.infer<typeof TraceEstimate>
+
+export const TracePayload = z
+  .discriminatedUnion('trace_type', [
+    z.object({
+      trace_type: z.literal('error'),
+      error: TraceError,
+    }),
+    z.object({
+      trace_type: z.literal('stream_status'),
+      stream_status: TraceStreamStatus,
+    }),
+    z.object({
+      trace_type: z.literal('estimate'),
+      estimate: TraceEstimate,
+    }),
+  ])
+  .describe('Diagnostic/status payload with subtypes for error, stream status, and estimates.')
+export type TracePayload = z.infer<typeof TracePayload>
+
+// MARK: - Envelope messages (the wire format)
+//
+// Every message is { type: '<kind>', <kind>: <payload> }.
+// One message per NDJSON line.
+
+export const RecordMessage = z
+  .object({ type: z.literal('record'), record: RecordPayload })
+  .meta({ id: 'RecordMessage' })
+export type RecordMessage = z.infer<typeof RecordMessage>
+
+export const StateMessage = z
+  .object({ type: z.literal('state'), state: StatePayload })
+  .meta({ id: 'StateMessage' })
+export type StateMessage = z.infer<typeof StateMessage>
+
+export const CatalogMessage = z
+  .object({ type: z.literal('catalog'), catalog: CatalogPayload })
+  .meta({ id: 'CatalogMessage' })
+export type CatalogMessage = z.infer<typeof CatalogMessage>
+
+export const LogMessage = z
+  .object({ type: z.literal('log'), log: LogPayload })
+  .meta({ id: 'LogMessage' })
+export type LogMessage = z.infer<typeof LogMessage>
+
+export const TraceMessage = z
+  .object({ type: z.literal('trace'), trace: TracePayload })
+  .meta({ id: 'TraceMessage' })
+export type TraceMessage = z.infer<typeof TraceMessage>
+
+export const SpecMessage = z
+  .object({ type: z.literal('spec'), spec: ConnectorSpecification })
+  .meta({ id: 'SpecMessage' })
+export type SpecMessage = z.infer<typeof SpecMessage>
+
+export const ConnectionStatusMessage = z
+  .object({
+    type: z.literal('connection_status'),
+    connection_status: ConnectionStatusPayload,
+  })
+  .meta({ id: 'ConnectionStatusMessage' })
+export type ConnectionStatusMessage = z.infer<typeof ConnectionStatusMessage>
+
+export const ControlMessage = z
+  .object({ type: z.literal('control'), control: ControlPayload })
+  .meta({ id: 'ControlMessage' })
+export type ControlMessage = z.infer<typeof ControlMessage>
+
+export const EofMessage = z
+  .object({ type: z.literal('eof'), eof: EofPayload })
   .meta({ id: 'EofMessage' })
 export type EofMessage = z.infer<typeof EofMessage>
 
@@ -236,13 +314,13 @@ export interface SyncParams {
 
 // MARK: - Message unions
 
-/** The subset of messages the destination receives. */
+/** The subset of messages the destination receives on stdin. */
 export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, StateMessage])
 export type DestinationInput = z.infer<typeof DestinationInput>
 
 /** Messages the destination yields back to the orchestrator (one per NDJSON line). */
 export const DestinationOutput = z
-  .discriminatedUnion('type', [StateMessage, ErrorMessage, LogMessage, EofMessage])
+  .discriminatedUnion('type', [StateMessage, TraceMessage, LogMessage, EofMessage])
   .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
@@ -253,18 +331,39 @@ export const Message = z
     StateMessage,
     CatalogMessage,
     LogMessage,
-    ErrorMessage,
-    StreamStatusMessage,
+    TraceMessage,
+    SpecMessage,
+    ConnectionStatusMessage,
+    ControlMessage,
     EofMessage,
   ])
   .meta({ id: 'Message' })
 export type Message = z.infer<typeof Message>
+
+// MARK: - Per-command output types
+
+/** Output of spec(): the connector's specification, plus optional logs/traces. */
+export type SpecOutput = SpecMessage | LogMessage | TraceMessage
+
+/** Output of check(): connection status, plus optional logs/traces. */
+export type CheckOutput = ConnectionStatusMessage | LogMessage | TraceMessage
+
+/** Output of discover(): catalog of streams, plus optional logs/traces. */
+export type DiscoverOutput = CatalogMessage | LogMessage | TraceMessage
+
+/** Output of setup(): config update controls, plus optional logs/traces. */
+export type SetupOutput = ControlMessage | LogMessage | TraceMessage
+
+/** Output of teardown(): optional logs/traces. */
+export type TeardownOutput = LogMessage | TraceMessage
 
 // MARK: - Source
 //
 // In-process sources implement this interface directly.
 // Subprocess sources read/write NDJSON on stdin/stdout and a thin
 // adapter converts between the two.
+//
+// Every method returns AsyncIterable<Message> — everything is a stream.
 
 /**
  * Reads data from an upstream system by emitting messages.
@@ -279,26 +378,22 @@ export type Message = z.infer<typeof Message>
  *   TInput       — serializable data passed to read() for event-driven reads
  *                  (e.g. a single webhook event). When absent, read() performs
  *                  a pull-based backfill.
- *
- * Subprocess equivalent:
- *   discover -> run source process, collect CatalogMessage from stdout
- *   read    -> run source process, stream Message lines from stdout
  */
 export interface Source<
   TConfig extends Record<string, unknown> = Record<string, unknown>,
   TStreamState = unknown,
   TInput = unknown,
 > {
-  /** Return the JSON Schema for this connector's configuration. */
-  spec(): ConnectorSpecification
+  /** Emit the connector's specification (config JSON Schema, etc.). */
+  spec(): AsyncIterable<SpecOutput>
 
-  /** Validate that the provided configuration can connect to the upstream system. */
-  check(params: { config: TConfig }): Promise<CheckResult>
+  /** Check connectivity and config validity. */
+  check(params: { config: TConfig }): AsyncIterable<CheckOutput>
 
-  /** Discover available streams. Returns them as a CatalogMessage. */
-  discover(params: { config: TConfig }): Promise<CatalogMessage>
+  /** Discover available streams. */
+  discover(params: { config: TConfig }): AsyncIterable<DiscoverOutput>
 
-  /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
+  /** Emit messages (record, state, log, trace). Finite for backfill, infinite for live. */
   read(
     params: {
       config: TConfig
@@ -308,11 +403,11 @@ export interface Source<
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
 
-  /** Provision external resources (webhook endpoints, replication slots, etc.). Called before first read(). */
-  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<Partial<TConfig> | void>
+  /** Provision external resources (webhook endpoints, replication slots, etc.). */
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>
 
   /** Clean up external resources. Called when a sync is deleted. */
-  teardown?(params: { config: TConfig }): Promise<void>
+  teardown?(params: { config: TConfig }): AsyncIterable<TeardownOutput>
 }
 
 // MARK: - Destination
@@ -320,6 +415,8 @@ export interface Source<
 // In-process destinations implement this interface directly.
 // Subprocess destinations read DestinationInputs from stdin and emit
 // DestinationOutput on stdout after committing.
+//
+// Every method returns AsyncIterable<Message> — everything is a stream.
 
 /**
  * Writes records into a downstream system.
@@ -329,34 +426,36 @@ export interface Source<
  *
  * TConfig is the connector's configuration type, inferred from its Zod spec.
  *
- * The destination only receives RecordMessage and StateMessage -- the
- * orchestrator filters out logs, errors, and status messages before
- * they reach the destination.
- *
- * Subprocess equivalent:
- *   destination write --config config.json --catalog catalog.json
- *   Reads DestinationInput lines from stdin, emits DestinationOutput on stdout.
+ * The destination only receives RecordMessage and StateMessage on stdin — the
+ * orchestrator filters out other message types before they reach the destination.
  */
 export interface Destination<TConfig extends Record<string, unknown> = Record<string, unknown>> {
-  /** Return the JSON Schema for this connector's configuration. */
-  spec(): ConnectorSpecification
+  /** Emit the connector's specification (config JSON Schema, etc.). */
+  spec(): AsyncIterable<SpecOutput>
 
-  /** Validate that the provided configuration can connect to the downstream system. */
-  check(params: { config: TConfig }): Promise<CheckResult>
+  /** Check connectivity and config validity. */
+  check(params: { config: TConfig }): AsyncIterable<CheckOutput>
 
   /**
    * Consume data messages and write records to the downstream system.
-   * Yields messages back to the orchestrator: StateMessage after committing,
-   * ErrorMessage on write failures, LogMessage for diagnostics.
+   * Yields messages back to the orchestrator: state after committing,
+   * trace on write failures, log for diagnostics.
    */
   write(
     params: { config: TConfig; catalog: ConfiguredCatalog },
     $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput>
 
-  /** Provision downstream resources (schemas, tables, etc.). Called before first write(). */
-  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): Promise<Partial<TConfig> | void>
+  /** Provision downstream resources (schemas, tables, etc.). */
+  setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>
 
   /** Clean up downstream resources. Called when a sync is deleted. */
-  teardown?(params: { config: TConfig }): Promise<void>
+  teardown?(params: { config: TConfig }): AsyncIterable<TeardownOutput>
 }
+
+// MARK: - Deprecated aliases (for migration)
+
+/** @deprecated Use ConnectionStatusPayload */
+export const CheckResult = ConnectionStatusPayload
+/** @deprecated Use ConnectionStatusPayload */
+export type CheckResult = ConnectionStatusPayload

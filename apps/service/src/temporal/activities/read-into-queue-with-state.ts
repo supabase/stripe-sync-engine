@@ -5,7 +5,7 @@ import type {
   Message,
   PipelineConfig,
   RecordMessage,
-  SyncOpts,
+  SourceReadOptions,
 } from '@stripe/sync-engine'
 import type { ActivitiesContext } from './_shared.js'
 import { asIterable, collectError, type RunResult, withRowKey } from './_shared.js'
@@ -14,7 +14,7 @@ export function createReadIntoQueueWithStateActivity(context: ActivitiesContext)
   return async function readIntoQueueWithState(
     config: PipelineConfig,
     pipelineId: string,
-    opts?: SyncOpts & {
+    opts?: SourceReadOptions & {
       input?: unknown[]
       catalog?: ConfiguredCatalog
     }
@@ -39,8 +39,11 @@ export function createReadIntoQueueWithStateActivity(context: ActivitiesContext)
         errors.push(error)
       } else if (raw.type === 'record') {
         queued.push(withRowKey(raw as RecordMessage, catalog))
-      } else if (raw.type === 'state' && typeof raw.stream === 'string') {
-        state[raw.stream] = raw.data
+      } else if (raw.type === 'state') {
+        const statePayload = (raw as Record<string, unknown>).state as Record<string, unknown>
+        if (typeof statePayload?.stream === 'string') {
+          state[statePayload.stream] = statePayload.data
+        }
         queued.push(raw as Message)
       }
       if (seen % 50 === 0) heartbeat({ messages: seen })

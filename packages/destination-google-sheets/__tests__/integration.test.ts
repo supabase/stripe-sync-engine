@@ -35,33 +35,41 @@ describeWithEnv(
         '_' +
         iso.slice(20, 23)
       const streamName = `test_${ts}`
-      const now = Date.now()
+      const emittedAt = new Date().toISOString()
 
       const records: RecordMessage[] = [
         {
           type: 'record',
-          stream: streamName,
-          data: { id: 'cus_1', name: 'Alice', balance: 100 },
-          emitted_at: now,
+          record: {
+            stream: streamName,
+            data: { id: 'cus_1', name: 'Alice', balance: 100 },
+            emitted_at: emittedAt,
+          },
         },
         {
           type: 'record',
-          stream: streamName,
-          data: { id: 'cus_2', name: 'Bob', balance: 250 },
-          emitted_at: now,
+          record: {
+            stream: streamName,
+            data: { id: 'cus_2', name: 'Bob', balance: 250 },
+            emitted_at: emittedAt,
+          },
         },
         {
           type: 'record',
-          stream: streamName,
-          data: { id: 'cus_3', name: 'Charlie', balance: 0 },
-          emitted_at: now,
+          record: {
+            stream: streamName,
+            data: { id: 'cus_3', name: 'Charlie', balance: 0 },
+            emitted_at: emittedAt,
+          },
         },
       ]
 
       const stateMsg: StateMessage = {
         type: 'state',
-        stream: streamName,
-        data: { cursor: 'cus_3' },
+        state: {
+          stream: streamName,
+          data: { cursor: 'cus_3' },
+        },
       }
 
       const messages: DestinationInput[] = [...records, stateMsg]
@@ -84,18 +92,17 @@ describeWithEnv(
         output.push(msg)
       }
 
-      // State re-emitted
+      // State re-emitted (envelope format)
       const states = output.filter((m) => m.type === 'state')
       expect(states).toHaveLength(1)
       expect(states[0]).toMatchObject({
         type: 'state',
-        stream: streamName,
-        data: { cursor: 'cus_3' },
+        state: { stream: streamName, data: { cursor: 'cus_3' } },
       })
 
-      // No errors
-      const errors = output.filter((m) => m.type === 'error')
-      expect(errors).toHaveLength(0)
+      // No trace errors
+      const traces = output.filter((m) => m.type === 'trace' && m.trace.trace_type === 'error')
+      expect(traces).toHaveLength(0)
 
       // Log emitted
       const logs = output.filter((m) => m.type === 'log')
