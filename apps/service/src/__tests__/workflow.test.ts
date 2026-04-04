@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
 import path from 'node:path'
-import type { PipelineConfig } from '@stripe/sync-engine'
 import type { SyncActivities } from '../temporal/activities/index.js'
 import type { RunResult } from '../temporal/activities/index.js'
 
@@ -11,11 +10,8 @@ const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
 
 const noErrors: RunResult = { errors: [], state: {} }
 
-const testPipeline = {
-  id: 'test_pipe',
-  source: { type: 'test', api_key: 'sk_test_123' },
-  destination: { type: 'test' },
-}
+// Workflows now receive only the pipelineId string
+const testPipelineId = 'test_pipe'
 
 function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities {
   return {
@@ -69,7 +65,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
+        args: [testPipelineId],
         workflowId: 'test-sync-1',
         taskQueue: 'test-queue-1',
       })
@@ -89,15 +85,15 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
   })
 
   it('processes stripe_event signals as optimistic updates', async () => {
-    const syncCalls: { config: PipelineConfig; input?: unknown[] }[] = []
+    const syncCalls: { pipelineId: string; input?: unknown[] }[] = []
 
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       taskQueue: 'test-queue-2',
       workflowsPath,
       activities: stubActivities({
-        syncImmediate: async (config: PipelineConfig, opts?) => {
-          syncCalls.push({ config, input: opts?.input ?? undefined })
+        syncImmediate: async (pipelineId: string, opts?) => {
+          syncCalls.push({ pipelineId, input: opts?.input ?? undefined })
           return noErrors
         },
       }),
@@ -105,7 +101,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
+        args: [testPipelineId],
         workflowId: 'test-sync-2',
         taskQueue: 'test-queue-2',
       })
@@ -139,9 +135,9 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
         ])
       )
 
-      // All calls should use the same pipeline config
+      // All calls should use the test pipeline ID
       for (const call of syncCalls) {
-        expect(call.config.source.type).toBe('test')
+        expect(call.pipelineId).toBe(testPipelineId)
       }
     })
   })
@@ -156,7 +152,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
+        args: [testPipelineId],
         workflowId: 'test-sync-3',
         taskQueue: 'test-queue-3',
       })
@@ -196,7 +192,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
+        args: [testPipelineId],
         workflowId: 'test-sync-4',
         taskQueue: 'test-queue-4',
       })
@@ -206,32 +202,6 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       await handle.result()
 
       expect(teardownCalled).toBe(true)
-    })
-  })
-
-  it('returns pipeline config via config query', async () => {
-    const worker = await Worker.create({
-      connection: testEnv.nativeConnection,
-      taskQueue: 'test-queue-6',
-      workflowsPath,
-      activities: stubActivities(),
-    })
-
-    await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
-        workflowId: 'test-sync-6',
-        taskQueue: 'test-queue-6',
-      })
-
-      await new Promise((r) => setTimeout(r, 500))
-
-      const config = await handle.query('config')
-      expect(config.id).toBe('test_pipe')
-      expect(config.source.type).toBe('test')
-
-      await handle.signal('delete')
-      await handle.result()
     })
   })
 
@@ -247,7 +217,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
-        args: [testPipeline],
+        args: [testPipelineId],
         workflowId: 'test-sync-7',
         taskQueue: 'test-queue-7',
       })
@@ -291,15 +261,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
-        args: [
-          {
-            ...testPipeline,
-            destination: {
-              type: 'google-sheets',
-              spreadsheet_id: 'sheet_123',
-            },
-          },
-        ],
+        args: ['test_gs_pipe'],
         workflowId: 'test-gs-sync-1',
         taskQueue: 'test-queue-gs-1',
       })
@@ -348,7 +310,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
             ? { count: 1, state: { customers: { cursor: 'cus_1' } } }
             : { count: 0, state: { customers: { cursor: 'cus_1' } } }
         },
-        writeGoogleSheetsFromQueue: async (_config, _pipelineId, opts) => {
+        writeGoogleSheetsFromQueue: async (_pipelineId, opts) => {
           writeCatalog = opts?.catalog
           return {
             errors: [],
@@ -362,15 +324,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
 
     await worker.runUntil(async () => {
       const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
-        args: [
-          {
-            ...testPipeline,
-            destination: {
-              type: 'google-sheets',
-              spreadsheet_id: 'sheet_456',
-            },
-          },
-        ],
+        args: ['test_gs_pipe_2'],
         workflowId: 'test-gs-sync-2',
         taskQueue: 'test-queue-gs-2',
       })

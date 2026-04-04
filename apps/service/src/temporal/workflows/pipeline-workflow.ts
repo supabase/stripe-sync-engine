@@ -1,16 +1,13 @@
 import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
 
 import {
-  configQuery,
   deleteSignal,
-  Pipeline,
   setup,
   stateQuery,
   statusQuery,
   stripeEventSignal,
   syncImmediate,
   teardown,
-  toConfig,
   updateSignal,
   WorkflowStatus,
 } from './_shared.js'
@@ -25,7 +22,7 @@ export interface PipelineWorkflowOpts {
 }
 
 export async function pipelineWorkflow(
-  pipeline: Pipeline,
+  pipelineId: string,
   opts?: PipelineWorkflowOpts
 ): Promise<void> {
   let paused = false
@@ -38,25 +35,19 @@ export async function pipelineWorkflow(
   setHandler(stripeEventSignal, (event: unknown) => {
     inputQueue.push(event)
   })
-  setHandler(updateSignal, (patch: Partial<Pipeline>) => {
-    if (patch.source) pipeline = { ...pipeline, source: patch.source }
-    if (patch.destination) pipeline = { ...pipeline, destination: patch.destination }
-    if (patch.streams !== undefined) pipeline = { ...pipeline, streams: patch.streams }
-    if ('paused' in (patch as Record<string, unknown>)) {
-      paused = !!(patch as Record<string, unknown>).paused
-    }
+  setHandler(updateSignal, (patch) => {
+    if (patch.paused !== undefined) paused = patch.paused
   })
   setHandler(deleteSignal, () => {
     deleted = true
   })
 
   setHandler(statusQuery, (): WorkflowStatus => ({ phase: 'running', paused, iteration }))
-  setHandler(configQuery, (): Pipeline => pipeline)
   setHandler(stateQuery, (): Record<string, unknown> => syncState)
 
   async function maybeContinueAsNew() {
     if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof pipelineWorkflow>(pipeline, {
+      await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
         state: syncState,
         timeLimit: opts?.timeLimit,
         inputQueue: inputQueue.length > 0 ? [...inputQueue] : undefined,
@@ -64,18 +55,9 @@ export async function pipelineWorkflow(
     }
   }
 
-  const setupResult = await setup(toConfig(pipeline))
-  if (setupResult.source) {
-    pipeline = { ...pipeline, source: { ...pipeline.source, ...setupResult.source } }
-  }
-  if (setupResult.destination) {
-    pipeline = {
-      ...pipeline,
-      destination: { ...pipeline.destination, ...setupResult.destination },
-    }
-  }
+  await setup(pipelineId)
   if (deleted) {
-    await teardown(toConfig(pipeline))
+    await teardown(pipelineId)
     return
   }
 
@@ -95,13 +77,11 @@ export async function pipelineWorkflow(
       continue
     }
 
-    const config = toConfig(pipeline)
-
     if (inputQueue.length > 0) {
       const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
-      await syncImmediate(config, { input: batch })
+      await syncImmediate(pipelineId, { input: batch })
     } else {
-      const result = await syncImmediate(config, {
+      const result = await syncImmediate(pipelineId, {
         state: syncState,
         stateLimit: 1,
         timeLimit: opts?.timeLimit,
@@ -113,5 +93,5 @@ export async function pipelineWorkflow(
     await maybeContinueAsNew()
   }
 
-  await teardown(toConfig(pipeline))
+  await teardown(pipelineId)
 }

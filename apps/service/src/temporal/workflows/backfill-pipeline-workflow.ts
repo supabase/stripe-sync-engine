@@ -1,13 +1,10 @@
 import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
 
 import {
-  configQuery,
   deleteSignal,
-  Pipeline,
   stateQuery,
   statusQuery,
   syncImmediate,
-  toConfig,
   updateSignal,
   WorkflowStatus,
 } from './_shared.js'
@@ -20,7 +17,7 @@ export interface BackfillPipelineWorkflowOpts {
 }
 
 export async function backfillPipelineWorkflow(
-  pipeline: Pipeline,
+  pipelineId: string,
   opts?: BackfillPipelineWorkflowOpts
 ): Promise<void> {
   let paused = false
@@ -29,25 +26,19 @@ export async function backfillPipelineWorkflow(
   let syncState: Record<string, unknown> = opts?.state ?? {}
   let backfillComplete = false
 
-  setHandler(updateSignal, (patch: Partial<Pipeline>) => {
-    if (patch.source) pipeline = { ...pipeline, source: patch.source }
-    if (patch.destination) pipeline = { ...pipeline, destination: patch.destination }
-    if (patch.streams !== undefined) pipeline = { ...pipeline, streams: patch.streams }
-    if ('paused' in (patch as Record<string, unknown>)) {
-      paused = !!(patch as Record<string, unknown>).paused
-    }
+  setHandler(updateSignal, (patch) => {
+    if (patch.paused !== undefined) paused = patch.paused
   })
   setHandler(deleteSignal, () => {
     deleted = true
   })
 
   setHandler(statusQuery, (): WorkflowStatus => ({ phase: 'running', paused, iteration }))
-  setHandler(configQuery, (): Pipeline => pipeline)
   setHandler(stateQuery, (): Record<string, unknown> => syncState)
 
   async function maybeContinueAsNew() {
     if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof backfillPipelineWorkflow>(pipeline, { state: syncState })
+      await continueAsNew<typeof backfillPipelineWorkflow>(pipelineId, { state: syncState })
     }
   }
 
@@ -64,7 +55,7 @@ export async function backfillPipelineWorkflow(
       continue
     }
 
-    const result = await syncImmediate(toConfig(pipeline), { state: syncState, stateLimit: 1 })
+    const result = await syncImmediate(pipelineId, { state: syncState, stateLimit: 1 })
     syncState = { ...syncState, ...result.state }
     backfillComplete = result.eof?.reason === 'complete'
     await maybeContinueAsNew()

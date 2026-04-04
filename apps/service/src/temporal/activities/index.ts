@@ -7,10 +7,15 @@ import { createSyncImmediateActivity } from './sync-immediate.js'
 import { createTeardownActivity } from './teardown.js'
 import { createWriteFromQueueActivity } from './write-from-queue.js'
 import { createWriteGoogleSheetsFromQueueActivity } from './write-google-sheets-from-queue.js'
+import type { PipelineStore } from '../../lib/stores.js'
 
 export type { RunResult } from './_shared.js'
 
-export function createActivities(opts: { engineUrl: string; kafkaBroker?: string }) {
+export function createActivities(opts: {
+  engineUrl: string
+  kafkaBroker?: string
+  pipelines: PipelineStore
+}) {
   const context = createActivitiesContext(opts)
 
   return {

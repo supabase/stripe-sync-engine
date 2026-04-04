@@ -1,12 +1,15 @@
 import { applySelection, buildCatalog, parseNdjsonStream } from '@stripe/sync-engine'
-import type { ConfiguredCatalog, PipelineConfig } from '@stripe/sync-engine'
+import type { ConfiguredCatalog } from '@stripe/sync-engine'
 import { collectCatalog } from '@stripe/sync-protocol'
 import type { DiscoverOutput } from '@stripe/sync-protocol'
+import { toConfig } from '../../lib/stores.js'
 import type { ActivitiesContext } from './_shared.js'
 import { pipelineHeader } from './_shared.js'
 
 export function createDiscoverCatalogActivity(context: ActivitiesContext) {
-  return async function discoverCatalog(config: PipelineConfig): Promise<ConfiguredCatalog> {
+  return async function discoverCatalog(pipelineId: string): Promise<ConfiguredCatalog> {
+    const pipeline = await context.pipelines.get(pipelineId)
+    const config = toConfig(pipeline)
     const response = await fetch(`${context.engineUrl}/discover`, {
       method: 'POST',
       headers: { 'x-pipeline': pipelineHeader(config) },

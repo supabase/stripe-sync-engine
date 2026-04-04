@@ -567,13 +567,16 @@ jobs:
             -e PORT=3000 \
             "$ENGINE_IMAGE"
 
+          docker volume create ci-pipeline-data
           docker run -d --name ci-service --network=host \
+            -v ci-pipeline-data:/data \
             "$SERVICE_IMAGE" \
-            serve --temporal-address localhost:7233 --port 4020
+            serve --temporal-address localhost:7233 --port 4020 --data-dir /data
 
           docker run -d --name ci-worker --network=host \
+            -v ci-pipeline-data:/data \
             "$SERVICE_IMAGE" \
-            worker --temporal-address localhost:7233 --engine-url http://localhost:3000
+            worker --temporal-address localhost:7233 --engine-url http://localhost:3000 --data-dir /data
 
           # Wait for service API health
           for i in $(seq 1 60); do

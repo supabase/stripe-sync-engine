@@ -12,6 +12,8 @@ import {
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
+import { memoryPipelineStore } from '../lib/stores-memory.js'
+import type { PipelineStore } from '../lib/stores.js'
 
 let resolver: ConnectorResolver
 
@@ -27,6 +29,7 @@ function app() {
   return createApp({
     temporal: { client: {} as WorkflowClient, taskQueue: 'unused' },
     resolver,
+    pipelines: memoryPipelineStore(),
   })
 }
 
@@ -84,6 +87,7 @@ describe('POST /pipelines workflow dispatch', () => {
     const res = await createApp({
       temporal: { client: { start } as unknown as WorkflowClient, taskQueue: 'unused' },
       resolver,
+      pipelines: memoryPipelineStore(),
     }).request('/pipelines', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -107,6 +111,7 @@ describe('POST /pipelines workflow dispatch', () => {
       'googleSheetPipelineWorkflow',
       expect.objectContaining({
         taskQueue: 'unused',
+        args: [expect.stringMatching(/^pipe_/)],
       })
     )
   })
@@ -140,9 +145,11 @@ function stubActivities(): SyncActivities {
 let testEnv: TestWorkflowEnvironment
 let worker: Worker
 let workerRunning: Promise<void>
+let sharedStore: PipelineStore
 
 beforeAll(async () => {
   testEnv = await TestWorkflowEnvironment.createLocal()
+  sharedStore = memoryPipelineStore()
   worker = await Worker.create({
     connection: testEnv.nativeConnection,
     taskQueue: 'test-api',
@@ -162,6 +169,7 @@ function liveApp() {
   return createApp({
     temporal: { client: testEnv.client.workflow, taskQueue: 'test-api' },
     resolver,
+    pipelines: sharedStore,
   })
 }
 
@@ -170,7 +178,10 @@ async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeou
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const res = await a.request(`/pipelines/${id}`)
-    if (res.status === 200) return
+    if (res.status === 200) {
+      const body = await res.json()
+      if (body.status) return
+    }
     await new Promise((r) => setTimeout(r, 200))
   }
   throw new Error(`Pipeline ${id} not queryable after ${timeoutMs}ms`)

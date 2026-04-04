@@ -2,10 +2,12 @@ import { heartbeat } from '@temporalio/activity'
 import type { Message } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
+import type { PipelineStore } from '../../lib/stores.js'
 
 export interface ActivitiesContext {
   engineUrl: string
   kafkaBroker?: string
+  pipelines: PipelineStore
   getProducer(): Promise<Producer>
   consumeQueueBatch(pipelineId: string, maxBatch: number): Promise<Message[]>
 }
@@ -13,8 +15,9 @@ export interface ActivitiesContext {
 export function createActivitiesContext(opts: {
   engineUrl: string
   kafkaBroker?: string
+  pipelines: PipelineStore
 }): ActivitiesContext {
-  const { engineUrl, kafkaBroker } = opts
+  const { engineUrl, kafkaBroker, pipelines } = opts
 
   let kafka: Kafka | undefined
   let producerConnected: Promise<Producer> | undefined
@@ -92,6 +95,7 @@ export function createActivitiesContext(opts: {
   return {
     engineUrl,
     kafkaBroker,
+    pipelines,
     getProducer,
     consumeQueueBatch,
   }

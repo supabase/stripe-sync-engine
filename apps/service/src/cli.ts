@@ -7,6 +7,7 @@ import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import { createApp } from './api/app.js'
+import { filePipelineStore } from './lib/stores-fs.js'
 import type { WorkflowClient } from '@temporalio/client'
 import { logger } from './logger.js'
 
@@ -44,6 +45,11 @@ const serveCmd = defineCommand({
       default: 'sync-engine',
       description: 'Temporal task queue name (default: sync-engine)',
     },
+    'data-dir': {
+      type: 'string',
+      required: true,
+      description: 'Directory to persist pipeline configs as JSON files.',
+    },
   },
   async run({ args }) {
     const port = Number(args.port)
@@ -59,7 +65,10 @@ const serveCmd = defineCommand({
     )
 
     const resolver = await resolverPromise
-    const app = createApp({ temporal, resolver })
+    const pipelines = filePipelineStore(args['data-dir'])
+    logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
+
+    const app = createApp({ temporal, resolver, pipelines })
 
     serve({ fetch: app.fetch, port }, () => {
       logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
@@ -97,6 +106,11 @@ const workerCmd = defineCommand({
       description:
         'Kafka broker for queue-backed workflows (for example localhost:9092). Can also be set via KAFKA_BROKER.',
     },
+    'data-dir': {
+      type: 'string',
+      required: true,
+      description: 'Directory to persist pipeline configs as JSON files.',
+    },
   },
   async run({ args }) {
     const { createWorker } = await import('./temporal/worker.js')
@@ -105,6 +119,7 @@ const workerCmd = defineCommand({
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
     const kafkaBroker = args['kafka-broker'] || process.env['KAFKA_BROKER']
     const temporalAddress = args['temporal-address']
+    const pipelines = filePipelineStore(args['data-dir'])
 
     // import.meta.url is the URL of cli.ts/cli.js, NOT the bin entry point:
     //   tsx:      file:///.../apps/service/src/cli.ts  → ./temporal/workflows/index.ts
@@ -121,6 +136,7 @@ const workerCmd = defineCommand({
       taskQueue,
       engineUrl,
       kafkaBroker,
+      pipelines,
       workflowsPath,
     })
 
@@ -135,7 +151,7 @@ const workerCmd = defineCommand({
 
 // Standalone webhook ingress command (Temporal mode only)
 const webhookCmd = defineCommand({
-  meta: { name: 'webhook', description: 'Start the webhook ingress server (Temporal mode)' },
+  meta: { name: 'webhook', description: 'Start the webhook ingress server' },
   args: {
     port: {
       type: 'string',
@@ -152,13 +168,19 @@ const webhookCmd = defineCommand({
       default: 'sync-engine',
       description: 'Temporal task queue name (default: sync-engine)',
     },
+    'data-dir': {
+      type: 'string',
+      required: true,
+      description: 'Directory to persist pipeline configs as JSON files.',
+    },
   },
   async run({ args }) {
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
     const resolver = await resolverPromise
-    const app = createApp({ temporal, resolver })
+    const pipelines = filePipelineStore(args['data-dir'])
+    const app = createApp({ temporal, resolver, pipelines })
 
     serve({ fetch: app.fetch, port }, () => {
       logger.info(
@@ -170,7 +192,7 @@ const webhookCmd = defineCommand({
 })
 
 export async function createProgram() {
-  // Mock client used only for OpenAPI spec generation (builds CLI structure)
+  // Mock client/store used only for OpenAPI spec generation (builds CLI structure)
   const mockClient = {
     start: async () => {},
     getHandle: () => ({
@@ -180,9 +202,20 @@ export async function createProgram() {
     }),
     list: async function* () {},
   } as any
+  const mockStore = {
+    get: async () => ({}),
+    set: async () => {},
+    update: async () => ({}),
+    delete: async () => {},
+    list: async () => [],
+  } as any
 
   const resolver = await resolverPromise
-  const mockApp = createApp({ temporal: { client: mockClient, taskQueue: 'cli' }, resolver })
+  const mockApp = createApp({
+    temporal: { client: mockClient, taskQueue: 'cli' },
+    resolver,
+    pipelines: mockStore,
+  })
   const res = await mockApp.request('/openapi.json')
   const spec = await res.json()
 
@@ -194,7 +227,10 @@ export async function createProgram() {
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
       const temporal = await createTemporalClient(address, taskQueue)
       const r = await resolverPromise
-      realApp = createApp({ temporal, resolver: r })
+      const dataDir = process.env.DATA_DIR
+      if (!dataDir) throw new Error('DATA_DIR environment variable is required')
+      const pipelines = filePipelineStore(dataDir)
+      realApp = createApp({ temporal, resolver: r, pipelines })
     }
     return realApp
   }

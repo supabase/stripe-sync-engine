@@ -3,11 +3,11 @@ import { createRemoteEngine } from '@stripe/sync-engine'
 import type {
   ConfiguredCatalog,
   Message,
-  PipelineConfig,
   RecordMessage,
   SourceReadOptions,
 } from '@stripe/sync-engine'
 import { ROW_KEY_FIELD, serializeRowKey } from '@stripe/sync-destination-google-sheets'
+import { toConfig } from '../../lib/stores.js'
 import type { ActivitiesContext } from './_shared.js'
 import { asIterable, collectError, type RunResult } from './_shared.js'
 
@@ -29,7 +29,6 @@ function withRowKey(record: RecordMessage, catalog?: ConfiguredCatalog): RecordM
 
 export function createReadGoogleSheetsIntoQueueActivity(context: ActivitiesContext) {
   return async function readGoogleSheetsIntoQueue(
-    config: PipelineConfig,
     pipelineId: string,
     opts?: SourceReadOptions & {
       input?: unknown[]
@@ -38,6 +37,8 @@ export function createReadGoogleSheetsIntoQueueActivity(context: ActivitiesConte
   ): Promise<{ count: number; state: Record<string, unknown> }> {
     if (!context.kafkaBroker) throw new Error('kafkaBroker is required for Google Sheets workflow')
 
+    const pipeline = await context.pipelines.get(pipelineId)
+    const config = toConfig(pipeline)
     const engine = createRemoteEngine(context.engineUrl)
     const { input: inputArr, catalog, ...syncOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined

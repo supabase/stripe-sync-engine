@@ -45,6 +45,7 @@ describe('worker CLI', () => {
         'temporal-task-queue': 'sync-engine',
         'engine-url': 'http://localhost:4010',
         'kafka-broker': 'localhost:9092',
+        'data-dir': '/tmp/test-pipelines',
       },
     })
 
@@ -75,6 +76,7 @@ describe('worker CLI', () => {
         'temporal-namespace': 'default',
         'temporal-task-queue': 'sync-engine',
         'engine-url': 'http://localhost:4010',
+        'data-dir': '/tmp/test-pipelines',
       },
     })
 
