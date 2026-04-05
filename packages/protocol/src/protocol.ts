@@ -17,15 +17,17 @@ import { z } from 'zod'
  * `streams` holds per-stream checkpoints (existing behavior).
  * `global` holds sync-wide state shared across all streams (new).
  */
-export const SyncState = z.object({
-  streams: z
-    .record(z.string(), z.unknown())
-    .describe('Per-stream checkpoint data, keyed by stream name.'),
-  global: z
-    .record(z.string(), z.unknown())
-    .describe('Sync-wide state shared across all streams (e.g. a global events cursor).'),
-})
-export type SyncState = z.infer<typeof SyncState>
+export const SourceState = z
+  .object({
+    streams: z
+      .record(z.string(), z.unknown())
+      .describe('Per-stream checkpoint data, keyed by stream name.'),
+    global: z
+      .record(z.string(), z.unknown())
+      .describe('Sync-wide state shared across all streams (e.g. a global events cursor).'),
+  })
+  .meta({ id: 'SourceState' })
+export type SourceState = z.infer<typeof SourceState>
 
 // MARK: - Data model
 
@@ -122,7 +124,7 @@ export const ConnectorSpecification = z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'JSON Schema for per-stream state (cursor/checkpoint shape). See also SyncState.global for sync-wide cursors.'
+        'JSON Schema for per-stream state (cursor/checkpoint shape). See also SourceState.global for sync-wide cursors.'
       ),
     source_input: z
       .record(z.string(), z.unknown())
@@ -390,7 +392,7 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 /** The full set of parsed sync request params: pipeline config + cursor state + stream limits. */
 export interface SyncParams {
   pipeline: PipelineConfig
-  state?: SyncState
+  state?: SourceState
   state_limit?: number
   time_limit?: number
 }
@@ -508,7 +510,7 @@ export interface Source<
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
-      state?: SyncState
+      state?: SourceState
     },
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>

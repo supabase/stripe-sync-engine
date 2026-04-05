@@ -132,14 +132,12 @@ function stubActivities(): SyncActivities {
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
     readGoogleSheetsIntoQueue: async () => ({ count: 0, state: {} }),
-    readIntoQueue: async () => ({ count: 0, state: {} }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
       state: {},
       written: 0,
       rowAssignments: {},
     }),
-    writeFromQueue: async () => ({ errors: [], state: {}, written: 0 }),
     teardown: async () => {},
   }
 }

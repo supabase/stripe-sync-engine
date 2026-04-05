@@ -176,7 +176,7 @@ export function createConnectorCli(
         const config = parseConfig(args.config, opts?.configSchema)
         const catalog = parseJsonOrFile(args.catalog)
         const rawState = args.state ? parseJsonOrFile(args.state) : undefined
-        // Accept both SyncState { streams, global } and legacy flat state
+        // Accept both SourceState { streams, global } and legacy flat state
         const state = rawState
           ? 'streams' in rawState
             ? (rawState as { streams: Record<string, unknown>; global: Record<string, unknown> })

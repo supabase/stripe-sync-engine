@@ -14,7 +14,8 @@ export function createSyncImmediateActivity(context: ActivitiesContext) {
     const { input: inputArr, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
     const { errors, state, sourceConfig, destConfig, eof } = await drainMessages(
-      context.engine.pipeline_sync(config, readOpts, input)
+      context.engine.pipeline_sync(config, readOpts, input),
+      readOpts.state
     )
     // Full replacement — connector emits the complete updated config
     if (sourceConfig) {

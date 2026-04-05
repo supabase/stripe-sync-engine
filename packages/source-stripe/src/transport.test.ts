@@ -120,9 +120,13 @@ describe('fetchWithProxy', () => {
     const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }))
     vi.stubGlobal('fetch', mockFetch)
 
-    await fetchWithProxy('https://api.stripe.com/v1/customers', {}, {
-      HTTPS_PROXY: 'http://proxy.example.test:8080',
-    })
+    await fetchWithProxy(
+      'https://api.stripe.com/v1/customers',
+      {},
+      {
+        HTTPS_PROXY: 'http://proxy.example.test:8080',
+      }
+    )
 
     expect(mockFetch).toHaveBeenCalledOnce()
     const [, init] = mockFetch.mock.calls[0]
@@ -133,9 +137,13 @@ describe('fetchWithProxy', () => {
     const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }))
     vi.stubGlobal('fetch', mockFetch)
 
-    await fetchWithProxy('http://localhost:12111/v1/customers', {}, {
-      HTTPS_PROXY: 'http://proxy.example.test:8080',
-    })
+    await fetchWithProxy(
+      'http://localhost:12111/v1/customers',
+      {},
+      {
+        HTTPS_PROXY: 'http://proxy.example.test:8080',
+      }
+    )
 
     expect(mockFetch).toHaveBeenCalledOnce()
     const [, init] = mockFetch.mock.calls[0]
@@ -146,10 +154,14 @@ describe('fetchWithProxy', () => {
     const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }))
     vi.stubGlobal('fetch', mockFetch)
 
-    await fetchWithProxy('https://stripe-sync.dev/stripe-api-specs/manifest.json', {}, {
-      HTTPS_PROXY: 'http://proxy.example.test:8080',
-      NO_PROXY: 'stripe-sync.dev',
-    })
+    await fetchWithProxy(
+      'https://stripe-sync.dev/stripe-api-specs/manifest.json',
+      {},
+      {
+        HTTPS_PROXY: 'http://proxy.example.test:8080',
+        NO_PROXY: 'stripe-sync.dev',
+      }
+    )
 
     expect(mockFetch).toHaveBeenCalledOnce()
     const [, init] = mockFetch.mock.calls[0]

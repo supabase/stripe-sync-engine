@@ -1,11 +1,9 @@
 import { createActivitiesContext } from './_shared.js'
 import { createDiscoverCatalogActivity } from './discover-catalog.js'
-import { createReadIntoQueueActivity } from './read-into-queue.js'
 import { createReadGoogleSheetsIntoQueueActivity } from './read-google-sheets-into-queue.js'
 import { createSetupActivity } from './setup.js'
 import { createSyncImmediateActivity } from './sync-immediate.js'
 import { createTeardownActivity } from './teardown.js'
-import { createWriteFromQueueActivity } from './write-from-queue.js'
 import { createWriteGoogleSheetsFromQueueActivity } from './write-google-sheets-from-queue.js'
 import type { PipelineStore } from '../../lib/stores.js'
 
@@ -23,9 +21,7 @@ export function createActivities(opts: {
     setup: createSetupActivity(context),
     syncImmediate: createSyncImmediateActivity(context),
     readGoogleSheetsIntoQueue: createReadGoogleSheetsIntoQueueActivity(context),
-    readIntoQueue: createReadIntoQueueActivity(context),
     writeGoogleSheetsFromQueue: createWriteGoogleSheetsFromQueueActivity(context),
-    writeFromQueue: createWriteFromQueueActivity(context),
     teardown: createTeardownActivity(context),
   }
 }

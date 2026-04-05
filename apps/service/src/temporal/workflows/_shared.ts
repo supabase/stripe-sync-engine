@@ -1,7 +1,7 @@
 import { defineQuery, defineSignal, proxyActivities } from '@temporalio/workflow'
 
 import type { SyncActivities } from '../activities/index.js'
-import type { SyncState } from '@stripe/sync-protocol'
+import type { SourceState } from '@stripe/sync-protocol'
 import { retryPolicy } from '../../lib/utils.js'
 
 export interface WorkflowStatus {
@@ -18,7 +18,7 @@ export const updateSignal = defineSignal<[{ paused?: boolean }]>('update')
 export const deleteSignal = defineSignal('delete')
 
 export const statusQuery = defineQuery<WorkflowStatus>('status')
-export const stateQuery = defineQuery<SyncState>('state')
+export const stateQuery = defineQuery<SourceState>('state')
 
 export const { setup, teardown } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '2m',

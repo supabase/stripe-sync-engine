@@ -116,6 +116,7 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
       maxBatch?: number
       rowIndex?: Record<string, Record<string, number>>
       catalog?: ConfiguredCatalog
+      state?: import('@stripe/sync-engine').SourceState
     }
   ): Promise<
     RunResult & {
@@ -128,8 +129,13 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
     const maxBatch = opts?.maxBatch ?? 50
     const queued = await context.consumeQueueBatch(pipelineId, maxBatch)
 
+    const initialState: import('@stripe/sync-engine').SourceState = {
+      streams: { ...opts?.state?.streams },
+      global: { ...opts?.state?.global },
+    }
+
     if (queued.length === 0) {
-      return { errors: [], state: { streams: {}, global: {} }, written: 0, rowAssignments: {} }
+      return { errors: [], state: initialState, written: 0, rowAssignments: {} }
     }
 
     const pipeline = await context.pipelineStore.get(pipelineId)
@@ -146,7 +152,10 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
     const filteredCatalog = augmentGoogleSheetsCatalog(opts.catalog)
     const destination = createGoogleSheetsDestination()
     const errors: RunResult['errors'] = []
-    const state: import('@stripe/sync-engine').SyncState = { streams: {}, global: {} }
+    const state: import('@stripe/sync-engine').SourceState = {
+      streams: { ...initialState.streams },
+      global: { ...initialState.global },
+    }
     const rowAssignments: Record<string, Record<string, number>> = {}
     const input = enforceCatalog(filteredCatalog)(
       asIterable(writeBatch)
@@ -164,7 +173,7 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
         errors.push(error)
       } else if (raw.type === 'source_state') {
         if (raw.source_state.state_type === 'global') {
-          Object.assign(state.global, raw.source_state.data as Record<string, unknown>)
+          state.global = raw.source_state.data as Record<string, unknown>
         } else {
           state.streams[raw.source_state.stream] = raw.source_state.data
         }

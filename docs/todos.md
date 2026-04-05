@@ -1,35 +1,17 @@
 # Todos
 
-- /setup
-  - finish getting setup working
-  - use the control message for persisting catalog updates in setiup
-- /pipeline_sync
-  - is activity plain functions
-- call pipeline_sync from webhook
-
----
-
-- [x] ~~_/discover endpoint passing stripe api version_~~ [2026-04-04]
-- [x] ~~\*~~how to return a list of all stripe api versions~~ done (DDR-008: enum on config JSON Schema)\*~~ [2026-04-04]
-- Consider renaming generated OpenAPI specs to `.oas.json` for consistency (e.g. `engine.oas.json`, `service.oas.json`)
-
-- /check (implmeent or remove for now)
-
-- The pipeline state machine.... maintain status
-- more resilient engine, not crash and do something else to recover from source / destination issues?
-
----
-
 Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 ## Now
 
 - Land grouped Stripe tables in stream selector (`docs/plans/active/2026-04-03-grouped-tables.md`)
 - Structured stream state + per-stream reset signal (`docs/plans/active/2026-04-03-structured-stream-state.md`)
+- Pipeline status state machine — implement `PipelineStatus`, `sub_status`, `backfill_complete` in workflow + API (`docs/plans/2026-04-03-pipeline-status-state-machine.md`)
+- Google Sheets destination — fix global state flush, catalog reset on update, batch updateRows
 
 ## Soon
 
-- Pipeline status state machine — implementation (`docs/plans/2026-04-03-pipeline-status-state-machine.md`)
+- `/check` endpoint — implement or remove
 - Control messages → config store updates (unscoped)
 - CLI backfill progress display (`docs/plans/active/2026-03-20-plan-005-cli-progress-display.md`) — progress bars with row counts
 - Scope rename: `@stripe/` → `@stripe-sync/` (`docs/plans/active/2026-03-20-plan-008-scope-rename-stripe-sync.md`) — blocked on npm org approval
@@ -59,6 +41,7 @@ Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 - OAuth credential refresh workflow (auto-renew expiring tokens)
 - Global state (per-pipeline state in addition to per-stream cursors)
 - Fan-in support (multiple sources → one destination)
+- Resilient engine — recover from source/destination errors without crashing the workflow (auto-pause on permanent, retry on transient)
 
 ## Developer Experience
 

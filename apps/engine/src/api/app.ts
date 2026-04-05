@@ -20,7 +20,7 @@ import {
   CheckOutput as CheckOutputSchema,
   SetupOutput as SetupOutputSchema,
   TeardownOutput as TeardownOutputSchema,
-  SyncState,
+  SourceState,
 } from '@stripe/sync-protocol'
 
 // Raw $refs for NDJSON content schemas — avoids zod-openapi generating *Output
@@ -161,10 +161,10 @@ export async function createApp(resolver: ConnectorResolver) {
       // Accept both new format { streams, global } and old flat format { stream_name: data }.
       'streams' in obj && 'global' in obj ? obj : { streams: obj, global: {} }
     )
-    .pipe(SyncState)
+    .pipe(SourceState)
     .optional()
     .meta({
-      description: 'JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state',
+      description: 'JSON-encoded SourceState ({ streams, global }) or legacy flat per-stream state',
       param: { content: { 'application/json': {} } },
     })
 
@@ -181,7 +181,7 @@ export async function createApp(resolver: ConnectorResolver) {
   const sourceHeaders = z.object({ 'x-source': xSourceHeader })
   const allSyncHeaders = z.object({
     'x-pipeline': xPipelineHeader,
-    'x-state': xStateHeader,
+    'x-source-state': xStateHeader,
   })
 
   const syncQueryParams = z.object({
@@ -333,7 +333,9 @@ export async function createApp(resolver: ConnectorResolver) {
   app.openapi(sourceDiscoverRoute, (c) => {
     const source = c.req.valid('header')['x-source']
     const context = { path: '/source_discover', sourceName: source.type }
-    return ndjsonResponse(logApiStream('Engine API /source_discover', engine.source_discover(source), context))
+    return ndjsonResponse(
+      logApiStream('Engine API /source_discover', engine.source_discover(source), context)
+    )
   })
 
   const pipelineReadRoute = createRoute({
@@ -363,7 +365,7 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineReadRoute, async (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
-    const state = c.req.valid('header')['x-state']
+    const state = c.req.valid('header')['x-source-state']
     const { state_limit, time_limit } = c.req.valid('query')
     const inputPresent = hasBody(c)
     const context = { path: '/pipeline_read', inputPresent, ...syncRequestContext(pipeline) }
@@ -458,7 +460,7 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineSyncRoute, async (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
-    const state = c.req.valid('header')['x-state']
+    const state = c.req.valid('header')['x-source-state']
     const { state_limit, time_limit } = c.req.valid('query')
     const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
     const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit }, input)

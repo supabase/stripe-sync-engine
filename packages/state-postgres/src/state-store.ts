@@ -5,13 +5,13 @@ import {
   stripSslParams,
   withPgConnectProxy,
 } from '@stripe/sync-util-postgres'
-import type { SyncState } from '@stripe/sync-protocol'
+import type { SourceState } from '@stripe/sync-protocol'
 
 /** Reserved stream name for global state in the _sync_state table. */
 const GLOBAL_KEY = '_global'
 
 export interface StateStore {
-  get(syncId: string): Promise<SyncState | undefined>
+  get(syncId: string): Promise<SourceState | undefined>
   set(syncId: string, stream: string, data: unknown): Promise<void>
   setGlobal(syncId: string, data: unknown): Promise<void>
   clear(syncId: string): Promise<void>
@@ -78,7 +78,7 @@ export function createPgStateStore(
 
 /** Engine-compatible state store scoped to a single sync_id. */
 export interface ScopedStateStore {
-  get(): Promise<SyncState | undefined>
+  get(): Promise<SourceState | undefined>
   set(stream: string, data: unknown): Promise<void>
   setGlobal(data: unknown): Promise<void>
 }

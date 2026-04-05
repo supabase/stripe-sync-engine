@@ -1,5 +1,5 @@
 import { heartbeat } from '@temporalio/activity'
-import type { Message, Engine, SyncState } from '@stripe/sync-engine'
+import type { Message, Engine, SourceState } from '@stripe/sync-engine'
 import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
@@ -105,7 +105,7 @@ export function createActivitiesContext(opts: {
 
 export interface RunResult {
   errors: Array<{ message: string; failure_type?: string; stream?: string }>
-  state: SyncState
+  state: SourceState
 }
 
 export async function* asIterable<T>(items: T[]): AsyncIterable<T> {
@@ -127,16 +127,22 @@ export function collectError(message: Message): RunResult['errors'][number] | nu
   return null
 }
 
-export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
+export async function drainMessages(
+  stream: AsyncIterable<Message>,
+  initialState?: SourceState
+): Promise<{
   errors: RunResult['errors']
-  state: SyncState
+  state: SourceState
   records: Message[]
   sourceConfig?: Record<string, unknown>
   destConfig?: Record<string, unknown>
   eof?: { reason: string }
 }> {
   const errors: RunResult['errors'] = []
-  const state: SyncState = { streams: {}, global: {} }
+  const state: SourceState = {
+    streams: { ...initialState?.streams },
+    global: { ...initialState?.global },
+  }
   const records: Message[] = []
   let sourceConfig: Record<string, unknown> | undefined
   let destConfig: Record<string, unknown> | undefined
@@ -159,7 +165,7 @@ export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
         errors.push(error)
       } else if (message.type === 'source_state') {
         if (message.source_state.state_type === 'global') {
-          Object.assign(state.global, message.source_state.data as Record<string, unknown>)
+          state.global = message.source_state.data as Record<string, unknown>
         } else {
           state.streams[message.source_state.stream] = message.source_state.data
         }

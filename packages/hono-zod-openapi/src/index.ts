@@ -150,13 +150,19 @@ function getPipeOutput(schema: AnyZod): AnyZod | undefined {
 
 /**
  * Check if a header field schema has the JSON content meta annotation.
- * Returns the content media type (e.g. 'application/json') or undefined.
+ * Returns the content media type string (e.g. 'application/json') or undefined.
+ *
+ * Accepts either object form `.meta({ param: { content: { 'application/json': {} } } })`
+ * (the OAS-typed form, preferred) or legacy string form `.meta({ param: { content: 'application/json' } })`.
  */
 function getParamContentType(schema: AnyZod): string | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const meta = z.globalRegistry.get(schema as any) as Record<string, unknown> | undefined
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (meta?.param as any)?.content as string | undefined
+  const content = (meta?.param as any)?.content
+  if (typeof content === 'string') return content
+  if (content && typeof content === 'object') return Object.keys(content)[0]
+  return undefined
 }
 
 /**

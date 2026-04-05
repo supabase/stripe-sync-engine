@@ -424,7 +424,7 @@ export interface components {
                 config: {
                     [key: string]: unknown;
                 };
-                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). See also SyncState.global for sync-wide cursors. */
+                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). See also SourceState.global for sync-wide cursors. */
                 source_state_stream?: {
                     [key: string]: unknown;
                 };
@@ -545,8 +545,8 @@ export interface components {
             account_id?: string;
             /** @description Whether this is a live mode sync */
             livemode?: boolean;
-            /** @constant */
-            api_version?: "2026-03-25.dahlia";
+            /** @enum {string} */
+            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
             /**
              * Format: uri
              * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
@@ -668,6 +668,16 @@ export interface components {
                 /** @description Cap backfill to this many records, then mark the stream complete. */
                 backfill_limit?: number;
             }[];
+        };
+        SourceState: {
+            /** @description Per-stream checkpoint data, keyed by stream name. */
+            streams: {
+                [key: string]: unknown;
+            };
+            /** @description Sync-wide state shared across all streams (e.g. a global events cursor). */
+            global: {
+                [key: string]: unknown;
+            };
         };
     };
     responses: never;
@@ -851,8 +861,8 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state */
-                "x-state"?: string;
+                /** @description JSON-encoded SourceState ({ streams, global }) or legacy flat per-stream state */
+                "x-source-state"?: string;
             };
             path?: never;
             cookie?: never;
@@ -934,8 +944,8 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state */
-                "x-state"?: string;
+                /** @description JSON-encoded SourceState ({ streams, global }) or legacy flat per-stream state */
+                "x-source-state"?: string;
             };
             path?: never;
             cookie?: never;

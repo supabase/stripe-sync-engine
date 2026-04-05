@@ -22,14 +22,12 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
     readGoogleSheetsIntoQueue: async () => ({ count: 0, state: emptyState }),
-    readIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
       state: emptyState,
       written: 0,
       rowAssignments: {},
     }),
-    writeFromQueue: async () => ({ errors: [], state: emptyState, written: 0 }),
     teardown: async () => {},
     ...overrides,
   }

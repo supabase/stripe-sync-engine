@@ -58,7 +58,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
   function stateHeaders(opts?: SourceReadOptions): Record<string, string> {
     const h: Record<string, string> = {}
     if (opts?.state && Object.keys(opts.state).length > 0) {
-      h['x-state'] = JSON.stringify(opts.state)
+      h['x-source-state'] = JSON.stringify(opts.state)
     }
     return h
   }

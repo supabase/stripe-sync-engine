@@ -11,7 +11,7 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   SyncOutput,
-  SyncState,
+  SourceState,
   RecordMessage,
   SourceStateMessage,
   collectFirst,
@@ -29,7 +29,7 @@ import { logger } from '../logger.js'
 
 export const SourceReadOptions = z.object({
   /** Aggregate state (per-stream + global) carried in from the previous sync run. */
-  state: SyncState.optional(),
+  state: SourceState.optional(),
   /** Stop after emitting this many state messages (useful for paging). */
   state_limit: z.number().int().positive().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */

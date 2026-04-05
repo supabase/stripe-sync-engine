@@ -8,13 +8,14 @@ import {
   updateSignal,
   WorkflowStatus,
 } from './_shared.js'
-import type { SyncState } from '@stripe/sync-protocol'
+import type { SourceState } from '@stripe/sync-protocol'
 import { CONTINUE_AS_NEW_THRESHOLD } from '../../lib/utils.js'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface BackfillPipelineWorkflowOpts {
-  state?: SyncState
+  state?: SourceState
+  reconcileComplete?: boolean
 }
 
 export async function backfillPipelineWorkflow(
@@ -24,8 +25,8 @@ export async function backfillPipelineWorkflow(
   let paused = false
   let deleted = false
   let iteration = 0
-  let syncState: SyncState = opts?.state ?? { streams: {}, global: {} }
-  let backfillComplete = false
+  let syncState: SourceState = opts?.state ?? { streams: {}, global: {} }
+  let reconcileComplete: boolean = opts?.reconcileComplete ?? false
 
   setHandler(updateSignal, (patch) => {
     if (patch.paused !== undefined) paused = patch.paused
@@ -35,11 +36,14 @@ export async function backfillPipelineWorkflow(
   })
 
   setHandler(statusQuery, (): WorkflowStatus => ({ phase: 'running', paused, iteration }))
-  setHandler(stateQuery, (): SyncState => syncState)
+  setHandler(stateQuery, (): SourceState => syncState)
 
   async function maybeContinueAsNew() {
     if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof backfillPipelineWorkflow>(pipelineId, { state: syncState })
+      await continueAsNew<typeof backfillPipelineWorkflow>(pipelineId, {
+        state: syncState,
+        reconcileComplete,
+      })
     }
   }
 
@@ -49,10 +53,10 @@ export async function backfillPipelineWorkflow(
       continue
     }
 
-    if (backfillComplete) {
+    if (reconcileComplete) {
       // Idle — wait up to one week; timeout means recon is due.
       const timedOut = !(await condition(() => paused || deleted, ONE_WEEK_MS))
-      if (timedOut) backfillComplete = false
+      if (timedOut) reconcileComplete = false
       continue
     }
 
@@ -61,11 +65,8 @@ export async function backfillPipelineWorkflow(
       state_limit: 100,
       time_limit: 10,
     })
-    syncState = {
-      streams: { ...syncState.streams, ...result.state.streams },
-      global: { ...syncState.global, ...result.state.global },
-    }
-    backfillComplete = result.eof?.reason === 'complete'
+    syncState = result.state
+    reconcileComplete = result.eof?.reason === 'complete'
     await maybeContinueAsNew()
   }
 }

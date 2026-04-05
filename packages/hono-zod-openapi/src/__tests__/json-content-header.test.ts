@@ -41,7 +41,7 @@ function createTestApp() {
             .string()
             .transform(jsonParse)
             .pipe(ItemSchema)
-            .meta({ param: { content: 'application/json' } }),
+            .meta({ param: { content: { 'application/json': {} } } }),
         }),
       },
       responses: {
@@ -120,7 +120,7 @@ describe('JSON content header — runtime', () => {
               .transform(jsonParse)
               .pipe(ItemSchema)
               .optional()
-              .meta({ param: { content: 'application/json' } }),
+              .meta({ param: { content: { 'application/json': {} } } }),
           }),
         },
         responses: { 200: { description: 'ok' } },
@@ -157,7 +157,7 @@ describe('JSON content header — runtime', () => {
               .string()
               .transform(jsonParse)
               .pipe(ItemSchema)
-              .meta({ param: { content: 'application/json' } }),
+              .meta({ param: { content: { 'application/json': {} } } }),
           }),
         },
         responses: { 200: { description: 'ok' } },

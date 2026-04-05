@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { SyncState, StatePayload, StreamStatePayload, GlobalStatePayload } from '../protocol.js'
+import { SourceState, StatePayload, StreamStatePayload, GlobalStatePayload } from '../protocol.js'
 import { stateMsg, stateStream, stateData } from '../helpers.js'
 
-describe('SyncState', () => {
-  it('parses a full SyncState', () => {
-    expect(SyncState.parse({ streams: { orders: { cursor: 1 } }, global: {} })).toEqual({
+describe('SourceState', () => {
+  it('parses a full SourceState', () => {
+    expect(SourceState.parse({ streams: { orders: { cursor: 1 } }, global: {} })).toEqual({
       streams: { orders: { cursor: 1 } },
       global: {},
     })
   })
 
   it('requires both fields', () => {
-    expect(() => SyncState.parse({ streams: {} })).toThrow()
+    expect(() => SourceState.parse({ streams: {} })).toThrow()
   })
 })
 
