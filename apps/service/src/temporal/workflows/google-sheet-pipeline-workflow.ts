@@ -1,5 +1,5 @@
 import { condition, continueAsNew, setHandler, sleep } from '@temporalio/workflow'
-import type { ConfiguredCatalog } from '@stripe/sync-engine'
+import type { ConfiguredCatalog, SyncState } from '@stripe/sync-engine'
 
 import {
   deleteSignal,
@@ -19,8 +19,8 @@ import { CONTINUE_AS_NEW_THRESHOLD, deepEqual, EVENT_BATCH_SIZE } from '../../li
 
 export interface GoogleSheetPipelineWorkflowOpts {
   phase?: string
-  sourceState?: Record<string, unknown>
-  readState?: Record<string, unknown>
+  sourceState?: SyncState
+  readState?: SyncState
   rowIndex?: RowIndex
   catalog?: ConfiguredCatalog
   pendingWrites?: boolean
@@ -37,8 +37,11 @@ export async function googleSheetPipelineWorkflow(
   let deleted = false
   const inputQueue: unknown[] = [...(opts?.inputQueue ?? [])]
   let iteration = 0
-  let sourceState: Record<string, unknown> = opts?.sourceState ?? {}
-  let readState: Record<string, unknown> = opts?.readState ?? { ...sourceState }
+  let sourceState: SyncState = opts?.sourceState ?? { streams: {}, global: {} }
+  let readState: SyncState = opts?.readState ?? {
+    streams: { ...sourceState.streams },
+    global: { ...sourceState.global },
+  }
   let rowIndex: RowIndex = opts?.rowIndex ?? {}
   let catalog: ConfiguredCatalog | undefined = opts?.catalog
   let readComplete = opts?.readComplete ?? false
@@ -67,7 +70,7 @@ export async function googleSheetPipelineWorkflow(
       iteration,
     })
   )
-  setHandler(stateQuery, (): Record<string, unknown> => sourceState)
+  setHandler(stateQuery, (): SyncState => sourceState)
 
   async function waitWhilePaused() {
     await condition(() => !paused || deleted)
@@ -125,7 +128,10 @@ export async function googleSheetPipelineWorkflow(
           catalog,
         })
         if (count > 0) pendingWrites = true
-        readState = { ...readState, ...nextReadState }
+        readState = {
+          streams: { ...readState.streams, ...nextReadState.streams },
+          global: { ...readState.global, ...nextReadState.global },
+        }
         readComplete = deepEqual(readState, before)
         await tickIteration()
         continue
@@ -148,7 +154,10 @@ export async function googleSheetPipelineWorkflow(
           catalog,
         })
         pendingWrites = result.written > 0
-        sourceState = { ...sourceState, ...result.state }
+        sourceState = {
+          streams: { ...sourceState.streams, ...result.state.streams },
+          global: { ...sourceState.global, ...result.state.global },
+        }
         for (const [stream, assignments] of Object.entries(result.rowAssignments)) {
           rowIndex[stream] ??= {}
           Object.assign(rowIndex[stream], assignments)

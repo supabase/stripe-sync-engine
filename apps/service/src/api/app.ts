@@ -8,6 +8,7 @@ import { createSchemas } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
 import type { WorkflowStatus } from '../temporal/workflows/_shared.js'
+import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
 
 const DEFAULT_PIPELINE_WORKFLOW = 'pipelineWorkflow'
 const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'googleSheetPipelineWorkflow'
@@ -450,11 +451,41 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { pipeline_id } = c.req.valid('param')
+
+      // Look up pipeline to get the webhook secret
+      const pipeline = await pipelineStore.get(pipeline_id)
+      if (!pipeline) {
+        return c.text('pipeline not found', 404)
+      }
+
+      if (pipeline.source.type !== 'stripe') {
+        return c.text('webhook ingress is only supported for stripe sources', 400)
+      }
+
+      const sourceConfig = pipeline.source[pipeline.source.type] as
+        | { webhook_secret?: string }
+        | undefined
+      const webhookSecret = sourceConfig?.webhook_secret
+      if (!webhookSecret) {
+        return c.text('pipeline has no webhook_secret configured', 400)
+      }
+
+      // Verify webhook signature
       const body = await c.req.text()
-      const headers = Object.fromEntries(c.req.raw.headers.entries())
+      const signature = c.req.header('stripe-signature') ?? ''
+      try {
+        verifyWebhookSignature(body, signature, webhookSecret)
+      } catch (err) {
+        if (err instanceof WebhookSignatureError) {
+          return c.text('webhook signature verification failed', 401)
+        }
+        throw err
+      }
+
+      // Forward verified event to the pipeline workflow
       temporal
         .getHandle(pipeline_id)
-        .signal('stripe_event', { body, headers })
+        .signal('stripe_event', { body, headers: Object.fromEntries(c.req.raw.headers.entries()) })
         .catch(() => {})
       return c.text('ok', 200)
     }

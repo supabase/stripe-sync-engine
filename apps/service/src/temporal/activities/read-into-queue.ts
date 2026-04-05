@@ -8,7 +8,11 @@ export function createReadIntoQueueActivity(context: ActivitiesContext) {
   return async function readIntoQueue(
     pipelineId: string,
     opts?: SourceReadOptions & { input?: SourceInput[] }
-  ): Promise<{ count: number; state: Record<string, unknown>; eof?: { reason: string } }> {
+  ): Promise<{
+    count: number
+    state: import('@stripe/sync-engine').SyncState
+    eof?: { reason: string }
+  }> {
     const pipeline = await context.pipelineStore.get(pipelineId)
     const { id: _, ...config } = pipeline
     const { input: inputArr, ...readOpts } = opts ?? {}

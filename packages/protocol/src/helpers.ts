@@ -4,13 +4,14 @@ import type {
   ControlMessage,
   DestinationInput,
   EofMessage,
+  GlobalStatePayload,
   LogMessage,
   Message,
   RecordMessage,
   RecordPayload,
+  SourceStateMessage,
   SpecMessage,
-  StateMessage,
-  StatePayload,
+  StreamStatePayload,
   TraceMessage,
 } from './protocol.js'
 
@@ -38,14 +39,14 @@ export function recordStream(msg: RecordMessage): string {
   return msg.record.stream
 }
 
-/** Extract the stream name from a StateMessage. */
-export function stateStream(msg: StateMessage): string {
-  return msg.state.stream
+/** Extract the stream name from a SourceStateMessage, or undefined for global state. */
+export function stateStream(msg: SourceStateMessage): string | undefined {
+  return msg.source_state.state_type === 'global' ? undefined : msg.source_state.stream
 }
 
-/** Extract the state data from a StateMessage. */
-export function stateData(msg: StateMessage): unknown {
-  return msg.state.data
+/** Extract the state data from a SourceStateMessage. */
+export function stateData(msg: SourceStateMessage): unknown {
+  return msg.source_state.data
 }
 
 // MARK: - Type guards
@@ -54,8 +55,8 @@ export function isRecordMessage(msg: Message): msg is RecordMessage {
   return msg.type === 'record'
 }
 
-export function isStateMessage(msg: Message): msg is StateMessage {
-  return msg.type === 'state'
+export function isStateMessage(msg: Message): msg is SourceStateMessage {
+  return msg.type === 'source_state'
 }
 
 export function isCatalogMessage(msg: Message): msg is CatalogMessage {
@@ -86,9 +87,9 @@ export function isEofMessage(msg: Message): msg is EofMessage {
   return msg.type === 'eof'
 }
 
-/** Type guard for "data" messages: record + state (the DestinationInput union). */
+/** Type guard for "data" messages: record + source_state (the DestinationInput union). */
 export function isDataMessage(msg: Message): msg is DestinationInput {
-  return msg.type === 'record' || msg.type === 'state'
+  return msg.type === 'record' || msg.type === 'source_state'
 }
 
 /** Type guard for trace error messages. */
@@ -172,7 +173,36 @@ export function recordMsg(payload: RecordPayload): RecordMessage {
   return { type: 'record', record: payload }
 }
 
-/** Shorthand to create a state envelope message. */
-export function stateMsg(payload: StatePayload): StateMessage {
-  return { type: 'state', state: payload }
+/** Shorthand to create a source_config control message. */
+export function sourceControlMsg<T extends Record<string, unknown>>(
+  source_config: T
+): ControlMessage {
+  return {
+    type: 'control',
+    control: { control_type: 'source_config', source_config },
+  }
+}
+
+/** Shorthand to create a destination_config control message. */
+export function destinationControlMsg<T extends Record<string, unknown>>(
+  destination_config: T
+): ControlMessage {
+  return {
+    type: 'control',
+    control: { control_type: 'destination_config', destination_config },
+  }
+}
+
+/** Shorthand to create a stream source_state envelope message. */
+export function stateMsg(payload: { stream: string; data: unknown }): SourceStateMessage
+/** Shorthand to create a global source_state envelope message. */
+export function stateMsg(payload: { state_type: 'global'; data: unknown }): SourceStateMessage
+export function stateMsg(
+  payload: { stream: string; data: unknown } | { state_type: 'global'; data: unknown }
+): SourceStateMessage {
+  const source_state: StreamStatePayload | GlobalStatePayload =
+    'state_type' in payload
+      ? (payload as GlobalStatePayload)
+      : { state_type: 'stream' as const, ...(payload as { stream: string; data: unknown }) }
+  return { type: 'source_state', source_state }
 }

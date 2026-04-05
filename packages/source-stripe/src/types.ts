@@ -1,4 +1,3 @@
-import type Stripe from 'stripe'
 import type { ListFn, RetrieveFn } from '@stripe/sync-openapi'
 import type { RevalidateEntityName } from './resourceRegistry.js'
 
@@ -49,7 +48,7 @@ export type ResourceConfig = BaseResourceConfig & {
 
 export type RevalidateEntity = RevalidateEntityName
 
-export const SUPPORTED_WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
+export const SUPPORTED_WEBHOOK_EVENTS: string[] = [
   'charge.captured',
   'charge.expired',
   'charge.failed',

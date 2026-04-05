@@ -1,21 +1,21 @@
 import type { ConfiguredCatalog, Message } from '@stripe/sync-protocol'
 import http from 'node:http'
-import type Stripe from 'stripe'
+import type { StripeEvent } from './spec.js'
 import type { Config, WebhookInput } from './index.js'
 import type { ResourceConfig } from './types.js'
 import { processStripeEvent } from './process-event.js'
+import { verifyWebhookSignature } from './webhookVerify.js'
 
 // MARK: - processWebhookInput
 
 /**
  * Verify a raw webhook body+signature and delegate to processStripeEvent.
- * Use this at the HTTP transport boundary. For already-verified Stripe.Event
+ * Use this at the HTTP transport boundary. For already-verified StripeEvent
  * objects (WebSocket, events API), call processStripeEvent directly.
  */
 export async function* processWebhookInput(
   input: WebhookInput,
   config: Config,
-  stripe: Stripe,
   catalog: ConfiguredCatalog,
   registry: Record<string, ResourceConfig>,
   streamNames: Set<string>
@@ -24,15 +24,15 @@ export async function* processWebhookInput(
     throw new Error('webhook_secret is required for raw webhook signature verification')
   }
   const signature = (input.headers['stripe-signature'] as string) ?? ''
-  const event = await stripe.webhooks.constructEvent(input.body, signature, config.webhook_secret)
-  yield* processStripeEvent(event, config, stripe, catalog, registry, streamNames)
+  const event = verifyWebhookSignature(input.body, signature, config.webhook_secret)
+  yield* processStripeEvent(event, config, catalog, registry, streamNames)
 }
 
 // MARK: - LiveInput queue
 
 /** An item in the live input queue. HTTP webhooks include resolve/reject for backpressure. */
 export type LiveInput = {
-  data: WebhookInput | Stripe.Event
+  data: WebhookInput | StripeEvent
   resolve?: () => void
   reject?: (err: Error) => void
 }
@@ -60,21 +60,13 @@ export function createInputQueue() {
 
   async function* drain(
     config: Config,
-    stripe: Stripe,
     catalog: ConfiguredCatalog,
     registry: Record<string, ResourceConfig>,
     streamNames: Set<string>
   ): AsyncGenerator<Message> {
     while (queue.length > 0) {
       const queued = queue.shift()!
-      yield* processStripeEvent(
-        queued.data as Stripe.Event,
-        config,
-        stripe,
-        catalog,
-        registry,
-        streamNames
-      )
+      yield* processStripeEvent(queued.data as StripeEvent, config, catalog, registry, streamNames)
     }
   }
 

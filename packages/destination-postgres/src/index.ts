@@ -223,8 +223,10 @@ const destination = {
           if (buffer.length >= batchSize) {
             await flushStream(stream)
           }
-        } else if (msg.type === 'state') {
-          await flushStream(msg.state.stream)
+        } else if (msg.type === 'source_state') {
+          if (msg.source_state.state_type !== 'global') {
+            await flushStream(msg.source_state.stream)
+          }
           yield msg
         }
       }

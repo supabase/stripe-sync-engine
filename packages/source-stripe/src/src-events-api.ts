@@ -1,8 +1,9 @@
 import type { ConfiguredCatalog, LogMessage, Message } from '@stripe/sync-protocol'
 import { stateMsg } from '@stripe/sync-protocol'
-import type Stripe from 'stripe'
+import type { StripeEvent } from './spec.js'
 import type { Config, StripeStreamState } from './index.js'
 import type { ResourceConfig } from './types.js'
+import type { StripeClient } from './client.js'
 import { processStripeEvent } from './process-event.js'
 
 // MARK: - Events polling
@@ -11,14 +12,14 @@ const EVENTS_MAX_AGE_DAYS = 25
 
 export async function* pollEvents(opts: {
   config: Config
-  stripe: Stripe
+  client: StripeClient
   catalog: ConfiguredCatalog
   registry: Record<string, ResourceConfig>
   streamNames: Set<string>
   state: Record<string, StripeStreamState> | undefined
   startTimestamp: number
 }): AsyncGenerator<Message> {
-  const { config, stripe, catalog, registry, streamNames, state, startTimestamp } = opts
+  const { config, client, catalog, registry, streamNames, state, startTimestamp } = opts
 
   if (!config.poll_events) return
 
@@ -63,29 +64,34 @@ export async function* pollEvents(opts: {
     } satisfies LogMessage
   }
 
-  // Fetch events since cursor (API returns newest-first)
-  const events: Stripe.Event[] = []
-  for await (const event of stripe.events.list({ created: { gt: cursor } })) {
-    events.push(event)
+  // Fetch all events since cursor via pagination (API returns newest-first)
+  const events: StripeEvent[] = []
+  let startingAfter: string | undefined
+  let hasMore = true
+
+  while (hasMore) {
+    const page = await client.listEvents({
+      created: { gt: cursor },
+      limit: 100,
+      starting_after: startingAfter,
+    })
+    events.push(...page.data)
+    hasMore = page.has_more
+    if (page.data.length > 0) {
+      startingAfter = page.data[page.data.length - 1]!.id
+    }
   }
 
   // Process oldest-first
   events.reverse()
 
   for (const event of events) {
-    for await (const msg of processStripeEvent(
-      event,
-      config,
-      stripe,
-      catalog,
-      registry,
-      streamNames
-    )) {
-      if (msg.type === 'state') {
+    for await (const msg of processStripeEvent(event, config, catalog, registry, streamNames)) {
+      if (msg.type === 'source_state' && msg.source_state.state_type !== 'global') {
         // Intercept state messages to preserve complete status + update events_cursor
-        const existing = state?.[msg.state.stream]
+        const existing = state?.[msg.source_state.stream]
         yield stateMsg({
-          stream: msg.state.stream,
+          stream: msg.source_state.stream,
           data: {
             page_cursor: existing?.page_cursor ?? null,
             status: 'complete' as const,

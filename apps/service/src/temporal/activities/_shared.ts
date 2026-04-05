@@ -1,5 +1,5 @@
 import { heartbeat } from '@temporalio/activity'
-import type { Message, Engine } from '@stripe/sync-engine'
+import type { Message, Engine, SyncState } from '@stripe/sync-engine'
 import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
@@ -105,7 +105,7 @@ export function createActivitiesContext(opts: {
 
 export interface RunResult {
   errors: Array<{ message: string; failure_type?: string; stream?: string }>
-  state: Record<string, unknown>
+  state: SyncState
 }
 
 export async function* asIterable<T>(items: T[]): AsyncIterable<T> {
@@ -129,15 +129,17 @@ export function collectError(message: Message): RunResult['errors'][number] | nu
 
 export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
   errors: RunResult['errors']
-  state: Record<string, unknown>
+  state: SyncState
   records: Message[]
-  controls: Array<Record<string, unknown>>
+  sourceConfig?: Record<string, unknown>
+  destConfig?: Record<string, unknown>
   eof?: { reason: string }
 }> {
   const errors: RunResult['errors'] = []
-  const state: Record<string, unknown> = {}
+  const state: SyncState = { streams: {}, global: {} }
   const records: Message[] = []
-  const controls: Array<Record<string, unknown>> = []
+  let sourceConfig: Record<string, unknown> | undefined
+  let destConfig: Record<string, unknown> | undefined
   let eof: { reason: string } | undefined
   let count = 0
 
@@ -146,15 +148,21 @@ export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
     if (message.type === 'eof') {
       eof = { reason: message.eof.reason }
     } else if (message.type === 'control') {
-      if (message.control.control_type === 'connector_config') {
-        controls.push(message.control.config)
+      if (message.control.control_type === 'source_config') {
+        sourceConfig = message.control.source_config!
+      } else if (message.control.control_type === 'destination_config') {
+        destConfig = message.control.destination_config!
       }
     } else {
       const error = collectError(message)
       if (error) {
         errors.push(error)
-      } else if (message.type === 'state') {
-        state[message.state.stream] = message.state.data
+      } else if (message.type === 'source_state') {
+        if (message.source_state.state_type === 'global') {
+          Object.assign(state.global, message.source_state.data as Record<string, unknown>)
+        } else {
+          state.streams[message.source_state.stream] = message.source_state.data
+        }
       } else if (message.type === 'record') {
         records.push(message)
       }
@@ -163,5 +171,5 @@ export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
   }
   if (count % 50 !== 0) heartbeat({ messages: count })
 
-  return { errors, state, records, controls, eof }
+  return { errors, state, records, sourceConfig, destConfig, eof }
 }

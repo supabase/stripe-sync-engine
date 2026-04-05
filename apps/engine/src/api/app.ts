@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
 import pg from 'pg'
-import type { Message, ConnectorResolver } from '../lib/index.js'
+import type { Message, ConnectorResolver, TraceMessage } from '../lib/index.js'
 import {
   createEngine,
   createConnectorSchemas,
@@ -11,7 +11,7 @@ import {
   ConnectorInfo,
   ConnectorListItem,
 } from '../lib/index.js'
-import { endpointTable } from './openapi-utils.js'
+import { endpointTable, patchControlMessageSchema } from './openapi-utils.js'
 import {
   Message as MessageSchema,
   DiscoverOutput as DiscoverOutputSchema,
@@ -20,6 +20,7 @@ import {
   CheckOutput as CheckOutputSchema,
   SetupOutput as SetupOutputSchema,
   TeardownOutput as TeardownOutputSchema,
+  SyncState,
 } from '@stripe/sync-protocol'
 
 // Raw $refs for NDJSON content schemas — avoids zod-openapi generating *Output
@@ -58,12 +59,28 @@ function syncRequestContext(pipeline: {
   }
 }
 
+function traceError(err: unknown): TraceMessage {
+  const message = err instanceof Error ? err.message : String(err)
+  const stack_trace = err instanceof Error ? err.stack : undefined
+  return {
+    type: 'trace',
+    trace: {
+      trace_type: 'error',
+      error: {
+        failure_type: 'system_error',
+        message,
+        ...(stack_trace ? { stack_trace } : {}),
+      },
+    },
+  }
+}
+
 async function* logApiStream<T>(
   label: string,
   iter: AsyncIterable<T>,
   context: Record<string, unknown>,
   startedAt = Date.now()
-): AsyncIterable<T> {
+): AsyncIterable<T | TraceMessage> {
   let itemCount = 0
   try {
     for await (const item of iter) {
@@ -76,7 +93,7 @@ async function* logApiStream<T>(
       { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
       `${label} failed`
     )
-    throw error
+    yield traceError(error)
   }
 }
 
@@ -112,7 +129,12 @@ export async function createApp(resolver: ConnectorResolver) {
   // ── Typed header schemas (transform + pipe for runtime validation,
   //    .meta({ param: { content } }) for OAS content encoding) ────
 
-  const { PipelineConfig: TypedPipelineConfig, SourceInput } = createConnectorSchemas(resolver)
+  const {
+    PipelineConfig: TypedPipelineConfig,
+    SourceInput,
+    sourceConfigNames,
+    destConfigNames,
+  } = createConnectorSchemas(resolver)
 
   const jsonParse = (s: string, ctx: z.RefinementCtx) => {
     try {
@@ -135,14 +157,28 @@ export async function createApp(resolver: ConnectorResolver) {
   const xStateHeader = z
     .string()
     .transform(jsonParse)
-    .pipe(z.record(z.string(), z.unknown()))
+    .transform((obj: Record<string, unknown>) =>
+      // Accept both new format { streams, global } and old flat format { stream_name: data }.
+      'streams' in obj && 'global' in obj ? obj : { streams: obj, global: {} }
+    )
+    .pipe(SyncState)
     .optional()
     .meta({
-      description: 'JSON-encoded per-stream cursor state',
+      description: 'JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state',
+      param: { content: { 'application/json': {} } },
+    })
+
+  const xSourceHeader = z
+    .string()
+    .transform(jsonParse)
+    .pipe(z.object({ type: z.string() }).catchall(z.unknown()))
+    .meta({
+      description: 'JSON-encoded source config ({ type, ...config })',
       param: { content: { 'application/json': {} } },
     })
 
   const pipelineHeaders = z.object({ 'x-pipeline': xPipelineHeader })
+  const sourceHeaders = z.object({ 'x-source': xSourceHeader })
   const allSyncHeaders = z.object({
     'x-pipeline': xPipelineHeader,
     'x-state': xStateHeader,
@@ -177,12 +213,30 @@ export async function createApp(resolver: ConnectorResolver) {
       summary: 'Health check',
       responses: {
         200: {
-          content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+          content: {
+            'application/json': {
+              schema: z.object({
+                ok: z.literal(true),
+                commit: z.string().optional(),
+                commit_url: z.string().optional(),
+                build_date: z.string().optional(),
+              }),
+            },
+          },
           description: 'Server is healthy',
         },
       },
     }),
-    (c) => c.json({ ok: true as const }, 200)
+    (c) =>
+      c.json(
+        {
+          ok: true as const,
+          commit: process.env.GIT_COMMIT,
+          commit_url: process.env.COMMIT_URL,
+          build_date: process.env.BUILD_DATE,
+        },
+        200
+      )
   )
 
   const pipelineCheckRoute = createRoute({
@@ -267,7 +321,7 @@ export async function createApp(resolver: ConnectorResolver) {
     tags: ['Stateless Sync API'],
     summary: 'Discover available streams',
     description: 'Streams NDJSON messages (catalog, logs, traces) for the configured source.',
-    requestParams: { header: pipelineHeaders },
+    requestParams: { header: sourceHeaders },
     responses: {
       200: {
         description: 'NDJSON stream of discover messages',
@@ -277,8 +331,9 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(sourceDiscoverRoute, (c) => {
-    const pipeline = c.req.valid('header')['x-pipeline']
-    return ndjsonResponse(engine.source_discover(pipeline.source))
+    const source = c.req.valid('header')['x-source']
+    const context = { path: '/source_discover', sourceName: source.type }
+    return ndjsonResponse(logApiStream('Engine API /source_discover', engine.source_discover(source), context))
   })
 
   const pipelineReadRoute = createRoute({
@@ -308,7 +363,7 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineReadRoute, async (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
-    const state = c.req.valid('header')['x-state'] as Record<string, unknown> | undefined
+    const state = c.req.valid('header')['x-state']
     const { state_limit, time_limit } = c.req.valid('query')
     const inputPresent = hasBody(c)
     const context = { path: '/pipeline_read', inputPresent, ...syncRequestContext(pipeline) }
@@ -317,14 +372,13 @@ export async function createApp(resolver: ConnectorResolver) {
 
     let input: AsyncIterable<unknown> | undefined
     if (inputPresent) {
-      const sourceType = pipeline.source.type
       if (SourceInput) {
-        // Validate each NDJSON line against the SourceInput discriminated union,
-        // then unwrap the connector-specific payload for source.read().
+        // Validate each NDJSON line against the SourceInput envelope,
+        // then unwrap the source_input payload for source.read().
         input = (async function* () {
           for await (const msg of parseNdjsonStream(c.req.raw.body!)) {
             const parsed = SourceInput.parse(msg)
-            yield (parsed as Record<string, unknown>)[sourceType]
+            yield (parsed as { source_input: unknown }).source_input
           }
         })()
       } else {
@@ -404,7 +458,7 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineSyncRoute, async (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
-    const state = c.req.valid('header')['x-state'] as Record<string, unknown> | undefined
+    const state = c.req.valid('header')['x-state']
     const { state_limit, time_limit } = c.req.valid('query')
     const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
     const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit }, input)
@@ -534,6 +588,10 @@ export async function createApp(resolver: ConnectorResolver) {
         },
       },
     })
+
+    // Patch ControlMessage's source_config/destination_config to reference typed
+    // connector config schemas instead of the protocol's untyped Record<string, unknown>.
+    patchControlMessageSchema(spec, sourceConfigNames, destConfigNames)
 
     spec.info.description =
       (spec.info.description ?? '') + '\n\n## Endpoints\n\n' + endpointTable(spec)

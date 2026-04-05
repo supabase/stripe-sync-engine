@@ -30,7 +30,7 @@ function record(stream: string, data: Record<string, unknown>): DestinationInput
 }
 
 function state(stream: string, data: unknown): DestinationInput {
-  return { type: 'state', state: { stream, data } }
+  return { type: 'source_state', source_state: { stream, data } }
 }
 
 const catalog = { streams: [] } as never
@@ -104,11 +104,11 @@ describe('destination-google-sheets', () => {
     )
 
     // State should be re-emitted (envelope format)
-    const states = output.filter((m) => m.type === 'state')
+    const states = output.filter((m) => m.type === 'source_state')
     expect(states).toHaveLength(1)
     expect(states[0]).toMatchObject({
-      type: 'state',
-      state: { stream: 'orders', data: { cursor: 'o2' } },
+      type: 'source_state',
+      source_state: { stream: 'orders', data: { cursor: 'o2' } },
     })
 
     // All 3 records should be written (2 flushed by state, 1 flushed at end)

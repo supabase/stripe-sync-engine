@@ -5,7 +5,7 @@ import { createEngine } from '../lib/index.js'
 import type { ConnectorResolver } from '../lib/index.js'
 import { sourceTest } from '../lib/index.js'
 import destination from '@stripe/sync-destination-postgres'
-import type { RecordMessage, StateMessage } from '../lib/index.js'
+import type { RecordMessage, SourceStateMessage } from '../lib/index.js'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle
@@ -88,8 +88,8 @@ function record(stream: string, id: string, data?: Record<string, unknown>): Rec
   }
 }
 
-function state(stream: string, data: unknown): StateMessage {
-  return { type: 'state', state: { stream, data } }
+function state(stream: string, data: unknown): SourceStateMessage {
+  return { type: 'source_state', source_state: { stream, data } }
 }
 
 function makeResolver(): ConnectorResolver {
@@ -144,12 +144,12 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     for await (const _ of engine.pipeline_setup(pipeline)) {
     }
     for await (const msg of engine.pipeline_sync(pipeline, undefined, toAsync(input))) {
-      if (msg.type === 'state') {
+      if (msg.type === 'source_state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
            VALUES ($1, $2)
            ON CONFLICT (stream) DO UPDATE SET data = $2`,
-          [msg.state.stream, JSON.stringify(msg.state.data)]
+          [msg.source_state.stream, JSON.stringify(msg.source_state.data)]
         )
       }
     }
@@ -195,12 +195,12 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       { state: loadedState },
       toAsync(input)
     )) {
-      if (msg.type === 'state') {
+      if (msg.type === 'source_state') {
         await pool.query(
           `INSERT INTO "${SCHEMA}"."${STATE_TABLE}" (stream, data)
            VALUES ($1, $2)
            ON CONFLICT (stream) DO UPDATE SET data = $2`,
-          [msg.state.stream, JSON.stringify(msg.state.data)]
+          [msg.source_state.stream, JSON.stringify(msg.source_state.data)]
         )
       }
     }

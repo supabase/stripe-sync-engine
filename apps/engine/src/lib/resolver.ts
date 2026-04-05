@@ -211,8 +211,8 @@ async function configSchemaFromSpec(connector: {
   // fromJSONSchema({}) returns ZodAny — fall back to empty object for composability
   const configSchema = schema instanceof z.ZodObject ? schema : z.object({})
   let rawInputJsonSchema: Record<string, unknown> | undefined
-  if (specPayload.input) {
-    const { $schema: _unused2, ...inputSchema } = specPayload.input
+  if (specPayload.source_input) {
+    const { $schema: _unused2, ...inputSchema } = specPayload.source_input
     rawInputJsonSchema = inputSchema
   }
   return { configSchema, rawConfigJsonSchema, rawInputJsonSchema }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { channel, merge, split, map } from './stream-utils.js'
+import { channel, merge, split, map } from './async-iterable-utils.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = []
@@ -57,9 +57,47 @@ describe('merge', () => {
     const result = await collect(merge(fromArray([]), fromArray([])))
     expect(result).toEqual([])
   })
+
+  it('propagates rejection from one iterable without unhandled rejection', async () => {
+    const good = fromArray([1, 2, 3])
+    async function* bad(): AsyncIterable<number> {
+      throw new Error('boom')
+    }
+    await expect(collect(merge(good, bad()))).rejects.toThrow('boom')
+  })
+
+  it('propagates rejection even when the failing iterable is slower', async () => {
+    async function* delayed(): AsyncIterable<number> {
+      yield 1
+      throw new Error('delayed boom')
+    }
+    const result: number[] = []
+    await expect(async () => {
+      for await (const item of merge(fromArray([10, 20]), delayed())) {
+        result.push(item)
+      }
+    }).rejects.toThrow('delayed boom')
+    // Should have yielded some items before the error
+    expect(result.length).toBeGreaterThan(0)
+  })
 })
 
 describe('split', () => {
+  it('closes both channels when source throws (no unhandled rejection)', async () => {
+    async function* failing(): AsyncIterable<number> {
+      yield 1
+      yield 2
+      throw new Error('source failed')
+    }
+    const isEven = (n: number): n is number => n % 2 === 0
+    const [evens, odds] = split(failing(), isEven)
+
+    // Both channels should close (the error is swallowed, but iteration ends)
+    const [evenResult, oddResult] = await Promise.all([collect(evens), collect(odds)])
+    expect(evenResult).toEqual([2])
+    expect(oddResult).toEqual([1])
+  })
+
   it('splits by predicate into two streams', async () => {
     const source = fromArray([1, 2, 3, 4, 5, 6])
     const isEven = (n: number): n is number => n % 2 === 0

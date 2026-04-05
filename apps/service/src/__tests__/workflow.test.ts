@@ -10,7 +10,8 @@ type SourceInput = unknown
 // workflowsPath points to the compiled workflow directory.
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
 
-const noErrors: RunResult = { errors: [], state: {} }
+const emptyState = { streams: {}, global: {} }
+const noErrors: RunResult = { errors: [], state: emptyState }
 
 // Workflows now receive only the pipelineId string
 const testPipelineId = 'test_pipe'
@@ -20,15 +21,15 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     discoverCatalog: async () => ({ streams: [] }),
     setup: async () => ({}),
     syncImmediate: async () => noErrors,
-    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: {} }),
-    readIntoQueue: async () => ({ count: 0, state: {} }),
+    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: emptyState }),
+    readIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
-      state: {},
+      state: emptyState,
       written: 0,
       rowAssignments: {},
     }),
-    writeFromQueue: async () => ({ errors: [], state: {}, written: 0 }),
+    writeFromQueue: async () => ({ errors: [], state: emptyState, written: 0 }),
     teardown: async () => {},
     ...overrides,
   }
@@ -213,7 +214,10 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       taskQueue: 'test-queue-7',
       workflowsPath,
       activities: stubActivities({
-        syncImmediate: async () => ({ errors: [], state: { customers: { cursor: 'cus_100' } } }),
+        syncImmediate: async () => ({
+          errors: [],
+          state: { streams: { customers: { cursor: 'cus_100' } }, global: {} },
+        }),
       }),
     })
 
@@ -226,8 +230,8 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
       await new Promise((r) => setTimeout(r, 1500))
 
-      const state = await handle.query('state')
-      expect(state).toHaveProperty('customers')
+      const state = (await handle.query('state')) as { streams: Record<string, unknown> }
+      expect(state.streams).toHaveProperty('customers')
 
       await handle.signal('delete')
       await handle.result()
@@ -252,7 +256,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
         },
         readGoogleSheetsIntoQueue: async () => {
           readCalls++
-          return { count: 0, state: {} }
+          return { count: 0, state: emptyState }
         },
         syncImmediate: async () => {
           syncCalls++
@@ -309,14 +313,14 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
         readGoogleSheetsIntoQueue: async () => {
           readCalls++
           return readCalls === 1
-            ? { count: 1, state: { customers: { cursor: 'cus_1' } } }
-            : { count: 0, state: { customers: { cursor: 'cus_1' } } }
+            ? { count: 1, state: { streams: { customers: { cursor: 'cus_1' } }, global: {} } }
+            : { count: 0, state: { streams: { customers: { cursor: 'cus_1' } }, global: {} } }
         },
         writeGoogleSheetsFromQueue: async (_pipelineId, opts) => {
           writeCatalog = opts?.catalog
           return {
             errors: [],
-            state: { customers: { cursor: 'cus_1' } },
+            state: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
             written: 0,
             rowAssignments: {},
           }

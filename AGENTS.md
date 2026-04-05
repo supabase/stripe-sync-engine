@@ -54,7 +54,7 @@ for the full dependency graph.
 
 0. **This file is an index, not a rulebook** — before adding anything here, check if it belongs in [docs/architecture/principles.md](docs/architecture/principles.md), [docs/architecture/decisions.md](docs/architecture/decisions.md), or another doc first. Only add to AGENTS.md if no better home exists.
 1. **Connector isolation** — sources never import destinations, both depend only on `protocol`. Enforced by `e2e/layers.test.ts`.
-2. **State is a message** — connectors never access state storage directly. State in = `cursor_in`; state out = `StateMessage`.
+2. **State is a message** — connectors never access state storage directly. State in = `cursor_in`; state out = `SourceStateMessage`.
 3. **Snake_case on the wire** — all Zod schemas and JSON wire format use snake_case.
 4. **api_version is required** — always mandatory in Stripe source config. Never optional.
 5. **Tests fail loud** — no silent skips when dependencies are unavailable.
@@ -76,7 +76,7 @@ See [docs/architecture/principles.md](docs/architecture/principles.md) for the c
 
 - All serializable inputs/outputs (Zod schemas, JSON wire format) must use **snake_case** field names.
 - Source connectors must use `console.error` for logging (stdout is the NDJSON stream).
-- Generated OpenAPI specs live in each package's `src/__generated__/openapi.json` — regenerate after route/schema changes.
+- Generated OpenAPI specs live in each package's `src/__generated__/openapi.json`. Run `./scripts/generate-openapi.sh` and commit the output before pushing when schemas change. Never edit generated files by hand.
 - Non-trivial PRs should be accompanied by a plan artifact in `docs/plans/YYYY-MM-DD-<slug>.md`. Save it before or alongside the first implementation commit.
 
 ## Key Gotchas

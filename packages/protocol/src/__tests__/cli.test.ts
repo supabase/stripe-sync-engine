@@ -31,7 +31,7 @@ const mockDestination: Destination = {
   check: async () => ({ status: 'succeeded' }) as CheckResult,
   async *write(_params, $stdin) {
     for await (const msg of $stdin) {
-      if (msg.type === 'state') yield msg
+      if (msg.type === 'source_state') yield msg
     }
   },
 }

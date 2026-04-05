@@ -1,4 +1,5 @@
 import type { Destination, DestinationInput } from '@stripe/sync-protocol'
+import { destinationControlMsg } from '@stripe/sync-protocol'
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'
@@ -150,13 +151,7 @@ export function createDestination(
       // Protect all data tabs with a warning so users know edits may be overwritten
       await protectSheets(sheets, spreadsheetId, sheetIds)
 
-      yield {
-        type: 'control' as const,
-        control: {
-          control_type: 'connector_config' as const,
-          config: { spreadsheet_id: spreadsheetId },
-        },
-      }
+      yield destinationControlMsg({ ...config, spreadsheet_id: spreadsheetId })
     },
 
     async *teardown({ config }) {
@@ -313,9 +308,11 @@ export function createDestination(
             if (appendCount + updateCount >= batchSize) {
               await flushStream(stream)
             }
-          } else if (msg.type === 'state') {
+          } else if (msg.type === 'source_state') {
             // Flush the stream's pending rows, then re-emit the state checkpoint
-            await flushStream(msg.state.stream)
+            if (msg.source_state.state_type !== 'global') {
+              await flushStream(msg.source_state.stream)
+            }
             yield msg
           }
         }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConnectorResolver, Message, StateMessage } from '../lib/index.js'
+import type { ConnectorResolver, Message, SourceStateMessage } from '../lib/index.js'
 import { sourceTest, destinationTest, collectFirst } from '../lib/index.js'
 import { createApp } from './app.js'
 import pg from 'pg'
@@ -156,7 +156,7 @@ describe('GET /openapi.json', () => {
 
     // Individual message types — zod-openapi uses const for z.literal() in OpenAPI 3.1
     expect(schemas.RecordMessage.properties.type.const).toBe('record')
-    expect(schemas.StateMessage.properties.type.const).toBe('state')
+    expect(schemas.SourceStateMessage.properties.type.const).toBe('source_state')
     expect(schemas.TraceMessage.properties.type.const).toBe('trace')
 
     // Message union
@@ -183,6 +183,27 @@ describe('GET /openapi.json', () => {
     const syncNdjson =
       spec.paths['/pipeline_sync']?.post?.responses?.['200']?.content?.['application/x-ndjson']
     expect(syncNdjson.schema.$ref).toBe('#/components/schemas/SyncOutput')
+  })
+
+  it('ControlMessage source_config/destination_config reference typed connector schemas', async () => {
+    const app = await createApp(resolver)
+    const res = await app.request('/openapi.json')
+    const spec = (await res.json()) as any
+    const control = spec.components.schemas.ControlMessage.properties.control
+
+    const sourceVariant = control.oneOf.find(
+      (v: any) => v.properties?.control_type?.const === 'source_config'
+    )
+    expect(sourceVariant.properties.source_config.$ref).toBe(
+      '#/components/schemas/SourceTestConfig'
+    )
+
+    const destVariant = control.oneOf.find(
+      (v: any) => v.properties?.control_type?.const === 'destination_config'
+    )
+    expect(destVariant.properties.destination_config.$ref).toBe(
+      '#/components/schemas/DestinationTestConfig'
+    )
   })
 
   it('/setup spec documents 200 response (not 204)', async () => {
@@ -369,7 +390,7 @@ describe('POST /read', () => {
           emitted_at: new Date().toISOString(),
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
     ])
     const res = await app.request('/pipeline_read', {
       method: 'POST',
@@ -383,7 +404,7 @@ describe('POST /read', () => {
     const events = await readNdjson<Message>(res)
     expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
-    expect(events[1]!.type).toBe('state')
+    expect(events[1]!.type).toBe('source_state')
     expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
@@ -460,7 +481,7 @@ describe('POST /read', () => {
           emitted_at: new Date().toISOString(),
         },
       }
-      const body = toNdjson([{ type: 'test', test: record }])
+      const body = toNdjson([{ type: 'source_input', source_input: record }])
       const res = await inputApp.request('/pipeline_read', {
         method: 'POST',
         headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
@@ -474,7 +495,7 @@ describe('POST /read', () => {
 
     it('rejects input that fails the SourceInput schema', async () => {
       // Missing required 'type' field in the inner payload
-      const body = toNdjson([{ type: 'test', test: { noTypeField: true } }])
+      const body = toNdjson([{ type: 'source_input', source_input: { noTypeField: true } }])
       const res = await inputApp.request('/pipeline_read', {
         method: 'POST',
         headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
@@ -498,7 +519,7 @@ describe('POST /read', () => {
             emitted_at: new Date().toISOString(),
           },
         },
-        { type: 'state', state: { stream: 'customers', data: {} } },
+        { type: 'source_state', source_state: { stream: 'customers', data: {} } },
       ])
       const res = await inputApp.request('/pipeline_sync', {
         method: 'POST',
@@ -507,7 +528,7 @@ describe('POST /read', () => {
       })
       expect(res.status).toBe(200)
       const events = await readNdjson<Record<string, unknown>>(res)
-      expect(events.some((e) => e.type === 'state' || e.type === 'eof')).toBe(true)
+      expect(events.some((e) => e.type === 'source_state' || e.type === 'eof')).toBe(true)
     })
   })
 })
@@ -526,8 +547,8 @@ describe('POST /write', () => {
         },
       },
       {
-        type: 'state',
-        state: {
+        type: 'source_state',
+        source_state: {
           stream: 'customers',
           data: { cursor: 'cus_1' },
         },
@@ -544,11 +565,11 @@ describe('POST /write', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readNdjson<StateMessage>(res)
-    // destinationTest passes through state messages only
+    const events = await readNdjson<SourceStateMessage>(res)
+    // destinationTest passes through source_state messages only
     expect(events).toHaveLength(1)
-    expect(events[0]!.type).toBe('state')
-    expect((events[0] as StateMessage).state.stream).toBe('customers')
+    expect(events[0]!.type).toBe('source_state')
+    expect((events[0] as SourceStateMessage).source_state.stream).toBe('customers')
   })
 
   it('returns 400 when body is missing', async () => {
@@ -577,7 +598,7 @@ describe('POST /sync', () => {
           emitted_at: new Date().toISOString(),
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
     ])
     const res = await app.request('/pipeline_sync', {
       method: 'POST',
@@ -590,9 +611,9 @@ describe('POST /sync', () => {
 
     const events = await readNdjson<Record<string, unknown>>(res)
     // pipeline_sync now yields source signals alongside dest output
-    const stateAndEof = events.filter((e) => e.type === 'state' || e.type === 'eof')
+    const stateAndEof = events.filter((e) => e.type === 'source_state' || e.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
-    expect(stateAndEof[0]!.type).toBe('state')
+    expect(stateAndEof[0]!.type).toBe('source_state')
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 })
@@ -614,7 +635,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '1' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
       {
         type: 'record',
         record: {
@@ -623,7 +644,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '2' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '2' } } },
       {
         type: 'record',
         record: {
@@ -647,7 +668,7 @@ describe('state_limit and time_limit', () => {
     // 1 record + 1 state + 1 eof
     expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
-    expect(events[1]!.type).toBe('state')
+    expect(events[1]!.type).toBe('source_state')
     expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
   })
 
@@ -663,7 +684,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '1' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
       {
         type: 'record',
         record: {
@@ -672,7 +693,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '2' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '2' } } },
     ])
     const res = await app.request('/pipeline_sync?state_limit=1', {
       method: 'POST',
@@ -687,7 +708,7 @@ describe('state_limit and time_limit', () => {
     const events = await readNdjson<Message>(res)
     // destinationTest only yields state messages, so we get 1 state + 1 eof
     expect(events).toHaveLength(2)
-    expect(events[0]!.type).toBe('state')
+    expect(events[0]!.type).toBe('source_state')
     expect(events[1]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
   })
 
@@ -703,7 +724,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '1' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
       {
         type: 'record',
         record: {
@@ -712,7 +733,7 @@ describe('state_limit and time_limit', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       },
-      { type: 'state', state: { stream: 'customers', data: { cursor: '2' } } },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '2' } } },
     ])
     const res = await app.request('/pipeline_read', {
       method: 'POST',
@@ -749,6 +770,71 @@ describe('error handling', () => {
     expect(body.error).toEqual(
       expect.arrayContaining([expect.objectContaining({ message: 'Invalid JSON' })])
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// POST /source_discover
+// ---------------------------------------------------------------------------
+
+describe('POST /source_discover', () => {
+  it('streams a catalog message from a working source', async () => {
+    const app = await createApp(resolver)
+    const source = JSON.stringify({
+      type: 'test',
+      test: { streams: { customers: {}, products: {} } },
+    })
+
+    const res = await app.request('/source_discover', {
+      method: 'POST',
+      headers: { 'X-Source': source },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
+    const events = await readNdjson<Record<string, unknown>>(res)
+    const catalogs = events.filter((e) => e.type === 'catalog')
+    expect(catalogs).toHaveLength(1)
+    const catalog = (catalogs[0] as any).catalog
+    const streamNames = catalog.streams.map((s: any) => s.name)
+    expect(streamNames).toContain('customers')
+    expect(streamNames).toContain('products')
+  })
+
+  it('emits a trace error message when discover throws instead of silently closing', async () => {
+    const failingSource = {
+      ...sourceTest,
+      async *discover(): AsyncIterable<import('@stripe/sync-protocol').DiscoverOutput> {
+        throw new Error('Could not resolve Stripe OpenAPI spec: network unreachable')
+      },
+    }
+    const failingResolver: ConnectorResolver = {
+      resolveSource: async () => failingSource,
+      resolveDestination: resolver.resolveDestination,
+      sources: resolver.sources,
+      destinations: resolver.destinations,
+    }
+    const app = await createApp(failingResolver)
+
+    const res = await app.request('/source_discover', {
+      method: 'POST',
+      headers: { 'X-Source': JSON.stringify({ type: 'test', test: {} }) },
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Record<string, unknown>>(res)
+    const traces = events.filter((e) => e.type === 'trace')
+    expect(traces).toHaveLength(1)
+    const trace = (traces[0] as any).trace
+    expect(trace.trace_type).toBe('error')
+    expect(trace.error.failure_type).toBe('system_error')
+    expect(trace.error.message).toContain('network unreachable')
+  })
+
+  it('returns 400 when X-Source header is missing', async () => {
+    const app = await createApp(resolver)
+    const res = await app.request('/source_discover', { method: 'POST' })
+    expect(res.status).toBe(400)
   })
 })
 

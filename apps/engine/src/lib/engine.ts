@@ -11,8 +11,9 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   SyncOutput,
+  SyncState,
   RecordMessage,
-  StateMessage,
+  SourceStateMessage,
   collectFirst,
   split,
   merge,
@@ -27,8 +28,8 @@ import { logger } from '../logger.js'
 // MARK: - Engine interface
 
 export const SourceReadOptions = z.object({
-  /** Per-stream state cursors carried in from the previous sync run. */
-  state: z.record(z.string(), z.unknown()).optional(),
+  /** Aggregate state (per-stream + global) carried in from the previous sync run. */
+  state: SyncState.optional(),
   /** Stop after emitting this many state messages (useful for paging). */
   state_limit: z.number().int().positive().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */
@@ -421,7 +422,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         messages,
         enforceCatalog(filteredCatalog),
         log,
-        filterType('record', 'state')
+        filterType('record', 'source_state')
       )
       const destOutput = connector.write(
         { config: destConfig, catalog: filteredCatalog },
@@ -447,8 +448,8 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
       // Split: data + eof → destination path, source signals → caller
       // Eof from pipeline_read is excluded from source signals (pipeline_sync adds its own)
-      const isDataOrEof = (msg: Message): msg is RecordMessage | StateMessage =>
-        msg.type === 'record' || msg.type === 'state' || msg.type === 'eof'
+      const isDataOrEof = (msg: Message): msg is RecordMessage | SourceStateMessage =>
+        msg.type === 'record' || msg.type === 'source_state' || msg.type === 'eof'
       const [dataStream, sourceSignals] = split(readOutput, isDataOrEof)
 
       // Set up destination inline — we need control of the stream split
@@ -461,7 +462,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         dataStream,
         enforceCatalog(filteredCatalog),
         log,
-        filterType('record', 'state')
+        filterType('record', 'source_state')
       )
       const destOutput = destConnector.write(
         { config: destConfig, catalog: filteredCatalog },

@@ -15,7 +15,7 @@ import type {
   Message,
   RecordMessage,
   Source,
-  StateMessage,
+  SourceStateMessage,
   Stream,
 } from './sync-engine-types'
 
@@ -53,7 +53,11 @@ export const source: Source = {
     }
 
     yield { type: 'stream_status', stream: 'users', status: 'complete' } as Message
-    yield { type: 'state', stream: 'users', data: { offset: users.length } } satisfies StateMessage
+    yield {
+      type: 'source_state',
+      stream: 'users',
+      data: { offset: users.length },
+    } satisfies SourceStateMessage
   },
 }
 
@@ -75,7 +79,7 @@ export const destination = {
       if (msg.type === 'record') {
         console.log(JSON.stringify(msg))
       }
-      if (msg.type === 'state') {
+      if (msg.type === 'source_state') {
         yield msg satisfies DestinationOutput
       }
     }
@@ -120,13 +124,13 @@ export async function* selectFields(
 const STATE_DIR = process.env['SYNC_STATE_DIR'] || process.cwd()
 const STATE_FILE = join(STATE_DIR, 'sync-state.json')
 
-function loadState(): StateMessage | undefined {
+function loadState(): SourceStateMessage | undefined {
   if (!existsSync(STATE_FILE)) return undefined
   const saved = JSON.parse(readFileSync(STATE_FILE, 'utf-8'))
-  return { type: 'state', stream: saved.stream, data: saved.data }
+  return { type: 'source_state', stream: saved.stream, data: saved.data }
 }
 
-function saveState(state: StateMessage): void {
+function saveState(state: SourceStateMessage): void {
   const payload = { stream: state.stream, data: state.data }
   writeFileSync(STATE_FILE, JSON.stringify(payload, null, 2) + '\n')
   console.error(`[state] saved → ${STATE_FILE}`)
@@ -152,7 +156,7 @@ export async function* forward(
   messages: AsyncIterableIterator<Message>
 ): AsyncIterableIterator<DataMessage> {
   for await (const msg of messages) {
-    if (msg.type === 'record' || msg.type === 'state') {
+    if (msg.type === 'record' || msg.type === 'source_state') {
       yield msg
     } else if (msg.type === 'log') {
       console.error(`[log:${msg.level}] ${msg.message}`)
@@ -170,9 +174,9 @@ export async function* forward(
  */
 export async function* collect(
   output: AsyncIterableIterator<DestinationOutput>
-): AsyncIterableIterator<StateMessage> {
+): AsyncIterableIterator<SourceStateMessage> {
   for await (const msg of output) {
-    if (msg.type === 'state') {
+    if (msg.type === 'source_state') {
       saveState(msg)
       yield msg
     } else if (msg.type === 'error') {

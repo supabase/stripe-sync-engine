@@ -2,7 +2,7 @@ import type {
   DestinationInput,
   DestinationOutput,
   RecordMessage,
-  StateMessage,
+  SourceStateMessage,
 } from '@stripe/sync-protocol'
 import { google } from 'googleapis'
 import { expect, it } from 'vitest'
@@ -64,9 +64,9 @@ describeWithEnv(
         },
       ]
 
-      const stateMsg: StateMessage = {
-        type: 'state',
-        state: {
+      const stateMsg: SourceStateMessage = {
+        type: 'source_state',
+        source_state: {
           stream: streamName,
           data: { cursor: 'cus_3' },
         },
@@ -93,11 +93,11 @@ describeWithEnv(
       }
 
       // State re-emitted (envelope format)
-      const states = output.filter((m) => m.type === 'state')
+      const states = output.filter((m) => m.type === 'source_state')
       expect(states).toHaveLength(1)
       expect(states[0]).toMatchObject({
-        type: 'state',
-        state: { stream: streamName, data: { cursor: 'cus_3' } },
+        type: 'source_state',
+        source_state: { stream: streamName, data: { cursor: 'cus_3' } },
       })
 
       // No trace errors

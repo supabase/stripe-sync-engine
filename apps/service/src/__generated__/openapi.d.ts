@@ -128,8 +128,8 @@ export interface components {
             account_id?: string;
             /** @description Whether this is a live mode sync */
             livemode?: boolean;
-            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-            api_version?: string;
+            /** @constant */
+            api_version?: "2026-03-25.dahlia";
             /**
              * Format: uri
              * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)

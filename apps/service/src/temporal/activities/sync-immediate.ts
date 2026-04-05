@@ -13,14 +13,20 @@ export function createSyncImmediateActivity(context: ActivitiesContext) {
     const { id: _, ...config } = pipeline
     const { input: inputArr, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
-    const { errors, state, controls, eof } = await drainMessages(
+    const { errors, state, sourceConfig, destConfig, eof } = await drainMessages(
       context.engine.pipeline_sync(config, readOpts, input)
     )
-    // Persist source config updates from control messages (e.g. OAuth token refresh)
-    if (controls.length > 0) {
-      const merged = controls.reduce((acc, c) => ({ ...acc, ...c }), {})
+    // Full replacement — connector emits the complete updated config
+    if (sourceConfig) {
+      const type = pipeline.source.type
       await context.pipelineStore.update(pipelineId, {
-        source: { ...pipeline.source, ...merged },
+        source: { type, [type]: sourceConfig },
+      })
+    }
+    if (destConfig) {
+      const type = pipeline.destination.type
+      await context.pipelineStore.update(pipelineId, {
+        destination: { type, [type]: destConfig },
       })
     }
     return { errors, state, eof }

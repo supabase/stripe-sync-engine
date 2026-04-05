@@ -5,7 +5,7 @@ import type { ConnectorResolver, Message } from './index.js'
 import { sourceTest, destinationTest, collectFirst } from './index.js'
 import { createApp } from '../api/app.js'
 import { createRemoteEngine } from './remote-engine.js'
-import type { PipelineConfig, StateMessage } from '@stripe/sync-protocol'
+import type { PipelineConfig, SourceStateMessage } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Server setup
@@ -146,12 +146,15 @@ describe('createRemoteEngine', () => {
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
-        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
+        {
+          type: 'source_state',
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        },
       ]
       const messages = await collect(engine.pipeline_read(pipeline, undefined, asIterable(input)))
       expect(messages).toHaveLength(3)
       expect(messages[0]!.type).toBe('record')
-      expect(messages[1]!.type).toBe('state')
+      expect(messages[1]!.type).toBe('source_state')
       expect(messages[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
 
@@ -176,12 +179,15 @@ describe('createRemoteEngine', () => {
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
-        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
+        {
+          type: 'source_state',
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        },
       ]
       const output = await collect(engine.pipeline_write(pipeline, asIterable(messages)))
       expect(output).toHaveLength(1)
-      expect(output[0]!.type).toBe('state')
-      expect((output[0] as StateMessage).state.stream).toBe('customers')
+      expect(output[0]!.type).toBe('source_state')
+      expect((output[0] as SourceStateMessage).source_state.stream).toBe('customers')
     })
   })
 
@@ -197,13 +203,16 @@ describe('createRemoteEngine', () => {
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         },
-        { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
+        {
+          type: 'source_state',
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        },
       ]
       const output = await collect(engine.pipeline_sync(pipeline, undefined, asIterable(input)))
       // pipeline_sync now yields source signals alongside dest output
-      const stateAndEof = output.filter((m) => m.type === 'state' || m.type === 'eof')
+      const stateAndEof = output.filter((m) => m.type === 'source_state' || m.type === 'eof')
       expect(stateAndEof).toHaveLength(2)
-      expect(stateAndEof[0]!.type).toBe('state')
+      expect(stateAndEof[0]!.type).toBe('source_state')
       expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
 

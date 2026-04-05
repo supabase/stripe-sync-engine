@@ -10,17 +10,25 @@ export function createSetupActivity(context: ActivitiesContext) {
       context.engine.pipeline_setup(config),
       'control'
     )
-    const sourceConfigs = controlMsgs
-      .filter((m) => m._emitted_by?.startsWith('source/'))
-      .map((m) => m.control.config)
-    const destConfigs = controlMsgs
-      .filter((m) => m._emitted_by?.startsWith('destination/'))
-      .map((m) => m.control.config)
+    // Full replacement — connector emits the complete updated config, no merging.
+    let sourceConfig: Record<string, unknown> | undefined
+    let destConfig: Record<string, unknown> | undefined
+    for (const m of controlMsgs) {
+      if (m.control.control_type === 'source_config') {
+        sourceConfig = m.control.source_config
+      } else if (m.control.control_type === 'destination_config') {
+        destConfig = m.control.destination_config
+      }
+    }
     const patch: Record<string, unknown> = {}
-    if (sourceConfigs.length > 0)
-      patch.source = { ...pipeline.source, ...Object.assign({}, ...sourceConfigs) }
-    if (destConfigs.length > 0)
-      patch.destination = { ...pipeline.destination, ...Object.assign({}, ...destConfigs) }
+    if (sourceConfig) {
+      const type = pipeline.source.type
+      patch.source = { type, [type]: sourceConfig }
+    }
+    if (destConfig) {
+      const type = pipeline.destination.type
+      patch.destination = { type, [type]: destConfig }
+    }
     if (Object.keys(patch).length > 0) {
       await context.pipelineStore.update(pipelineId, patch)
     }

@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { ConfiguredCatalog, Message, RecordMessage, StateMessage } from '@stripe/sync-protocol'
+import type {
+  ConfiguredCatalog,
+  Message,
+  RecordMessage,
+  SourceStateMessage,
+} from '@stripe/sync-protocol'
 import source from '../index.js'
 import type { StripeStreamState } from '../index.js'
 
@@ -51,7 +56,7 @@ describe('events polling (integration — stripe-mock)', () => {
 
     // stripe-mock should return some events — we expect records + state messages
     const records = messages.filter((m): m is RecordMessage => m.type === 'record')
-    const states = messages.filter((m): m is StateMessage => m.type === 'state')
+    const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
 
     // stripe-mock returns fixture events, so we should get at least something
     // (if stripe-mock has no events, records may be empty — that's still valid)
@@ -74,7 +79,7 @@ describe('events polling (integration — stripe-mock)', () => {
     }
 
     const messages = await collect(source.read({ config, catalog, state }))
-    const states = messages.filter((m): m is StateMessage => m.type === 'state')
+    const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
 
     // Every state message should preserve status: complete
     for (const s of states) {

@@ -34,13 +34,17 @@ export function enforceCatalog(
         } else {
           yield msg
         }
-      } else if (msg.type === 'state') {
-        const cs = streamMap.get(msg.state.stream)
-        if (!cs) {
-          logger.error({ stream: msg.state.stream }, 'Unknown stream not in catalog')
-          continue
+      } else if (msg.type === 'source_state') {
+        if (msg.source_state.state_type === 'global') {
+          yield msg // global state needs no catalog validation
+        } else {
+          const cs = streamMap.get(msg.source_state.stream)
+          if (!cs) {
+            logger.error({ stream: msg.source_state.stream }, 'Unknown stream not in catalog')
+            continue
+          }
+          yield msg
         }
-        yield msg
       } else {
         yield msg
       }
@@ -100,7 +104,13 @@ export function persistState(
 ): (msgs: AsyncIterable<DestinationOutput>) => AsyncIterable<DestinationOutput> {
   return async function* (messages) {
     for await (const msg of messages) {
-      if (msg.type === 'state') await store.set(msg.state.stream, msg.state.data)
+      if (msg.type === 'source_state') {
+        if (msg.source_state.state_type === 'global') {
+          await store.setGlobal(msg.source_state.data)
+        } else {
+          await store.set(msg.source_state.stream, msg.source_state.data)
+        }
+      }
       yield msg
     }
   }
@@ -129,7 +139,7 @@ export function takeLimits<T extends { type: string }>(
         yield { type: 'eof', eof: { reason: 'time_limit' } } as unknown as T
         return
       }
-      if (msg.type === 'state' && opts.state_limit && ++stateCount >= opts.state_limit) {
+      if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
         yield { type: 'eof', eof: { reason: 'state_limit' } } as unknown as T
         return
       }

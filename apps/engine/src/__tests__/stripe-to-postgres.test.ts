@@ -181,7 +181,7 @@ describe('engine read → write', () => {
     const messages = await collect<Message>(engine.pipeline_read(pipeline))
 
     const records = messages.filter((m) => m.type === 'record')
-    const states = messages.filter((m) => m.type === 'state')
+    const states = messages.filter((m) => m.type === 'source_state')
     expect(records.length).toBeGreaterThan(0)
     expect(states.length).toBeGreaterThan(0)
 
@@ -207,7 +207,7 @@ describe('engine read → write', () => {
     const writeOutput = await collect<DestinationOutput>(
       engine.pipeline_write(pipeline, toAsync(readMessages))
     )
-    const stateMessages = writeOutput.filter((s) => s.type === 'state')
+    const stateMessages = writeOutput.filter((s) => s.type === 'source_state')
 
     expect(stateMessages.length).toBeGreaterThan(0)
 
@@ -225,9 +225,9 @@ describe('resumable sync via state', () => {
     const pipeline = makePipeline({ streams: [{ name: targetStream }] })
     const results = await collect(engine.pipeline_sync(pipeline))
 
-    const stateMessages = results.filter((m) => m.type === 'state')
+    const stateMessages = results.filter((m) => m.type === 'source_state')
     expect(stateMessages.length).toBeGreaterThan(0)
-    expect(stateMessages[0]).toMatchObject({ type: 'state', stream: targetStream })
+    expect(stateMessages[0]).toMatchObject({ type: 'source_state', stream: targetStream })
   })
 
   it('pre-seeded complete state skips backfill', async () => {

@@ -1,11 +1,6 @@
-import { Agent } from 'node:http'
 import { describe, expect, it } from 'vitest'
-import { buildStripeClientOptions, type StripeClientConfigInput } from './client.js'
+import { makeClient, StripeRequestError } from './client.js'
 import { getProxyUrl } from './transport.js'
-
-const config: StripeClientConfigInput = {
-  api_key: 'sk_test_fake',
-}
 
 describe('getProxyUrl', () => {
   it('prefers HTTPS_PROXY over HTTP_PROXY', () => {
@@ -22,61 +17,31 @@ describe('getProxyUrl', () => {
   })
 })
 
-describe('buildStripeClientOptions', () => {
-  it('adds a proxy agent and default timeout when HTTPS_PROXY is set', () => {
-    const options = buildStripeClientOptions(config, {
-      HTTPS_PROXY: 'http://proxy.example.test:8080',
-    })
-
-    expect(options.timeout).toBe(10_000)
-    expect(options.httpAgent).toBeInstanceOf(Agent)
+describe('makeClient', () => {
+  it('creates a client with required methods', () => {
+    const client = makeClient({ api_key: 'sk_test_fake' })
+    expect(client.getAccount).toBeTypeOf('function')
+    expect(client.listEvents).toBeTypeOf('function')
+    expect(client.listWebhookEndpoints).toBeTypeOf('function')
+    expect(client.createWebhookEndpoint).toBeTypeOf('function')
+    expect(client.deleteWebhookEndpoint).toBeTypeOf('function')
   })
 
-  it('uses the configured timeout override', () => {
-    const options = buildStripeClientOptions(config, {
-      HTTPS_PROXY: 'http://proxy.example.test:8080',
-      STRIPE_REQUEST_TIMEOUT_MS: '2500',
-    })
-
-    expect(options.timeout).toBe(2500)
-  })
-
-  it('bypasses the proxy for localhost base_url overrides', () => {
-    const options = buildStripeClientOptions(
-      {
-        ...config,
-        base_url: 'http://localhost:12111',
-      },
-      {
-        HTTPS_PROXY: 'http://proxy.example.test:8080',
-      }
-    )
-
-    expect(options.host).toBe('localhost')
-    expect(options.port).toBe(12111)
-    expect(options.protocol).toBe('http')
-    expect(options.httpAgent).toBeUndefined()
-  })
-
-  it('keeps the proxy for external base_url overrides', () => {
-    const options = buildStripeClientOptions(
-      {
-        ...config,
-        base_url: 'https://api.stripe.com',
-      },
-      {
-        HTTPS_PROXY: 'http://proxy.example.test:8080',
-      }
-    )
-
-    expect(options.httpAgent).toBeInstanceOf(Agent)
-  })
-
-  it('throws on an invalid timeout override', () => {
+  it('throws on invalid timeout override', () => {
     expect(() =>
-      buildStripeClientOptions(config, {
-        STRIPE_REQUEST_TIMEOUT_MS: '0',
-      })
+      makeClient({ api_key: 'sk_test_fake' }, { STRIPE_REQUEST_TIMEOUT_MS: '0' })
     ).toThrow('STRIPE_REQUEST_TIMEOUT_MS must be a positive integer')
+  })
+
+  it('StripeRequestError includes status and stripe error details', () => {
+    const err = new StripeRequestError(
+      401,
+      { type: 'invalid_request_error', message: 'Invalid API Key' },
+      'req_123'
+    )
+    expect(err.status).toBe(401)
+    expect(err.stripeError?.type).toBe('invalid_request_error')
+    expect(err.requestId).toBe('req_123')
+    expect(err.message).toBe('Invalid API Key')
   })
 })

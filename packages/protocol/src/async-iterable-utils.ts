@@ -1,7 +1,14 @@
-// Async iterable utilities for streaming message pipelines.
+// Async iterable utilities — generic combinators for any AsyncIterable.
 // Pure primitives — no external deps, no engine-specific imports.
 
-/** Async push/pull channel. No array buffering — uses linked promise pairs. */
+/**
+ * Async push/pull channel. No array buffering — uses linked promise pairs.
+ *
+ * **Error handling:** The channel itself never throws — it is a passive data
+ * structure. Producers call `push()` and `close()`; neither can fail.
+ * Errors must be handled by whoever drives the source that feeds the channel
+ * (see `split` for an example).
+ */
 export function channel<T>(): AsyncIterable<T> & {
   push(value: T): void
   close(): void
@@ -47,7 +54,17 @@ export function channel<T>(): AsyncIterable<T> & {
   })
 }
 
-/** Merge multiple async iterables, yielding whichever produces next. Falsy entries are ignored. */
+/**
+ * Merge multiple async iterables, yielding whichever produces next.
+ * Falsy entries are ignored.
+ *
+ * **Error handling:** If any input iterable rejects, the error propagates to
+ * the consumer on the next iteration. Because `Promise.race` only settles on
+ * one promise at a time, other pending `.next()` promises may reject while
+ * unobserved. Each pending promise has a no-op `.catch()` attached to prevent
+ * Node's unhandled-rejection detector from crashing the process — the
+ * rejection is still observed when `Promise.race` settles on it next.
+ */
 export async function* merge<T>(
   ...iterables: (AsyncIterable<T> | false | null | undefined)[]
 ): AsyncIterable<T> {
@@ -56,11 +73,18 @@ export async function* merge<T>(
     .map((it) => it[Symbol.asyncIterator]())
   const pending = new Map<number, Promise<{ index: number; result: IteratorResult<T> }>>()
 
-  for (const [i, iter] of iterators.entries()) {
-    pending.set(
-      i,
-      iter.next().then((result) => ({ index: i, result }))
-    )
+  const suppress = (p: Promise<unknown>) => {
+    p.catch(() => {})
+    return p
+  }
+  const enqueue = (i: number) => {
+    const p = iterators[i]!.next().then((result) => ({ index: i, result }))
+    suppress(p)
+    pending.set(i, p)
+  }
+
+  for (const [i] of iterators.entries()) {
+    enqueue(i)
   }
 
   while (pending.size > 0) {
@@ -69,10 +93,7 @@ export async function* merge<T>(
       pending.delete(index)
     } else {
       yield result.value
-      pending.set(
-        index,
-        iterators[index]!.next().then((result) => ({ index, result }))
-      )
+      enqueue(index)
     }
   }
 }
@@ -81,6 +102,14 @@ export async function* merge<T>(
  * Split an async iterable into two based on a type-guard predicate.
  * Returns [matches, rest] — both are async iterables connected by channels.
  * Consumption of either drives the source forward.
+ *
+ * **Error handling:** The source is consumed by a background async IIFE that
+ * routes items into two channels. If the source throws, `finally` closes both
+ * channels so consumers see a normal end-of-iteration. The error itself is
+ * swallowed (`.catch(() => {})`) to prevent an unhandled rejection from
+ * crashing the process. This is intentional: `split` has two independent
+ * consumers and no single place to propagate an error to. If you need error
+ * visibility, handle errors on the source *before* passing it to `split`.
  */
 export function split<T, U extends T>(
   iterable: AsyncIterable<T>,
@@ -89,7 +118,6 @@ export function split<T, U extends T>(
   const matches = channel<U>()
   const rest = channel<Exclude<T, U>>()
 
-  // Drive the source in the background — routes items to the correct channel.
   ;(async () => {
     try {
       for await (const item of iterable) {
@@ -103,12 +131,19 @@ export function split<T, U extends T>(
       matches.close()
       rest.close()
     }
-  })()
+  })().catch(() => {})
 
   return [matches, rest]
 }
 
-/** Transform each item in an async iterable. */
+/**
+ * Transform each item in an async iterable.
+ *
+ * **Error handling:** Errors propagate naturally — a throw from the source
+ * iterable or from `fn` rejects the consumer's `for await` loop. No special
+ * machinery is needed because `map` is a simple pass-through generator with
+ * a single consumer.
+ */
 export async function* map<T, U>(
   iterable: AsyncIterable<T>,
   fn: (item: T) => U | Promise<U>

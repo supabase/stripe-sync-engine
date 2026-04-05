@@ -77,8 +77,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       | '/pipeline_write'
       | '/pipeline_sync'
       | '/pipeline_setup'
-      | '/pipeline_teardown'
-      | '/source_discover',
+      | '/pipeline_teardown',
     pipeline: PipelineConfig,
     opts?: SourceReadOptions,
     body?: ReadableStream<Uint8Array>
@@ -136,12 +135,11 @@ export function createRemoteEngine(engineUrl: string): Engine {
     },
 
     async *source_discover(source: PipelineConfig['source']): AsyncIterable<DiscoverOutput> {
-      // Only source config is needed for discover — pass a minimal pipeline header
-      const res = await post('/source_discover', {
-        source,
-        destination: { type: '_' },
-      } as PipelineConfig)
-      yield* parseNdjsonStream<DiscoverOutput>(res.body!)
+      const { response } = await streamPost('/source_discover', {
+        params: { header: { 'x-source': JSON.stringify(source) } },
+      })
+      if (!response.ok) throw new Error(`source_discover failed: ${response.status}`)
+      yield* parseNdjsonStream<DiscoverOutput>(response.body!)
     },
 
     async *pipeline_check(pipeline: PipelineConfig): AsyncIterable<CheckOutput> {

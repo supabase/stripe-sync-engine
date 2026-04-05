@@ -5,7 +5,7 @@ import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
 import { createEngine } from '@stripe/sync-engine'
 import type { ConnectorResolver } from '@stripe/sync-engine'
-import type { StateMessage, DestinationOutput } from '@stripe/sync-protocol'
+import type { SourceStateMessage, DestinationOutput } from '@stripe/sync-protocol'
 import { drain } from '@stripe/sync-protocol'
 import { describeWithEnv } from './test-helpers.js'
 
@@ -27,10 +27,12 @@ const BACKFILL_LIMIT = 10
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function collectStates(iter: AsyncIterable<DestinationOutput>): Promise<StateMessage[]> {
-  const states: StateMessage[] = []
+async function collectStates(
+  iter: AsyncIterable<DestinationOutput>
+): Promise<SourceStateMessage[]> {
+  const states: SourceStateMessage[] = []
   for await (const msg of iter) {
-    if (msg.type === 'state') states.push(msg)
+    if (msg.type === 'source_state') states.push(msg)
   }
   return states
 }
@@ -125,8 +127,11 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
       while (completed.size < STREAMS.length) {
         const { value, done } = await iter.next()
         if (done) throw new Error('Pipeline ended before backfill completed')
-        if (value.type === 'state' && (value.state.data as any)?.status === 'complete') {
-          completed.add(value.state.stream)
+        if (
+          value.type === 'source_state' &&
+          (value.source_state.data as any)?.status === 'complete'
+        ) {
+          completed.add(value.source_state.stream)
         }
       }
       console.log('    Backfill complete, sending product update…')
@@ -151,9 +156,9 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         const { value, done } = result as IteratorResult<DestinationOutput>
         if (done) break
         if (
-          value.type === 'state' &&
-          value.state.stream === 'products' &&
-          (value.state.data as any)?.eventId
+          value.type === 'source_state' &&
+          value.source_state.stream === 'products' &&
+          (value.source_state.data as any)?.eventId
         )
           break
       }

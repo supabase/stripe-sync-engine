@@ -5,16 +5,23 @@ import {
   stripSslParams,
   withPgConnectProxy,
 } from '@stripe/sync-util-postgres'
+import type { SyncState } from '@stripe/sync-protocol'
+
+/** Reserved stream name for global state in the _sync_state table. */
+const GLOBAL_KEY = '_global'
 
 export interface StateStore {
-  get(syncId: string): Promise<Record<string, unknown> | undefined>
+  get(syncId: string): Promise<SyncState | undefined>
   set(syncId: string, stream: string, data: unknown): Promise<void>
+  setGlobal(syncId: string, data: unknown): Promise<void>
   clear(syncId: string): Promise<void>
 }
 
 /**
  * Postgres-backed state store that persists per-stream cursor state
  * in a `_sync_state` table within the destination schema.
+ *
+ * Global state is stored in a reserved row with stream = '_global'.
  *
  * Callers must run migrations (including 0002_sync_state) before using this store.
  */
@@ -29,11 +36,16 @@ export function createPgStateStore(
         [syncId]
       )
       if (rows.length === 0) return undefined
-      const result: Record<string, unknown> = {}
+      const streams: Record<string, unknown> = {}
+      let global: Record<string, unknown> = {}
       for (const row of rows) {
-        result[row.stream] = row.state
+        if (row.stream === GLOBAL_KEY) {
+          global = row.state as Record<string, unknown>
+        } else {
+          streams[row.stream] = row.state
+        }
       }
-      return result
+      return { streams, global }
     },
 
     async set(syncId: string, stream: string, data: unknown) {
@@ -42,6 +54,15 @@ export function createPgStateStore(
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (sync_id, stream) DO UPDATE SET state = $3, updated_at = NOW()`,
         [syncId, stream, JSON.stringify(data)]
+      )
+    },
+
+    async setGlobal(syncId: string, data: unknown) {
+      await pool.query(
+        sql`INSERT INTO "${schema}"."_sync_state" (sync_id, stream, state, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (sync_id, stream) DO UPDATE SET state = $3, updated_at = NOW()`,
+        [syncId, GLOBAL_KEY, JSON.stringify(data)]
       )
     },
 
@@ -57,8 +78,9 @@ export function createPgStateStore(
 
 /** Engine-compatible state store scoped to a single sync_id. */
 export interface ScopedStateStore {
-  get(): Promise<Record<string, unknown> | undefined>
+  get(): Promise<SyncState | undefined>
   set(stream: string, data: unknown): Promise<void>
+  setGlobal(data: unknown): Promise<void>
 }
 
 /**
@@ -74,6 +96,7 @@ export function createScopedPgStateStore(
   return {
     get: () => store.get(syncId),
     set: (stream, data) => store.set(syncId, stream, data),
+    setGlobal: (data) => store.setGlobal(syncId, data),
   }
 }
 

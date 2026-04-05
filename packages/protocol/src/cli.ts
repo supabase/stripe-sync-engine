@@ -175,7 +175,13 @@ export function createConnectorCli(
       async run({ args }) {
         const config = parseConfig(args.config, opts?.configSchema)
         const catalog = parseJsonOrFile(args.catalog)
-        const state = args.state ? parseJsonOrFile(args.state) : undefined
+        const rawState = args.state ? parseJsonOrFile(args.state) : undefined
+        // Accept both SyncState { streams, global } and legacy flat state
+        const state = rawState
+          ? 'streams' in rawState
+            ? (rawState as { streams: Record<string, unknown>; global: Record<string, unknown> })
+            : { streams: rawState, global: {} }
+          : undefined
         await streamToStdout(
           src.read({
             config,

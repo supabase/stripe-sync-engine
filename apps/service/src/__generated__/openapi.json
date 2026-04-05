@@ -989,7 +989,7 @@
           },
           "api_version": {
             "type": "string",
-            "description": "Stripe API version (e.g. 2025-04-30.basil)"
+            "const": "2026-03-25.dahlia"
           },
           "base_url": {
             "type": "string",

@@ -1,4 +1,4 @@
-import Stripe from 'stripe'
+import type { StripeApiList } from '@stripe/sync-openapi'
 
 /**
  * Stripe only sends the first 10 entries by default, the option will actively fetch all entries.
@@ -7,11 +7,11 @@ import Stripe from 'stripe'
 export async function expandEntity<
   K extends { id?: string },
   P extends keyof T,
-  T extends { id?: string } & { [key in P]?: Stripe.ApiList<K> | null },
+  T extends { id?: string } & { [key in P]?: StripeApiList<K> | null },
 >(
   entities: T[],
   property: P,
-  listFn: (id: string, params?: { starting_after?: string }) => Promise<Stripe.ApiList<K>>
+  listFn: (id: string, params?: { starting_after?: string }) => Promise<StripeApiList<K>>
 ) {
   for (const entity of entities) {
     const existingList = entity[property]

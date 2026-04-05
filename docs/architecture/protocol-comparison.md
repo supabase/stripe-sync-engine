@@ -33,15 +33,16 @@ Message-by-message comparison of our protocol (`packages/protocol`) against the
 
 | Field        | Airbyte                           | Sync Engine                       | Notes                                                        |
 | ------------ | --------------------------------- | --------------------------------- | ------------------------------------------------------------ |
-| `state_type` | `enum(LEGACY, STREAM, GLOBAL)`    | —                                 | We only have per-stream state                                |
-| `stream`     | `AirbyteStreamState` object       | `string` (stream name)            | Airbyte wraps in `{stream_descriptor, stream_state}`         |
-| `global`     | `AirbyteGlobalState` object       | —                                 | We don't support global state                                |
+| `state_type` | `enum(LEGACY, STREAM, GLOBAL)`    | `enum('stream', 'global')`        | We skip LEGACY; old messages default to `stream` via Zod     |
+| `stream`     | `AirbyteStreamState` object       | `string` (stream name)            | Only present on `stream`-type messages                       |
+| `global`     | `AirbyteGlobalState` object       | `GlobalStatePayload`              | Sync-wide cursor (e.g. `events_cursor`)                      |
 | `data`       | `object` (deprecated legacy blob) | `unknown` (per-stream checkpoint) | Our `data` is the per-stream checkpoint, not the legacy blob |
 
 **Key difference:** Airbyte supports three state modes (legacy, per-stream, global).
-We only support per-stream state — the `stream` field is a plain string name and
-`data` is the opaque checkpoint. This is simpler but means we can't express
-"all streams share one cursor" (global) without workarounds.
+We skip LEGACY and support both STREAM and GLOBAL via a `state_type` discriminated
+union. Old messages without `state_type` are backward-compatibly parsed as `stream`
+type. The `SyncState` aggregate shape (`{ streams, global }`) replaces the flat
+`Record<string, unknown>` used previously.
 
 ### CATALOG
 
@@ -158,10 +159,8 @@ Airbyte only documents one subtype (`CONNECTOR_CONFIG`). We have one (`connector
 | -------- | ------------------------------------------------ | --------------------------------------------------------------- | ---------------------------------- |
 | `config` | nested under `connectorConfig.config` (`object`) | directly on `ControlPayload.config` (`Record<string, unknown>`) | Airbyte has an extra nesting level |
 
-**Merge semantics:** In both protocols, the orchestrator shallow-merges the emitted
-`config` into the persisted connector config. Airbyte specifies that the merged result
-must be validated against the connector's spec schema before persisting.
-We validate via `getSpecConfig()` (throws on invalid, same as `Message.parse()`).
+**Replacement semantics:** In both protocols, the connector emits the **full updated config**
+and the orchestrator replaces the stored config wholesale — no shallow merging. The engine validates the result against the connector's spec schema before returning
 
 **When control messages can be emitted:**
 
@@ -177,24 +176,21 @@ We validate via `getSpecConfig()` (throws on invalid, same as `Message.parse()`)
 
 ```
 Airbyte:
-  connector.read() emits CONTROL
-    → platform intercepts → merges config → persists to DB
-    → validated against connector spec
+  connector.read() emits CONTROL with full updated config
+    → platform intercepts → replaces stored config → persists to DB
 
 Sync Engine:
-  connector.setup() emits ControlMessage
-    → engine.pipeline_setup() collects via collectControls()
-    → returns SetupResult { source?, destination? }
-    → service setup activity persists patches to pipeline store
+  connector.setup() emits ControlMessage with full updated config
+    → engine.pipeline_setup() yields ControlMessage in SetupOutput stream
+    → service setup activity replaces config in pipeline store
 
-  connector.read() emits ControlMessage
+  connector.read() emits ControlMessage with full updated config
     → engine.pipeline_sync() splits read stream via split()
     → source signals (control, trace, log) tagged with _emitted_by, _ts
     → merged with destination output via merge()
     → yielded as SyncOutput stream
-    → engine validates merged config via getSpecConfig() (throws on invalid)
-    → service drainMessages() collects control configs
-    → service syncImmediate activity persists patches to pipeline store
+    → service drainMessages() captures last control config
+    → service syncImmediate activity replaces config in pipeline store
 ```
 
 **User-initiated config changes (service only):**
@@ -249,7 +245,7 @@ outside the connector protocol.
 ## Summary of Divergences
 
 1. **No namespace** — we encode it in the stream name.
-2. **Per-stream state only** — no global or legacy state modes.
+2. **No legacy state** — we support `stream` and `global` modes but skip `LEGACY`.
 3. **ISO timestamps** — records use ISO 8601 strings, not epoch millis.
 4. **Richer failure types** — `transient_error` and `auth_error` added.
 5. **EOF message** — explicit stream termination reason (no Airbyte equivalent).

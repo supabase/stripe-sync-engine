@@ -12,7 +12,7 @@ import type {
   DestinationInput,
   DestinationOutput,
   Message,
-  StateMessage,
+  SourceStateMessage,
   Stream,
 } from './sync-engine-types'
 import type { Sync } from '../3-sync/sync-types'
@@ -40,7 +40,7 @@ export interface Source {
   discover(): Promise<CatalogMessage>
 
   /** Emit messages (record, state, log, error, stream_status). Finite for backfill, infinite for live. */
-  read(streams: Stream[], state?: StateMessage): AsyncIterableIterator<Message>
+  read(streams: Stream[], state?: SourceStateMessage): AsyncIterableIterator<Message>
 }
 
 // MARK: - Destination
@@ -55,7 +55,7 @@ export interface Source {
  * A destination can be a database, spreadsheet, warehouse, Stripe API
  * (e.g. Custom Objects for reverse ETL), Kafka topic, etc.
  *
- * The destination only receives RecordMessage and StateMessage — the
+ * The destination only receives RecordMessage and SourceStateMessage — the
  * orchestrator filters out logs, errors, and status messages before
  * they reach the destination.
  *
@@ -66,7 +66,7 @@ export interface Source {
 export interface Destination {
   /**
    * Consume data messages and write records to the downstream system.
-   * Yields messages back to the orchestrator: StateMessage after committing,
+   * Yields messages back to the orchestrator: SourceStateMessage after committing,
    * ErrorMessage on write failures, LogMessage for diagnostics.
    */
   write(
@@ -145,7 +145,7 @@ export interface Orchestrator {
    * The Sync object — config + runtime state in one record.
    * Source/destination config, stream selection, and per-stream
    * checkpoint cursors all live here. `collect` merges incoming
-   * StateMessages into `sync.state[stream]` and persists the
+   * SourceStateMessages into `sync.state[stream]` and persists the
    * whole Sync back to disk.
    */
   readonly sync: Sync
@@ -154,17 +154,19 @@ export interface Orchestrator {
 
   /**
    * Sits between source and destination in a pipe.
-   * Forwards RecordMessage and StateMessage to stdout (for destination).
+   * Forwards RecordMessage and SourceStateMessage to stdout (for destination).
    * Routes LogMessage, ErrorMessage, StreamStatusMessage to stderr.
    */
   forward(messages: AsyncIterableIterator<Message>): AsyncIterableIterator<DestinationInput>
 
   /**
    * Sits after destination in a pipe.
-   * Reads destination output, persists StateMessage checkpoints to disk.
+   * Reads destination output, persists SourceStateMessage checkpoints to disk.
    * Routes ErrorMessage and LogMessage to stderr.
    */
-  collect(output: AsyncIterableIterator<DestinationOutput>): AsyncIterableIterator<StateMessage>
+  collect(
+    output: AsyncIterableIterator<DestinationOutput>
+  ): AsyncIterableIterator<SourceStateMessage>
 
   // ── Supervisor mode (CLI: run)
 

@@ -18,7 +18,7 @@ export function createWriteFromQueueActivity(context: ActivitiesContext) {
     }
 
     if (records.length === 0) {
-      return { errors: [], state: {}, written: 0 }
+      return { errors: [], state: { streams: {}, global: {} }, written: 0 }
     }
 
     const pipeline = await context.pipelineStore.get(pipelineId)

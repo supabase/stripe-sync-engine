@@ -12,8 +12,16 @@ export function writeLine(obj: unknown) {
   process.stdout.write(JSON.stringify(obj) + '\n')
 }
 
-/** Wrap an AsyncIterable into an NDJSON streaming Response (application/x-ndjson). */
-export function ndjsonResponse<T>(iterable: AsyncIterable<T>): Response {
+/** Wrap an AsyncIterable into an NDJSON streaming Response (application/x-ndjson).
+ *
+ * If `onError` is provided, uncaught errors are mapped to a final message of
+ * type `T` before closing the stream. The callback must return a valid `T` —
+ * this keeps protocol-specific error shapes out of this generic helper.
+ */
+export function ndjsonResponse<T>(
+  iterable: AsyncIterable<T>,
+  onError?: (err: unknown) => T
+): Response {
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -23,8 +31,9 @@ export function ndjsonResponse<T>(iterable: AsyncIterable<T>): Response {
           controller.enqueue(encoder.encode(JSON.stringify(item) + '\n'))
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', message }) + '\n'))
+        if (onError) {
+          controller.enqueue(encoder.encode(JSON.stringify(onError(err)) + '\n'))
+        }
       } finally {
         controller.close()
       }

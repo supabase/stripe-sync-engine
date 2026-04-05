@@ -1,11 +1,23 @@
-import Stripe from 'stripe'
+type SubscriptionItem = {
+  id: string
+  price: { id: string } | string
+  deleted?: boolean
+  quantity?: number | null
+  [key: string]: unknown
+}
+
+type Subscription = {
+  id: string
+  items: { data: SubscriptionItem[] }
+  [key: string]: unknown
+}
 
 export async function syncSubscriptionItems(opts: {
-  subscriptions: Stripe.Subscription[]
+  subscriptions: Subscription[]
   accountId: string
   syncTimestamp?: string
   upsertItems: (
-    items: Stripe.SubscriptionItem[],
+    items: SubscriptionItem[],
     accountId: string,
     syncTimestamp?: string
   ) => Promise<void>
@@ -23,14 +35,14 @@ export async function syncSubscriptionItems(opts: {
   // if they don't exist in the current subscriptionItems list
   await Promise.all(
     subscriptionsWithItems.map((subscription) => {
-      const subItemIds = subscription.items.data.map((x: Stripe.SubscriptionItem) => x.id)
+      const subItemIds = subscription.items.data.map((x) => x.id)
       return opts.markDeleted(subscription.id, subItemIds)
     })
   )
 }
 
 export async function upsertSubscriptionItems(
-  subscriptionItems: Stripe.SubscriptionItem[],
+  subscriptionItems: SubscriptionItem[],
   accountId: string,
   upsertMany: (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,7 +55,10 @@ export async function upsertSubscriptionItems(
 ): Promise<void> {
   const modifiedSubscriptionItems = subscriptionItems.map((subscriptionItem) => ({
     ...subscriptionItem,
-    price: subscriptionItem.price.id.toString(),
+    price:
+      typeof subscriptionItem.price === 'string'
+        ? subscriptionItem.price
+        : subscriptionItem.price.id.toString(),
     deleted: subscriptionItem.deleted ?? false,
     quantity: subscriptionItem.quantity ?? null,
   }))

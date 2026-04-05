@@ -1,91 +1,179 @@
-import Stripe from 'stripe'
 import {
-  getHttpsProxyAgentForTarget,
-  parsePositiveInteger,
-  type TransportEnv,
-} from './transport.js'
+  StripeAccountSchema,
+  StripeWebhookEndpointSchema,
+  StripeApiListSchema,
+  StripeApiErrorSchema,
+  type StripeAccount,
+  type StripeApiList,
+  type StripeWebhookEndpoint,
+} from '@stripe/sync-openapi'
+import { stripeEventSchema, type StripeEvent } from './spec.js'
+import { fetchWithProxy, parsePositiveInteger, type TransportEnv } from './transport.js'
 
-export type StripeClientConfigInput = {
+export type StripeClientConfig = {
   api_key: string
+  api_version?: string
   base_url?: string
 }
+
 export { getProxyUrl as getStripeProxyUrl } from './transport.js'
 
 const DEFAULT_STRIPE_API_BASE = 'https://api.stripe.com'
 
-function buildBaseUrlOptions(
-  baseUrl: string
-): Pick<Stripe.StripeConfig, 'host' | 'port' | 'protocol'> {
-  const url = new URL(baseUrl)
-  return {
-    host: url.hostname,
-    port: url.port ? parseInt(url.port, 10) : url.protocol === 'https:' ? 443 : 80,
-    protocol: url.protocol.replace(':', '') as Stripe.HttpProtocol,
+export class StripeRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly stripeError?: { type: string; message: string; code?: string },
+    public readonly requestId?: string
+  ) {
+    super(stripeError?.message ?? `Stripe API error: ${status}`)
+    this.name = 'StripeRequestError'
   }
 }
 
-export function buildStripeClientOptions(
-  config: StripeClientConfigInput,
-  env: TransportEnv = process.env
-): Stripe.StripeConfig {
-  const options: Stripe.StripeConfig = {
-    timeout: parsePositiveInteger(
-      'STRIPE_REQUEST_TIMEOUT_MS',
-      env.STRIPE_REQUEST_TIMEOUT_MS,
-      10_000
-    ),
+export type StripeClient = ReturnType<typeof makeClient>
+
+export function makeClient(config: StripeClientConfig, env: TransportEnv = process.env) {
+  const baseUrl = (config.base_url ?? DEFAULT_STRIPE_API_BASE).replace(/\/$/, '')
+  const timeoutMs = parsePositiveInteger(
+    'STRIPE_REQUEST_TIMEOUT_MS',
+    env.STRIPE_REQUEST_TIMEOUT_MS,
+    10_000
+  )
+  const logRequests = env.STRIPE_LOG_REQUESTS === '1'
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.api_key}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+    ...(config.api_version ? { 'Stripe-Version': config.api_version } : {}),
   }
 
-  if (config.base_url) {
-    const httpAgent = getHttpsProxyAgentForTarget(config.base_url, env)
-    return {
-      ...options,
-      ...buildBaseUrlOptions(config.base_url),
-      ...(httpAgent ? { httpAgent } : {}),
+  async function request(
+    method: string,
+    path: string,
+    params?: Record<string, unknown>
+  ): Promise<unknown> {
+    const url = new URL(path, baseUrl)
+
+    let body: string | undefined
+    if (method === 'GET' && params) {
+      appendSearchParams(url.searchParams, params)
+    } else if (params) {
+      body = encodeFormData(params)
+    }
+
+    if (logRequests) {
+      console.error({
+        msg: 'Stripe API request started',
+        method,
+        path,
+        apiVersion: config.api_version,
+      })
+    }
+
+    const start = Date.now()
+    const response = await fetchWithProxy(
+      url.toString(),
+      {
+        method,
+        headers,
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+      env
+    )
+
+    const json = (await response.json()) as unknown
+
+    if (logRequests) {
+      console.error({
+        msg: 'Stripe API request completed',
+        method,
+        path,
+        status: response.status,
+        elapsed: Date.now() - start,
+        requestId: response.headers.get('request-id'),
+        apiVersion: config.api_version,
+      })
+    }
+
+    if (!response.ok) {
+      const parsed = StripeApiErrorSchema.safeParse(json)
+      throw new StripeRequestError(
+        response.status,
+        parsed.success ? parsed.data.error : undefined,
+        response.headers.get('request-id') ?? undefined
+      )
+    }
+
+    return json
+  }
+
+  return {
+    async getAccount(): Promise<StripeAccount> {
+      const json = await request('GET', '/v1/account')
+      return StripeAccountSchema.parse(json)
+    },
+
+    async listEvents(params: {
+      created?: { gt: number }
+      limit?: number
+      starting_after?: string
+    }): Promise<StripeApiList<StripeEvent>> {
+      const query: Record<string, unknown> = {}
+      if (params.limit) query.limit = params.limit
+      if (params.starting_after) query.starting_after = params.starting_after
+      if (params.created?.gt) query['created[gt]'] = params.created.gt
+      const json = await request('GET', '/v1/events', query)
+      return StripeApiListSchema(stripeEventSchema).parse(json)
+    },
+
+    async listWebhookEndpoints(params?: {
+      limit?: number
+    }): Promise<StripeApiList<StripeWebhookEndpoint>> {
+      const json = await request('GET', '/v1/webhook_endpoints', params)
+      return StripeApiListSchema(StripeWebhookEndpointSchema).parse(json)
+    },
+
+    async createWebhookEndpoint(params: {
+      url: string
+      enabled_events: string[]
+      metadata?: Record<string, string>
+    }): Promise<StripeWebhookEndpoint> {
+      const json = await request('POST', '/v1/webhook_endpoints', params)
+      return StripeWebhookEndpointSchema.parse(json)
+    },
+
+    async deleteWebhookEndpoint(id: string): Promise<void> {
+      await request('DELETE', `/v1/webhook_endpoints/${encodeURIComponent(id)}`)
+    },
+  }
+}
+
+// MARK: - URL encoding helpers
+
+function appendSearchParams(sp: URLSearchParams, params: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null) {
+      sp.set(key, String(value))
     }
   }
-
-  const httpAgent = getHttpsProxyAgentForTarget(DEFAULT_STRIPE_API_BASE, env)
-  if (httpAgent) {
-    options.httpAgent = httpAgent
-  }
-
-  return options
 }
 
-function attachStripeRequestLogging(stripe: Stripe, env: TransportEnv = process.env): void {
-  if (env.STRIPE_LOG_REQUESTS !== '1') {
-    return
+function encodeFormData(params: Record<string, unknown>, prefix = ''): string {
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(params)) {
+    const fullKey = prefix ? `${prefix}[${key}]` : key
+    if (value == null) continue
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      parts.push(encodeFormData(value as Record<string, unknown>, fullKey))
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        parts.push(`${encodeURIComponent(`${fullKey}[]`)}=${encodeURIComponent(String(item))}`)
+      }
+    } else {
+      parts.push(`${encodeURIComponent(fullKey)}=${encodeURIComponent(String(value))}`)
+    }
   }
-
-  stripe.on('request', (event) => {
-    console.info({
-      msg: 'Stripe API request started',
-      method: event.method,
-      path: event.path,
-      apiVersion: event.api_version,
-      requestStartTime: event.request_start_time,
-    })
-  })
-
-  stripe.on('response', (event) => {
-    console.info({
-      msg: 'Stripe API request completed',
-      method: event.method,
-      path: event.path,
-      status: event.status,
-      elapsed: event.elapsed,
-      requestId: event.request_id,
-      apiVersion: event.api_version,
-    })
-  })
-}
-
-export function makeClient(
-  config: StripeClientConfigInput,
-  env: TransportEnv = process.env
-): Stripe {
-  const stripe = new Stripe(config.api_key, buildStripeClientOptions(config, env))
-  attachStripeRequestLogging(stripe, env)
-  return stripe
+  return parts.filter(Boolean).join('&')
 }

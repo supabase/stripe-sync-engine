@@ -14,8 +14,14 @@ const STRIPE_SPEC_CDN_BASE_URL =
   process.env.STRIPE_SPEC_CDN_BASE_URL ?? 'https://stripe-sync.dev/stripe-api-specs'
 
 // The spec bundled into this package at build time.
-// Update this constant and bundled-spec.json together when bumping.
+// Update this constant and the corresponding .oas.json file together when bumping.
 export const BUNDLED_API_VERSION = '2026-03-25.dahlia'
+
+// Stripe API versions that this connector has been tested against and supports.
+// Each entry must have a corresponding `{version}.json` file in this package.
+// The bundled version is always first. Add older versions as they are confirmed.
+// Clients discover this list via the config JSON Schema's `api_version.enum`.
+export const SUPPORTED_API_VERSIONS = [BUNDLED_API_VERSION] as const
 
 export async function resolveOpenApiSpec(
   config: ResolveSpecConfig,
@@ -41,7 +47,7 @@ export async function resolveOpenApiSpec(
   // If the requested version matches what's bundled, serve from the filesystem
   // without any network calls or caching overhead.
   if (extractDatePart(apiVersion) === extractDatePart(BUNDLED_API_VERSION)) {
-    const bundledPath = fileURLToPath(new URL('./bundled-spec.json', import.meta.url))
+    const bundledPath = fileURLToPath(new URL(`./oas/${BUNDLED_API_VERSION}.json`, import.meta.url))
     const spec = await readSpecFromPath(bundledPath)
     return {
       apiVersion,

@@ -29,7 +29,7 @@ export const destinationTest = {
     $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput> {
     for await (const msg of $stdin) {
-      if (msg.type === 'state') {
+      if (msg.type === 'source_state') {
         yield msg
       }
     }

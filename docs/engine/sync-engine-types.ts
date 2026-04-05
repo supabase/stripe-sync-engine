@@ -55,13 +55,16 @@ export interface RecordMessage {
  * The orchestrator persists state keyed by (sync_id, stream) and passes the
  * full map back to the source on resume.
  */
-export interface StateMessage {
-  type: 'state'
+export interface SourceStateMessage {
+  type: 'source_state'
   /** Which stream this checkpoint is for. */
   stream: string
   /** Opaque cursor data. Only the source reads/writes this. */
   data: unknown
 }
+
+/** @deprecated Use SourceStateMessage */
+export type StateMessage = SourceStateMessage
 
 /** Catalog of available streams. Emitted by a source during discovery. */
 export interface CatalogMessage {
@@ -102,15 +105,15 @@ export interface StreamStatusMessage {
 // MARK: - Message unions
 
 /** The subset of messages the destination receives. */
-export type DestinationInput = RecordMessage | StateMessage
+export type DestinationInput = RecordMessage | SourceStateMessage
 
 /** Messages the destination yields back to the orchestrator. */
-export type DestinationOutput = StateMessage | ErrorMessage | LogMessage
+export type DestinationOutput = SourceStateMessage | ErrorMessage | LogMessage
 
 /** Any message flowing through the engine. One message per line (NDJSON). */
 export type Message =
   | RecordMessage
-  | StateMessage
+  | SourceStateMessage
   | CatalogMessage
   | LogMessage
   | ErrorMessage

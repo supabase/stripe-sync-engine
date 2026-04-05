@@ -8,6 +8,8 @@ export {
   stateData,
   recordMsg,
   stateMsg,
+  sourceControlMsg,
+  destinationControlMsg,
   // Type guards
   isRecordMessage,
   isStateMessage,
@@ -27,4 +29,4 @@ export {
   drain,
 } from './helpers.js'
 export { parseNdjsonChunks, writeLine } from './ndjson.js'
-export { channel, merge, split, map } from './stream-utils.js'
+export { channel, merge, split, map } from './async-iterable-utils.js'

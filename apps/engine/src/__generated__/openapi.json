@@ -24,6 +24,15 @@
                     "ok": {
                       "type": "boolean",
                       "const": true
+                    },
+                    "commit": {
+                      "type": "string"
+                    },
+                    "commit_url": {
+                      "type": "string"
+                    },
+                    "build_date": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -210,13 +219,22 @@
         "parameters": [
           {
             "in": "header",
-            "name": "x-pipeline",
+            "name": "x-source",
             "required": true,
-            "description": "JSON-encoded PipelineConfig",
+            "description": "JSON-encoded source config ({ type, ...config })",
             "content": {
               "[object Object]": {
                 "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": {}
                 }
               }
             }
@@ -302,15 +320,34 @@
             "in": "header",
             "name": "x-state",
             "required": false,
-            "description": "JSON-encoded per-stream cursor state",
+            "description": "JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state",
             "content": {
               "[object Object]": {
                 "schema": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
+                  "properties": {
+                    "streams": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "Per-stream checkpoint data, keyed by stream name."
+                    },
+                    "global": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "Sync-wide state shared across all streams (e.g. a global events cursor)."
+                    }
                   },
-                  "additionalProperties": {}
+                  "required": [
+                    "streams",
+                    "global"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -470,15 +507,34 @@
             "in": "header",
             "name": "x-state",
             "required": false,
-            "description": "JSON-encoded per-stream cursor state",
+            "description": "JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state",
             "content": {
               "[object Object]": {
                 "schema": {
                   "type": "object",
-                  "propertyNames": {
-                    "type": "string"
+                  "properties": {
+                    "streams": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "Per-stream checkpoint data, keyed by stream name."
+                    },
+                    "global": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {},
+                      "description": "Sync-wide state shared across all streams (e.g. a global events cursor)."
+                    }
                   },
-                  "additionalProperties": {}
+                  "required": [
+                    "streams",
+                    "global"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -774,7 +830,7 @@
           "record"
         ]
       },
-      "StateMessage": {
+      "SourceStateMessage": {
         "type": "object",
         "properties": {
           "_emitted_by": {
@@ -789,29 +845,55 @@
           },
           "type": {
             "type": "string",
-            "const": "state"
+            "const": "source_state"
           },
-          "state": {
-            "type": "object",
-            "properties": {
-              "stream": {
-                "type": "string",
-                "description": "Stream being checkpointed."
+          "source_state": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state_type": {
+                    "default": "stream",
+                    "type": "string",
+                    "const": "stream"
+                  },
+                  "stream": {
+                    "type": "string",
+                    "description": "Stream being checkpointed."
+                  },
+                  "data": {
+                    "description": "Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume."
+                  }
+                },
+                "required": [
+                  "stream",
+                  "data"
+                ],
+                "description": "Per-stream checkpoint for resumable syncs."
               },
-              "data": {
-                "description": "Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume."
+              {
+                "type": "object",
+                "properties": {
+                  "state_type": {
+                    "type": "string",
+                    "const": "global"
+                  },
+                  "data": {
+                    "description": "Sync-wide state shared across all streams (e.g. a global events cursor)."
+                  }
+                },
+                "required": [
+                  "state_type",
+                  "data"
+                ],
+                "description": "Sync-wide checkpoint shared across all streams."
               }
-            },
-            "required": [
-              "stream",
-              "data"
-            ],
-            "description": "Per-stream checkpoint for resumable syncs."
+            ]
           }
         },
         "required": [
           "type",
-          "state"
+          "source_state"
         ]
       },
       "CatalogMessage": {
@@ -1117,15 +1199,15 @@
                 "additionalProperties": {},
                 "description": "JSON Schema for the connector's configuration object."
               },
-              "stream_state": {
-                "description": "JSON Schema for per-stream state (cursor/checkpoint shape).",
+              "source_state_stream": {
+                "description": "JSON Schema for per-stream state (cursor/checkpoint shape). See also SyncState.global for sync-wide cursors.",
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
                 },
                 "additionalProperties": {}
               },
-              "input": {
+              "source_input": {
                 "description": "JSON Schema for the read() input parameter (e.g. a webhook event).",
                 "type": "object",
                 "propertyNames": {
@@ -1207,29 +1289,52 @@
             "const": "control"
           },
           "control": {
-            "type": "object",
-            "properties": {
-              "control_type": {
-                "type": "string",
-                "enum": [
-                  "connector_config"
-                ],
-                "description": "What kind of control action the connector is requesting."
-              },
-              "config": {
+            "oneOf": [
+              {
                 "type": "object",
-                "propertyNames": {
-                  "type": "string"
+                "properties": {
+                  "control_type": {
+                    "type": "string",
+                    "const": "source_config"
+                  },
+                  "source_config": {
+                    "$ref": "#/components/schemas/SourceStripeConfig"
+                  }
                 },
-                "additionalProperties": {},
-                "description": "Config fields to merge into the active connector configuration."
+                "required": [
+                  "control_type",
+                  "source_config"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "control_type": {
+                    "type": "string",
+                    "const": "destination_config"
+                  },
+                  "destination_config": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DestinationPostgresConfig"
+                      },
+                      {
+                        "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "control_type",
+                  "destination_config"
+                ]
               }
-            },
-            "required": [
-              "control_type",
-              "config"
             ],
-            "description": "Control signal from a connector to the orchestrator."
+            "description": "Control signal from a connector to the orchestrator.",
+            "type": "object",
+            "discriminator": {
+              "propertyName": "control_type"
+            }
           }
         },
         "required": [
@@ -1435,7 +1540,7 @@
           },
           "api_version": {
             "type": "string",
-            "description": "Stripe API version (e.g. 2025-04-30.basil)"
+            "const": "2026-03-25.dahlia"
           },
           "base_url": {
             "type": "string",
@@ -1651,7 +1756,7 @@
             "$ref": "#/components/schemas/RecordMessage"
           },
           {
-            "$ref": "#/components/schemas/StateMessage"
+            "$ref": "#/components/schemas/SourceStateMessage"
           },
           {
             "$ref": "#/components/schemas/CatalogMessage"
@@ -1680,7 +1785,7 @@
           "propertyName": "type",
           "mapping": {
             "record": "#/components/schemas/RecordMessage",
-            "state": "#/components/schemas/StateMessage",
+            "source_state": "#/components/schemas/SourceStateMessage",
             "catalog": "#/components/schemas/CatalogMessage",
             "log": "#/components/schemas/LogMessage",
             "trace": "#/components/schemas/TraceMessage",
@@ -1716,7 +1821,7 @@
       "DestinationOutput": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/StateMessage"
+            "$ref": "#/components/schemas/SourceStateMessage"
           },
           {
             "$ref": "#/components/schemas/TraceMessage"
@@ -1732,7 +1837,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "state": "#/components/schemas/StateMessage",
+            "source_state": "#/components/schemas/SourceStateMessage",
             "trace": "#/components/schemas/TraceMessage",
             "log": "#/components/schemas/LogMessage",
             "eof": "#/components/schemas/EofMessage"
@@ -1742,7 +1847,7 @@
       "SyncOutput": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/StateMessage"
+            "$ref": "#/components/schemas/SourceStateMessage"
           },
           {
             "$ref": "#/components/schemas/TraceMessage"
@@ -1761,7 +1866,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "state": "#/components/schemas/StateMessage",
+            "source_state": "#/components/schemas/SourceStateMessage",
             "trace": "#/components/schemas/TraceMessage",
             "log": "#/components/schemas/LogMessage",
             "eof": "#/components/schemas/EofMessage",
@@ -1832,29 +1937,21 @@
         }
       },
       "SourceInput": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "stripe"
-              },
-              "stripe": {
-                "$ref": "#/components/schemas/SourceStripeInput"
-              }
-            },
-            "required": [
-              "type",
-              "stripe"
-            ],
-            "additionalProperties": false
-          }
-        ],
         "type": "object",
-        "discriminator": {
-          "propertyName": "type"
-        }
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "source_input"
+          },
+          "source_input": {
+            "$ref": "#/components/schemas/SourceStripeInput"
+          }
+        },
+        "required": [
+          "type",
+          "source_input"
+        ],
+        "additionalProperties": false
       },
       "PipelineConfig": {
         "type": "object",

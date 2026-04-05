@@ -7,7 +7,7 @@ import type {
   DestinationInput,
   DestinationOutput,
   RecordMessage,
-  StateMessage,
+  SourceStateMessage,
 } from '@stripe/sync-protocol'
 import { collectFirst, drain } from '@stripe/sync-protocol'
 import type { Message } from '@stripe/sync-protocol'
@@ -79,8 +79,8 @@ function makeRecord(stream: string, data: Record<string, unknown>): RecordMessag
   return { type: 'record', record: { stream, data, emitted_at: new Date().toISOString() } }
 }
 
-function makeState(stream: string, data: unknown): StateMessage {
-  return { type: 'state', state: { stream, data } }
+function makeState(stream: string, data: unknown): SourceStateMessage {
+  return { type: 'source_state', source_state: { stream, data } }
 }
 
 async function* toAsyncIter(msgs: DestinationInput[]): AsyncIterable<DestinationInput> {
@@ -199,7 +199,7 @@ describe('destination default export', () => {
       expect(rows[0].n).toBe(5)
     })
 
-    it('re-emits StateMessage after flushing preceding records', async () => {
+    it('re-emits SourceStateMessage after flushing preceding records', async () => {
       const stateData = { cursor: 'abc123' }
       const messages = toAsyncIter([
         makeRecord('customers', { id: 'cus_1', name: 'Alice' }),
@@ -211,11 +211,11 @@ describe('destination default export', () => {
         destination.write({ config: makeConfig(), catalog }, messages)
       )
 
-      const stateOutputs = outputs.filter((m) => m.type === 'state')
+      const stateOutputs = outputs.filter((m) => m.type === 'source_state')
       expect(stateOutputs).toHaveLength(1)
       expect(stateOutputs[0]).toEqual({
-        type: 'state',
-        state: { stream: 'customers', data: stateData },
+        type: 'source_state',
+        source_state: { stream: 'customers', data: stateData },
       })
 
       // Records should be in DB (flushed before state was yielded)

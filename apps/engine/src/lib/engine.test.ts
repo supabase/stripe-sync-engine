@@ -17,7 +17,7 @@ import {
   Message,
   PipelineConfig,
   RecordMessage,
-  StateMessage,
+  SourceStateMessage,
   Stream,
   TraceMessage,
 } from '@stripe/sync-protocol'
@@ -154,11 +154,11 @@ describe('protocol schemas', () => {
     it('parses with all fields', () => {
       const result = ConnectorSpecification.parse({
         config: {},
-        stream_state: { type: 'object' },
-        input: { type: 'object' },
+        source_state_stream: { type: 'object' },
+        source_input: { type: 'object' },
       })
-      expect(result.stream_state).toEqual({ type: 'object' })
-      expect(result.input).toEqual({ type: 'object' })
+      expect(result.source_state_stream).toEqual({ type: 'object' })
+      expect(result.source_input).toEqual({ type: 'object' })
     })
   })
 
@@ -195,15 +195,15 @@ describe('protocol schemas', () => {
       expect(msg.record.data).toEqual({ id: 'cus_1' })
     })
 
-    it('StateMessage', () => {
-      const msg = StateMessage.parse({
-        type: 'state',
-        state: {
+    it('SourceStateMessage', () => {
+      const msg = SourceStateMessage.parse({
+        type: 'source_state',
+        source_state: {
           stream: 'customers',
           data: { cursor: 'abc' },
         },
       })
-      expect(msg.type).toBe('state')
+      expect(msg.type).toBe('source_state')
     })
 
     it('CatalogMessage', () => {
@@ -269,7 +269,7 @@ describe('protocol schemas', () => {
     it('rejects wrong type literal', () => {
       expect(() =>
         RecordMessage.parse({
-          type: 'state',
+          type: 'source_state',
           record: {
             stream: 'x',
             data: {},
@@ -287,7 +287,7 @@ describe('protocol schemas', () => {
           type: 'record',
           record: { stream: 's', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         },
-        { type: 'state', state: { stream: 's', data: null } },
+        { type: 'source_state', source_state: { stream: 's', data: null } },
         { type: 'catalog', catalog: { streams: [{ name: 's', primary_key: [['id']] }] } },
         { type: 'log', log: { level: 'info', message: 'hi' } },
         {
@@ -328,7 +328,7 @@ describe('protocol schemas', () => {
         })
       ).not.toThrow()
       expect(() =>
-        DestinationInput.parse({ type: 'state', state: { stream: 's', data: null } })
+        DestinationInput.parse({ type: 'source_state', source_state: { stream: 's', data: null } })
       ).not.toThrow()
     })
 
@@ -342,7 +342,10 @@ describe('protocol schemas', () => {
   describe('DestinationOutput', () => {
     it('accepts state, trace, and log', () => {
       expect(() =>
-        DestinationOutput.parse({ type: 'state', state: { stream: 's', data: null } })
+        DestinationOutput.parse({
+          type: 'source_state',
+          source_state: { stream: 's', data: null },
+        })
       ).not.toThrow()
       expect(() =>
         DestinationOutput.parse({
@@ -522,13 +525,16 @@ describe('engine message validation', () => {
               emitted_at: new Date().toISOString(),
             },
           },
-          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+          {
+            type: 'source_state',
+            source_state: { stream: 'customers', data: { status: 'complete' } },
+          },
         ])
       )
     )
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('record')
-    expect(results[1]!.type).toBe('state')
+    expect(results[1]!.type).toBe('source_state')
     expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
@@ -595,7 +601,10 @@ describe('engine message validation', () => {
                 emitted_at: new Date().toISOString(),
               },
             },
-            { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+            {
+              type: 'source_state',
+              source_state: { stream: 'customers', data: { status: 'complete' } },
+            },
           ])
         )
       )
@@ -628,7 +637,10 @@ describe('engine stream membership validation', () => {
               emitted_at: new Date().toISOString(),
             },
           },
-          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+          {
+            type: 'source_state',
+            source_state: { stream: 'customers', data: { status: 'complete' } },
+          },
         ])
       )
     )
@@ -717,17 +729,20 @@ describe('engine.pipeline_sync() pipeline', () => {
               emitted_at: new Date().toISOString(),
             },
           },
-          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+          {
+            type: 'source_state',
+            source_state: { stream: 'customers', data: { status: 'complete' } },
+          },
         ])
       )
     )
 
-    // pipeline_sync now yields source signals alongside dest output — filter to state+eof
-    const stateAndEof = results.filter((m) => m.type === 'state' || m.type === 'eof')
+    // pipeline_sync now yields source signals alongside dest output — filter to source_state+eof
+    const stateAndEof = results.filter((m) => m.type === 'source_state' || m.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]).toMatchObject({
-      type: 'state',
-      state: { stream: 'customers', data: { status: 'complete' } },
+      type: 'source_state',
+      source_state: { stream: 'customers', data: { status: 'complete' } },
     })
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
@@ -752,7 +767,10 @@ describe('engine.pipeline_sync() pipeline', () => {
               emitted_at: new Date().toISOString(),
             },
           },
-          { type: 'state', state: { stream: 'customers', data: { status: 'complete' } } },
+          {
+            type: 'source_state',
+            source_state: { stream: 'customers', data: { status: 'complete' } },
+          },
           {
             type: 'record',
             record: {
@@ -761,15 +779,18 @@ describe('engine.pipeline_sync() pipeline', () => {
               emitted_at: new Date().toISOString(),
             },
           },
-          { type: 'state', state: { stream: 'invoices', data: { status: 'complete' } } },
+          {
+            type: 'source_state',
+            source_state: { stream: 'invoices', data: { status: 'complete' } },
+          },
         ])
       )
     )
 
     // Only the customers stream state should come through
-    const states = results.filter((r) => r.type === 'state')
+    const states = results.filter((r) => r.type === 'source_state')
     expect(states).toHaveLength(1)
-    expect((states[0] as StateMessage).state.stream).toBe('customers')
+    expect((states[0] as SourceStateMessage).source_state.stream).toBe('customers')
   })
 
   it('non-data messages filtered: only record + state reach destination', async () => {
@@ -823,8 +844,8 @@ describe('engine.pipeline_sync() pipeline', () => {
           },
         }
         yield {
-          type: 'state' as const,
-          state: {
+          type: 'source_state' as const,
+          source_state: {
             stream: 'customers',
             data: { after: 'cus_1' },
           },
@@ -836,10 +857,10 @@ describe('engine.pipeline_sync() pipeline', () => {
     const results = await drain(engine.pipeline_sync(defaultPipeline))
 
     // pipeline_sync now yields source signals (log/trace) alongside dest output
-    // Filter to state+eof to verify destination processing
-    const stateAndEof = results.filter((m) => m.type === 'state' || m.type === 'eof')
+    // Filter to source_state+eof to verify destination processing
+    const stateAndEof = results.filter((m) => m.type === 'source_state' || m.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
-    expect(stateAndEof[0]!.type).toBe('state')
+    expect(stateAndEof[0]!.type).toBe('source_state')
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     // Source signals (log, trace) are also present in the output
     const sourceSignals = results.filter((m) => m.type === 'log' || m.type === 'trace')

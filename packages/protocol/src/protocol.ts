@@ -10,6 +10,23 @@
 
 import { z } from 'zod'
 
+// MARK: - Aggregate state
+
+/**
+ * Aggregate state shape — replaces `Record<string, unknown>` everywhere.
+ * `streams` holds per-stream checkpoints (existing behavior).
+ * `global` holds sync-wide state shared across all streams (new).
+ */
+export const SyncState = z.object({
+  streams: z
+    .record(z.string(), z.unknown())
+    .describe('Per-stream checkpoint data, keyed by stream name.'),
+  global: z
+    .record(z.string(), z.unknown())
+    .describe('Sync-wide state shared across all streams (e.g. a global events cursor).'),
+})
+export type SyncState = z.infer<typeof SyncState>
+
 // MARK: - Data model
 
 export const Stream = z
@@ -101,11 +118,13 @@ export const ConnectorSpecification = z
     config: z
       .record(z.string(), z.unknown())
       .describe("JSON Schema for the connector's configuration object."),
-    stream_state: z
+    source_state_stream: z
       .record(z.string(), z.unknown())
       .optional()
-      .describe('JSON Schema for per-stream state (cursor/checkpoint shape).'),
-    input: z
+      .describe(
+        'JSON Schema for per-stream state (cursor/checkpoint shape). See also SyncState.global for sync-wide cursors.'
+      ),
+    source_input: z
       .record(z.string(), z.unknown())
       .optional()
       .describe('JSON Schema for the read() input parameter (e.g. a webhook event).'),
@@ -125,8 +144,9 @@ export const RecordPayload = z
   .describe('One record for one stream.')
 export type RecordPayload = z.infer<typeof RecordPayload>
 
-export const StatePayload = z
+export const StreamStatePayload = z
   .object({
+    state_type: z.literal('stream').default('stream'),
     stream: z.string().describe('Stream being checkpointed.'),
     data: z
       .unknown()
@@ -135,6 +155,27 @@ export const StatePayload = z
       ),
   })
   .describe('Per-stream checkpoint for resumable syncs.')
+export type StreamStatePayload = z.infer<typeof StreamStatePayload>
+
+export const GlobalStatePayload = z
+  .object({
+    state_type: z.literal('global'),
+    data: z
+      .unknown()
+      .describe('Sync-wide state shared across all streams (e.g. a global events cursor).'),
+  })
+  .describe('Sync-wide checkpoint shared across all streams.')
+export type GlobalStatePayload = z.infer<typeof GlobalStatePayload>
+
+/**
+ * Wire-format state payload — discriminated on `state_type`.
+ *
+ * Uses `z.union` (not `z.discriminatedUnion`) so that old messages without
+ * `state_type` fall through to `StreamStatePayload` where `.default('stream')`
+ * fills it in. New messages with `state_type: 'global'` fail the stream literal
+ * and match `GlobalStatePayload`.
+ */
+export const StatePayload = z.union([StreamStatePayload, GlobalStatePayload])
 export type StatePayload = z.infer<typeof StatePayload>
 
 export const CatalogPayload = z
@@ -170,14 +211,24 @@ export const ConnectionStatusPayload = z
 export type ConnectionStatusPayload = z.infer<typeof ConnectionStatusPayload>
 
 export const ControlPayload = z
-  .object({
-    control_type: z
-      .enum(['connector_config'])
-      .describe('What kind of control action the connector is requesting.'),
-    config: z
-      .record(z.string(), z.unknown())
-      .describe('Config fields to merge into the active connector configuration.'),
-  })
+  .discriminatedUnion('control_type', [
+    z.object({
+      control_type: z.literal('source_config'),
+      source_config: z
+        .record(z.string(), z.unknown())
+        .describe(
+          'Full updated source configuration. The connector must emit the complete config, not a partial diff. The orchestrator replaces the stored config wholesale.'
+        ),
+    }),
+    z.object({
+      control_type: z.literal('destination_config'),
+      destination_config: z
+        .record(z.string(), z.unknown())
+        .describe(
+          'Full updated destination configuration. The connector must emit the complete config, not a partial diff. The orchestrator replaces the stored config wholesale.'
+        ),
+    }),
+  ])
   .describe('Control signal from a connector to the orchestrator.')
 export type ControlPayload = z.infer<typeof ControlPayload>
 
@@ -261,11 +312,11 @@ export const RecordMessage = MessageBase.extend({
 }).meta({ id: 'RecordMessage' })
 export type RecordMessage = z.infer<typeof RecordMessage>
 
-export const StateMessage = MessageBase.extend({
-  type: z.literal('state'),
-  state: StatePayload,
-}).meta({ id: 'StateMessage' })
-export type StateMessage = z.infer<typeof StateMessage>
+export const SourceStateMessage = MessageBase.extend({
+  type: z.literal('source_state'),
+  source_state: StatePayload,
+}).meta({ id: 'SourceStateMessage' })
+export type SourceStateMessage = z.infer<typeof SourceStateMessage>
 
 export const CatalogMessage = MessageBase.extend({
   type: z.literal('catalog'),
@@ -339,7 +390,7 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 /** The full set of parsed sync request params: pipeline config + cursor state + stream limits. */
 export interface SyncParams {
   pipeline: PipelineConfig
-  state?: Record<string, unknown>
+  state?: SyncState
   state_limit?: number
   time_limit?: number
 }
@@ -347,18 +398,24 @@ export interface SyncParams {
 // MARK: - Message unions
 
 /** The subset of messages the destination receives on stdin. */
-export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, StateMessage])
+export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, SourceStateMessage])
 export type DestinationInput = z.infer<typeof DestinationInput>
 
 /** Messages the destination yields back to the orchestrator (one per NDJSON line). */
 export const DestinationOutput = z
-  .discriminatedUnion('type', [StateMessage, TraceMessage, LogMessage, EofMessage])
+  .discriminatedUnion('type', [SourceStateMessage, TraceMessage, LogMessage, EofMessage])
   .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
 /** Output of pipeline_sync(): destination output plus source signals (controls, logs, traces). */
 export const SyncOutput = z
-  .discriminatedUnion('type', [StateMessage, TraceMessage, LogMessage, EofMessage, ControlMessage])
+  .discriminatedUnion('type', [
+    SourceStateMessage,
+    TraceMessage,
+    LogMessage,
+    EofMessage,
+    ControlMessage,
+  ])
   .meta({ id: 'SyncOutput' })
 export type SyncOutput = z.infer<typeof SyncOutput>
 
@@ -366,7 +423,7 @@ export type SyncOutput = z.infer<typeof SyncOutput>
 export const Message = z
   .discriminatedUnion('type', [
     RecordMessage,
-    StateMessage,
+    SourceStateMessage,
     CatalogMessage,
     LogMessage,
     TraceMessage,
@@ -451,7 +508,7 @@ export interface Source<
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
-      state?: Record<string, TStreamState>
+      state?: SyncState
     },
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
@@ -479,7 +536,7 @@ export interface Source<
  *
  * TConfig is the connector's configuration type, inferred from its Zod spec.
  *
- * The destination only receives RecordMessage and StateMessage on stdin — the
+ * The destination only receives RecordMessage and SourceStateMessage on stdin — the
  * orchestrator filters out other message types before they reach the destination.
  */
 export interface Destination<TConfig extends Record<string, unknown> = Record<string, unknown>> {

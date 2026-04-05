@@ -112,12 +112,11 @@ Deno.serve(async (req) => {
     }
 
     const stateStore = createScopedPgStateStore(pool, schemaName, 'default')
-    let state = (await stateStore.get()) as
-      | Record<string, { pageCursor: string | null; status: string }>
-      | undefined
+    let state = await stateStore.get()
 
     // Debounce: skip if all streams completed within SYNC_INTERVAL
-    if (state && Object.values(state).every((s) => s?.status === 'complete')) {
+    const streamEntries = state ? (Object.values(state.streams) as Array<{ status?: string }>) : []
+    if (streamEntries.length > 0 && streamEntries.every((s) => s?.status === 'complete')) {
       const { rows } = await pool.query(
         `SELECT MAX(updated_at) as last_update FROM "${safeSchema}"."_sync_state" WHERE sync_id = 'default'`
       )
@@ -196,8 +195,8 @@ Deno.serve(async (req) => {
     let checkpoints = 0
     let stopReason = 'complete'
     for await (const msg of destOutput) {
-      if (msg.type === 'state' && msg.state.stream) {
-        await stateStore.set(msg.state.stream, msg.state.data)
+      if (msg.type === 'source_state' && msg.source_state.state_type !== 'global') {
+        await stateStore.set(msg.source_state.stream, msg.source_state.data)
         checkpoints++
         if (Date.now() - startedAt >= MAX_WALL_MS) {
           stopReason = 'time_limit'

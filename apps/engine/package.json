@@ -31,7 +31,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "PORT=4010 tsx --conditions bun src/api/index.ts",
+    "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
+    "dev": "PORT=4010 LOG_PRETTY=true pnpm x:watch src/api/index.ts",
     "test": "vitest run",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },
@@ -59,7 +60,6 @@
     "pg": "^8.16.3",
     "pino": "^10",
     "pino-pretty": "^13",
-    "stripe": "^17.7.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },

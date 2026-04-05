@@ -261,7 +261,7 @@ export interface components {
                 emitted_at: string;
             };
         };
-        StateMessage: {
+        SourceStateMessage: {
             /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
             _emitted_by?: string;
             /**
@@ -273,12 +273,21 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "state";
-            /** @description Per-stream checkpoint for resumable syncs. */
-            state: {
+            type: "source_state";
+            source_state: {
+                /**
+                 * @default stream
+                 * @constant
+                 */
+                state_type: "stream";
                 /** @description Stream being checkpointed. */
                 stream: string;
                 /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
+                data: unknown;
+            } | {
+                /** @constant */
+                state_type: "global";
+                /** @description Sync-wide state shared across all streams (e.g. a global events cursor). */
                 data: unknown;
             };
         };
@@ -415,12 +424,12 @@ export interface components {
                 config: {
                     [key: string]: unknown;
                 };
-                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). */
-                stream_state?: {
+                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). See also SyncState.global for sync-wide cursors. */
+                source_state_stream?: {
                     [key: string]: unknown;
                 };
                 /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
-                input?: {
+                source_input?: {
                     [key: string]: unknown;
                 };
             };
@@ -464,15 +473,13 @@ export interface components {
             type: "control";
             /** @description Control signal from a connector to the orchestrator. */
             control: {
-                /**
-                 * @description What kind of control action the connector is requesting.
-                 * @enum {string}
-                 */
-                control_type: "connector_config";
-                /** @description Config fields to merge into the active connector configuration. */
-                config: {
-                    [key: string]: unknown;
-                };
+                /** @constant */
+                control_type: "source_config";
+                source_config: components["schemas"]["SourceStripeConfig"];
+            } | {
+                /** @constant */
+                control_type: "destination_config";
+                destination_config: components["schemas"]["DestinationPostgresConfig"] | components["schemas"]["DestinationGoogleSheetsConfig"];
             };
         };
         EofMessage: {
@@ -538,8 +545,8 @@ export interface components {
             account_id?: string;
             /** @description Whether this is a live mode sync */
             livemode?: boolean;
-            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-            api_version?: string;
+            /** @constant */
+            api_version?: "2026-03-25.dahlia";
             /**
              * Format: uri
              * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
@@ -633,17 +640,17 @@ export interface components {
              */
             batch_size: number;
         };
-        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
+        Message: components["schemas"]["RecordMessage"] | components["schemas"]["SourceStateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
         DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        DestinationOutput: components["schemas"]["StateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
-        SyncOutput: components["schemas"]["StateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
+        DestinationOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
+        SyncOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
         CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
         SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
         TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
         SourceInput: {
             /** @constant */
-            type: "stripe";
-            stripe: components["schemas"]["SourceStripeInput"];
+            type: "source_input";
+            source_input: components["schemas"]["SourceStripeInput"];
         };
         PipelineConfig: {
             source: components["schemas"]["SourceConfig"];
@@ -689,6 +696,9 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         ok: true;
+                        commit?: string;
+                        commit_url?: string;
+                        build_date?: string;
                     };
                 };
             };
@@ -800,8 +810,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
+                /** @description JSON-encoded source config ({ type, ...config }) */
+                "x-source": string;
             };
             path?: never;
             cookie?: never;
@@ -841,7 +851,7 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded per-stream cursor state */
+                /** @description JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state */
                 "x-state"?: string;
             };
             path?: never;
@@ -924,7 +934,7 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded per-stream cursor state */
+                /** @description JSON-encoded SyncState ({ streams, global }) or legacy flat per-stream state */
                 "x-state"?: string;
             };
             path?: never;
