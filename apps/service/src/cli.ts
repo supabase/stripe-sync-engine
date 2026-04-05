@@ -65,10 +65,10 @@ const serveCmd = defineCommand({
     )
 
     const resolver = await resolverPromise
-    const pipelines = filePipelineStore(args['data-dir'])
+    const pipelineStore = filePipelineStore(args['data-dir'])
     logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
 
-    const app = createApp({ temporal, resolver, pipelines })
+    const app = createApp({ temporal, resolver, pipelineStore })
 
     serve({ fetch: app.fetch, port }, () => {
       logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
@@ -119,7 +119,7 @@ const workerCmd = defineCommand({
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
     const kafkaBroker = args['kafka-broker'] || process.env['KAFKA_BROKER']
     const temporalAddress = args['temporal-address']
-    const pipelines = filePipelineStore(args['data-dir'])
+    const pipelineStore = filePipelineStore(args['data-dir'])
 
     // import.meta.url is the URL of cli.ts/cli.js, NOT the bin entry point:
     //   tsx:      file:///.../apps/service/src/cli.ts  → ./temporal/workflows/index.ts
@@ -136,7 +136,7 @@ const workerCmd = defineCommand({
       taskQueue,
       engineUrl,
       kafkaBroker,
-      pipelines,
+      pipelineStore,
       workflowsPath,
     })
 
@@ -179,8 +179,8 @@ const webhookCmd = defineCommand({
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
     const resolver = await resolverPromise
-    const pipelines = filePipelineStore(args['data-dir'])
-    const app = createApp({ temporal, resolver, pipelines })
+    const pipelineStore = filePipelineStore(args['data-dir'])
+    const app = createApp({ temporal, resolver, pipelineStore })
 
     serve({ fetch: app.fetch, port }, () => {
       logger.info(
@@ -214,7 +214,7 @@ export async function createProgram() {
   const mockApp = createApp({
     temporal: { client: mockClient, taskQueue: 'cli' },
     resolver,
-    pipelines: mockStore,
+    pipelineStore: mockStore,
   })
   const res = await mockApp.request('/openapi.json')
   const spec = await res.json()
@@ -229,8 +229,8 @@ export async function createProgram() {
       const r = await resolverPromise
       const dataDir = process.env.DATA_DIR
       if (!dataDir) throw new Error('DATA_DIR environment variable is required')
-      const pipelines = filePipelineStore(dataDir)
-      realApp = createApp({ temporal, resolver: r, pipelines })
+      const pipelineStore = filePipelineStore(dataDir)
+      realApp = createApp({ temporal, resolver: r, pipelineStore })
     }
     return realApp
   }

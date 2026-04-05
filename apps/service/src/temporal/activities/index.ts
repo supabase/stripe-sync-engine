@@ -14,7 +14,7 @@ export type { RunResult } from './_shared.js'
 export function createActivities(opts: {
   engineUrl: string
   kafkaBroker?: string
-  pipelines: PipelineStore
+  pipelineStore: PipelineStore
 }) {
   const context = createActivitiesContext(opts)
 

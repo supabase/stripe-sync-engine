@@ -1,35 +1,32 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
+import type {
+  CheckOutput,
+  Destination,
+  DiscoverOutput,
+  Source,
+  SpecOutput,
+} from '@stripe/sync-protocol'
 import {
-  RecordMessage,
-  StateMessage,
   CatalogMessage,
-  LogMessage,
-  TraceMessage,
+  ConfiguredCatalog,
+  ConfiguredStream,
+  ConnectionStatusPayload,
+  ConnectorSpecification,
   DestinationInput,
   DestinationOutput,
+  LogMessage,
   Message,
-  Stream,
-  ConfiguredStream,
-  ConfiguredCatalog,
-  ConnectorSpecification,
-  ConnectionStatusPayload,
   PipelineConfig,
+  RecordMessage,
+  StateMessage,
+  Stream,
+  TraceMessage,
 } from '@stripe/sync-protocol'
-import type {
-  Source,
-  Destination,
-  DestinationInput as DestInput,
-  SpecOutput,
-  CheckOutput,
-  DiscoverOutput,
-  SetupOutput,
-  TeardownOutput,
-} from '@stripe/sync-protocol'
-import { createEngine, buildCatalog } from './engine.js'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+import { destinationTest } from './destination-test.js'
+import { createEngine } from './engine.js'
 import type { ConnectorResolver } from './resolver.js'
 import { sourceTest } from './source-test.js'
-import { destinationTest } from './destination-test.js'
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
 const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
@@ -69,7 +66,10 @@ function makeResolver(source: Source, destination: Destination): ConnectorResolv
   }
 }
 
-const defaultPipeline = { source: { type: 'test' }, destination: { type: 'test' } }
+const defaultPipeline = {
+  source: { type: 'test', test: {} },
+  destination: { type: 'test', test: {} },
+}
 
 // ---------------------------------------------------------------------------
 // Protocol schema tests
@@ -384,8 +384,8 @@ describe('protocol schemas', () => {
 
     it('parses with all fields', () => {
       const result = PipelineConfig.parse({
-        source: { type: 'stripe', api_key: 'sk_test' },
-        destination: { type: 'postgres', url: 'pg://...' },
+        source: { type: 'stripe', stripe: { api_key: 'sk_test' } },
+        destination: { type: 'postgres', postgres: { url: 'pg://...' } },
         streams: [{ name: 'customers', sync_mode: 'incremental' }],
       })
       expect(result.streams).toHaveLength(1)
@@ -432,7 +432,7 @@ describe('engine config validation', () => {
       },
       async *read() {},
     }
-    const pipeline = { source: { type: 'test' }, destination: { type: 'test' } }
+    const pipeline = { source: { type: 'test', test: {} }, destination: { type: 'test', test: {} } }
     const engine = await createEngine(makeResolver(source, destinationTest))
     await expect(drain(engine.pipeline_read(pipeline))).rejects.toThrow()
   })
@@ -457,8 +457,8 @@ describe('engine config validation', () => {
       },
     }
     const pipeline = {
-      source: { type: 'test', streams: {} },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: {} } },
+      destination: { type: 'test', test: {} },
     }
     const engine = await createEngine(makeResolver(sourceTest, destination))
     await expect(drain(engine.pipeline_write(pipeline, toAsync([])))).rejects.toThrow()
@@ -483,7 +483,7 @@ describe('engine config validation', () => {
       async *read() {},
     }
 
-    const pipeline = { source: { type: 'test' }, destination: { type: 'test' } }
+    const pipeline = { source: { type: 'test', test: {} }, destination: { type: 'test', test: {} } }
     const engine = await createEngine(makeResolver(source, destinationTest))
     return drain(engine.pipeline_sync(pipeline))
   })
@@ -505,8 +505,8 @@ describe('engine message validation', () => {
   it('valid messages pass through engine.pipeline_read()', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
     }
 
     const results = await drain(
@@ -576,8 +576,8 @@ describe('engine message validation', () => {
     }
 
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
     }
     const engine = await createEngine(makeResolver(sourceTest, badDest))
 
@@ -611,8 +611,8 @@ describe('engine stream membership validation', () => {
   it('record with known stream passes through', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
     }
 
     const results = await drain(
@@ -685,8 +685,8 @@ describe('engine.pipeline_sync() pipeline', () => {
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
     }
     const results = await drain(
       engine.pipeline_sync(
@@ -722,20 +722,21 @@ describe('engine.pipeline_sync() pipeline', () => {
       )
     )
 
-    // Pipeline yields 1 state message (destinationTest passes state through) + eof:complete
-    expect(results).toHaveLength(2)
-    expect(results[0]).toMatchObject({
+    // pipeline_sync now yields source signals alongside dest output — filter to state+eof
+    const stateAndEof = results.filter((m) => m.type === 'state' || m.type === 'eof')
+    expect(stateAndEof).toHaveLength(2)
+    expect(stateAndEof[0]).toMatchObject({
       type: 'state',
       state: { stream: 'customers', data: { status: 'complete' } },
     })
-    expect(results[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
   it('stream filtering: only configures requested streams', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
-      source: { type: 'test', streams: { customers: {}, invoices: {} } },
-      destination: { type: 'test' },
+      source: { type: 'test', test: { streams: { customers: {}, invoices: {} } } },
+      destination: { type: 'test', test: {} },
       streams: [{ name: 'customers' }],
     }
     const results = await drain(
@@ -834,11 +835,15 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(mixedSource, destinationTest))
     const results = await drain(engine.pipeline_sync(defaultPipeline))
 
-    // Only the state message passes through engine.pipeline_sync() (record goes to dest but
-    // dest only yields state back; log/trace are routed to callbacks) + eof:complete
-    expect(results).toHaveLength(2)
-    expect(results[0]!.type).toBe('state')
-    expect(results[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    // pipeline_sync now yields source signals (log/trace) alongside dest output
+    // Filter to state+eof to verify destination processing
+    const stateAndEof = results.filter((m) => m.type === 'state' || m.type === 'eof')
+    expect(stateAndEof).toHaveLength(2)
+    expect(stateAndEof[0]!.type).toBe('state')
+    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    // Source signals (log, trace) are also present in the output
+    const sourceSignals = results.filter((m) => m.type === 'log' || m.type === 'trace')
+    expect(sourceSignals.length).toBeGreaterThan(0)
 
     vi.restoreAllMocks()
   })

@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipeline_check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check connector connection
+         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.
+         */
+        post: operations["pipeline_check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipeline_setup": {
         parameters: {
             query?: never;
@@ -32,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Set up destination schema
-         * @description Creates destination tables and applies migrations. Safe to call multiple times.
+         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by.
          */
         post: operations["pipeline_setup"];
         delete?: never;
@@ -52,29 +72,9 @@ export interface paths {
         put?: never;
         /**
          * Tear down destination schema
-         * @description Drops destination tables. Irreversible.
+         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by.
          */
         post: operations["pipeline_teardown"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Check connector connection
-         * @description Validates the source/destination config and tests connectivity.
-         */
-        get: operations["pipeline_check"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -233,8 +233,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
         RecordMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -256,6 +262,13 @@ export interface components {
             };
         };
         StateMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -270,6 +283,13 @@ export interface components {
             };
         };
         CatalogMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -295,6 +315,13 @@ export interface components {
             };
         };
         LogMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -312,6 +339,13 @@ export interface components {
             };
         };
         TraceMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -363,6 +397,13 @@ export interface components {
             };
         };
         SpecMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -385,6 +426,13 @@ export interface components {
             };
         };
         ConnectionStatusMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -402,6 +450,13 @@ export interface components {
             };
         };
         ControlMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -413,7 +468,7 @@ export interface components {
                  * @description What kind of control action the connector is requesting.
                  * @enum {string}
                  */
-                control_type: "config_update";
+                control_type: "connector_config";
                 /** @description Config fields to merge into the active connector configuration. */
                 config: {
                     [key: string]: unknown;
@@ -421,6 +476,13 @@ export interface components {
             };
         };
         EofMessage: {
+            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+            _emitted_by?: string;
+            /**
+             * Format: date-time
+             * @description ISO 8601 timestamp when the engine observed this message.
+             */
+            _ts?: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -435,215 +497,41 @@ export interface components {
                 reason: "complete" | "state_limit" | "time_limit" | "error";
             };
         };
-        DestinationOutput: components["schemas"]["StateMessageOutput"] | components["schemas"]["TraceMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["EofMessageOutput"];
-        MessageOutput: components["schemas"]["RecordMessageOutput"] | components["schemas"]["StateMessageOutput"] | components["schemas"]["CatalogMessageOutput"] | components["schemas"]["LogMessageOutput"] | components["schemas"]["TraceMessageOutput"] | components["schemas"]["SpecMessageOutput"] | components["schemas"]["ConnectionStatusMessageOutput"] | components["schemas"]["ControlMessageOutput"] | components["schemas"]["EofMessageOutput"];
-        RecordMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "record";
-            /** @description One record for one stream. */
-            record: {
-                /** @description Stream (table) name this record belongs to. */
-                stream: string;
-                /** @description The record payload as a key-value map. */
-                data: {
+        SourceStripeInput: {
+            /** @description Unique identifier for the object. */
+            id: string;
+            /** @constant */
+            object: "event";
+            /** @description The connected account that originates the event. */
+            account?: string;
+            api_version: string | null;
+            /** @description Time at which the object was created. Measured in seconds since the Unix epoch. */
+            created: number;
+            data: {
+                object: {
                     [key: string]: unknown;
                 };
-                /**
-                 * Format: date-time
-                 * @description ISO 8601 timestamp when the record was emitted by the source.
-                 */
-                emitted_at: string;
-            };
-        };
-        StateMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "state";
-            /** @description Per-stream checkpoint for resumable syncs. */
-            state: {
-                /** @description Stream being checkpointed. */
-                stream: string;
-                /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
-                data: unknown;
-            };
-        };
-        CatalogMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "catalog";
-            /** @description Catalog of available streams. */
-            catalog: {
-                /** @description All streams available from this source. */
-                streams: {
-                    /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-                    name: string;
-                    /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
-                    primary_key: string[][];
-                    /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-                    json_schema?: {
-                        [key: string]: unknown;
-                    };
-                    /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
-                    metadata?: {
-                        [key: string]: unknown;
-                    };
-                }[];
-            };
-        };
-        LogMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "log";
-            /** @description Structured log output from a connector. */
-            log: {
-                /**
-                 * @description Log severity level.
-                 * @enum {string}
-                 */
-                level: "debug" | "info" | "warn" | "error";
-                /** @description Human-readable log message. */
-                message: string;
-            };
-        };
-        TraceMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "trace";
-            /** @description Diagnostic/status payload with subtypes for error, stream status, and estimates. */
-            trace: {
-                /** @constant */
-                trace_type: "error";
-                /** @description Structured error from a connector. */
-                error: {
-                    /**
-                     * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
-                     * @enum {string}
-                     */
-                    failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
-                    /** @description Human-readable error description. */
-                    message: string;
-                    /** @description Stream that triggered the error, if applicable. */
-                    stream?: string;
-                    /** @description Full stack trace for debugging. */
-                    stack_trace?: string;
-                };
-            } | {
-                /** @constant */
-                trace_type: "stream_status";
-                /** @description Per-stream status update. */
-                stream_status: {
-                    /** @description Stream being reported on. */
-                    stream: string;
-                    /**
-                     * @description Current phase of the stream within this sync run.
-                     * @enum {string}
-                     */
-                    status: "started" | "running" | "complete" | "incomplete";
-                };
-            } | {
-                /** @constant */
-                trace_type: "estimate";
-                /** @description Sync progress estimate for a stream. */
-                estimate: {
-                    /** @description Stream being estimated. */
-                    stream: string;
-                    /** @description Estimated total row count for this stream. */
-                    row_count?: number;
-                    /** @description Estimated total byte count for this stream. */
-                    byte_count?: number;
-                };
-            };
-        };
-        SpecMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "spec";
-            /** @description JSON Schema describing the configuration a connector requires. */
-            spec: {
-                /** @description JSON Schema for the connector's configuration object. */
-                config: {
-                    [key: string]: unknown;
-                };
-                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). */
-                stream_state?: {
-                    [key: string]: unknown;
-                };
-                /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
-                input?: {
+                previous_attributes?: {
                     [key: string]: unknown;
                 };
             };
+            /** @description Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode. */
+            livemode: boolean;
+            /** @description Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify. */
+            pending_webhooks: number;
+            request: {
+                id: string | null;
+                idempotency_key: string | null;
+            } | null;
+            /** @description Description of the event (for example, `invoice.created` or `charge.refunded`). */
+            type: string;
         };
-        ConnectionStatusMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "connection_status";
-            /** @description Result of a connection check. */
-            connection_status: {
-                /**
-                 * @description Whether the connection check passed.
-                 * @enum {string}
-                 */
-                status: "succeeded" | "failed";
-                /** @description Human-readable explanation of the check result. */
-                message?: string;
-            };
+        SourceConfig: {
+            /** @constant */
+            type: "stripe";
+            stripe: components["schemas"]["SourceStripeConfig"];
         };
-        ControlMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "control";
-            /** @description Control signal from a connector to the orchestrator. */
-            control: {
-                /**
-                 * @description What kind of control action the connector is requesting.
-                 * @enum {string}
-                 */
-                control_type: "config_update";
-                /** @description Config fields to merge into the active connector configuration. */
-                config: {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        EofMessageOutput: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "eof";
-            /** @description Terminal payload — tells the client why the stream ended. */
-            eof: {
-                /**
-                 * @description Why the stream ended.
-                 * @enum {string}
-                 */
-                reason: "complete" | "state_limit" | "time_limit" | "error";
-            };
-        };
-        StripeSourceConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "StripeSourceConfig";
+        SourceStripeConfig: {
             /** @description Stripe API key (sk_test_... or sk_live_...) */
             api_key: string;
             /** @description Stripe account ID (resolved from API if omitted) */
@@ -679,12 +567,16 @@ export interface components {
             /** @description Number of time-range segments for parallel backfill (default: 200) */
             backfill_concurrency?: number;
         };
-        PostgresDestinationConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "PostgresDestinationConfig";
+        DestinationConfig: {
+            /** @constant */
+            type: "postgres";
+            postgres: components["schemas"]["DestinationPostgresConfig"];
+        } | {
+            /** @constant */
+            type: "google-sheets";
+            "google-sheets": components["schemas"]["DestinationGoogleSheetsConfig"];
+        };
+        DestinationPostgresConfig: {
             /** @description Postgres connection string (alias for connection_string) */
             url?: string;
             /** @description Postgres connection string */
@@ -719,12 +611,7 @@ export interface components {
             /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
             ssl_ca_pem?: string;
         };
-        GoogleSheetsDestinationConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "GoogleSheetsDestinationConfig";
+        DestinationGoogleSheetsConfig: {
             /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
             client_id?: string;
             /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
@@ -746,16 +633,33 @@ export interface components {
              */
             batch_size: number;
         };
-        SourceConfig: components["schemas"]["StripeSourceConfig"];
-        DestinationConfig: components["schemas"]["PostgresDestinationConfig"] | components["schemas"]["GoogleSheetsDestinationConfig"];
+        Message: components["schemas"]["RecordMessage"] | components["schemas"]["StateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
+        DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        DestinationOutput: components["schemas"]["StateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
+        SyncOutput: components["schemas"]["StateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
+        CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        SourceInput: {
+            /** @constant */
+            type: "stripe";
+            stripe: components["schemas"]["SourceStripeInput"];
+        };
         PipelineConfig: {
             source: components["schemas"]["SourceConfig"];
             destination: components["schemas"]["DestinationConfig"];
             streams?: {
+                /** @description Stream (table) name to sync. */
                 name: string;
-                /** @enum {string} */
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
                 sync_mode?: "incremental" | "full_refresh";
+                /** @description If set, only these fields are synced. */
                 fields?: string[];
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
             }[];
         };
     };
@@ -790,27 +694,59 @@ export interface operations {
             };
         };
     };
-    pipeline_setup: {
+    pipeline_check: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Setup complete */
+            /** @description NDJSON stream of check messages */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/x-ndjson": components["schemas"]["CheckOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": {
-                        [key: string]: unknown;
+                        error: unknown;
                     };
+                };
+            };
+        };
+    };
+    pipeline_setup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description NDJSON stream of setup messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["SetupOutput"];
                 };
             };
             /** @description Invalid params */
@@ -829,65 +765,22 @@ export interface operations {
     pipeline_teardown: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Teardown complete */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_check: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Connection check result */
+            /** @description NDJSON stream of teardown messages */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        source: {
-                            /** @enum {string} */
-                            status: "succeeded" | "failed";
-                            message?: string;
-                        };
-                        destination: {
-                            /** @enum {string} */
-                            status: "succeeded" | "failed";
-                            message?: string;
-                        };
-                    };
+                    "application/x-ndjson": components["schemas"]["TeardownOutput"];
                 };
             };
             /** @description Invalid params */
@@ -906,9 +799,9 @@ export interface operations {
     source_discover: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -921,7 +814,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/x-ndjson": components["schemas"]["MessageOutput"];
+                    "application/x-ndjson": components["schemas"]["DiscoverOutput"];
                 };
             };
             /** @description Invalid params */
@@ -945,16 +838,20 @@ export interface operations {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
             };
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
-                /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
+                /** @description JSON-encoded per-stream cursor state */
                 "x-state"?: string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/x-ndjson": components["schemas"]["SourceInput"];
+            };
+        };
         responses: {
             /** @description NDJSON stream of sync messages */
             200: {
@@ -962,7 +859,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/x-ndjson": components["schemas"]["MessageOutput"];
+                    "application/x-ndjson": components["schemas"]["Message"];
                 };
             };
             /** @description Invalid params */
@@ -981,9 +878,9 @@ export interface operations {
     pipeline_write: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -1024,16 +921,20 @@ export interface operations {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
             };
-            header?: {
-                /** @description JSON-encoded PipelineConfig: { source: { type, ...config }, destination: { type, ...config }, streams } */
-                "x-pipeline"?: string;
-                /** @description JSON-encoded per-stream cursor state. Engine uses this if present, falls back to StateStore. */
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
+                /** @description JSON-encoded per-stream cursor state */
                 "x-state"?: string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/x-ndjson": components["schemas"]["SourceInput"];
+            };
+        };
         responses: {
             /** @description NDJSON stream of sync messages */
             200: {
@@ -1041,7 +942,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/x-ndjson": components["schemas"]["DestinationOutput"];
+                    "application/x-ndjson": components["schemas"]["SyncOutput"];
                 };
             };
             /** @description Invalid params */

@@ -8,7 +8,7 @@ export interface WorkerOptions {
   taskQueue: string
   engineUrl: string
   kafkaBroker?: string
-  pipelines: PipelineStore
+  pipelineStore: PipelineStore
   /** Path to a compiled workflow module or directory (Temporal bundles it for V8 sandbox). */
   workflowsPath: string
 }
@@ -26,7 +26,7 @@ export async function createWorker(opts: WorkerOptions): Promise<Worker> {
     activities: createActivities({
       engineUrl: opts.engineUrl,
       kafkaBroker: opts.kafkaBroker,
-      pipelines: opts.pipelines,
+      pipelineStore: opts.pipelineStore,
     }),
   })
 }

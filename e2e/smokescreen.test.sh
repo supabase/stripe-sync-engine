@@ -137,7 +137,7 @@ echo "    Confirmed: no direct internet access from isolated network"
 
 echo "==> src-stripe: read through smokescreen"
 READ_PARAMS=$(printf \
-  '{"source":{"type":"stripe","api_key":"%s","backfill_limit":5},"destination":{"type":"postgres","url":"postgres://unused:5432/db","schema":"stripe"},"streams":[{"name":"products"}]}' \
+  '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"products"}]}' \
   "$STRIPE_API_KEY")
 OUTPUT=$(ecurl -s --max-time 90 -w '\n%{http_code}' -X POST "${ENGINE_URL}/pipeline_read" \
   -H "X-Pipeline: $READ_PARAMS")
@@ -156,7 +156,7 @@ echo "    Got $RECORD_COUNT record(s)"
 
 echo "==> dest-pg: setup + write"
 PG_PARAMS=$(printf \
-  '{"source":{"type":"stripe","api_key":"%s"},"destination":{"type":"postgres","url":"%s","schema":"stripe_smokescreen_test"}}' \
+  '{"source":{"type":"stripe","stripe":{"api_key":"%s"}},"destination":{"type":"postgres","postgres":{"url":"%s","schema":"stripe_smokescreen_test"}}}' \
   "$STRIPE_API_KEY" "$PG_URL")
 ecurl -sf --max-time 30 -X POST "${ENGINE_URL}/pipeline_setup" \
   -H "X-Pipeline: $PG_PARAMS" && echo "    setup OK" || echo "    setup returned non-204 (may be fine)"

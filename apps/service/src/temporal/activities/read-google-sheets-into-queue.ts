@@ -1,5 +1,4 @@
 import { heartbeat } from '@temporalio/activity'
-import { createRemoteEngine } from '@stripe/sync-engine'
 import type {
   ConfiguredCatalog,
   Message,
@@ -7,9 +6,11 @@ import type {
   SourceReadOptions,
 } from '@stripe/sync-engine'
 import { ROW_KEY_FIELD, serializeRowKey } from '@stripe/sync-destination-google-sheets'
-import { toConfig } from '../../lib/stores.js'
+
 import type { ActivitiesContext } from './_shared.js'
 import { asIterable, collectError, type RunResult } from './_shared.js'
+
+type SourceInput = unknown
 
 function withRowKey(record: RecordMessage, catalog?: ConfiguredCatalog): RecordMessage {
   const primaryKey = catalog?.streams.find((stream) => stream.stream.name === record.record.stream)
@@ -31,16 +32,15 @@ export function createReadGoogleSheetsIntoQueueActivity(context: ActivitiesConte
   return async function readGoogleSheetsIntoQueue(
     pipelineId: string,
     opts?: SourceReadOptions & {
-      input?: unknown[]
+      input?: SourceInput[]
       catalog?: ConfiguredCatalog
     }
   ): Promise<{ count: number; state: Record<string, unknown> }> {
     if (!context.kafkaBroker) throw new Error('kafkaBroker is required for Google Sheets workflow')
 
-    const pipeline = await context.pipelines.get(pipelineId)
-    const config = toConfig(pipeline)
-    const engine = createRemoteEngine(context.engineUrl)
-    const { input: inputArr, catalog, ...syncOpts } = opts ?? {}
+    const pipeline = await context.pipelineStore.get(pipelineId)
+    const { id: _, ...config } = pipeline
+    const { input: inputArr, catalog, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
 
     const queued: Message[] = []
@@ -48,21 +48,16 @@ export function createReadGoogleSheetsIntoQueueActivity(context: ActivitiesConte
     const errors: RunResult['errors'] = []
     let seen = 0
 
-    for await (const raw of engine.pipeline_read(config, syncOpts, input) as AsyncIterable<
-      Record<string, unknown>
-    >) {
+    for await (const raw of context.engine.pipeline_read(config, readOpts, input)) {
       seen++
       const error = collectError(raw)
       if (error) {
         errors.push(error)
       } else if (raw.type === 'record') {
-        queued.push(withRowKey(raw as RecordMessage, catalog))
+        queued.push(withRowKey(raw, catalog))
       } else if (raw.type === 'state') {
-        const statePayload = (raw as Record<string, unknown>).state as Record<string, unknown>
-        if (typeof statePayload?.stream === 'string') {
-          state[statePayload.stream] = statePayload.data
-        }
-        queued.push(raw as Message)
+        state[raw.state.stream] = raw.state.data
+        queued.push(raw)
       }
       if (seen % 50 === 0) heartbeat({ messages: seen })
     }

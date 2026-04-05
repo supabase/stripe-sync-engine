@@ -121,7 +121,7 @@ export async function googleSheetPipelineWorkflow(
         const before = readState
         const { count, state: nextReadState } = await readGoogleSheetsIntoQueue(pipelineId, {
           state: readState,
-          stateLimit: 1,
+          state_limit: 1,
           catalog,
         })
         if (count > 0) pendingWrites = true

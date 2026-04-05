@@ -124,13 +124,17 @@ describeWithEnv(
         body: {
           source: {
             type: 'stripe',
-            api_key: STRIPE_API_KEY,
-            ...(stripeMockUrl ? { base_url: stripeMockUrl } : {}),
+            stripe: {
+              api_key: STRIPE_API_KEY,
+              ...(stripeMockUrl ? { base_url: stripeMockUrl } : {}),
+            },
           },
           destination: {
             type: 'postgres',
-            connection_string: POSTGRES_CONTAINER_URL,
-            schema,
+            postgres: {
+              connection_string: POSTGRES_CONTAINER_URL,
+              schema,
+            },
           },
           streams: [{ name: 'products', backfill_limit: 500 }],
         },

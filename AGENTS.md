@@ -22,7 +22,7 @@ pnpm lint
 pnpm build
 ```
 
-Minimum Node.js version: **24**. Dev with auto-rebuild: `cd packages/sync-engine && pnpm dev`
+Minimum Node.js version: **24**. Dev with auto-rebuild: `pnpm --filter sync-engine dev`
 
 If you add a migration, register it in `packages/state-postgres/src/migrations/index.ts`.
 

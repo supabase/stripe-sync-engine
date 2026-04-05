@@ -173,8 +173,14 @@ describe('pipeline integration', () => {
     // 2. Create pipeline with webhook_url
     const { data: created, error: createErr } = await c.POST('/pipelines', {
       body: {
-        source: { type: 'stripe', api_key: STRIPE_API_KEY, webhook_url: webhookToken.url },
-        destination: { type: 'postgres', connection_string: POSTGRES_URL, schema: SCHEMA },
+        source: {
+          type: 'stripe',
+          stripe: { api_key: STRIPE_API_KEY, webhook_url: webhookToken.url },
+        },
+        destination: {
+          type: 'postgres',
+          postgres: { connection_string: POSTGRES_URL, schema: SCHEMA },
+        },
         streams: [{ name: 'products' }],
       },
     })

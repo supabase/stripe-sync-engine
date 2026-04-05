@@ -126,8 +126,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
   it('run 1: writes records and persists state', async () => {
     const engine = await createEngine(makeResolver())
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: {
+        type: 'postgres',
+        postgres: { connection_string: connectionString, schema: SCHEMA },
+      },
     }
 
     const input = [
@@ -138,7 +141,8 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
     ]
 
     // Set up destination schema/tables, then run pipeline
-    await engine.pipeline_setup(pipeline)
+    for await (const _ of engine.pipeline_setup(pipeline)) {
+    }
     for await (const msg of engine.pipeline_sync(pipeline, undefined, toAsync(input))) {
       if (msg.type === 'state') {
         await pool.query(
@@ -173,8 +177,11 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
 
     const engine = await createEngine(makeResolver())
     const pipeline = {
-      source: { type: 'test', streams: { customers: {} } },
-      destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: {
+        type: 'postgres',
+        postgres: { connection_string: connectionString, schema: SCHEMA },
+      },
     }
 
     const input = [

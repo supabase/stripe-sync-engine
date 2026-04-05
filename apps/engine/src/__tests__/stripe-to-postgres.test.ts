@@ -3,8 +3,9 @@ import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import source from '@stripe/sync-source-stripe'
 import destination from '@stripe/sync-destination-postgres'
-import { createEngine, collectCatalog } from '../lib/index.js'
+import { createEngine, collectFirst } from '../lib/index.js'
 import type { ConnectorResolver, Message, DestinationOutput } from '../lib/index.js'
+import { drain } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -93,8 +94,11 @@ function makeResolver(): ConnectorResolver {
 
 function makePipeline(overrides: { streams?: Array<{ name: string }> } = {}) {
   return {
-    source: { type: 'stripe', api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
-    destination: { type: 'postgres', connection_string: connectionString, schema: SCHEMA },
+    source: { type: 'stripe', stripe: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL } },
+    destination: {
+      type: 'postgres',
+      postgres: { connection_string: connectionString, schema: SCHEMA },
+    },
     streams: overrides.streams,
   }
 }
@@ -113,14 +117,14 @@ let targetStream: string
 
 beforeAll(async () => {
   const engine = createEngine(makeResolver())
-  const { catalog: discovered } = await collectCatalog(
+  const catalogMsg = await collectFirst(
     engine.source_discover({
       type: 'stripe',
-      api_key: 'sk_test_fake',
-      base_url: STRIPE_MOCK_URL,
-    })
+      stripe: { api_key: 'sk_test_fake', base_url: STRIPE_MOCK_URL },
+    }),
+    'catalog'
   )
-  targetStream = discovered.streams[0]!.name
+  targetStream = catalogMsg.catalog.streams[0]!.name
 }, 30_000)
 
 // ---------------------------------------------------------------------------
@@ -193,7 +197,7 @@ describe('engine read → write', () => {
     const pipeline = makePipeline({ streams: [{ name: targetStream }] })
 
     // Setup first (creates tables)
-    await engine.pipeline_setup(pipeline)
+    await drain(engine.pipeline_setup(pipeline))
 
     // Read → collect → feed into write
     const readMessages = await collect<Message>(engine.pipeline_read(pipeline))

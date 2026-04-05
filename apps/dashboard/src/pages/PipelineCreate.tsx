@@ -49,7 +49,7 @@ export function PipelineCreate({ onDone }: { onDone?: () => void }) {
     setDiscovering(true)
     setError(null)
     try {
-      const catalog = await discover({ type: sourceType, ...sourceConfig })
+      const catalog = await discover({ type: sourceType, [sourceType]: sourceConfig })
       setCatalog(catalog.streams)
       setStep('streams')
     } catch (err) {
@@ -84,8 +84,8 @@ export function PipelineCreate({ onDone }: { onDone?: () => void }) {
     setError(null)
     try {
       await createPipeline({
-        source: { type: sourceType, ...sourceConfig },
-        destination: { type: destType, ...destConfig },
+        source: { type: sourceType, [sourceType]: sourceConfig },
+        destination: { type: destType, [destType]: destConfig },
         streams: [...selectedStreams].map((name) => ({ name })),
       })
       // Success — navigate back to list

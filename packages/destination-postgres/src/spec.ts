@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ConnectorSpecification } from '@stripe/sync-protocol'
 
 export const configSchema = z.object({
   url: z.string().optional().describe('Postgres connection string (alias for connection_string)'),
@@ -26,3 +27,7 @@ export const configSchema = z.object({
 })
 
 export type Config = z.infer<typeof configSchema>
+
+export default {
+  config: z.toJSONSchema(configSchema),
+} satisfies ConnectorSpecification

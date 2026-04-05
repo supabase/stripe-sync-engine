@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ConnectorSpecification } from '@stripe/sync-protocol'
 
 export const envVars = {
   client_id: 'GOOGLE_CLIENT_ID',
@@ -22,3 +23,7 @@ export const configSchema = z.object({
 })
 
 export type Config = z.infer<typeof configSchema>
+
+export default {
+  config: z.toJSONSchema(configSchema),
+} satisfies ConnectorSpecification

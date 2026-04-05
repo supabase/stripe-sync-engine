@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ConnectorSpecification } from '@stripe/sync-protocol'
 
 export const configSchema = z.object({
   api_key: z.string().describe('Stripe API key (sk_test_... or sk_live_...)'),
@@ -54,3 +55,77 @@ export const configSchema = z.object({
 })
 
 export type Config = z.infer<typeof configSchema>
+
+const segmentStateSpec = z.object({
+  index: z.number(),
+  gte: z.number(),
+  lt: z.number(),
+  page_cursor: z.string().nullable(),
+  status: z.enum(['pending', 'complete']),
+})
+
+const backfillStateSpec = z.object({
+  range: z.object({ gte: z.number(), lt: z.number() }),
+  num_segments: z.number(),
+  completed: z.array(z.object({ gte: z.number(), lt: z.number() })),
+  in_flight: z.array(z.object({ gte: z.number(), lt: z.number(), page_cursor: z.string() })),
+})
+
+export const streamStateSpec = z.object({
+  page_cursor: z.string().nullable(),
+  status: z.enum(['pending', 'complete']),
+  events_cursor: z.number().optional(),
+  segments: z.array(segmentStateSpec).optional(),
+  backfill: backfillStateSpec.optional(),
+})
+
+export const webhookEventSchema = z.object({
+  id: z.string().describe('Unique identifier for the object.'),
+  object: z
+    .literal('event')
+    .describe(
+      "String representing the object's type. Objects of the same type share the same value."
+    ),
+  account: z.string().optional().describe('The connected account that originates the event.'),
+  api_version: z
+    .string()
+    .nullable()
+    .describe(
+      'The Stripe API version used to render `data`. This property is populated only for events on or after October 31, 2014.'
+    ),
+  created: z
+    .number()
+    .describe('Time at which the object was created. Measured in seconds since the Unix epoch.'),
+  data: z.object({
+    object: z.record(z.string(), z.unknown()),
+    previous_attributes: z.record(z.string(), z.unknown()).optional(),
+  }),
+  livemode: z
+    .boolean()
+    .describe(
+      'Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.'
+    ),
+  pending_webhooks: z
+    .number()
+    .describe(
+      "Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify."
+    ),
+  request: z
+    .object({
+      id: z.string().nullable(),
+      idempotency_key: z.string().nullable(),
+    })
+    .nullable()
+    .describe('Information on the API request that triggers the event.'),
+  type: z
+    .string()
+    .describe('Description of the event (for example, `invoice.created` or `charge.refunded`).'),
+})
+
+export type WebhookEvent = z.infer<typeof webhookEventSchema>
+
+export default {
+  config: z.toJSONSchema(configSchema),
+  stream_state: z.toJSONSchema(streamStateSpec),
+  input: z.toJSONSchema(webhookEventSchema),
+} satisfies ConnectorSpecification

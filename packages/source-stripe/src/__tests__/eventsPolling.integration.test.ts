@@ -44,7 +44,7 @@ describe('events polling (integration — stripe-mock)', () => {
   it('fetches and processes events from stripe-mock', async () => {
     // State: all streams complete with events_cursor in the past
     const state: Record<string, StripeStreamState> = {
-      customers: { pageCursor: null, status: 'complete', events_cursor: 0 },
+      customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 
     const messages = await collect(source.read({ config, catalog, state }))
@@ -70,7 +70,7 @@ describe('events polling (integration — stripe-mock)', () => {
 
   it('preserves status: complete in all state messages during polling', async () => {
     const state: Record<string, StripeStreamState> = {
-      customers: { pageCursor: null, status: 'complete', events_cursor: 0 },
+      customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 
     const messages = await collect(source.read({ config, catalog, state }))

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { ConnectorSpecification, collectSpec } from '@stripe/sync-protocol'
+import { ConnectorSpecification, collectFirst } from '@stripe/sync-protocol'
 import { createConnectorCli } from '@stripe/sync-protocol/cli'
 import {
   sourceTest,
@@ -87,14 +87,14 @@ describe.each(sources)('source: $name', ({ name, mod: initialMod }) => {
 
   it('spec() returns valid ConnectorSpecification', async () => {
     const src = mod.default as Record<string, Function>
-    const { spec } = await collectSpec(src.spec())
+    const spec = (await collectFirst(src.spec(), 'spec')).spec
     const result = ConnectorSpecification.safeParse(spec)
     expect(result.success, result.success ? '' : result.error.message).toBe(true)
   })
 
   it('spec().config is a valid JSON Schema object', async () => {
     const src = mod.default as Record<string, Function>
-    const { spec } = await collectSpec(src.spec())
+    const spec = (await collectFirst(src.spec(), 'spec')).spec
     expect(spec.config.type).toBe('object')
     expect(typeof spec.config.properties).toBe('object')
   })
@@ -138,14 +138,14 @@ describe.each(destinations)('destination: $name', ({ name, mod: initialMod }) =>
 
   it('spec() returns valid ConnectorSpecification', async () => {
     const dest = mod.default as Record<string, Function>
-    const { spec } = await collectSpec(dest.spec())
+    const spec = (await collectFirst(dest.spec(), 'spec')).spec
     const result = ConnectorSpecification.safeParse(spec)
     expect(result.success, result.success ? '' : result.error.message).toBe(true)
   })
 
   it('spec().config is a valid JSON Schema object', async () => {
     const dest = mod.default as Record<string, Function>
-    const { spec } = await collectSpec(dest.spec())
+    const spec = (await collectFirst(dest.spec(), 'spec')).spec
     expect(spec.config.type).toBe('object')
     expect(typeof spec.config.properties).toBe('object')
   })

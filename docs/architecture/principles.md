@@ -16,7 +16,7 @@ Connectors never access state storage directly. State flows in via `cursor_in` o
 
 ## 4. Snake_case on the wire
 
-All Zod schemas and JSON wire format use **snake_case** field names. TypeScript code uses camelCase internally, but serialization boundaries are always snake_case.
+All Zod schemas and JSON wire format use **snake_case** field names. This includes connector spec schemas (`config`, `stream_state`, `input`), protocol messages, and any type whose instances are serialized to JSON. TypeScript code may use camelCase for purely internal variables and function parameters that never cross a serialization boundary.
 
 ## 5. api_version is required
 

@@ -1,13 +1,15 @@
 import { heartbeat } from '@temporalio/activity'
-import type { Message } from '@stripe/sync-engine'
+import type { Message, Engine } from '@stripe/sync-engine'
+import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
 import type { PipelineStore } from '../../lib/stores.js'
 
 export interface ActivitiesContext {
-  engineUrl: string
+  /** Remote engine client — satisfies the {@link Engine} interface over HTTP. Drop-in replacement for a local engine. */
+  engine: Engine
   kafkaBroker?: string
-  pipelines: PipelineStore
+  pipelineStore: PipelineStore
   getProducer(): Promise<Producer>
   consumeQueueBatch(pipelineId: string, maxBatch: number): Promise<Message[]>
 }
@@ -15,9 +17,9 @@ export interface ActivitiesContext {
 export function createActivitiesContext(opts: {
   engineUrl: string
   kafkaBroker?: string
-  pipelines: PipelineStore
+  pipelineStore: PipelineStore
 }): ActivitiesContext {
-  const { engineUrl, kafkaBroker, pipelines } = opts
+  const { engineUrl, kafkaBroker, pipelineStore } = opts
 
   let kafka: Kafka | undefined
   let producerConnected: Promise<Producer> | undefined
@@ -93,9 +95,9 @@ export function createActivitiesContext(opts: {
   }
 
   return {
-    engineUrl,
+    engine: createRemoteEngine(engineUrl),
     kafkaBroker,
-    pipelines,
+    pipelineStore,
     getProducer,
     consumeQueueBatch,
   }
@@ -114,45 +116,45 @@ export function pipelineHeader(config: Record<string, unknown>): string {
   return JSON.stringify(config)
 }
 
-export function collectError(message: Record<string, unknown>): RunResult['errors'][number] | null {
-  if (message.type === 'trace') {
-    const trace = message.trace as Record<string, unknown> | undefined
-    if (trace?.trace_type === 'error') {
-      const error = trace.error as Record<string, unknown>
-      return {
-        message: (error.message as string) || 'Unknown error',
-        failure_type: error.failure_type as string | undefined,
-        stream: error.stream as string | undefined,
-      }
+export function collectError(message: Message): RunResult['errors'][number] | null {
+  if (message.type === 'trace' && message.trace.trace_type === 'error') {
+    return {
+      message: message.trace.error.message || 'Unknown error',
+      failure_type: message.trace.error.failure_type,
+      stream: message.trace.error.stream,
     }
   }
   return null
 }
 
-export async function drainMessages(stream: AsyncIterable<Record<string, unknown>>): Promise<{
+export async function drainMessages(stream: AsyncIterable<Message>): Promise<{
   errors: RunResult['errors']
   state: Record<string, unknown>
-  records: unknown[]
+  records: Message[]
+  controls: Array<Record<string, unknown>>
   eof?: { reason: string }
 }> {
   const errors: RunResult['errors'] = []
   const state: Record<string, unknown> = {}
-  const records: unknown[] = []
+  const records: Message[] = []
+  const controls: Array<Record<string, unknown>> = []
   let eof: { reason: string } | undefined
   let count = 0
 
   for await (const message of stream) {
     count++
     if (message.type === 'eof') {
-      const eofPayload = message.eof as Record<string, unknown>
-      eof = { reason: eofPayload.reason as string }
+      eof = { reason: message.eof.reason }
+    } else if (message.type === 'control') {
+      if (message.control.control_type === 'connector_config') {
+        controls.push(message.control.config)
+      }
     } else {
       const error = collectError(message)
       if (error) {
         errors.push(error)
       } else if (message.type === 'state') {
-        const statePayload = message.state as Record<string, unknown>
-        state[statePayload.stream as string] = statePayload.data
+        state[message.state.stream] = message.state.data
       } else if (message.type === 'record') {
         records.push(message)
       }
@@ -161,5 +163,5 @@ export async function drainMessages(stream: AsyncIterable<Record<string, unknown
   }
   if (count % 50 !== 0) heartbeat({ messages: count })
 
-  return { errors, state, records, eof }
+  return { errors, state, records, controls, eof }
 }

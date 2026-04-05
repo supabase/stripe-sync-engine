@@ -28,7 +28,7 @@ export function compactState(
   numSegments: number
 ): BackfillState {
   const completed: BackfillState['completed'] = []
-  const inFlight: BackfillState['inFlight'] = []
+  const inFlight: BackfillState['in_flight'] = []
 
   for (const seg of segments) {
     if (seg.status === 'complete') {
@@ -38,13 +38,13 @@ export function compactState(
       } else {
         completed.push({ gte: seg.gte, lt: seg.lt })
       }
-    } else if (seg.pageCursor) {
-      inFlight.push({ gte: seg.gte, lt: seg.lt, pageCursor: seg.pageCursor })
+    } else if (seg.page_cursor) {
+      inFlight.push({ gte: seg.gte, lt: seg.lt, page_cursor: seg.page_cursor })
     }
     // pending with null cursor → derived from gaps, not stored
   }
 
-  return { range, numSegments, completed, inFlight }
+  return { range, num_segments: numSegments, completed, in_flight: inFlight }
 }
 
 /**
@@ -58,17 +58,24 @@ export function expandState(state: BackfillState): SegmentState[] {
     gte: number
     lt: number
     status: 'complete' | 'pending'
-    pageCursor: string | null
+    page_cursor: string | null
   }
   const occupied: Interval[] = [
-    ...state.completed.map((r) => ({ ...r, status: 'complete' as const, pageCursor: null })),
-    ...state.inFlight.map((r) => ({ ...r, status: 'pending' as const, pageCursor: r.pageCursor })),
+    ...state.completed.map((r) => ({ ...r, status: 'complete' as const, page_cursor: null })),
+    ...state.in_flight.map((r) => ({
+      ...r,
+      status: 'pending' as const,
+      page_cursor: r.page_cursor,
+    })),
   ].sort((a, b) => a.gte - b.gte)
 
   const segments: SegmentState[] = []
   let idx = 0
   let cursor = state.range.gte
-  const segmentSize = Math.max(1, Math.ceil((state.range.lt - state.range.gte) / state.numSegments))
+  const segmentSize = Math.max(
+    1,
+    Math.ceil((state.range.lt - state.range.gte) / state.num_segments)
+  )
 
   for (const interval of occupied) {
     // Fill gap before this interval with pending segments
@@ -83,7 +90,7 @@ export function expandState(state: BackfillState): SegmentState[] {
       index: idx,
       gte: interval.gte,
       lt: interval.lt,
-      pageCursor: interval.pageCursor,
+      page_cursor: interval.page_cursor,
       status: interval.status,
     })
     idx++
@@ -113,7 +120,7 @@ function splitRange(
   let idx = startIndex
   while (cursor < lt) {
     const end = Math.min(cursor + segmentSize, lt)
-    segments.push({ index: idx, gte: cursor, lt: end, pageCursor: null, status: 'pending' })
+    segments.push({ index: idx, gte: cursor, lt: end, page_cursor: null, status: 'pending' })
     cursor = end
     idx++
   }
@@ -194,7 +201,7 @@ function buildSegments(
     const gte = startTimestamp + i * segmentSize
     const lt = i === numSegments - 1 ? endTimestamp + 1 : startTimestamp + (i + 1) * segmentSize
     if (gte >= endTimestamp + 1) break
-    segments.push({ index: i, gte, lt, pageCursor: null, status: 'pending' })
+    segments.push({ index: i, gte, lt, page_cursor: null, status: 'pending' })
   }
 
   return segments
@@ -227,7 +234,7 @@ async function* paginateSegment(opts: {
     rateLimiter,
   } = opts
 
-  let pageCursor: string | null = segment.pageCursor
+  let pageCursor: string | null = segment.page_cursor
   let hasMore = true
 
   while (hasMore) {
@@ -262,14 +269,14 @@ async function* paginateSegment(opts: {
     }
 
     // Update shared segment state and emit checkpoint
-    segment.pageCursor = hasMore ? pageCursor : null
+    segment.page_cursor = hasMore ? pageCursor : null
     segment.status = hasMore ? 'pending' : 'complete'
 
     const allComplete = segments.every((s) => s.status === 'complete')
     yield stateMsg({
       stream: streamName,
       data: {
-        pageCursor: null,
+        page_cursor: null,
         status: allComplete ? 'complete' : 'pending',
         backfill: compactState(segments, range, numSegments),
       },
@@ -328,7 +335,7 @@ async function* sequentialBackfillStream(opts: {
     yield stateMsg({
       stream: streamName,
       data: {
-        pageCursor: hasMore ? pageCursor : null,
+        page_cursor: hasMore ? pageCursor : null,
         status: hasMore ? 'pending' : 'complete',
       },
     })
@@ -343,7 +350,7 @@ export async function* listApiBackfill(opts: {
     | Record<
         string,
         {
-          pageCursor: string | null
+          page_cursor: string | null
           status: string
           segments?: SegmentState[]
           backfill?: BackfillState
@@ -414,7 +421,7 @@ export async function* listApiBackfill(opts: {
           // Resume from compact backfill state
           segments = expandState(streamState.backfill)
           range = streamState.backfill.range
-          numSegments = streamState.backfill.numSegments
+          numSegments = streamState.backfill.num_segments
         } else if (streamState?.segments) {
           // Legacy: resume from old segment array format
           segments = streamState.segments.map((s) => ({ ...s }))
@@ -453,7 +460,7 @@ export async function* listApiBackfill(opts: {
         }
       } else {
         // Sequential path: no created filter support
-        const pageCursor: string | null = streamState?.pageCursor ?? null
+        const pageCursor: string | null = streamState?.page_cursor ?? null
         yield* sequentialBackfillStream({
           resourceConfig,
           streamName: stream.name,

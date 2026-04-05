@@ -22,10 +22,9 @@ export {
   isTraceError,
   isTraceStreamStatus,
   // Stream collectors
-  collectSpec,
-  collectConnectionStatus,
-  collectCatalog,
-  collectControls,
-  drainStream,
+  collectMessages,
+  collectFirst,
+  drain,
 } from './helpers.js'
 export { parseNdjsonChunks, writeLine } from './ndjson.js'
+export { channel, merge, split, map } from './stream-utils.js'

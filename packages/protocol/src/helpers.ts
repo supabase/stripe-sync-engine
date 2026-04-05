@@ -1,8 +1,6 @@
 import type {
   CatalogMessage,
-  CatalogPayload,
   ConnectionStatusMessage,
-  ConnectionStatusPayload,
   ControlMessage,
   DestinationInput,
   EofMessage,
@@ -107,90 +105,64 @@ export function isTraceStreamStatus(
   return msg.type === 'trace' && msg.trace.trace_type === 'stream_status'
 }
 
-// MARK: - Stream helpers
+// MARK: - Stream collector
 
 /**
- * Collect the first message of a given type from an async iterable.
- * Logs any LogMessages encountered. Throws on trace errors.
- * Returns the payload extracted from the envelope, or undefined if the stream ends
- * without emitting a message of the requested type.
+ * Generic stream collector. Drains the stream, accumulating messages whose
+ * `type` matches one of the given types. Log messages are always collected
+ * into `logs`. Trace errors always throw.
+ *
+ * With no type arguments, acts as a drain (consumes all, returns logs only).
+ *
+ * @example
+ *   // Collect a single spec message
+ *   const { messages: [specMsg] } = await collect(connector.spec(), 'spec')
+ *
+ *   // Collect all control messages
+ *   const { messages } = await collect(stream, 'control')
+ *
+ *   // Drain, collecting logs and throwing on trace errors
+ *   const { logs } = await collect(stream)
  */
-export async function collectSpec(
-  stream: AsyncIterable<Message>
-): Promise<{ spec: SpecMessage['spec']; logs: string[] }> {
+export async function collectMessages<T extends Message['type']>(
+  stream: AsyncIterable<{ type: string }>,
+  ...types: T[]
+): Promise<{ messages: Extract<Message, { type: T }>[]; logs: string[] }> {
   const logs: string[] = []
-  for await (const msg of stream) {
+  const messages: Extract<Message, { type: T }>[] = []
+  const typeSet = new Set<string>(types)
+  for await (const raw of stream) {
+    const msg = raw as Message
     if (msg.type === 'log') {
       logs.push(`[${msg.log.level}] ${msg.log.message}`)
     } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
       throw new Error(msg.trace.error.message)
-    } else if (msg.type === 'spec') {
-      return { spec: msg.spec, logs }
+    }
+    if (typeSet.has(msg.type)) {
+      messages.push(msg as Extract<Message, { type: T }>)
     }
   }
-  throw new Error('spec stream ended without emitting a spec message')
+  return { messages, logs }
 }
 
-export async function collectConnectionStatus(
-  stream: AsyncIterable<Message>
-): Promise<{ connection_status: ConnectionStatusPayload; logs: string[] }> {
-  const logs: string[] = []
-  for await (const msg of stream) {
-    if (msg.type === 'log') {
-      logs.push(`[${msg.log.level}] ${msg.log.message}`)
-    } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
-      throw new Error(msg.trace.error.message)
-    } else if (msg.type === 'connection_status') {
-      return { connection_status: msg.connection_status, logs }
-    }
-  }
-  throw new Error('check stream ended without emitting a connection_status message')
+/**
+ * Collect the first message of a given type from a stream.
+ * Throws if the stream ends without emitting a matching message.
+ * Log messages are collected; trace errors throw.
+ */
+export async function collectFirst<T extends Message['type']>(
+  stream: AsyncIterable<{ type: string }>,
+  type: T
+): Promise<Extract<Message, { type: T }>> {
+  const { messages } = await collectMessages(stream, type)
+  const first = messages[0]
+  if (!first) throw new Error(`stream ended without emitting a '${type}' message`)
+  return first
 }
 
-export async function collectCatalog(
-  stream: AsyncIterable<Message>
-): Promise<{ catalog: CatalogPayload; logs: string[] }> {
-  const logs: string[] = []
-  for await (const msg of stream) {
-    if (msg.type === 'log') {
-      logs.push(`[${msg.log.level}] ${msg.log.message}`)
-    } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
-      throw new Error(msg.trace.error.message)
-    } else if (msg.type === 'catalog') {
-      return { catalog: msg.catalog, logs }
-    }
-  }
-  throw new Error('discover stream ended without emitting a catalog message')
-}
-
-export async function collectControls(
-  stream: AsyncIterable<Message>
-): Promise<{ configs: Array<Record<string, unknown>>; logs: string[] }> {
-  const logs: string[] = []
-  const configs: Array<Record<string, unknown>> = []
-  for await (const msg of stream) {
-    if (msg.type === 'log') {
-      logs.push(`[${msg.log.level}] ${msg.log.message}`)
-    } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
-      throw new Error(msg.trace.error.message)
-    } else if (msg.type === 'control' && msg.control.control_type === 'config_update') {
-      configs.push(msg.control.config)
-    }
-  }
-  return { configs, logs }
-}
-
-/** Drain a stream, logging LogMessages and throwing on trace errors. */
-export async function drainStream(stream: AsyncIterable<Message>): Promise<{ logs: string[] }> {
-  const logs: string[] = []
-  for await (const msg of stream) {
-    if (msg.type === 'log') {
-      logs.push(`[${msg.log.level}] ${msg.log.message}`)
-    } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
-      throw new Error(msg.trace.error.message)
-    }
-  }
-  return { logs }
+/** Drain a stream, collecting logs and throwing on trace errors. */
+export async function drain(stream: AsyncIterable<{ type: string }>): Promise<{ logs: string[] }> {
+  return collectMessages(stream)
 }
 
 // MARK: - Envelope constructors

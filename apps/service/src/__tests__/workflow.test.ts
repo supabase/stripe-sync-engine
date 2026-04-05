@@ -5,6 +5,8 @@ import path from 'node:path'
 import type { SyncActivities } from '../temporal/activities/index.js'
 import type { RunResult } from '../temporal/activities/index.js'
 
+type SourceInput = unknown
+
 // workflowsPath points to the compiled workflow directory.
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
 
@@ -85,7 +87,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
   })
 
   it('processes stripe_event signals as optimistic updates', async () => {
-    const syncCalls: { pipelineId: string; input?: unknown[] }[] = []
+    const syncCalls: { pipelineId: string; input?: SourceInput[] }[] = []
 
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,

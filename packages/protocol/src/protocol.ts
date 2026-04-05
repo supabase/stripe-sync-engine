@@ -172,7 +172,7 @@ export type ConnectionStatusPayload = z.infer<typeof ConnectionStatusPayload>
 export const ControlPayload = z
   .object({
     control_type: z
-      .enum(['config_update'])
+      .enum(['connector_config'])
       .describe('What kind of control action the connector is requesting.'),
     config: z
       .record(z.string(), z.unknown())
@@ -236,58 +236,90 @@ export type TracePayload = z.infer<typeof TracePayload>
 //
 // Every message is { type: '<kind>', <kind>: <payload> }.
 // One message per NDJSON line.
+//
+// MessageBase carries engine-injected metadata (underscore-prefixed fields).
+// Connectors never set these — the engine populates them when assembling pipelines.
 
-export const RecordMessage = z
-  .object({ type: z.literal('record'), record: RecordPayload })
-  .meta({ id: 'RecordMessage' })
+export const MessageBase = z.object({
+  _emitted_by: z
+    .string()
+    .optional()
+    .describe(
+      'Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine.'
+    ),
+  _ts: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('ISO 8601 timestamp when the engine observed this message.'),
+})
+export type MessageBase = z.infer<typeof MessageBase>
+
+export const RecordMessage = MessageBase.extend({
+  type: z.literal('record'),
+  record: RecordPayload,
+}).meta({ id: 'RecordMessage' })
 export type RecordMessage = z.infer<typeof RecordMessage>
 
-export const StateMessage = z
-  .object({ type: z.literal('state'), state: StatePayload })
-  .meta({ id: 'StateMessage' })
+export const StateMessage = MessageBase.extend({
+  type: z.literal('state'),
+  state: StatePayload,
+}).meta({ id: 'StateMessage' })
 export type StateMessage = z.infer<typeof StateMessage>
 
-export const CatalogMessage = z
-  .object({ type: z.literal('catalog'), catalog: CatalogPayload })
-  .meta({ id: 'CatalogMessage' })
+export const CatalogMessage = MessageBase.extend({
+  type: z.literal('catalog'),
+  catalog: CatalogPayload,
+}).meta({ id: 'CatalogMessage' })
 export type CatalogMessage = z.infer<typeof CatalogMessage>
 
-export const LogMessage = z
-  .object({ type: z.literal('log'), log: LogPayload })
-  .meta({ id: 'LogMessage' })
+export const LogMessage = MessageBase.extend({
+  type: z.literal('log'),
+  log: LogPayload,
+}).meta({ id: 'LogMessage' })
 export type LogMessage = z.infer<typeof LogMessage>
 
-export const TraceMessage = z
-  .object({ type: z.literal('trace'), trace: TracePayload })
-  .meta({ id: 'TraceMessage' })
+export const TraceMessage = MessageBase.extend({
+  type: z.literal('trace'),
+  trace: TracePayload,
+}).meta({ id: 'TraceMessage' })
 export type TraceMessage = z.infer<typeof TraceMessage>
 
-export const SpecMessage = z
-  .object({ type: z.literal('spec'), spec: ConnectorSpecification })
-  .meta({ id: 'SpecMessage' })
+export const SpecMessage = MessageBase.extend({
+  type: z.literal('spec'),
+  spec: ConnectorSpecification,
+}).meta({ id: 'SpecMessage' })
 export type SpecMessage = z.infer<typeof SpecMessage>
 
-export const ConnectionStatusMessage = z
-  .object({
-    type: z.literal('connection_status'),
-    connection_status: ConnectionStatusPayload,
-  })
-  .meta({ id: 'ConnectionStatusMessage' })
+export const ConnectionStatusMessage = MessageBase.extend({
+  type: z.literal('connection_status'),
+  connection_status: ConnectionStatusPayload,
+}).meta({ id: 'ConnectionStatusMessage' })
 export type ConnectionStatusMessage = z.infer<typeof ConnectionStatusMessage>
 
-export const ControlMessage = z
-  .object({ type: z.literal('control'), control: ControlPayload })
-  .meta({ id: 'ControlMessage' })
+export const ControlMessage = MessageBase.extend({
+  type: z.literal('control'),
+  control: ControlPayload,
+}).meta({ id: 'ControlMessage' })
 export type ControlMessage = z.infer<typeof ControlMessage>
 
-export const EofMessage = z
-  .object({ type: z.literal('eof'), eof: EofPayload })
-  .meta({ id: 'EofMessage' })
+export const EofMessage = MessageBase.extend({
+  type: z.literal('eof'),
+  eof: EofPayload,
+}).meta({ id: 'EofMessage' })
 export type EofMessage = z.infer<typeof EofMessage>
 
 // MARK: - Pipeline params
 
-/** Parameters for a sync pipeline — source/destination config and optional stream selection. */
+/**
+ * Parameters for a sync pipeline — source/destination config and optional stream selection.
+ *
+ * Source and destination use a nested envelope format:
+ *   `{ type: 'stripe', stripe: { api_key: '...' } }`
+ *
+ * The loose `catchall` schema accepts any extra keys (including the nested payload key)
+ * without validating the inner shape — validation happens in the engine via the connector spec.
+ */
 export const PipelineConfig = z.object({
   source: z.object({ type: z.string() }).catchall(z.unknown()),
   destination: z.object({ type: z.string() }).catchall(z.unknown()),
@@ -308,8 +340,8 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 export interface SyncParams {
   pipeline: PipelineConfig
   state?: Record<string, unknown>
-  stateLimit?: number
-  timeLimit?: number
+  state_limit?: number
+  time_limit?: number
 }
 
 // MARK: - Message unions
@@ -323,6 +355,12 @@ export const DestinationOutput = z
   .discriminatedUnion('type', [StateMessage, TraceMessage, LogMessage, EofMessage])
   .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
+
+/** Output of pipeline_sync(): destination output plus source signals (controls, logs, traces). */
+export const SyncOutput = z
+  .discriminatedUnion('type', [StateMessage, TraceMessage, LogMessage, EofMessage, ControlMessage])
+  .meta({ id: 'SyncOutput' })
+export type SyncOutput = z.infer<typeof SyncOutput>
 
 /** Any message flowing through the engine. One message per NDJSON line. */
 export const Message = z
@@ -343,19 +381,34 @@ export type Message = z.infer<typeof Message>
 // MARK: - Per-command output types
 
 /** Output of spec(): the connector's specification, plus optional logs/traces. */
-export type SpecOutput = SpecMessage | LogMessage | TraceMessage
+export const SpecOutput = z
+  .discriminatedUnion('type', [SpecMessage, LogMessage, TraceMessage])
+  .meta({ id: 'SpecOutput' })
+export type SpecOutput = z.infer<typeof SpecOutput>
 
 /** Output of check(): connection status, plus optional logs/traces. */
-export type CheckOutput = ConnectionStatusMessage | LogMessage | TraceMessage
+export const CheckOutput = z
+  .discriminatedUnion('type', [ConnectionStatusMessage, LogMessage, TraceMessage])
+  .meta({ id: 'CheckOutput' })
+export type CheckOutput = z.infer<typeof CheckOutput>
 
 /** Output of discover(): catalog of streams, plus optional logs/traces. */
-export type DiscoverOutput = CatalogMessage | LogMessage | TraceMessage
+export const DiscoverOutput = z
+  .discriminatedUnion('type', [CatalogMessage, LogMessage, TraceMessage])
+  .meta({ id: 'DiscoverOutput' })
+export type DiscoverOutput = z.infer<typeof DiscoverOutput>
 
 /** Output of setup(): config update controls, plus optional logs/traces. */
-export type SetupOutput = ControlMessage | LogMessage | TraceMessage
+export const SetupOutput = z
+  .discriminatedUnion('type', [ControlMessage, LogMessage, TraceMessage])
+  .meta({ id: 'SetupOutput' })
+export type SetupOutput = z.infer<typeof SetupOutput>
 
 /** Output of teardown(): optional logs/traces. */
-export type TeardownOutput = LogMessage | TraceMessage
+export const TeardownOutput = z
+  .discriminatedUnion('type', [LogMessage, TraceMessage])
+  .meta({ id: 'TeardownOutput' })
+export type TeardownOutput = z.infer<typeof TeardownOutput>
 
 // MARK: - Source
 //

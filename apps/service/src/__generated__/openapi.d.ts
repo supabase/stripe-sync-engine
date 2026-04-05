@@ -115,7 +115,115 @@ export interface paths {
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        SourceConfig: {
+            /** @constant */
+            type: "stripe";
+            stripe: components["schemas"]["SourceStripeConfig"];
+        };
+        SourceStripeConfig: {
+            /** @description Stripe API key (sk_test_... or sk_live_...) */
+            api_key: string;
+            /** @description Stripe account ID (resolved from API if omitted) */
+            account_id?: string;
+            /** @description Whether this is a live mode sync */
+            livemode?: boolean;
+            /** @description Stripe API version (e.g. 2025-04-30.basil) */
+            api_version?: string;
+            /**
+             * Format: uri
+             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+             */
+            base_url?: string;
+            /**
+             * Format: uri
+             * @description URL for managed webhook endpoint registration
+             */
+            webhook_url?: string;
+            /** @description Webhook signing secret (whsec_...) for signature verification */
+            webhook_secret?: string;
+            /** @description Enable WebSocket streaming for live events */
+            websocket?: boolean;
+            /** @description Enable events API polling for incremental sync after backfill */
+            poll_events?: boolean;
+            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+            webhook_port?: number;
+            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+            revalidate_objects?: string[];
+            /** @description Max objects to backfill per stream (useful for testing) */
+            backfill_limit?: number;
+            /** @description Max Stripe API requests per second (default: 25) */
+            rate_limit?: number;
+            /** @description Number of time-range segments for parallel backfill (default: 200) */
+            backfill_concurrency?: number;
+        };
+        DestinationConfig: {
+            /** @constant */
+            type: "postgres";
+            postgres: components["schemas"]["DestinationPostgresConfig"];
+        } | {
+            /** @constant */
+            type: "google-sheets";
+            "google-sheets": components["schemas"]["DestinationGoogleSheetsConfig"];
+        };
+        DestinationPostgresConfig: {
+            /** @description Postgres connection string (alias for connection_string) */
+            url?: string;
+            /** @description Postgres connection string */
+            connection_string?: string;
+            /** @description Postgres host (required for AWS IAM) */
+            host?: string;
+            /**
+             * @description Postgres port
+             * @default 5432
+             */
+            port: number;
+            /** @description Database name (required for AWS IAM) */
+            database?: string;
+            /** @description Database user (required for AWS IAM) */
+            user?: string;
+            /** @description Target schema name (e.g. "stripe_sync") */
+            schema: string;
+            /**
+             * @description Records to buffer before flushing
+             * @default 100
+             */
+            batch_size: number;
+            /** @description AWS RDS IAM authentication config */
+            aws?: {
+                /** @description AWS region for RDS instance */
+                region: string;
+                /** @description IAM role ARN to assume (cross-account) */
+                role_arn?: string;
+                /** @description External ID for STS AssumeRole */
+                external_id?: string;
+            };
+            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+            ssl_ca_pem?: string;
+        };
+        DestinationGoogleSheetsConfig: {
+            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+            client_id?: string;
+            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+            client_secret?: string;
+            /** @description OAuth2 access token */
+            access_token: string;
+            /** @description OAuth2 refresh token */
+            refresh_token: string;
+            /** @description Target spreadsheet ID (created if omitted) */
+            spreadsheet_id?: string;
+            /**
+             * @description Title when creating a new spreadsheet
+             * @default Stripe Sync
+             */
+            spreadsheet_title: string;
+            /**
+             * @description Rows per Sheets API append call
+             * @default 50
+             */
+            batch_size: number;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -166,104 +274,8 @@ export interface operations {
                         data: {
                             /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                             id: string;
-                            source: {
-                                /** @description Stripe API key (sk_test_... or sk_live_...) */
-                                api_key: string;
-                                /** @description Stripe account ID (resolved from API if omitted) */
-                                account_id?: string;
-                                /** @description Whether this is a live mode sync */
-                                livemode?: boolean;
-                                /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                                api_version?: string;
-                                /**
-                                 * Format: uri
-                                 * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                                 */
-                                base_url?: string;
-                                /**
-                                 * Format: uri
-                                 * @description URL for managed webhook endpoint registration
-                                 */
-                                webhook_url?: string;
-                                /** @description Webhook signing secret (whsec_...) for signature verification */
-                                webhook_secret?: string;
-                                /** @description Enable WebSocket streaming for live events */
-                                websocket?: boolean;
-                                /** @description Enable events API polling for incremental sync after backfill */
-                                poll_events?: boolean;
-                                /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                                webhook_port?: number;
-                                /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                                revalidate_objects?: string[];
-                                /** @description Max objects to backfill per stream (useful for testing) */
-                                backfill_limit?: number;
-                                /** @description Max Stripe API requests per second (default: 25) */
-                                rate_limit?: number;
-                                /** @description Number of time-range segments for parallel backfill (default: 200) */
-                                backfill_concurrency?: number;
-                                /** @constant */
-                                type: "stripe";
-                            };
-                            destination: {
-                                /** @description Postgres connection string (alias for connection_string) */
-                                url?: string;
-                                /** @description Postgres connection string */
-                                connection_string?: string;
-                                /** @description Postgres host (required for AWS IAM) */
-                                host?: string;
-                                /**
-                                 * @description Postgres port
-                                 * @default 5432
-                                 */
-                                port: number;
-                                /** @description Database name (required for AWS IAM) */
-                                database?: string;
-                                /** @description Database user (required for AWS IAM) */
-                                user?: string;
-                                /** @description Target schema name (e.g. "stripe_sync") */
-                                schema: string;
-                                /**
-                                 * @description Records to buffer before flushing
-                                 * @default 100
-                                 */
-                                batch_size: number;
-                                /** @description AWS RDS IAM authentication config */
-                                aws?: {
-                                    /** @description AWS region for RDS instance */
-                                    region: string;
-                                    /** @description IAM role ARN to assume (cross-account) */
-                                    role_arn?: string;
-                                    /** @description External ID for STS AssumeRole */
-                                    external_id?: string;
-                                };
-                                /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                                ssl_ca_pem?: string;
-                                /** @constant */
-                                type: "postgres";
-                            } | {
-                                /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                                client_id?: string;
-                                /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                                client_secret?: string;
-                                /** @description OAuth2 access token */
-                                access_token: string;
-                                /** @description OAuth2 refresh token */
-                                refresh_token: string;
-                                /** @description Target spreadsheet ID (created if omitted) */
-                                spreadsheet_id?: string;
-                                /**
-                                 * @description Title when creating a new spreadsheet
-                                 * @default Stripe Sync
-                                 */
-                                spreadsheet_title: string;
-                                /**
-                                 * @description Rows per Sheets API append call
-                                 * @default 50
-                                 */
-                                batch_size: number;
-                                /** @constant */
-                                type: "google-sheets";
-                            };
+                            source: components["schemas"]["SourceConfig"];
+                            destination: components["schemas"]["DestinationConfig"];
                             /** @description Selected streams to sync. All streams synced if omitted. */
                             streams?: {
                                 /** @description Stream (table) name to sync. */
@@ -302,104 +314,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    source: {
-                        /** @description Stripe API key (sk_test_... or sk_live_...) */
-                        api_key: string;
-                        /** @description Stripe account ID (resolved from API if omitted) */
-                        account_id?: string;
-                        /** @description Whether this is a live mode sync */
-                        livemode?: boolean;
-                        /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                        api_version?: string;
-                        /**
-                         * Format: uri
-                         * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                         */
-                        base_url?: string;
-                        /**
-                         * Format: uri
-                         * @description URL for managed webhook endpoint registration
-                         */
-                        webhook_url?: string;
-                        /** @description Webhook signing secret (whsec_...) for signature verification */
-                        webhook_secret?: string;
-                        /** @description Enable WebSocket streaming for live events */
-                        websocket?: boolean;
-                        /** @description Enable events API polling for incremental sync after backfill */
-                        poll_events?: boolean;
-                        /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                        webhook_port?: number;
-                        /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                        revalidate_objects?: string[];
-                        /** @description Max objects to backfill per stream (useful for testing) */
-                        backfill_limit?: number;
-                        /** @description Max Stripe API requests per second (default: 25) */
-                        rate_limit?: number;
-                        /** @description Number of time-range segments for parallel backfill (default: 200) */
-                        backfill_concurrency?: number;
-                        /** @constant */
-                        type: "stripe";
-                    };
-                    destination: {
-                        /** @description Postgres connection string (alias for connection_string) */
-                        url?: string;
-                        /** @description Postgres connection string */
-                        connection_string?: string;
-                        /** @description Postgres host (required for AWS IAM) */
-                        host?: string;
-                        /**
-                         * @description Postgres port
-                         * @default 5432
-                         */
-                        port?: number;
-                        /** @description Database name (required for AWS IAM) */
-                        database?: string;
-                        /** @description Database user (required for AWS IAM) */
-                        user?: string;
-                        /** @description Target schema name (e.g. "stripe_sync") */
-                        schema: string;
-                        /**
-                         * @description Records to buffer before flushing
-                         * @default 100
-                         */
-                        batch_size?: number;
-                        /** @description AWS RDS IAM authentication config */
-                        aws?: {
-                            /** @description AWS region for RDS instance */
-                            region: string;
-                            /** @description IAM role ARN to assume (cross-account) */
-                            role_arn?: string;
-                            /** @description External ID for STS AssumeRole */
-                            external_id?: string;
-                        };
-                        /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                        ssl_ca_pem?: string;
-                        /** @constant */
-                        type: "postgres";
-                    } | {
-                        /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                        client_id?: string;
-                        /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                        client_secret?: string;
-                        /** @description OAuth2 access token */
-                        access_token: string;
-                        /** @description OAuth2 refresh token */
-                        refresh_token: string;
-                        /** @description Target spreadsheet ID (created if omitted) */
-                        spreadsheet_id?: string;
-                        /**
-                         * @description Title when creating a new spreadsheet
-                         * @default Stripe Sync
-                         */
-                        spreadsheet_title?: string;
-                        /**
-                         * @description Rows per Sheets API append call
-                         * @default 50
-                         */
-                        batch_size?: number;
-                        /** @constant */
-                        type: "google-sheets";
-                    };
+                    source: components["schemas"]["SourceConfig"];
+                    destination: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
                     streams?: {
                         /** @description Stream (table) name to sync. */
@@ -425,104 +341,8 @@ export interface operations {
                     "application/json": {
                         /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
-                        source: {
-                            /** @description Stripe API key (sk_test_... or sk_live_...) */
-                            api_key: string;
-                            /** @description Stripe account ID (resolved from API if omitted) */
-                            account_id?: string;
-                            /** @description Whether this is a live mode sync */
-                            livemode?: boolean;
-                            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                            api_version?: string;
-                            /**
-                             * Format: uri
-                             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                             */
-                            base_url?: string;
-                            /**
-                             * Format: uri
-                             * @description URL for managed webhook endpoint registration
-                             */
-                            webhook_url?: string;
-                            /** @description Webhook signing secret (whsec_...) for signature verification */
-                            webhook_secret?: string;
-                            /** @description Enable WebSocket streaming for live events */
-                            websocket?: boolean;
-                            /** @description Enable events API polling for incremental sync after backfill */
-                            poll_events?: boolean;
-                            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                            webhook_port?: number;
-                            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                            revalidate_objects?: string[];
-                            /** @description Max objects to backfill per stream (useful for testing) */
-                            backfill_limit?: number;
-                            /** @description Max Stripe API requests per second (default: 25) */
-                            rate_limit?: number;
-                            /** @description Number of time-range segments for parallel backfill (default: 200) */
-                            backfill_concurrency?: number;
-                            /** @constant */
-                            type: "stripe";
-                        };
-                        destination: {
-                            /** @description Postgres connection string (alias for connection_string) */
-                            url?: string;
-                            /** @description Postgres connection string */
-                            connection_string?: string;
-                            /** @description Postgres host (required for AWS IAM) */
-                            host?: string;
-                            /**
-                             * @description Postgres port
-                             * @default 5432
-                             */
-                            port: number;
-                            /** @description Database name (required for AWS IAM) */
-                            database?: string;
-                            /** @description Database user (required for AWS IAM) */
-                            user?: string;
-                            /** @description Target schema name (e.g. "stripe_sync") */
-                            schema: string;
-                            /**
-                             * @description Records to buffer before flushing
-                             * @default 100
-                             */
-                            batch_size: number;
-                            /** @description AWS RDS IAM authentication config */
-                            aws?: {
-                                /** @description AWS region for RDS instance */
-                                region: string;
-                                /** @description IAM role ARN to assume (cross-account) */
-                                role_arn?: string;
-                                /** @description External ID for STS AssumeRole */
-                                external_id?: string;
-                            };
-                            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                            ssl_ca_pem?: string;
-                            /** @constant */
-                            type: "postgres";
-                        } | {
-                            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                            client_id?: string;
-                            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                            client_secret?: string;
-                            /** @description OAuth2 access token */
-                            access_token: string;
-                            /** @description OAuth2 refresh token */
-                            refresh_token: string;
-                            /** @description Target spreadsheet ID (created if omitted) */
-                            spreadsheet_id?: string;
-                            /**
-                             * @description Title when creating a new spreadsheet
-                             * @default Stripe Sync
-                             */
-                            spreadsheet_title: string;
-                            /**
-                             * @description Rows per Sheets API append call
-                             * @default 50
-                             */
-                            batch_size: number;
-                            /** @constant */
-                            type: "google-sheets";
-                        };
+                        source: components["schemas"]["SourceConfig"];
+                        destination: components["schemas"]["DestinationConfig"];
                         /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
                             /** @description Stream (table) name to sync. */
@@ -571,104 +391,8 @@ export interface operations {
                     "application/json": {
                         /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
-                        source: {
-                            /** @description Stripe API key (sk_test_... or sk_live_...) */
-                            api_key: string;
-                            /** @description Stripe account ID (resolved from API if omitted) */
-                            account_id?: string;
-                            /** @description Whether this is a live mode sync */
-                            livemode?: boolean;
-                            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                            api_version?: string;
-                            /**
-                             * Format: uri
-                             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                             */
-                            base_url?: string;
-                            /**
-                             * Format: uri
-                             * @description URL for managed webhook endpoint registration
-                             */
-                            webhook_url?: string;
-                            /** @description Webhook signing secret (whsec_...) for signature verification */
-                            webhook_secret?: string;
-                            /** @description Enable WebSocket streaming for live events */
-                            websocket?: boolean;
-                            /** @description Enable events API polling for incremental sync after backfill */
-                            poll_events?: boolean;
-                            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                            webhook_port?: number;
-                            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                            revalidate_objects?: string[];
-                            /** @description Max objects to backfill per stream (useful for testing) */
-                            backfill_limit?: number;
-                            /** @description Max Stripe API requests per second (default: 25) */
-                            rate_limit?: number;
-                            /** @description Number of time-range segments for parallel backfill (default: 200) */
-                            backfill_concurrency?: number;
-                            /** @constant */
-                            type: "stripe";
-                        };
-                        destination: {
-                            /** @description Postgres connection string (alias for connection_string) */
-                            url?: string;
-                            /** @description Postgres connection string */
-                            connection_string?: string;
-                            /** @description Postgres host (required for AWS IAM) */
-                            host?: string;
-                            /**
-                             * @description Postgres port
-                             * @default 5432
-                             */
-                            port: number;
-                            /** @description Database name (required for AWS IAM) */
-                            database?: string;
-                            /** @description Database user (required for AWS IAM) */
-                            user?: string;
-                            /** @description Target schema name (e.g. "stripe_sync") */
-                            schema: string;
-                            /**
-                             * @description Records to buffer before flushing
-                             * @default 100
-                             */
-                            batch_size: number;
-                            /** @description AWS RDS IAM authentication config */
-                            aws?: {
-                                /** @description AWS region for RDS instance */
-                                region: string;
-                                /** @description IAM role ARN to assume (cross-account) */
-                                role_arn?: string;
-                                /** @description External ID for STS AssumeRole */
-                                external_id?: string;
-                            };
-                            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                            ssl_ca_pem?: string;
-                            /** @constant */
-                            type: "postgres";
-                        } | {
-                            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                            client_id?: string;
-                            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                            client_secret?: string;
-                            /** @description OAuth2 access token */
-                            access_token: string;
-                            /** @description OAuth2 refresh token */
-                            refresh_token: string;
-                            /** @description Target spreadsheet ID (created if omitted) */
-                            spreadsheet_id?: string;
-                            /**
-                             * @description Title when creating a new spreadsheet
-                             * @default Stripe Sync
-                             */
-                            spreadsheet_title: string;
-                            /**
-                             * @description Rows per Sheets API append call
-                             * @default 50
-                             */
-                            batch_size: number;
-                            /** @constant */
-                            type: "google-sheets";
-                        };
+                        source: components["schemas"]["SourceConfig"];
+                        destination: components["schemas"]["DestinationConfig"];
                         /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
                             /** @description Stream (table) name to sync. */
@@ -766,104 +490,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    source?: {
-                        /** @description Stripe API key (sk_test_... or sk_live_...) */
-                        api_key: string;
-                        /** @description Stripe account ID (resolved from API if omitted) */
-                        account_id?: string;
-                        /** @description Whether this is a live mode sync */
-                        livemode?: boolean;
-                        /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                        api_version?: string;
-                        /**
-                         * Format: uri
-                         * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                         */
-                        base_url?: string;
-                        /**
-                         * Format: uri
-                         * @description URL for managed webhook endpoint registration
-                         */
-                        webhook_url?: string;
-                        /** @description Webhook signing secret (whsec_...) for signature verification */
-                        webhook_secret?: string;
-                        /** @description Enable WebSocket streaming for live events */
-                        websocket?: boolean;
-                        /** @description Enable events API polling for incremental sync after backfill */
-                        poll_events?: boolean;
-                        /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                        webhook_port?: number;
-                        /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                        revalidate_objects?: string[];
-                        /** @description Max objects to backfill per stream (useful for testing) */
-                        backfill_limit?: number;
-                        /** @description Max Stripe API requests per second (default: 25) */
-                        rate_limit?: number;
-                        /** @description Number of time-range segments for parallel backfill (default: 200) */
-                        backfill_concurrency?: number;
-                        /** @constant */
-                        type: "stripe";
-                    };
-                    destination?: {
-                        /** @description Postgres connection string (alias for connection_string) */
-                        url?: string;
-                        /** @description Postgres connection string */
-                        connection_string?: string;
-                        /** @description Postgres host (required for AWS IAM) */
-                        host?: string;
-                        /**
-                         * @description Postgres port
-                         * @default 5432
-                         */
-                        port?: number;
-                        /** @description Database name (required for AWS IAM) */
-                        database?: string;
-                        /** @description Database user (required for AWS IAM) */
-                        user?: string;
-                        /** @description Target schema name (e.g. "stripe_sync") */
-                        schema: string;
-                        /**
-                         * @description Records to buffer before flushing
-                         * @default 100
-                         */
-                        batch_size?: number;
-                        /** @description AWS RDS IAM authentication config */
-                        aws?: {
-                            /** @description AWS region for RDS instance */
-                            region: string;
-                            /** @description IAM role ARN to assume (cross-account) */
-                            role_arn?: string;
-                            /** @description External ID for STS AssumeRole */
-                            external_id?: string;
-                        };
-                        /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                        ssl_ca_pem?: string;
-                        /** @constant */
-                        type: "postgres";
-                    } | {
-                        /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                        client_id?: string;
-                        /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                        client_secret?: string;
-                        /** @description OAuth2 access token */
-                        access_token: string;
-                        /** @description OAuth2 refresh token */
-                        refresh_token: string;
-                        /** @description Target spreadsheet ID (created if omitted) */
-                        spreadsheet_id?: string;
-                        /**
-                         * @description Title when creating a new spreadsheet
-                         * @default Stripe Sync
-                         */
-                        spreadsheet_title?: string;
-                        /**
-                         * @description Rows per Sheets API append call
-                         * @default 50
-                         */
-                        batch_size?: number;
-                        /** @constant */
-                        type: "google-sheets";
-                    };
+                    source?: components["schemas"]["SourceConfig"];
+                    destination?: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
                     streams?: {
                         /** @description Stream (table) name to sync. */
@@ -889,104 +517,8 @@ export interface operations {
                     "application/json": {
                         /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
-                        source: {
-                            /** @description Stripe API key (sk_test_... or sk_live_...) */
-                            api_key: string;
-                            /** @description Stripe account ID (resolved from API if omitted) */
-                            account_id?: string;
-                            /** @description Whether this is a live mode sync */
-                            livemode?: boolean;
-                            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                            api_version?: string;
-                            /**
-                             * Format: uri
-                             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                             */
-                            base_url?: string;
-                            /**
-                             * Format: uri
-                             * @description URL for managed webhook endpoint registration
-                             */
-                            webhook_url?: string;
-                            /** @description Webhook signing secret (whsec_...) for signature verification */
-                            webhook_secret?: string;
-                            /** @description Enable WebSocket streaming for live events */
-                            websocket?: boolean;
-                            /** @description Enable events API polling for incremental sync after backfill */
-                            poll_events?: boolean;
-                            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                            webhook_port?: number;
-                            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                            revalidate_objects?: string[];
-                            /** @description Max objects to backfill per stream (useful for testing) */
-                            backfill_limit?: number;
-                            /** @description Max Stripe API requests per second (default: 25) */
-                            rate_limit?: number;
-                            /** @description Number of time-range segments for parallel backfill (default: 200) */
-                            backfill_concurrency?: number;
-                            /** @constant */
-                            type: "stripe";
-                        };
-                        destination: {
-                            /** @description Postgres connection string (alias for connection_string) */
-                            url?: string;
-                            /** @description Postgres connection string */
-                            connection_string?: string;
-                            /** @description Postgres host (required for AWS IAM) */
-                            host?: string;
-                            /**
-                             * @description Postgres port
-                             * @default 5432
-                             */
-                            port: number;
-                            /** @description Database name (required for AWS IAM) */
-                            database?: string;
-                            /** @description Database user (required for AWS IAM) */
-                            user?: string;
-                            /** @description Target schema name (e.g. "stripe_sync") */
-                            schema: string;
-                            /**
-                             * @description Records to buffer before flushing
-                             * @default 100
-                             */
-                            batch_size: number;
-                            /** @description AWS RDS IAM authentication config */
-                            aws?: {
-                                /** @description AWS region for RDS instance */
-                                region: string;
-                                /** @description IAM role ARN to assume (cross-account) */
-                                role_arn?: string;
-                                /** @description External ID for STS AssumeRole */
-                                external_id?: string;
-                            };
-                            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                            ssl_ca_pem?: string;
-                            /** @constant */
-                            type: "postgres";
-                        } | {
-                            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                            client_id?: string;
-                            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                            client_secret?: string;
-                            /** @description OAuth2 access token */
-                            access_token: string;
-                            /** @description OAuth2 refresh token */
-                            refresh_token: string;
-                            /** @description Target spreadsheet ID (created if omitted) */
-                            spreadsheet_id?: string;
-                            /**
-                             * @description Title when creating a new spreadsheet
-                             * @default Stripe Sync
-                             */
-                            spreadsheet_title: string;
-                            /**
-                             * @description Rows per Sheets API append call
-                             * @default 50
-                             */
-                            batch_size: number;
-                            /** @constant */
-                            type: "google-sheets";
-                        };
+                        source: components["schemas"]["SourceConfig"];
+                        destination: components["schemas"]["DestinationConfig"];
                         /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
                             /** @description Stream (table) name to sync. */
@@ -1055,104 +587,8 @@ export interface operations {
                     "application/json": {
                         /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
-                        source: {
-                            /** @description Stripe API key (sk_test_... or sk_live_...) */
-                            api_key: string;
-                            /** @description Stripe account ID (resolved from API if omitted) */
-                            account_id?: string;
-                            /** @description Whether this is a live mode sync */
-                            livemode?: boolean;
-                            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                            api_version?: string;
-                            /**
-                             * Format: uri
-                             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                             */
-                            base_url?: string;
-                            /**
-                             * Format: uri
-                             * @description URL for managed webhook endpoint registration
-                             */
-                            webhook_url?: string;
-                            /** @description Webhook signing secret (whsec_...) for signature verification */
-                            webhook_secret?: string;
-                            /** @description Enable WebSocket streaming for live events */
-                            websocket?: boolean;
-                            /** @description Enable events API polling for incremental sync after backfill */
-                            poll_events?: boolean;
-                            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                            webhook_port?: number;
-                            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                            revalidate_objects?: string[];
-                            /** @description Max objects to backfill per stream (useful for testing) */
-                            backfill_limit?: number;
-                            /** @description Max Stripe API requests per second (default: 25) */
-                            rate_limit?: number;
-                            /** @description Number of time-range segments for parallel backfill (default: 200) */
-                            backfill_concurrency?: number;
-                            /** @constant */
-                            type: "stripe";
-                        };
-                        destination: {
-                            /** @description Postgres connection string (alias for connection_string) */
-                            url?: string;
-                            /** @description Postgres connection string */
-                            connection_string?: string;
-                            /** @description Postgres host (required for AWS IAM) */
-                            host?: string;
-                            /**
-                             * @description Postgres port
-                             * @default 5432
-                             */
-                            port: number;
-                            /** @description Database name (required for AWS IAM) */
-                            database?: string;
-                            /** @description Database user (required for AWS IAM) */
-                            user?: string;
-                            /** @description Target schema name (e.g. "stripe_sync") */
-                            schema: string;
-                            /**
-                             * @description Records to buffer before flushing
-                             * @default 100
-                             */
-                            batch_size: number;
-                            /** @description AWS RDS IAM authentication config */
-                            aws?: {
-                                /** @description AWS region for RDS instance */
-                                region: string;
-                                /** @description IAM role ARN to assume (cross-account) */
-                                role_arn?: string;
-                                /** @description External ID for STS AssumeRole */
-                                external_id?: string;
-                            };
-                            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                            ssl_ca_pem?: string;
-                            /** @constant */
-                            type: "postgres";
-                        } | {
-                            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                            client_id?: string;
-                            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                            client_secret?: string;
-                            /** @description OAuth2 access token */
-                            access_token: string;
-                            /** @description OAuth2 refresh token */
-                            refresh_token: string;
-                            /** @description Target spreadsheet ID (created if omitted) */
-                            spreadsheet_id?: string;
-                            /**
-                             * @description Title when creating a new spreadsheet
-                             * @default Stripe Sync
-                             */
-                            spreadsheet_title: string;
-                            /**
-                             * @description Rows per Sheets API append call
-                             * @default 50
-                             */
-                            batch_size: number;
-                            /** @constant */
-                            type: "google-sheets";
-                        };
+                        source: components["schemas"]["SourceConfig"];
+                        destination: components["schemas"]["DestinationConfig"];
                         /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
                             /** @description Stream (table) name to sync. */
@@ -1210,104 +646,8 @@ export interface operations {
                     "application/json": {
                         /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                         id: string;
-                        source: {
-                            /** @description Stripe API key (sk_test_... or sk_live_...) */
-                            api_key: string;
-                            /** @description Stripe account ID (resolved from API if omitted) */
-                            account_id?: string;
-                            /** @description Whether this is a live mode sync */
-                            livemode?: boolean;
-                            /** @description Stripe API version (e.g. 2025-04-30.basil) */
-                            api_version?: string;
-                            /**
-                             * Format: uri
-                             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-                             */
-                            base_url?: string;
-                            /**
-                             * Format: uri
-                             * @description URL for managed webhook endpoint registration
-                             */
-                            webhook_url?: string;
-                            /** @description Webhook signing secret (whsec_...) for signature verification */
-                            webhook_secret?: string;
-                            /** @description Enable WebSocket streaming for live events */
-                            websocket?: boolean;
-                            /** @description Enable events API polling for incremental sync after backfill */
-                            poll_events?: boolean;
-                            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-                            webhook_port?: number;
-                            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-                            revalidate_objects?: string[];
-                            /** @description Max objects to backfill per stream (useful for testing) */
-                            backfill_limit?: number;
-                            /** @description Max Stripe API requests per second (default: 25) */
-                            rate_limit?: number;
-                            /** @description Number of time-range segments for parallel backfill (default: 200) */
-                            backfill_concurrency?: number;
-                            /** @constant */
-                            type: "stripe";
-                        };
-                        destination: {
-                            /** @description Postgres connection string (alias for connection_string) */
-                            url?: string;
-                            /** @description Postgres connection string */
-                            connection_string?: string;
-                            /** @description Postgres host (required for AWS IAM) */
-                            host?: string;
-                            /**
-                             * @description Postgres port
-                             * @default 5432
-                             */
-                            port: number;
-                            /** @description Database name (required for AWS IAM) */
-                            database?: string;
-                            /** @description Database user (required for AWS IAM) */
-                            user?: string;
-                            /** @description Target schema name (e.g. "stripe_sync") */
-                            schema: string;
-                            /**
-                             * @description Records to buffer before flushing
-                             * @default 100
-                             */
-                            batch_size: number;
-                            /** @description AWS RDS IAM authentication config */
-                            aws?: {
-                                /** @description AWS region for RDS instance */
-                                region: string;
-                                /** @description IAM role ARN to assume (cross-account) */
-                                role_arn?: string;
-                                /** @description External ID for STS AssumeRole */
-                                external_id?: string;
-                            };
-                            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-                            ssl_ca_pem?: string;
-                            /** @constant */
-                            type: "postgres";
-                        } | {
-                            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-                            client_id?: string;
-                            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-                            client_secret?: string;
-                            /** @description OAuth2 access token */
-                            access_token: string;
-                            /** @description OAuth2 refresh token */
-                            refresh_token: string;
-                            /** @description Target spreadsheet ID (created if omitted) */
-                            spreadsheet_id?: string;
-                            /**
-                             * @description Title when creating a new spreadsheet
-                             * @default Stripe Sync
-                             */
-                            spreadsheet_title: string;
-                            /**
-                             * @description Rows per Sheets API append call
-                             * @default 50
-                             */
-                            batch_size: number;
-                            /** @constant */
-                            type: "google-sheets";
-                        };
+                        source: components["schemas"]["SourceConfig"];
+                        destination: components["schemas"]["DestinationConfig"];
                         /** @description Selected streams to sync. All streams synced if omitted. */
                         streams?: {
                             /** @description Stream (table) name to sync. */

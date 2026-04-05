@@ -1,7 +1,7 @@
 export * from '@stripe/sync-protocol'
 export { enforceCatalog, log, filterType, persistState, collect, pipe } from './pipeline.js'
 export { createEngine, buildCatalog } from './engine.js'
-export { SetupResult, SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
+export { SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
 export type { Engine } from './engine.js'
 export { parseNdjson, parseNdjsonChunks, parseNdjsonStream, toNdjsonStream } from './ndjson.js'
 export { createRemoteEngine } from './remote-engine.js'
@@ -29,3 +29,9 @@ export type { DestinationTestConfig } from './destination-test.js'
 export { readonlyStateStore } from './state-store.js'
 export type { StateStore } from './state-store.js'
 export { maybeDestinationStateStore } from './select-state-store.js'
+export {
+  createConnectorSchemas,
+  connectorSchemaName,
+  connectorInputSchemaName,
+  connectorUnionId,
+} from './createSchemas.js'

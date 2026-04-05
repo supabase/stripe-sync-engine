@@ -17,7 +17,7 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface PipelineWorkflowOpts {
   state?: Record<string, unknown>
-  timeLimit?: number
+  time_limit?: number
   inputQueue?: unknown[]
 }
 
@@ -49,7 +49,7 @@ export async function pipelineWorkflow(
     if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
       await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
         state: syncState,
-        timeLimit: opts?.timeLimit,
+        time_limit: opts?.time_limit,
         inputQueue: inputQueue.length > 0 ? [...inputQueue] : undefined,
       })
     }
@@ -83,8 +83,8 @@ export async function pipelineWorkflow(
     } else {
       const result = await syncImmediate(pipelineId, {
         state: syncState,
-        stateLimit: 1,
-        timeLimit: opts?.timeLimit,
+        state_limit: 1,
+        time_limit: opts?.time_limit,
       })
       syncState = { ...syncState, ...result.state }
       readComplete = result.eof?.reason === 'complete'

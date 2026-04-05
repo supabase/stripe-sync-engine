@@ -1,5 +1,15 @@
 # Todos
 
+- /setup
+  - finish getting setup working
+  - use the control message for persisting catalog updates in setiup
+- /pipeline_sync
+  - is activity plain functions
+
+- /check (implmeent or remove for now)
+
+---
+
 Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 ## Now

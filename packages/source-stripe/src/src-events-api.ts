@@ -40,7 +40,7 @@ export async function* pollEvents(opts: {
       yield stateMsg({
         stream: cs.stream.name,
         data: {
-          pageCursor: existing?.pageCursor ?? null,
+          page_cursor: existing?.page_cursor ?? null,
           status: 'complete' as const,
           events_cursor: startTimestamp,
         },
@@ -87,7 +87,7 @@ export async function* pollEvents(opts: {
         yield stateMsg({
           stream: msg.state.stream,
           data: {
-            pageCursor: existing?.pageCursor ?? null,
+            page_cursor: existing?.page_cursor ?? null,
             status: 'complete' as const,
             events_cursor: event.created,
           },

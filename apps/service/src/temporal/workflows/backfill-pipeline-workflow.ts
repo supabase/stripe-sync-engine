@@ -55,7 +55,7 @@ export async function backfillPipelineWorkflow(
       continue
     }
 
-    const result = await syncImmediate(pipelineId, { state: syncState, stateLimit: 1 })
+    const result = await syncImmediate(pipelineId, { state: syncState, state_limit: 1 })
     syncState = { ...syncState, ...result.state }
     backfillComplete = result.eof?.reason === 'complete'
     await maybeContinueAsNew()

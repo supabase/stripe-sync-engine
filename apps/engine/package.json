@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "PORT=4010 tsx src/api/index.ts",
+    "dev": "PORT=4010 tsx --conditions bun src/api/index.ts",
     "test": "vitest run",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },

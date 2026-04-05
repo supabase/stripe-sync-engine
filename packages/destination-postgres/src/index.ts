@@ -10,7 +10,7 @@ import {
 } from '@stripe/sync-util-postgres'
 import { z } from 'zod'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
-import { configSchema } from './spec.js'
+import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 
 // MARK: - Spec
@@ -102,10 +102,7 @@ function isTransient(err: unknown): boolean {
 
 const destination = {
   async *spec() {
-    yield {
-      type: 'spec' as const,
-      spec: { config: z.toJSONSchema(configSchema) },
-    }
+    yield { type: 'spec' as const, spec: defaultSpec }
   },
 
   async *check({ config }) {

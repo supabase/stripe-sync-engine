@@ -30,14 +30,14 @@ describe('Engine OpenAPI spec', () => {
     expect(output.valid, errors).toBe(true)
   })
 
-  it('has typed SourceConfig and DestinationConfig', async () => {
+  it('has typed Source and Destination schemas', async () => {
     const spec = await getSpec()
     const schemas = spec.components.schemas
     expect(Object.keys(schemas)).toEqual(
       expect.arrayContaining([
-        'StripeSourceConfig',
-        'PostgresDestinationConfig',
-        'GoogleSheetsDestinationConfig',
+        'SourceStripeConfig',
+        'DestinationPostgresConfig',
+        'DestinationGoogleSheetsConfig',
         'SourceConfig',
         'DestinationConfig',
         'PipelineConfig',

@@ -6,6 +6,7 @@ import destination from '@stripe/sync-destination-postgres'
 import { createEngine } from '@stripe/sync-engine'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import type { StateMessage, DestinationOutput } from '@stripe/sync-protocol'
+import { drain } from '@stripe/sync-protocol'
 import { describeWithEnv } from './test-helpers.js'
 
 // ---------------------------------------------------------------------------
@@ -59,12 +60,17 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
     return {
       source: {
         type: 'stripe',
-        api_key: STRIPE_API_KEY,
-        backfill_limit: BACKFILL_LIMIT,
-        backfill_concurrency: 1,
-        ...(opts.websocket && { websocket: true }),
+        stripe: {
+          api_key: STRIPE_API_KEY,
+          backfill_limit: BACKFILL_LIMIT,
+          backfill_concurrency: 1,
+          ...(opts.websocket && { websocket: true }),
+        },
       },
-      destination: { type: 'postgres', connection_string: POSTGRES_URL, schema: SCHEMA },
+      destination: {
+        type: 'postgres',
+        postgres: { connection_string: POSTGRES_URL, schema: SCHEMA },
+      },
       streams: STREAMS.map((name) => ({ name })),
     }
   }
@@ -92,6 +98,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
 
   it('backfills product and price data to postgres', async () => {
     const engine = await createEngine(resolver)
+    await drain(engine.pipeline_setup(makePipeline()))
     await collectStates(engine.pipeline_sync(makePipeline()))
 
     for (const stream of STREAMS) {
@@ -109,7 +116,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
 
     const engine = await createEngine(resolver)
     const pipeline = makePipeline({ websocket: true })
-    await engine.pipeline_setup(pipeline)
+    await drain(engine.pipeline_setup(pipeline))
     const iter = engine.pipeline_sync(pipeline)[Symbol.asyncIterator]()
 
     try {

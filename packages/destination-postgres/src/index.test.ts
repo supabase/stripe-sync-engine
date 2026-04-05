@@ -9,7 +9,8 @@ import type {
   RecordMessage,
   StateMessage,
 } from '@stripe/sync-protocol'
-import { collectConnectionStatus, drainStream } from '@stripe/sync-protocol'
+import { collectFirst, drain } from '@stripe/sync-protocol'
+import type { Message } from '@stripe/sync-protocol'
 
 // ---------------------------------------------------------------------------
 // Docker Postgres lifecycle
@@ -115,25 +116,27 @@ const catalog: ConfiguredCatalog = {
 describe('destination default export', () => {
   describe('check()', () => {
     it('succeeds against a live Postgres', async () => {
-      const { connection_status } = await collectConnectionStatus(
-        destination.check({ config: makeConfig() })
+      const statusMsg = await collectFirst(
+        destination.check({ config: makeConfig() }),
+        'connection_status'
       )
-      expect(connection_status.status).toBe('succeeded')
+      expect(statusMsg.connection_status.status).toBe('succeeded')
     })
 
     it('fails with bad connection string', async () => {
-      const { connection_status } = await collectConnectionStatus(
+      const statusMsg = await collectFirst(
         destination.check({
           config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
-        })
+        }),
+        'connection_status'
       )
-      expect(connection_status.status).toBe('failed')
+      expect(statusMsg.connection_status.status).toBe('failed')
     })
   })
 
   describe('setup()', () => {
     it('creates schema and table', async () => {
-      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
+      await drain(destination.setup!({ config: makeConfig(), catalog }))
 
       const { rows } = await pool.query(
         `SELECT table_name FROM information_schema.tables WHERE table_schema = $1`,
@@ -145,8 +148,8 @@ describe('destination default export', () => {
 
   describe('teardown()', () => {
     it('drops schema CASCADE', async () => {
-      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
-      await drainStream(destination.teardown!({ config: makeConfig() }))
+      await drain(destination.setup!({ config: makeConfig(), catalog }))
+      await drain(destination.teardown!({ config: makeConfig() }))
 
       const { rows } = await pool.query(
         `SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`,
@@ -158,7 +161,7 @@ describe('destination default export', () => {
 
   describe('write()', () => {
     beforeEach(async () => {
-      await drainStream(destination.setup!({ config: makeConfig(), catalog }))
+      await drain(destination.setup!({ config: makeConfig(), catalog }))
     })
 
     it('upserts records and emits log on completion', async () => {
@@ -239,7 +242,7 @@ describe('destination default export', () => {
 
 describe('upsertMany standalone', () => {
   beforeEach(async () => {
-    await drainStream(destination.setup!({ config: makeConfig(), catalog }))
+    await drain(destination.setup!({ config: makeConfig(), catalog }))
   })
 
   it('inserts records directly via pool', async () => {

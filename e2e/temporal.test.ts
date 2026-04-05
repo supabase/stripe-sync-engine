@@ -161,8 +161,8 @@ describe.skip('temporal e2e: stripe → postgres', () => {
   it('backfills products then processes a live event via signal', async () => {
     const pipeline = {
       id: `pipe_e2e_${Date.now()}`,
-      source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 5 },
-      destination: { type: 'postgres', connection_string: POSTGRES_URL, schema },
+      source: { type: 'stripe', stripe: { api_key: STRIPE_API_KEY, backfill_limit: 5 } },
+      destination: { type: 'postgres', postgres: { connection_string: POSTGRES_URL, schema } },
       streams: [{ name: 'products' }],
     }
     console.log(`  Pipeline: ${pipeline.id}`)
@@ -303,7 +303,7 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
   it('backfills products from Stripe into a Google Sheet tab', async () => {
     const pipeline = {
       id: `pipe_sheets_${Date.now()}`,
-      source: { type: 'stripe', api_key: STRIPE_API_KEY, backfill_limit: 3 },
+      source: { type: 'stripe', stripe: { api_key: STRIPE_API_KEY, backfill_limit: 3 } },
       destination: {
         name: 'google-sheets',
         client_id: GOOGLE_CLIENT_ID,

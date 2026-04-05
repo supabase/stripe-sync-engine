@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest'
 import type { AddressInfo } from 'node:net'
 import { serve } from '@hono/node-server'
 import type { ConnectorResolver, Message } from './index.js'
-import { sourceTest, destinationTest, collectSpec } from './index.js'
+import { sourceTest, destinationTest, collectFirst } from './index.js'
 import { createApp } from '../api/app.js'
 import { createRemoteEngine } from './remote-engine.js'
 import type { PipelineConfig, StateMessage } from '@stripe/sync-protocol'
@@ -15,10 +15,11 @@ import type { PipelineConfig, StateMessage } from '@stripe/sync-protocol'
 async function getRawConfigJsonSchema(
   connector: typeof sourceTest | typeof destinationTest
 ): Promise<Record<string, unknown>> {
-  const { spec } = await collectSpec(
-    connector.spec() as AsyncIterable<import('@stripe/sync-protocol').Message>
+  const specMsg = await collectFirst(
+    connector.spec() as AsyncIterable<import('@stripe/sync-protocol').Message>,
+    'spec'
   )
-  return spec.config
+  return specMsg.spec.config
 }
 
 vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -29,8 +30,8 @@ let server: any
 let engineUrl: string
 
 const pipeline: PipelineConfig = {
-  source: { type: 'test', streams: { customers: {} } },
-  destination: { type: 'test' },
+  source: { type: 'test', test: { streams: { customers: {} } } },
+  destination: { type: 'test', test: {} },
 }
 
 beforeAll(async () => {
@@ -107,27 +108,29 @@ async function* asIterable<T>(items: T[]): AsyncIterable<T> {
 
 describe('createRemoteEngine', () => {
   describe('pipeline_setup()', () => {
-    it('resolves without error', async () => {
+    it('streams without error (empty for test connectors)', async () => {
       const engine = createRemoteEngine(engineUrl)
-      await expect(engine.pipeline_setup(pipeline)).resolves.toEqual({})
+      const msgs = await collect(engine.pipeline_setup(pipeline))
+      // sourceTest and destinationTest have no setup(), so stream is empty
+      expect(msgs).toHaveLength(0)
     })
   })
 
   describe('pipeline_teardown()', () => {
-    it('resolves without error', async () => {
+    it('streams without error (empty for test connectors)', async () => {
       const engine = createRemoteEngine(engineUrl)
-      await expect(engine.pipeline_teardown(pipeline)).resolves.toBeUndefined()
+      const msgs = await collect(engine.pipeline_teardown(pipeline))
+      expect(msgs).toHaveLength(0)
     })
   })
 
   describe('pipeline_check()', () => {
-    it('returns source and destination check results', async () => {
+    it('streams connection_status messages for source and destination', async () => {
       const engine = createRemoteEngine(engineUrl)
-      const result = await engine.pipeline_check(pipeline)
-      expect(result).toEqual({
-        source: { status: 'succeeded' },
-        destination: { status: 'succeeded' },
-      })
+      const msgs = await collect(engine.pipeline_check(pipeline))
+      const statuses = msgs.filter((m) => m.type === 'connection_status')
+      expect(statuses).toHaveLength(2)
+      expect(statuses.every((s) => s.connection_status.status === 'succeeded')).toBe(true)
     })
   })
 
@@ -197,16 +200,19 @@ describe('createRemoteEngine', () => {
         { type: 'state', state: { stream: 'customers', data: { cursor: 'cus_1' } } },
       ]
       const output = await collect(engine.pipeline_sync(pipeline, undefined, asIterable(input)))
-      expect(output).toHaveLength(2)
-      expect(output[0]!.type).toBe('state')
-      expect(output[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      // pipeline_sync now yields source signals alongside dest output
+      const stateAndEof = output.filter((m) => m.type === 'state' || m.type === 'eof')
+      expect(stateAndEof).toHaveLength(2)
+      expect(stateAndEof[0]!.type).toBe('state')
+      expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
 
     it('returns eof:complete without input (no source data)', async () => {
       const engine = createRemoteEngine(engineUrl)
       const output = await collect(engine.pipeline_sync(pipeline))
-      expect(output).toHaveLength(1)
-      expect(output[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      const eofMsgs = output.filter((m) => m.type === 'eof')
+      expect(eofMsgs).toHaveLength(1)
+      expect(eofMsgs[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
     })
   })
 
@@ -219,16 +225,16 @@ describe('createRemoteEngine', () => {
     })
   })
 
-  describe('meta_source()', () => {
+  describe('meta_sources_get()', () => {
     it('returns spec for a known source type', async () => {
       const engine = createRemoteEngine(engineUrl)
-      const result = await engine.meta_source('test')
+      const result = await engine.meta_sources_get('test')
       expect(result).toHaveProperty('config_schema')
     })
 
     it('throws for an unknown source type', async () => {
       const engine = createRemoteEngine(engineUrl)
-      await expect(engine.meta_source('nonexistent')).rejects.toThrow()
+      await expect(engine.meta_sources_get('nonexistent')).rejects.toThrow()
     })
   })
 
@@ -241,16 +247,16 @@ describe('createRemoteEngine', () => {
     })
   })
 
-  describe('meta_destination()', () => {
+  describe('meta_destinations_get()', () => {
     it('returns spec for a known destination type', async () => {
       const engine = createRemoteEngine(engineUrl)
-      const result = await engine.meta_destination('test')
+      const result = await engine.meta_destinations_get('test')
       expect(result).toHaveProperty('config_schema')
     })
 
     it('throws for an unknown destination type', async () => {
       const engine = createRemoteEngine(engineUrl)
-      await expect(engine.meta_destination('nonexistent')).rejects.toThrow()
+      await expect(engine.meta_destinations_get('nonexistent')).rejects.toThrow()
     })
   })
 
@@ -261,7 +267,7 @@ describe('createRemoteEngine', () => {
         destination: { type: 'nonexistent' },
       }
       const engine = createRemoteEngine(engineUrl)
-      await expect(engine.pipeline_setup(badPipeline)).rejects.toThrow(/failed/)
+      await expect(collect(engine.pipeline_setup(badPipeline))).rejects.toThrow(/failed/)
     })
   })
 })

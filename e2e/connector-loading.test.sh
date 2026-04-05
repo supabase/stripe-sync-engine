@@ -116,7 +116,7 @@ echo ""
 # ---------------------------------------------------------------------------
 
 # JSON-encoded X-Pipeline header value for check requests.
-SYNC_PARAMS='{"source":{"type":"stripe","api_key":"sk_test_fake"},"destination":{"type":"postgres","connection_string":"postgresql://fake:fake@localhost/fake"},"streams":[{"name":"products"}]}'
+SYNC_PARAMS='{"source":{"type":"stripe","stripe":{"api_key":"sk_test_fake"}},"destination":{"type":"postgres","postgres":{"connection_string":"postgresql://fake:fake@localhost/fake"}},"streams":[{"name":"products"}]}'
 
 # Run `sync-engine pipeline-check` with fake credentials and given extra flags.
 # Exits non-zero (bad credentials) but must NOT output "not found".
@@ -202,10 +202,10 @@ UNKNOWN_PARAMS='{"source":{"type":"nonexistent-xyz"},"destination":{"type":"none
 unknown_output=$(npx sync-engine pipeline-check \
      --x-pipeline "$UNKNOWN_PARAMS" \
      2>&1 || true)
-if echo "$unknown_output" | grep -qi "not found"; then
-  echo "  PASS: unknown connector correctly reports 'not found'"
+if echo "$unknown_output" | grep -qiE "not found|No matching discriminator|invalid_union"; then
+  echo "  PASS: unknown connector correctly rejected"
 else
-  echo "  FAIL: unknown connector did not report 'not found'"
+  echo "  FAIL: unknown connector was not rejected"
   echo "  Output: $unknown_output"
   exit 1
 fi
