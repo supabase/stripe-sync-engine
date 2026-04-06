@@ -1,31 +1,22 @@
-import { defineQuery, defineSignal, proxyActivities } from '@temporalio/workflow'
+import { defineSignal, proxyActivities } from '@temporalio/workflow'
 
 import type { SyncActivities } from '../activities/index.js'
-import type { SourceState } from '@stripe/sync-protocol'
 import { retryPolicy } from '../../lib/utils.js'
-
-export interface WorkflowStatus {
-  phase: string
-  paused: boolean
-  iteration: number
-}
+import { DesiredStatus } from '../../lib/createSchemas.js'
+import { SourceInputMessage } from '@stripe/sync-protocol'
 
 export type RowIndex = Record<string, Record<string, number>>
 
-export const stripeEventSignal = defineSignal<[unknown]>('stripe_event')
-/** Signal to control pause/resume. Config changes are written to the store directly. */
-export const updateSignal = defineSignal<[{ paused?: boolean }]>('update')
-export const deleteSignal = defineSignal('delete')
+export const sourceInputSignal = defineSignal<[SourceInputMessage]>('source_input')
+/** Carries the new desired_status value — workflow updates its local state directly. */
+export const desiredStatusSignal = defineSignal<[DesiredStatus]>('desired_status')
 
-export const statusQuery = defineQuery<WorkflowStatus>('status')
-export const stateQuery = defineQuery<SourceState>('state')
-
-export const { setup, teardown } = proxyActivities<SyncActivities>({
+export const { pipelineSetup, pipelineTeardown } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '2m',
   retry: retryPolicy,
 })
 
-export const { syncImmediate } = proxyActivities<SyncActivities>({
+export const { pipelineSync } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '10m',
   heartbeatTimeout: '2m',
   retry: retryPolicy,
@@ -37,3 +28,8 @@ export const { discoverCatalog, readGoogleSheetsIntoQueue, writeGoogleSheetsFrom
     heartbeatTimeout: '2m',
     retry: retryPolicy,
   })
+
+export const { updatePipelineStatus } = proxyActivities<SyncActivities>({
+  startToCloseTimeout: '30s',
+  retry: retryPolicy,
+})

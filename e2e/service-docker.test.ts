@@ -171,7 +171,7 @@ describeWithEnv(
 
       // --- Get returns status ---
       const { data: got } = await c.GET('/pipelines/{id}', { params: { path: { id } } })
-      expect(got!.status?.phase).toBeDefined()
+      expect(typeof got!.status).toBe('string')
 
       // --- Delete ---
       const { data: deleted, error: deleteErr } = await c.DELETE('/pipelines/{id}', {

@@ -163,6 +163,24 @@ export function createMemorySheets() {
           }
         },
 
+        async batchUpdate(params: {
+          spreadsheetId: string
+          requestBody?: {
+            valueInputOption?: string
+            data?: { range: string; values?: unknown[][] }[]
+          }
+        }) {
+          for (const entry of params.requestBody?.data ?? []) {
+            const tab = getTab(params.spreadsheetId, entry.range)
+            const rows = entry.values ?? []
+            const startRow = parseStartRow(entry.range)
+            for (let i = 0; i < rows.length; i++) {
+              tab.values[startRow - 1 + i] = rows[i]
+            }
+          }
+          return { data: {} }
+        },
+
         async get(params: { spreadsheetId: string; range: string }) {
           const tab = getTab(params.spreadsheetId, params.range)
           return { data: { values: tab.values } }

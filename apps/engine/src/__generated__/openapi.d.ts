@@ -647,7 +647,7 @@ export interface components {
         CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
         SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
         TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        SourceInput: {
+        SourceInputMessage: {
             /** @constant */
             type: "source_input";
             source_input: components["schemas"]["SourceStripeInput"];
@@ -869,7 +869,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/x-ndjson": components["schemas"]["SourceInput"];
+                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
             };
         };
         responses: {
@@ -952,7 +952,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/x-ndjson": components["schemas"]["SourceInput"];
+                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
             };
         };
         responses: {

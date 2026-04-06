@@ -1,97 +1,173 @@
 import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
 
+import type { SourceInputMessage, SourceState } from '@stripe/sync-protocol'
+import type { DesiredStatus, PipelineStatus } from '../../lib/createSchemas.js'
+import { CONTINUE_AS_NEW_THRESHOLD } from '../../lib/utils.js'
 import {
-  deleteSignal,
-  setup,
-  stateQuery,
-  statusQuery,
-  stripeEventSignal,
-  syncImmediate,
-  teardown,
-  updateSignal,
-  WorkflowStatus,
+  desiredStatusSignal,
+  pipelineSetup,
+  sourceInputSignal,
+  pipelineSync,
+  pipelineTeardown,
+  updatePipelineStatus,
 } from './_shared.js'
-import { CONTINUE_AS_NEW_THRESHOLD, EVENT_BATCH_SIZE } from '../../lib/utils.js'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const LIVE_EVENT_BATCH_SIZE = 10
 
-import type { SourceState } from '@stripe/sync-protocol'
+export type ReconcileState = 'backfilling' | 'reconciling' | 'ready'
+export type SetupState = 'started' | 'completed'
+export type TeardownState = 'started' | 'completed'
+
+export interface PipelineWorkflowState {
+  phase?: ReconcileState
+  paused?: boolean
+  setup?: SetupState
+  teardown?: TeardownState
+}
 
 export interface PipelineWorkflowOpts {
-  state?: SourceState
-  inputQueue?: unknown[]
+  desiredStatus?: DesiredStatus
+  sourceState?: SourceState
+  inputQueue?: SourceInputMessage[]
+  state?: PipelineWorkflowState
 }
 
 export async function pipelineWorkflow(
   pipelineId: string,
   opts?: PipelineWorkflowOpts
 ): Promise<void> {
-  let paused = false
-  let deleted = false
-  const inputQueue: unknown[] = [...(opts?.inputQueue ?? [])]
-  let iteration = 0
-  let syncState: SourceState = opts?.state ?? { streams: {}, global: {} }
-  let readComplete = false
+  // Persisted through continue-as-new.
+  const inputQueue: SourceInputMessage[] = opts?.inputQueue ? [...opts.inputQueue] : []
+  let desiredStatus: DesiredStatus = opts?.desiredStatus ?? 'active'
+  let sourceState: SourceState = opts?.sourceState ?? { streams: {}, global: {} }
+  let state: PipelineWorkflowState = { ...opts?.state }
 
-  setHandler(stripeEventSignal, (event: unknown) => {
+  // Transient workflow-local state.
+  let operationCount = 0
+
+  setHandler(sourceInputSignal, (event: SourceInputMessage) => {
     inputQueue.push(event)
   })
-  setHandler(updateSignal, (patch) => {
-    if (patch.paused !== undefined) paused = patch.paused
-  })
-  setHandler(deleteSignal, () => {
-    deleted = true
+  setHandler(desiredStatusSignal, (status: DesiredStatus) => {
+    desiredStatus = status
   })
 
-  setHandler(statusQuery, (): WorkflowStatus => ({ phase: 'running', paused, iteration }))
-  setHandler(stateQuery, (): SourceState => syncState)
+  // MARK: - State
 
-  async function maybeContinueAsNew() {
-    if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
-        state: syncState,
-        inputQueue: inputQueue.length > 0 ? [...inputQueue] : undefined,
-      })
+  function derivePipelineStatus(): PipelineStatus {
+    if (state.teardown) return 'teardown'
+    if (state.paused) return 'paused'
+    if (state.setup !== 'completed') return 'setup'
+    return state.phase === 'ready' ? 'ready' : 'backfill'
+  }
+
+  async function setState(next: Partial<PipelineWorkflowState>) {
+    const previousStatus = derivePipelineStatus()
+    state = { ...state, ...next }
+    const nextStatus = derivePipelineStatus()
+
+    if (previousStatus !== nextStatus) {
+      await updatePipelineStatus(pipelineId, nextStatus)
     }
   }
 
-  await setup(pipelineId)
-  if (deleted) {
-    await teardown(pipelineId)
-    return
+  /**
+   * Returns whether active work in this run should stop because the pipeline is
+   * no longer active or because the workflow should roll over into continue-as-new.
+   */
+  function runInterrupted() {
+    return desiredStatus !== 'active' || operationCount >= CONTINUE_AS_NEW_THRESHOLD
   }
 
-  while (!deleted) {
-    if (paused) {
-      await condition(() => !paused || deleted)
-      continue
+  // MARK: - Live loop
+
+  async function waitForLiveEvents(): Promise<SourceInputMessage[] | null> {
+    await condition(() => inputQueue.length > 0 || runInterrupted())
+
+    if (runInterrupted()) {
+      return null
     }
 
-    if (readComplete && inputQueue.length === 0) {
-      // Idle — wait up to one week; timeout means recon is due.
-      const timedOut = !(await condition(
-        () => paused || deleted || inputQueue.length > 0,
-        ONE_WEEK_MS
-      ))
-      if (timedOut) readComplete = false
-      continue
+    return inputQueue.splice(0, LIVE_EVENT_BATCH_SIZE)
+  }
+
+  async function liveLoop(): Promise<void> {
+    while (true) {
+      const events = await waitForLiveEvents()
+      if (!events) return
+
+      await pipelineSync(pipelineId, { input: events })
+      operationCount++
+    }
+  }
+
+  // MARK: - Reconcile loop
+
+  async function waitForReconcileTurn(): Promise<boolean> {
+    await condition(() => runInterrupted() || state.phase !== 'ready', ONE_WEEK_MS)
+
+    if (runInterrupted()) {
+      return false
     }
 
-    if (inputQueue.length > 0) {
-      const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
-      await syncImmediate(pipelineId, { input: batch })
-    } else {
-      const result = await syncImmediate(pipelineId, {
-        state: syncState,
+    return true
+  }
+
+  async function reconcileLoop(): Promise<void> {
+    while (await waitForReconcileTurn()) {
+      if (!state.phase) {
+        await setState({ phase: 'backfilling' })
+      } else if (state.phase === 'ready') {
+        await setState({ phase: 'reconciling' })
+      }
+
+      const result = await pipelineSync(pipelineId, {
+        state: sourceState,
         state_limit: 100,
         time_limit: 10,
       })
-      syncState = result.state
-      readComplete = result.eof?.reason === 'complete'
+      sourceState = result.state
+      if (result.eof?.reason === 'complete') {
+        await setState({ phase: 'ready' })
+      }
+      operationCount++
     }
-
-    await maybeContinueAsNew()
   }
 
-  await teardown(pipelineId)
+  // MARK: - Main logic
+
+  if (state.setup !== 'completed') {
+    await setState({ setup: 'started' })
+    await pipelineSetup(pipelineId)
+    await setState({ setup: 'completed' })
+  }
+
+  while (desiredStatus !== 'deleted') {
+    if (desiredStatus === 'paused') {
+      await setState({ paused: true })
+      await condition(() => desiredStatus !== 'paused')
+      await setState({ paused: false })
+      // Re-enter root control flow after pause in case the pipeline resumed
+      // normally or was deleted while we were waiting.
+      continue
+    }
+
+    await Promise.all([liveLoop(), reconcileLoop()])
+
+    if (operationCount >= CONTINUE_AS_NEW_THRESHOLD) {
+      return await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
+        desiredStatus,
+        sourceState,
+        inputQueue,
+        state,
+      })
+    }
+  }
+
+  // Delete stays in normal workflow control flow instead of cancellation so teardown
+  // can run once in the terminal path after the active loops have stopped.
+  await setState({ teardown: 'started' })
+  await pipelineTeardown(pipelineId)
+  await setState({ teardown: 'completed' })
 }

@@ -2,8 +2,8 @@ import { collectMessages } from '@stripe/sync-protocol'
 
 import type { ActivitiesContext } from './_shared.js'
 
-export function createSetupActivity(context: ActivitiesContext) {
-  return async function setup(pipelineId: string): Promise<void> {
+export function createPipelineSetupActivity(context: ActivitiesContext) {
+  return async function pipelineSetup(pipelineId: string): Promise<void> {
     const pipeline = await context.pipelineStore.get(pipelineId)
     const { id: _, ...config } = pipeline
     const { messages: controlMsgs } = await collectMessages(

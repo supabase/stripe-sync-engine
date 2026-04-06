@@ -6,6 +6,13 @@ import type { CatalogStream } from './stream-groups'
 const engine = createClient<EnginePaths>({ baseUrl: '/api/engine' })
 const service = createClient<ServicePaths>({ baseUrl: '/api/service' })
 
+// Derive Pipeline type from the generated OpenAPI spec
+type PipelinesGetResponse =
+  ServicePaths['/pipelines/{id}']['get']['responses']['200']['content']['application/json']
+export type Pipeline = PipelinesGetResponse
+export type DesiredStatus = Pipeline['desired_status']
+export type PipelineStatus = Pipeline['status']
+
 // ── Engine API ────────────────────────────────────────────────
 
 export interface ConnectorInfo {
@@ -30,10 +37,9 @@ export interface CatalogResponse {
 }
 
 export async function discover(source: Record<string, unknown>): Promise<CatalogResponse> {
-  // /source_discover streams NDJSON — read line-by-line and find the catalog message
   const response = await fetch('/api/engine/source_discover', {
     method: 'POST',
-    headers: { 'x-pipeline': JSON.stringify({ source, destination: { type: '_' } }) },
+    headers: { 'x-source': JSON.stringify(source) },
   })
   if (!response.ok) {
     const text = await response.text().catch(() => '')
@@ -56,62 +62,49 @@ export interface CreatePipelineParams {
   streams: Array<{ name: string }>
 }
 
-export interface PipelineStatus {
-  phase: string
-  paused: boolean
-  iteration: number
-}
-
-export interface Pipeline {
-  id: string
-  source: Record<string, unknown>
-  destination: Record<string, unknown>
-  streams?: Array<{ name: string }>
-  status?: PipelineStatus
-}
-
-export async function listPipelines(): Promise<{ data: Pipeline[]; has_more: boolean }> {
+export async function listPipelines() {
   const { data, error, response } = await service.GET('/pipelines')
   if (error) throw new Error(`GET /pipelines: ${(response as Response).status}`)
-  return data as { data: Pipeline[]; has_more: boolean }
+  return data!
 }
 
-export async function getPipeline(id: string): Promise<Pipeline> {
+export async function getPipeline(id: string) {
   const { data, error, response } = await service.GET('/pipelines/{id}', {
     params: { path: { id } },
   })
   if (error) throw new Error(`GET /pipelines/${id}: ${response.status}`)
-  return data as Pipeline
+  return data!
 }
 
-export async function pausePipeline(id: string): Promise<Pipeline> {
-  const { data, error, response } = await service.POST('/pipelines/{id}/pause', {
+export async function updatePipeline(
+  id: string,
+  patch: { desired_status?: DesiredStatus; [key: string]: unknown }
+) {
+  const { data, error, response } = await service.PATCH('/pipelines/{id}', {
     params: { path: { id } },
+    body: patch as never,
   })
-  if (error) throw new Error(`POST /pipelines/${id}/pause: ${response.status}`)
-  return data as Pipeline
+  if (error) throw new Error(`PATCH /pipelines/${id}: ${response.status}`)
+  return data!
 }
 
-export async function resumePipeline(id: string): Promise<Pipeline> {
-  const { data, error, response } = await service.POST('/pipelines/{id}/resume', {
-    params: { path: { id } },
-  })
-  if (error) throw new Error(`POST /pipelines/${id}/resume: ${response.status}`)
-  return data as Pipeline
+export async function pausePipeline(id: string) {
+  return updatePipeline(id, { desired_status: 'paused' })
 }
 
-export async function deletePipeline(id: string): Promise<void> {
-  const { error, response } = await service.DELETE('/pipelines/{id}', {
-    params: { path: { id } },
-  })
-  if (error) throw new Error(`DELETE /pipelines/${id}: ${response.status}`)
+export async function resumePipeline(id: string) {
+  return updatePipeline(id, { desired_status: 'active' })
 }
 
-export async function createPipeline(params: CreatePipelineParams): Promise<Pipeline> {
+export async function deletePipeline(id: string) {
+  await updatePipeline(id, { desired_status: 'deleted' })
+}
+
+export async function createPipeline(params: CreatePipelineParams) {
   const { data, error, response } = await service.POST('/pipelines', { body: params as never })
   if (error) {
     const msg = (error as { error?: string }).error ?? `Create failed: ${response.status}`
     throw new Error(msg)
   }
-  return data as Pipeline
+  return data!
 }

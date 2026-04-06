@@ -335,7 +335,7 @@
           "content": {
             "application/x-ndjson": {
               "schema": {
-                "$ref": "#/components/schemas/SourceInput"
+                "$ref": "#/components/schemas/SourceInputMessage"
               }
             }
           }
@@ -499,7 +499,7 @@
           "content": {
             "application/x-ndjson": {
               "schema": {
-                "$ref": "#/components/schemas/SourceInput"
+                "$ref": "#/components/schemas/SourceInputMessage"
               }
             }
           }
@@ -1942,7 +1942,7 @@
           }
         }
       },
-      "SourceInput": {
+      "SourceInputMessage": {
         "type": "object",
         "properties": {
           "type": {

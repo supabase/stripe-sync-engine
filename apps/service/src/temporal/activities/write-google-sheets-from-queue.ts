@@ -11,7 +11,6 @@ import {
   parseGoogleSheetsMetaLog,
   ROW_KEY_FIELD,
   ROW_NUMBER_FIELD,
-  serializeRowKey,
 } from '@stripe/sync-destination-google-sheets'
 
 import type { ActivitiesContext } from './_shared.js'
@@ -57,31 +56,6 @@ function compactGoogleSheetsMessages(messages: Message[]): Message[] {
   return compacted
 }
 
-function addRowNumbers(
-  messages: Message[],
-  rowIndex: Record<string, Record<string, number>>
-): Message[] {
-  return messages.map((message) => {
-    if (message.type !== 'record') return message
-    const rowKey =
-      typeof message.record.data[ROW_KEY_FIELD] === 'string'
-        ? message.record.data[ROW_KEY_FIELD]
-        : undefined
-    const rowNumber = rowKey ? rowIndex[message.record.stream]?.[rowKey] : undefined
-    if (rowNumber === undefined) return message
-    return {
-      ...message,
-      record: {
-        ...message.record,
-        data: {
-          ...message.record.data,
-          [ROW_NUMBER_FIELD]: rowNumber,
-        },
-      },
-    }
-  })
-}
-
 function augmentGoogleSheetsCatalog(catalog: ConfiguredCatalog): ConfiguredCatalog {
   return {
     streams: catalog.streams.map((configuredStream) => {
@@ -114,7 +88,6 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
     pipelineId: string,
     opts?: {
       maxBatch?: number
-      rowIndex?: Record<string, Record<string, number>>
       catalog?: ConfiguredCatalog
       state?: import('@stripe/sync-engine').SourceState
     }
@@ -140,7 +113,7 @@ export function createWriteGoogleSheetsFromQueueActivity(context: ActivitiesCont
 
     const pipeline = await context.pipelineStore.get(pipelineId)
     const { id: _, ...config } = pipeline
-    const writeBatch = addRowNumbers(compactGoogleSheetsMessages(queued), opts?.rowIndex ?? {})
+    const writeBatch = compactGoogleSheetsMessages(queued)
     if (config.destination.type !== 'google-sheets') {
       throw new Error('writeGoogleSheetsFromQueue requires a google-sheets destination')
     }

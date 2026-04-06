@@ -34,7 +34,7 @@ const ndjsonRef = {
   CheckOutput: { $ref: '#/components/schemas/CheckOutput' },
   SetupOutput: { $ref: '#/components/schemas/SetupOutput' },
   TeardownOutput: { $ref: '#/components/schemas/TeardownOutput' },
-  SourceInput: { $ref: '#/components/schemas/SourceInput' },
+  SourceInputMessage: { $ref: '#/components/schemas/SourceInputMessage' },
 }
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { logger } from '../logger.js'
@@ -131,7 +131,7 @@ export async function createApp(resolver: ConnectorResolver) {
 
   const {
     PipelineConfig: TypedPipelineConfig,
-    SourceInput,
+    SourceInputMessage,
     sourceConfigNames,
     destConfigNames,
   } = createConnectorSchemas(resolver)
@@ -351,7 +351,7 @@ export async function createApp(resolver: ConnectorResolver) {
       required: false,
       content: {
         'application/x-ndjson': {
-          schema: SourceInput ? ndjsonRef.SourceInput : ndjsonRef.Message,
+          schema: SourceInputMessage ? ndjsonRef.SourceInputMessage : ndjsonRef.Message,
         },
       },
     },
@@ -374,12 +374,12 @@ export async function createApp(resolver: ConnectorResolver) {
 
     let input: AsyncIterable<unknown> | undefined
     if (inputPresent) {
-      if (SourceInput) {
-        // Validate each NDJSON line against the SourceInput envelope,
+      if (SourceInputMessage) {
+        // Validate each NDJSON line against the SourceInputMessage envelope,
         // then unwrap the source_input payload for source.read().
         input = (async function* () {
           for await (const msg of parseNdjsonStream(c.req.raw.body!)) {
-            const parsed = SourceInput.parse(msg)
+            const parsed = SourceInputMessage.parse(msg)
             yield (parsed as { source_input: unknown }).source_input
           }
         })()
@@ -446,7 +446,7 @@ export async function createApp(resolver: ConnectorResolver) {
       required: false,
       content: {
         'application/x-ndjson': {
-          schema: SourceInput ? ndjsonRef.SourceInput : ndjsonRef.Message,
+          schema: SourceInputMessage ? ndjsonRef.SourceInputMessage : ndjsonRef.Message,
         },
       },
     },
@@ -586,7 +586,7 @@ export async function createApp(resolver: ConnectorResolver) {
           CheckOutput: CheckOutputSchema,
           SetupOutput: SetupOutputSchema,
           TeardownOutput: TeardownOutputSchema,
-          ...(SourceInput ? { SourceInput } : {}),
+          ...(SourceInputMessage ? { SourceInputMessage } : {}),
         },
       },
     })

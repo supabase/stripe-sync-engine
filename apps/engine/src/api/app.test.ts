@@ -408,7 +408,7 @@ describe('POST /read', () => {
     expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 
-  describe('SourceInput validation (source with input schema)', () => {
+  describe('SourceInputMessage validation (source with input schema)', () => {
     // Build a resolver where the source has rawInputJsonSchema.
     // The input schema matches the Message record shape so sourceTest can echo it
     // and the engine's Message.parse() succeeds downstream.
@@ -458,7 +458,7 @@ describe('POST /read', () => {
       inputApp = await createApp(inputResolver)
     })
 
-    it('spec uses SourceInput schema for /read and /sync request body when source has input schema', async () => {
+    it('spec uses SourceInputMessage schema for /read and /sync request body when source has input schema', async () => {
       const res = await inputApp.request('/openapi.json')
       const spec = (await res.json()) as any
 
@@ -467,7 +467,7 @@ describe('POST /read', () => {
         expect(body).toBeDefined()
         expect(body.required).toBe(false)
         expect(body.content?.['application/x-ndjson']?.schema?.$ref).toBe(
-          '#/components/schemas/SourceInput'
+          '#/components/schemas/SourceInputMessage'
         )
       }
     })
@@ -493,7 +493,7 @@ describe('POST /read', () => {
       expect(events.some((e) => e.type === 'record')).toBe(true)
     })
 
-    it('rejects input that fails the SourceInput schema', async () => {
+    it('rejects input that fails the SourceInputMessage schema', async () => {
       // Missing required 'type' field in the inner payload
       const body = toNdjson([{ type: 'source_input', source_input: { noTypeField: true } }])
       const res = await inputApp.request('/pipeline_read', {
@@ -501,15 +501,15 @@ describe('POST /read', () => {
         headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
         body,
       })
-      // SourceInput.parse() throws — error propagates through the NDJSON stream
+      // SourceInputMessage.parse() throws — error propagates through the NDJSON stream
       expect(res.status).toBe(200)
       const text = await res.text()
       expect(text).toContain('error')
     })
 
     it('pipeline_sync: accepts raw (already-unwrapped) input and produces output', async () => {
-      // pipeline_sync passes input as-is to engine — no SourceInput unwrapping in the handler.
-      // Clients send the connector-specific payload directly (not the SourceInput envelope).
+      // pipeline_sync passes input as-is to engine — no SourceInputMessage unwrapping in the handler.
+      // Clients send the connector-specific payload directly (not the SourceInputMessage envelope).
       const body = toNdjson([
         {
           type: 'record',

@@ -47,15 +47,13 @@ describe('GET /openapi.json', () => {
     expect(spec.paths).toBeDefined()
   })
 
-  it('includes pipeline, pause/resume, and webhook paths', async () => {
+  it('includes pipeline and webhook paths', async () => {
     const res = await app().request('/openapi.json')
     const spec = (await res.json()) as { paths: Record<string, unknown> }
     const paths = Object.keys(spec.paths)
 
     expect(paths).toContain('/pipelines')
     expect(paths).toContain('/pipelines/{id}')
-    expect(paths).toContain('/pipelines/{id}/pause')
-    expect(paths).toContain('/pipelines/{id}/resume')
     expect(paths).toContain('/webhooks/{pipeline_id}')
   })
 })
@@ -113,7 +111,10 @@ describe('POST /pipelines workflow dispatch', () => {
       'googleSheetPipelineWorkflow',
       expect.objectContaining({
         taskQueue: 'unused',
-        args: [expect.stringMatching(/^pipe_/)],
+        args: [
+          expect.stringMatching(/^pipe_/),
+          expect.objectContaining({ desiredStatus: 'active' }),
+        ],
       })
     )
   })
@@ -124,21 +125,23 @@ describe('POST /pipelines workflow dispatch', () => {
 // ---------------------------------------------------------------------------
 
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
-const noErrors: RunResult = { errors: [], state: {} }
+const emptyState = { streams: {}, global: {} }
+const noErrors: RunResult = { errors: [], state: emptyState }
 
 function stubActivities(): SyncActivities {
   return {
     discoverCatalog: async () => ({ streams: [] }),
-    setup: async () => ({}),
-    syncImmediate: async () => noErrors,
-    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: {} }),
+    pipelineSetup: async () => ({}),
+    pipelineSync: async () => noErrors,
+    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
-      state: {},
+      state: emptyState,
       written: 0,
       rowAssignments: {},
     }),
-    teardown: async () => {},
+    pipelineTeardown: async () => {},
+    updatePipelineStatus: async () => {},
   }
 }
 
@@ -231,8 +234,7 @@ describe('pipeline CRUD', () => {
     const updated = await updateRes.json()
     expect(updated.id).toBe(created.id)
     expect(updated.source.type).toBe('test')
-    expect(updated.status).toBeDefined()
-    expect(updated.status.paused).toBe(false)
+    expect(typeof updated.status).toBe('string')
 
     // Cleanup
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
@@ -355,18 +357,26 @@ describe('pipeline CRUD', () => {
     await waitForPipeline(a, created.id)
 
     // Pause
-    const pauseRes = await a.request(`/pipelines/${created.id}/pause`, { method: 'POST' })
+    const pauseRes = await a.request(`/pipelines/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ desired_status: 'paused' }),
+    })
     expect(pauseRes.status).toBe(200)
     const paused = await pauseRes.json()
     expect(paused.id).toBe(created.id)
-    expect(paused.status.paused).toBe(true)
+    expect(paused.desired_status).toBe('paused')
 
     // Resume
-    const resumeRes = await a.request(`/pipelines/${created.id}/resume`, { method: 'POST' })
+    const resumeRes = await a.request(`/pipelines/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ desired_status: 'active' }),
+    })
     expect(resumeRes.status).toBe(200)
     const resumed = await resumeRes.json()
     expect(resumed.id).toBe(created.id)
-    expect(resumed.status.paused).toBe(false)
+    expect(resumed.desired_status).toBe('active')
 
     // Cleanup
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })

@@ -91,9 +91,9 @@ export function PipelineDetail({ id, onBack }: PipelineDetailProps) {
 
   const sourceType = String(pipeline.source?.type ?? 'unknown')
   const destType = String(pipeline.destination?.type ?? 'unknown')
-  const phase = pipeline.status?.phase ?? 'unknown'
-  const paused = pipeline.status?.paused ?? false
-  const iteration = pipeline.status?.iteration ?? 0
+  const phase = pipeline.status ?? 'unknown'
+  const paused = pipeline.desired_status === 'paused'
+  const iteration = 0
   const streams = pipeline.streams ?? []
 
   return (

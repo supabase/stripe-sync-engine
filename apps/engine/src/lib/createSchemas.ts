@@ -99,14 +99,14 @@ export function createConnectorSchemas(resolver: ConnectorResolver) {
       })
     })
 
-  const SourceInput =
+  const SourceInputMessage =
     inputSchemas.length > 0
       ? z
           .object({
             type: z.literal('source_input'),
             source_input: configUnion(inputSchemas),
           })
-          .meta({ id: 'SourceInput' })
+          .meta({ id: 'SourceInputMessage' })
       : undefined
 
   const PipelineConfig = z
@@ -126,7 +126,7 @@ export function createConnectorSchemas(resolver: ConnectorResolver) {
   return {
     SourceConfig,
     DestinationConfig,
-    SourceInput,
+    SourceInputMessage,
     PipelineConfig,
     sourceConfigNames,
     destConfigNames,

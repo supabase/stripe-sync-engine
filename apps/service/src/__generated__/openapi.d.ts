@@ -58,40 +58,6 @@ export interface paths {
         patch: operations["pipelines.update"];
         trace?: never;
     };
-    "/pipelines/{id}/pause": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Pause pipeline */
-        post: operations["pipelines.pause"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipelines/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resume pipeline */
-        post: operations["pipelines.resume"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/webhooks/{pipeline_id}": {
         parameters: {
             query?: never;
@@ -288,15 +254,18 @@ export interface operations {
                                 /** @description Cap backfill to this many records, then mark the stream complete. */
                                 backfill_limit?: number;
                             }[];
-                            /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
-                            status?: {
-                                /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
-                                phase: string;
-                                /** @description Whether the pipeline is currently paused. */
-                                paused: boolean;
-                                /** @description Number of times this workflow has continued-as-new. */
-                                iteration: number;
-                            };
+                            /**
+                             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+                             * @default active
+                             * @enum {string}
+                             */
+                            desired_status: "active" | "paused" | "deleted";
+                            /**
+                             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+                             * @default setup
+                             * @enum {string}
+                             */
+                            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         }[];
                         has_more: boolean;
                     };
@@ -355,6 +324,18 @@ export interface operations {
                             /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
+                        /**
+                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+                         * @default active
+                         * @enum {string}
+                         */
+                        desired_status: "active" | "paused" | "deleted";
+                        /**
+                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+                         * @default setup
+                         * @enum {string}
+                         */
+                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                     };
                 };
             };
@@ -405,15 +386,18 @@ export interface operations {
                             /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
-                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
-                        status?: {
-                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
-                            phase: string;
-                            /** @description Whether the pipeline is currently paused. */
-                            paused: boolean;
-                            /** @description Number of times this workflow has continued-as-new. */
-                            iteration: number;
-                        };
+                        /**
+                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+                         * @default active
+                         * @enum {string}
+                         */
+                        desired_status: "active" | "paused" | "deleted";
+                        /**
+                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+                         * @default setup
+                         * @enum {string}
+                         */
+                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                     };
                 };
             };
@@ -465,17 +449,6 @@ export interface operations {
                     };
                 };
             };
-            /** @description Teardown or deletion failed */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
         };
     };
     "pipelines.update": {
@@ -504,6 +477,11 @@ export interface operations {
                         /** @description Cap backfill to this many records, then mark the stream complete. */
                         backfill_limit?: number;
                     }[];
+                    /**
+                     * @description Set to "paused" to pause, "active" to resume, "deleted" to tear down.
+                     * @enum {string}
+                     */
+                    desired_status?: "active" | "paused" | "deleted";
                 };
             };
         };
@@ -531,15 +509,18 @@ export interface operations {
                             /** @description Cap backfill to this many records, then mark the stream complete. */
                             backfill_limit?: number;
                         }[];
-                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
-                        status?: {
-                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
-                            phase: string;
-                            /** @description Whether the pipeline is currently paused. */
-                            paused: boolean;
-                            /** @description Number of times this workflow has continued-as-new. */
-                            iteration: number;
-                        };
+                        /**
+                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+                         * @default active
+                         * @enum {string}
+                         */
+                        desired_status: "active" | "paused" | "deleted";
+                        /**
+                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+                         * @default setup
+                         * @enum {string}
+                         */
+                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                     };
                 };
             };
@@ -565,115 +546,8 @@ export interface operations {
                     };
                 };
             };
-        };
-    };
-    "pipelines.pause": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Paused pipeline */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
-                        status?: {
-                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
-                            phase: string;
-                            /** @description Whether the pipeline is currently paused. */
-                            paused: boolean;
-                            /** @description Number of times this workflow has continued-as-new. */
-                            iteration: number;
-                        };
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Resumed pipeline */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /** @description Live workflow status. Absent if no workflow is running for this pipeline. */
-                        status?: {
-                            /** @description Current workflow phase (e.g. "backfill", "live", "idle"). */
-                            phase: string;
-                            /** @description Whether the pipeline is currently paused. */
-                            paused: boolean;
-                            /** @description Number of times this workflow has continued-as-new. */
-                            iteration: number;
-                        };
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
+            /** @description Invalid status transition */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

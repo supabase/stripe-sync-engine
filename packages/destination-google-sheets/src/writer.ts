@@ -305,16 +305,18 @@ export async function updateRows(
 ): Promise<void> {
   if (updates.length === 0) return
 
-  for (const update of updates) {
-    await withRetry(() =>
-      sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `'${sheetName}'!A${update.rowNumber}`,
+  await withRetry(() =>
+    sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: {
         valueInputOption: 'RAW',
-        requestBody: { values: [update.values] },
-      })
-    )
-  }
+        data: updates.map((update) => ({
+          range: `'${sheetName}'!A${update.rowNumber}`,
+          values: [update.values],
+        })),
+      },
+    })
+  )
 }
 
 /**

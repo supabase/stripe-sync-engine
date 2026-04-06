@@ -94,8 +94,8 @@ function PipelineCard({
   const sourceType = String(pipeline.source?.type ?? 'unknown')
   const destType = String(pipeline.destination?.type ?? 'unknown')
   const streams = pipeline.streams ?? []
-  const phase = pipeline.status?.phase ?? 'unknown'
-  const paused = pipeline.status?.paused
+  const phase = pipeline.status ?? 'unknown'
+  const paused = pipeline.desired_status === 'paused'
 
   // Summarize tables: "Payments, Customers, and 8 others"
   const groups = [...new Set(streams.map((s) => inferGroupName(s.name)))]

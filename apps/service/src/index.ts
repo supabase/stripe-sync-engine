@@ -19,6 +19,6 @@ export type { AppOptions } from './api/app.js'
 // Temporal workflow types (for consumers that need to reference them)
 export { createActivities } from './temporal/activities/index.js'
 export type { SyncActivities, RunResult } from './temporal/activities/index.js'
-export type { WorkflowStatus } from './temporal/workflows/_shared.js'
+export type { PipelineStatus } from './lib/createSchemas.js'
 export { createWorker } from './temporal/worker.js'
 export type { WorkerOptions } from './temporal/worker.js'

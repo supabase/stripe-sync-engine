@@ -1,13 +1,11 @@
-import type { SourceReadOptions } from '@stripe/sync-engine'
+import type { SourceInputMessage, SourceReadOptions } from '@stripe/sync-engine'
 import type { ActivitiesContext } from './_shared.js'
 import { asIterable, drainMessages, type RunResult } from './_shared.js'
 
-type SourceInput = unknown
-
-export function createSyncImmediateActivity(context: ActivitiesContext) {
-  return async function syncImmediate(
+export function createPipelineSyncActivity(context: ActivitiesContext) {
+  return async function pipelineSync(
     pipelineId: string,
-    opts?: SourceReadOptions & { input?: SourceInput[] }
+    opts?: SourceReadOptions & { input?: SourceInputMessage[] }
   ): Promise<RunResult & { eof?: { reason: string } }> {
     const pipeline = await context.pipelineStore.get(pipelineId)
     const { id: _, ...config } = pipeline

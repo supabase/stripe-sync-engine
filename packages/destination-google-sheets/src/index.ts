@@ -258,12 +258,6 @@ export function createDestination(
           appends.map((entry) => entry.row)
         )
         if (range) {
-          const expectedEndRow = range.startRow + appends.length - 1
-          if (range.endRow !== expectedEndRow) {
-            throw new Error(
-              `Append row mismatch for ${streamName}: expected ${expectedEndRow}, got ${range.endRow}`
-            )
-          }
           for (let index = 0; index < appends.length; index++) {
             const rowKey = appends[index]?.rowKey
             if (!rowKey) continue
@@ -310,7 +304,9 @@ export function createDestination(
             }
           } else if (msg.type === 'source_state') {
             // Flush the stream's pending rows, then re-emit the state checkpoint
-            if (msg.source_state.state_type !== 'global') {
+            if (msg.source_state.state_type === 'global') {
+              await flushAll()
+            } else {
               await flushStream(msg.source_state.stream)
             }
             yield msg

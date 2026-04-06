@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/pause | Pause pipeline |\n| POST | /pipelines/{id}/resume | Resume pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -98,35 +98,36 @@
                               "additionalProperties": false
                             }
                           },
-                          "status": {
-                            "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
-                            "type": "object",
-                            "properties": {
-                              "phase": {
-                                "type": "string",
-                                "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
-                              },
-                              "paused": {
-                                "type": "boolean",
-                                "description": "Whether the pipeline is currently paused."
-                              },
-                              "iteration": {
-                                "type": "number",
-                                "description": "Number of times this workflow has continued-as-new."
-                              }
-                            },
-                            "required": [
-                              "phase",
+                          "desired_status": {
+                            "default": "active",
+                            "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                            "type": "string",
+                            "enum": [
+                              "active",
                               "paused",
-                              "iteration"
-                            ],
-                            "additionalProperties": false
+                              "deleted"
+                            ]
+                          },
+                          "status": {
+                            "default": "setup",
+                            "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                            "type": "string",
+                            "enum": [
+                              "setup",
+                              "backfill",
+                              "ready",
+                              "paused",
+                              "teardown",
+                              "error"
+                            ]
                           }
                         },
                         "required": [
                           "id",
                           "source",
-                          "destination"
+                          "destination",
+                          "desired_status",
+                          "status"
                         ],
                         "additionalProperties": false
                       }
@@ -251,12 +252,37 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
                     }
                   },
                   "required": [
                     "id",
                     "source",
-                    "destination"
+                    "destination",
+                    "desired_status",
+                    "status"
                   ],
                   "additionalProperties": false
                 }
@@ -350,35 +376,36 @@
                         "additionalProperties": false
                       }
                     },
-                    "status": {
-                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
-                      "type": "object",
-                      "properties": {
-                        "phase": {
-                          "type": "string",
-                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
-                        },
-                        "paused": {
-                          "type": "boolean",
-                          "description": "Whether the pipeline is currently paused."
-                        },
-                        "iteration": {
-                          "type": "number",
-                          "description": "Number of times this workflow has continued-as-new."
-                        }
-                      },
-                      "required": [
-                        "phase",
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
                         "paused",
-                        "iteration"
-                      ],
-                      "additionalProperties": false
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
                     }
                   },
                   "required": [
                     "id",
                     "source",
-                    "destination"
+                    "destination",
+                    "desired_status",
+                    "status"
                   ],
                   "additionalProperties": false
                 }
@@ -462,6 +489,15 @@
                         "name"
                       ]
                     }
+                  },
+                  "desired_status": {
+                    "description": "Set to \"paused\" to pause, \"active\" to resume, \"deleted\" to tear down.",
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "deleted"
+                    ]
                   }
                 }
               }
@@ -517,35 +553,36 @@
                         "additionalProperties": false
                       }
                     },
-                    "status": {
-                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
-                      "type": "object",
-                      "properties": {
-                        "phase": {
-                          "type": "string",
-                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
-                        },
-                        "paused": {
-                          "type": "boolean",
-                          "description": "Whether the pipeline is currently paused."
-                        },
-                        "iteration": {
-                          "type": "number",
-                          "description": "Number of times this workflow has continued-as-new."
-                        }
-                      },
-                      "required": [
-                        "phase",
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
                         "paused",
-                        "iteration"
-                      ],
-                      "additionalProperties": false
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
                     }
                   },
                   "required": [
                     "id",
                     "source",
-                    "destination"
+                    "destination",
+                    "desired_status",
+                    "status"
                   ],
                   "additionalProperties": false
                 }
@@ -571,6 +608,23 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid status transition",
             "content": {
               "application/json": {
                 "schema": {
@@ -624,267 +678,6 @@
                   "required": [
                     "id",
                     "deleted"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Teardown or deletion failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pipelines/{id}/pause": {
-      "post": {
-        "operationId": "pipelines.pause",
-        "tags": [
-          "Pipelines"
-        ],
-        "summary": "Pause pipeline",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "schema": {
-              "type": "string",
-              "example": "pipe_abc123"
-            },
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paused pipeline",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
-                    },
-                    "source": {
-                      "$ref": "#/components/schemas/SourceConfig"
-                    },
-                    "destination": {
-                      "$ref": "#/components/schemas/DestinationConfig"
-                    },
-                    "streams": {
-                      "description": "Selected streams to sync. All streams synced if omitted.",
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "Stream (table) name to sync."
-                          },
-                          "sync_mode": {
-                            "description": "How the source reads this stream. Defaults to full_refresh.",
-                            "type": "string",
-                            "enum": [
-                              "incremental",
-                              "full_refresh"
-                            ]
-                          },
-                          "backfill_limit": {
-                            "description": "Cap backfill to this many records, then mark the stream complete.",
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "status": {
-                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
-                      "type": "object",
-                      "properties": {
-                        "phase": {
-                          "type": "string",
-                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
-                        },
-                        "paused": {
-                          "type": "boolean",
-                          "description": "Whether the pipeline is currently paused."
-                        },
-                        "iteration": {
-                          "type": "number",
-                          "description": "Number of times this workflow has continued-as-new."
-                        }
-                      },
-                      "required": [
-                        "phase",
-                        "paused",
-                        "iteration"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "source",
-                    "destination"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {}
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pipelines/{id}/resume": {
-      "post": {
-        "operationId": "pipelines.resume",
-        "tags": [
-          "Pipelines"
-        ],
-        "summary": "Resume pipeline",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "schema": {
-              "type": "string",
-              "example": "pipe_abc123"
-            },
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resumed pipeline",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
-                    },
-                    "source": {
-                      "$ref": "#/components/schemas/SourceConfig"
-                    },
-                    "destination": {
-                      "$ref": "#/components/schemas/DestinationConfig"
-                    },
-                    "streams": {
-                      "description": "Selected streams to sync. All streams synced if omitted.",
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "Stream (table) name to sync."
-                          },
-                          "sync_mode": {
-                            "description": "How the source reads this stream. Defaults to full_refresh.",
-                            "type": "string",
-                            "enum": [
-                              "incremental",
-                              "full_refresh"
-                            ]
-                          },
-                          "backfill_limit": {
-                            "description": "Cap backfill to this many records, then mark the stream complete.",
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "required": [
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "status": {
-                      "description": "Live workflow status. Absent if no workflow is running for this pipeline.",
-                      "type": "object",
-                      "properties": {
-                        "phase": {
-                          "type": "string",
-                          "description": "Current workflow phase (e.g. \"backfill\", \"live\", \"idle\")."
-                        },
-                        "paused": {
-                          "type": "boolean",
-                          "description": "Whether the pipeline is currently paused."
-                        },
-                        "iteration": {
-                          "type": "number",
-                          "description": "Number of times this workflow has continued-as-new."
-                        }
-                      },
-                      "required": [
-                        "phase",
-                        "paused",
-                        "iteration"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "source",
-                    "destination"
                   ],
                   "additionalProperties": false
                 }

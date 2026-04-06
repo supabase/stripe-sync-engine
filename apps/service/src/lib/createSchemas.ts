@@ -2,6 +2,34 @@ import { z } from 'zod'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { connectorSchemaName, connectorUnionId } from '@stripe/sync-engine'
 
+// MARK: - Pipeline status enums
+
+export const DesiredStatus = z
+  .enum(['active', 'paused', 'deleted'])
+  .describe('User-controlled lifecycle state.')
+export type DesiredStatus = z.infer<typeof DesiredStatus>
+
+export const PipelineStatus = z
+  .enum(['setup', 'backfill', 'ready', 'paused', 'teardown', 'error'])
+  .describe('Workflow-controlled execution state.')
+export type PipelineStatus = z.infer<typeof PipelineStatus>
+
+/**
+ * Derive user-facing status from the two independent fields.
+ *
+ * | desired  | workflow  | → status      |
+ * |----------|-----------|---------------|
+ * | deleted  | *         | tearing_down  |
+ * | *        | teardown  | tearing_down  |
+ * | *        | error     | error         |
+ * | *        | setup     | setting_up    |
+ * | active   | paused    | resuming      |
+ * | paused   | paused    | paused        |
+ * | paused   | *         | pausing       |
+ * | active   | backfill  | backfilling   |
+ * | active   | ready     | ready         |
+ */
+
 // MARK: - Static schemas (independent of connector set)
 
 export const StreamConfig = z.object({
@@ -81,6 +109,12 @@ export function createSchemas(resolver: ConnectorResolver) {
       .array(StreamConfig)
       .optional()
       .describe('Selected streams to sync. All streams synced if omitted.'),
+    desired_status: DesiredStatus.default('active').describe(
+      'User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.'
+    ),
+    status: PipelineStatus.default('setup').describe(
+      'Workflow-controlled execution state. Updated by the Temporal workflow.'
+    ),
   })
 
   const CreatePipeline = z.object({
@@ -92,7 +126,11 @@ export function createSchemas(resolver: ConnectorResolver) {
       .describe('Selected streams to sync. All streams synced if omitted.'),
   })
 
-  const UpdatePipeline = CreatePipeline.partial()
+  const UpdatePipeline = CreatePipeline.extend({
+    desired_status: DesiredStatus.optional().describe(
+      'Set to "paused" to pause, "active" to resume, "deleted" to tear down.'
+    ),
+  }).partial()
 
   return {
     SourceConfig,
