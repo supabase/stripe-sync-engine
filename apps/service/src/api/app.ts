@@ -13,7 +13,7 @@ const DEFAULT_PIPELINE_WORKFLOW = 'pipelineWorkflow'
 const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'googleSheetPipelineWorkflow'
 
 function workflowTypeForPipeline(pipeline: Pipeline): string {
-  return pipeline.destination.type === 'google-sheets'
+  return pipeline.destination.type === 'google_sheets'
     ? GOOGLE_SHEETS_PIPELINE_WORKFLOW
     : DEFAULT_PIPELINE_WORKFLOW
 }
@@ -232,7 +232,7 @@ export function createApp(options: AppOptions) {
         }
       }
 
-      // Validate google-sheets constraints
+      // Validate google_sheets constraints
       const next = {
         ...current,
         ...(patch.source ? { source: patch.source } : {}),
@@ -243,22 +243,22 @@ export function createApp(options: AppOptions) {
         return c.json(
           {
             error:
-              'Changing destination.type between google-sheets and non-google-sheets requires recreating the pipeline',
+              'Changing destination.type between google_sheets and non-google_sheets requires recreating the pipeline',
           },
           400
         )
       }
       if (
-        current.destination.type === 'google-sheets' &&
+        current.destination.type === 'google_sheets' &&
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (current.destination as any)['google-sheets']?.spreadsheet_id !==
+        (current.destination as any)['google_sheets']?.spreadsheet_id !==
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (next.destination as any)['google-sheets']?.spreadsheet_id
+          (next.destination as any)['google_sheets']?.spreadsheet_id
       ) {
         return c.json(
           {
             error:
-              'Changing the target spreadsheet for a google-sheets pipeline requires recreating the pipeline',
+              'Changing the target spreadsheet for a google_sheets pipeline requires recreating the pipeline',
           },
           400
         )

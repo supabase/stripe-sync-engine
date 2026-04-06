@@ -59,7 +59,7 @@ export const sync_stripe_to_sheets = {
     credential_id: 'cred_stripe_prod',
   },
   destination: {
-    type: 'google-sheets',
+    type: 'google_sheets',
     google_sheet_id: '1ABCdef_spreadsheet_id',
     credential_id: 'cred_google_finance',
   },

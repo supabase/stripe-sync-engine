@@ -5,7 +5,7 @@ import { retryPolicy } from '../../lib/utils.js'
 import { DesiredStatus } from '../../lib/createSchemas.js'
 import { SourceInputMessage } from '@stripe/sync-protocol'
 
-export type RowIndex = Record<string, Record<string, number>>
+export type RowIndexMap = Record<string, Record<string, number>>
 
 export const sourceInputSignal = defineSignal<[SourceInputMessage]>('source_input')
 /** Carries the new desired_status value — workflow updates its local state directly. */
@@ -22,7 +22,7 @@ export const { pipelineSync } = proxyActivities<SyncActivities>({
   retry: retryPolicy,
 })
 
-export const { discoverCatalog, readGoogleSheetsIntoQueue, writeGoogleSheetsFromQueue } =
+export const { discoverCatalog, readIntoQueue, writeGoogleSheetsFromQueue } =
   proxyActivities<SyncActivities>({
     startToCloseTimeout: '10m',
     heartbeatTimeout: '2m',

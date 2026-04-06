@@ -129,8 +129,8 @@ export interface components {
             postgres: components["schemas"]["DestinationPostgresConfig"];
         } | {
             /** @constant */
-            type: "google-sheets";
-            "google-sheets": components["schemas"]["DestinationGoogleSheetsConfig"];
+            type: "google_sheets";
+            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
         };
         DestinationPostgresConfig: {
             /** @description Postgres connection string (alias for connection_string) */

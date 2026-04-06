@@ -57,7 +57,7 @@ export type DestinationConfig =
       credential_id: string
     }
   | {
-      type: 'google-sheets'
+      type: 'google_sheets'
       google_sheet_id: string
       /** Credential type: `google` */
       credential_id: string

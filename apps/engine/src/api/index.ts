@@ -13,7 +13,7 @@ const port = Number(process.env.PORT || 3001)
 async function main() {
   const resolver = await createConnectorResolver({
     sources: { stripe: source },
-    destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
+    destinations: { postgres: pgDestination, 'google_sheets': sheetsDestination },
   })
   const app = await createApp(resolver)
 

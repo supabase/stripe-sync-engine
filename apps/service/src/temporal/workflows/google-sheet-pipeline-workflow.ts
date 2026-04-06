@@ -1,33 +1,41 @@
 import { condition, continueAsNew, setHandler, sleep } from '@temporalio/workflow'
-import type {
-  ConfiguredCatalog,
-  SourceInputMessage,
-  SourceState as SyncState,
-} from '@stripe/sync-engine'
-
+import type { ConfiguredCatalog, SourceInputMessage, SourceState } from '@stripe/sync-protocol'
+import type { DesiredStatus, PipelineStatus } from '../../lib/createSchemas.js'
+import { CONTINUE_AS_NEW_THRESHOLD, EVENT_BATCH_SIZE } from '../../lib/utils.js'
 import {
   desiredStatusSignal,
   discoverCatalog,
   pipelineSetup,
   pipelineTeardown,
-  readGoogleSheetsIntoQueue,
-  RowIndex,
+  readIntoQueue,
+  RowIndexMap,
   sourceInputSignal,
   updatePipelineStatus,
   writeGoogleSheetsFromQueue,
 } from './_shared.js'
-import { CONTINUE_AS_NEW_THRESHOLD, deepEqual, EVENT_BATCH_SIZE } from '../../lib/utils.js'
+
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+export type ReconcilePhase = 'backfilling' | 'reconciling' | 'ready'
+export type SetupState = 'started' | 'completed'
+export type TeardownState = 'started' | 'completed'
+
+export interface GoogleSheetWorkflowState {
+  phase?: ReconcilePhase
+  paused?: boolean
+  setup?: SetupState
+  teardown?: TeardownState
+  pendingWrites?: boolean
+}
 
 export interface GoogleSheetPipelineWorkflowOpts {
-  desiredStatus?: string
-  setupDone?: boolean
-  state?: SyncState
-  readState?: SyncState
-  rowIndex?: RowIndex
+  desiredStatus?: DesiredStatus
+  syncState?: SourceState
+  readState?: SourceState
+  rowIndexMap?: RowIndexMap
   catalog?: ConfiguredCatalog
-  pendingWrites?: boolean
   inputQueue?: SourceInputMessage[]
-  readComplete?: boolean
+  state?: GoogleSheetWorkflowState
   writeRps?: number
 }
 
@@ -35,140 +43,167 @@ export async function googleSheetPipelineWorkflow(
   pipelineId: string,
   opts?: GoogleSheetPipelineWorkflowOpts
 ): Promise<void> {
-  let desiredStatus = opts?.desiredStatus ?? 'active'
-  const inputQueue: SourceInputMessage[] = [...(opts?.inputQueue ?? [])]
-  let iteration = 0
-  let setupDone = opts?.setupDone ?? false
-  let syncState: SyncState = opts?.state ?? { streams: {}, global: {} }
-  let readState: SyncState = opts?.readState ?? {
-    streams: { ...syncState.streams },
-    global: { ...syncState.global },
-  }
-  let rowIndex: RowIndex = opts?.rowIndex ?? {}
+  // Persisted through continue-as-new.
+  const inputQueue: SourceInputMessage[] = opts?.inputQueue ? [...opts.inputQueue] : []
+  let desiredStatus: DesiredStatus = opts?.desiredStatus ?? 'active'
+  let syncState: SourceState = opts?.syncState ?? { streams: {}, global: {} }
+  let readState: SourceState = opts?.readState ?? syncState
+  let rowIndexMap: RowIndexMap = opts?.rowIndexMap ?? {}
   let catalog: ConfiguredCatalog | undefined = opts?.catalog
-  let readComplete = opts?.readComplete ?? false
-  let pendingWrites = opts?.pendingWrites ?? false
+  let state: GoogleSheetWorkflowState = { ...opts?.state }
+  const writeRps = opts?.writeRps
+
+  // Transient workflow-local state.
+  let operationCount = 0
 
   setHandler(sourceInputSignal, (event: SourceInputMessage) => {
     inputQueue.push(event)
   })
-  setHandler(desiredStatusSignal, (status: string) => {
+  setHandler(desiredStatusSignal, (status: DesiredStatus) => {
     desiredStatus = status
   })
 
-  async function maybeContinueAsNew() {
-    if (++iteration >= CONTINUE_AS_NEW_THRESHOLD) {
-      await continueAsNew<typeof googleSheetPipelineWorkflow>(pipelineId, {
-        desiredStatus,
-        setupDone: true,
-        state: syncState,
-        readState,
-        rowIndex,
+  // MARK: - State
+
+  function derivePipelineStatus(): PipelineStatus {
+    if (state.teardown) return 'teardown'
+    if (state.paused) return 'paused'
+    if (state.setup !== 'completed') return 'setup'
+    return state.phase === 'ready' ? 'ready' : 'backfill'
+  }
+
+  async function setState(next: Partial<GoogleSheetWorkflowState>) {
+    const previousStatus = derivePipelineStatus()
+    state = { ...state, ...next }
+    const nextStatus = derivePipelineStatus()
+    if (previousStatus !== nextStatus) {
+      await updatePipelineStatus(pipelineId, nextStatus)
+    }
+  }
+
+  function runInterrupted() {
+    return desiredStatus !== 'active' || operationCount >= CONTINUE_AS_NEW_THRESHOLD
+  }
+
+  // MARK: - Live event loop
+
+  async function waitForLiveEvents(): Promise<SourceInputMessage[] | null> {
+    await condition(() => inputQueue.length > 0 || runInterrupted())
+    if (runInterrupted()) return null
+    return inputQueue.splice(0, EVENT_BATCH_SIZE)
+  }
+
+  async function liveEventLoop(): Promise<void> {
+    while (true) {
+      const events = await waitForLiveEvents()
+      if (!events) return
+
+      const { count } = await readIntoQueue(pipelineId, {
+        input: events,
+      })
+      if (count > 0) await setState({ pendingWrites: true })
+      operationCount++
+    }
+  }
+
+  // MARK: - Reconcile loop
+
+  async function waitForReconcileTurn(): Promise<boolean> {
+    await condition(() => runInterrupted() || state.phase !== 'ready', ONE_WEEK_MS)
+    if (runInterrupted()) return false
+    return true
+  }
+
+  async function reconcileLoop(): Promise<void> {
+    while (await waitForReconcileTurn()) {
+      if (!state.phase) {
+        await setState({ phase: 'backfilling' })
+      } else if (state.phase === 'ready') {
+        await setState({ phase: 'reconciling' })
+      }
+
+      const result = await readIntoQueue(pipelineId, {
+        state: readState,
+        state_limit: 1,
+      })
+
+      readState = result.state
+      if (result.count > 0) await setState({ pendingWrites: true })
+      if (result.eof?.reason === 'complete') await setState({ phase: 'ready' })
+
+      operationCount++
+    }
+  }
+
+  // MARK: - Write loop
+
+  async function waitForPendingWrites(): Promise<boolean> {
+    await condition(() => state.pendingWrites || runInterrupted())
+    if (runInterrupted()) return false
+    return true
+  }
+
+  async function writeLoop(): Promise<void> {
+    while (await waitForPendingWrites()) {
+      if (!catalog) catalog = await discoverCatalog(pipelineId)
+
+      const result = await writeGoogleSheetsFromQueue(pipelineId, {
+        maxBatch: 50,
         catalog,
-        pendingWrites,
-        inputQueue: inputQueue.length > 0 ? [...inputQueue] : undefined,
-        readComplete,
-        writeRps: opts?.writeRps,
+        rowIndexMap,
+        sourceState: syncState,
+      })
+
+      for (const [stream, assignments] of Object.entries(result.rowIndexMap)) {
+        rowIndexMap[stream] ??= {}
+        Object.assign(rowIndexMap[stream], assignments)
+      }
+
+      if (result.written > 0) {
+        syncState = result.state
+      } else {
+        await setState({ pendingWrites: false })
+      }
+
+      if (writeRps) await sleep(Math.ceil(1000 / writeRps))
+      operationCount++
+    }
+  }
+
+  // MARK: - Main logic
+
+  if (state.setup !== 'completed') {
+    await setState({ setup: 'started' })
+    if (!catalog) catalog = await discoverCatalog(pipelineId)
+    await pipelineSetup(pipelineId)
+    await setState({ setup: 'completed' })
+  }
+
+  while (desiredStatus !== 'deleted') {
+    if (desiredStatus === 'paused') {
+      await setState({ paused: true })
+      await condition(() => desiredStatus !== 'paused')
+      await setState({ paused: false })
+      continue
+    }
+
+    await Promise.all([liveEventLoop(), reconcileLoop(), writeLoop()])
+
+    if (operationCount >= CONTINUE_AS_NEW_THRESHOLD) {
+      return await continueAsNew<typeof googleSheetPipelineWorkflow>(pipelineId, {
+        desiredStatus,
+        syncState,
+        readState,
+        rowIndexMap,
+        catalog,
+        inputQueue,
+        state,
+        writeRps,
       })
     }
   }
 
-  function shouldStop() {
-    return desiredStatus === 'deleted' || desiredStatus === 'paused'
-  }
-
-  // Setup
-  if (!setupDone) {
-    await pipelineSetup(pipelineId)
-    catalog = await discoverCatalog(pipelineId)
-    setupDone = true
-    if (desiredStatus === 'deleted') {
-      await updatePipelineStatus(pipelineId, 'teardown')
-      await pipelineTeardown(pipelineId)
-      return
-    }
-  }
-
-  await updatePipelineStatus(pipelineId, readComplete ? 'ready' : 'backfill')
-
-  async function readLoop(): Promise<void> {
-    while (!shouldStop()) {
-      if (!catalog) catalog = await discoverCatalog(pipelineId)
-
-      if (inputQueue.length > 0) {
-        const batch = inputQueue.splice(0, EVENT_BATCH_SIZE)
-        const { count } = await readGoogleSheetsIntoQueue(pipelineId, {
-          input: batch,
-          catalog,
-          rowIndex,
-        })
-        if (count > 0) pendingWrites = true
-        await maybeContinueAsNew()
-        continue
-      }
-
-      if (!readComplete) {
-        const before = readState
-        const { count, state: nextReadState } = await readGoogleSheetsIntoQueue(pipelineId, {
-          state: readState,
-          state_limit: 1,
-          catalog,
-          rowIndex,
-        })
-        if (count > 0) pendingWrites = true
-        readState = {
-          streams: { ...readState.streams, ...nextReadState.streams },
-          global: { ...readState.global, ...nextReadState.global },
-        }
-        if (count === 0 || deepEqual(readState, before)) {
-          readComplete = true
-          await updatePipelineStatus(pipelineId, 'ready')
-        }
-        await maybeContinueAsNew()
-        continue
-      }
-
-      await condition(() => inputQueue.length > 0 || shouldStop())
-    }
-  }
-
-  async function writeLoop(): Promise<void> {
-    while (!shouldStop()) {
-      if (pendingWrites) {
-        if (!catalog) catalog = await discoverCatalog(pipelineId)
-        const result = await writeGoogleSheetsFromQueue(pipelineId, {
-          maxBatch: 50,
-          catalog,
-        })
-        pendingWrites = result.written > 0
-        if (result.written > 0) syncState = result.state
-        for (const [stream, assignments] of Object.entries(result.rowAssignments)) {
-          rowIndex[stream] ??= {}
-          Object.assign(rowIndex[stream], assignments)
-        }
-        if (opts?.writeRps) await sleep(Math.ceil(1000 / opts.writeRps))
-        await maybeContinueAsNew()
-      } else {
-        await condition(() => pendingWrites || shouldStop())
-      }
-    }
-  }
-
-  // Main loop: handle pause/delete/active cycling
-  while (desiredStatus !== 'deleted') {
-    if (desiredStatus === 'deleted') break
-
-    if (desiredStatus === 'paused') {
-      await updatePipelineStatus(pipelineId, 'paused')
-      await condition(() => desiredStatus !== 'paused')
-      continue
-    }
-
-    // Active — run read/write loops until paused or deleted
-    await updatePipelineStatus(pipelineId, readComplete ? 'ready' : 'backfill')
-    await Promise.all([readLoop(), writeLoop()])
-  }
-
-  await updatePipelineStatus(pipelineId, 'teardown')
+  await setState({ teardown: 'started' })
   await pipelineTeardown(pipelineId)
+  await setState({ teardown: 'completed' })
 }

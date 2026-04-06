@@ -20,7 +20,7 @@ let resolver: ConnectorResolver
 beforeAll(async () => {
   resolver = await createConnectorResolver({
     sources: { test: sourceTest },
-    destinations: { test: destinationTest, 'google-sheets': destinationGoogleSheets },
+    destinations: { test: destinationTest, 'google_sheets': destinationGoogleSheets },
   })
 })
 
@@ -80,7 +80,7 @@ describe('GET /health', () => {
 })
 
 describe('POST /pipelines workflow dispatch', () => {
-  it('starts google-sheets pipelines on the dedicated workflow', async () => {
+  it('starts google_sheets pipelines on the dedicated workflow', async () => {
     const start = vi.fn(async () => ({}))
     const res = await createApp({
       temporal: { client: { start } as unknown as WorkflowClient, taskQueue: 'unused' },
@@ -92,8 +92,8 @@ describe('POST /pipelines workflow dispatch', () => {
       body: JSON.stringify({
         source: { type: 'test', test: {} },
         destination: {
-          type: 'google-sheets',
-          'google-sheets': {
+          type: 'google_sheets',
+          'google_sheets': {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Test Sheet',
             client_id: 'client',
@@ -133,12 +133,12 @@ function stubActivities(): SyncActivities {
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => ({}),
     pipelineSync: async () => noErrors,
-    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: emptyState }),
+    readIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
       state: emptyState,
       written: 0,
-      rowAssignments: {},
+      rowIndexMap: {},
     }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
@@ -240,7 +240,7 @@ describe('pipeline CRUD', () => {
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })
 
-  it('rejects changing the target spreadsheet for a google-sheets pipeline', async () => {
+  it('rejects changing the target spreadsheet for a google_sheets pipeline', async () => {
     const a = liveApp()
 
     const createRes = await a.request('/pipelines', {
@@ -249,8 +249,8 @@ describe('pipeline CRUD', () => {
       body: JSON.stringify({
         source: { type: 'test', test: {} },
         destination: {
-          type: 'google-sheets',
-          'google-sheets': {
+          type: 'google_sheets',
+          'google_sheets': {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Original Sheet',
             client_id: 'client',
@@ -269,8 +269,8 @@ describe('pipeline CRUD', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         destination: {
-          type: 'google-sheets',
-          'google-sheets': {
+          type: 'google_sheets',
+          'google_sheets': {
             spreadsheet_id: 'sheet_456',
             spreadsheet_title: 'Replacement Sheet',
             client_id: 'client',
@@ -285,7 +285,7 @@ describe('pipeline CRUD', () => {
     expect(updateRes.status).toBe(400)
     expect(await updateRes.json()).toEqual({
       error:
-        'Changing the target spreadsheet for a google-sheets pipeline requires recreating the pipeline',
+        'Changing the target spreadsheet for a google_sheets pipeline requires recreating the pipeline',
     })
 
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
@@ -300,8 +300,8 @@ describe('pipeline CRUD', () => {
       body: JSON.stringify({
         source: { type: 'test', test: {} },
         destination: {
-          type: 'google-sheets',
-          'google-sheets': {
+          type: 'google_sheets',
+          'google_sheets': {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Original Sheet',
             client_id: 'client',
@@ -320,8 +320,8 @@ describe('pipeline CRUD', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         destination: {
-          type: 'google-sheets',
-          'google-sheets': {
+          type: 'google_sheets',
+          'google_sheets': {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Renamed Sheet',
             client_id: 'client',
@@ -335,8 +335,8 @@ describe('pipeline CRUD', () => {
 
     expect(updateRes.status).toBe(200)
     const updated = await updateRes.json()
-    expect(updated.destination['google-sheets'].spreadsheet_id).toBe('sheet_123')
-    expect(updated.destination['google-sheets'].spreadsheet_title).toBe('Renamed Sheet')
+    expect(updated.destination['google_sheets'].spreadsheet_id).toBe('sheet_123')
+    expect(updated.destination['google_sheets'].spreadsheet_title).toBe('Renamed Sheet')
 
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })

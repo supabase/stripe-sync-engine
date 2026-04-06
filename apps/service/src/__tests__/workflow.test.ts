@@ -22,12 +22,12 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => ({}),
     pipelineSync: async () => noErrors,
-    readGoogleSheetsIntoQueue: async () => ({ count: 0, state: emptyState }),
+    readIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
       errors: [],
       state: emptyState,
       written: 0,
-      rowAssignments: {},
+      rowIndexMap: {},
     }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
@@ -310,9 +310,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
           if (opts?.input) return noErrors
 
           reconcileCalls++
-          return reconcileCalls === 1
-            ? { ...noErrors, eof: { reason: 'complete' } }
-            : noErrors
+          return reconcileCalls === 1 ? { ...noErrors, eof: { reason: 'complete' } } : noErrors
         },
       }),
     })
@@ -330,7 +328,9 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       await handle.signal('desired_status', 'deleted')
       await handle.result()
 
-      expect(statusWrites).toEqual(expect.arrayContaining(['backfill', 'ready', 'paused', 'teardown']))
+      expect(statusWrites).toEqual(
+        expect.arrayContaining(['backfill', 'ready', 'paused', 'teardown'])
+      )
     })
   })
 
@@ -507,7 +507,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
           discoverCalls++
           return { streams: [] }
         },
-        readGoogleSheetsIntoQueue: async () => {
+        readIntoQueue: async () => {
           readCalls++
           return { count: 0, state: emptyState }
         },
@@ -563,7 +563,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
       workflowsPath,
       activities: stubActivities({
         discoverCatalog: async () => discoveredCatalog,
-        readGoogleSheetsIntoQueue: async () => {
+        readIntoQueue: async () => {
           readCalls++
           return readCalls === 1
             ? { count: 1, state: { streams: { customers: { cursor: 'cus_1' } }, global: {} } }
@@ -575,7 +575,7 @@ describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
             errors: [],
             state: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
             written: 0,
-            rowAssignments: {},
+            rowIndexMap: {},
           }
         },
       }),

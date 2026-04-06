@@ -1630,15 +1630,15 @@
             "properties": {
               "type": {
                 "type": "string",
-                "const": "google-sheets"
+                "const": "google_sheets"
               },
-              "google-sheets": {
+              "google_sheets": {
                 "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
               }
             },
             "required": [
               "type",
-              "google-sheets"
+              "google_sheets"
             ]
           }
         ],

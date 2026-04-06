@@ -89,7 +89,7 @@ echo "$STRIPE_OUTPUT" | head -3 || true
 # --- 2) Write to Google Sheets ---
 if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
   echo "==> Writing to Google Sheets (/pipeline_write)"
-  SHEETS_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s"}},"destination":{"type":"google-sheets","google-sheets":{"client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}}' \
+  SHEETS_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s"}},"destination":{"type":"google_sheets","google_sheets":{"client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}}' \
     "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
   SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \

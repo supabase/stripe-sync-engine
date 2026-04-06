@@ -15,7 +15,7 @@ echo "Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID" >&2
 PIPELINE=$(node -e "console.log(JSON.stringify({
   source: { name: 'stripe', api_key: process.env.STRIPE_API_KEY, backfill_limit: 10 },
   destination: {
-    name: 'google-sheets',
+    name: 'google_sheets',
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
     access_token: 'unused',

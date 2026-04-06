@@ -64,7 +64,7 @@ POST /syncs        { source: { type: "stripe", credential_id: "cred_stripe_..." 
 
 ```
 POST /syncs  { source: { type: "stripe", credential_id: "cred_stripe_..." },
-               destination: { type: "google-sheets", google_sheet_id: "1abc...", credential_id: "cred_goog_..." } }
+               destination: { type: "google_sheets", google_sheet_id: "1abc...", credential_id: "cred_goog_..." } }
 ```
 
 | Test                                               | Validates            |

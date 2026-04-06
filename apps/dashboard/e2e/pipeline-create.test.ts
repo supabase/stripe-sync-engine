@@ -46,7 +46,7 @@ test('full pipeline creation flow: source → discover → streams → destinati
   // Click next to destination
   await page.getByRole('button', { name: /next.*configure destination/i }).click()
 
-  // Step 3: Destination — should show postgres and google-sheets
+  // Step 3: Destination — should show postgres and google_sheets
   await expect(page.locator('select').first()).toBeVisible()
   await page.locator('select').first().selectOption('postgres')
 

@@ -11,7 +11,7 @@ export default async function globalSetup(_config: FullConfig) {
 
   const resolver = createConnectorResolver({
     sources: { stripe: sourceStripe },
-    destinations: { postgres: destinationPostgres, 'google-sheets': destinationGoogleSheets },
+    destinations: { postgres: destinationPostgres, 'google_sheets': destinationGoogleSheets },
   })
 
   const app = createApp(resolver)

@@ -1,5 +1,5 @@
 import { heartbeat } from '@temporalio/activity'
-import type { Message, Engine, SourceState } from '@stripe/sync-engine'
+import type { Message, Engine, SourceState, SourceStateMessage } from '@stripe/sync-engine'
 import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
@@ -116,6 +116,16 @@ export function pipelineHeader(config: Record<string, unknown>): string {
   return JSON.stringify(config)
 }
 
+export function mergeStateMessage(state: SourceState, msg: SourceStateMessage): SourceState {
+  if (msg.source_state.state_type === 'global') {
+    return { ...state, global: msg.source_state.data as Record<string, unknown> }
+  }
+  return {
+    ...state,
+    streams: { ...state.streams, [msg.source_state.stream]: msg.source_state.data },
+  }
+}
+
 export function collectError(message: Message): RunResult['errors'][number] | null {
   if (message.type === 'trace' && message.trace.trace_type === 'error') {
     return {
@@ -139,10 +149,7 @@ export async function drainMessages(
   eof?: { reason: string }
 }> {
   const errors: RunResult['errors'] = []
-  const state: SourceState = {
-    streams: { ...initialState?.streams },
-    global: { ...initialState?.global },
-  }
+  let state: SourceState = initialState ?? { streams: {}, global: {} }
   const records: Message[] = []
   let sourceConfig: Record<string, unknown> | undefined
   let destConfig: Record<string, unknown> | undefined
@@ -164,11 +171,7 @@ export async function drainMessages(
       if (error) {
         errors.push(error)
       } else if (message.type === 'source_state') {
-        if (message.source_state.state_type === 'global') {
-          state.global = message.source_state.data as Record<string, unknown>
-        } else {
-          state.streams[message.source_state.stream] = message.source_state.data
-        }
+        state = mergeStateMessage(state, message)
       } else if (message.type === 'record') {
         records.push(message)
       }

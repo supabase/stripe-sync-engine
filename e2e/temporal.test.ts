@@ -23,6 +23,34 @@ import { createActivities } from '@stripe/sync-service'
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** In-memory pipeline store for e2e tests. */
+function memoryPipelineStore() {
+  const data = new Map<string, Record<string, unknown>>()
+  return {
+    async get(id: string) {
+      const p = data.get(id)
+      if (!p) throw new Error(`Pipeline not found: ${id}`)
+      return p as any
+    },
+    async set(id: string, pipeline: Record<string, unknown>) {
+      data.set(id, pipeline)
+    },
+    async update(id: string, patch: Record<string, unknown>) {
+      const existing = data.get(id)
+      if (!existing) throw new Error(`Pipeline not found: ${id}`)
+      const updated = { ...existing, ...patch, id }
+      data.set(id, updated)
+      return updated as any
+    },
+    async delete(id: string) {
+      data.delete(id)
+    },
+    async list() {
+      return [...data.values()] as any[]
+    },
+  }
+}
+
 const POSTGRES_URL =
   process.env.POSTGRES_URL ?? 'postgresql://postgres:postgres@localhost:5432/postgres'
 
@@ -109,7 +137,7 @@ function createTestInfra() {
 
       const connectors = createConnectorResolver({
         sources: { stripe: source },
-        destinations: { postgres: pgDestination, 'google-sheets': sheetsDestination },
+        destinations: { postgres: pgDestination, 'google_sheets': sheetsDestination },
       })
 
       // Start engine API (stateless sync execution)
@@ -144,10 +172,12 @@ describe.skip('temporal e2e: stripe → postgres', () => {
   const infra = createTestInfra()
   const schema = schemaName()
   let stripe: Stripe
+  let pipelineStore: ReturnType<typeof memoryPipelineStore>
 
   beforeAll(async () => {
     await infra.setup()
     stripe = new Stripe(STRIPE_API_KEY)
+    pipelineStore = memoryPipelineStore()
     console.log(`  Schema: ${schema}`)
   }, 60_000)
 
@@ -159,17 +189,20 @@ describe.skip('temporal e2e: stripe → postgres', () => {
   })
 
   it('backfills products then processes a live event via signal', async () => {
+    const pipelineId = `pipe_e2e_${Date.now()}`
     const pipeline = {
-      id: `pipe_e2e_${Date.now()}`,
+      id: pipelineId,
       source: { type: 'stripe', stripe: { api_key: STRIPE_API_KEY, backfill_limit: 5 } },
       destination: { type: 'postgres', postgres: { connection_string: POSTGRES_URL, schema } },
       streams: [{ name: 'products' }],
     }
-    console.log(`  Pipeline: ${pipeline.id}`)
+
+    await pipelineStore.set(pipelineId, pipeline as any)
+    console.log(`  Pipeline: ${pipelineId}`)
 
     const handle = await infra.client.workflow.start('pipelineWorkflow', {
-      args: [pipeline],
-      workflowId: `pipe_${pipeline.id}`,
+      args: [pipelineId],
+      workflowId: `pipe_${pipelineId}`,
       taskQueue: 'pg-queue',
     })
 
@@ -179,6 +212,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       workflowsPath: infra.workflowsPath,
       activities: createActivities({
         engineUrl: infra.engineUrl,
+        pipelineStore,
       }),
     })
 
@@ -207,7 +241,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       expect(sampleRows[0].id).toMatch(/^prod_/)
       console.log(`  Sample: ${sampleRows[0].id} → ${sampleRows[0].name}`)
 
-      // --- Live event via stripe_event signal ---
+      // --- Live event via source_input signal ---
       const products = await stripe.products.list({ limit: 1 })
       const product = products.data[0]
       const newName = `temporal-e2e-${Date.now()}`
@@ -218,7 +252,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       const events = await stripe.events.list({ limit: 5, type: 'product.updated' })
       const event = events.data[0]
       console.log(`  Fetched event ${event.id} (${event.type})`)
-      await handle.signal('stripe_event', event)
+      await handle.signal('source_input', event)
 
       await new Promise((r) => setTimeout(r, 5000))
 
@@ -231,11 +265,11 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       console.log(`  Live update verified: ${product.id} → "${updatedRows[0].name}"`)
 
       // --- Teardown ---
-      await handle.signal('delete')
+      await handle.signal('desired_status', 'deleted')
       try {
         await handle.result()
       } catch {
-        // Expected
+        // Expected — workflow terminates after teardown
       }
     })
 
@@ -252,10 +286,10 @@ describe.skip('temporal e2e: stripe → postgres', () => {
 })
 
 // ===========================================================================
-// 2. Stripe → Google Sheets (backfill)
+// 2. Stripe → Google Sheets (backfill via googleSheetPipelineWorkflow)
 // ===========================================================================
 
-describe.skip('temporal e2e: stripe → google-sheets', () => {
+describe.skip('temporal e2e: stripe → google_sheets', () => {
   const STRIPE_API_KEY = process.env.STRIPE_API_KEY ?? ''
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? ''
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? ''
@@ -263,6 +297,7 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
   const GOOGLE_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? ''
   const infra = createTestInfra()
   let sheetsClient: ReturnType<typeof google.sheets>
+  let pipelineStore: ReturnType<typeof memoryPipelineStore>
 
   const streamName = 'products'
 
@@ -272,6 +307,8 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
     const auth = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
     auth.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN })
     sheetsClient = google.sheets({ version: 'v4', auth })
+
+    pipelineStore = memoryPipelineStore()
 
     console.log(`  Spreadsheet: ${GOOGLE_SPREADSHEET_ID}`)
     console.log(`  Tab: ${streamName}`)
@@ -301,24 +338,30 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
   })
 
   it('backfills products from Stripe into a Google Sheet tab', async () => {
+    const pipelineId = `pipe_sheets_${Date.now()}`
     const pipeline = {
-      id: `pipe_sheets_${Date.now()}`,
+      id: pipelineId,
       source: { type: 'stripe', stripe: { api_key: STRIPE_API_KEY, backfill_limit: 3 } },
       destination: {
-        name: 'google-sheets',
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        refresh_token: GOOGLE_REFRESH_TOKEN,
-        access_token: 'placeholder',
-        spreadsheet_id: GOOGLE_SPREADSHEET_ID,
+        type: 'google_sheets',
+        'google_sheets': {
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          refresh_token: GOOGLE_REFRESH_TOKEN,
+          access_token: 'placeholder',
+          spreadsheet_id: GOOGLE_SPREADSHEET_ID,
+        },
       },
       streams: [{ name: streamName }],
     }
-    console.log(`  Pipeline: ${pipeline.id}`)
 
-    const handle = await infra.client.workflow.start('pipelineWorkflow', {
-      args: [pipeline],
-      workflowId: `pipe_${pipeline.id}`,
+    // Pre-populate the pipeline store (workflow reads config from store, not args)
+    await pipelineStore.set(pipelineId, pipeline as any)
+    console.log(`  Pipeline: ${pipelineId}`)
+
+    const handle = await infra.client.workflow.start('googleSheetPipelineWorkflow', {
+      args: [pipelineId],
+      workflowId: `pipe_${pipelineId}`,
       taskQueue: 'sheets-queue',
     })
 
@@ -328,6 +371,7 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
       workflowsPath: infra.workflowsPath,
       activities: createActivities({
         engineUrl: infra.engineUrl,
+        pipelineStore,
       }),
     })
 
@@ -359,11 +403,11 @@ describe.skip('temporal e2e: stripe → google-sheets', () => {
       }
       console.log(`  Sample: ${dataRows[0][idCol]}`)
 
-      await handle.signal('delete')
+      await handle.signal('desired_status', 'deleted')
       try {
         await handle.result()
       } catch {
-        // Expected
+        // Expected — workflow terminates after teardown
       }
     })
   })

@@ -15,8 +15,9 @@
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "down": "docker compose down && (lsof -ti:4010,4020,5173 | xargs kill -9 2>/dev/null; true)",
     "dev:engine": "pnpm --filter @stripe/sync-engine dev",
-    "dev": "concurrently -n engine,service,worker,dashboard -c cyan,green,yellow,magenta \"pnpm --filter @stripe/sync-engine dev\" \"pnpm --filter @stripe/sync-service dev:serve\" \"pnpm --filter @stripe/sync-service dev:worker\" \"pnpm --filter @stripe/sync-dashboard dev\"",
+    "dev": "docker compose up -d; concurrently -n engine,service,worker,dashboard -c cyan,green,yellow,magenta \"pnpm --filter @stripe/sync-engine dev\" \"pnpm --filter @stripe/sync-service dev:serve\" \"pnpm --filter @stripe/sync-service dev:worker\" \"pnpm --filter @stripe/sync-dashboard dev\"",
     "visualizer": "pnpm --filter @stripe/sync-visualizer dev"
   },
   "dependencies": {
