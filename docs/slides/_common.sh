@@ -4,5 +4,5 @@
 set -euo pipefail
 [ -f "$ROOT/.env" ] && set -a && source "$ROOT/.env" && set +a
 
-source-stripe() { node "$ROOT/packages/source-stripe/dist/bin.js" "$@"; }
-dest-postgres()  { node "$ROOT/packages/destination-postgres/dist/bin.js" "$@"; }
+source-stripe() { "$ROOT/scripts/ts-run" "$ROOT/packages/source-stripe/src/bin.ts" "$@"; }
+dest-postgres()  { "$ROOT/scripts/ts-run" "$ROOT/packages/destination-postgres/src/bin.ts" "$@"; }
