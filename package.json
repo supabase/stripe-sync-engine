@@ -28,7 +28,7 @@
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.2"
+    "vite": "^8.0.5"
   },
   "packageManager": "pnpm@10.33.0",
   "overrides": {
