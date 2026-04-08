@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectorResolver, Message, SourceStateMessage } from '../lib/index.js'
 import { sourceTest, destinationTest, collectFirst } from '../lib/index.js'
 import { createApp } from './app.js'
-import pg from 'pg'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -843,51 +842,60 @@ describe('POST /source_discover', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /internal/query', () => {
-  it('executes SQL and returns rows and rowCount', async () => {
-    const mockQuery = vi.fn().mockResolvedValue({ rows: [{ n: 1 }], rowCount: 1 })
-    const mockEnd = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(pg, 'Pool').mockImplementation(
-      () => ({ query: mockQuery, end: mockEnd }) as unknown as pg.Pool
-    )
+  const dbUrl = process.env.DATABASE_URL!
 
+  it('executes SQL and returns rows and rowCount', async () => {
     const app = await createApp(resolver)
     const res = await app.request('/internal/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        connection_string: 'postgres://user:pass@localhost:5432/db',
-        sql: 'SELECT 1 AS n',
-      }),
+      body: JSON.stringify({ connection_string: dbUrl, sql: 'SELECT 1 AS n' }),
     })
 
     expect(res.status).toBe(200)
-    const body = await res.json<{ rows: unknown[]; rowCount: number }>()
+    const body = (await res.json()) as { rows: unknown[]; rowCount: number }
     expect(body.rows).toEqual([{ n: 1 }])
     expect(body.rowCount).toBe(1)
-    expect(mockEnd).toHaveBeenCalled()
   })
 
-  it('closes pool even when query fails', async () => {
-    const mockEnd = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(pg, 'Pool').mockImplementation(
-      () =>
-        ({
-          query: vi.fn().mockRejectedValue(new Error('connection refused')),
-          end: mockEnd,
-        }) as unknown as pg.Pool
-    )
+  it('returns 400 with error message for invalid SQL', async () => {
+    const app = await createApp(resolver)
+    const res = await app.request('/internal/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connection_string: dbUrl, sql: 'NOT VALID SQL' }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toMatch(/syntax error/i)
+  })
+
+  it('connects without SSL when sslmode is absent (no SSL forced)', async () => {
+    // Strip sslmode so the route sees a connection string with no SSL hint.
+    // If the handler incorrectly forced ssl: { rejectUnauthorized: false },
+    // this would fail on a local Postgres that has no SSL configured.
+    const url = new URL(dbUrl)
+    url.searchParams.delete('sslmode')
 
     const app = await createApp(resolver)
     const res = await app.request('/internal/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        connection_string: 'postgres://user:pass@localhost:5432/db',
-        sql: 'SELECT 1',
-      }),
+      body: JSON.stringify({ connection_string: url.toString(), sql: 'SELECT 1' }),
     })
 
-    expect(res.status).toBe(500)
-    expect(mockEnd).toHaveBeenCalled()
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 400 when required fields are missing', async () => {
+    const app = await createApp(resolver)
+    const res = await app.request('/internal/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connection_string: 'postgres://localhost/db' }),
+    })
+
+    expect(res.status).toBe(400)
   })
 })

@@ -605,20 +605,53 @@ export async function createApp(resolver: ConnectorResolver) {
   // ── Internal utilities ───────────────────────────────────────────────────────
   // NOTE: no HTTP auth on /internal/* — only safe on a trusted private network.
 
-  app.post('/internal/query', async (c) => {
-    const { connection_string, sql } = await c.req.json<{
-      connection_string: string
-      sql: string
-    }>()
+  const internalQueryRoute = createRoute({
+    method: 'post',
+    path: '/internal/query',
+    tags: ['Internal'],
+    hide: true,
+    summary: 'Run a SQL query against a Postgres connection',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: z.object({
+            connection_string: z.string(),
+            sql: z.string(),
+          }),
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Query results',
+        content: {
+          'application/json': {
+            schema: z.object({
+              rows: z.array(z.record(z.string(), z.unknown())),
+              rowCount: z.number().nullable(),
+            }),
+          },
+        },
+      },
+      400: errorResponse,
+    },
+  })
+  app.openapi(internalQueryRoute, async (c) => {
+    const { connection_string, sql } = c.req.valid('json')
+    const ssl = sslConfigFromConnectionString(connection_string)
     const pool = new pg.Pool(
       withPgConnectProxy({
         connectionString: stripSslParams(connection_string),
-        ssl: sslConfigFromConnectionString(connection_string),
+        ssl,
       })
     )
     try {
-      const result = await pool.query(sql)
+      const result = await pool.query(sql.trim())
       return c.json({ rows: result.rows, rowCount: result.rowCount })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Query failed'
+      return c.json({ error: message }, 400)
     } finally {
       await pool.end()
     }
