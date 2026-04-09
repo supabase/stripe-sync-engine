@@ -6,15 +6,33 @@ import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 
+// Errors matching these patterns are silently skipped during backfill.
+// The stream is marked complete without yielding records.
+// NOTE: these are band-aids — the underlying issue is that the OpenAPI spec
+// advertises endpoints that don't exist for all accounts/key types (e.g.
+// /v1/exchange_rates). This means pipeline_setup creates empty tables in
+// Postgres that never get populated. The proper fix is to filter unreachable
+// endpoints during discover or to not create tables for streams that fail.
+//
+// Examples of matched errors:
+//   400 "This resource is only available in testmode."          → only available in testmode
+//   400 "This endpoint is not in live mode"                     → not in live mode
+//   400 "Must provide customer"                                 → Must provide customer
+//   400 "Must provide source or customer"                       → Must provide
+//   400 "Missing required param: customer"                      → Missing required param
+//   400 "Unrecognized request URL (GET: /v1/exchange_rates)"    → Unrecognized request URL
+//   400 "Your account is not set up to use Issuing."            → not set up to use
 const SKIPPABLE_ERROR_PATTERNS = [
   'only available in testmode',
   'not in live mode',
   'Must provide customer',
   'Must provide ',
   'Missing required param',
+  'Unrecognized request URL',
+  'not set up to use',
 ]
 
-const DEFAULT_BACKFILL_CONCURRENCY = 200
+const DEFAULT_BACKFILL_CONCURRENCY = 1 // Used to be 200, but for now default to just 1 to make it easier to reason about. Chane back when ready.
 
 // MARK: - Compact state (generative — O(concurrency) not O(total segments))
 

@@ -24,10 +24,7 @@ export type {
   ListParams,
 } from './listFnResolver.js'
 export { parsedTableToJsonSchema } from './jsonSchemaConverter.js'
-export {
-  generateObjectsFromSchema,
-  findSchemaNameByResourceId,
-} from './objectGenerator.js'
+export { generateObjectsFromSchema, findSchemaNameByResourceId } from './objectGenerator.js'
 export type { GenerateObjectsOptions } from './objectGenerator.js'
 export {
   StripeAccountSchema,

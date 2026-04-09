@@ -32,8 +32,6 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
     env.STRIPE_REQUEST_TIMEOUT_MS,
     10_000
   )
-  const logRequests = env.STRIPE_LOG_REQUESTS === '1'
-
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.api_key}`,
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -54,16 +52,6 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
       body = encodeFormData(params)
     }
 
-    if (logRequests) {
-      console.error({
-        msg: 'Stripe API request started',
-        method,
-        path,
-        apiVersion: config.api_version,
-      })
-    }
-
-    const start = Date.now()
     const response = await fetchWithProxy(
       url.toString(),
       {
@@ -76,18 +64,6 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
     )
 
     const json = (await response.json()) as unknown
-
-    if (logRequests) {
-      console.error({
-        msg: 'Stripe API request completed',
-        method,
-        path,
-        status: response.status,
-        elapsed: Date.now() - start,
-        requestId: response.headers.get('request-id'),
-        apiVersion: config.api_version,
-      })
-    }
 
     if (!response.ok) {
       throw new StripeApiRequestError(response.status, json, method, path)

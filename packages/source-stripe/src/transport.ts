@@ -181,6 +181,8 @@ export function getHttpsProxyAgentForTarget(
   return proxyUrl ? getHttpsProxyAgent(proxyUrl) : undefined
 }
 
+const DANGEROUSLY_VERBOSE_LOGGING = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
+
 type ProxyAwareRequestInit = RequestInit & { dispatcher?: ProxyAgent }
 
 export function withFetchProxy(
@@ -204,12 +206,37 @@ export function fetchWithProxy(
   env: TransportEnv = process.env
 ): Promise<Response> {
   const proxyUrl = getProxyUrlForTarget(input, env)
-  if (!proxyUrl) {
-    return fetch(input, init)
+  const fetchInit: ProxyAwareRequestInit = proxyUrl
+    ? { ...init, dispatcher: getProxyAgent(proxyUrl) }
+    : init
+
+  if (!DANGEROUSLY_VERBOSE_LOGGING) {
+    return fetch(input, fetchInit)
   }
 
-  return fetch(input, {
-    ...init,
-    dispatcher: getProxyAgent(proxyUrl),
-  } as ProxyAwareRequestInit)
+  const method = (init.method ?? 'GET').toUpperCase()
+  const reqId = crypto.randomUUID().slice(0, 8)
+  const start = Date.now()
+  const loggedHeaders: Record<string, string> = {}
+  if (init.headers) {
+    new Headers(init.headers as HeadersInit).forEach((v, k) => {
+      loggedHeaders[k] = k.toLowerCase() === 'authorization' ? '[redacted]' : v
+    })
+  }
+  console.error(`[http ${reqId}] → ${method} ${String(input)}`, {
+    headers: loggedHeaders,
+    ...(init.body != null ? { body: String(init.body) } : {}),
+  })
+
+  return fetch(input, fetchInit).then((res) => {
+    const resClone = res.clone()
+    console.error(`[http ${reqId}] ← ${method} ${String(input)} ${res.status} (${Date.now() - start}ms)`)
+    resClone
+      .text()
+      .then((body) => {
+        console.error(`[http ${reqId}] ← body: ${body.slice(0, 4096)}`)
+      })
+      .catch(() => {})
+    return res
+  })
 }

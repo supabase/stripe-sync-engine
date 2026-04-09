@@ -53,7 +53,7 @@ export function createPgStateStore(
         sql`INSERT INTO "${schema}"."_sync_state" (sync_id, stream, state, updated_at)
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (sync_id, stream) DO UPDATE SET state = $3, updated_at = NOW()`,
-        [syncId, stream, JSON.stringify(data)]
+        [syncId, stream, data]
       )
     },
 
@@ -62,7 +62,7 @@ export function createPgStateStore(
         sql`INSERT INTO "${schema}"."_sync_state" (sync_id, stream, state, updated_at)
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (sync_id, stream) DO UPDATE SET state = $3, updated_at = NOW()`,
-        [syncId, GLOBAL_KEY, JSON.stringify(data)]
+        [syncId, GLOBAL_KEY, data]
       )
     },
 
