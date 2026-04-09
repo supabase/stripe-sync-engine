@@ -571,7 +571,7 @@ export interface components {
             backfill_limit?: number;
             /** @description Max Stripe API requests per second (default: 25) */
             rate_limit?: number;
-            /** @description Number of time-range segments for parallel backfill (default: 200) */
+            /** @description Number of time-range segments for parallel backfill (default: 10) */
             backfill_concurrency?: number;
         };
         DestinationConfig: {

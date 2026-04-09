@@ -32,7 +32,7 @@ const SKIPPABLE_ERROR_PATTERNS = [
   'not set up to use',
 ]
 
-const DEFAULT_BACKFILL_CONCURRENCY = 1 // Used to be 200, but for now default to just 1 to make it easier to reason about. Chane back when ready.
+const DEFAULT_BACKFILL_CONCURRENCY = 10
 
 // MARK: - Compact state (generative — O(concurrency) not O(total segments))
 

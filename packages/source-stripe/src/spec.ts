@@ -55,7 +55,7 @@ export const configSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe('Number of time-range segments for parallel backfill (default: 200)'),
+    .describe('Number of time-range segments for parallel backfill (default: 10)'),
 })
 
 export type Config = z.infer<typeof configSchema>

@@ -541,11 +541,12 @@ export async function createApp(resolver: ConnectorResolver) {
     const pipeline = c.req.valid('header')['x-pipeline']
     const state = c.req.valid('header')['x-source-state']
     const { state_limit, time_limit } = c.req.valid('query')
+    const context = { path: '/pipeline_sync', ...syncRequestContext(pipeline) }
     const input = hasBody(c)
       ? verboseInput('pipeline_sync', parseNdjsonStream(c.req.raw.body!))
       : undefined
     const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit }, input)
-    return ndjsonResponse(output)
+    return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context))
   })
 
   app.openapi(
