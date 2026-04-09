@@ -3,6 +3,7 @@ import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
 import type { SegmentState, BackfillState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
+import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 
 const SKIPPABLE_ERROR_PATTERNS = [
@@ -222,6 +223,7 @@ async function* paginateSegment(opts: {
   numSegments: number
   streamName: string
   supportsLimit: boolean
+  supportsForwardPagination: boolean
   backfillLimit?: number
   totalEmitted: { count: number }
   rateLimiter: RateLimiter
@@ -234,6 +236,7 @@ async function* paginateSegment(opts: {
     numSegments,
     streamName,
     supportsLimit,
+    supportsForwardPagination,
     backfillLimit,
     totalEmitted,
     rateLimiter,
@@ -246,10 +249,10 @@ async function* paginateSegment(opts: {
     const params: Record<string, unknown> = {
       created: { gte: segment.gte, lt: segment.lt },
     }
-    if (supportsLimit !== false) {
+    if (supportsForwardPagination && supportsLimit !== false) {
       params.limit = 100
     }
-    if (pageCursor) {
+    if (supportsForwardPagination && pageCursor) {
       params.starting_after = pageCursor
     }
 
@@ -262,7 +265,7 @@ async function* paginateSegment(opts: {
       totalEmitted.count++
     }
 
-    hasMore = response.has_more
+    hasMore = supportsForwardPagination && response.has_more
     if (response.pageCursor) {
       pageCursor = response.pageCursor
     } else if (response.data.length > 0) {
@@ -308,10 +311,14 @@ async function* sequentialBackfillStream(opts: {
     if (drainQueue) yield* drainQueue()
 
     const params: Record<string, unknown> = {}
-    if (resourceConfig.supportsLimit !== false) {
+    // `!== false` treats undefined as "supports pagination" for backward compat.
+    if (
+      resourceConfig.supportsForwardPagination !== false &&
+      resourceConfig.supportsLimit !== false
+    ) {
       params.limit = 100
     }
-    if (pageCursor) {
+    if (resourceConfig.supportsForwardPagination !== false && pageCursor) {
       params.starting_after = pageCursor
     }
 
@@ -326,7 +333,7 @@ async function* sequentialBackfillStream(opts: {
       totalEmitted++
     }
 
-    hasMore = response.has_more
+    hasMore = resourceConfig.supportsForwardPagination !== false && response.has_more
     if (response.pageCursor) {
       pageCursor = response.pageCursor
     } else if (response.data.length > 0) {
@@ -455,6 +462,7 @@ export async function* listApiBackfill(opts: {
               numSegments,
               streamName: stream.name,
               supportsLimit: resourceConfig.supportsLimit !== false,
+              supportsForwardPagination: resourceConfig.supportsForwardPagination !== false,
               backfillLimit: streamBackfillLimit,
               totalEmitted,
               rateLimiter,
@@ -500,12 +508,18 @@ export async function* listApiBackfill(opts: {
         error: err instanceof Error ? err.message : String(err),
       })
       const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
+      const isAuthError =
+        err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)
       yield {
         type: 'trace',
         trace: {
           trace_type: 'error',
           error: {
-            failure_type: isRateLimit ? 'transient_error' : 'system_error',
+            failure_type: isRateLimit
+              ? 'transient_error'
+              : isAuthError
+                ? 'auth_error'
+                : 'system_error',
             message: String(err),
             stream: stream.name,
             ...(err instanceof Error ? { stack_trace: err.stack } : {}),

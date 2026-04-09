@@ -6,6 +6,7 @@
 
 services:
   engine:
+    image: sync-engine-engine:dev
     build:
       context: .
       target: engine
@@ -21,6 +22,7 @@ services:
       start_period: 10s
 
   service:
+    image: sync-engine-service:dev
     build:
       context: .
       target: service
@@ -47,9 +49,7 @@ services:
       start_period: 10s
 
   worker:
-    build:
-      context: .
-      target: service
+    image: sync-engine-service:dev
     command:
       - worker
       - --temporal-address

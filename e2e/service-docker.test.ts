@@ -24,6 +24,7 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '..')
 const COMPOSE_CMD = `docker compose -f compose.yml -f compose.dev.yml`
 
 const SKIP_CLEANUP = process.env.SKIP_CLEANUP === '1'
+const STOP_MANAGED_STACK = process.env.STOP_MANAGED_STACK === '1'
 // When true, skip building and starting containers (CI pre-starts them).
 const SKIP_SETUP = process.env.SKIP_SETUP === '1'
 
@@ -72,12 +73,14 @@ describeWithEnv(
     beforeAll(async () => {
       schema = `docker_e2e_${Date.now()}`
 
-      if (SKIP_SETUP || (await isServiceHealthy())) {
-        console.log('\n  Service already healthy — skipping build & container startup')
+      if (SKIP_SETUP) {
+        console.log('\n  SKIP_SETUP=1 — assuming containers are already managed externally')
       } else {
+        if (await isServiceHealthy()) {
+          console.log('\n  Service already healthy — reconciling shared stack')
+        }
         managedContainers = true
 
-        // 1. Build TypeScript so Dockerfiles have fresh dist/
         console.log('\n  Building packages...')
         execSync('pnpm build', { cwd: REPO_ROOT, stdio: 'pipe' })
 
@@ -101,6 +104,7 @@ describeWithEnv(
       console.log(`  Schema:   ${schema}`)
       console.log(`  Postgres: ${POSTGRES_HOST_URL}`)
       console.log(`  Cleanup:  ${SKIP_CLEANUP ? 'no (SKIP_CLEANUP=1)' : 'yes'}`)
+      console.log(`  Stop stack: ${STOP_MANAGED_STACK ? 'yes' : 'no'}`)
     }, 5 * 60_000) // 5 min — includes docker build
 
     afterAll(async () => {
@@ -110,7 +114,7 @@ describeWithEnv(
       await pool?.end().catch(() => {})
 
       // Only stop containers we started
-      if (managedContainers) {
+      if (managedContainers && STOP_MANAGED_STACK) {
         execSync(`${COMPOSE_CMD} stop engine service worker`, { cwd: REPO_ROOT, stdio: 'pipe' })
         execSync(`${COMPOSE_CMD} rm -f engine service worker`, { cwd: REPO_ROOT, stdio: 'pipe' })
       }

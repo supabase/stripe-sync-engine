@@ -10,6 +10,8 @@ function listPath(
   }
   if (opts.supportsLimit !== false) {
     parameters.push({ name: 'limit', in: 'query' })
+    parameters.push({ name: 'starting_after', in: 'query' })
+    parameters.push({ name: 'ending_before', in: 'query' })
   }
   return {
     get: {

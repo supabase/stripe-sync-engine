@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeClient, StripeRequestError } from './client.js'
 import { getProxyUrl } from './transport.js'
+
+const originalFetch = globalThis.fetch
+
+afterEach(() => {
+  vi.useRealTimers()
+  globalThis.fetch = originalFetch
+})
 
 describe('getProxyUrl', () => {
   it('prefers HTTPS_PROXY over HTTP_PROXY', () => {
@@ -36,15 +43,61 @@ describe('makeClient', () => {
     ).toThrow('STRIPE_REQUEST_TIMEOUT_MS must be a positive integer')
   })
 
-  it('StripeRequestError includes status and stripe error details', () => {
+  it('StripeRequestError includes status and error message from body', () => {
     const err = new StripeRequestError(
       401,
-      { type: 'invalid_request_error', message: 'Invalid API Key' },
-      'req_123'
+      { error: { type: 'invalid_request_error', message: 'Invalid API Key' } },
+      'GET',
+      '/v1/account'
     )
     expect(err.status).toBe(401)
-    expect(err.stripeError?.type).toBe('invalid_request_error')
-    expect(err.requestId).toBe('req_123')
     expect(err.message).toBe('Invalid API Key')
+  })
+
+  it('retries transient GET failures and eventually succeeds', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { type: 'api_error', message: 'Temporary outage' },
+          }),
+          { status: 500 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'acct_test', object: 'account', created: 123 }), {
+          status: 200,
+        })
+      )
+    globalThis.fetch = fetchMock
+
+    const client = makeClient({ api_key: 'sk_test_fake', base_url: 'http://stripe.test' }, {})
+    const pending = client.getAccount()
+    await vi.runAllTimersAsync()
+
+    await expect(pending).resolves.toMatchObject({ id: 'acct_test', created: 123 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry auth failures on GET requests', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            type: 'invalid_request_error',
+            message: 'Invalid API Key provided: sk_test_bad',
+          },
+        }),
+        { status: 401 }
+      )
+    )
+    globalThis.fetch = fetchMock
+
+    const client = makeClient({ api_key: 'sk_test_bad', base_url: 'http://stripe.test' }, {})
+
+    await expect(client.getAccount()).rejects.toThrow('Invalid API Key provided: sk_test_bad')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

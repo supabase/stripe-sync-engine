@@ -22,6 +22,8 @@ export type ListEndpoint = {
   apiPath: string
   supportsCreatedFilter: boolean
   supportsLimit: boolean
+  supportsStartingAfter: boolean
+  supportsEndingBefore: boolean
 }
 
 export type NestedEndpoint = {
@@ -117,12 +119,20 @@ export function discoverListEndpoints(
       const supportsLimit = params.some(
         (p: { name?: string; in?: string }) => p.name === 'limit' && p.in === 'query'
       )
+      const supportsStartingAfter = params.some(
+        (p: { name?: string; in?: string }) => p.name === 'starting_after' && p.in === 'query'
+      )
+      const supportsEndingBefore = params.some(
+        (p: { name?: string; in?: string }) => p.name === 'ending_before' && p.in === 'query'
+      )
       endpoints.set(tableName, {
         tableName,
         resourceId,
         apiPath,
         supportsCreatedFilter,
         supportsLimit,
+        supportsStartingAfter,
+        supportsEndingBefore,
       })
     }
   }
@@ -211,6 +221,51 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` }
 }
 
+export class StripeApiRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: unknown,
+    method: string,
+    path: string
+  ) {
+    super(extractErrorMessage(body, status, method, path))
+    this.name = 'StripeApiRequestError'
+  }
+}
+
+function extractErrorMessage(body: unknown, status: number, method: string, path: string): string {
+  if (
+    body &&
+    typeof body === 'object' &&
+    'error' in body &&
+    body.error &&
+    typeof body.error === 'object' &&
+    'message' in body.error &&
+    typeof body.error.message === 'string'
+  ) {
+    return body.error.message
+  }
+
+  return `Stripe API request failed (${status}) for ${method.toUpperCase()} ${path}`
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (!text) return null
+
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return text
+  }
+}
+
+function assertOk(response: Response, body: unknown, method: string, path: string): void {
+  if (!response.ok) {
+    throw new StripeApiRequestError(response.status, body, method, path)
+  }
+}
+
 /**
  * Build a callable list function that hits the Stripe HTTP API directly.
  * Supports both v1 (has_more pagination) and v2 (next_page_url pagination).
@@ -229,17 +284,23 @@ export function buildListFn(
       const qs = new URLSearchParams()
       qs.set('limit', String(Math.min(params.limit ?? 20, 20)))
       if (params.starting_after) qs.set('page', params.starting_after)
+      if (params.created) {
+        for (const [op, val] of Object.entries(params.created)) {
+          if (val != null) qs.set(`created[${op}]`, toV2CreatedParam(val))
+        }
+      }
 
       const headers = authHeaders(apiKey)
       if (apiVersion) headers['Stripe-Version'] = apiVersion
 
       const response = await fetch(`${base}${apiPath}?${qs}`, { headers })
-      const body = (await response.json()) as {
+      const parsed = (await readJson(response)) as {
         data: unknown[]
         next_page_url?: string | null
       }
-      const pageCursor = extractPageToken(body.next_page_url)
-      return { data: body.data ?? [], has_more: !!body.next_page_url, pageCursor }
+      assertOk(response, parsed, 'GET', apiPath)
+      const pageCursor = extractPageToken(parsed.next_page_url)
+      return { data: parsed.data ?? [], has_more: !!parsed.next_page_url, pageCursor }
     }
   }
 
@@ -257,9 +318,14 @@ export function buildListFn(
     const response = await fetch(`${base}${apiPath}?${qs}`, {
       headers: authHeaders(apiKey),
     })
-    const body = (await response.json()) as { data: unknown[]; has_more: boolean }
+    const body = (await readJson(response)) as { data: unknown[]; has_more: boolean }
+    assertOk(response, body, 'GET', apiPath)
     return { data: body.data ?? [], has_more: body.has_more }
   }
+}
+
+function toV2CreatedParam(value: number): string {
+  return new Date(value * 1000).toISOString()
 }
 
 /**
@@ -280,7 +346,9 @@ export function buildRetrieveFn(
       if (apiVersion) headers['Stripe-Version'] = apiVersion
 
       const response = await fetch(`${base}${apiPath}/${id}`, { headers })
-      return await response.json()
+      const body = await readJson(response)
+      assertOk(response, body, 'GET', `${apiPath}/${id}`)
+      return body
     }
   }
 
@@ -288,7 +356,9 @@ export function buildRetrieveFn(
     const response = await fetch(`${base}${apiPath}/${id}`, {
       headers: authHeaders(apiKey),
     })
-    return await response.json()
+    const body = await readJson(response)
+    assertOk(response, body, 'GET', `${apiPath}/${id}`)
+    return body
   }
 }
 

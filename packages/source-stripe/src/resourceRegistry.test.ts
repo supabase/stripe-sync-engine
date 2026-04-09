@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest'
+import type { OpenApiSpec } from '@stripe/sync-openapi'
+import { buildResourceRegistry } from './resourceRegistry.js'
+
+const v2CreatedSpec: OpenApiSpec = {
+  openapi: '3.0.0',
+  paths: {
+    '/v2/core/accounts': {
+      get: {
+        parameters: [{ name: 'limit', in: 'query' }],
+        responses: {
+          '200': {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/v2.core.account' },
+                    },
+                    next_page_url: { type: 'string', nullable: true },
+                    previous_page_url: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/v2/core/events': {
+      get: {
+        parameters: [
+          {
+            name: 'created',
+            in: 'query',
+            schema: {
+              type: 'object',
+              properties: {
+                gte: { type: 'string', format: 'date-time' },
+                lt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+          { name: 'limit', in: 'query' },
+        ],
+        responses: {
+          '200': {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/v2.core.event' },
+                    },
+                    next_page_url: { type: 'string', nullable: true },
+                    previous_page_url: { type: 'string', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    schemas: {
+      'v2.core.account': {
+        'x-resourceId': 'v2.core.account',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+      'v2.core.event': {
+        'x-resourceId': 'v2.core.event',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          created: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+  },
+}
+
+describe('buildResourceRegistry', () => {
+  it('keeps v2 created filter support when the spec advertises it', () => {
+    const registry = buildResourceRegistry(v2CreatedSpec, 'sk_test_fake')
+
+    expect(registry.v2_core_accounts?.supportsCreatedFilter).toBe(false)
+    expect(registry.v2_core_events?.supportsCreatedFilter).toBe(true)
+  })
+})

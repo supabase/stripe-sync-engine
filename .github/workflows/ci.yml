@@ -446,11 +446,65 @@ jobs:
             echo "::warning::E2E tests skipped — STRIPE_API_KEY not available (fork PR?)"
             exit 0
           fi
-          pnpm --filter @stripe/sync-e2e exec vitest run --exclude 'service-docker.test.ts'
+          pnpm --filter @stripe/sync-e2e exec vitest run \
+            --exclude 'service-docker.test.ts' \
+            --exclude 'test-server-all-api.test.ts' \
+            --exclude 'test-server-sync.test.ts' \
+            --exclude 'test-sync-e2e.test.ts' \
+            --exclude 'test-sync-engine.test.ts' \
+            --exclude 'test-e2e-network.test.ts'  # ↑ run in e2e_test_server job
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'
           TEMPORAL_ADDRESS: 'localhost:7233'
+
+      - name: Skipped test warnings
+        if: always()
+        run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
+
+  # ---------------------------------------------------------------------------
+  # E2E Test Server — test-server suites that need Docker Compose infrastructure
+  # ---------------------------------------------------------------------------
+  e2e_test_server:
+    name: E2E Test Server
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Start Docker Compose stack
+        run: |
+          docker compose -f compose.yml -f compose.dev.yml -f e2e/compose.e2e.yml \
+            up --build -d --wait temporal engine service worker
+
+      - name: Test server suites (parallel)
+        run: |
+          pnpm --filter @stripe/sync-e2e exec vitest run \
+            test-server-all-api.test.ts \
+            test-server-sync.test.ts \
+            test-sync-e2e.test.ts \
+            test-sync-engine.test.ts
+        env:
+          SKIP_SETUP: '1'
+
+      - name: Network interruption tests (pauses containers)
+        run: |
+          pnpm --filter @stripe/sync-e2e exec vitest run \
+            test-e2e-network.test.ts
+        env:
+          SKIP_SETUP: '1'
 
       - name: Skipped test warnings
         if: always()
@@ -755,7 +809,7 @@ jobs:
         run: pnpm install --frozen-lockfile && pnpm build
 
       - name: CDN e2e tests
-        run: pnpm --filter @stripe/sync-e2e run test -- openapi-cdn.test.ts
+        run: pnpm --filter @stripe/sync-e2e exec vitest run openapi-cdn.test.ts
         env:
           STRIPE_SPEC_CDN_BASE_URL: ${{ needs.docs.outputs.deployment_url }}/stripe-api-specs
 

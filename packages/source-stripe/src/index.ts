@@ -342,6 +342,7 @@ export default createStripeSource()
 
 // MARK: - Re-exports
 
+export { expandState } from './src-list-api.js'
 export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
 export { catalogFromRegistry } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'

@@ -4,6 +4,7 @@ import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
 import type { PipelineStore } from '../../lib/stores.js'
+import type { SyncRunError } from '../sync-errors.js'
 
 export interface ActivitiesContext {
   /** Remote engine client — satisfies the {@link Engine} interface over HTTP. Drop-in replacement for a local engine. */
@@ -104,7 +105,7 @@ export function createActivitiesContext(opts: {
 }
 
 export interface RunResult {
-  errors: Array<{ message: string; failure_type?: string; stream?: string }>
+  errors: SyncRunError[]
   state: SourceState
 }
 

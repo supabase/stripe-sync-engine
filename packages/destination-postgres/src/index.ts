@@ -9,9 +9,8 @@ import {
   withPgConnectProxy,
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
-import { z } from 'zod'
 import { buildCreateTableDDL } from './schemaProjection.js'
-import defaultSpec, { configSchema } from './spec.js'
+import defaultSpec from './spec.js'
 import type { Config } from './spec.js'
 
 function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
@@ -106,13 +105,22 @@ function isTransient(err: unknown): boolean {
   return msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('connection')
 }
 
+function createPool(config: PoolConfig): pg.Pool {
+  const pool = new pg.Pool(config)
+  // Destination connectors should surface pool failures without crashing the host process.
+  pool.on('error', (err) => {
+    console.error('Postgres destination pool error:', err)
+  })
+  return pool
+}
+
 const destination = {
   async *spec() {
     yield { type: 'spec' as const, spec: defaultSpec }
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
     try {
       await pool.query('SELECT 1')
       yield {
@@ -133,7 +141,7 @@ const destination = {
   },
 
   async *setup({ config, catalog }) {
-    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
     try {
       yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
@@ -183,7 +191,7 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
@@ -191,8 +199,8 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
+  async *write({ config, catalog: _catalog }, $stdin) {
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()

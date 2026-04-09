@@ -3,6 +3,7 @@ import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
 import type { SourceInputMessage, SourceState } from '@stripe/sync-protocol'
 import type { DesiredStatus, PipelineStatus } from '../../lib/createSchemas.js'
 import { CONTINUE_AS_NEW_THRESHOLD } from '../../lib/utils.js'
+import { classifySyncErrors } from '../sync-errors.js'
 import {
   desiredStatusSignal,
   pipelineSetup,
@@ -22,6 +23,7 @@ export type TeardownState = 'started' | 'completed'
 export interface PipelineWorkflowState {
   phase?: ReconcileState
   paused?: boolean
+  errored?: boolean
   setup?: SetupState
   teardown?: TeardownState
 }
@@ -31,6 +33,7 @@ export interface PipelineWorkflowOpts {
   sourceState?: SourceState
   inputQueue?: SourceInputMessage[]
   state?: PipelineWorkflowState
+  errorRecoveryRequested?: boolean
 }
 
 export async function pipelineWorkflow(
@@ -42,6 +45,7 @@ export async function pipelineWorkflow(
   let desiredStatus: DesiredStatus = opts?.desiredStatus ?? 'active'
   let sourceState: SourceState = opts?.sourceState ?? { streams: {}, global: {} }
   let state: PipelineWorkflowState = { ...opts?.state }
+  let errorRecoveryRequested = opts?.errorRecoveryRequested ?? false
 
   // Transient workflow-local state.
   let operationCount = 0
@@ -51,12 +55,16 @@ export async function pipelineWorkflow(
   })
   setHandler(desiredStatusSignal, (status: DesiredStatus) => {
     desiredStatus = status
+    if (state.errored && status === 'active') {
+      errorRecoveryRequested = true
+    }
   })
 
   // MARK: - State
 
   function derivePipelineStatus(): PipelineStatus {
     if (state.teardown) return 'teardown'
+    if (state.errored) return 'error'
     if (state.paused) return 'paused'
     if (state.setup !== 'completed') return 'setup'
     return state.phase === 'ready' ? 'ready' : 'backfill'
@@ -77,7 +85,21 @@ export async function pipelineWorkflow(
    * no longer active or because the workflow should roll over into continue-as-new.
    */
   function runInterrupted() {
-    return desiredStatus !== 'active' || operationCount >= CONTINUE_AS_NEW_THRESHOLD
+    return (
+      desiredStatus !== 'active' || operationCount >= CONTINUE_AS_NEW_THRESHOLD || !!state.errored
+    )
+  }
+
+  async function markPermanentError(): Promise<void> {
+    await setState({ errored: true })
+  }
+
+  async function waitForErrorRecovery(): Promise<void> {
+    await condition(() => desiredStatus === 'deleted' || errorRecoveryRequested)
+    errorRecoveryRequested = false
+    if (desiredStatus === 'active') {
+      await setState({ errored: false })
+    }
   }
 
   // MARK: - Live loop
@@ -97,8 +119,12 @@ export async function pipelineWorkflow(
       const events = await waitForLiveEvents()
       if (!events) return
 
-      await pipelineSync(pipelineId, { input: events })
+      const result = await pipelineSync(pipelineId, { input: events })
       operationCount++
+      if (classifySyncErrors(result.errors).permanent.length > 0) {
+        await markPermanentError()
+        return
+      }
     }
   }
 
@@ -127,11 +153,15 @@ export async function pipelineWorkflow(
         state_limit: 100,
         time_limit: 10,
       })
+      operationCount++
       sourceState = result.state
-      if (result.eof?.reason === 'complete') {
+      if (classifySyncErrors(result.errors).permanent.length > 0) {
+        await markPermanentError()
+        return
+      }
+      if (result.eof?.reason === 'complete' && !state.errored) {
         await setState({ phase: 'ready' })
       }
-      operationCount++
     }
   }
 
@@ -144,6 +174,11 @@ export async function pipelineWorkflow(
   }
 
   while (desiredStatus !== 'deleted') {
+    if (state.errored) {
+      await waitForErrorRecovery()
+      continue
+    }
+
     if (desiredStatus === 'paused') {
       await setState({ paused: true })
       await condition(() => desiredStatus !== 'paused')
@@ -161,6 +196,7 @@ export async function pipelineWorkflow(
         sourceState,
         inputQueue,
         state,
+        errorRecoveryRequested,
       })
     }
   }

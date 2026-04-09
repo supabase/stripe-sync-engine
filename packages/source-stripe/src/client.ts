@@ -2,11 +2,12 @@ import {
   StripeAccountSchema,
   StripeWebhookEndpointSchema,
   StripeApiListSchema,
-  StripeApiErrorSchema,
+  StripeApiRequestError,
   type StripeAccount,
   type StripeApiList,
   type StripeWebhookEndpoint,
 } from '@stripe/sync-openapi'
+import { withHttpRetry } from './retry.js'
 import { stripeEventSchema, type StripeEvent } from './spec.js'
 import { fetchWithProxy, parsePositiveInteger, type TransportEnv } from './transport.js'
 
@@ -20,16 +21,7 @@ export { getProxyUrl as getStripeProxyUrl } from './transport.js'
 
 const DEFAULT_STRIPE_API_BASE = 'https://api.stripe.com'
 
-export class StripeRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly stripeError?: { type: string; message: string; code?: string },
-    public readonly requestId?: string
-  ) {
-    super(stripeError?.message ?? `Stripe API error: ${status}`)
-    this.name = 'StripeRequestError'
-  }
-}
+export { StripeApiRequestError as StripeRequestError }
 
 export type StripeClient = ReturnType<typeof makeClient>
 
@@ -98,20 +90,31 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
     }
 
     if (!response.ok) {
-      const parsed = StripeApiErrorSchema.safeParse(json)
-      throw new StripeRequestError(
-        response.status,
-        parsed.success ? parsed.data.error : undefined,
-        response.headers.get('request-id') ?? undefined
-      )
+      throw new StripeApiRequestError(response.status, json, method, path)
     }
 
     return json
   }
 
+  /**
+   * Wraps `request` with retry logic for GET requests only.
+   * Non-GET methods (POST, DELETE) pass through without retry to avoid
+   * duplicating side effects.
+   */
+  async function requestWithRetry(
+    method: string,
+    path: string,
+    params?: Record<string, unknown>
+  ): Promise<unknown> {
+    if (method === 'GET') {
+      return withHttpRetry(() => request(method, path, params))
+    }
+    return request(method, path, params)
+  }
+
   return {
     async getAccount(): Promise<StripeAccount> {
-      const json = await request('GET', '/v1/account')
+      const json = await requestWithRetry('GET', '/v1/account')
       return StripeAccountSchema.parse(json)
     },
 
@@ -124,14 +127,14 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
       if (params.limit) query.limit = params.limit
       if (params.starting_after) query.starting_after = params.starting_after
       if (params.created?.gt) query['created[gt]'] = params.created.gt
-      const json = await request('GET', '/v1/events', query)
+      const json = await requestWithRetry('GET', '/v1/events', query)
       return StripeApiListSchema(stripeEventSchema).parse(json)
     },
 
     async listWebhookEndpoints(params?: {
       limit?: number
     }): Promise<StripeApiList<StripeWebhookEndpoint>> {
-      const json = await request('GET', '/v1/webhook_endpoints', params)
+      const json = await requestWithRetry('GET', '/v1/webhook_endpoints', params)
       return StripeApiListSchema(StripeWebhookEndpointSchema).parse(json)
     },
 
@@ -140,12 +143,12 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
       enabled_events: string[]
       metadata?: Record<string, string>
     }): Promise<StripeWebhookEndpoint> {
-      const json = await request('POST', '/v1/webhook_endpoints', params)
+      const json = await requestWithRetry('POST', '/v1/webhook_endpoints', params)
       return StripeWebhookEndpointSchema.parse(json)
     },
 
     async deleteWebhookEndpoint(id: string): Promise<void> {
-      await request('DELETE', `/v1/webhook_endpoints/${encodeURIComponent(id)}`)
+      await requestWithRetry('DELETE', `/v1/webhook_endpoints/${encodeURIComponent(id)}`)
     },
   }
 }

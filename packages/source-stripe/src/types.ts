@@ -34,6 +34,8 @@ export type ResourceConfig = BaseResourceConfig & {
   retrieveFn?: RetrieveFn
   /** Whether the list API supports the `limit` parameter */
   supportsLimit?: boolean
+  /** Whether the list API supports forward cursor pagination for repeated page fetches. */
+  supportsForwardPagination?: boolean
   /** Nested child resources discovered from the spec (e.g. subscription items under subscriptions) */
   nestedResources?: {
     tableName: string

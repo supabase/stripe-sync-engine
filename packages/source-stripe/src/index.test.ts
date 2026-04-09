@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StripeEvent } from './spec.js'
-import type { StripeClient } from './client.js'
+import { StripeRequestError, type StripeClient } from './client.js'
 import type {
   ConfiguredCatalog,
   Message,
@@ -608,6 +608,167 @@ describe('StripeSource', () => {
       ).error
       expect(traceError.failure_type).toBe('system_error')
       expect(traceError.message).toContain('Connection refused')
+    })
+
+    it('emits TraceMessage error when getAccount fails before parallel backfill pagination', async () => {
+      const listFn = vi.fn()
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const mockClient = {
+        getAccount: vi.fn().mockRejectedValueOnce(
+          new StripeRequestError(
+            401,
+            { error: { type: 'invalid_request_error', message: 'Invalid API Key provided: sk_test_bad' } },
+            'GET',
+            '/v1/account'
+          )
+        ),
+      } as unknown as StripeClient
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'customers' }),
+          state: undefined,
+          registry,
+          client: mockClient,
+          rateLimiter: async () => 0,
+          backfillConcurrency: 2,
+        })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(listFn).not.toHaveBeenCalled()
+      expect(messages[0]).toMatchObject({
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: 'customers', status: 'started' },
+        },
+      })
+
+      const errorMsg = messages[1] as TraceMessage
+      expect(errorMsg.trace.trace_type).toBe('error')
+      const traceError = (
+        errorMsg.trace as {
+          trace_type: 'error'
+          error: { failure_type: string; message: string; stream?: string }
+        }
+      ).error
+      expect(traceError.failure_type).toBe('auth_error')
+      expect(traceError.message).toContain('Invalid API Key')
+      expect(traceError.stream).toBe('customers')
+    })
+
+    it('emits TraceMessage error for Invalid API Key on sequential streams', async () => {
+      const listFn = vi.fn().mockRejectedValueOnce(
+        new StripeRequestError(
+          401,
+          { error: { type: 'invalid_request_error', message: 'Invalid API Key provided: sk_test_bad' } },
+          'GET',
+          '/v1/tax_ids'
+        )
+      )
+
+      const registry: Record<string, ResourceConfig> = {
+        tax_ids: makeConfig({
+          order: 1,
+          tableName: 'tax_ids',
+          supportsCreatedFilter: false,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+      const messages = await collect(
+        source.read({ config, catalog: catalog({ name: 'tax_ids', primary_key: [['id']] }) })
+      )
+
+      expect(messages).toHaveLength(2)
+      const errorMsg = messages[1] as TraceMessage
+      expect(errorMsg.trace.trace_type).toBe('error')
+      const traceError = (
+        errorMsg.trace as {
+          trace_type: 'error'
+          error: { failure_type: string; message: string; stream?: string }
+        }
+      ).error
+      expect(traceError.failure_type).toBe('auth_error')
+      expect(traceError.message).toContain('Invalid API Key')
+      expect(traceError.stream).toBe('tax_ids')
+    })
+
+    it('does not treat near-miss auth errors as skippable', async () => {
+      const listFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Authentication failed: must provide a valid API key'))
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+      const messages = await collect(
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[1]).toMatchObject({
+        type: 'trace',
+        trace: {
+          trace_type: 'error',
+          error: {
+            failure_type: 'system_error',
+            stream: 'customers',
+          },
+        },
+      })
+    })
+
+    it('marks known skippable Stripe list errors as complete without emitting error traces', async () => {
+      const listFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('This object is only available in testmode'))
+
+      const registry: Record<string, ResourceConfig> = {
+        invoices: makeConfig({
+          order: 1,
+          tableName: 'invoices',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+      const messages = await collect(
+        source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
+      )
+
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: 'invoices', status: 'started' },
+        },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: 'invoices', status: 'complete' },
+        },
+      })
     })
 
     it('continues to next stream after error on previous stream', async () => {
@@ -1855,6 +2016,46 @@ describe('StripeSource', () => {
       for (const state of states) {
         expect((state.source_state.data as StripeStreamState).segments).toBeUndefined()
       }
+    })
+
+    it('does not assume cursor pagination when the endpoint does not support it', async () => {
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'report_type_1', name: 'One shot' }],
+        has_more: true,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        reporting_report_types: makeConfig({
+          order: 1,
+          tableName: 'reporting_report_types',
+          supportsCreatedFilter: false,
+          supportsLimit: false,
+          supportsForwardPagination: false,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const mockClient = {} as unknown as StripeClient
+      const rateLimiter: RateLimiter = async () => 0
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: catalog({ name: 'reporting_report_types' }),
+          state: undefined,
+          registry,
+          client: mockClient,
+          rateLimiter,
+        })
+      )
+
+      expect(listFn).toHaveBeenCalledTimes(1)
+      expect(listFn).toHaveBeenCalledWith({})
+
+      const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
+      expect(states.at(-1)?.source_state.data).toMatchObject({
+        status: 'complete',
+        page_cursor: null,
+      })
     })
 
     it('parallel and sequential streams coexist in the same catalog', async () => {

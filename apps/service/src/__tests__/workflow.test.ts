@@ -8,19 +8,23 @@ import { CONTINUE_AS_NEW_THRESHOLD } from '../lib/utils.js'
 
 type SourceInput = unknown
 
-// workflowsPath points to the compiled workflow directory.
-const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
+// Point directly at the workflow index to avoid resolving the legacy dist/temporal/workflows.js file.
+const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows/index.js')
 
 const emptyState = { streams: {}, global: {} }
 const noErrors: RunResult = { errors: [], state: emptyState }
+const permanentSyncError: RunResult = {
+  errors: [{ message: 'permanent sync failure', failure_type: 'auth_error', stream: 'customers' }],
+  state: emptyState,
+}
 
 // Workflows now receive only the pipelineId string
 const testPipelineId = 'test_pipe'
 
 function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities {
-  return {
+  const activities = {
     discoverCatalog: async () => ({ streams: [] }),
-    pipelineSetup: async () => ({}),
+    pipelineSetup: async () => {},
     pipelineSync: async () => noErrors,
     readIntoQueue: async () => ({ count: 0, state: emptyState }),
     writeGoogleSheetsFromQueue: async () => ({
@@ -33,6 +37,13 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     updatePipelineStatus: async () => {},
     ...overrides,
   }
+
+  return {
+    ...activities,
+    setup: activities.pipelineSetup,
+    sync: activities.pipelineSync,
+    teardown: activities.pipelineTeardown,
+  } as SyncActivities
 }
 
 /** Signal the workflow to delete. */
@@ -69,7 +80,6 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       activities: stubActivities({
         pipelineSetup: async () => {
           setupCalled = true
-          return {}
         },
         pipelineSync: async () => {
           runCallCount++
@@ -89,7 +99,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       await new Promise((r) => setTimeout(r, 2000))
 
       const status = await handle.query('status')
-      expect(status.iteration).toBeGreaterThan(0)
+      expect((status as { iteration: number }).iteration).toBeGreaterThan(0)
 
       await signalDelete(handle)
       await handle.result()
@@ -334,6 +344,82 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
     })
   })
 
+  it('transitions to error instead of ready when reconcile returns permanent sync errors', async () => {
+    const statusWrites: string[] = []
+
+    const worker = await Worker.create({
+      connection: testEnv.nativeConnection,
+      taskQueue: 'test-queue-3b-error',
+      workflowsPath,
+      activities: stubActivities({
+        updatePipelineStatus: async (_id: string, status: string) => {
+          statusWrites.push(status)
+        },
+        pipelineSync: async (_pipelineId: string, opts?) => {
+          if (opts?.input) return noErrors
+          return { ...permanentSyncError, eof: { reason: 'complete' as const } }
+        },
+      }),
+    })
+
+    await worker.runUntil(async () => {
+      const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
+        args: [testPipelineId],
+        workflowId: 'test-sync-3b-error',
+        taskQueue: 'test-queue-3b-error',
+      })
+
+      await new Promise((r) => setTimeout(r, 500))
+      await signalDelete(handle)
+      await handle.result()
+
+      expect(statusWrites).toContain('error')
+      expect(statusWrites).not.toContain('ready')
+    })
+  })
+
+  it('retries transient sync activity failures and still reaches ready', async () => {
+    const statusWrites: string[] = []
+    let reconcileCalls = 0
+
+    const worker = await Worker.create({
+      connection: testEnv.nativeConnection,
+      taskQueue: 'test-queue-3b-retry',
+      workflowsPath,
+      activities: stubActivities({
+        updatePipelineStatus: async (_id: string, status: string) => {
+          statusWrites.push(status)
+        },
+        pipelineSync: async (_pipelineId: string, opts?) => {
+          if (opts?.input) return noErrors
+
+          reconcileCalls++
+          if (reconcileCalls === 1) {
+            throw new Error('transient sync failure')
+          }
+
+          return { ...noErrors, eof: { reason: 'complete' as const } }
+        },
+      }),
+    })
+
+    await worker.runUntil(async () => {
+      const handle = await testEnv.client.workflow.start('pipelineWorkflow', {
+        args: [testPipelineId],
+        workflowId: 'test-sync-3b-retry',
+        taskQueue: 'test-queue-3b-retry',
+      })
+
+      await new Promise((r) => setTimeout(r, 2500))
+      await signalDelete(handle)
+      await handle.result()
+
+      expect(reconcileCalls).toBeGreaterThanOrEqual(2)
+      expect(statusWrites).toContain('ready')
+      expect(statusWrites).not.toContain('error')
+    })
+  })
+
   it('queues live events while paused and drains them after resume', async () => {
     const syncCalls: { input?: SourceInput[] }[] = []
 
@@ -464,7 +550,6 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       activities: stubActivities({
         pipelineSetup: async () => {
           setupCalls++
-          return {}
         },
         pipelineSync: async () => {
           syncCallCount++
