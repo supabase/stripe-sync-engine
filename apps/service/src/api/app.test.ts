@@ -20,7 +20,7 @@ let resolver: ConnectorResolver
 beforeAll(async () => {
   resolver = await createConnectorResolver({
     sources: { test: sourceTest },
-    destinations: { test: destinationTest, 'google_sheets': destinationGoogleSheets },
+    destinations: { test: destinationTest, google_sheets: destinationGoogleSheets },
   })
 })
 
@@ -93,7 +93,7 @@ describe('POST /pipelines workflow dispatch', () => {
         source: { type: 'test', test: {} },
         destination: {
           type: 'google_sheets',
-          'google_sheets': {
+          google_sheets: {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Test Sheet',
             client_id: 'client',
@@ -250,7 +250,7 @@ describe('pipeline CRUD', () => {
         source: { type: 'test', test: {} },
         destination: {
           type: 'google_sheets',
-          'google_sheets': {
+          google_sheets: {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Original Sheet',
             client_id: 'client',
@@ -270,7 +270,7 @@ describe('pipeline CRUD', () => {
       body: JSON.stringify({
         destination: {
           type: 'google_sheets',
-          'google_sheets': {
+          google_sheets: {
             spreadsheet_id: 'sheet_456',
             spreadsheet_title: 'Replacement Sheet',
             client_id: 'client',
@@ -301,7 +301,7 @@ describe('pipeline CRUD', () => {
         source: { type: 'test', test: {} },
         destination: {
           type: 'google_sheets',
-          'google_sheets': {
+          google_sheets: {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Original Sheet',
             client_id: 'client',
@@ -321,7 +321,7 @@ describe('pipeline CRUD', () => {
       body: JSON.stringify({
         destination: {
           type: 'google_sheets',
-          'google_sheets': {
+          google_sheets: {
             spreadsheet_id: 'sheet_123',
             spreadsheet_title: 'Renamed Sheet',
             client_id: 'client',

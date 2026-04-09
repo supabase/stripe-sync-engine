@@ -19,7 +19,7 @@ describe('getProxyUrl', () => {
 
 describe('makeClient', () => {
   it('creates a client with required methods', () => {
-    const client = makeClient({ api_key: 'sk_test_fake' })
+    const client = makeClient({ api_key: 'sk_test_fake', api_version: '2025-04-30.basil' })
     expect(client.getAccount).toBeTypeOf('function')
     expect(client.listEvents).toBeTypeOf('function')
     expect(client.listWebhookEndpoints).toBeTypeOf('function')
@@ -29,7 +29,10 @@ describe('makeClient', () => {
 
   it('throws on invalid timeout override', () => {
     expect(() =>
-      makeClient({ api_key: 'sk_test_fake' }, { STRIPE_REQUEST_TIMEOUT_MS: '0' })
+      makeClient(
+        { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' },
+        { STRIPE_REQUEST_TIMEOUT_MS: '0' }
+      )
     ).toThrow('STRIPE_REQUEST_TIMEOUT_MS must be a positive integer')
   })
 

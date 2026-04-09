@@ -11,9 +11,15 @@ import { logger } from '../logger.js'
 const port = Number(process.env.PORT || 3001)
 
 async function main() {
+  if (process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true') {
+    logger.warn(
+      '⚠️  DANGEROUSLY_VERBOSE_LOGGING is enabled — all request headers and message payloads will be logged. Do not use in production.'
+    )
+  }
+
   const resolver = await createConnectorResolver({
     sources: { stripe: source },
-    destinations: { postgres: pgDestination, 'google_sheets': sheetsDestination },
+    destinations: { postgres: pgDestination, google_sheets: sheetsDestination },
   })
   const app = await createApp(resolver)
 

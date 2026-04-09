@@ -12,7 +12,7 @@ import { fetchWithProxy, parsePositiveInteger, type TransportEnv } from './trans
 
 export type StripeClientConfig = {
   api_key: string
-  api_version?: string
+  api_version: string
   base_url?: string
 }
 
@@ -45,7 +45,7 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.api_key}`,
     'Content-Type': 'application/x-www-form-urlencoded',
-    ...(config.api_version ? { 'Stripe-Version': config.api_version } : {}),
+    'Stripe-Version': config.api_version,
   }
 
   async function request(

@@ -1,17 +1,22 @@
 import pg from 'pg'
 import type { PoolConfig } from 'pg'
-import type { Destination, DestinationInput } from '@stripe/sync-protocol'
+import type { Destination, DestinationInput, LogMessage } from '@stripe/sync-protocol'
 import {
   sql,
   sslConfigFromConnectionString,
   stripSslParams,
   upsert,
   withPgConnectProxy,
+  withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import { z } from 'zod'
 import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
+
+function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
+  return { type: 'log', log: { level, message } }
+}
 
 // MARK: - Spec
 
@@ -106,7 +111,7 @@ const destination = {
   },
 
   async *check({ config }) {
-    const pool = new pg.Pool(await buildPoolConfig(config))
+    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
     try {
       await pool.query('SELECT 1')
       yield {
@@ -127,11 +132,10 @@ const destination = {
   },
 
   async *setup({ config, catalog }) {
-    const pool = new pg.Pool(await buildPoolConfig(config))
+    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
     try {
+      yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
-      // Ensure the trigger function exists in the target schema so triggers
-      // can reference it without relying on search_path.
       await pool.query(sql`
         CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
             LANGUAGE plpgsql
@@ -145,16 +149,18 @@ const destination = {
         END;
         $$;
       `)
-      for (const cs of catalog.streams) {
+      for (const [i, cs] of catalog.streams.entries()) {
+        const start = Date.now()
         if (cs.stream.json_schema) {
-          for (const stmt of buildCreateTableWithSchema(
+          const stmts = buildCreateTableWithSchema(
             config.schema,
             cs.stream.name,
             cs.stream.json_schema,
             {
               system_columns: cs.system_columns,
             }
-          )) {
+          )
+          for (const stmt of stmts) {
             await runSqlAdditive(pool, stmt)
           }
         } else {
@@ -168,6 +174,9 @@ const destination = {
             )
           `)
         }
+        yield logMsg(
+          `[${i + 1}/${catalog.streams.length}] Table "${cs.stream.name}" ready (${Date.now() - start}ms)`
+        )
       }
     } finally {
       await pool.end()
@@ -181,7 +190,7 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = new pg.Pool(await buildPoolConfig(config))
+    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
@@ -190,7 +199,7 @@ const destination = {
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = new pg.Pool(await buildPoolConfig(config))
+    const pool = withQueryLogging(new pg.Pool(await buildPoolConfig(config)))
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()

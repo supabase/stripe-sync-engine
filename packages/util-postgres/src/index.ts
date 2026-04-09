@@ -9,3 +9,4 @@ export {
   stripSslParams,
   type PgSslConfig,
 } from './sslConfigFromConnectionString.js'
+export { withQueryLogging } from './queryLogging.js'

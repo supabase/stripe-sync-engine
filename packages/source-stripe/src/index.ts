@@ -17,8 +17,8 @@ import type { StripeEvent } from './spec.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
 import {
-  resolveOpenApiSpec,
   BUNDLED_API_VERSION,
+  resolveOpenApiSpec,
   SpecParser,
   OPENAPI_RESOURCE_TABLE_ALIASES,
 } from '@stripe/sync-openapi'
@@ -96,7 +96,10 @@ export function createStripeSource(
 
     async *check({ config }): AsyncGenerator<CheckOutput> {
       try {
-        const client = makeClient(config)
+        const client = makeClient({
+          ...config,
+          api_version: config.api_version ?? BUNDLED_API_VERSION,
+        })
         await client.getAccount()
         yield {
           type: 'connection_status' as const,
@@ -149,7 +152,10 @@ export function createStripeSource(
 
     async *setup({ config, catalog }): AsyncGenerator<SetupOutput> {
       const updates: Partial<Config> = {}
-      const client = makeClient(config)
+      const client = makeClient({
+        ...config,
+        api_version: config.api_version ?? BUNDLED_API_VERSION,
+      })
 
       // Resolve account_id if not already set
       if (!config.account_id) {
@@ -202,7 +208,10 @@ export function createStripeSource(
 
     async *teardown({ config }): AsyncGenerator<TeardownOutput> {
       if (config.webhook_url) {
-        const client = makeClient(config)
+        const client = makeClient({
+          ...config,
+          api_version: config.api_version ?? BUNDLED_API_VERSION,
+        })
         const existing = await client.listWebhookEndpoints({ limit: 100 })
         // Only delete the endpoint matching THIS pipeline's URL — not all managed endpoints.
         // Other pipelines on the same account may share the managed_by tag with different URLs.
@@ -216,13 +225,11 @@ export function createStripeSource(
     },
 
     async *read({ config, catalog, state }, $stdin?) {
+      const apiVersion = config.api_version ?? BUNDLED_API_VERSION
       const rateLimiter =
         externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
-      const client = makeClient(config)
-      const resolved = await resolveOpenApiSpec(
-        { apiVersion: config.api_version ?? BUNDLED_API_VERSION },
-        apiFetch
-      )
+      const client = makeClient({ ...config, api_version: apiVersion })
+      const resolved = await resolveOpenApiSpec({ apiVersion }, apiFetch)
       const registry = buildResourceRegistry(
         resolved.spec,
         config.api_key,

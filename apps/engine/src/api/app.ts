@@ -42,6 +42,7 @@ import {
   sslConfigFromConnectionString,
   stripSslParams,
   withPgConnectProxy,
+  withQueryLogging,
 } from '@stripe/sync-util-postgres'
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ async function* logApiStream<T>(
   try {
     for await (const item of iter) {
       itemCount++
+      if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
       yield item
     }
     logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
@@ -94,6 +96,15 @@ async function* logApiStream<T>(
       `${label} failed`
     )
     yield traceError(error)
+  }
+}
+
+const dangerouslyVerbose = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
+
+async function* verboseInput(label: string, iter: AsyncIterable<unknown>): AsyncIterable<unknown> {
+  for await (const msg of iter) {
+    if (dangerouslyVerbose) logger.debug({ msg }, `${label} input`)
+    yield msg
   }
 }
 
@@ -116,6 +127,68 @@ export async function createApp(resolver: ConnectorResolver) {
     }
     logger.error({ err }, 'Unhandled error')
     return c.json({ error: 'Internal server error' }, 500)
+  })
+
+  app.use('*', async (c, next) => {
+    const requestId = crypto.randomUUID()
+    const start = Date.now()
+    if (dangerouslyVerbose) {
+      const headers: Record<string, unknown> = {}
+      c.req.raw.headers.forEach((value, key) => {
+        try {
+          headers[key] = JSON.parse(value)
+        } catch {
+          headers[key] = value
+        }
+      })
+      logger.debug(
+        { requestId, method: c.req.method, path: c.req.path, headers },
+        'request headers'
+      )
+    }
+    logger.info({ requestId, method: c.req.method, path: c.req.path }, 'request start')
+    if (dangerouslyVerbose) {
+      const curlParts = [`curl -X ${c.req.method} '${c.req.url}'`]
+      c.req.raw.headers.forEach((value, key) => {
+        curlParts.push(`  -H '${key}: ${value}'`)
+      })
+      if (hasBody(c)) {
+        const cl = c.req.header('Content-Length')
+        if (cl && Number(cl) < 100_000) {
+          try {
+            const body = await c.req.raw.clone().text()
+            curlParts.push(`  -d '${body.replace(/'/g, "'\\''")}'`)
+          } catch {
+            /* skip */
+          }
+        } else {
+          curlParts.push('  --data-binary @-')
+        }
+      }
+      logger.debug(curlParts.join(' \\\n'))
+    }
+    await next()
+    let error: string | undefined
+    if (c.res.status >= 400) {
+      try {
+        const body = (await c.res.clone().json()) as { error: unknown }
+        error = typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
+      } catch {
+        // non-JSON error body, skip
+      }
+    }
+    const level = c.res.status >= 200 && c.res.status < 300 ? 'info' : 'warn'
+    logger[level](
+      {
+        requestId,
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: Date.now() - start,
+        error,
+      },
+      'request end'
+    )
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
@@ -260,7 +333,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const pipeline = c.req.valid('header')['x-pipeline']
     const context = { path: '/pipeline_check', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /check', engine.pipeline_check(pipeline), context)
+      logApiStream('Engine API /pipeline_check', engine.pipeline_check(pipeline), context)
     )
   })
 
@@ -285,7 +358,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const pipeline = c.req.valid('header')['x-pipeline']
     const context = { path: '/pipeline_setup', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /setup', engine.pipeline_setup(pipeline), context)
+      logApiStream('Engine API /pipeline_setup', engine.pipeline_setup(pipeline), context)
     )
   })
 
@@ -310,7 +383,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const pipeline = c.req.valid('header')['x-pipeline']
     const context = { path: '/pipeline_teardown', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /teardown', engine.pipeline_teardown(pipeline), context)
+      logApiStream('Engine API /pipeline_teardown', engine.pipeline_teardown(pipeline), context)
     )
   })
 
@@ -370,7 +443,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const inputPresent = hasBody(c)
     const context = { path: '/pipeline_read', inputPresent, ...syncRequestContext(pipeline) }
     const startedAt = Date.now()
-    logger.info(context, 'Engine API /read started')
+    logger.info(context, 'Engine API /pipeline_read started')
 
     let input: AsyncIterable<unknown> | undefined
     if (inputPresent) {
@@ -378,17 +451,20 @@ export async function createApp(resolver: ConnectorResolver) {
         // Validate each NDJSON line against the SourceInputMessage envelope,
         // then unwrap the source_input payload for source.read().
         input = (async function* () {
-          for await (const msg of parseNdjsonStream(c.req.raw.body!)) {
+          for await (const msg of verboseInput(
+            'pipeline_read',
+            parseNdjsonStream(c.req.raw.body!)
+          )) {
             const parsed = SourceInputMessage.parse(msg)
             yield (parsed as { source_input: unknown }).source_input
           }
         })()
       } else {
-        input = parseNdjsonStream(c.req.raw.body!)
+        input = verboseInput('pipeline_read', parseNdjsonStream(c.req.raw.body!))
       }
     }
     const output = engine.pipeline_read(pipeline, { state, state_limit, time_limit }, input)
-    return ndjsonResponse(logApiStream('Engine API /read', output, context, startedAt))
+    return ndjsonResponse(logApiStream('Engine API /pipeline_read', output, context, startedAt))
   })
 
   const pipelineWriteRoute = createRoute({
@@ -421,7 +497,10 @@ export async function createApp(resolver: ConnectorResolver) {
     }
     const startedAt = Date.now()
     logger.info(context, 'Engine API /write started')
-    const messages = parseNdjsonStream<Message>(c.req.raw.body!)
+    const messages = verboseInput(
+      'pipeline_write',
+      parseNdjsonStream<Message>(c.req.raw.body!)
+    ) as AsyncIterable<Message>
     return ndjsonResponse(
       logApiStream(
         'Engine API /write',
@@ -462,7 +541,9 @@ export async function createApp(resolver: ConnectorResolver) {
     const pipeline = c.req.valid('header')['x-pipeline']
     const state = c.req.valid('header')['x-source-state']
     const { state_limit, time_limit } = c.req.valid('query')
-    const input = hasBody(c) ? parseNdjsonStream(c.req.raw.body!) : undefined
+    const input = hasBody(c)
+      ? verboseInput('pipeline_sync', parseNdjsonStream(c.req.raw.body!))
+      : undefined
     const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit }, input)
     return ndjsonResponse(output)
   })
@@ -640,11 +721,13 @@ export async function createApp(resolver: ConnectorResolver) {
   app.openapi(internalQueryRoute, async (c) => {
     const { connection_string, sql } = c.req.valid('json')
     const ssl = sslConfigFromConnectionString(connection_string)
-    const pool = new pg.Pool(
-      withPgConnectProxy({
-        connectionString: stripSslParams(connection_string),
-        ssl,
-      })
+    const pool = withQueryLogging(
+      new pg.Pool(
+        withPgConnectProxy({
+          connectionString: stripSslParams(connection_string),
+          ssl,
+        })
+      )
     )
     try {
       const result = await pool.query(sql.trim())

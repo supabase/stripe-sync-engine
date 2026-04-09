@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import { BUNDLED_API_VERSION } from '@stripe/sync-openapi'
 import { execSync } from 'node:child_process'
 import createFetchClient from 'openapi-fetch'
 import pg from 'pg'
@@ -126,6 +127,7 @@ describeWithEnv(
             type: 'stripe',
             stripe: {
               api_key: STRIPE_API_KEY,
+              api_version: BUNDLED_API_VERSION,
               ...(stripeMockUrl ? { base_url: stripeMockUrl } : {}),
             },
           },

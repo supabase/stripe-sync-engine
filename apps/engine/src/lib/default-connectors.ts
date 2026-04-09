@@ -8,6 +8,6 @@ export const defaultConnectors: RegisteredConnectors = {
   sources: { stripe: sourceStripe },
   destinations: {
     postgres: destinationPostgres,
-    'google_sheets': destinationGoogleSheets,
+    google_sheets: destinationGoogleSheets,
   },
 }

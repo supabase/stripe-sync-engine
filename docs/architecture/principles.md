@@ -38,6 +38,10 @@ Sources advertise available streams via `CatalogMessage`. Destinations create ta
 
 JSDoc comments on Zod fields (`/** ... */`) are stripped by TypeScript and never reach the OpenAPI generator. Always use `.describe('...')` on Zod schema fields so descriptions appear in the generated spec.
 
-## 10. Stripe polymorphism pattern
+## 10. Log and trace messages are liveness signals
+
+Connectors must emit `LogMessage` or `TraceMessage` during long-running operations (at least once per table in setup, once per migration batch, periodically during reads/writes). These messages serve two purposes: human-readable progress and **liveness signals to the orchestrator**. A stream that goes silent for too long looks identical to a hang — the orchestrator (e.g. Temporal) may cancel it. Use `LogMessage` for human-readable progress, `TraceMessage` (stream_status, estimate) for structured machine-readable signals.
+
+## 11. Stripe polymorphism pattern
 
 Polymorphic objects use `{type, [type]: payload}` where the `type` value names the sub-hash key. This is Stripe's standard API polymorphism pattern (see Trailhead: `api-design/polymorphism-in-the-stripe-api`). Examples: `PipelineConfig.source` uses `{type: 'stripe', stripe: {...}}`, `ControlPayload` uses `{control_type: 'source_config', source_config: {...}}`, `TracePayload` uses `{trace_type: 'error', error: {...}}`.

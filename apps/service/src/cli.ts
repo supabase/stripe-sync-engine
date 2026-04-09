@@ -16,7 +16,7 @@ const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
 
 const resolverPromise = createConnectorResolver({
   sources: { stripe: sourceStripe },
-  destinations: { postgres: destinationPostgres, 'google_sheets': destinationGoogleSheets },
+  destinations: { postgres: destinationPostgres, google_sheets: destinationGoogleSheets },
 })
 
 async function createTemporalClient(

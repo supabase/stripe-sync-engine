@@ -21,7 +21,7 @@ const resolver = await createConnectorResolver({
   sources: { stripe: (sourceStripe as any).default ?? sourceStripe },
   destinations: {
     postgres: (destinationPostgres as any).default ?? destinationPostgres,
-    'google_sheets': (destinationGoogleSheets as any).default ?? destinationGoogleSheets,
+    google_sheets: (destinationGoogleSheets as any).default ?? destinationGoogleSheets,
   },
 })
 

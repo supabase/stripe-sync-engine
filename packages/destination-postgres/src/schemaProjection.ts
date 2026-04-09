@@ -276,6 +276,8 @@ export type ApplySchemaFromCatalogConfig = {
   /** Extra system columns to add to each table. */
   system_columns?: SystemColumn[]
   apiVersion?: string
+  /** Progress callback — emitting logs signals liveness to the orchestrator. */
+  onLog?: (message: string) => void
 }
 
 /**
@@ -325,14 +327,19 @@ export async function applySchemaFromCatalog(
     return
   }
 
-  for (const stream of streams) {
-    if (!stream.json_schema) continue
-    const stmts = buildCreateTableWithSchema(dataSchema, stream.name, stream.json_schema, {
+  const schemasToMigrate = streams.filter((s) => s.json_schema)
+  config.onLog?.(`Migrating ${schemasToMigrate.length} tables (marker: ${marker.slice(0, 24)}…)`)
+  for (const [i, stream] of schemasToMigrate.entries()) {
+    const start = Date.now()
+    const stmts = buildCreateTableWithSchema(dataSchema, stream.name, stream.json_schema!, {
       system_columns: config.system_columns,
     })
     for (const stmt of stmts) {
       await runSqlAdditive(client, stmt)
     }
+    config.onLog?.(
+      `[${i + 1}/${schemasToMigrate.length}] Migrated "${stream.name}" (${Date.now() - start}ms)`
+    )
   }
 
   await insertMigrationMarker(client, syncSchema, markerColumn, marker, fingerprint)
