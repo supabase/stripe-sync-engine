@@ -10,7 +10,7 @@ import {
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import { z } from 'zod'
-import { buildCreateTableWithSchema, runSqlAdditive } from './schemaProjection.js'
+import { buildCreateTableDDL } from './schemaProjection.js'
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 
@@ -87,6 +87,7 @@ export async function upsertMany(
 
 // Schema projection (JSON Schema -> Postgres DDL)
 export {
+  buildCreateTableDDL,
   buildCreateTableWithSchema,
   jsonSchemaToColumns,
   runSqlAdditive,
@@ -149,35 +150,27 @@ const destination = {
         END;
         $$;
       `)
-      for (const [i, cs] of catalog.streams.entries()) {
-        const start = Date.now()
-        if (cs.stream.json_schema) {
-          const stmts = buildCreateTableWithSchema(
-            config.schema,
-            cs.stream.name,
-            cs.stream.json_schema,
-            {
-              system_columns: cs.system_columns,
-            }
-          )
-          for (const stmt of stmts) {
-            await runSqlAdditive(pool, stmt)
-          }
-        } else {
-          await pool.query(sql`
-            CREATE TABLE IF NOT EXISTS "${config.schema}"."${cs.stream.name}" (
-              "_raw_data" jsonb NOT NULL,
-              "_last_synced_at" timestamptz,
-              "_updated_at" timestamptz NOT NULL DEFAULT now(),
-              "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
-              PRIMARY KEY ("id")
+      await Promise.all(
+        catalog.streams.map(async (cs) => {
+          if (cs.stream.json_schema) {
+            await pool.query(
+              buildCreateTableDDL(config.schema, cs.stream.name, cs.stream.json_schema, {
+                system_columns: cs.system_columns,
+              })
             )
-          `)
-        }
-        yield logMsg(
-          `[${i + 1}/${catalog.streams.length}] Table "${cs.stream.name}" ready (${Date.now() - start}ms)`
-        )
-      }
+          } else {
+            await pool.query(sql`
+              CREATE TABLE IF NOT EXISTS "${config.schema}"."${cs.stream.name}" (
+                "_raw_data" jsonb NOT NULL,
+                "_last_synced_at" timestamptz,
+                "_updated_at" timestamptz NOT NULL DEFAULT now(),
+                "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
+                PRIMARY KEY ("id")
+              )
+            `)
+          }
+        })
+      )
     } finally {
       await pool.end()
     }

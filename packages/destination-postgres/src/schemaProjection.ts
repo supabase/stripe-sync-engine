@@ -89,11 +89,6 @@ export function jsonSchemaToColumns(jsonSchema: Record<string, unknown>): Column
   return columns
 }
 
-/**
- * Build DDL statements to create a table with generated columns from JSON Schema.
- * Returns an array of SQL statements (CREATE TABLE + ALTER TABLE ADD COLUMN for each column
- * + indexes + trigger).
- */
 export type SystemColumn = {
   name: string
   type: string
@@ -105,6 +100,11 @@ export type BuildTableOptions = {
   system_columns?: SystemColumn[]
 }
 
+/**
+ * Build DDL statements to create a table with generated columns from JSON Schema.
+ * Returns an array of individual SQL statements (CREATE TABLE, ALTER TABLE,
+ * indexes, triggers). Prefer {@link buildCreateTableDDL} for fewer round trips.
+ */
 export function buildCreateTableWithSchema(
   schema: string,
   tableName: string,
@@ -118,10 +118,6 @@ export function buildCreateTableWithSchema(
 
   const generatedColumnDefs = columns.map(
     (col) => `${quoteIdent(col.name)} ${col.pgType} GENERATED ALWAYS AS (${col.expression}) STORED`
-  )
-
-  const generatedColumnAlters = generatedColumnDefs.map(
-    (colDef) => `ALTER TABLE ${quotedSchema}.${quotedTable} ADD COLUMN IF NOT EXISTS ${colDef};`
   )
 
   const systemColumnDefs = (options.system_columns ?? []).map(
@@ -140,8 +136,12 @@ export function buildCreateTableWithSchema(
 
   const stmts: string[] = [
     `CREATE TABLE ${quotedSchema}.${quotedTable} (\n  ${columnDefs.join(',\n  ')}\n);`,
-    ...generatedColumnAlters,
   ]
+
+  if (generatedColumnDefs.length > 0) {
+    const addClauses = generatedColumnDefs.map((colDef) => `ADD COLUMN IF NOT EXISTS ${colDef}`)
+    stmts.push(`ALTER TABLE ${quotedSchema}.${quotedTable}\n  ${addClauses.join(',\n  ')};`)
+  }
 
   for (const col of options.system_columns ?? []) {
     if (col.index) {
@@ -161,9 +161,39 @@ export function buildCreateTableWithSchema(
 }
 
 /**
+ * Wrap a DDL statement in BEGIN…EXCEPTION so it's skipped when the object already
+ * exists.  Mirrors the error codes handled by {@link runSqlAdditive}.
+ */
+function wrapAdditive(stmt: string): string {
+  return `BEGIN\n    ${stmt}\n  EXCEPTION WHEN duplicate_table OR duplicate_object OR duplicate_column OR invalid_table_definition THEN NULL;\n  END;`
+}
+
+/**
+ * Build a single SQL string (a DO block) that idempotently creates a table with
+ * generated columns from JSON Schema, adds missing columns, indexes, and the
+ * updated_at trigger.  Sends exactly **one round trip** to the database.
+ *
+ * Delegates to {@link buildCreateTableWithSchema} for the statement list, then
+ * wraps each mutating statement in BEGIN…EXCEPTION for idempotency.
+ */
+export function buildCreateTableDDL(
+  schema: string,
+  tableName: string,
+  jsonSchema: Record<string, unknown>,
+  options: BuildTableOptions = {}
+): string {
+  const stmts = buildCreateTableWithSchema(schema, tableName, jsonSchema, options)
+  const blocks = stmts.map((stmt) => (/^DROP\s/i.test(stmt) ? stmt : wrapAdditive(stmt)))
+  return `DO $ddl$\nBEGIN\n  ${blocks.join('\n  ')}\nEND;\n$ddl$;`
+}
+
+/**
  * Execute a DDL statement, skipping if the object already exists.
  * Handles: 42P07 (table exists), 42710 (constraint exists),
  * 42P16 (invalid constraint definition), 42701 (column exists).
+ *
+ * @deprecated No longer used internally — {@link buildCreateTableDDL} handles
+ * idempotency inside a PL/pgSQL DO block instead. Kept for external callers.
  */
 export async function runSqlAdditive(client: PgClient, sql: string): Promise<void> {
   try {
@@ -283,6 +313,10 @@ export type ApplySchemaFromCatalogConfig = {
 /**
  * Apply schema from a catalog's json_schema fields to the database.
  * Uses migration markers to avoid redundant DDL.
+ *
+ * Tables are migrated concurrently via `Promise.all`. For true parallelism,
+ * pass a `pg.Pool` (which multiplexes across connections); a single `pg.Client`
+ * will serialize queries on its connection.
  */
 export async function applySchemaFromCatalog(
   client: PgClient,
@@ -329,18 +363,21 @@ export async function applySchemaFromCatalog(
 
   const schemasToMigrate = streams.filter((s) => s.json_schema)
   config.onLog?.(`Migrating ${schemasToMigrate.length} tables (marker: ${marker.slice(0, 24)}…)`)
-  for (const [i, stream] of schemasToMigrate.entries()) {
-    const start = Date.now()
-    const stmts = buildCreateTableWithSchema(dataSchema, stream.name, stream.json_schema!, {
-      system_columns: config.system_columns,
+  const total = schemasToMigrate.length
+  let completed = 0
+  await Promise.all(
+    schemasToMigrate.map(async (stream) => {
+      const start = Date.now()
+      await client.query(
+        buildCreateTableDDL(dataSchema, stream.name, stream.json_schema!, {
+          system_columns: config.system_columns,
+        })
+      )
+      config.onLog?.(
+        `[${++completed}/${total}] Migrated "${stream.name}" (${Date.now() - start}ms)`
+      )
     })
-    for (const stmt of stmts) {
-      await runSqlAdditive(client, stmt)
-    }
-    config.onLog?.(
-      `[${i + 1}/${schemasToMigrate.length}] Migrated "${stream.name}" (${Date.now() - start}ms)`
-    )
-  }
+  )
 
   await insertMigrationMarker(client, syncSchema, markerColumn, marker, fingerprint)
 }

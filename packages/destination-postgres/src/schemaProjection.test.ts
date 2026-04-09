@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { jsonSchemaToColumns, buildCreateTableWithSchema } from './schemaProjection.js'
+import {
+  jsonSchemaToColumns,
+  buildCreateTableWithSchema,
+  buildCreateTableDDL,
+} from './schemaProjection.js'
 
 const SAMPLE_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -62,9 +66,13 @@ describe('buildCreateTableWithSchema', () => {
     expect(stmts[0]).toContain('"created" bigint GENERATED ALWAYS AS')
     expect(stmts[0]).toContain('"metadata" jsonb GENERATED ALWAYS AS')
 
-    // ALTER TABLE ADD COLUMN IF NOT EXISTS for each column
+    // Single batched ALTER TABLE with all ADD COLUMN IF NOT EXISTS clauses
     const alterStmts = stmts.filter((s) => s.includes('ADD COLUMN IF NOT EXISTS'))
-    expect(alterStmts.length).toBe(4) // created, deleted, metadata, expires_at
+    expect(alterStmts.length).toBe(1)
+    expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "created"')
+    expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "deleted"')
+    expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "metadata"')
+    expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
 
     // No FK constraint
     expect(stmts.some((s) => s.includes('FOREIGN KEY'))).toBe(false)
@@ -116,6 +124,76 @@ describe('buildCreateTableWithSchema', () => {
   it('produces stable output across repeated calls', () => {
     const first = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     const second = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
+    expect(second).toEqual(first)
+  })
+})
+
+describe('buildCreateTableDDL', () => {
+  it('returns a single DO block containing all DDL', () => {
+    const ddl = buildCreateTableDDL('mydata', 'repos', SAMPLE_JSON_SCHEMA)
+
+    expect(ddl).toMatch(/^DO \$ddl\$/)
+    expect(ddl).toMatch(/\$ddl\$;$/)
+
+    expect(ddl).toContain('CREATE TABLE "mydata"."repos"')
+    expect(ddl).toContain('"_raw_data" jsonb NOT NULL')
+    expect(ddl).toContain("GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED")
+    expect(ddl).toContain('"created" bigint GENERATED ALWAYS AS')
+
+    expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "created"')
+    expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "deleted"')
+    expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "metadata"')
+    expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
+
+    expect(ddl).toContain('DROP TRIGGER IF EXISTS handle_updated_at')
+    expect(ddl).toContain('CREATE TRIGGER handle_updated_at')
+  })
+
+  it('wraps every DDL statement in exception handlers', () => {
+    const ddl = buildCreateTableDDL('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
+      system_columns: [{ name: '_account_id', type: 'text', index: true }],
+    })
+
+    expect(ddl).toContain('EXCEPTION WHEN duplicate_table')
+    expect(ddl).toContain('CREATE INDEX')
+    expect(ddl).toContain('"_account_id"')
+
+    // Count exception handlers: CREATE TABLE, ALTER, CREATE INDEX, CREATE TRIGGER = 4
+    const exceptionCount = (ddl.match(/EXCEPTION WHEN/g) || []).length
+    expect(exceptionCount).toBe(4)
+  })
+
+  it('contains every SQL statement from buildCreateTableWithSchema', () => {
+    const collapse = (s: string) => s.replace(/\s+/g, ' ').trim()
+
+    const schemas = [SAMPLE_JSON_SCHEMA, EXPANDABLE_REF_SCHEMA]
+    const optionSets = [
+      {},
+      { system_columns: [{ name: '_account_id', type: 'text' as const, index: true }] },
+      {
+        system_columns: [
+          { name: '_account_id', type: 'text' as const, index: true },
+          { name: '_tenant_id', type: 'uuid' as const, index: false },
+        ],
+      },
+    ]
+
+    for (const schema of schemas) {
+      for (const opts of optionSets) {
+        const stmts = buildCreateTableWithSchema('s', 't', schema, opts)
+        const ddlCollapsed = collapse(buildCreateTableDDL('s', 't', schema, opts))
+
+        for (const stmt of stmts) {
+          const stmtCollapsed = collapse(stmt.replace(/;\s*$/, ''))
+          expect(ddlCollapsed).toContain(stmtCollapsed)
+        }
+      }
+    }
+  })
+
+  it('produces stable output across repeated calls', () => {
+    const first = buildCreateTableDDL('mydata', 'customers', SAMPLE_JSON_SCHEMA)
+    const second = buildCreateTableDDL('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     expect(second).toEqual(first)
   })
 })
