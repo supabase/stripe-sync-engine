@@ -149,6 +149,9 @@ describe('SpecParser', () => {
           'v2.core.event_destination',
         ])
       )
+      expect(ids).not.toContain('recipient')
+      expect(ids).not.toContain('exchange_rate')
+      expect(ids).not.toContain('deprecated_widget')
     })
 
     it('optionally includes nested list endpoints', () => {
@@ -203,8 +206,17 @@ describe('SpecParser', () => {
         },
       }
 
-      const ids = parser.discoverListableResourceIds(spec, { includeNested: true })
+      const ids = parser.discoverListableResourceIds(spec, {
+        includeNested: true,
+      })
       expect(ids).toContain('person')
+    })
+
+    it('excludes paths present in the generated global deprecated set', () => {
+      const parser = new SpecParser()
+      const ids = parser.discoverListableResourceIds(minimalStripeOpenApiSpec)
+      expect(ids).not.toContain('recipient')
+      expect(ids).toContain('customer')
     })
 
     it('returns empty set when spec has no paths', () => {
@@ -330,6 +342,14 @@ describe('SpecParser', () => {
       const parsed = parser.parse(spec)
       const tableNames = parsed.tables.map((table) => table.tableName)
       expect(tableNames).toContain('persons')
+    })
+
+    it('excludes generated global deprecated paths from auto-discovered tables', () => {
+      const parser = new SpecParser()
+      const parsed = parser.parse(minimalStripeOpenApiSpec)
+      const tableNames = parsed.tables.map((t) => t.tableName)
+      expect(tableNames).not.toContain('recipients')
+      expect(tableNames).toContain('customers')
     })
 
     it('excludes schemas that have no list endpoint', () => {

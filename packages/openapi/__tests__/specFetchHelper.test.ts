@@ -40,6 +40,7 @@ describe('resolveOpenApiSpec', () => {
     )
 
     expect(result.source).toBe('explicit_path')
+    expect(result.spec.paths?.['/v1/recipients']).toBeUndefined()
     expect(fetchMock).not.toHaveBeenCalled()
     await fs.rm(tempDir, { recursive: true, force: true })
   })
@@ -60,6 +61,7 @@ describe('resolveOpenApiSpec', () => {
 
     expect(result.source).toBe('cache')
     expect(result.cachePath).toBe(cachePath)
+    expect(result.spec.paths?.['/v1/recipients']).toBeUndefined()
     expect(fetchMock).not.toHaveBeenCalled()
     await fs.rm(tempDir, { recursive: true, force: true })
   })
@@ -83,9 +85,11 @@ describe('resolveOpenApiSpec', () => {
 
     expect(result.source).toBe('github')
     expect(result.commitSha).toBe('abc123def456')
+    expect(result.spec.paths?.['/v1/recipients']).toBeUndefined()
 
     const cached = await fs.readFile(path.join(tempDir, '2020-08-27.spec3.sdk.json'), 'utf8')
     expect(JSON.parse(cached)).toMatchObject({ openapi: '3.0.0' })
+    expect(JSON.parse(cached).paths['/v1/recipients']).toBeUndefined()
     // 1 CDN manifest (404) + 1 GitHub commits + 1 GitHub spec
     expect(fetchMock).toHaveBeenCalledTimes(3)
     await fs.rm(tempDir, { recursive: true, force: true })

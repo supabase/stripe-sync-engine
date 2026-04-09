@@ -78,6 +78,15 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check deprecated paths are up to date
+        run: |
+          cd packages/openapi
+          bundled=$(ls oas/*.json | grep -v manifest.json | grep -v index.html)
+          [ "$(echo "$bundled" | wc -l)" -eq 1 ] || { echo "Expected 1 bundled spec"; exit 1; }
+          version=$(basename "$bundled" .json)
+          grep -q "DEPRECATED_PATHS_BUNDLED_VERSION = '${version}'" src/deprecatedPaths.ts \
+            || { echo "deprecatedPaths.ts is stale (bundled spec is ${version}). Fix: node packages/openapi/scripts/generate-versions.mjs"; exit 1; }
+
       - name: Check generated OpenAPI files
         run: ./scripts/generate-openapi.sh --check
         env:

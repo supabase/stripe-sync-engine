@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildListFn, buildRetrieveFn, discoverListEndpoints } from '../listFnResolver'
+import { isDeprecatedOperation } from '../specCleaning'
 import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
 
 describe('discoverListEndpoints', () => {
@@ -91,6 +92,25 @@ describe('discoverListEndpoints', () => {
     const endpoints = discoverListEndpoints(spec)
     const paths = Array.from(endpoints.values()).map((e) => e.apiPath)
     expect(paths).not.toContain('/v1/customers/{customer}/sources')
+  })
+
+  it('skips endpoints with deprecated: true on the operation', () => {
+    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const tables = Array.from(endpoints.keys())
+    expect(tables).not.toContain('deprecated_widgets')
+  })
+
+  it('skips endpoints with [Deprecated] in the description', () => {
+    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const tables = Array.from(endpoints.keys())
+    expect(tables).not.toContain('exchange_rates')
+  })
+
+  it('skips endpoints that appear in the generated global deprecated paths set', () => {
+    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const tables = Array.from(endpoints.keys())
+    expect(tables).not.toContain('recipients')
+    expect(tables).toContain('customers')
   })
 
   it('returns empty map when spec has no paths', () => {
@@ -217,5 +237,42 @@ describe('discoverListEndpoints', () => {
     const retrieve = buildRetrieveFn('sk_test_fake', '/v1/customers', fetchMock)
 
     await expect(retrieve('cus_missing')).rejects.toThrow("No such customer: 'cus_missing'")
+  })
+})
+
+describe('isDeprecatedOperation', () => {
+  it('returns true for deprecated: true', () => {
+    expect(isDeprecatedOperation({ deprecated: true })).toBe(true)
+  })
+
+  it('returns false for deprecated: false', () => {
+    expect(isDeprecatedOperation({ deprecated: false })).toBe(false)
+  })
+
+  it('returns true for description starting with <p>[Deprecated]', () => {
+    expect(
+      isDeprecatedOperation({
+        description:
+          '<p>[Deprecated] The ExchangeRate APIs are deprecated. Please use the FX Quotes API instead.</p>',
+      })
+    ).toBe(true)
+  })
+
+  it('returns false for description mentioning deprecated elsewhere', () => {
+    expect(
+      isDeprecatedOperation({
+        description: '<p>Returns a list of things. Some fields are deprecated.</p>',
+      })
+    ).toBe(false)
+  })
+
+  it('returns false for a normal operation', () => {
+    expect(isDeprecatedOperation({ description: '<p>Returns a list of customers.</p>' })).toBe(
+      false
+    )
+  })
+
+  it('returns false for an operation with no description or deprecated flag', () => {
+    expect(isDeprecatedOperation({})).toBe(false)
   })
 })

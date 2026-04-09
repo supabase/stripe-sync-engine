@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OpenApiSpec, ResolveSpecConfig, ResolvedOpenApiSpec } from './types.js'
+import { cleanOpenApiSpec } from './specCleaning.js'
 
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'stripe-sync-openapi-cache')
 
@@ -28,10 +29,10 @@ export async function resolveOpenApiSpec(
   }
 
   if (config.openApiSpecPath) {
-    const explicitSpec = await readSpecFromPath(config.openApiSpecPath)
+    const spec = cleanOpenApiSpec(await readSpecFromPath(config.openApiSpecPath))
     return {
       apiVersion,
-      spec: explicitSpec,
+      spec,
       source: 'explicit_path',
       cachePath: config.openApiSpecPath,
     }
@@ -41,7 +42,7 @@ export async function resolveOpenApiSpec(
   // without any network calls or caching overhead.
   if (extractDatePart(apiVersion) === extractDatePart(BUNDLED_API_VERSION)) {
     const bundledPath = fileURLToPath(new URL(`./oas/${BUNDLED_API_VERSION}.json`, import.meta.url))
-    const spec = await readSpecFromPath(bundledPath)
+    const spec = cleanOpenApiSpec(await readSpecFromPath(bundledPath))
     return {
       apiVersion,
       spec,
@@ -54,9 +55,10 @@ export async function resolveOpenApiSpec(
   const cachePath = getCachePath(cacheDir, apiVersion)
   const cachedSpec = await tryReadCachedSpec(cachePath)
   if (cachedSpec) {
+    const spec = cleanOpenApiSpec(cachedSpec)
     return {
       apiVersion,
-      spec: cachedSpec,
+      spec,
       source: 'cache',
       cachePath,
     }
@@ -66,10 +68,11 @@ export async function resolveOpenApiSpec(
   // The CDN serves spec versions without auth or rate limits.
   const cdnSpec = await tryFetchFromCdn(apiVersion, fetch)
   if (cdnSpec) {
-    await tryWriteCache(cachePath, cdnSpec)
+    const spec = cleanOpenApiSpec(cdnSpec)
+    await tryWriteCache(cachePath, spec)
     return {
       apiVersion,
-      spec: cdnSpec,
+      spec,
       source: 'cdn',
       cachePath,
     }
@@ -85,8 +88,7 @@ export async function resolveOpenApiSpec(
     )
   }
 
-  const spec = await fetchSpecForCommit(commitSha, fetch)
-  validateOpenApiSpec(spec)
+  const spec = cleanOpenApiSpec(await fetchSpecForCommit(commitSha, fetch))
   await tryWriteCache(cachePath, spec)
 
   return {

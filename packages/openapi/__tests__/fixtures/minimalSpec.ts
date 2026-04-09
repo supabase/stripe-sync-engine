@@ -1,8 +1,14 @@
 import type { OpenApiSpec, OpenApiPathItem } from '../../types'
+import { cleanOpenApiSpec } from '../../specCleaning'
 
 function listPath(
   schemaRef: string,
-  opts: { supportsCreatedFilter?: boolean; supportsLimit?: boolean } = {}
+  opts: {
+    supportsCreatedFilter?: boolean
+    supportsLimit?: boolean
+    deprecated?: boolean
+    description?: string
+  } = {}
 ): OpenApiPathItem {
   const parameters: { name: string; in: string }[] = []
   if (opts.supportsCreatedFilter) {
@@ -15,6 +21,8 @@ function listPath(
   }
   return {
     get: {
+      ...(opts.deprecated ? { deprecated: true } : {}),
+      ...(opts.description ? { description: opts.description } : {}),
       parameters,
       responses: {
         '200': {
@@ -60,7 +68,7 @@ function v2ListPath(schemaRef: string): OpenApiPathItem {
   }
 }
 
-export const minimalStripeOpenApiSpec: OpenApiSpec = {
+const rawSpec: OpenApiSpec = {
   openapi: '3.0.0',
   info: {
     version: '2020-08-27',
@@ -79,6 +87,12 @@ export const minimalStripeOpenApiSpec: OpenApiSpec = {
     '/v1/entitlements/features': listPath('entitlements_feature'),
     '/v2/core/accounts': v2ListPath('v2_core_account'),
     '/v2/core/event_destinations': v2ListPath('v2_core_event_destination'),
+    '/v1/recipients': listPath('recipient'),
+    '/v1/exchange_rates': listPath('exchange_rate', {
+      description:
+        '<p>[Deprecated] The <code>ExchangeRate</code> APIs are deprecated. Please use the FX Quotes API instead.</p>',
+    }),
+    '/v1/deprecated_widgets': listPath('deprecated_widget', { deprecated: true }),
   },
   components: {
     schemas: {
@@ -193,6 +207,33 @@ export const minimalStripeOpenApiSpec: OpenApiSpec = {
           livemode: { type: 'boolean' },
         },
       },
+      recipient: {
+        'x-resourceId': 'recipient',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+      },
+      exchange_rate: {
+        'x-resourceId': 'exchange_rate',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          rates: { type: 'object', additionalProperties: true },
+        },
+      },
+      deprecated_widget: {
+        'x-resourceId': 'deprecated_widget',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+        },
+      },
     },
   },
 }
+
+export const rawMinimalStripeOpenApiSpec: OpenApiSpec = rawSpec
+export const minimalStripeOpenApiSpec: OpenApiSpec = cleanOpenApiSpec(rawSpec)

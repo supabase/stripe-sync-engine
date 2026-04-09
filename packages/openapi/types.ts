@@ -34,6 +34,8 @@ export type OpenApiResponse = {
 
 export type OpenApiOperationObject = {
   operationId?: string
+  description?: string
+  deprecated?: boolean
   parameters?: {
     name?: string
     in?: string

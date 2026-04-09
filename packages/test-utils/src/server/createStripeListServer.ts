@@ -27,6 +27,9 @@ export type { StripeListServerOptions, StripeListServer } from './types.js'
 
 const V2_PAGE_CURSOR_QUERY_PARAM = 'page'
 
+// Hardcoded for testing purposes. don't want to reply on open api spec parser for testing known deprecation.
+const REMOVED_ENDPOINTS = ['/v1/exchange_rates']
+
 function makeFakeAccount(created: number) {
   return {
     id: 'acct_test_fake_000000',
@@ -131,6 +134,20 @@ export async function createStripeListServer(
   })
 
   app.get('/v1/account', (c) => c.json(fakeAccount))
+
+  for (const path of REMOVED_ENDPOINTS) {
+    app.all(path, (c) =>
+      c.json(
+        {
+          error: {
+            type: 'invalid_request_error',
+            message: `Unrecognized request URL (${c.req.method}: ${path}). Please see https://stripe.com/docs or we can help at https://support.stripe.com/.`,
+          },
+        },
+        404
+      )
+    )
+  }
 
   for (const ep of endpointSet.endpoints.values()) {
     app.get(ep.apiPath, (c) =>
