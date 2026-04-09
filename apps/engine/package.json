@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsc",
     "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
-    "dev": "LOG_LEVEL=debug LOG_PRETTY=true DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/api/index.ts",
+    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/api/index.ts",
     "test": "vitest run",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },

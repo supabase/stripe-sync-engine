@@ -1325,6 +1325,16 @@
                   "error"
                 ],
                 "description": "Why the stream ended."
+              },
+              "record_count": {
+                "description": "Per-stream record counts: { stream_name: count }.",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "number"
+                }
               }
             },
             "required": [

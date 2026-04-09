@@ -1,5 +1,8 @@
 import { ProxyAgent } from 'undici'
 import { HttpsProxyAgent } from 'https-proxy-agent'
+import pino from 'pino'
+
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 export type TransportEnv = Record<string, string | undefined>
 type ProxyTarget = URL | string
@@ -210,7 +213,7 @@ export function fetchWithProxy(
     ? { ...init, dispatcher: getProxyAgent(proxyUrl) }
     : init
 
-  if (!DANGEROUSLY_VERBOSE_LOGGING) {
+  if (!DANGEROUSLY_VERBOSE_LOGGING || !logger.isLevelEnabled('trace')) {
     return fetch(input, fetchInit)
   }
 
@@ -223,18 +226,20 @@ export function fetchWithProxy(
       loggedHeaders[k] = k.toLowerCase() === 'authorization' ? '[redacted]' : v
     })
   }
-  console.error(`[http ${reqId}] → ${method} ${String(input)}`, {
-    headers: loggedHeaders,
-    ...(init.body != null ? { body: String(init.body) } : {}),
-  })
+  logger.trace(
+    { headers: loggedHeaders, ...(init.body != null ? { body: String(init.body) } : {}) },
+    `[http ${reqId}] → ${method} ${String(input)}`
+  )
 
   return fetch(input, fetchInit).then((res) => {
     const resClone = res.clone()
-    console.error(`[http ${reqId}] ← ${method} ${String(input)} ${res.status} (${Date.now() - start}ms)`)
+    logger.trace(
+      `[http ${reqId}] ← ${method} ${String(input)} ${res.status} (${Date.now() - start}ms)`
+    )
     resClone
       .text()
       .then((body) => {
-        console.error(`[http ${reqId}] ← body: ${body.slice(0, 4096)}`)
+        logger.trace(`[http ${reqId}] ← body: ${body.slice(0, 4096)}`)
       })
       .catch(() => {})
     return res

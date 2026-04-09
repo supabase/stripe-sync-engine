@@ -570,6 +570,9 @@ importers:
       https-proxy-agent:
         specifier: ^7.0.6
         version: 7.0.6(supports-color@10.2.2)
+      pino:
+        specifier: ^10
+        version: 10.1.0
       undici:
         specifier: ^7.16.0
         version: 7.24.6
@@ -661,6 +664,9 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.16.3
+      pino:
+        specifier: ^10
+        version: 10.1.0
     devDependencies:
       '@types/pg':
         specifier: ^8.15.5
@@ -7320,6 +7326,7 @@ snapshots:
       '@stripe/sync-openapi': file:packages/openapi
       '@stripe/sync-protocol': file:packages/protocol
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
+      pino: 10.1.0
       undici: 7.24.6
       ws: 8.18.3
       zod: 4.3.6
@@ -7343,6 +7350,7 @@ snapshots:
   '@stripe/sync-util-postgres@file:packages/util-postgres':
     dependencies:
       pg: 8.16.3
+      pino: 10.1.0
     transitivePeerDependencies:
       - pg-native
 

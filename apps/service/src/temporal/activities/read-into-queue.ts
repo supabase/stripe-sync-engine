@@ -1,5 +1,6 @@
 import { heartbeat } from '@temporalio/activity'
 import type { Message, SourceInputMessage, SourceReadOptions } from '@stripe/sync-engine'
+import type { EofPayload } from '@stripe/sync-protocol'
 
 import type { ActivitiesContext } from './_shared.js'
 import { mergeStateMessage, asIterable, collectError, type RunResult } from './_shared.js'
@@ -11,7 +12,7 @@ export function createReadIntoQueueActivity(context: ActivitiesContext) {
   ): Promise<{
     count: number
     state: import('@stripe/sync-engine').SourceState
-    eof?: { reason: string }
+    eof?: EofPayload
   }> {
     if (!context.kafkaBroker) throw new Error('kafkaBroker is required for Google Sheets workflow')
 
@@ -26,13 +27,13 @@ export function createReadIntoQueueActivity(context: ActivitiesContext) {
       global: {},
     }
     const errors: RunResult['errors'] = []
-    let eof: { reason: string } | undefined
+    let eof: EofPayload | undefined
     let seen = 0
 
     for await (const raw of context.engine.pipeline_read(config, readOpts, input)) {
       seen++
       if (raw.type === 'eof') {
-        eof = { reason: raw.eof.reason }
+        eof = { reason: raw.eof.reason, record_count: raw.eof.record_count }
       } else {
         const error = collectError(raw)
         if (error) {

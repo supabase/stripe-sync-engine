@@ -1,5 +1,6 @@
 import { heartbeat } from '@temporalio/activity'
 import type { Message, Engine, SourceState, SourceStateMessage } from '@stripe/sync-engine'
+import type { EofPayload } from '@stripe/sync-protocol'
 import { createRemoteEngine } from '@stripe/sync-engine'
 import { Kafka } from 'kafkajs'
 import type { Producer } from 'kafkajs'
@@ -147,20 +148,20 @@ export async function drainMessages(
   records: Message[]
   sourceConfig?: Record<string, unknown>
   destConfig?: Record<string, unknown>
-  eof?: { reason: string }
+  eof?: EofPayload
 }> {
   const errors: RunResult['errors'] = []
   let state: SourceState = initialState ?? { streams: {}, global: {} }
   const records: Message[] = []
   let sourceConfig: Record<string, unknown> | undefined
   let destConfig: Record<string, unknown> | undefined
-  let eof: { reason: string } | undefined
+  let eof: EofPayload | undefined
   let count = 0
 
   for await (const message of stream) {
     count++
     if (message.type === 'eof') {
-      eof = { reason: message.eof.reason }
+      eof = { reason: message.eof.reason, record_count: message.eof.record_count }
     } else if (message.type === 'control') {
       if (message.control.control_type === 'source_config') {
         sourceConfig = message.control.source_config!

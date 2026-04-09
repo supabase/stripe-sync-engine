@@ -28,7 +28,7 @@ async function main() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof (globalThis as any).Bun !== 'undefined') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(globalThis as any).Bun.serve({ fetch: app.fetch, port })
+    ;(globalThis as any).Bun.serve({ fetch: app.fetch, port, idleTimeout: 60 })
     logger.warn(
       { port, server: 'Bun.serve' },
       `Sync Engine API listening on http://localhost:${port}`

@@ -568,7 +568,10 @@ describe('takeLimits()', () => {
       type: 'source_state',
       source_state: { data: { cursor: '1' } },
     })
-    expect(result[2]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(result[2]).toMatchObject({
+      type: 'eof',
+      eof: { reason: 'state_limit', record_count: { customers: 1 } },
+    })
   })
 
   it('emits eof with complete reason when source exhausts', async () => {
@@ -588,7 +591,10 @@ describe('takeLimits()', () => {
     ]
     const result = await drain(takeLimits<Message>({ state_limit: 5 })(toAsync(msgs)))
     expect(result).toHaveLength(3)
-    expect(result[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(result[2]).toMatchObject({
+      type: 'eof',
+      eof: { reason: 'complete', record_count: { customers: 1 } },
+    })
   })
 
   it('emits eof complete with no limits set', async () => {
@@ -648,7 +654,10 @@ describe('takeLimits()', () => {
       type: 'source_state',
       source_state: { state_type: 'stream', stream: 'products' },
     })
-    expect(result[4]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(result[4]).toMatchObject({
+      type: 'eof',
+      eof: { reason: 'state_limit', record_count: { customers: 1, products: 1 } },
+    })
   })
 
   it('stops on time limit at any message boundary', async () => {
@@ -709,6 +718,8 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits<Message>()(toAsync([])))
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    // No records means no record_count field
+    expect((result[0] as any).eof.record_count).toBeUndefined()
   })
 })
 

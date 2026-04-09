@@ -200,6 +200,10 @@ export const EofPayload = z
     reason: z
       .enum(['complete', 'state_limit', 'time_limit', 'error'])
       .describe('Why the stream ended.'),
+    record_count: z
+      .record(z.string(), z.number())
+      .optional()
+      .describe('Per-stream record counts: { stream_name: count }.'),
   })
   .describe('Terminal payload — tells the client why the stream ended.')
 export type EofPayload = z.infer<typeof EofPayload>

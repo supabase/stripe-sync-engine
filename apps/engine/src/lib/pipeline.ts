@@ -133,18 +133,25 @@ export function takeLimits<T extends { type: string }>(
   return async function* (messages) {
     const deadline = opts.time_limit ? Date.now() + opts.time_limit * 1000 : undefined
     let stateCount = 0
+    const recordCount = new Map<string, number>()
     for await (const msg of messages) {
+      if (msg.type === 'record' && 'record' in msg) {
+        const stream = (msg as any).record.stream as string
+        recordCount.set(stream, (recordCount.get(stream) ?? 0) + 1)
+      }
       yield msg
+      const record_count = recordCount.size > 0 ? Object.fromEntries(recordCount) : undefined
       if (deadline && Date.now() >= deadline) {
-        yield { type: 'eof', eof: { reason: 'time_limit' } } as unknown as T
+        yield { type: 'eof', eof: { reason: 'time_limit', record_count } } as unknown as T
         return
       }
       if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-        yield { type: 'eof', eof: { reason: 'state_limit' } } as unknown as T
+        yield { type: 'eof', eof: { reason: 'state_limit', record_count } } as unknown as T
         return
       }
     }
-    yield { type: 'eof', eof: { reason: 'complete' } } as unknown as T
+    const record_count = recordCount.size > 0 ? Object.fromEntries(recordCount) : undefined
+    yield { type: 'eof', eof: { reason: 'complete', record_count } } as unknown as T
   }
 }
 

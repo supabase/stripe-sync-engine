@@ -1,5 +1,7 @@
 import type pg from 'pg'
+import pino from 'pino'
 
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 const verbose = !!process.env.DANGEROUSLY_VERBOSE_LOGGING
 
 /**
@@ -8,7 +10,7 @@ const verbose = !!process.env.DANGEROUSLY_VERBOSE_LOGGING
  * Format: [pg] <ms>ms | rows=<n> | <sql (truncated)>
  */
 export function withQueryLogging<T extends pg.Pool>(pool: T): T {
-  if (!verbose) return pool
+  if (!verbose || !logger.isLevelEnabled('trace')) return pool
 
   const origQuery = pool.query.bind(pool) as typeof pool.query
 
@@ -27,11 +29,11 @@ export function withQueryLogging<T extends pg.Pool>(pool: T): T {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (origQuery as any)(...args)
-      console.error(`[pg] ${Date.now() - start}ms | rows=${result?.rowCount ?? 0} | ${label}`)
+      logger.trace(`[pg] ${Date.now() - start}ms | rows=${result?.rowCount ?? 0} | ${label}`)
       return result
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[pg] ${Date.now() - start}ms | ERROR ${msg} | ${label}`)
+      logger.trace(`[pg] ${Date.now() - start}ms | ERROR ${msg} | ${label}`)
       throw err
     }
   }

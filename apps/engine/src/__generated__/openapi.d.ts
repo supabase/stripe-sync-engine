@@ -502,6 +502,10 @@ export interface components {
                  * @enum {string}
                  */
                 reason: "complete" | "state_limit" | "time_limit" | "error";
+                /** @description Per-stream record counts: { stream_name: count }. */
+                record_count?: {
+                    [key: string]: number;
+                };
             };
         };
         SourceStripeInput: {
