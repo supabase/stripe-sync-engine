@@ -6,6 +6,23 @@ import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 
+export function errorToTrace(err: unknown, stream: string): TraceMessage {
+  const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
+  const isAuth = err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)
+  return {
+    type: 'trace',
+    trace: {
+      trace_type: 'error',
+      error: {
+        failure_type: isRateLimit ? 'transient_error' : isAuth ? 'auth_error' : 'system_error',
+        message: err instanceof Error ? err.message : String(err),
+        stream,
+        ...(err instanceof Error ? { stack_trace: err.stack } : {}),
+      },
+    },
+  }
+}
+
 // Errors matching these patterns are silently skipped during backfill.
 // The stream is marked complete without yielding records.
 // NOTE: these are band-aids — the underlying issue is that the OpenAPI spec
@@ -240,6 +257,7 @@ async function* paginateSegment(opts: {
   range: { gte: number; lt: number }
   numSegments: number
   streamName: string
+  accountId: string
   supportsLimit: boolean
   supportsForwardPagination: boolean
   backfillLimit?: number
@@ -253,6 +271,7 @@ async function* paginateSegment(opts: {
     range,
     numSegments,
     streamName,
+    accountId,
     supportsLimit,
     supportsForwardPagination,
     backfillLimit,
@@ -279,7 +298,10 @@ async function* paginateSegment(opts: {
     const response = await listFn(params as Parameters<typeof listFn>[0])
 
     for (const item of response.data) {
-      yield toRecordMessage(streamName, item as Record<string, unknown>)
+      yield toRecordMessage(streamName, {
+        ...(item as Record<string, unknown>),
+        _account_id: accountId,
+      })
       totalEmitted.count++
     }
 
@@ -315,12 +337,13 @@ async function* paginateSegment(opts: {
 async function* sequentialBackfillStream(opts: {
   resourceConfig: ResourceConfig
   streamName: string
+  accountId: string
   pageCursor: string | null
   backfillLimit?: number
   rateLimiter: RateLimiter
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
-  const { resourceConfig, streamName, backfillLimit, rateLimiter, drainQueue } = opts
+  const { resourceConfig, streamName, accountId, backfillLimit, rateLimiter, drainQueue } = opts
   let pageCursor = opts.pageCursor
   let hasMore = true
   let totalEmitted = 0
@@ -347,7 +370,10 @@ async function* sequentialBackfillStream(opts: {
     )
 
     for (const item of response.data) {
-      yield toRecordMessage(streamName, item as Record<string, unknown>)
+      yield toRecordMessage(streamName, {
+        ...(item as Record<string, unknown>),
+        _account_id: accountId,
+      })
       totalEmitted++
     }
 
@@ -389,6 +415,7 @@ export async function* listApiBackfill(opts: {
     | undefined
   registry: Record<string, ResourceConfig>
   client: StripeClient
+  accountId: string
   rateLimiter: RateLimiter
   backfillLimit?: number
   backfillConcurrency?: number
@@ -399,6 +426,7 @@ export async function* listApiBackfill(opts: {
     state,
     registry,
     client,
+    accountId,
     rateLimiter,
     backfillLimit,
     backfillConcurrency = DEFAULT_BACKFILL_CONCURRENCY,
@@ -479,6 +507,7 @@ export async function* listApiBackfill(opts: {
               range,
               numSegments,
               streamName: stream.name,
+              accountId,
               supportsLimit: resourceConfig.supportsLimit !== false,
               supportsForwardPagination: resourceConfig.supportsForwardPagination !== false,
               backfillLimit: streamBackfillLimit,
@@ -495,6 +524,7 @@ export async function* listApiBackfill(opts: {
         yield* sequentialBackfillStream({
           resourceConfig,
           streamName: stream.name,
+          accountId,
           pageCursor,
           backfillLimit: streamBackfillLimit,
           rateLimiter,
@@ -525,25 +555,7 @@ export async function* listApiBackfill(opts: {
         stream: stream.name,
         error: err instanceof Error ? err.message : String(err),
       })
-      const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
-      const isAuthError =
-        err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)
-      yield {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: {
-            failure_type: isRateLimit
-              ? 'transient_error'
-              : isAuthError
-                ? 'auth_error'
-                : 'system_error',
-            message: String(err),
-            stream: stream.name,
-            ...(err instanceof Error ? { stack_trace: err.stack } : {}),
-          },
-        },
-      } satisfies TraceMessage
+      yield errorToTrace(err, stream.name)
     }
   }
 }

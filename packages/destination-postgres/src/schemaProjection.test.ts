@@ -121,6 +121,25 @@ describe('buildCreateTableWithSchema', () => {
     expect(stmts[0]).toContain("WHEN jsonb_typeof(_raw_data->'customer') = 'object'")
   })
 
+  it('generates composite primary key with _account_id when primary_key option is set', () => {
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', SAMPLE_JSON_SCHEMA, {
+      primary_key: [['id'], ['_account_id']],
+    })
+
+    // Both PK columns present as generated columns
+    expect(stmts[0]).toContain(`"id" text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED`)
+    expect(stmts[0]).toContain(
+      `"_account_id" text GENERATED ALWAYS AS ((_raw_data->>'_account_id')::text) STORED`
+    )
+
+    // Composite PRIMARY KEY
+    expect(stmts[0]).toContain('PRIMARY KEY ("id", "_account_id")')
+
+    // _account_id should NOT appear as a regular generated column from json_schema
+    const alterStmts = stmts.filter((s) => s.includes('ADD COLUMN IF NOT EXISTS'))
+    expect(alterStmts.every((s) => !s.includes('"_account_id"'))).toBe(true)
+  })
+
   it('produces stable output across repeated calls', () => {
     const first = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     const second = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)

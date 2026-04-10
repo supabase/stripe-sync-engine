@@ -18,14 +18,15 @@ export async function* processWebhookInput(
   config: Config,
   catalog: ConfiguredCatalog,
   registry: Record<string, ResourceConfig>,
-  streamNames: Set<string>
+  streamNames: Set<string>,
+  accountId?: string
 ): AsyncGenerator<Message> {
   if (!config.webhook_secret) {
     throw new Error('webhook_secret is required for raw webhook signature verification')
   }
   const signature = (input.headers['stripe-signature'] as string) ?? ''
   const event = verifyWebhookSignature(input.body, signature, config.webhook_secret)
-  yield* processStripeEvent(event, config, catalog, registry, streamNames)
+  yield* processStripeEvent(event, config, catalog, registry, streamNames, accountId)
 }
 
 // MARK: - LiveInput queue
@@ -62,11 +63,19 @@ export function createInputQueue() {
     config: Config,
     catalog: ConfiguredCatalog,
     registry: Record<string, ResourceConfig>,
-    streamNames: Set<string>
+    streamNames: Set<string>,
+    accountId?: string
   ): AsyncGenerator<Message> {
     while (queue.length > 0) {
       const queued = queue.shift()!
-      yield* processStripeEvent(queued.data as StripeEvent, config, catalog, registry, streamNames)
+      yield* processStripeEvent(
+        queued.data as StripeEvent,
+        config,
+        catalog,
+        registry,
+        streamNames,
+        accountId
+      )
     }
   }
 

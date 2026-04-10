@@ -45,7 +45,8 @@ function isDeleteEvent(event: StripeEvent): boolean {
  */
 export function fromStripeEvent(
   event: StripeEvent,
-  registry: Record<string, ResourceConfig>
+  registry: Record<string, ResourceConfig>,
+  accountId?: string
 ): { record: RecordMessage; state: SourceStateMessage } | null {
   const dataObject = event.data?.object as unknown as
     | { id?: string; object?: string; deleted?: boolean; [key: string]: unknown }
@@ -59,7 +60,10 @@ export function fromStripeEvent(
   // Skip objects without an id (preview/draft objects like invoice.upcoming)
   if (!dataObject.id) return null
 
-  const record = toRecordMessage(config.tableName, dataObject as Record<string, unknown>)
+  const data = accountId
+    ? { ...(dataObject as Record<string, unknown>), _account_id: accountId }
+    : (dataObject as Record<string, unknown>)
+  const record = toRecordMessage(config.tableName, data)
   const state: SourceStateMessage = stateMsg({
     stream: config.tableName,
     data: {
@@ -86,7 +90,8 @@ export async function* processStripeEvent(
   config: Config,
   catalog: ConfiguredCatalog,
   registry: Record<string, ResourceConfig>,
-  streamNames: Set<string>
+  streamNames: Set<string>,
+  accountId?: string
 ): AsyncGenerator<Message> {
   // 1. Extract object
   const dataObject = event.data?.object as unknown as
@@ -118,6 +123,7 @@ export async function* processStripeEvent(
         customer: summary.customer,
         livemode: e.livemode,
         lookup_key: e.lookup_key,
+        ...(accountId ? { _account_id: accountId } : {}),
       })
     }
     yield stateMsg({
@@ -136,7 +142,11 @@ export async function* processStripeEvent(
 
   // 4. Delete events — yield record with deleted: true
   if (isDeleteEvent(event)) {
-    yield toRecordMessage(resourceConfig.tableName, { ...dataObject, deleted: true })
+    yield toRecordMessage(resourceConfig.tableName, {
+      ...dataObject,
+      deleted: true,
+      ...(accountId ? { _account_id: accountId } : {}),
+    })
     yield stateMsg({
       stream: resourceConfig.tableName,
       data: { eventId: event.id, eventCreated: event.created },
@@ -155,12 +165,16 @@ export async function* processStripeEvent(
   }
 
   // 6. Yield main record
-  yield toRecordMessage(resourceConfig.tableName, data)
+  const recordData = accountId ? { ...data, _account_id: accountId } : data
+  yield toRecordMessage(resourceConfig.tableName, recordData)
 
   // 7. Yield subscription items if applicable
   if (objectType === 'subscriptions' && (data as { items?: { data?: unknown[] } }).items?.data) {
     for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
-      yield toRecordMessage('subscription_items', item)
+      yield toRecordMessage(
+        'subscription_items',
+        accountId ? { ...item, _account_id: accountId } : item
+      )
     }
   }
 

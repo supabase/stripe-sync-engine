@@ -668,6 +668,37 @@ describe('test-server sync via Docker engine', () => {
     expect((state.streams.customers as StripeStreamState).status).toBe('complete')
   }, 600_000)
 
+  it('multiple keys: concurrent syncs with different API keys do not interfere', async () => {
+    const COUNT = 5000
+    const KEYS = ['sk_test_key_alpha', 'sk_test_key_bravo', 'sk_test_key_charlie']
+
+    await seedCustomers(generateCustomers(COUNT, 'cus_mk_'))
+
+    const syncs = KEYS.map(async (apiKey) => {
+      const destSchema = uniqueSchema(`multikey_${apiKey.slice(-5)}`)
+      const { state } = await runSync({
+        destSchema,
+        sourceOverrides: { api_key: apiKey, backfill_concurrency: 3 },
+      })
+      return { apiKey, destSchema, state }
+    })
+
+    const results = await Promise.all(syncs)
+
+    for (const { apiKey, destSchema, state } of results) {
+      const ids = await listIds(destSchema, 'customers')
+      expect(ids.length, `key ${apiKey}: expected ${COUNT} rows`).toBe(COUNT)
+
+      const destIds = new Set(ids)
+      for (let i = 0; i < COUNT; i++) {
+        const expected = `cus_mk_${String(i).padStart(5, '0')}`
+        expect(destIds.has(expected), `key ${apiKey}: missing ${expected}`).toBe(true)
+      }
+
+      expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    }
+  }, 180_000)
+
   it('v2 stream: syncs v2_core_event_destinations via cursor pagination', async () => {
     const destSchema = uniqueSchema('v2sync')
     const STREAM = 'v2_core_event_destinations'

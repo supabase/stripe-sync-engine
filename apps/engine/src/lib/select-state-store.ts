@@ -6,9 +6,9 @@ import type { PipelineConfig } from '@stripe/sync-protocol'
  * Tries to resolve a destination-colocated state store.
  *
  * Imports `@stripe/sync-state-${destination.type}` and calls its
- * `createStateStore(destConfig)`. Not all destinations support this —
- * Postgres does (state table alongside synced data), Google Sheets doesn't.
- * Falls back to a read-only no-op store when unavailable.
+ * `createStateStore(destConfig, pipelineId)`. Not all destinations support this
+ * convention; Postgres does (state table alongside synced data), Google Sheets
+ * doesn't. Falls back to a read-only store when unavailable.
  *
  * If the package exports a `setupStateStore(destConfig)` function,
  * it is called first to ensure the state table exists (runs migrations).
@@ -20,24 +20,27 @@ import type { PipelineConfig } from '@stripe/sync-protocol'
  *   e.g. the HTTP API (state flows in via X-State header, out via NDJSON stream)
  *   or Temporal workflows (workflow memory is the source of truth).
  *   Writing state to the destination DB in those cases creates unexpected tables.
+ *
+ * @param pipelineId Identifies the sync slot. Defaults to `'default'` downstream.
+ *   Pass a unique value per pipeline (e.g. the Stripe account ID) to isolate cursor state.
  */
-export async function maybeDestinationStateStore(
-  params: PipelineConfig
+export async function selectStateStore(
+  params: PipelineConfig,
+  pipelineId?: string
 ): Promise<StateStore & { close?(): Promise<void> }> {
   try {
     const { type: destType, ...destConfig } = params.destination
     const pkg = await import(`@stripe/sync-state-${destType}`)
     if (typeof pkg.createStateStore === 'function') {
-      // Run migrations if the package provides a setup function
       if (typeof pkg.setupStateStore === 'function') {
         await pkg.setupStateStore(destConfig)
       }
-      return pkg.createStateStore(destConfig) as StateStore & {
-        close?(): Promise<void>
-      }
+      return pkg.createStateStore(destConfig, pipelineId)
     }
   } catch {
     // Package not installed — fall through to readonly
   }
   return readonlyStateStore()
 }
+
+export const maybeDestinationStateStore = selectStateStore

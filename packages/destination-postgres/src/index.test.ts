@@ -240,6 +240,94 @@ describe('destination default export', () => {
   })
 })
 
+describe('multi-org sync (two account IDs)', () => {
+  const multiOrgCatalog: ConfiguredCatalog = {
+    streams: [
+      {
+        stream: {
+          name: 'customers',
+          primary_key: [['id'], ['_account_id']],
+          metadata: {},
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'overwrite',
+      },
+    ],
+  }
+
+  beforeEach(async () => {
+    await drain(destination.setup!({ config: makeConfig(), catalog: multiOrgCatalog }))
+  })
+
+  it('creates table with composite primary key (id, _account_id)', async () => {
+    const { rows } = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = 'customers'
+       ORDER BY ordinal_position`,
+      [SCHEMA]
+    )
+    const columnNames = rows.map((r) => r.column_name)
+    expect(columnNames).toContain('id')
+    expect(columnNames).toContain('_account_id')
+
+    const { rows: pkRows } = await pool.query(
+      `SELECT a.attname
+       FROM pg_index i
+       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+       WHERE i.indrelid = $1::regclass AND i.indisprimary
+       ORDER BY array_position(i.indkey, a.attnum)`,
+      [`"${SCHEMA}"."customers"`]
+    )
+    expect(pkRows.map((r) => r.attname)).toEqual(['id', '_account_id'])
+  })
+
+  it('stores rows from two accounts with the same object id as separate rows', async () => {
+    const messages = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice (Acct A)', _account_id: 'acct_AAA' }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice (Acct B)', _account_id: 'acct_BBB' }),
+    ])
+
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: multiOrgCatalog }, messages)
+    )
+
+    const { rows } = await pool.query(
+      `SELECT id, _account_id, _raw_data->>'name' AS name
+       FROM "${SCHEMA}".customers ORDER BY _account_id`
+    )
+    expect(rows).toEqual([
+      { id: 'cus_1', _account_id: 'acct_AAA', name: 'Alice (Acct A)' },
+      { id: 'cus_1', _account_id: 'acct_BBB', name: 'Alice (Acct B)' },
+    ])
+  })
+
+  it('upserts per-account: same id + same account updates, different account inserts', async () => {
+    const batch1 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1', _account_id: 'acct_AAA' }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1', _account_id: 'acct_BBB' }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: multiOrgCatalog }, batch1)
+    )
+
+    const batch2 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', _account_id: 'acct_AAA' }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: multiOrgCatalog }, batch2)
+    )
+
+    const { rows } = await pool.query(
+      `SELECT _account_id, _raw_data->>'name' AS name
+       FROM "${SCHEMA}".customers ORDER BY _account_id`
+    )
+    expect(rows).toEqual([
+      { _account_id: 'acct_AAA', name: 'Alice v2' },
+      { _account_id: 'acct_BBB', name: 'Alice v1' },
+    ])
+  })
+})
+
 describe('upsertMany standalone', () => {
   beforeEach(async () => {
     await drain(destination.setup!({ config: makeConfig(), catalog }))

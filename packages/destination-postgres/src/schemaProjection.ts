@@ -98,6 +98,8 @@ export type SystemColumn = {
 export type BuildTableOptions = {
   /** Extra system columns to add to the table (e.g. _account_id). */
   system_columns?: SystemColumn[]
+  /** Primary key paths from the stream (e.g. [['id'], ['_account_id']]). Defaults to [['id']]. */
+  primary_key?: string[][]
 }
 
 /**
@@ -114,7 +116,10 @@ export function buildCreateTableWithSchema(
   const quotedSchema = quoteIdent(schema)
   const quotedTable = quoteIdent(tableName)
 
-  const columns = jsonSchemaToColumns(jsonSchema)
+  const pkFields = (options.primary_key ?? [['id']]).map((pk) => pk[0])
+  const pkSet = new Set(pkFields)
+
+  const columns = jsonSchemaToColumns(jsonSchema).filter((c) => !pkSet.has(c.name))
 
   const generatedColumnDefs = columns.map(
     (col) => `${quoteIdent(col.name)} ${col.pgType} GENERATED ALWAYS AS (${col.expression}) STORED`
@@ -124,14 +129,19 @@ export function buildCreateTableWithSchema(
     (col) => `${quoteIdent(col.name)} ${col.type}`
   )
 
+  const pkColumnDefs = pkFields.map((field) => {
+    const escapedField = field.replace(/'/g, "''")
+    return `${quoteIdent(field)} text GENERATED ALWAYS AS ((_raw_data->>'${escapedField}')::text) STORED`
+  })
+
   const columnDefs = [
     '"_raw_data" jsonb NOT NULL',
     '"_last_synced_at" timestamptz',
     '"_updated_at" timestamptz NOT NULL DEFAULT now()',
     ...systemColumnDefs,
-    `"id" text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED`,
+    ...pkColumnDefs,
     ...generatedColumnDefs,
-    'PRIMARY KEY ("id")',
+    `PRIMARY KEY (${pkFields.map((f) => quoteIdent(f)).join(', ')})`,
   ]
 
   const stmts: string[] = [
@@ -305,6 +315,8 @@ export type ApplySchemaFromCatalogConfig = {
   syncSchema?: string
   /** Extra system columns to add to each table. */
   system_columns?: SystemColumn[]
+  /** Primary key paths (e.g. [['id'], ['_account_id']]). Defaults to [['id']]. */
+  primary_key?: string[][]
   apiVersion?: string
   /** Progress callback — emitting logs signals liveness to the orchestrator. */
   onLog?: (message: string) => void
@@ -371,6 +383,7 @@ export async function applySchemaFromCatalog(
       await client.query(
         buildCreateTableDDL(dataSchema, stream.name, stream.json_schema!, {
           system_columns: config.system_columns,
+          primary_key: config.primary_key,
         })
       )
       config.onLog?.(

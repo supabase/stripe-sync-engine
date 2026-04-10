@@ -68,7 +68,8 @@ export async function upsertMany(
   schema: string,
   table: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entries: Record<string, any>[]
+  entries: Record<string, any>[],
+  keyColumns: string[] = ['id']
 ): Promise<void> {
   if (!entries.length) return
   await upsert(
@@ -77,7 +78,7 @@ export async function upsertMany(
     {
       schema,
       table,
-      keyColumns: ['id'],
+      keyColumns,
     }
   )
 }
@@ -160,23 +161,12 @@ const destination = {
       `)
       await Promise.all(
         catalog.streams.map(async (cs) => {
-          if (cs.stream.json_schema) {
-            await pool.query(
-              buildCreateTableDDL(config.schema, cs.stream.name, cs.stream.json_schema, {
-                system_columns: cs.system_columns,
-              })
-            )
-          } else {
-            await pool.query(sql`
-              CREATE TABLE IF NOT EXISTS "${config.schema}"."${cs.stream.name}" (
-                "_raw_data" jsonb NOT NULL,
-                "_last_synced_at" timestamptz,
-                "_updated_at" timestamptz NOT NULL DEFAULT now(),
-                "id" text GENERATED ALWAYS AS (("_raw_data"->>'id')::text) STORED,
-                PRIMARY KEY ("id")
-              )
-            `)
-          }
+          await pool.query(
+            buildCreateTableDDL(config.schema, cs.stream.name, cs.stream.json_schema ?? {}, {
+              system_columns: cs.system_columns,
+              primary_key: cs.stream.primary_key,
+            })
+          )
         })
       )
     } finally {
@@ -199,16 +189,28 @@ const destination = {
     }
   },
 
-  async *write({ config, catalog: _catalog }, $stdin) {
+  async *write({ config, catalog }, $stdin) {
     const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
+    const streamKeyColumns = new Map(
+      catalog.streams.map((cs) => [
+        cs.stream.name,
+        cs.stream.primary_key?.map((pk) => pk[0]) ?? ['id'],
+      ])
+    )
 
     const flushStream = async (streamName: string) => {
       const buffer = streamBuffers.get(streamName)
       if (!buffer || buffer.length === 0) return
-      await upsertMany(pool, config.schema, streamName, buffer)
+      await upsertMany(
+        pool,
+        config.schema,
+        streamName,
+        buffer,
+        streamKeyColumns.get(streamName) ?? ['id']
+      )
       streamBuffers.set(streamName, [])
     }
 

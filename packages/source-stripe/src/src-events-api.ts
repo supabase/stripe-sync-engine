@@ -18,8 +18,9 @@ export async function* pollEvents(opts: {
   streamNames: Set<string>
   state: Record<string, StripeStreamState> | undefined
   startTimestamp: number
+  accountId: string
 }): AsyncGenerator<Message> {
-  const { config, client, catalog, registry, streamNames, state, startTimestamp } = opts
+  const { config, client, catalog, registry, streamNames, state, startTimestamp, accountId } = opts
 
   if (!config.poll_events) return
 
@@ -86,7 +87,14 @@ export async function* pollEvents(opts: {
   events.reverse()
 
   for (const event of events) {
-    for await (const msg of processStripeEvent(event, config, catalog, registry, streamNames)) {
+    for await (const msg of processStripeEvent(
+      event,
+      config,
+      catalog,
+      registry,
+      streamNames,
+      accountId
+    )) {
       if (msg.type === 'source_state' && msg.source_state.state_type !== 'global') {
         // Intercept state messages to preserve complete status + update events_cursor
         const existing = state?.[msg.source_state.stream]
