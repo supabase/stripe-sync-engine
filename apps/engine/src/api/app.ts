@@ -352,6 +352,14 @@ export async function createApp(resolver: ConnectorResolver) {
     )
   })
 
+  const onlyQueryParam = z.object({
+    only: z.enum(['source', 'destination']).optional().meta({
+      description:
+        'Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.',
+      example: 'destination',
+    }),
+  })
+
   const pipelineSetupRoute = createRoute({
     operationId: 'pipeline_setup',
     method: 'post',
@@ -359,8 +367,9 @@ export async function createApp(resolver: ConnectorResolver) {
     tags: ['Stateless Sync API'],
     summary: 'Set up destination schema',
     description:
-      'Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by.',
-    requestParams: { header: pipelineHeaders },
+      'Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. ' +
+      'Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.',
+    requestParams: { header: pipelineHeaders, query: onlyQueryParam },
     responses: {
       200: {
         description: 'NDJSON stream of setup messages',
@@ -371,9 +380,14 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineSetupRoute, (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
+    const only = c.req.valid('query').only
     const context = { path: '/pipeline_setup', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /pipeline_setup', engine.pipeline_setup(pipeline), context)
+      logApiStream(
+        'Engine API /pipeline_setup',
+        engine.pipeline_setup(pipeline, only ? { only } : undefined),
+        context
+      )
     )
   })
 
@@ -384,8 +398,9 @@ export async function createApp(resolver: ConnectorResolver) {
     tags: ['Stateless Sync API'],
     summary: 'Tear down destination schema',
     description:
-      'Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by.',
-    requestParams: { header: pipelineHeaders },
+      'Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. ' +
+      'Pass ?only=destination or ?only=source to run a single side.',
+    requestParams: { header: pipelineHeaders, query: onlyQueryParam },
     responses: {
       200: {
         description: 'NDJSON stream of teardown messages',
@@ -396,9 +411,14 @@ export async function createApp(resolver: ConnectorResolver) {
   })
   app.openapi(pipelineTeardownRoute, (c) => {
     const pipeline = c.req.valid('header')['x-pipeline']
+    const only = c.req.valid('query').only
     const context = { path: '/pipeline_teardown', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /pipeline_teardown', engine.pipeline_teardown(pipeline), context)
+      logApiStream(
+        'Engine API /pipeline_teardown',
+        engine.pipeline_teardown(pipeline, only ? { only } : undefined),
+        context
+      )
     )
   })
 

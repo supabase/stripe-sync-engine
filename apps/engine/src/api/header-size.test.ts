@@ -72,10 +72,7 @@ function makePipelineHeader(sizeBytes: number): string {
   return JSON.stringify(base)
 }
 
-async function probeHeaderSize(
-  baseUrl: string,
-  bytes: number
-): Promise<number | string> {
+async function probeHeaderSize(baseUrl: string, bytes: number): Promise<number | string> {
   const header = makePipelineHeader(bytes)
   try {
     const res = await fetch(`${baseUrl}/pipeline_check`, {

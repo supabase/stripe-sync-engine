@@ -46,6 +46,11 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
         type: 'string',
         description: 'Stop after N seconds',
       },
+      live: {
+        type: 'boolean',
+        default: false,
+        description: 'Keep running after backfill and stream live events via WebSocket',
+      },
     },
     async run({ args }) {
       const stripeApiKey = args.stripeApiKey || process.env.STRIPE_API_KEY
@@ -77,9 +82,13 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
       const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
       const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
 
-      // Inject backfill_limit into source config if provided
+      // Inject optional source config overrides
+      const stripeConfig = pipeline.source.stripe as Record<string, unknown>
       if (backfillLimit) {
-        ;(pipeline.source.stripe as Record<string, unknown>).backfill_limit = backfillLimit
+        stripeConfig.backfill_limit = backfillLimit
+      }
+      if (args.live) {
+        stripeConfig.websocket = true
       }
 
       // Create tables before syncing (must drain — await alone no-ops on AsyncIterable)

@@ -94,15 +94,53 @@ export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
 
 This syncs `products`, `prices`, and `customers` into Postgres with full schema management.
 
+## Step 5: Live mode (WebSocket streaming)
+
+The engine can keep running after the initial backfill and stream live events
+via Stripe's WebSocket API (the same mechanism behind `stripe listen`). Any
+object you create, update, or delete in the Stripe Dashboard (or via the API)
+is written to Postgres within seconds.
+
+```sh
+export STRIPE_API_KEY=sk_test_...
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+
+./demo/stripe-to-postgres-live.sh
+```
+
+The script backfills the latest 10 objects per stream, then blocks and waits
+for live events. Open a second terminal to trigger some:
+
+```sh
+# Using the Stripe CLI (https://docs.stripe.com/stripe-cli)
+stripe trigger customer.created
+stripe trigger product.created
+stripe trigger price.created
+```
+
+You'll see the new records appear in Postgres immediately.
+Press **Ctrl+C** to stop.
+
+### How it works
+
+Setting `websocket: true` in the source config tells the Stripe source to open
+a WebSocket session to Stripe (via the same `/v1/stripecli/sessions` API the
+Stripe CLI uses). During backfill, incoming events are queued; once backfill
+completes the engine drains the queue and then blocks on new events indefinitely.
+
+No webhook endpoint, tunnel, or public URL is needed — everything runs over an
+outbound WebSocket connection.
+
 ## All demos
 
-| Script | What it does | Required env vars |
-|--------|-------------|-------------------|
-| `read-from-stripe.sh` | Read from Stripe, output NDJSON to stdout | `STRIPE_API_KEY` |
-| `write-to-postgres.sh` | Write NDJSON (stdin or sample data) to Postgres | `DATABASE_URL` |
-| `write-to-sheets.sh` | Write NDJSON (stdin or sample data) to Google Sheets | `GOOGLE_*` |
-| `stripe-to-postgres.sh` | Stripe → Postgres via the engine | `STRIPE_API_KEY`, `DATABASE_URL` |
-| `stripe-to-google-sheets.sh` | Stripe → Google Sheets via the engine | `STRIPE_API_KEY`, `GOOGLE_*` |
+| Script                       | What it does                                         | Required env vars                |
+| ---------------------------- | ---------------------------------------------------- | -------------------------------- |
+| `read-from-stripe.sh`        | Read from Stripe, output NDJSON to stdout            | `STRIPE_API_KEY`                 |
+| `write-to-postgres.sh`       | Write NDJSON (stdin or sample data) to Postgres      | `DATABASE_URL`                   |
+| `write-to-sheets.sh`         | Write NDJSON (stdin or sample data) to Google Sheets | `GOOGLE_*`                       |
+| `stripe-to-postgres.sh`      | Stripe → Postgres via the engine                     | `STRIPE_API_KEY`, `DATABASE_URL` |
+| `stripe-to-google-sheets.sh` | Stripe → Google Sheets via the engine                | `STRIPE_API_KEY`, `GOOGLE_*`     |
+| `stripe-to-postgres-live.sh` | Stripe → Postgres with live WebSocket streaming      | `STRIPE_API_KEY`, `DATABASE_URL` |
 
 ### TypeScript API
 
@@ -111,11 +149,12 @@ The `.ts` files do the same thing using the engine as a library / during develop
 ```sh
 node --import tsx demo/stripe-to-postgres.ts
 node --import tsx demo/stripe-to-google-sheets.ts
+node --import tsx demo/stripe-to-postgres-live.ts   # live WebSocket mode
 ```
 
 ## Utilities
 
-| Script | What it does |
-|--------|-------------|
-| `reset-postgres.sh` | Drop all tables and non-system schemas |
-| `webhooksite.sh` | Set up webhook forwarding for live Stripe events |
+| Script              | What it does                                     |
+| ------------------- | ------------------------------------------------ |
+| `reset-postgres.sh` | Drop all tables and non-system schemas           |
+| `webhooksite.sh`    | Set up webhook forwarding for live Stripe events |

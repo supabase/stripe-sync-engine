@@ -52,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Set up destination schema
-         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by.
+         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.
          */
         post: operations["pipeline_setup"];
         delete?: never;
@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Tear down destination schema
-         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by.
+         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.
          */
         post: operations["pipeline_teardown"];
         delete?: never;
@@ -755,7 +755,10 @@ export interface operations {
     };
     pipeline_setup: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
+                only?: "source" | "destination";
+            };
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
@@ -789,7 +792,10 @@ export interface operations {
     };
     pipeline_teardown: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
+                only?: "source" | "destination";
+            };
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;

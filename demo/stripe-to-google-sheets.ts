@@ -37,7 +37,8 @@ const resolver = await createConnectorResolver(defaultConnectors, { path: true }
 const engine = await createEngine(resolver)
 
 // Setup (creates spreadsheet/sheets if needed)
-for await (const _msg of engine.pipeline_setup(pipeline)) {}
+for await (const _msg of engine.pipeline_setup(pipeline)) {
+}
 
 // State: file-backed, resumable across runs
 const store = fileStateStore('.sync-state-sheets.json')

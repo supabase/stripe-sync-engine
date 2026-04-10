@@ -73,17 +73,28 @@ export interface Engine {
   pipeline_check(pipeline: PipelineConfig): AsyncIterable<CheckOutput>
 
   /**
-   * Run connector `setup()` hooks for both source and destination.
+   * Run connector `setup()` hooks for source and/or destination.
    * Yields {@link SetupOutput} messages (control, log, trace) tagged with `_emitted_by`.
    * Use `collectMessages(stream, 'control')` to extract config updates.
+   *
+   * Pass `only` to run a single side — useful for optimistic destination setup
+   * (e.g. creating tables early in a UI flow) or isolating connectors when debugging.
    */
-  pipeline_setup(pipeline: PipelineConfig): AsyncIterable<SetupOutput>
+  pipeline_setup(
+    pipeline: PipelineConfig,
+    opts?: { only?: 'source' | 'destination' }
+  ): AsyncIterable<SetupOutput>
 
   /**
-   * Run connector `teardown()` hooks for both source and destination.
+   * Run connector `teardown()` hooks for source and/or destination.
    * Yields {@link TeardownOutput} messages (log, trace) tagged with `_emitted_by`.
+   *
+   * Pass `only` to run a single side — useful for isolating connectors when debugging.
    */
-  pipeline_teardown(pipeline: PipelineConfig): AsyncIterable<TeardownOutput>
+  pipeline_teardown(
+    pipeline: PipelineConfig,
+    opts?: { only?: 'source' | 'destination' }
+  ): AsyncIterable<TeardownOutput>
 
   /**
    * Discover the streams available from a source.
@@ -316,17 +327,18 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       )
     },
 
-    async *pipeline_setup(pipeline) {
+    async *pipeline_setup(pipeline, opts?) {
       const baseContext = engineLogContext(pipeline)
+      const runSource = opts?.only !== 'destination'
+      const runDest = opts?.only !== 'source'
+
       const [srcConnector, destConnector] = await Promise.all([
-        resolver.resolveSource(pipeline.source.type),
-        resolver.resolveDestination(pipeline.destination.type),
+        runSource ? resolver.resolveSource(pipeline.source.type) : null,
+        runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      const rawSrc = configPayload(pipeline.source)
-      const rawDest = configPayload(pipeline.destination)
       const [sourceConfig, destConfig] = await Promise.all([
-        getSpecConfig(srcConnector, rawSrc),
-        getSpecConfig(destConnector, rawDest),
+        srcConnector ? getSpecConfig(srcConnector, configPayload(pipeline.source)) : null,
+        destConnector ? getSpecConfig(destConnector, configPayload(pipeline.destination)) : null,
       ])
 
       const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
@@ -335,49 +347,57 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const destTag = `destination/${pipeline.destination.type}`
 
       yield* merge(
-        srcConnector.setup &&
+        runSource &&
+          srcConnector?.setup &&
           withLoggedStream(
             'Engine source setup',
             baseContext,
-            map(srcConnector.setup({ config: sourceConfig, catalog }), tag(sourceTag))
+            map(srcConnector.setup({ config: sourceConfig!, catalog }), tag(sourceTag))
           ),
-        destConnector.setup &&
+        runDest &&
+          destConnector?.setup &&
           withLoggedStream(
             'Engine destination setup',
             baseContext,
-            map(destConnector.setup({ config: destConfig, catalog: filteredCatalog }), tag(destTag))
+            map(
+              destConnector.setup({ config: destConfig!, catalog: filteredCatalog }),
+              tag(destTag)
+            )
           )
       )
     },
 
-    async *pipeline_teardown(pipeline) {
+    async *pipeline_teardown(pipeline, opts?) {
       const baseContext = engineLogContext(pipeline)
+      const runSource = opts?.only !== 'destination'
+      const runDest = opts?.only !== 'source'
+
       const [srcConnector, destConnector] = await Promise.all([
-        resolver.resolveSource(pipeline.source.type),
-        resolver.resolveDestination(pipeline.destination.type),
+        runSource ? resolver.resolveSource(pipeline.source.type) : null,
+        runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      const rawSrc = configPayload(pipeline.source)
-      const rawDest = configPayload(pipeline.destination)
       const [sourceConfig, destConfig] = await Promise.all([
-        getSpecConfig(srcConnector, rawSrc),
-        getSpecConfig(destConnector, rawDest),
+        srcConnector ? getSpecConfig(srcConnector, configPayload(pipeline.source)) : null,
+        destConnector ? getSpecConfig(destConnector, configPayload(pipeline.destination)) : null,
       ])
 
       const sourceTag = `source/${pipeline.source.type}`
       const destTag = `destination/${pipeline.destination.type}`
 
       yield* merge(
-        srcConnector.teardown &&
+        runSource &&
+          srcConnector?.teardown &&
           withLoggedStream(
             'Engine source teardown',
             baseContext,
-            map(srcConnector.teardown({ config: sourceConfig }), tag(sourceTag))
+            map(srcConnector.teardown({ config: sourceConfig! }), tag(sourceTag))
           ),
-        destConnector.teardown &&
+        runDest &&
+          destConnector?.teardown &&
           withLoggedStream(
             'Engine destination teardown',
             baseContext,
-            map(destConnector.teardown({ config: destConfig }), tag(destTag))
+            map(destConnector.teardown({ config: destConfig! }), tag(destTag))
           )
       )
     },

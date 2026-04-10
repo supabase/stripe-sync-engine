@@ -27,11 +27,11 @@ Bun's `Bun.serve()` does not use Node's HTTP parser and has a much higher defaul
 
 Each `{ "obj_id": row_number }` entry is ~30 bytes. With Google Sheets' 10M cell limit:
 
-| Columns/row | Max rows | Mapping size (JSON object) |
-|---|---|---|
-| 10 | 1,000,000 | ~30 MB |
-| 20 | 500,000 | ~15 MB |
-| 50 | 200,000 | ~6 MB |
+| Columns/row | Max rows  | Mapping size (JSON object) |
+| ----------- | --------- | -------------------------- |
+| 10          | 1,000,000 | ~30 MB                     |
+| 20          | 500,000   | ~15 MB                     |
+| 50          | 200,000   | ~6 MB                      |
 
 More efficient encodings (sorted array, prefix compression) reduce this by ~30-50% but
 don't change the order of magnitude.
@@ -42,11 +42,11 @@ Instead of storing the row map in state, read the ID column from the sheet at th
 each write batch and build the map in memory:
 
 | Sheet rows | API call time | Response size |
-|---|---|---|
-| 1K | ~100ms | ~25 KB |
-| 10K | ~200ms | ~250 KB |
-| 100K | ~1-2s | ~2.5 MB |
-| 1M | ~5-15s | ~25 MB |
+| ---------- | ------------- | ------------- |
+| 1K         | ~100ms        | ~25 KB        |
+| 10K        | ~200ms        | ~250 KB       |
+| 100K       | ~1-2s         | ~2.5 MB       |
+| 1M         | ~5-15s        | ~25 MB        |
 
 This eliminates the mapping from state entirely. Tradeoff: one extra Sheets API read per
 batch. At large row counts the batch write itself takes longer than the lookup.

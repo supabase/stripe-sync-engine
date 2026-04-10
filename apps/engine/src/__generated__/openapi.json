@@ -111,8 +111,22 @@
           "Stateless Sync API"
         ],
         "summary": "Set up destination schema",
-        "description": "Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by.",
+        "description": "Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.",
         "parameters": [
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
+          },
           {
             "in": "header",
             "name": "x-pipeline",
@@ -165,8 +179,22 @@
           "Stateless Sync API"
         ],
         "summary": "Tear down destination schema",
-        "description": "Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by.",
+        "description": "Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.",
         "parameters": [
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
+          },
           {
             "in": "header",
             "name": "x-pipeline",

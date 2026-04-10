@@ -46,7 +46,10 @@ async function main() {
         serverOptions: { maxHeaderSize: 50 * 1024 * 1024 },
       },
       (info) => {
-        logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
+        logger.info(
+          { port: info.port },
+          `Sync Engine API listening on http://localhost:${info.port}`
+        )
       }
     )
   }
