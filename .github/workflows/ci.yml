@@ -734,6 +734,12 @@ jobs:
           key: stripe-openapi-${{ env.STRIPE_OPENAPI_WEEK }}
           restore-keys: stripe-openapi-
 
+      - name: Copy Sync Engine OpenAPI specs
+        run: |
+          mkdir -p docs/openapi
+          cp apps/engine/src/__generated__/openapi.json docs/openapi/engine.json
+          cp apps/service/src/__generated__/openapi.json docs/openapi/service.json
+
       - name: Build
         run: |
           PROD=${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && '--prod' || '' }}
