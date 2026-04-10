@@ -18,14 +18,14 @@
   "scripts": {
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "build": "tsup src/index.ts --format esm,cjs --dts && cp -r src/database/migrations dist/migrations",
+    "build": "tsup src/index.ts --format esm,cjs --dts --shims && cp -r src/database/migrations dist/migrations",
     "lint": "eslint src --ext .ts"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
-    "pg": "^8.18.0",
+    "pg": "^8.20.0",
     "pg-node-migrations": "0.0.8",
     "yesql": "^7.0.0"
   },
@@ -33,7 +33,7 @@
     "stripe": "> 18"
   },
   "devDependencies": {
-    "@types/pg": "^8.16.0",
+    "@types/pg": "^8.20.0",
     "@types/yesql": "^4.1.4"
   },
   "repository": {

@@ -1,10 +1,10 @@
 # Build step
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN corepack enable
+RUN npm install -g corepack --force && corepack enable
 
 WORKDIR /app
 COPY . ./
@@ -17,7 +17,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm run -r build
 
 ## Build step complete, copy to working image
-FROM node:24-alpine
+FROM node:25-alpine
 WORKDIR /app
 
 # Copy workspace configuration
