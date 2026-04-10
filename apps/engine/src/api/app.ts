@@ -1,3 +1,4 @@
+import os from 'node:os'
 import { OpenAPIHono, createRoute } from '@stripe/sync-hono-zod-openapi'
 import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
@@ -290,6 +291,7 @@ export async function createApp(resolver: ConnectorResolver) {
             'application/json': {
               schema: z.object({
                 ok: z.literal(true),
+                hostname: z.string(),
                 commit: z.string().optional(),
                 commit_url: z.string().optional(),
                 build_date: z.string().optional(),
@@ -304,6 +306,7 @@ export async function createApp(resolver: ConnectorResolver) {
       c.json(
         {
           ok: true as const,
+          hostname: os.hostname(),
           commit: process.env.GIT_COMMIT,
           commit_url: process.env.COMMIT_URL,
           build_date: process.env.BUILD_DATE,

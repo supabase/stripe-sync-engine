@@ -1,3 +1,4 @@
+import os from 'node:os'
 import { OpenAPIHono, createRoute } from '@stripe/sync-hono-zod-openapi'
 import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
@@ -8,15 +9,6 @@ import { createSchemas } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
 import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
-
-const DEFAULT_PIPELINE_WORKFLOW = 'pipelineWorkflow'
-const GOOGLE_SHEETS_PIPELINE_WORKFLOW = 'googleSheetPipelineWorkflow'
-
-function workflowTypeForPipeline(pipeline: Pipeline): string {
-  return pipeline.destination.type === 'google_sheets'
-    ? GOOGLE_SHEETS_PIPELINE_WORKFLOW
-    : DEFAULT_PIPELINE_WORKFLOW
-}
 
 // MARK: - Helpers
 
@@ -79,13 +71,15 @@ export function createApp(options: AppOptions) {
       responses: {
         200: {
           content: {
-            'application/json': { schema: z.object({ ok: z.literal(true) }) },
+            'application/json': {
+              schema: z.object({ ok: z.literal(true), hostname: z.string() }),
+            },
           },
           description: 'Server is healthy',
         },
       },
     }),
-    (c) => c.json({ ok: true as const }, 200)
+    (c) => c.json({ ok: true as const, hostname: os.hostname() }, 200)
   )
 
   // MARK: - Pipelines
@@ -144,7 +138,7 @@ export function createApp(options: AppOptions) {
         status: 'setup',
       } as Pipeline
       await pipelineStore.set(id, pipeline)
-      await temporal.start(workflowTypeForPipeline(pipeline), {
+      await temporal.start('pipelineWorkflow', {
         workflowId: id,
         taskQueue,
         args: [id, { desiredStatus: pipeline.desired_status }],
@@ -230,38 +224,6 @@ export function createApp(options: AppOptions) {
         if (current.desired_status === 'deleted') {
           return c.json({ error: 'Pipeline is deleted — create a new pipeline instead' }, 409)
         }
-      }
-
-      // Validate google_sheets constraints
-      const next = {
-        ...current,
-        ...(patch.source ? { source: patch.source } : {}),
-        ...(patch.destination ? { destination: patch.destination } : {}),
-        ...(patch.streams !== undefined ? { streams: patch.streams } : {}),
-      } as Pipeline
-      if (workflowTypeForPipeline(current) !== workflowTypeForPipeline(next)) {
-        return c.json(
-          {
-            error:
-              'Changing destination.type between google_sheets and non-google_sheets requires recreating the pipeline',
-          },
-          400
-        )
-      }
-      if (
-        current.destination.type === 'google_sheets' &&
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (current.destination as any)['google_sheets']?.spreadsheet_id !==
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (next.destination as any)['google_sheets']?.spreadsheet_id
-      ) {
-        return c.json(
-          {
-            error:
-              'Changing the target spreadsheet for a google_sheets pipeline requires recreating the pipeline',
-          },
-          400
-        )
       }
 
       // Build store patch

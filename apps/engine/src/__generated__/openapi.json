@@ -25,6 +25,9 @@
                       "type": "boolean",
                       "const": true
                     },
+                    "hostname": {
+                      "type": "string"
+                    },
                     "commit": {
                       "type": "string"
                     },
@@ -36,7 +39,8 @@
                     }
                   },
                   "required": [
-                    "ok"
+                    "ok",
+                    "hostname"
                   ],
                   "additionalProperties": false
                 }

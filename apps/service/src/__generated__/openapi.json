@@ -24,10 +24,14 @@
                     "ok": {
                       "type": "boolean",
                       "const": true
+                    },
+                    "hostname": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "ok"
+                    "ok",
+                    "hostname"
                   ],
                   "additionalProperties": false
                 }

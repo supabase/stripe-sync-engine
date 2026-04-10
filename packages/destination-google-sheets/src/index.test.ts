@@ -400,6 +400,184 @@ describe('check', () => {
   })
 })
 
+describe('native upsert', () => {
+  const catalogWith = (primaryKey: string[][] = [['id']]): ConfiguredCatalog => ({
+    streams: [
+      {
+        stream: {
+          name: 'customers',
+          primary_key: primaryKey,
+          json_schema: {
+            type: 'object',
+            properties: { id: { type: 'string' }, name: { type: 'string' } },
+          },
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'append',
+      },
+    ],
+  })
+
+  it('updates existing row by primary key without _row_number', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // First write: insert cus_1
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+      )
+    )
+
+    // Second write: same PK, no _row_number — should update in place
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice Updated'],
+    ])
+  })
+
+  it('appends new key alongside existing rows', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob' })])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+    ])
+  })
+
+  it('duplicate key within same write — second occurrence updates', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // batch_size: 1 forces flush after first record, then second record sees the map
+    await collect(
+      dest.write(
+        { config: cfg({ batch_size: 1 }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated' }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice Updated'],
+    ])
+  })
+
+  it('explicit _row_number takes priority over row map lookup', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // Insert two rows
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_2', name: 'Bob' }),
+        ])
+      )
+    )
+
+    // Send cus_1 with explicit _row_number=3 (Bob's row) — should override map lookup
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_1',
+            name: 'Alice Overwrite',
+            [ROW_NUMBER_FIELD]: 3,
+          }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice'],
+      ['cus_1', 'Alice Overwrite'], // overwrote row 3 (Bob's row) per explicit _row_number
+    ])
+  })
+
+  it('no primary key — append-only, no dedup', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith([]) // empty primary key
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_1', name: 'Alice Again' }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice'],
+      ['cus_1', 'Alice Again'],
+    ])
+  })
+
+  it('PK-first header ordering — id column is first', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // Record with name before id in object key order
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', { name: 'Alice', email: 'alice@test.invalid', id: 'cus_1' }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    // id should be first column despite being last in the record
+    expect(rows[0]).toEqual(['id', 'name', 'email'])
+  })
+})
+
 describe('envVars', () => {
   it('exports env var mapping', () => {
     expect(envVars.client_id).toBe('GOOGLE_CLIENT_ID')

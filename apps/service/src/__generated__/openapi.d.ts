@@ -216,6 +216,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         ok: true;
+                        hostname: string;
                     };
                 };
             };

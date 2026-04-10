@@ -26,13 +26,6 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => {},
     pipelineSync: async () => noErrors,
-    readIntoQueue: async () => ({ count: 0, state: emptyState }),
-    writeGoogleSheetsFromQueue: async () => ({
-      errors: [],
-      state: emptyState,
-      written: 0,
-      rowIndexMap: {},
-    }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
     ...overrides,
@@ -573,111 +566,6 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
       expect(syncCallCount).toBeGreaterThan(CONTINUE_AS_NEW_THRESHOLD)
       expect(setupCalls).toBe(1)
-    })
-  })
-})
-
-describe('googleSheetPipelineWorkflow (unit — stubbed activities)', () => {
-  it('uses the Sheets-specific read path and catalog discovery', async () => {
-    let discoverCalls = 0
-    let readCalls = 0
-    let syncCalls = 0
-
-    const worker = await Worker.create({
-      connection: testEnv.nativeConnection,
-      taskQueue: 'test-queue-gs-1',
-      workflowsPath,
-      activities: stubActivities({
-        discoverCatalog: async () => {
-          discoverCalls++
-          return { streams: [] }
-        },
-        readIntoQueue: async () => {
-          readCalls++
-          return { count: 0, state: emptyState }
-        },
-        pipelineSync: async () => {
-          syncCalls++
-          return noErrors
-        },
-      }),
-    })
-
-    await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
-        args: ['test_gs_pipe'],
-        workflowId: 'test-gs-sync-1',
-        taskQueue: 'test-queue-gs-1',
-      })
-
-      await new Promise((r) => setTimeout(r, 1500))
-      await signalDelete(handle)
-      await handle.result()
-
-      expect(discoverCalls).toBeGreaterThanOrEqual(1)
-      expect(readCalls).toBeGreaterThanOrEqual(1)
-      expect(syncCalls).toBe(0)
-    })
-  })
-
-  it('passes the discovered catalog into the Sheets write activity', async () => {
-    const discoveredCatalog = {
-      streams: [
-        {
-          stream: {
-            name: 'customers',
-            primary_key: [['id']],
-            json_schema: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-              },
-            },
-          },
-          sync_mode: 'full_refresh' as const,
-          destination_sync_mode: 'append' as const,
-        },
-      ],
-    }
-    let readCalls = 0
-    let writeCatalog: unknown
-
-    const worker = await Worker.create({
-      connection: testEnv.nativeConnection,
-      taskQueue: 'test-queue-gs-2',
-      workflowsPath,
-      activities: stubActivities({
-        discoverCatalog: async () => discoveredCatalog,
-        readIntoQueue: async () => {
-          readCalls++
-          return readCalls === 1
-            ? { count: 1, state: { streams: { customers: { cursor: 'cus_1' } }, global: {} } }
-            : { count: 0, state: { streams: { customers: { cursor: 'cus_1' } }, global: {} } }
-        },
-        writeGoogleSheetsFromQueue: async (_pipelineId, opts) => {
-          writeCatalog = opts?.catalog
-          return {
-            errors: [],
-            state: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
-            written: 0,
-            rowIndexMap: {},
-          }
-        },
-      }),
-    })
-
-    await worker.runUntil(async () => {
-      const handle = await testEnv.client.workflow.start('googleSheetPipelineWorkflow', {
-        args: ['test_gs_pipe_2'],
-        workflowId: 'test-gs-sync-2',
-        taskQueue: 'test-queue-gs-2',
-      })
-
-      await new Promise((r) => setTimeout(r, 1500))
-      await signalDelete(handle)
-      await handle.result()
-
-      expect(writeCatalog).toEqual(discoveredCatalog)
     })
   })
 })

@@ -16,6 +16,7 @@ import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import {
   appendRows,
+  buildRowMap,
   createIntroSheet,
   deleteSpreadsheet,
   ensureSheet,
@@ -32,6 +33,7 @@ export {
   updateRows,
   readHeaderRow,
   readSheet,
+  buildRowMap,
   createIntroSheet,
   protectSheets,
   deleteSpreadsheet,
@@ -202,6 +204,8 @@ export function createDestination(
       const appendBuffers = new Map<string, Array<{ row: string[]; rowKey?: string }>>()
       const updateBuffers = new Map<string, Array<{ rowNumber: number; values: string[] }>>()
       const rowAssignments: Record<string, Record<string, number>> = {}
+      // Row maps for native upsert: rowKey → 1-based row number per stream
+      const rowMaps = new Map<string, Map<string, number>>()
 
       const ensureHeadersForRecord = async (
         streamName: string,
@@ -222,7 +226,11 @@ export function createDestination(
           }
 
           if (headers.length === 0) {
-            headers = Object.keys(cleanData)
+            // Place primary key columns first so buildRowMap can read minimal columns
+            const pk = primaryKeys.get(streamName)
+            const pkFields = pk?.map((path) => path[0]) ?? []
+            const rest = Object.keys(cleanData).filter((k) => !pkFields.includes(k))
+            headers = [...pkFields.filter((k) => k in cleanData), ...rest]
             await ensureSheet(sheets, spreadsheetId!, streamName, headers)
           }
 
@@ -239,6 +247,25 @@ export function createDestination(
         }
 
         return headers
+      }
+
+      const ensureRowMapForStream = async (streamName: string): Promise<Map<string, number>> => {
+        let map = rowMaps.get(streamName)
+        if (!map) {
+          const primaryKey = primaryKeys.get(streamName)
+          const headers = streamHeaders.get(streamName)
+          if (primaryKey && primaryKey.length > 0 && headers) {
+            try {
+              map = await buildRowMap(sheets, spreadsheetId!, streamName, headers, primaryKey)
+            } catch {
+              map = new Map() // sheet doesn't exist yet or is empty
+            }
+          } else {
+            map = new Map() // no primary key or no headers = append-only
+          }
+          rowMaps.set(streamName, map)
+        }
+        return map
       }
 
       const flushStream = async (streamName: string) => {
@@ -258,11 +285,14 @@ export function createDestination(
           appends.map((entry) => entry.row)
         )
         if (range) {
+          const map = rowMaps.get(streamName)
           for (let index = 0; index < appends.length; index++) {
             const rowKey = appends[index]?.rowKey
             if (!rowKey) continue
+            const rowNumber = range.startRow + index
             rowAssignments[streamName] ??= {}
-            rowAssignments[streamName][rowKey] = range.startRow + index
+            rowAssignments[streamName][rowKey] = rowNumber
+            map?.set(rowKey, rowNumber) // keep row map in sync for subsequent records
           }
         }
         appendBuffers.set(streamName, [])
@@ -292,9 +322,20 @@ export function createDestination(
                   : undefined
 
             if (rowNumber !== undefined) {
+              // 1. Explicit _row_number (backwards compat with service layer)
               updateBuffers.get(stream)!.push({ rowNumber, values: row })
+            } else if (rowKey) {
+              // 2. Native upsert: look up row key in the map
+              const map = await ensureRowMapForStream(stream)
+              const existingRow = map.get(rowKey)
+              if (existingRow !== undefined) {
+                updateBuffers.get(stream)!.push({ rowNumber: existingRow, values: row })
+              } else {
+                appendBuffers.get(stream)!.push({ row, rowKey })
+              }
             } else {
-              appendBuffers.get(stream)!.push({ row, rowKey })
+              // 3. No key at all — pure append
+              appendBuffers.get(stream)!.push({ row })
             }
 
             const appendCount = appendBuffers.get(stream)?.length ?? 0

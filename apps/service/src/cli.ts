@@ -104,11 +104,6 @@ const workerCmd = defineCommand({
       default: 'http://localhost:4010',
       description: 'Sync engine URL for sync execution (default: http://localhost:4010)',
     },
-    'kafka-broker': {
-      type: 'string',
-      description:
-        'Kafka broker for queue-backed workflows (for example localhost:9092). Can also be set via KAFKA_BROKER.',
-    },
     'data-dir': {
       type: 'string',
       default: defaultDataDir,
@@ -120,7 +115,6 @@ const workerCmd = defineCommand({
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const namespace = args['temporal-namespace'] || 'default'
     const engineUrl = args['engine-url'] || 'http://localhost:4010'
-    const kafkaBroker = args['kafka-broker'] || process.env['KAFKA_BROKER']
     const temporalAddress = args['temporal-address']
     const pipelineStore = filePipelineStore(args['data-dir'])
 
@@ -138,15 +132,11 @@ const workerCmd = defineCommand({
       namespace,
       taskQueue,
       engineUrl,
-      kafkaBroker,
       pipelineStore,
       workflowsPath,
     })
 
-    logger.info(
-      { temporalAddress, namespace, taskQueue, engineUrl, kafkaBroker },
-      'Starting Temporal worker'
-    )
+    logger.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
 
     await worker.run()
   },

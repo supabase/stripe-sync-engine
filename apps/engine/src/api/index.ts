@@ -35,9 +35,20 @@ async function main() {
     )
   } else {
     const { serve } = await import('@hono/node-server')
-    serve({ fetch: app.fetch, port }, (info) => {
-      logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
-    })
+    serve(
+      {
+        fetch: app.fetch,
+        port,
+        // Pipeline config and connector state are passed via the X-Pipeline header.
+        // Node.js defaults to 16 KB which caps state at ~250 entries — too small for
+        // connectors like google-sheets that carry row mappings. 50 MB is a conservative
+        // ceiling; typical headers remain small. See docs/engine/header-size-limits.md
+        serverOptions: { maxHeaderSize: 50 * 1024 * 1024 },
+      },
+      (info) => {
+        logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
+      }
+    )
   }
 }
 

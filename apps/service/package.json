@@ -44,7 +44,6 @@
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4",
-    "kafkajs": "^2.2.4",
     "openapi-fetch": "^0.13",
     "pino": "^10",
     "pino-pretty": "^13",

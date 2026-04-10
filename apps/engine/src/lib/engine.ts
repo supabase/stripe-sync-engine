@@ -405,7 +405,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           yield Message.parse(msg)
         }
       })()
-      yield* takeLimits<Message>({
+      yield* takeLimits({
         state_limit: opts?.state_limit,
         time_limit: opts?.time_limit,
       })(parsed)

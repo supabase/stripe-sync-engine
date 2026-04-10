@@ -9,13 +9,11 @@ import { serve } from '@hono/node-server'
 import type { ServerType } from '@hono/node-server'
 import pg from 'pg'
 import Stripe from 'stripe'
-import { google } from 'googleapis'
 import path from 'node:path'
 import net from 'node:net'
 import source from '@stripe/sync-source-stripe'
 import pgDestination from '@stripe/sync-destination-postgres'
 import sheetsDestination from '@stripe/sync-destination-google-sheets'
-import { readSheet } from '@stripe/sync-destination-google-sheets'
 import { createConnectorResolver, createApp as createEngineApp } from '@stripe/sync-engine'
 import { createActivities } from '@stripe/sync-service'
 
@@ -285,136 +283,5 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       expect(parseInt(rows[0].cnt, 10)).toBe(0)
       console.log(`  Teardown verified: schema "${schema}" is empty`)
     }
-  })
-})
-
-// ===========================================================================
-// 2. Stripe → Google Sheets (backfill via googleSheetPipelineWorkflow)
-// ===========================================================================
-
-describe.skip('temporal e2e: stripe → google_sheets', () => {
-  const STRIPE_API_KEY = process.env.STRIPE_API_KEY ?? ''
-  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? ''
-  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? ''
-  const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN ?? ''
-  const GOOGLE_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? ''
-  const infra = createTestInfra()
-  let sheetsClient: ReturnType<typeof google.sheets>
-  let pipelineStore: ReturnType<typeof memoryPipelineStore>
-
-  const streamName = 'products'
-
-  beforeAll(async () => {
-    await infra.setup()
-
-    const auth = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
-    auth.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN })
-    sheetsClient = google.sheets({ version: 'v4', auth })
-
-    pipelineStore = memoryPipelineStore()
-
-    console.log(`  Spreadsheet: ${GOOGLE_SPREADSHEET_ID}`)
-    console.log(`  Tab: ${streamName}`)
-  }, 60_000)
-
-  afterAll(async () => {
-    if (sheetsClient && !process.env.KEEP_TEST_DATA) {
-      try {
-        const meta = await sheetsClient.spreadsheets.get({
-          spreadsheetId: GOOGLE_SPREADSHEET_ID,
-        })
-        const sheet = meta.data.sheets?.find((s) => s.properties?.title === streamName)
-        if (sheet?.properties?.sheetId != null) {
-          await sheetsClient.spreadsheets.batchUpdate({
-            spreadsheetId: GOOGLE_SPREADSHEET_ID,
-            requestBody: {
-              requests: [{ deleteSheet: { sheetId: sheet.properties.sheetId } }],
-            },
-          })
-          console.log(`  Cleaned up tab: ${streamName}`)
-        }
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-    await infra.teardown()
-  })
-
-  it('backfills products from Stripe into a Google Sheet tab', async () => {
-    const pipelineId = `pipe_sheets_${Date.now()}`
-    const pipeline = {
-      id: pipelineId,
-      source: {
-        type: 'stripe',
-        stripe: { api_key: STRIPE_API_KEY, backfill_limit: 3 },
-      },
-      destination: {
-        type: 'google_sheets',
-        google_sheets: {
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          refresh_token: GOOGLE_REFRESH_TOKEN,
-          access_token: 'placeholder',
-          spreadsheet_id: GOOGLE_SPREADSHEET_ID,
-        },
-      },
-      streams: [{ name: streamName }],
-    }
-
-    // Pre-populate the pipeline store (workflow reads config from store, not args)
-    await pipelineStore.set(pipelineId, pipeline as any)
-    console.log(`  Pipeline: ${pipelineId}`)
-
-    const handle = await infra.client.workflow.start('googleSheetPipelineWorkflow', {
-      args: [pipelineId],
-      workflowId: `pipe_${pipelineId}`,
-      taskQueue: 'sheets-queue',
-    })
-
-    const worker = await Worker.create({
-      connection: infra.nativeConnection,
-      taskQueue: 'sheets-queue',
-      workflowsPath: infra.workflowsPath,
-      activities: createActivities({
-        engineUrl: infra.engineUrl,
-        pipelineStore,
-      }),
-    })
-
-    await worker.runUntil(async () => {
-      await pollUntil(
-        async () => {
-          try {
-            const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
-            return rows.length > 1
-          } catch {
-            return false
-          }
-        },
-        { timeout: 60_000, interval: 2000 }
-      )
-
-      const rows = await readSheet(sheetsClient, GOOGLE_SPREADSHEET_ID, streamName)
-      const headerRow = rows[0]
-      const dataRows = rows.slice(1)
-      console.log(`  Sheet: ${dataRows.length} data rows`)
-      console.log(`  Headers: ${headerRow.join(', ')}`)
-
-      expect(dataRows.length).toBeGreaterThan(0)
-
-      const idCol = headerRow.indexOf('id')
-      expect(idCol).toBeGreaterThanOrEqual(0)
-      for (const row of dataRows) {
-        expect(row[idCol]).toMatch(/^prod_/)
-      }
-      console.log(`  Sample: ${dataRows[0][idCol]}`)
-
-      await handle.signal('desired_status', 'deleted')
-      try {
-        await handle.result()
-      } catch {
-        // Expected — workflow terminates after teardown
-      }
-    })
   })
 })

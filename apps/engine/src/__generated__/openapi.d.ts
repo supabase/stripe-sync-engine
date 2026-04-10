@@ -710,6 +710,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         ok: true;
+                        hostname: string;
                         commit?: string;
                         commit_url?: string;
                         build_date?: string;

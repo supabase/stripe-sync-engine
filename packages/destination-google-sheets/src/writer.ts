@@ -1,4 +1,5 @@
 import type { drive_v3, sheets_v4 } from 'googleapis'
+import { serializeRowKey } from './metadata.js'
 
 /**
  * Low-level Sheets API write operations.
@@ -328,6 +329,39 @@ export async function deleteSpreadsheet(
   spreadsheetId: string
 ): Promise<void> {
   await withRetry(() => drive.files.delete({ fileId: spreadsheetId }))
+}
+
+/**
+ * Build a map from serialized primary key → 1-based row number by reading
+ * existing sheet data and extracting only the primary key columns.
+ *
+ * `headers` must already be known (from `readHeaderRow` or first-record discovery).
+ */
+export async function buildRowMap(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  sheetName: string,
+  headers: string[],
+  primaryKey: string[][]
+): Promise<Map<string, number>> {
+  const pkFields = primaryKey.map((path) => path[0])
+  const pkIndices = pkFields.map((field) => headers.indexOf(field))
+  if (pkIndices.some((i) => i === -1)) return new Map()
+
+  const allRows = await readSheet(sheets, spreadsheetId, sheetName)
+  // Skip header row (index 0), data starts at index 1
+  const map = new Map<string, number>()
+  for (let i = 1; i < allRows.length; i++) {
+    const row = allRows[i] as string[]
+    const data: Record<string, unknown> = {}
+    for (let j = 0; j < pkFields.length; j++) {
+      data[pkFields[j]] = row[pkIndices[j]] ?? ''
+    }
+    const rowKey = serializeRowKey(primaryKey, data)
+    if (rowKey === '[""]' || rowKey === '[null]') continue
+    map.set(rowKey, i + 1) // 1-based: row 1 = headers, so data row at index i → row i+1
+  }
+  return map
 }
 
 /** Read all values from a sheet tab. Used for verification in tests. */

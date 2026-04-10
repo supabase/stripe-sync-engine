@@ -75,48 +75,7 @@ describe('GET /health', () => {
   it('returns ok', async () => {
     const res = await app().request('/health')
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true })
-  })
-})
-
-describe('POST /pipelines workflow dispatch', () => {
-  it('starts google_sheets pipelines on the dedicated workflow', async () => {
-    const start = vi.fn(async () => ({}))
-    const res = await createApp({
-      temporal: { client: { start } as unknown as WorkflowClient, taskQueue: 'unused' },
-      resolver,
-      pipelineStore: memoryPipelineStore(),
-    }).request('/pipelines', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test', test: {} },
-        destination: {
-          type: 'google_sheets',
-          google_sheets: {
-            spreadsheet_id: 'sheet_123',
-            spreadsheet_title: 'Test Sheet',
-            client_id: 'client',
-            client_secret: 'secret',
-            access_token: 'token',
-            refresh_token: 'refresh',
-          },
-        },
-      }),
-    })
-
-    expect(res.status).toBe(201)
-    expect(start).toHaveBeenCalledOnce()
-    expect(start).toHaveBeenCalledWith(
-      'googleSheetPipelineWorkflow',
-      expect.objectContaining({
-        taskQueue: 'unused',
-        args: [
-          expect.stringMatching(/^pipe_/),
-          expect.objectContaining({ desiredStatus: 'active' }),
-        ],
-      })
-    )
+    expect(await res.json()).toMatchObject({ ok: true, hostname: expect.any(String) })
   })
 })
 
@@ -133,13 +92,6 @@ function stubActivities(): SyncActivities {
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => ({}),
     pipelineSync: async () => noErrors,
-    readIntoQueue: async () => ({ count: 0, state: emptyState }),
-    writeGoogleSheetsFromQueue: async () => ({
-      errors: [],
-      state: emptyState,
-      written: 0,
-      rowIndexMap: {},
-    }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
   }
@@ -237,107 +189,6 @@ describe('pipeline CRUD', () => {
     expect(typeof updated.status).toBe('string')
 
     // Cleanup
-    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
-  })
-
-  it('rejects changing the target spreadsheet for a google_sheets pipeline', async () => {
-    const a = liveApp()
-
-    const createRes = await a.request('/pipelines', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test', test: {} },
-        destination: {
-          type: 'google_sheets',
-          google_sheets: {
-            spreadsheet_id: 'sheet_123',
-            spreadsheet_title: 'Original Sheet',
-            client_id: 'client',
-            client_secret: 'secret',
-            access_token: 'token',
-            refresh_token: 'refresh',
-          },
-        },
-      }),
-    })
-    const created = await createRes.json()
-    await waitForPipeline(a, created.id)
-
-    const updateRes = await a.request(`/pipelines/${created.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        destination: {
-          type: 'google_sheets',
-          google_sheets: {
-            spreadsheet_id: 'sheet_456',
-            spreadsheet_title: 'Replacement Sheet',
-            client_id: 'client',
-            client_secret: 'secret',
-            access_token: 'token',
-            refresh_token: 'refresh',
-          },
-        },
-      }),
-    })
-
-    expect(updateRes.status).toBe(400)
-    expect(await updateRes.json()).toEqual({
-      error:
-        'Changing the target spreadsheet for a google_sheets pipeline requires recreating the pipeline',
-    })
-
-    await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
-  })
-
-  it('allows changing spreadsheet title when spreadsheet_id is unchanged', async () => {
-    const a = liveApp()
-
-    const createRes = await a.request('/pipelines', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source: { type: 'test', test: {} },
-        destination: {
-          type: 'google_sheets',
-          google_sheets: {
-            spreadsheet_id: 'sheet_123',
-            spreadsheet_title: 'Original Sheet',
-            client_id: 'client',
-            client_secret: 'secret',
-            access_token: 'token',
-            refresh_token: 'refresh',
-          },
-        },
-      }),
-    })
-    const created = await createRes.json()
-    await waitForPipeline(a, created.id)
-
-    const updateRes = await a.request(`/pipelines/${created.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        destination: {
-          type: 'google_sheets',
-          google_sheets: {
-            spreadsheet_id: 'sheet_123',
-            spreadsheet_title: 'Renamed Sheet',
-            client_id: 'client',
-            client_secret: 'secret',
-            access_token: 'token',
-            refresh_token: 'refresh',
-          },
-        },
-      }),
-    })
-
-    expect(updateRes.status).toBe(200)
-    const updated = await updateRes.json()
-    expect(updated.destination['google_sheets'].spreadsheet_id).toBe('sheet_123')
-    expect(updated.destination['google_sheets'].spreadsheet_title).toBe('Renamed Sheet')
-
     await a.request(`/pipelines/${created.id}`, { method: 'DELETE' })
   })
 

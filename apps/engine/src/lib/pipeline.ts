@@ -127,7 +127,7 @@ export function persistState(
  * When both are set, whichever fires first wins. All non-matching messages
  * pass through unchanged. The last yielded item is always `{ type: 'eof', eof: { reason } }`.
  */
-export function takeLimits<T extends { type: string }>(
+export function takeLimits<T extends Message>(
   opts: { state_limit?: number; time_limit?: number } = {}
 ): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
   return async function* (messages) {
@@ -142,16 +142,16 @@ export function takeLimits<T extends { type: string }>(
       yield msg
       const record_count = recordCount.size > 0 ? Object.fromEntries(recordCount) : undefined
       if (deadline && Date.now() >= deadline) {
-        yield { type: 'eof', eof: { reason: 'time_limit', record_count } } as unknown as T
+        yield { type: 'eof' as const, eof: { reason: 'time_limit' as const, record_count } } as T
         return
       }
       if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-        yield { type: 'eof', eof: { reason: 'state_limit', record_count } } as unknown as T
+        yield { type: 'eof' as const, eof: { reason: 'state_limit' as const, record_count } } as T
         return
       }
     }
     const record_count = recordCount.size > 0 ? Object.fromEntries(recordCount) : undefined
-    yield { type: 'eof', eof: { reason: 'complete', record_count } } as unknown as T
+    yield { type: 'eof' as const, eof: { reason: 'complete' as const, record_count } } as T
   }
 }
 
