@@ -1,0 +1,32 @@
+{
+  "id": "evt_1T925fEduqPk9bEEIR3ResAd",
+  "object": "event",
+  "api_version": "2023-10-16",
+  "created": 1773056115,
+  "data": {
+    "object": {
+      "id": "82cOWD3z",
+      "object": "coupon",
+      "amount_off": null,
+      "created": 1773056115,
+      "currency": null,
+      "duration": "once",
+      "duration_in_months": null,
+      "livemode": false,
+      "max_redemptions": null,
+      "metadata": {},
+      "name": "TEST_DISCOUNT_UPDATED",
+      "percent_off": 50,
+      "redeem_by": null,
+      "times_redeemed": 1,
+      "valid": true
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_hMl8XMocNsAed4",
+    "idempotency_key": "eb42ae66-a11a-47a3-acdd-3ff904f249a6"
+  },
+  "type": "coupon.updated"
+}

@@ -71,6 +71,9 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `checkout.session.async_payment_succeeded` 🟢
 - [x] `checkout.session.completed` 🟢
 - [x] `checkout.session.expired` 🟢
+- [x] `coupon.created` 🟢
+- [x] `coupon.deleted` 🟢
+- [x] `coupon.updated` 🟢
 - [x] `credit_note.created` 🟢
 - [x] `credit_note.updated` 🟢
 - [x] `credit_note.voided` 🟢
@@ -128,6 +131,8 @@ To deploy the sync-engine to a Supabase Edge Function, follow this [guide](./doc
 - [x] `price.created` 🟢
 - [x] `price.deleted` 🟢
 - [x] `price.updated` 🟢
+- [x] `promotion_code.created` 🟢
+- [x] `promotion_code.updated` 🟢
 - [x] `product.created` 🟢
 - [x] `product.deleted` 🟢
 - [x] `product.updated` 🟢
