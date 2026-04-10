@@ -67,6 +67,7 @@ describe('POST /webhooks', () => {
     'customer_tax_id_created.json',
     'customer_tax_id_updated.json',
     'coupon_created.json',
+    'coupon_updated.json',
     'product_created.json',
     'product_updated.json',
     'price_created.json',
@@ -128,6 +129,7 @@ describe('POST /webhooks', () => {
     'checkout_session_completed.json',
     'invoice_payment_paid.json',
     'promotion_code_created.json',
+    'promotion_code_updated.json',
   ])('event %s is upserted', async (jsonFile) => {
     const eventBody = await import(`./stripe/${jsonFile}`).then(({ default: myData }) => myData)
     // Update the event body created timestamp to be the current time
@@ -175,6 +177,7 @@ describe('POST /webhooks', () => {
     'price_deleted.json',
     'invoice_deleted.json',
     'plan_deleted.json',
+    'coupon_deleted.json',
     'refund_created.json',
     'refund_failed.json',
     'refund_updated.json',

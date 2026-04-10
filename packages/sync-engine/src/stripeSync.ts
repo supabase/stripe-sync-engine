@@ -164,16 +164,25 @@ export class StripeSync {
       }
       case 'coupon.created':
       case 'coupon.updated': {
-        const { entity: coupon, refetched } = await this.fetchOrUseWebhookData(
-          event.data.object as Stripe.Coupon,
-          (id) => this.stripe.coupons.retrieve(id)
-        )
+        try {
+          const { entity: coupon, refetched } = await this.fetchOrUseWebhookData(
+            event.data.object as Stripe.Coupon,
+            (id) => this.stripe.coupons.retrieve(id)
+          )
 
-        this.config.logger?.info(
-          `Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`
-        )
+          this.config.logger?.info(
+            `Received webhook ${event.id}: ${event.type} for coupon ${coupon.id}`
+          )
 
-        await this.upsertCoupons([coupon], this.getSyncTimestamp(event, refetched))
+          await this.upsertCoupons([coupon], this.getSyncTimestamp(event, refetched))
+        } catch (err) {
+          if (err instanceof Stripe.errors.StripeAPIError && err.code === 'resource_missing') {
+            await this.deleteCoupon(event.data.object.id)
+          } else {
+            throw err
+          }
+        }
+
         break
       }
       case 'coupon.deleted': {
@@ -443,23 +452,15 @@ export class StripeSync {
           (id) => this.stripe.promotionCodes.retrieve(id)
         )
 
-        const syncTimestamp = this.getSyncTimestamp(event, refetched)
-
         this.config.logger?.info(
           `Received webhook ${event.id}: ${event.type} for promotionCode ${promotionCode.id}`
         )
 
-        const coupon =
-          (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-            .coupon ??
-          promotionCode.promotion?.coupon ??
-          null
-
-        if (coupon && typeof coupon !== 'string') {
-          await this.upsertCoupons([coupon], syncTimestamp)
-        }
-
-        await this.upsertPromotionCodes([promotionCode], false, syncTimestamp)
+        await this.upsertPromotionCodes(
+          [promotionCode],
+          false,
+          this.getSyncTimestamp(event, refetched)
+        )
         break
       }
       case 'charge.dispute.created':
@@ -1568,9 +1569,7 @@ export class StripeSync {
         .map((promotionCode) => {
           const coupon =
             (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-              .coupon ??
-            promotionCode.promotion?.coupon ??
-            null
+              .coupon ?? null
 
           if (!coupon) return null
 
@@ -1593,9 +1592,7 @@ export class StripeSync {
     const normalizedPromotionCodes = promotionCodes.map((promotionCode) => {
       const coupon =
         (promotionCode as Stripe.PromotionCode & { coupon?: string | Stripe.Coupon | null })
-          .coupon ??
-        promotionCode.promotion?.coupon ??
-        null
+          .coupon ?? null
       const customerAccount = (
         promotionCode as Stripe.PromotionCode & {
           customer_account?: string | { id: string } | null

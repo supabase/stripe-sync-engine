@@ -1,0 +1,51 @@
+{
+  "id": "evt_1T925fEduqPk9bEEIR3ResAf",
+  "object": "event",
+  "api_version": "2023-10-16",
+  "created": 1773056115,
+  "data": {
+    "object": {
+      "id": "promo_1T925fEduqPk9bEE4b5egICF",
+      "object": "promotion_code",
+      "active": false,
+      "code": "FREE2026",
+      "coupon": {
+        "id": "82cOWD3z",
+        "object": "coupon",
+        "amount_off": null,
+        "created": 1773056115,
+        "currency": null,
+        "duration": "once",
+        "duration_in_months": null,
+        "livemode": false,
+        "max_redemptions": null,
+        "metadata": {},
+        "name": "TEST_DISCOUNT",
+        "percent_off": 100,
+        "redeem_by": null,
+        "times_redeemed": 0,
+        "valid": true
+      },
+      "created": 1773056115,
+      "customer": null,
+      "customer_account": null,
+      "expires_at": null,
+      "livemode": false,
+      "max_redemptions": null,
+      "metadata": {},
+      "restrictions": {
+        "first_time_transaction": true,
+        "minimum_amount": null,
+        "minimum_amount_currency": null
+      },
+      "times_redeemed": 1
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_hMl8XMocNsAed6",
+    "idempotency_key": "eb42ae66-a11a-47a3-acdd-3ff904f249a8"
+  },
+  "type": "promotion_code.updated"
+}
