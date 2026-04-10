@@ -1,28 +1,40 @@
 #!/usr/bin/env bash
 # Sync Stripe → Google Sheets via the sync-engine CLI.
 #
-# Env: STRIPE_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_SPREADSHEET_ID
-# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
+# Usage:
+#   ./demo/stripe-to-google-sheets.sh
+#
+# Env: STRIPE_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+# Optional: GOOGLE_SPREADSHEET_ID (creates new sheet if omitted)
+# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="npx tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-$(dirname "$0")/../scripts/ts-run}"
+RUN="${TS_RUNNER:-bun}"
 
-ACCT=$(curl -su "$STRIPE_API_KEY:" https://api.stripe.com/v1/account 2>/dev/null \
-  | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).id))")
-echo "Stripe: $ACCT" >&2
-echo "Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID" >&2
+echo "=== Stripe → Google Sheets ===" >&2
+[ -n "${GOOGLE_SPREADSHEET_ID:-}" ] && echo "Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID" >&2
 
 PIPELINE=$(node -e "console.log(JSON.stringify({
-  source: { name: 'stripe', api_key: process.env.STRIPE_API_KEY, backfill_limit: 10 },
-  destination: {
-    name: 'google_sheets',
-    client_id: process.env.GOOGLE_CLIENT_ID,
-    client_secret: process.env.GOOGLE_CLIENT_SECRET,
-    access_token: 'unused',
-    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-    spreadsheet_id: process.env.GOOGLE_SPREADSHEET_ID,
+  source: {
+    type: 'stripe',
+    stripe: {
+      api_key: process.env.STRIPE_API_KEY,
+      backfill_limit: 10,
+    },
   },
-  streams: [{ name: 'products' }],
+  destination: {
+    type: 'google_sheets',
+    google_sheets: {
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      access_token: 'unused',
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      spreadsheet_id: process.env.GOOGLE_SPREADSHEET_ID || undefined,
+      spreadsheet_title: 'Stripe Sync Demo',
+      batch_size: 50,
+    },
+  },
+  streams: [{ name: 'products' }, { name: 'customers' }],
 }))")
 
-$RUN apps/engine/src/cli/index.ts sync --xPipeline "$PIPELINE"
+$RUN apps/engine/src/cli/index.ts pipeline-sync --xPipeline "$PIPELINE"

@@ -170,7 +170,18 @@ export async function createApp(resolver: ConnectorResolver) {
     }
     await next()
     let error: string | undefined
-    if (c.res.status >= 400) {
+    let responseBody: unknown | undefined
+    if (dangerouslyVerbose) {
+      try {
+        responseBody = await c.res.clone().json()
+      } catch {
+        try {
+          responseBody = await c.res.clone().text()
+        } catch {
+          // skip unreadable bodies
+        }
+      }
+    } else if (c.res.status >= 400) {
       try {
         const body = (await c.res.clone().json()) as { error: unknown }
         error = typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
@@ -187,6 +198,7 @@ export async function createApp(resolver: ConnectorResolver) {
         status: c.res.status,
         durationMs: Date.now() - start,
         error,
+        ...(responseBody !== undefined && { responseBody }),
       },
       'request end'
     )

@@ -3,10 +3,11 @@ import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { parseJsonOrFile } from '@stripe/sync-ts-cli'
-import { createConnectorResolver } from '../lib/index.js'
+import { createConnectorResolver, createEngine } from '../lib/index.js'
 import { createApp } from '../api/app.js'
 import { serveAction } from '../serve-command.js'
 import { supabaseCmd } from './supabase.js'
+import { createSyncCmd } from './sync.js'
 import { defaultConnectors } from '../lib/default-connectors.js'
 
 /** Connector discovery flags shared by all commands (serve + one-shot). */
@@ -77,6 +78,7 @@ export async function createProgram() {
       | Record<string, string>
       | undefined,
   })
+  const engine = await createEngine(resolver)
   const app = await createApp(resolver)
   const res = await app.request('/openapi.json')
   const spec = await res.json()
@@ -97,6 +99,11 @@ export async function createProgram() {
 
   return defineCommand({
     ...specCli,
-    subCommands: { serve: serveCmd, supabase: supabaseCmd, ...specCli.subCommands },
+    subCommands: {
+      serve: serveCmd,
+      supabase: supabaseCmd,
+      sync: createSyncCmd(engine, resolver),
+      ...specCli.subCommands,
+    },
   })
 }
