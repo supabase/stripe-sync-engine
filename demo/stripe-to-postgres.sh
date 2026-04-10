@@ -9,7 +9,7 @@
 # Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="npx tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-bun}"
+RUN="${TS_RUNNER:-node --import tsx}"
 POSTGRES_URL="${DATABASE_URL:-${POSTGRES_URL:?Set DATABASE_URL or POSTGRES_URL}}"
 
 if [[ "${1:-}" == "verbose" ]]; then
@@ -19,6 +19,7 @@ fi
 
 echo "=== Stripe → Postgres ===" >&2
 echo "Postgres: $POSTGRES_URL" >&2
+
 
 # ── Option A: Simple shorthand (new sync command) ────────────────────────────
 $RUN apps/engine/src/cli/index.ts sync \

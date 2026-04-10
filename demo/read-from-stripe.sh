@@ -2,14 +2,14 @@
 # Read from Stripe via the connector CLI — outputs NDJSON to stdout.
 #
 # Usage:
-#   ./scripts/read-from-stripe.sh
-#   ./scripts/read-from-stripe.sh | ./scripts/write-to-sheets.sh
+#   ./demo/read-from-stripe.sh
+#   ./demo/read-from-stripe.sh | ./demo/write-to-sheets.sh
 #
 # Env: STRIPE_API_KEY
-# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
+# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="npx tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-$(dirname "$0")/../scripts/ts-run}"
+RUN="${TS_RUNNER:-node --import tsx}"
 
 ACCT=$(curl -su "$STRIPE_API_KEY:" https://api.stripe.com/v1/account 2>/dev/null \
   | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).id))")

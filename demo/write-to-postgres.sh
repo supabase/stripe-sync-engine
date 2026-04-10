@@ -7,10 +7,10 @@
 #   ./scripts/read-from-stripe.sh | ./scripts/write-to-postgres.sh    # piped
 #
 # Env: DATABASE_URL
-# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="node --import tsx"
+# Override TypeScript runner: TS_RUNNER="bun" or TS_RUNNER="npx tsx"
 set -euo pipefail
 cd "$(dirname "$0")/.."
-RUN="${TS_RUNNER:-$(dirname "$0")/../scripts/ts-run}"
+RUN="${TS_RUNNER:-node --import tsx}"
 
 echo "Postgres: $DATABASE_URL" >&2
 
