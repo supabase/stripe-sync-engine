@@ -172,7 +172,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish_npmjs:
     name: Publish to npmjs.org
-    needs: [test, publish_npm, changes]
+    needs: [test, changes]
     if: >-
       github.event_name == 'push'
       && needs.changes.outputs.code == 'true'
