@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, v2, auto-publish-npmjs]
+    branches: [main, v2]
   workflow_dispatch:
 
 permissions:

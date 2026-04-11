@@ -1,6 +1,6 @@
 {
   "name": "@stripe/sync-source-stripe",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "private": false,
   "type": "module",
   "exports": {

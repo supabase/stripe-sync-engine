@@ -1,6 +1,6 @@
 {
   "name": "@stripe/sync-engine",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "private": false,
   "description": "Stripe Sync Engine — sync Stripe data to Postgres",
   "type": "module",
