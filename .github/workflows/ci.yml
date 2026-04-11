@@ -3,12 +3,12 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, v2]
+    branches: [main, v2, auto-publish-npmjs]
   workflow_dispatch:
 
 permissions:
   packages: write
-  contents: read
+  contents: write
 
 env:
   STRIPE_NPM_REGISTRY: https://npm.pkg.github.com
@@ -166,6 +166,73 @@ jobs:
           ./scripts/publish-packages.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Publish npmjs.org — auto-publish when version changes
+  # ---------------------------------------------------------------------------
+  publish_npmjs:
+    name: Publish to npmjs.org
+    needs: [test, publish_npm, changes]
+    if: >-
+      github.event_name == 'push'
+      && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check if version changed
+        id: version-check
+        run: |
+          LOCAL_VERSION=$(jq -r .version apps/engine/package.json)
+          NPM_VERSION=$(npm view @stripe/sync-engine version \
+            --registry https://registry.npmjs.org 2>/dev/null || echo "0.0.0")
+          echo "local=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm=$NPM_VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version changed: npm=$NPM_VERSION -> local=$LOCAL_VERSION"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged: $LOCAL_VERSION"
+          fi
+
+      - name: Install pnpm
+        if: steps.version-check.outputs.changed == 'true'
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        if: steps.version-check.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+          cache: pnpm
+
+      - name: Install dependencies & build
+        if: steps.version-check.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Publish to npmjs.org
+        if: steps.version-check.outputs.changed == 'true'
+        run: |
+          echo "@stripe:registry=https://registry.npmjs.org" > .npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
+          pnpm publish -r --access public --no-git-checks
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.version-check.outputs.changed == 'true'
+        run: |
+          VERSION="${{ steps.version-check.outputs.local }}"
+          # Extract changelog section for this version
+          BODY=$(sed -n "/^## v${VERSION}/,/^## v/{ /^## v${VERSION}/d; /^## v/d; p; }" CHANGELOG.md 2>/dev/null | head -100 || true)
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes "${BODY:-Release v${VERSION}}" \
+            --target "${{ github.sha }}" || echo "::warning::GitHub Release creation skipped (tag may not exist or release already exists)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # Build arm64 — native arm build with BuildKit registry cache

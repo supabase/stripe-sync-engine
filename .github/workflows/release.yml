@@ -1,3 +1,5 @@
+# Manual fallback — automated publishing happens in ci.yml (publish_npmjs job).
+# Use this workflow only to re-promote a specific SHA if the automated publish fails.
 name: Release
 
 on:

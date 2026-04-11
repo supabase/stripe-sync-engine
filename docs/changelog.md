@@ -1,5 +1,7 @@
 # Changelog
 
+> For the auto-generated release changelog, see [CHANGELOG.md](/CHANGELOG.md) in the repo root.
+
 Completed plans and shipped features, newest first.
 
 ## 2026-04
