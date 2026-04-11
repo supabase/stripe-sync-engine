@@ -57,13 +57,21 @@ done
 # Publish all tarballs to npmjs.org
 echo ""
 echo "=== Publishing to npmjs.org ==="
+FAILED=0
 for tgz in *.tgz; do
   echo "Publishing $tgz"
-  npm publish "$tgz" \
+  if ! npm publish "$tgz" \
     --registry https://registry.npmjs.org \
     --access public \
-    --//registry.npmjs.org/:_authToken="${NPM_TOKEN}"
+    --//registry.npmjs.org/:_authToken="${NPM_TOKEN}" 2>&1; then
+    echo "WARNING: Failed to publish $tgz (may already exist)"
+    FAILED=$((FAILED + 1))
+  fi
 done
 
 echo ""
-echo "=== Done ==="
+if [ "$FAILED" -gt 0 ]; then
+  echo "=== Done with $FAILED warning(s) (packages may already exist at this version) ==="
+else
+  echo "=== Done ==="
+fi
