@@ -26,5 +26,6 @@
   },
   "dependencies": {
     "openapi-fetch": "^0.17.0"
-  }
+  },
+  "version": "0.2.0"
 }
