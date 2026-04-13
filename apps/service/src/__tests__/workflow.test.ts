@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { SyncActivities } from '../temporal/activities/index.js'
 import type { RunResult } from '../temporal/activities/index.js'
 import { CONTINUE_AS_NEW_THRESHOLD } from '../lib/utils.js'
+import { createPipelineTestWorkflowEnvironment } from './temporal-test-env.js'
 
 type SourceInput = unknown
 
@@ -54,7 +55,7 @@ async function signalSourceInput(
 let testEnv: TestWorkflowEnvironment
 
 beforeAll(async () => {
-  testEnv = await TestWorkflowEnvironment.createLocal()
+  testEnv = await createPipelineTestWorkflowEnvironment()
 }, 120_000)
 
 afterAll(async () => {
@@ -126,6 +127,16 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
       // Let reconciliation start
       await new Promise((r) => setTimeout(r, 1500))
+
+      const statusSnap = (await handle.query('status')) as {
+        pipeline_id: string
+        status: string
+        desired_status: string
+        iteration: number
+      }
+      expect(statusSnap.pipeline_id).toBe(testPipelineId)
+      expect(statusSnap.desired_status).toBe('active')
+      expect(['setup', 'backfill', 'ready']).toContain(statusSnap.status)
 
       // Send events
       await signalSourceInput(handle, {

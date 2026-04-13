@@ -11,6 +11,7 @@ import {
 } from '@stripe/sync-engine'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
+import { createPipelineTestWorkflowEnvironment } from '../__tests__/temporal-test-env.js'
 import { createApp } from './app.js'
 import { memoryPipelineStore } from '../lib/stores-memory.js'
 import type { PipelineStore } from '../lib/stores.js'
@@ -103,7 +104,7 @@ let workerRunning: Promise<void>
 let sharedStore: PipelineStore
 
 beforeAll(async () => {
-  testEnv = await TestWorkflowEnvironment.createLocal()
+  testEnv = await createPipelineTestWorkflowEnvironment()
   sharedStore = memoryPipelineStore()
   worker = await Worker.create({
     connection: testEnv.nativeConnection,

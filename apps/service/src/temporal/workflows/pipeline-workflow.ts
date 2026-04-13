@@ -1,7 +1,18 @@
-import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
+import {
+  condition,
+  continueAsNew,
+  defineQuery,
+  setHandler,
+  type SearchAttributes,
+  upsertSearchAttributes,
+} from '@temporalio/workflow'
 
 import type { SourceInputMessage, SourceState } from '@stripe/sync-protocol'
 import type { DesiredStatus, PipelineStatus } from '../../lib/createSchemas.js'
+import {
+  SYNC_ENGINE_PIPELINE_DESIRED_STATUS_SEARCH_ATTRIBUTE,
+  SYNC_ENGINE_PIPELINE_STATUS_SEARCH_ATTRIBUTE,
+} from '../pipeline-search-attributes.js'
 import { CONTINUE_AS_NEW_THRESHOLD } from '../../lib/utils.js'
 import { classifySyncErrors } from '../sync-errors.js'
 import {
@@ -36,6 +47,21 @@ export interface PipelineWorkflowOpts {
   errorRecoveryRequested?: boolean
 }
 
+/** Snapshot returned by the `status` workflow query (Temporal UI / QA). */
+export interface PipelineWorkflowStatusSnapshot {
+  pipeline_id: string
+  status: PipelineStatus
+  desired_status: DesiredStatus
+  state: PipelineWorkflowState
+  /** Sync operations completed in this run (resets on continue-as-new). */
+  operation_count: number
+  /** Alias for `operation_count` (legacy tests / tooling). */
+  iteration: number
+  input_queue_length: number
+}
+
+const pipelineStatusQuery = defineQuery<PipelineWorkflowStatusSnapshot>('status')
+
 export async function pipelineWorkflow(
   pipelineId: string,
   opts?: PipelineWorkflowOpts
@@ -58,7 +84,18 @@ export async function pipelineWorkflow(
     if (state.errored && status === 'active') {
       errorRecoveryRequested = true
     }
+    syncPipelineSearchAttributes()
   })
+
+  setHandler(pipelineStatusQuery, () => ({
+    pipeline_id: pipelineId,
+    status: derivePipelineStatus(),
+    desired_status: desiredStatus,
+    state: { ...state },
+    operation_count: operationCount,
+    iteration: operationCount,
+    input_queue_length: inputQueue.length,
+  }))
 
   // MARK: - State
 
@@ -70,6 +107,14 @@ export async function pipelineWorkflow(
     return state.phase === 'ready' ? 'ready' : 'backfill'
   }
 
+  function syncPipelineSearchAttributes(): void {
+    const attrs: SearchAttributes = {
+      [SYNC_ENGINE_PIPELINE_STATUS_SEARCH_ATTRIBUTE]: [derivePipelineStatus()],
+      [SYNC_ENGINE_PIPELINE_DESIRED_STATUS_SEARCH_ATTRIBUTE]: [desiredStatus],
+    }
+    upsertSearchAttributes(attrs)
+  }
+
   async function setState(next: Partial<PipelineWorkflowState>) {
     const previousStatus = derivePipelineStatus()
     state = { ...state, ...next }
@@ -77,6 +122,7 @@ export async function pipelineWorkflow(
 
     if (previousStatus !== nextStatus) {
       await updatePipelineStatus(pipelineId, nextStatus)
+      syncPipelineSearchAttributes()
     }
   }
 
@@ -164,6 +210,8 @@ export async function pipelineWorkflow(
       }
     }
   }
+
+  syncPipelineSearchAttributes()
 
   // MARK: - Main logic
 

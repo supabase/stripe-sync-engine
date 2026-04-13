@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@hyperjump/json-schema": "^1.17.5",
+    "@temporalio/common": "^1",
     "@temporalio/testing": "^1",
     "@types/node": "^24.10.1",
     "openapi-typescript": "^7",
