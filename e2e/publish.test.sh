@@ -22,6 +22,7 @@ set -euo pipefail
 REGISTRY="${STRIPE_NPM_REGISTRY:?Set STRIPE_NPM_REGISTRY (e.g. http://localhost:4873 or https://npm.pkg.github.com)}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMPDIR_BASE=$(mktemp -d)
+ENGINE_VERSION=$(node -p "require('$REPO_ROOT/apps/engine/package.json').version")
 
 # Ensure npm/npx don't route localhost through a proxy
 export no_proxy="${no_proxy:-}${no_proxy:+,}localhost,127.0.0.1"
@@ -84,7 +85,7 @@ if [[ "$REGISTRY" == *"npm.pkg.github.com"* ]]; then
 fi
 echo "  .npmrc: $(cat .npmrc | grep -v authToken)"
 
-if VERSION_OUTPUT=$(npx --yes @stripe/sync-engine --version 2>&1); then
+if VERSION_OUTPUT=$(npx --yes "@stripe/sync-engine@$ENGINE_VERSION" --version 2>&1); then
   echo "  Version: $VERSION_OUTPUT"
   echo "  PASS: --version returned output"
 else
@@ -99,11 +100,11 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Step 4: npx @stripe/sync-engine --help ---"
 
-if npx --yes @stripe/sync-engine --help > /dev/null 2>&1; then
+if npx --yes "@stripe/sync-engine@$ENGINE_VERSION" --help > /dev/null 2>&1; then
   echo "  PASS: --help exits 0"
 else
   echo "  FAIL: --help exited with $?"
-  npx --yes @stripe/sync-engine --help 2>&1 || true
+  npx --yes "@stripe/sync-engine@$ENGINE_VERSION" --help 2>&1 || true
   exit 1
 fi
 echo ""
@@ -115,7 +116,7 @@ echo "--- Step 5: npx @stripe/sync-engine check (connector loading) ---"
 
 PARAMS='{"source":{"type":"stripe","stripe":{"api_key":"sk_test_fake"}},"destination":{"type":"postgres","postgres":{"connection_string":"postgresql://fake:fake@localhost:5432/fake"}}}'
 
-CHECK_OUTPUT=$(npx --yes @stripe/sync-engine check --params "$PARAMS" 2>&1 || true)
+CHECK_OUTPUT=$(npx --yes "@stripe/sync-engine@$ENGINE_VERSION" check --params "$PARAMS" 2>&1 || true)
 
 # check will fail (bad credentials) but should NOT fail on "not found" (connector loading)
 if echo "$CHECK_OUTPUT" | grep -qi "not found"; then
