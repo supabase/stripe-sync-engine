@@ -65,6 +65,12 @@ for pkg in $PACKAGES; do
   fi
 done
 
+# Switch .npmrc from GitHub Packages to npmjs.org for publishing.
+# npm's scoped registry config (@stripe:registry) takes precedence over
+# --registry, so we must point the scope at npmjs.org before publishing.
+echo "@stripe:registry=https://registry.npmjs.org" > .npmrc
+echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc
+
 # Publish all tarballs to npmjs.org
 echo ""
 echo "=== Publishing to npmjs.org ==="
@@ -78,8 +84,7 @@ for tgz in $TGZ_FILES; do
   echo "Publishing $tgz"
   if PUBLISH_OUTPUT=$(npm publish "$tgz" \
     --registry https://registry.npmjs.org \
-    --access public \
-    --//registry.npmjs.org/:_authToken="${NPM_TOKEN}" 2>&1); then
+    --access public 2>&1); then
     echo "$PUBLISH_OUTPUT"
   else
     status=$?

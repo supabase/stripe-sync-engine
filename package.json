@@ -2,7 +2,7 @@
   "name": "stripe-sync-engine",
   "private": true,
   "type": "module",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "workspaces": [
     "packages/*",
     "apps/*"
