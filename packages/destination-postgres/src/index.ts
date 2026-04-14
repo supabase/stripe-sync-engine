@@ -103,7 +103,21 @@ export {
 function isTransient(err: unknown): boolean {
   if (!(err instanceof Error)) return false
   const msg = err.message.toLowerCase()
-  return msg.includes('econnrefused') || msg.includes('timeout') || msg.includes('connection')
+  const code = ((err as NodeJS.ErrnoException).code ?? '').toLowerCase()
+  return (
+    msg.includes('econnrefused') ||
+    msg.includes('timeout') ||
+    msg.includes('connection') ||
+    code.includes('econnrefused') ||
+    code.includes('etimedout') ||
+    code.includes('econnreset')
+  )
+}
+
+function errorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+  if (err.message) return err.message
+  return (err as NodeJS.ErrnoException).code ?? err.constructor.name
 }
 
 function createPool(config: PoolConfig): pg.Pool {
@@ -244,6 +258,14 @@ const destination = {
       }
 
       await flushAll()
+
+      yield {
+        type: 'log' as const,
+        log: {
+          level: 'info' as const,
+          message: `Postgres destination: wrote to schema "${config.schema}"`,
+        },
+      }
     } catch (err: unknown) {
       try {
         await flushAll()
@@ -259,21 +281,14 @@ const destination = {
             failure_type: isTransient(err)
               ? ('transient_error' as const)
               : ('system_error' as const),
-            message: err instanceof Error ? err.message : String(err),
+            message: errorMessage(err),
             stack_trace: err instanceof Error ? err.stack : undefined,
           },
         },
       }
+      throw err
     } finally {
       await pool.end()
-    }
-
-    yield {
-      type: 'log' as const,
-      log: {
-        level: 'info' as const,
-        message: `Postgres destination: wrote to schema "${config.schema}"`,
-      },
     }
   },
 } satisfies Destination<Config>

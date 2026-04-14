@@ -65,7 +65,12 @@ function syncRequestContext(pipeline: {
 }
 
 function traceError(err: unknown): TraceMessage {
-  const message = err instanceof Error ? err.message : String(err)
+  let message: string
+  if (err instanceof Error) {
+    message = err.message || (err as NodeJS.ErrnoException).code || err.constructor.name
+  } else {
+    message = String(err)
+  }
   const stack_trace = err instanceof Error ? err.stack : undefined
   return {
     type: 'trace',
@@ -87,10 +92,13 @@ async function* logApiStream<T>(
   startedAt = Date.now()
 ): AsyncIterable<T | TraceMessage> {
   let itemCount = 0
+  let hasErrorTrace = false
   try {
     for await (const item of iter) {
       itemCount++
       if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
+      const msg = item as { type?: string; trace?: { trace_type?: string } }
+      if (msg?.type === 'trace' && msg?.trace?.trace_type === 'error') hasErrorTrace = true
       yield item
     }
     logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
@@ -99,7 +107,7 @@ async function* logApiStream<T>(
       { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
       `${label} failed`
     )
-    yield traceError(error)
+    if (!hasErrorTrace) yield traceError(error)
   }
 }
 
