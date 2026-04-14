@@ -232,10 +232,12 @@ export async function createApp(resolver: ConnectorResolver) {
         status: c.res.status,
         durationMs: Date.now() - start,
         error,
-        ...(responseBody !== undefined && { responseBody }),
       },
       'request end'
     )
+    if (responseBody !== undefined) {
+      logger.debug({ requestId, responseBody }, 'response body')
+    }
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
