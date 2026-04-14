@@ -61,11 +61,18 @@ export function trackProgress(opts: {
     let stateCheckpointCount = 0
     const streamStatus = new Map<string, Status>()
 
-    // Restore stream statuses from persisted engine state
+    // Restore stream statuses: engine state first, then source state overrides
+    // (source state is authoritative — streams the source skips emit no messages)
     if (opts.initial_state?.engine?.streams) {
       for (const [stream, data] of Object.entries(opts.initial_state.engine.streams)) {
         const status = (data as { status?: Status })?.status
         if (status) streamStatus.set(stream, status)
+      }
+    }
+    if (opts.initial_state?.source?.streams) {
+      for (const [stream, data] of Object.entries(opts.initial_state.source.streams)) {
+        const status = (data as { status?: string })?.status
+        if (status) streamStatus.set(stream, status as Status)
       }
     }
     const streamErrors = new Map<string, StreamError[]>()
@@ -263,6 +270,9 @@ export function trackProgress(opts: {
             const errs = streamErrors.get(err.stream) ?? []
             errs.push({ message: err.message, failure_type: err.failure_type as FailureType })
             streamErrors.set(err.stream, errs)
+            if (err.failure_type && streamStatus.get(err.stream) !== 'complete') {
+              streamStatus.set(err.stream, err.failure_type as Status)
+            }
           }
         }
       }
