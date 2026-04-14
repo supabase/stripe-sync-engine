@@ -570,7 +570,7 @@ describe('takeLimits()', () => {
     })
     expect(result[2]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'state_limit', record_count: { customers: 1 } },
+      eof: { reason: 'state_limit' },
     })
   })
 
@@ -593,7 +593,7 @@ describe('takeLimits()', () => {
     expect(result).toHaveLength(3)
     expect(result[2]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'complete', record_count: { customers: 1 } },
+      eof: { reason: 'complete' },
     })
   })
 
@@ -656,7 +656,7 @@ describe('takeLimits()', () => {
     })
     expect(result[4]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'state_limit', record_count: { customers: 1, products: 1 } },
+      eof: { reason: 'state_limit' },
     })
   })
 
@@ -874,8 +874,6 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits()(toAsync([])))
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
-    // No records means no record_count field
-    expect((result[0] as any).eof.record_count).toBeUndefined()
   })
 })
 

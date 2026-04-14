@@ -433,10 +433,6 @@ export const EofPayload = z
       .describe(
         'Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.'
       ),
-    record_count: z
-      .record(z.string(), z.number())
-      .optional()
-      .describe('Legacy per-stream record counts. Backward compat.'),
   })
   .describe(
     'Terminal message with two nested sections: ' +

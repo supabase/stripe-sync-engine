@@ -146,7 +146,6 @@ export function takeLimits<T extends Message>(
   return async function* (messages) {
     const startedAt = Date.now()
     let stateCount = 0
-    const recordCount = new Map<string, number>()
 
     const hasTimeLimit = opts.time_limit != null && opts.time_limit > 0
     const nominalDeadline = hasTimeLimit ? startedAt + opts.time_limit! * 1000 : undefined
@@ -165,18 +164,11 @@ export function takeLimits<T extends Message>(
 
     const needsRace = hardDeadline != null || opts.signal != null
 
-    function getRecordCount() {
-      return recordCount.size > 0 ? Object.fromEntries(recordCount) : undefined
-    }
-
     function makeEof(
       reason: 'complete' | 'state_limit' | 'time_limit' | 'aborted',
       extra?: { cutoff?: 'soft' | 'hard' }
     ): T {
-      const eof: Record<string, unknown> = {
-        reason,
-        record_count: getRecordCount(),
-      }
+      const eof: Record<string, unknown> = { reason }
       if (reason === 'time_limit' && extra?.cutoff) eof.cutoff = extra.cutoff
       if (reason === 'time_limit' || reason === 'aborted') {
         eof.elapsed_ms = Date.now() - startedAt
@@ -187,10 +179,6 @@ export function takeLimits<T extends Message>(
     // Fast path: no time limit and no signal — simple cooperative loop
     if (!needsRace) {
       for await (const msg of messages) {
-        if (msg.type === 'record' && 'record' in msg) {
-          const stream = (msg as any).record.stream as string
-          recordCount.set(stream, (recordCount.get(stream) ?? 0) + 1)
-        }
         yield msg
         if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
           yield makeEof('state_limit')
@@ -285,10 +273,6 @@ export function takeLimits<T extends Message>(
         }
 
         const msg = result.value
-        if (msg.type === 'record' && 'record' in msg) {
-          const stream = (msg as any).record.stream as string
-          recordCount.set(stream, (recordCount.get(stream) ?? 0) + 1)
-        }
         yield msg
 
         // Check soft deadline between messages

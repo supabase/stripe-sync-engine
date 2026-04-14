@@ -194,11 +194,8 @@ export function trackProgress(opts: {
       const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
       const streams = allStreams()
       const streamProgressMap: Record<string, EofStreamProgress> = {}
-      const recordCountLegacy: Record<string, number> = {}
       for (const s of streams) {
         streamProgressMap[s] = buildStreamProgress(s)
-        const rc = runRecordCount(s)
-        if (rc > 0) recordCountLegacy[s] = rc
       }
       const eof: EofPayload = {
         reason,
@@ -211,7 +208,6 @@ export function trackProgress(opts: {
           state_checkpoint_count: stateCheckpointCount,
         },
         stream_progress: Object.keys(streamProgressMap).length > 0 ? streamProgressMap : undefined,
-        record_count: Object.keys(recordCountLegacy).length > 0 ? recordCountLegacy : undefined,
       }
       return {
         type: 'eof',

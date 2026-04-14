@@ -578,10 +578,6 @@ export interface components {
                         }[];
                     };
                 };
-                /** @description Legacy per-stream record counts. Backward compat. */
-                record_count?: {
-                    [key: string]: number;
-                };
             };
         };
         SourceStripeInput: {

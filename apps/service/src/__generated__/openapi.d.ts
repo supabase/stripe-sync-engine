@@ -358,10 +358,6 @@ export interface operations {
                                         }[];
                                     };
                                 };
-                                /** @description Legacy per-stream record counts. Backward compat. */
-                                record_count?: {
-                                    [key: string]: number;
-                                };
                             };
                         }[];
                         has_more: boolean;
@@ -490,10 +486,6 @@ export interface operations {
                                     }[];
                                 };
                             };
-                            /** @description Legacy per-stream record counts. Backward compat. */
-                            record_count?: {
-                                [key: string]: number;
-                            };
                         };
                     };
                 };
@@ -613,10 +605,6 @@ export interface operations {
                                         failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
                                     }[];
                                 };
-                            };
-                            /** @description Legacy per-stream record counts. Backward compat. */
-                            record_count?: {
-                                [key: string]: number;
                             };
                         };
                     };
@@ -798,10 +786,6 @@ export interface operations {
                                         failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
                                     }[];
                                 };
-                            };
-                            /** @description Legacy per-stream record counts. Backward compat. */
-                            record_count?: {
-                                [key: string]: number;
                             };
                         };
                     };

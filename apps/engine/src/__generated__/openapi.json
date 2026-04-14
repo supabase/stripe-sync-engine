@@ -1565,16 +1565,6 @@
                   ],
                   "description": "End-of-sync summary for a single stream."
                 }
-              },
-              "record_count": {
-                "description": "Legacy per-stream record counts. Backward compat.",
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "number"
-                }
               }
             },
             "required": [

@@ -134,7 +134,6 @@ describe('trackProgress', () => {
             errors: [{ message: 'boom', failure_type: 'system_error' }],
           },
         },
-        record_count: { customers: 2 },
       },
     })
   })
