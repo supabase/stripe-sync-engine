@@ -5,6 +5,7 @@ import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
 import pg from 'pg'
 import type { Message, ConnectorResolver, TraceMessage } from '../lib/index.js'
+import type { EofPayload } from '@stripe/sync-protocol'
 import {
   createEngine,
   createConnectorSchemas,
@@ -99,7 +100,7 @@ async function* logApiStream<T>(
       if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
       const msg = item as { type?: string; trace?: { trace_type?: string }; eof?: unknown }
       if (msg?.type === 'trace' && msg?.trace?.trace_type === 'error') hasErrorTrace = true
-      if (msg?.type === 'eof') logger.info({ ...context, eof: msg.eof }, `${label} eof`)
+      if (msg?.type === 'eof') logger.info({ ...context }, formatEof(msg.eof as EofPayload))
       yield item
     }
     logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
@@ -113,6 +114,103 @@ async function* logApiStream<T>(
 }
 
 const dangerouslyVerbose = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
+
+const REASON_EMOJI: Record<string, string> = {
+  complete: '✅',
+  time_limit: '⏱️',
+  state_limit: '📦',
+  error: '❌',
+  aborted: '🛑',
+}
+
+const STATUS_EMOJI: Record<string, string> = {
+  complete: '✅',
+  started: '🔄',
+  running: '🔄',
+  transient_error: '⚠️',
+  system_error: '❌',
+  config_error: '❌',
+  auth_error: '🔒',
+}
+
+function formatEof(eof: EofPayload): string {
+  const emoji = REASON_EMOJI[eof.reason] ?? '❓'
+  const elapsed = eof.global_progress?.elapsed_ms
+    ? `${(eof.global_progress.elapsed_ms / 1000).toFixed(1)}s`
+    : ''
+  const totalRows = eof.global_progress?.run_record_count ?? 0
+  const rps = eof.global_progress?.rows_per_second?.toFixed(1) ?? '0'
+  const checkpoints = eof.global_progress?.state_checkpoint_count ?? 0
+
+  const lines: string[] = []
+  lines.push(
+    `${emoji} Sync ${eof.reason}${elapsed ? ` (${elapsed}` : ''}${totalRows ? ` | ${totalRows} rows, ${rps} rows/s` : ''}${checkpoints ? `, ${checkpoints} checkpoints` : ''}${elapsed ? ')' : ''}`
+  )
+
+  const sp = eof.stream_progress
+  if (sp) {
+    let complete = 0
+    let inProgress = 0
+    let errored = 0
+    let pending = 0
+    const errorStreams: string[] = []
+    const activeStreams: { name: string; rows: number; rps: string }[] = []
+
+    for (const [name, s] of Object.entries(sp)) {
+      if (s.status === 'complete') {
+        complete++
+        if (s.run_record_count > 0) {
+          activeStreams.push({
+            name,
+            rows: s.run_record_count,
+            rps: s.records_per_second?.toFixed(1) ?? '0',
+          })
+        }
+      } else if (s.status === 'started' || s.status === 'running') {
+        inProgress++
+        if (s.run_record_count > 0) {
+          activeStreams.push({
+            name,
+            rows: s.run_record_count,
+            rps: s.records_per_second?.toFixed(1) ?? '0',
+          })
+        }
+      } else if (
+        s.status === 'transient_error' ||
+        s.status === 'system_error' ||
+        s.status === 'config_error' ||
+        s.status === 'auth_error'
+      ) {
+        errored++
+        const errMsg = s.errors?.[0]?.message ?? s.status
+        errorStreams.push(`${STATUS_EMOJI[s.status]} ${name}: ${errMsg}`)
+      } else {
+        pending++
+      }
+    }
+
+    // Show streams that synced rows this run
+    for (const s of activeStreams.sort((a, b) => b.rows - a.rows)) {
+      lines.push(`  ✅ ${s.name}: ${s.rows} rows @ ${s.rps} rows/s`)
+    }
+
+    // Show errored streams
+    for (const e of errorStreams) {
+      lines.push(`  ${e}`)
+    }
+
+    // Summary line
+    const parts: string[] = []
+    if (complete) parts.push(`${complete} complete`)
+    if (inProgress) parts.push(`${inProgress} in progress`)
+    if (errored) parts.push(`${errored} errored`)
+    if (pending) parts.push(`${pending} pending`)
+    parts.push(`${totalRows} total rows this run`)
+    lines.push(`  📊 ${parts.join(', ')}`)
+  }
+
+  return lines.join('\n')
+}
 
 /**
  * Create an AbortController that fires on client disconnect.
