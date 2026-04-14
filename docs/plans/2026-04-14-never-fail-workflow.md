@@ -20,14 +20,14 @@ Source error → errorToTrace() → drainMessages() → classifySyncErrors():
 
 ### What `system_error` retries look like in practice
 
-| Error | Self-heals? | 10 retries useful? |
-|---|---|---|
-| Rate limit (429) | Yes | Yes |
-| Stripe 5xx | Usually | Yes |
-| Network timeout | Usually | Yes |
-| Connector bug (bad params) | No | No — 30 min wasted |
-| Schema mismatch | No | No |
-| JSON parse failure | No | No |
+| Error                      | Self-heals? | 10 retries useful? |
+| -------------------------- | ----------- | ------------------ |
+| Rate limit (429)           | Yes         | Yes                |
+| Stripe 5xx                 | Usually     | Yes                |
+| Network timeout            | Usually     | Yes                |
+| Connector bug (bad params) | No          | No — 30 min wasted |
+| Schema mismatch            | No          | No                 |
+| JSON parse failure         | No          | No                 |
 
 Most `system_error` cases are deterministic. Retrying them wastes time and API quota before the workflow dies anyway.
 
@@ -54,6 +54,7 @@ The pipeline workflow is an entity. It runs until explicitly deleted. Every erro
 ### Change 1: Activity never throws for classified errors
 
 **Current** (`pipeline-sync.ts`):
+
 ```ts
 if (transient.length > 0) {
   throw ApplicationFailure.retryable(summarizeSyncErrors(transient), 'TransientSyncError')
@@ -61,6 +62,7 @@ if (transient.length > 0) {
 ```
 
 **Proposed**: The activity always returns — never throws for classified errors.
+
 ```ts
 if (errors.length > 0) {
   return { errors, state, eof }
@@ -87,7 +89,7 @@ if (transient.length > 0) {
   continue
 }
 
-transientFailureCount = 0  // reset on success
+transientFailureCount = 0 // reset on success
 ```
 
 This keeps the workflow alive. Transient errors that won't self-heal eventually escalate to the errored state, where the workflow parks and waits for a signal.
@@ -98,15 +100,15 @@ This keeps the workflow alive. Transient errors that won't self-heal eventually 
 
 Split the catch-all `system_error` into genuinely transient vs. deterministic:
 
-| Error | Current type | Proposed type |
-|---|---|---|
-| Rate limit (429) | `transient_error` | `transient_error` (no change) |
-| Auth (401/403) | `auth_error` | `auth_error` (no change) |
-| Network timeout / ECONNRESET | `system_error` | `transient_error` |
-| Stripe 5xx | `system_error` | `transient_error` |
-| JSON parse failure | `system_error` | `system_error` → permanent |
-| Connector bug (bad params) | `system_error` | `system_error` → permanent |
-| Unknown stream | `config_error` | `config_error` (no change) |
+| Error                        | Current type      | Proposed type                 |
+| ---------------------------- | ----------------- | ----------------------------- |
+| Rate limit (429)             | `transient_error` | `transient_error` (no change) |
+| Auth (401/403)               | `auth_error`      | `auth_error` (no change)      |
+| Network timeout / ECONNRESET | `system_error`    | `transient_error`             |
+| Stripe 5xx                   | `system_error`    | `transient_error`             |
+| JSON parse failure           | `system_error`    | `system_error` → permanent    |
+| Connector bug (bad params)   | `system_error`    | `system_error` → permanent    |
+| Unknown stream               | `config_error`    | `config_error` (no change)    |
 
 The classifier expands:
 
@@ -125,7 +127,7 @@ function classifyError(err: unknown): TraceError['failure_type'] {
   }
   if (isNetworkError(err)) return 'transient_error'
   if (err instanceof Error && err.message.includes('Rate limit')) return 'transient_error'
-  return 'system_error'  // deterministic by default
+  return 'system_error' // deterministic by default
 }
 ```
 
@@ -134,6 +136,7 @@ Only `transient_error` gets retried. Everything else parks.
 ### Change 3: Preserve `failure_type` through `collectMessages`
 
 **Current** (`packages/protocol/src/helpers.ts`):
+
 ```ts
 } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
   throw new Error(msg.trace.error.message)
@@ -141,6 +144,7 @@ Only `transient_error` gets retried. Everything else parks.
 ```
 
 **Proposed**:
+
 ```ts
 export class TraceErrorException extends Error {
   constructor(
@@ -167,12 +171,12 @@ Then `pipelineSetup` can distinguish config errors from transient ones instead o
 
 ### Recovery signals
 
-| Signal | Trigger | Workflow action |
-|---|---|---|
-| `desired_status: active` | User re-enables | Clear errored state, re-enter main loop (existing) |
-| `credentials_updated` | User rotates API key | Clear if `auth_error` |
-| `config_updated` | User modifies config | Clear, re-run setup if needed |
-| `deployment_updated` | New connector deployed | Clear if `system_error` |
+| Signal                   | Trigger                | Workflow action                                    |
+| ------------------------ | ---------------------- | -------------------------------------------------- |
+| `desired_status: active` | User re-enables        | Clear errored state, re-enter main loop (existing) |
+| `credentials_updated`    | User rotates API key   | Clear if `auth_error`                              |
+| `config_updated`         | User modifies config   | Clear, re-run setup if needed                      |
+| `deployment_updated`     | New connector deployed | Clear if `system_error`                            |
 
 Today only `desired_status: active` triggers recovery. The others let the workflow react to specific fixes without requiring the user to manually toggle the pipeline.
 
@@ -224,12 +228,12 @@ Phase 3 (reclassifying `system_error` as permanent) changes behavior — errors 
 ## Constants
 
 ```ts
-const MAX_TRANSIENT_RETRIES = 5  // before escalating to permanent
+const MAX_TRANSIENT_RETRIES = 5 // before escalating to permanent
 ```
 
 ## Open questions
 
 1. **Should `system_error` get 1 retry before parking?** Some system errors might be flaky. One retry before escalation could be a reasonable middle ground.
-2. **How does the operator know what to do?** When the workflow parks, it needs visibility into *why* and *what action to take*. Should the workflow write error details to the pipeline store?
+2. **How does the operator know what to do?** When the workflow parks, it needs visibility into _why_ and _what action to take_. Should the workflow write error details to the pipeline store?
 3. **Should `SKIPPABLE_ERROR_PATTERNS` move to the workflow layer?** Currently the source connector silently swallows these. If the workflow handled all error classification, the source would just emit errors and let the orchestrator decide. Cleaner separation, but requires the workflow to understand Stripe-specific error messages.
 4. **Backward compatibility.** Changing activity return types is a Temporal versioning concern. Existing in-flight workflows expect the throw behavior for transient errors.

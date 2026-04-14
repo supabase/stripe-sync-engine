@@ -17,7 +17,7 @@
 import { createConnectorResolver, createEngine } from '../apps/engine/src/lib/index.js'
 import { defaultConnectors } from '../apps/engine/src/lib/default-connectors.js'
 import { fileStateStore } from '../apps/engine/src/lib/state-store.js'
-import type { PipelineConfig } from '../packages/protocol/src/index.js'
+import { type PipelineConfig, emptySyncState } from '../packages/protocol/src/index.js'
 
 const stripeApiKey = process.env.STRIPE_API_KEY
 const postgresUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
@@ -49,7 +49,8 @@ for await (const _msg of engine.pipeline_setup(pipeline)) {
 
 // State: file-backed, resumable across runs
 const store = fileStateStore('.sync-state.json')
-const state = await store.get()
+const sourceState = await store.get()
+const state = sourceState ? { ...emptySyncState(), source: sourceState } : undefined
 
 console.error('=== Stripe → Postgres (live WebSocket mode) ===')
 console.error('After backfill, the engine will stream live events. Press Ctrl+C to stop.\n')

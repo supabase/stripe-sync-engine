@@ -23,6 +23,11 @@ export {
   isDataMessage,
   isTraceError,
   isTraceStreamStatus,
+  isTraceProgress,
+  // State constructors
+  coerceSyncState,
+  emptySectionState,
+  emptySyncState,
   // Stream collectors
   collectMessages,
   collectFirst,

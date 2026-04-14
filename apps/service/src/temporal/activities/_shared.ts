@@ -1,7 +1,8 @@
 import { heartbeat } from '@temporalio/activity'
-import type { Message, Engine, SourceState, SourceStateMessage } from '@stripe/sync-engine'
-import type { EofPayload } from '@stripe/sync-protocol'
+import type { Message, Engine } from '@stripe/sync-engine'
 import { createRemoteEngine } from '@stripe/sync-engine'
+import type { EofPayload, SourceStateMessage, SyncState } from '@stripe/sync-protocol'
+import { emptySyncState } from '@stripe/sync-protocol'
 import type { PipelineStore } from '../../lib/stores.js'
 import type { SyncRunError } from '../sync-errors.js'
 
@@ -24,7 +25,7 @@ export function createActivitiesContext(opts: {
 
 export interface RunResult {
   errors: SyncRunError[]
-  state: SourceState
+  state: SyncState
 }
 
 export async function* asIterable<T>(items: T[]): AsyncIterable<T> {
@@ -35,13 +36,19 @@ export function pipelineHeader(config: Record<string, unknown>): string {
   return JSON.stringify(config)
 }
 
-export function mergeStateMessage(state: SourceState, msg: SourceStateMessage): SourceState {
+export function mergeStateMessage(state: SyncState, msg: SourceStateMessage): SyncState {
   if (msg.source_state.state_type === 'global') {
-    return { ...state, global: msg.source_state.data as Record<string, unknown> }
+    return {
+      ...state,
+      source: { ...state.source, global: msg.source_state.data as Record<string, unknown> },
+    }
   }
   return {
     ...state,
-    streams: { ...state.streams, [msg.source_state.stream]: msg.source_state.data },
+    source: {
+      ...state.source,
+      streams: { ...state.source.streams, [msg.source_state.stream]: msg.source_state.data },
+    },
   }
 }
 
@@ -58,17 +65,17 @@ export function collectError(message: Message): RunResult['errors'][number] | nu
 
 export async function drainMessages(
   stream: AsyncIterable<Message>,
-  initialState?: SourceState
+  initialState?: SyncState
 ): Promise<{
   errors: RunResult['errors']
-  state: SourceState
+  state: SyncState
   records: Message[]
   sourceConfig?: Record<string, unknown>
   destConfig?: Record<string, unknown>
   eof?: EofPayload
 }> {
   const errors: RunResult['errors'] = []
-  let state: SourceState = initialState ?? { streams: {}, global: {} }
+  let state: SyncState = initialState ?? emptySyncState()
   const records: Message[] = []
   let sourceConfig: Record<string, unknown> | undefined
   let destConfig: Record<string, unknown> | undefined
@@ -78,7 +85,14 @@ export async function drainMessages(
   for await (const message of stream) {
     count++
     if (message.type === 'eof') {
-      eof = { reason: message.eof.reason, record_count: message.eof.record_count }
+      eof = message.eof
+      if (eof.stream_progress) {
+        const engineStreams: Record<string, unknown> = { ...state.engine.streams }
+        for (const [name, sp] of Object.entries(eof.stream_progress)) {
+          engineStreams[name] = { cumulative_record_count: sp.cumulative_record_count }
+        }
+        state = { ...state, engine: { ...state.engine, streams: engineStreams } }
+      }
     } else if (message.type === 'control') {
       if (message.control.control_type === 'source_config') {
         sourceConfig = message.control.source_config!

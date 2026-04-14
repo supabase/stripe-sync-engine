@@ -11,7 +11,7 @@
 import { createConnectorResolver, createEngine } from '../apps/engine/src/lib/index.js'
 import { defaultConnectors } from '../apps/engine/src/lib/default-connectors.js'
 import { fileStateStore } from '../apps/engine/src/lib/state-store.js'
-import type { PipelineConfig } from '../packages/protocol/src/index.js'
+import { type PipelineConfig, emptySyncState } from '../packages/protocol/src/index.js'
 
 const stripeApiKey = process.env.STRIPE_API_KEY
 if (!stripeApiKey) throw new Error('Set STRIPE_API_KEY')
@@ -42,7 +42,8 @@ for await (const _msg of engine.pipeline_setup(pipeline)) {
 
 // State: file-backed, resumable across runs
 const store = fileStateStore('.sync-state-sheets.json')
-const state = await store.get()
+const sourceState = await store.get()
+const state = sourceState ? { ...emptySyncState(), source: sourceState } : undefined
 
 // Sync
 for await (const msg of engine.pipeline_sync(pipeline, { state })) {

@@ -1,0 +1,230 @@
+import type {
+  Message,
+  SyncOutput,
+  TraceStreamStatus,
+  TraceProgress,
+  EofPayload,
+  EofStreamProgress,
+} from '@stripe/sync-protocol'
+
+type FailureType = 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
+type StreamError = { message: string; failure_type?: FailureType }
+type Status = TraceStreamStatus['status']
+
+/**
+ * Shared record counter that can be tapped into the data pipeline (before the
+ * destination) to count records. The trackProgress() stage reads from it.
+ */
+export function createRecordCounter() {
+  const counts = new Map<string, number>()
+  return {
+    counts,
+    tap<T extends Message>(msgs: AsyncIterable<T>): AsyncIterable<T> {
+      const self = this
+      return (async function* () {
+        for await (const msg of msgs) {
+          if (msg.type === 'record' && 'record' in msg) {
+            const stream = (msg as { record: { stream: string } }).record.stream
+            self.counts.set(stream, (self.counts.get(stream) ?? 0) + 1)
+          }
+          yield msg
+        }
+      })()
+    },
+  }
+}
+
+export function trackProgress(opts: {
+  interval_ms?: number
+  initial_cumulative_counts?: Record<string, number>
+  /** Shared counter fed by createRecordCounter().tap() on the data path. */
+  recordCounter?: ReturnType<typeof createRecordCounter>
+}): (msgs: AsyncIterable<SyncOutput>) => AsyncIterable<SyncOutput> {
+  const intervalMs = opts.interval_ms ?? 2000
+
+  return async function* (messages) {
+    const cumulativeRecordCount = new Map<string, number>(
+      Object.entries(opts.initial_cumulative_counts ?? {})
+    )
+    const prevSnapshotCounts = new Map<string, number>()
+    let stateCheckpointCount = 0
+    const streamStatus = new Map<string, Status>()
+    const streamErrors = new Map<string, StreamError[]>()
+
+    const startedAt = Date.now()
+    let lastWindowAt = startedAt
+    let lastEmitAt = startedAt
+    let prevWindowTotal = 0
+
+    function elapsedMs() {
+      return Date.now() - startedAt
+    }
+
+    function elapsedSec() {
+      return Math.max(elapsedMs() / 1000, 0.001)
+    }
+
+    function runRecordCount(stream: string): number {
+      return opts.recordCounter?.counts.get(stream) ?? 0
+    }
+
+    function totalRunRecords(): number {
+      if (!opts.recordCounter) return 0
+      let sum = 0
+      for (const v of opts.recordCounter.counts.values()) sum += v
+      return sum
+    }
+
+    function windowRecordCount(stream: string): number {
+      return runRecordCount(stream) - (prevSnapshotCounts.get(stream) ?? 0)
+    }
+
+    function totalWindowRecords(): number {
+      return totalRunRecords() - prevWindowTotal
+    }
+
+    function allStreams(): string[] {
+      const s = new Set<string>()
+      if (opts.recordCounter) {
+        for (const k of opts.recordCounter.counts.keys()) s.add(k)
+      }
+      for (const k of cumulativeRecordCount.keys()) s.add(k)
+      for (const k of streamStatus.keys()) s.add(k)
+      return [...s]
+    }
+
+    function snapshotWindow() {
+      if (opts.recordCounter) {
+        for (const [k, v] of opts.recordCounter.counts) prevSnapshotCounts.set(k, v)
+      }
+      prevWindowTotal = totalRunRecords()
+      lastWindowAt = Date.now()
+      lastEmitAt = Date.now()
+    }
+
+    function buildStreamStatus(stream: string): SyncOutput {
+      const run = runRecordCount(stream)
+      const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
+      return {
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status' as const,
+          stream_status: {
+            stream,
+            status: streamStatus.get(stream) ?? 'running',
+            cumulative_record_count: cumulative,
+            run_record_count: run,
+            window_record_count: windowRecordCount(stream),
+            records_per_second: run / elapsedSec(),
+          },
+        },
+        _emitted_by: 'engine',
+        _ts: new Date().toISOString(),
+      } as SyncOutput
+    }
+
+    function buildGlobalProgress(): SyncOutput {
+      const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
+      const progress: TraceProgress = {
+        elapsed_ms: elapsedMs(),
+        run_record_count: totalRunRecords(),
+        rows_per_second: totalRunRecords() / elapsedSec(),
+        window_rows_per_second: totalWindowRecords() / windowDuration,
+        state_checkpoint_count: stateCheckpointCount,
+      }
+      return {
+        type: 'trace',
+        trace: { trace_type: 'progress' as const, progress },
+        _emitted_by: 'engine',
+        _ts: new Date().toISOString(),
+      } as SyncOutput
+    }
+
+    function buildStreamProgress(stream: string): EofStreamProgress {
+      const run = runRecordCount(stream)
+      const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
+      return {
+        status: streamStatus.get(stream) ?? 'running',
+        cumulative_record_count: cumulative,
+        run_record_count: run,
+        records_per_second: run / elapsedSec(),
+        errors: streamErrors.has(stream) ? streamErrors.get(stream) : undefined,
+      }
+    }
+
+    function buildEnrichedEof(reason: EofPayload['reason']): SyncOutput {
+      const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
+      const streams = allStreams()
+      const streamProgressMap: Record<string, EofStreamProgress> = {}
+      const recordCountLegacy: Record<string, number> = {}
+      for (const s of streams) {
+        streamProgressMap[s] = buildStreamProgress(s)
+        const rc = runRecordCount(s)
+        if (rc > 0) recordCountLegacy[s] = rc
+      }
+      const eof: EofPayload = {
+        reason,
+        global_progress: {
+          elapsed_ms: elapsedMs(),
+          run_record_count: totalRunRecords(),
+          rows_per_second: totalRunRecords() / elapsedSec(),
+          window_rows_per_second: totalWindowRecords() / windowDuration,
+          state_checkpoint_count: stateCheckpointCount,
+        },
+        stream_progress: Object.keys(streamProgressMap).length > 0 ? streamProgressMap : undefined,
+        record_count: Object.keys(recordCountLegacy).length > 0 ? recordCountLegacy : undefined,
+      }
+      return {
+        type: 'eof',
+        eof,
+        _emitted_by: 'engine',
+        _ts: new Date().toISOString(),
+      } as SyncOutput
+    }
+
+    function* maybeEmitProgress(): Iterable<SyncOutput> {
+      const now = Date.now()
+      if (now - lastEmitAt < intervalMs) return
+
+      for (const stream of allStreams()) {
+        yield buildStreamStatus(stream)
+      }
+      yield buildGlobalProgress()
+      snapshotWindow()
+    }
+
+    for await (const msg of messages) {
+      if (msg.type === 'source_state') {
+        stateCheckpointCount++
+        if (msg.source_state.state_type === 'stream') {
+          const stream = msg.source_state.stream
+          if (!streamStatus.has(stream)) streamStatus.set(stream, 'running')
+        }
+      } else if (msg.type === 'trace') {
+        if (msg.trace.trace_type === 'stream_status') {
+          const ss = msg.trace.stream_status
+          streamStatus.set(ss.stream, ss.status)
+        } else if (msg.trace.trace_type === 'error') {
+          const err = msg.trace.error
+          if (err.stream) {
+            const errs = streamErrors.get(err.stream) ?? []
+            errs.push({ message: err.message, failure_type: err.failure_type as FailureType })
+            streamErrors.set(err.stream, errs)
+          }
+        }
+      }
+
+      if (msg.type === 'eof') {
+        for (const stream of allStreams()) {
+          yield buildStreamStatus(stream)
+        }
+        yield buildGlobalProgress()
+        yield buildEnrichedEof(msg.eof.reason)
+        return
+      }
+
+      yield msg
+      yield* maybeEmitProgress()
+    }
+  }
+}

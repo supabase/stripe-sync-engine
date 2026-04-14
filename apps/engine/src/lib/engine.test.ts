@@ -694,6 +694,43 @@ describe('engine stream membership validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('engine.pipeline_sync() pipeline', () => {
+  it('normalizes legacy section state for direct in-process callers', async () => {
+    let receivedState: unknown
+    const stateCapturingSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read(params) {
+        receivedState = params.state
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { status: 'complete' } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(stateCapturingSource, destinationTest))
+    await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
+      })
+    )
+
+    expect(receivedState).toEqual({
+      streams: { customers: { cursor: 'cus_1' } },
+      global: {},
+    })
+  })
+
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {

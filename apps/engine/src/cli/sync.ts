@@ -2,7 +2,7 @@ import { defineCommand } from 'citty'
 import type { Engine } from '../lib/engine.js'
 import type { ConnectorResolver } from '../lib/index.js'
 import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
-import type { PipelineConfig } from '@stripe/sync-protocol'
+import { type PipelineConfig, type SyncState, emptySyncState } from '@stripe/sync-protocol'
 
 export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
   return defineCommand({
@@ -96,7 +96,10 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
         // drain setup messages (table creation, etc.)
       }
 
-      const output = engine.pipeline_sync(pipeline, { state: initialState, time_limit: timeLimit })
+      const syncState: SyncState | undefined = initialState
+        ? { ...emptySyncState(), source: initialState }
+        : undefined
+      const output = engine.pipeline_sync(pipeline, { state: syncState, time_limit: timeLimit })
 
       // Persist state checkpoints and stream NDJSON to stdout
       for await (const msg of output) {

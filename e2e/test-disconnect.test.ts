@@ -51,7 +51,9 @@ interface MockStripeServer {
   close: () => Promise<void>
 }
 
-async function startMockStripeApi(opts: { delayMs?: number; port?: number } = {}): Promise<MockStripeServer> {
+async function startMockStripeApi(
+  opts: { delayMs?: number; port?: number } = {}
+): Promise<MockStripeServer> {
   const delayMs = opts.delayMs ?? 0
   const port = opts.port ?? 0
   let count = 0
@@ -269,11 +271,7 @@ async function waitForServer(
   throw new Error(`Server at ${url} did not become healthy in ${timeout}ms`)
 }
 
-async function waitForLog(
-  engine: EngineProcess,
-  needle: string,
-  timeout = 5_000
-): Promise<void> {
+async function waitForLog(engine: EngineProcess, needle: string, timeout = 5_000): Promise<void> {
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
     if (engine.stderr.includes(needle)) return
@@ -380,7 +378,10 @@ for (const runtime of runtimes) {
     let engine: EngineProcess
 
     beforeAll(async () => {
-      mockApi = await startMockStripeApi({ delayMs: 200, port: runtime.name === 'docker' ? 18888 : 0 })
+      mockApi = await startMockStripeApi({
+        delayMs: 200,
+        port: runtime.name === 'docker' ? 18888 : 0,
+      })
       const port = getPort()
       engine = await runtime.start(port, mockApi.url)
     }, 120_000)
@@ -395,7 +396,9 @@ for (const runtime of runtimes) {
     })
 
     it('client disconnect stops the engine from making further API calls', async () => {
-      const pipelineHeader = makePipelineHeader(normalizeMockUrlForRuntime(runtime.name, mockApi.url))
+      const pipelineHeader = makePipelineHeader(
+        normalizeMockUrlForRuntime(runtime.name, mockApi.url)
+      )
       const ac = new AbortController()
 
       // Start a streaming sync request
@@ -403,13 +406,15 @@ for (const runtime of runtimes) {
         method: 'POST',
         headers: { 'X-Pipeline': pipelineHeader },
         signal: ac.signal,
-      }).then(async (res) => {
-        if (!res.ok) {
-          const body = await res.text().catch(() => '')
-          console.error(`pipeline_read returned ${res.status}: ${body}`)
-        }
-        return res
-      }).catch(() => null)
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            console.error(`pipeline_read returned ${res.status}: ${body}`)
+          }
+          return res
+        })
+        .catch(() => null)
 
       // Wait for some requests to hit the mock
       await new Promise((r) => setTimeout(r, 1500))
@@ -433,7 +438,9 @@ for (const runtime of runtimes) {
     }, 30_000)
 
     it('soft time limit returns eof with cutoff=soft and elapsed_ms', async () => {
-      const pipelineHeader = makePipelineHeader(normalizeMockUrlForRuntime(runtime.name, mockApi.url))
+      const pipelineHeader = makePipelineHeader(
+        normalizeMockUrlForRuntime(runtime.name, mockApi.url)
+      )
 
       const start = Date.now()
       const res = await fetch(`${engine.url}/pipeline_read?time_limit=3`, {

@@ -11,9 +11,10 @@ import {
   ConfiguredStream,
   ConfiguredCatalog,
   SyncOutput,
-  SourceState,
+  SyncState,
   RecordMessage,
   SourceStateMessage,
+  coerceSyncState,
   collectFirst,
   split,
   merge,
@@ -21,6 +22,7 @@ import {
 } from '@stripe/sync-protocol'
 
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
+import { trackProgress, createRecordCounter } from './progress.js'
 import { applySelection } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 import { logger } from '../logger.js'
@@ -28,14 +30,21 @@ import { logger } from '../logger.js'
 // MARK: - Engine interface
 
 export const SourceReadOptions = z.object({
-  /** Aggregate state (per-stream + global) carried in from the previous sync run. */
-  state: SourceState.optional(),
+  /** Sync state. Normalized at runtime to SyncState for backward compatibility. */
+  state: z.unknown().optional(),
   /** Stop after emitting this many state messages (useful for paging). */
   state_limit: z.number().int().positive().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */
   time_limit: z.number().positive().optional(),
 })
-export type SourceReadOptions = z.infer<typeof SourceReadOptions>
+export interface SourceReadOptions {
+  state?:
+    | SyncState
+    | { streams: Record<string, unknown>; global: Record<string, unknown> }
+    | Record<string, unknown>
+  state_limit?: number
+  time_limit?: number
+}
 
 /** Metadata for a single connector type, including its configuration JSON Schema. */
 export const ConnectorInfo = z.object({
@@ -411,13 +420,10 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const rawSrc = configPayload(pipeline.source)
       const sourceConfig = await getSpecConfig(connector, rawSrc)
       const { catalog } = await discoverCatalog(engine, pipeline)
-      const state = opts?.state
+      const normalizedState = coerceSyncState(opts?.state)
+      const state = normalizedState?.source
 
-      const raw = connector.read(
-        { config: sourceConfig, catalog, state },
-        input,
-        signal
-      )
+      const raw = connector.read({ config: sourceConfig, catalog, state }, input, signal)
       const logged = withLoggedStream(
         'Engine source read',
         {
@@ -474,12 +480,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const now = () => new Date().toISOString()
 
       // Read from source (pass state + signal but not state_limit — state_limit controls sync output)
-      const readOutput = engine.pipeline_read(
-        pipeline,
-        { state: opts?.state },
-        input,
-        signal
-      )
+      const readOutput = engine.pipeline_read(pipeline, { state: opts?.state }, input, signal)
 
       // Split: data + eof → destination path, source signals → caller
       // Eof from pipeline_read is excluded from source signals (pipeline_sync adds its own)
@@ -493,10 +494,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const destConfig = await getSpecConfig(destConnector, rawDest)
       const { filteredCatalog } = await discoverCatalog(engine, pipeline)
 
+      const recordCounter = createRecordCounter()
       const destInput = pipe(
         dataStream,
         enforceCatalog(filteredCatalog),
         log,
+        recordCounter.tap.bind(recordCounter),
         filterType('record', 'source_state')
       )
       const destOutput = destConnector.write(
@@ -515,12 +518,29 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         SyncOutput.parse({ ...msg, _emitted_by: sourceTag, _ts: now() })
       )
 
-      // Merge both streams and apply limits
-      yield* takeLimits<SyncOutput>({
+      // Merge both streams, apply limits, and track progress
+      const limited = takeLimits<SyncOutput>({
         state_limit: opts?.state_limit,
         time_limit: opts?.time_limit,
         signal,
       })(merge(taggedDest, taggedSource))
+
+      const normalizedState = coerceSyncState(opts?.state)
+      const initialCounts = normalizedState?.engine?.streams
+        ? Object.fromEntries(
+            Object.entries(normalizedState.engine.streams)
+              .map(([k, v]) => [
+                k,
+                (v as { cumulative_record_count?: number })?.cumulative_record_count ?? 0,
+              ])
+              .filter(([, v]) => typeof v === 'number' && v > 0)
+          )
+        : undefined
+
+      yield* trackProgress({
+        initial_cumulative_counts: initialCounts as Record<string, number> | undefined,
+        recordCounter,
+      })(limited)
     },
   }
   return engine

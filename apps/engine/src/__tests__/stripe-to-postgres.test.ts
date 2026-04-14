@@ -156,7 +156,11 @@ describe('selective backfill', () => {
   it('creates table but skips backfill when state is pre-seeded as complete', async () => {
     const engine = createEngine(makeResolver())
     const pipeline = makePipeline({ streams: [{ name: targetStream }] })
-    const preSeededState = { [targetStream]: { pageCursor: null, status: 'complete' } }
+    const preSeededState = {
+      source: { streams: { [targetStream]: { pageCursor: null, status: 'complete' } }, global: {} },
+      destination: { streams: {}, global: {} },
+      engine: { streams: {}, global: {} },
+    }
     await collect(engine.pipeline_sync(pipeline, { state: preSeededState }))
 
     // Table WAS created by setup()
@@ -233,7 +237,11 @@ describe('resumable sync via state', () => {
   it('pre-seeded complete state skips backfill', async () => {
     const engine = createEngine(makeResolver())
     const pipeline = makePipeline({ streams: [{ name: targetStream }] })
-    const preSeededState = { [targetStream]: { pageCursor: null, status: 'complete' } }
+    const preSeededState = {
+      source: { streams: { [targetStream]: { pageCursor: null, status: 'complete' } }, global: {} },
+      destination: { streams: {}, global: {} },
+      engine: { streams: {}, global: {} },
+    }
     await collect(engine.pipeline_sync(pipeline, { state: preSeededState }))
 
     // Table created by setup() but no records written (backfill skipped by complete state)

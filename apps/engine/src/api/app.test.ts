@@ -622,6 +622,35 @@ describe('POST /sync', () => {
 // ---------------------------------------------------------------------------
 
 describe('state_limit and time_limit', () => {
+  it('POST /pipeline_sync accepts deprecated X-Source-State header', async () => {
+    const app = await createApp(resolver)
+
+    const body = toNdjson([
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
+    ])
+    const res = await app.request('/pipeline_sync?state_limit=1', {
+      method: 'POST',
+      headers: {
+        'X-Pipeline': syncParams,
+        'X-Source-State': JSON.stringify({ streams: { customers: { cursor: '0' } }, global: {} }),
+        ...bodyHeaders(body),
+      },
+      body,
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Message>(res)
+    expect(events.some((e) => e.type === 'eof')).toBe(true)
+  })
+
   it('POST /pipeline_read?state_limit=1 stops after 1 state message and emits eof', async () => {
     const app = await createApp(resolver)
 
@@ -705,10 +734,11 @@ describe('state_limit and time_limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    // destinationTest only yields state messages, so we get 1 state + 1 eof
-    expect(events).toHaveLength(2)
-    expect(events[0]!.type).toBe('source_state')
-    expect(events[1]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    const stateEvents = events.filter((e) => e.type === 'source_state')
+    const eofEvents = events.filter((e) => e.type === 'eof')
+    expect(stateEvents).toHaveLength(1)
+    expect(eofEvents).toHaveLength(1)
+    expect(eofEvents[0]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
   })
 
   it('POST /read without limits returns all messages plus eof:complete', async () => {

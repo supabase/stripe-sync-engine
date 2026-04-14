@@ -124,6 +124,165 @@
                               "teardown",
                               "error"
                             ]
+                          },
+                          "progress": {
+                            "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                            "type": "object",
+                            "properties": {
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "complete",
+                                  "state_limit",
+                                  "time_limit",
+                                  "error",
+                                  "aborted"
+                                ],
+                                "description": "Why the sync run ended."
+                              },
+                              "cutoff": {
+                                "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                                "type": "string",
+                                "enum": [
+                                  "soft",
+                                  "hard"
+                                ]
+                              },
+                              "elapsed_ms": {
+                                "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                                "type": "number"
+                              },
+                              "global_progress": {
+                                "description": "Final global aggregates. Same shape as trace/progress.",
+                                "type": "object",
+                                "properties": {
+                                  "elapsed_ms": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Wall-clock milliseconds since the sync run started."
+                                  },
+                                  "run_record_count": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Total records synced across all streams in this run."
+                                  },
+                                  "rows_per_second": {
+                                    "type": "number",
+                                    "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                                  },
+                                  "window_rows_per_second": {
+                                    "type": "number",
+                                    "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                                  },
+                                  "state_checkpoint_count": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Total source_state messages observed so far in this sync run."
+                                  }
+                                },
+                                "required": [
+                                  "elapsed_ms",
+                                  "run_record_count",
+                                  "rows_per_second",
+                                  "window_rows_per_second",
+                                  "state_checkpoint_count"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "stream_progress": {
+                                "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "started",
+                                        "running",
+                                        "complete",
+                                        "incomplete"
+                                      ],
+                                      "description": "Final stream status."
+                                    },
+                                    "cumulative_record_count": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Cumulative records synced for this stream across all runs."
+                                    },
+                                    "run_record_count": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Records synced in this run."
+                                    },
+                                    "records_per_second": {
+                                      "description": "Average records/sec for this stream over the run.",
+                                      "type": "number"
+                                    },
+                                    "requests_per_second": {
+                                      "description": "Average requests/sec for this stream over the run.",
+                                      "type": "number"
+                                    },
+                                    "errors": {
+                                      "description": "All accumulated errors for this stream during this run.",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "message": {
+                                            "type": "string",
+                                            "description": "Human-readable error description."
+                                          },
+                                          "failure_type": {
+                                            "description": "Error category matching TraceError.failure_type.",
+                                            "type": "string",
+                                            "enum": [
+                                              "config_error",
+                                              "system_error",
+                                              "transient_error",
+                                              "auth_error"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "message"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "cumulative_record_count",
+                                    "run_record_count"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "End-of-sync summary for a single stream."
+                                }
+                              },
+                              "record_count": {
+                                "description": "Legacy per-stream record counts. Backward compat.",
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "required": [
+                              "reason"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -279,6 +438,165 @@
                         "teardown",
                         "error"
                       ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "incomplete"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        },
+                        "record_count": {
+                          "description": "Legacy per-stream record counts. Backward compat.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -402,6 +720,165 @@
                         "teardown",
                         "error"
                       ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "incomplete"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        },
+                        "record_count": {
+                          "description": "Legacy per-stream record counts. Backward compat.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -579,6 +1056,165 @@
                         "teardown",
                         "error"
                       ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "incomplete"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        },
+                        "record_count": {
+                          "description": "Legacy per-stream record counts. Backward compat.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [

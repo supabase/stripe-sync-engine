@@ -199,7 +199,6 @@ jobs:
       github.event_name == 'push'
       && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04-arm
-
     steps:
       - uses: actions/checkout@v5
 

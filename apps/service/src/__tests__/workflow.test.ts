@@ -11,7 +11,11 @@ type SourceInput = unknown
 // Point directly at the workflow index to avoid resolving the legacy dist/temporal/workflows.js file.
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows/index.js')
 
-const emptyState = { streams: {}, global: {} }
+const emptyState = {
+  source: { streams: {}, global: {} },
+  destination: { streams: {}, global: {} },
+  engine: { streams: {}, global: {} },
+}
 const noErrors: RunResult = { errors: [], state: emptyState }
 const permanentSyncError: RunResult = {
   errors: [{ message: 'permanent sync failure', failure_type: 'auth_error', stream: 'customers' }],
@@ -506,7 +510,11 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
           syncCallCount++
           return {
             errors: [],
-            state: { streams: { customers: { cursor: `cus_${syncCallCount}` } }, global: {} },
+            state: {
+              source: { streams: { customers: { cursor: `cus_${syncCallCount}` } }, global: {} },
+              destination: { streams: {}, global: {} },
+              engine: { streams: {}, global: {} },
+            },
           }
         },
       }),

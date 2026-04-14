@@ -52,15 +52,16 @@ describe('Engine OpenAPI spec', () => {
     }
   })
 
-  it('has SourceState as a named component schema', async () => {
+  it('has SyncState as a named component schema', async () => {
     const spec = await getSpec()
-    expect(spec.components.schemas).toHaveProperty('SourceState')
-    const sourceState = spec.components.schemas['SourceState'] as Record<string, unknown>
-    expect(sourceState.type).toBe('object')
-    expect(sourceState).toHaveProperty('properties')
-    const props = sourceState.properties as Record<string, unknown>
-    expect(props).toHaveProperty('streams')
-    expect(props).toHaveProperty('global')
+    expect(spec.components.schemas).toHaveProperty('SyncState')
+    const syncState = spec.components.schemas['SyncState'] as Record<string, unknown>
+    expect(syncState.type).toBe('object')
+    expect(syncState).toHaveProperty('properties')
+    const props = syncState.properties as Record<string, unknown>
+    expect(props).toHaveProperty('source')
+    expect(props).toHaveProperty('destination')
+    expect(props).toHaveProperty('engine')
   })
 
   it('header params use application/json content key, never [object Object]', async () => {
@@ -81,7 +82,7 @@ describe('Engine OpenAPI spec', () => {
     }
   })
 
-  it('x-source-state header uses application/json content with $ref to SourceState', async () => {
+  it('x-state header uses application/json content with $ref to SyncState', async () => {
     const spec = await getSpec()
     const allParams: Array<Record<string, unknown>> = []
     for (const pathItem of Object.values(spec.paths ?? {})) {
@@ -90,14 +91,14 @@ describe('Engine OpenAPI spec', () => {
         allParams.push(...(operation?.parameters ?? []))
       }
     }
-    const stateParams = allParams.filter((p) => p.name === 'x-source-state')
+    const stateParams = allParams.filter((p) => p.name === 'x-state')
     expect(stateParams.length).toBeGreaterThan(0)
     for (const param of stateParams) {
       expect(param.schema).toBeUndefined()
       const content = param.content as Record<string, Record<string, unknown>> | undefined
       expect(content?.['application/json']).toBeDefined()
       expect(content?.['application/json']?.schema).toMatchObject({
-        $ref: '#/components/schemas/SourceState',
+        $ref: '#/components/schemas/SyncState',
       })
     }
   })

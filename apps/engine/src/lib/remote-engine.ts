@@ -57,8 +57,8 @@ export function createRemoteEngine(engineUrl: string): Engine {
 
   function stateHeaders(opts?: SourceReadOptions): Record<string, string> {
     const h: Record<string, string> = {}
-    if (opts?.state && Object.keys(opts.state).length > 0) {
-      h['x-source-state'] = JSON.stringify(opts.state)
+    if (opts?.state) {
+      h['x-state'] = JSON.stringify(opts.state)
     }
     return h
   }
@@ -175,7 +175,13 @@ export function createRemoteEngine(engineUrl: string): Engine {
       messages: AsyncIterable<Message>,
       signal?: AbortSignal
     ): AsyncIterable<DestinationOutput> {
-      const res = await post('/pipeline_write', pipeline, undefined, toNdjsonStream(messages), signal)
+      const res = await post(
+        '/pipeline_write',
+        pipeline,
+        undefined,
+        toNdjsonStream(messages),
+        signal
+      )
       yield* parseNdjsonStream<DestinationOutput>(res.body!)
     },
 

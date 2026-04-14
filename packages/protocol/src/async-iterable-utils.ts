@@ -161,7 +161,6 @@ export function split<T, U extends T>(
   }
   matches.onReturn = abort
   rest.onReturn = abort
-
   ;(async () => {
     try {
       while (true) {

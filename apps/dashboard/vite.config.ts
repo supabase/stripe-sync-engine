@@ -6,6 +6,11 @@ import path from 'node:path'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: { target: 'esnext' },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },

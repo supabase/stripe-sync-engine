@@ -88,7 +88,7 @@ This gives a smooth curve: `ceil(1 / timeProgress)` naturally maps density to se
 ```ts
 const numSegments = segmentCountFromDensity(timeProgress)
 const segments = buildSegments(accountCreated, now, numSegments)
-yield* mergeAsync(generators, MAX_CONCURRENCY) // always capped
+yield * mergeAsync(generators, MAX_CONCURRENCY) // always capped
 ```
 
 This means a dense stream gets 50 fine-grained segments but only 15 execute at a time, avoiding the "50 concurrent promises" problem.
@@ -105,7 +105,7 @@ The simplest improvement: make the probe the first page of the first (most recen
 
 ```ts
 async function probeAndBuildSegments(opts: {
-  listFn: ListFn  // already rate-limited from Change 1
+  listFn: ListFn // already rate-limited from Change 1
   range: { gte: number; lt: number }
 }): Promise<{ segments: SegmentState[]; firstPage: ListResult }> {
   const { listFn, range } = opts
@@ -261,8 +261,8 @@ Change 3b: Adaptive subdivision (future)
 ### Constants
 
 ```ts
-const MAX_SEGMENTS = 50       // finest granularity for any stream
-const MAX_CONCURRENCY = 15    // max in-flight segment generators
+const MAX_SEGMENTS = 50 // finest granularity for any stream
+const MAX_CONCURRENCY = 15 // max in-flight segment generators
 const MIN_SEGMENT_SPAN = 86400 // don't subdivide below 1 day (for 3b)
 ```
 

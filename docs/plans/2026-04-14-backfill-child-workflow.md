@@ -82,6 +82,7 @@ interface BackfillLoopResult {
 ```
 
 Properties:
+
 - **Finite**: runs until all streams complete or an error stops it
 - **Own event history**: backfill pagination doesn't bloat the pipeline workflow
 - **Own `continueAsNew`**: manages its own history size independently
@@ -140,17 +141,25 @@ export async function pipelineWorkflow(
 
   // Main loop
   while (desiredStatus !== 'deleted') {
-    if (state.errored) { await waitForErrorRecovery(); continue }
-    if (desiredStatus === 'paused') { await waitForResume(); continue }
+    if (state.errored) {
+      await waitForErrorRecovery()
+      continue
+    }
+    if (desiredStatus === 'paused') {
+      await waitForResume()
+      continue
+    }
 
     await Promise.all([
-      liveLoop(),          // signals → pipelineSync activity
-      reconcileScheduler() // periodic backfillLoop child workflows
+      liveLoop(), // signals → pipelineSync activity
+      reconcileScheduler(), // periodic backfillLoop child workflows
     ])
 
     if (shouldContinueAsNew()) {
       await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
-        desiredStatus, sourceState, state,
+        desiredStatus,
+        sourceState,
+        state,
       })
     }
   }
@@ -228,9 +237,9 @@ Existing running workflows need to transition. Deploy new workflow code, let exi
 ## Constants
 
 ```ts
-const BACKFILL_CONTINUE_AS_NEW_THRESHOLD = 500   // for backfillLoop
-const PIPELINE_CONTINUE_AS_NEW_THRESHOLD = 1000  // pipeline is much lighter now
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000      // reconcile schedule
+const BACKFILL_CONTINUE_AS_NEW_THRESHOLD = 500 // for backfillLoop
+const PIPELINE_CONTINUE_AS_NEW_THRESHOLD = 1000 // pipeline is much lighter now
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000 // reconcile schedule
 ```
 
 ## Open questions

@@ -3,6 +3,7 @@
 ## v0.2.0 (2026-04-11)
 
 ### Features
+
 - Auto-publish packages to npmjs.org on version bump (#272)
 - Add `--live` CLI flag and `?only` setup/teardown filter (#271)
 - Add multi-key sync support (#211)
@@ -47,6 +48,7 @@
 - Non-default sync schema names (#141)
 
 ### Bug Fixes
+
 - Fix `/internal/query` error handling (#256)
 - Strip deprecated paths from OpenAPI specs (#264)
 - Require Stripe-Version header, skip unavailable endpoints (#262)
@@ -60,6 +62,7 @@
 - Skip unsupported webhook objects during live sync (#156)
 
 ### Breaking Changes
+
 - Rename `@stripe/sync-protocol` to `@stripe/protocol`; pipeline stages moved to engine
 - Rename `syncs` to `pipelines` throughout the service API
 - Rename `SyncParams` to `PipelineConfig`
@@ -69,4 +72,4 @@
 - `api_version` is now required in `StripeClientConfig` (#258)
 - `emitted_at` changed from Unix ms integer to ISO 8601 string (#231)
 - Rename `X-Sync-Params` header to `X-Pipeline` with separate `X-State` header
-All notable changes to sync-engine will be documented in this file.
+  All notable changes to sync-engine will be documented in this file.

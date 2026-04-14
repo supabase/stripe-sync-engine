@@ -1,4 +1,5 @@
 import { ApplicationFailure } from '@temporalio/activity'
+import { coerceSyncState } from '@stripe/sync-engine'
 import type { SourceInputMessage, SourceReadOptions } from '@stripe/sync-engine'
 import type { EofPayload } from '@stripe/sync-protocol'
 import type { ActivitiesContext } from './_shared.js'
@@ -14,9 +15,10 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
     const { id: _, ...config } = pipeline
     const { input: inputArr, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
+    const initialState = coerceSyncState(readOpts.state)
     const { errors, state, sourceConfig, destConfig, eof } = await drainMessages(
       context.engine.pipeline_sync(config, readOpts, input),
-      readOpts.state
+      initialState
     )
     // Full replacement — connector emits the complete updated config
     if (sourceConfig) {
@@ -29,6 +31,11 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
       const type = pipeline.destination.type
       await context.pipelineStore.update(pipelineId, {
         destination: { type, [type]: destConfig },
+      })
+    }
+    if (eof) {
+      await context.pipelineStore.update(pipelineId, {
+        progress: eof,
       })
     }
     const { transient, permanent } = classifySyncErrors(errors)

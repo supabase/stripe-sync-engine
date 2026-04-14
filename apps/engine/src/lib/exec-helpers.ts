@@ -52,7 +52,7 @@ export async function* spawnAndStream<T>(
   yield* parseNdjsonChunks<T>(child.stdout)
   await exitPromise
 
-  if (exitCode !== 0 && !(signal?.aborted)) {
+  if (exitCode !== 0 && !signal?.aborted) {
     const stderr = Buffer.concat(stderrChunks).toString()
     throw new Error(`${bin} exited with code ${exitCode}: ${stderr}`)
   }
@@ -105,7 +105,7 @@ export async function* spawnWithStdin<TIn, TOut>(
   yield* parseNdjsonChunks<TOut>(child.stdout)
   await exitPromise
 
-  if (exitCode !== 0 && !(signal?.aborted)) {
+  if (exitCode !== 0 && !signal?.aborted) {
     const stderr = Buffer.concat(stderrChunks).toString()
     throw new Error(`${bin} exited with code ${exitCode}: ${stderr}`)
   }

@@ -31,6 +31,7 @@ npmjs.org. This should be replaced with npm's [trusted publishing][tp]
 - Removes the risk of leaked/expired tokens breaking publishes.
 
 Steps to migrate:
+
 1. Link each `@stripe/sync-*` package to the GitHub repo in npm's
    trusted publishing settings.
 2. Add `permissions: id-token: write` to the `publish_npmjs` job.

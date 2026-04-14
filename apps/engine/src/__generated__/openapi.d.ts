@@ -360,7 +360,7 @@ export interface components {
              * @enum {string}
              */
             type: "trace";
-            /** @description Diagnostic/status payload with subtypes for error, stream status, and estimates. */
+            /** @description Diagnostic/status payload with subtypes for error, stream status, estimates, and progress. */
             trace: {
                 /** @constant */
                 trace_type: "error";
@@ -381,7 +381,7 @@ export interface components {
             } | {
                 /** @constant */
                 trace_type: "stream_status";
-                /** @description Per-stream status update. */
+                /** @description Per-stream status update. Sources emit the minimal form (stream + status). The engine emits enriched versions with record counts and throughput rates. */
                 stream_status: {
                     /** @description Stream being reported on. */
                     stream: string;
@@ -390,6 +390,16 @@ export interface components {
                      * @enum {string}
                      */
                     status: "started" | "running" | "complete" | "incomplete";
+                    /** @description Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source. */
+                    cumulative_record_count?: number;
+                    /** @description Records synced for this stream in the current sync run. Set by the engine. */
+                    run_record_count?: number;
+                    /** @description Records synced since the last stream_status emission for this stream. Set by the engine. Used for instantaneous per-stream throughput. */
+                    window_record_count?: number;
+                    /** @description Average records per second for this stream over the entire run: run_record_count / elapsed seconds. Set by the engine. */
+                    records_per_second?: number;
+                    /** @description Average API requests per second for this stream over the entire run. Set by the engine from source-reported request counts. */
+                    requests_per_second?: number;
                 };
             } | {
                 /** @constant */
@@ -402,6 +412,22 @@ export interface components {
                     row_count?: number;
                     /** @description Estimated total byte count for this stream. */
                     byte_count?: number;
+                };
+            } | {
+                /** @constant */
+                trace_type: "progress";
+                /** @description Periodic global sync progress emitted by the engine. Aggregate stats only — per-stream detail is in stream_status messages. Each emission is a full replacement. */
+                progress: {
+                    /** @description Wall-clock milliseconds since the sync run started. */
+                    elapsed_ms: number;
+                    /** @description Total records synced across all streams in this run. */
+                    run_record_count: number;
+                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                    rows_per_second: number;
+                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                    window_rows_per_second: number;
+                    /** @description Total source_state messages observed so far in this sync run. */
+                    state_checkpoint_count: number;
                 };
             };
         };
@@ -495,10 +521,10 @@ export interface components {
              * @enum {string}
              */
             type: "eof";
-            /** @description Terminal payload — tells the client why the stream ended. */
+            /** @description Terminal message with two nested sections: global_progress (same shape as trace/progress) and stream_progress (final per-stream detail including accumulated errors). */
             eof: {
                 /**
-                 * @description Why the stream ended.
+                 * @description Why the sync run ended.
                  * @enum {string}
                  */
                 reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
@@ -509,7 +535,48 @@ export interface components {
                 cutoff?: "soft" | "hard";
                 /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                 elapsed_ms?: number;
-                /** @description Per-stream record counts: { stream_name: count }. */
+                /** @description Final global aggregates. Same shape as trace/progress. */
+                global_progress?: {
+                    /** @description Wall-clock milliseconds since the sync run started. */
+                    elapsed_ms: number;
+                    /** @description Total records synced across all streams in this run. */
+                    run_record_count: number;
+                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                    rows_per_second: number;
+                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                    window_rows_per_second: number;
+                    /** @description Total source_state messages observed so far in this sync run. */
+                    state_checkpoint_count: number;
+                };
+                /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+                stream_progress?: {
+                    [key: string]: {
+                        /**
+                         * @description Final stream status.
+                         * @enum {string}
+                         */
+                        status: "started" | "running" | "complete" | "incomplete";
+                        /** @description Cumulative records synced for this stream across all runs. */
+                        cumulative_record_count: number;
+                        /** @description Records synced in this run. */
+                        run_record_count: number;
+                        /** @description Average records/sec for this stream over the run. */
+                        records_per_second?: number;
+                        /** @description Average requests/sec for this stream over the run. */
+                        requests_per_second?: number;
+                        /** @description All accumulated errors for this stream during this run. */
+                        errors?: {
+                            /** @description Human-readable error description. */
+                            message: string;
+                            /**
+                             * @description Error category matching TraceError.failure_type.
+                             * @enum {string}
+                             */
+                            failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                        }[];
+                    };
+                };
+                /** @description Legacy per-stream record counts. Backward compat. */
                 record_count?: {
                     [key: string]: number;
                 };
@@ -680,14 +747,40 @@ export interface components {
                 backfill_limit?: number;
             }[];
         };
-        SourceState: {
-            /** @description Per-stream checkpoint data, keyed by stream name. */
-            streams: {
-                [key: string]: unknown;
+        /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
+        SyncState: {
+            /** @description Source connector state — cursors, backfill progress, events cursors. */
+            source: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
             };
-            /** @description Sync-wide state shared across all streams (e.g. a global events cursor). */
-            global: {
-                [key: string]: unknown;
+            /** @description Destination connector state — reserved for future use. */
+            destination: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
+            };
+            /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
+            engine: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
             };
         };
     };
@@ -879,8 +972,8 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded SourceState ({ streams, global }) or legacy flat per-stream state */
-                "x-source-state"?: string;
+                /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
+                "x-state"?: string;
             };
             path?: never;
             cookie?: never;
@@ -962,8 +1055,8 @@ export interface operations {
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
-                /** @description JSON-encoded SourceState ({ streams, global }) or legacy flat per-stream state */
-                "x-source-state"?: string;
+                /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
+                "x-state"?: string;
             };
             path?: never;
             cookie?: never;

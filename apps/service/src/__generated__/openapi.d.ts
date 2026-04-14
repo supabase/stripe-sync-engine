@@ -267,6 +267,66 @@ export interface operations {
                              * @enum {string}
                              */
                             status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+                            /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
+                            progress?: {
+                                /**
+                                 * @description Why the sync run ended.
+                                 * @enum {string}
+                                 */
+                                reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
+                                /**
+                                 * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+                                 * @enum {string}
+                                 */
+                                cutoff?: "soft" | "hard";
+                                /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+                                elapsed_ms?: number;
+                                /** @description Final global aggregates. Same shape as trace/progress. */
+                                global_progress?: {
+                                    /** @description Wall-clock milliseconds since the sync run started. */
+                                    elapsed_ms: number;
+                                    /** @description Total records synced across all streams in this run. */
+                                    run_record_count: number;
+                                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                                    rows_per_second: number;
+                                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                                    window_rows_per_second: number;
+                                    /** @description Total source_state messages observed so far in this sync run. */
+                                    state_checkpoint_count: number;
+                                };
+                                /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+                                stream_progress?: {
+                                    [key: string]: {
+                                        /**
+                                         * @description Final stream status.
+                                         * @enum {string}
+                                         */
+                                        status: "started" | "running" | "complete" | "incomplete";
+                                        /** @description Cumulative records synced for this stream across all runs. */
+                                        cumulative_record_count: number;
+                                        /** @description Records synced in this run. */
+                                        run_record_count: number;
+                                        /** @description Average records/sec for this stream over the run. */
+                                        records_per_second?: number;
+                                        /** @description Average requests/sec for this stream over the run. */
+                                        requests_per_second?: number;
+                                        /** @description All accumulated errors for this stream during this run. */
+                                        errors?: {
+                                            /** @description Human-readable error description. */
+                                            message: string;
+                                            /**
+                                             * @description Error category matching TraceError.failure_type.
+                                             * @enum {string}
+                                             */
+                                            failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                        }[];
+                                    };
+                                };
+                                /** @description Legacy per-stream record counts. Backward compat. */
+                                record_count?: {
+                                    [key: string]: number;
+                                };
+                            };
                         }[];
                         has_more: boolean;
                     };
@@ -337,6 +397,66 @@ export interface operations {
                          * @enum {string}
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
+                        progress?: {
+                            /**
+                             * @description Why the sync run ended.
+                             * @enum {string}
+                             */
+                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
+                            /**
+                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+                             * @enum {string}
+                             */
+                            cutoff?: "soft" | "hard";
+                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+                            elapsed_ms?: number;
+                            /** @description Final global aggregates. Same shape as trace/progress. */
+                            global_progress?: {
+                                /** @description Wall-clock milliseconds since the sync run started. */
+                                elapsed_ms: number;
+                                /** @description Total records synced across all streams in this run. */
+                                run_record_count: number;
+                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                                rows_per_second: number;
+                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                                window_rows_per_second: number;
+                                /** @description Total source_state messages observed so far in this sync run. */
+                                state_checkpoint_count: number;
+                            };
+                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+                            stream_progress?: {
+                                [key: string]: {
+                                    /**
+                                     * @description Final stream status.
+                                     * @enum {string}
+                                     */
+                                    status: "started" | "running" | "complete" | "incomplete";
+                                    /** @description Cumulative records synced for this stream across all runs. */
+                                    cumulative_record_count: number;
+                                    /** @description Records synced in this run. */
+                                    run_record_count: number;
+                                    /** @description Average records/sec for this stream over the run. */
+                                    records_per_second?: number;
+                                    /** @description Average requests/sec for this stream over the run. */
+                                    requests_per_second?: number;
+                                    /** @description All accumulated errors for this stream during this run. */
+                                    errors?: {
+                                        /** @description Human-readable error description. */
+                                        message: string;
+                                        /**
+                                         * @description Error category matching TraceError.failure_type.
+                                         * @enum {string}
+                                         */
+                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    }[];
+                                };
+                            };
+                            /** @description Legacy per-stream record counts. Backward compat. */
+                            record_count?: {
+                                [key: string]: number;
+                            };
+                        };
                     };
                 };
             };
@@ -399,6 +519,66 @@ export interface operations {
                          * @enum {string}
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
+                        progress?: {
+                            /**
+                             * @description Why the sync run ended.
+                             * @enum {string}
+                             */
+                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
+                            /**
+                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+                             * @enum {string}
+                             */
+                            cutoff?: "soft" | "hard";
+                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+                            elapsed_ms?: number;
+                            /** @description Final global aggregates. Same shape as trace/progress. */
+                            global_progress?: {
+                                /** @description Wall-clock milliseconds since the sync run started. */
+                                elapsed_ms: number;
+                                /** @description Total records synced across all streams in this run. */
+                                run_record_count: number;
+                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                                rows_per_second: number;
+                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                                window_rows_per_second: number;
+                                /** @description Total source_state messages observed so far in this sync run. */
+                                state_checkpoint_count: number;
+                            };
+                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+                            stream_progress?: {
+                                [key: string]: {
+                                    /**
+                                     * @description Final stream status.
+                                     * @enum {string}
+                                     */
+                                    status: "started" | "running" | "complete" | "incomplete";
+                                    /** @description Cumulative records synced for this stream across all runs. */
+                                    cumulative_record_count: number;
+                                    /** @description Records synced in this run. */
+                                    run_record_count: number;
+                                    /** @description Average records/sec for this stream over the run. */
+                                    records_per_second?: number;
+                                    /** @description Average requests/sec for this stream over the run. */
+                                    requests_per_second?: number;
+                                    /** @description All accumulated errors for this stream during this run. */
+                                    errors?: {
+                                        /** @description Human-readable error description. */
+                                        message: string;
+                                        /**
+                                         * @description Error category matching TraceError.failure_type.
+                                         * @enum {string}
+                                         */
+                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    }[];
+                                };
+                            };
+                            /** @description Legacy per-stream record counts. Backward compat. */
+                            record_count?: {
+                                [key: string]: number;
+                            };
+                        };
                     };
                 };
             };
@@ -522,6 +702,66 @@ export interface operations {
                          * @enum {string}
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
+                        progress?: {
+                            /**
+                             * @description Why the sync run ended.
+                             * @enum {string}
+                             */
+                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
+                            /**
+                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+                             * @enum {string}
+                             */
+                            cutoff?: "soft" | "hard";
+                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+                            elapsed_ms?: number;
+                            /** @description Final global aggregates. Same shape as trace/progress. */
+                            global_progress?: {
+                                /** @description Wall-clock milliseconds since the sync run started. */
+                                elapsed_ms: number;
+                                /** @description Total records synced across all streams in this run. */
+                                run_record_count: number;
+                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+                                rows_per_second: number;
+                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+                                window_rows_per_second: number;
+                                /** @description Total source_state messages observed so far in this sync run. */
+                                state_checkpoint_count: number;
+                            };
+                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+                            stream_progress?: {
+                                [key: string]: {
+                                    /**
+                                     * @description Final stream status.
+                                     * @enum {string}
+                                     */
+                                    status: "started" | "running" | "complete" | "incomplete";
+                                    /** @description Cumulative records synced for this stream across all runs. */
+                                    cumulative_record_count: number;
+                                    /** @description Records synced in this run. */
+                                    run_record_count: number;
+                                    /** @description Average records/sec for this stream over the run. */
+                                    records_per_second?: number;
+                                    /** @description Average requests/sec for this stream over the run. */
+                                    requests_per_second?: number;
+                                    /** @description All accumulated errors for this stream during this run. */
+                                    errors?: {
+                                        /** @description Human-readable error description. */
+                                        message: string;
+                                        /**
+                                         * @description Error category matching TraceError.failure_type.
+                                         * @enum {string}
+                                         */
+                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    }[];
+                                };
+                            };
+                            /** @description Legacy per-stream record counts. Backward compat. */
+                            record_count?: {
+                                [key: string]: number;
+                            };
+                        };
                     };
                 };
             };

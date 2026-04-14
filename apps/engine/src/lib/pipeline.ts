@@ -227,10 +227,7 @@ export function takeLimits<T extends Message>(
         // Check if already aborted before starting the race
         if (opts.signal?.aborted) {
           cleanup()
-          logger.warn(
-            { elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' },
-            'SYNC_ABORTED'
-          )
+          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof('aborted')
           await iterator.return?.(undefined)
           return
@@ -274,10 +271,7 @@ export function takeLimits<T extends Message>(
         }
 
         if (winner.kind === 'aborted') {
-          logger.warn(
-            { elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' },
-            'SYNC_ABORTED'
-          )
+          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof('aborted')
           iterator.return?.(undefined)
           return
