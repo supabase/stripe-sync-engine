@@ -10,6 +10,8 @@
 #   NPM_TOKEN          — for publishing to npmjs.org
 #   GITHUB_REPO_OWNER  — GitHub org (e.g. "stripe")
 #   GITHUB_REPO_NAME   — repo name (e.g. "sync-engine")
+# Optional env:
+#   RELEASE_VERSION    — exact version to promote instead of the latest package
 #
 # Usage:
 #   bash scripts/promote-to-npmjs.sh
@@ -21,6 +23,7 @@ set -euo pipefail
 : "${NPM_TOKEN:?Required}"
 : "${GITHUB_REPO_OWNER:?Required}"
 : "${GITHUB_REPO_NAME:?Required}"
+RELEASE_VERSION="${RELEASE_VERSION:-}"
 
 WORKDIR=$(mktemp -d)
 cd "$WORKDIR"
@@ -51,19 +54,40 @@ echo ""
 echo "=== Packing from GitHub Packages ==="
 for pkg in $PACKAGES; do
   echo "--- $pkg ---"
-  npm pack "$pkg" --registry https://npm.pkg.github.com
+  package_spec="$pkg"
+  if [ -n "$RELEASE_VERSION" ]; then
+    package_spec="${pkg}@${RELEASE_VERSION}"
+  fi
+  npm pack "$package_spec" --registry https://npm.pkg.github.com
 done
 
 # Publish all tarballs to npmjs.org
 echo ""
 echo "=== Publishing to npmjs.org ==="
+ALREADY_PUBLISHED=0
 for tgz in *.tgz; do
   echo "Publishing $tgz"
-  npm publish "$tgz" \
+  if PUBLISH_OUTPUT=$(npm publish "$tgz" \
     --registry https://registry.npmjs.org \
     --access public \
-    --//registry.npmjs.org/:_authToken="${NPM_TOKEN}"
+    --//registry.npmjs.org/:_authToken="${NPM_TOKEN}" 2>&1); then
+    echo "$PUBLISH_OUTPUT"
+  else
+    status=$?
+    echo "$PUBLISH_OUTPUT"
+    if echo "$PUBLISH_OUTPUT" | grep -Eqi 'Cannot publish over existing version|previously published versions|EPUBLISHCONFLICT'; then
+      echo "WARNING: $tgz already exists on npmjs.org, skipping"
+      ALREADY_PUBLISHED=$((ALREADY_PUBLISHED + 1))
+    else
+      echo "FAIL: npm publish failed for $tgz"
+      exit "$status"
+    fi
+  fi
 done
 
 echo ""
-echo "=== Done ==="
+if [ "$ALREADY_PUBLISHED" -gt 0 ]; then
+  echo "=== Done with $ALREADY_PUBLISHED already-published warning(s) ==="
+else
+  echo "=== Done ==="
+fi
