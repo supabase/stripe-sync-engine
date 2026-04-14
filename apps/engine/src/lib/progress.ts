@@ -60,6 +60,14 @@ export function trackProgress(opts: {
     const prevSnapshotCounts = new Map<string, number>()
     let stateCheckpointCount = 0
     const streamStatus = new Map<string, Status>()
+
+    // Restore stream statuses from persisted engine state
+    if (opts.initial_state?.engine?.streams) {
+      for (const [stream, data] of Object.entries(opts.initial_state.engine.streams)) {
+        const status = (data as { status?: Status })?.status
+        if (status) streamStatus.set(stream, status)
+      }
+    }
     const streamErrors = new Map<string, StreamError[]>()
     const hadInitialState = opts.initial_state != null
     const finalState: SyncState = structuredClone(opts.initial_state ?? emptySyncState())
@@ -115,7 +123,9 @@ export function trackProgress(opts: {
       lastEmitAt = Date.now()
     }
 
-    function buildStreamStatus(stream: string): SyncOutput {
+    function buildStreamStatus(stream: string): SyncOutput | undefined {
+      const status = streamStatus.get(stream)
+      if (!status) return undefined
       const run = runRecordCount(stream)
       const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
       return {
@@ -124,7 +134,7 @@ export function trackProgress(opts: {
           trace_type: 'stream_status' as const,
           stream_status: {
             stream,
-            status: streamStatus.get(stream) ?? 'running',
+            status,
             cumulative_record_count: cumulative,
             run_record_count: run,
             window_record_count: windowRecordCount(stream),
@@ -153,11 +163,13 @@ export function trackProgress(opts: {
       } as SyncOutput
     }
 
-    function buildStreamProgress(stream: string): EofStreamProgress {
+    function buildStreamProgress(stream: string): EofStreamProgress | undefined {
+      const status = streamStatus.get(stream)
+      if (!status) return undefined
       const run = runRecordCount(stream)
       const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
       return {
-        status: streamStatus.get(stream) ?? 'running',
+        status,
         cumulative_record_count: cumulative,
         run_record_count: run,
         records_per_second: run / elapsedSec(),
@@ -176,6 +188,7 @@ export function trackProgress(opts: {
         finalState.engine.streams[stream] = {
           ...existing,
           cumulative_record_count: cumulative,
+          ...(streamStatus.has(stream) ? { status: streamStatus.get(stream) } : {}),
         }
       }
 
@@ -195,7 +208,8 @@ export function trackProgress(opts: {
       const streams = allStreams()
       const streamProgressMap: Record<string, EofStreamProgress> = {}
       for (const s of streams) {
-        streamProgressMap[s] = buildStreamProgress(s)
+        const sp = buildStreamProgress(s)
+        if (sp) streamProgressMap[s] = sp
       }
       const eof: EofPayload = {
         reason,
@@ -222,7 +236,8 @@ export function trackProgress(opts: {
       if (now - lastEmitAt < intervalMs) return
 
       for (const stream of allStreams()) {
-        yield buildStreamStatus(stream)
+        const ss = buildStreamStatus(stream)
+        if (ss) yield ss
       }
       yield buildGlobalProgress()
       snapshotWindow()
@@ -234,7 +249,7 @@ export function trackProgress(opts: {
         if (msg.source_state.state_type === 'stream') {
           const stream = msg.source_state.stream
           finalState.source.streams[stream] = msg.source_state.data
-          if (!streamStatus.has(stream)) streamStatus.set(stream, 'running')
+          if (!streamStatus.has(stream)) streamStatus.set(stream, 'started')
         } else if (msg.source_state.state_type === 'global') {
           finalState.source.global = msg.source_state.data as Record<string, unknown>
         }
@@ -254,7 +269,8 @@ export function trackProgress(opts: {
 
       if (msg.type === 'eof') {
         for (const stream of allStreams()) {
-          yield buildStreamStatus(stream)
+          const ss = buildStreamStatus(stream)
+          if (ss) yield ss
         }
         yield buildGlobalProgress()
         yield buildEnrichedEof(msg.eof.reason)
