@@ -97,8 +97,9 @@ async function* logApiStream<T>(
     for await (const item of iter) {
       itemCount++
       if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
-      const msg = item as { type?: string; trace?: { trace_type?: string } }
+      const msg = item as { type?: string; trace?: { trace_type?: string }; eof?: unknown }
       if (msg?.type === 'trace' && msg?.trace?.trace_type === 'error') hasErrorTrace = true
+      if (msg?.type === 'eof') logger.info({ ...context, eof: msg.eof }, `${label} eof`)
       yield item
     }
     logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
