@@ -67,9 +67,11 @@ export type BackfillState = {
   in_flight: Array<{ gte: number; lt: number; page_cursor: string }>
 }
 
+export type StreamErrorStatus = 'transient_error' | 'system_error' | 'config_error' | 'auth_error'
+
 export type StripeStreamState = {
   page_cursor: string | null
-  status: 'pending' | 'complete'
+  status: 'pending' | 'complete' | StreamErrorStatus
   events_cursor?: number
   /** @deprecated Legacy — use backfill instead */
   segments?: SegmentState[]

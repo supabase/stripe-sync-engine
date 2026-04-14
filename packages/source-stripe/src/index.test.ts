@@ -540,8 +540,8 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      // trace(stream_status started) + trace(error)
-      expect(messages).toHaveLength(2)
+      // trace(stream_status started) + trace(error) + source_state(transient_error)
+      expect(messages).toHaveLength(3)
       expect(messages[0]).toMatchObject({
         type: 'trace',
         trace: {
@@ -563,6 +563,15 @@ describe('StripeSource', () => {
       expect(traceError.message).toContain('Rate limit')
       expect(traceError.stream).toBe('customers')
       expect(traceError.stack_trace).toBeDefined()
+
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'customers',
+          data: { status: 'transient_error' },
+        },
+      })
     })
 
     it('emits TraceMessage error with failure_type config_error for unknown stream', async () => {
@@ -574,7 +583,7 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(1)
+      expect(messages).toHaveLength(2)
 
       const errorMsg = messages[0] as TraceMessage
       expect(errorMsg.type).toBe('trace')
@@ -588,6 +597,15 @@ describe('StripeSource', () => {
       expect(traceError.failure_type).toBe('config_error')
       expect(traceError.message).toBe('Unknown stream: nonexistent')
       expect(traceError.stream).toBe('nonexistent')
+
+      expect(messages[1]).toMatchObject({
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'nonexistent',
+          data: { status: 'config_error' },
+        },
+      })
     })
 
     it('emits TraceMessage error with failure_type system_error on non-rate-limit error', async () => {
@@ -606,7 +624,7 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       const errorMsg = messages[1] as TraceMessage
       expect(errorMsg.type).toBe('trace')
       expect(errorMsg.trace.trace_type).toBe('error')
@@ -615,6 +633,15 @@ describe('StripeSource', () => {
       ).error
       expect(traceError.failure_type).toBe('system_error')
       expect(traceError.message).toContain('Connection refused')
+
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'customers',
+          data: { status: 'system_error' },
+        },
+      })
     })
 
     it('emits TraceMessage error when getAccount fails before parallel backfill pagination', async () => {
@@ -656,7 +683,7 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       expect(listFn).not.toHaveBeenCalled()
       expect(messages[0]).toMatchObject({
         type: 'trace',
@@ -677,6 +704,11 @@ describe('StripeSource', () => {
       expect(traceError.failure_type).toBe('auth_error')
       expect(traceError.message).toContain('Invalid API Key')
       expect(traceError.stream).toBe('customers')
+
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { status: 'auth_error' } },
+      })
     })
 
     it('emits TraceMessage error for Invalid API Key on sequential streams', async () => {
@@ -708,7 +740,7 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'tax_ids', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       const errorMsg = messages[1] as TraceMessage
       expect(errorMsg.trace.trace_type).toBe('error')
       const traceError = (
@@ -720,6 +752,11 @@ describe('StripeSource', () => {
       expect(traceError.failure_type).toBe('auth_error')
       expect(traceError.message).toContain('Invalid API Key')
       expect(traceError.stream).toBe('tax_ids')
+
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'tax_ids', data: { status: 'auth_error' } },
+      })
     })
 
     it('does not treat near-miss auth errors as skippable', async () => {
@@ -740,7 +777,7 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(3)
       expect(messages[1]).toMatchObject({
         type: 'trace',
         trace: {
@@ -749,6 +786,14 @@ describe('StripeSource', () => {
             failure_type: 'system_error',
             stream: 'customers',
           },
+        },
+      })
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'customers',
+          data: { status: 'system_error' },
         },
       })
     })
@@ -819,9 +864,9 @@ describe('StripeSource', () => {
         })
       )
 
-      // customers: started + error = 2
+      // customers: started + error + error_state = 3
       // invoices: started + record + state + complete = 4
-      expect(messages).toHaveLength(6)
+      expect(messages).toHaveLength(7)
 
       // Customers errored
       expect(messages[0]).toMatchObject({
@@ -835,22 +880,174 @@ describe('StripeSource', () => {
         type: 'trace',
         trace: { trace_type: 'error', error: { stream: 'customers' } },
       })
+      expect(messages[2]).toMatchObject({
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'customers',
+          data: { status: 'system_error' },
+        },
+      })
 
       // Invoices succeeded
-      expect(messages[2]).toMatchObject({
+      expect(messages[3]).toMatchObject({
         type: 'trace',
         trace: {
           trace_type: 'stream_status',
           stream_status: { stream: 'invoices', status: 'started' },
         },
       })
-      expect(messages[5]).toMatchObject({
+      expect(messages[6]).toMatchObject({
         type: 'trace',
         trace: {
           trace_type: 'stream_status',
           stream_status: { stream: 'invoices', status: 'complete' },
         },
       })
+    })
+  })
+
+  describe('read() — error state persistence and skip/retry', () => {
+    const skipListFn = vi.fn()
+    const skipRegistry: Record<string, ResourceConfig> = {
+      customers: makeConfig({
+        order: 1,
+        tableName: 'customers',
+        listFn: skipListFn as ResourceConfig['listFn'],
+      }),
+    }
+
+    beforeEach(() => {
+      skipListFn.mockReset()
+      vi.mocked(buildResourceRegistry).mockReturnValue(skipRegistry as any)
+    })
+
+    it('skips streams with auth_error state (permanent)', async () => {
+      skipListFn.mockResolvedValueOnce({ data: [{ id: 'cus_1' }], has_more: false })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: {
+            streams: {
+              customers: { page_cursor: null, status: 'auth_error' },
+            },
+            global: {},
+          },
+        })
+      )
+
+      expect(messages).toHaveLength(0)
+      expect(skipListFn).not.toHaveBeenCalled()
+    })
+
+    it('skips streams with system_error state (permanent)', async () => {
+      skipListFn.mockResolvedValueOnce({ data: [{ id: 'cus_1' }], has_more: false })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: {
+            streams: {
+              customers: { page_cursor: null, status: 'system_error' },
+            },
+            global: {},
+          },
+        })
+      )
+
+      expect(messages).toHaveLength(0)
+      expect(skipListFn).not.toHaveBeenCalled()
+    })
+
+    it('skips streams with config_error state (permanent)', async () => {
+      skipListFn.mockResolvedValueOnce({ data: [{ id: 'cus_1' }], has_more: false })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: {
+            streams: {
+              customers: { page_cursor: null, status: 'config_error' },
+            },
+            global: {},
+          },
+        })
+      )
+
+      expect(messages).toHaveLength(0)
+      expect(skipListFn).not.toHaveBeenCalled()
+    })
+
+    it('retries streams with transient_error state (same as pending)', async () => {
+      skipListFn.mockResolvedValueOnce({
+        data: [{ id: 'cus_1', name: 'Alice' }],
+        has_more: false,
+      })
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: {
+            streams: {
+              customers: { page_cursor: null, status: 'transient_error' },
+            },
+            global: {},
+          },
+        })
+      )
+
+      expect(skipListFn).toHaveBeenCalled()
+      expect(messages.some((m) => m.type === 'record')).toBe(true)
+      expect(messages.at(-1)).toMatchObject({
+        type: 'trace',
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: 'customers', status: 'complete' },
+        },
+      })
+    })
+
+    it('preserves backfill progress in error state for later resume', async () => {
+      const failAfterOne = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: [{ id: 'cus_1', created: 1400000000 }],
+          has_more: true,
+        })
+        .mockRejectedValueOnce(new Error('Connection refused'))
+
+      const failRegistry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: false,
+          listFn: failAfterOne as ResourceConfig['listFn'],
+        }),
+      }
+      vi.mocked(buildResourceRegistry).mockReturnValue(failRegistry as any)
+
+      const messages = await collect(
+        source.read({
+          config,
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+        })
+      )
+
+      const errorState = messages.find(
+        (m) =>
+          m.type === 'source_state' &&
+          (m as any).source_state.stream === 'customers' &&
+          (m as any).source_state.data.status === 'system_error'
+      ) as any
+      expect(errorState).toBeDefined()
+      // page_cursor reflects the last checkpointed state, not the mid-pagination
+      // cursor — the sequential paginator's local cursor is lost on error
+      expect(errorState.source_state.data.page_cursor).toBeNull()
     })
   })
 

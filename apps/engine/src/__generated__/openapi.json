@@ -1089,7 +1089,10 @@
                           "started",
                           "running",
                           "complete",
-                          "incomplete"
+                          "transient_error",
+                          "system_error",
+                          "config_error",
+                          "auth_error"
                         ],
                         "description": "Current phase of the stream within this sync run."
                       },
@@ -1507,7 +1510,10 @@
                         "started",
                         "running",
                         "complete",
-                        "incomplete"
+                        "transient_error",
+                        "system_error",
+                        "config_error",
+                        "auth_error"
                       ],
                       "description": "Final stream status."
                     },

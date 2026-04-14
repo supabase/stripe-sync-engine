@@ -278,7 +278,10 @@ function StreamStatusBadge({ status }: { status: string }) {
     started: 'bg-blue-100 text-blue-700',
     running: 'bg-green-100 text-green-700',
     complete: 'bg-gray-100 text-gray-700',
-    incomplete: 'bg-yellow-100 text-yellow-700',
+    transient_error: 'bg-yellow-100 text-yellow-700',
+    system_error: 'bg-red-100 text-red-700',
+    config_error: 'bg-red-100 text-red-700',
+    auth_error: 'bg-red-100 text-red-700',
   }
   return (
     <span

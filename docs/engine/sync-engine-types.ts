@@ -99,7 +99,14 @@ export interface ErrorMessage {
 export interface StreamStatusMessage {
   type: 'stream_status'
   stream: string
-  status: 'started' | 'running' | 'complete' | 'incomplete'
+  status:
+    | 'started'
+    | 'running'
+    | 'complete'
+    | 'transient_error'
+    | 'system_error'
+    | 'config_error'
+    | 'auth_error'
 }
 
 // MARK: - Message unions

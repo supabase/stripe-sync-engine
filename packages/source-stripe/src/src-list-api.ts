@@ -18,15 +18,19 @@ function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter): ListFn {
   }
 }
 
-export function errorToTrace(err: unknown, stream: string): TraceMessage {
+export function getFailureType(err: unknown): 'transient_error' | 'system_error' | 'auth_error' {
   const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
   const isAuth = err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)
+  return isRateLimit ? 'transient_error' : isAuth ? 'auth_error' : 'system_error'
+}
+
+export function errorToTrace(err: unknown, stream: string): TraceMessage {
   return {
     type: 'trace',
     trace: {
       trace_type: 'error',
       error: {
-        failure_type: isRateLimit ? 'transient_error' : isAuth ? 'auth_error' : 'system_error',
+        failure_type: getFailureType(err),
         message: err instanceof Error ? err.message : String(err),
         stream,
         ...(err instanceof Error ? { stack_trace: err.stack } : {}),
@@ -481,16 +485,8 @@ export async function* listApiBackfill(opts: {
   backfillLimit?: number
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
-  const {
-    catalog,
-    state,
-    registry,
-    client,
-    accountId,
-    rateLimiter,
-    backfillLimit,
-    drainQueue,
-  } = opts
+  const { catalog, state, registry, client, accountId, rateLimiter, backfillLimit, drainQueue } =
+    opts
 
   let accountCreated: number | null = null
 
@@ -511,13 +507,24 @@ export async function* listApiBackfill(opts: {
           },
         },
       } satisfies TraceMessage
+      yield stateMsg({
+        stream: stream.name,
+        data: { page_cursor: null, status: 'config_error' },
+      })
       continue
     }
 
     if (!resourceConfig.listFn) continue
 
     const streamState = state?.[stream.name]
-    if (streamState?.status === 'complete') continue
+    const streamStatus = streamState?.status
+    if (
+      streamStatus === 'complete' ||
+      streamStatus === 'system_error' ||
+      streamStatus === 'config_error' ||
+      streamStatus === 'auth_error'
+    )
+      continue
 
     yield {
       type: 'trace',
@@ -652,7 +659,16 @@ export async function* listApiBackfill(opts: {
         stream: stream.name,
         error: err instanceof Error ? err.message : String(err),
       })
+      const failureType = getFailureType(err)
       yield errorToTrace(err, stream.name)
+      yield stateMsg({
+        stream: stream.name,
+        data: {
+          page_cursor: streamState?.page_cursor ?? null,
+          status: failureType,
+          ...(streamState?.backfill ? { backfill: streamState.backfill } : {}),
+        },
+      })
     }
   }
 }

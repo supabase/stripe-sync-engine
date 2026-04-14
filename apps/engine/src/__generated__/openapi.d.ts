@@ -389,7 +389,7 @@ export interface components {
                      * @description Current phase of the stream within this sync run.
                      * @enum {string}
                      */
-                    status: "started" | "running" | "complete" | "incomplete";
+                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                     /** @description Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source. */
                     cumulative_record_count?: number;
                     /** @description Records synced for this stream in the current sync run. Set by the engine. */
@@ -557,7 +557,7 @@ export interface components {
                          * @description Final stream status.
                          * @enum {string}
                          */
-                        status: "started" | "running" | "complete" | "incomplete";
+                        status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                         /** @description Cumulative records synced for this stream across all runs. */
                         cumulative_record_count: number;
                         /** @description Records synced in this run. */

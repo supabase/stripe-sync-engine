@@ -337,7 +337,7 @@ export interface operations {
                                          * @description Final stream status.
                                          * @enum {string}
                                          */
-                                        status: "started" | "running" | "complete" | "incomplete";
+                                        status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                                         /** @description Cumulative records synced for this stream across all runs. */
                                         cumulative_record_count: number;
                                         /** @description Records synced in this run. */
@@ -465,7 +465,7 @@ export interface operations {
                                      * @description Final stream status.
                                      * @enum {string}
                                      */
-                                    status: "started" | "running" | "complete" | "incomplete";
+                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                                     /** @description Cumulative records synced for this stream across all runs. */
                                     cumulative_record_count: number;
                                     /** @description Records synced in this run. */
@@ -585,7 +585,7 @@ export interface operations {
                                      * @description Final stream status.
                                      * @enum {string}
                                      */
-                                    status: "started" | "running" | "complete" | "incomplete";
+                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                                     /** @description Cumulative records synced for this stream across all runs. */
                                     cumulative_record_count: number;
                                     /** @description Records synced in this run. */
@@ -766,7 +766,7 @@ export interface operations {
                                      * @description Final stream status.
                                      * @enum {string}
                                      */
-                                    status: "started" | "running" | "complete" | "incomplete";
+                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                                     /** @description Cumulative records synced for this stream across all runs. */
                                     cumulative_record_count: number;
                                     /** @description Records synced in this run. */

@@ -187,7 +187,7 @@ describe('segmentCountFromDensity', () => {
 
   it('produces smooth values without cliff edges', () => {
     const at9 = segmentCountFromDensity(0.09)
-    const at10 = segmentCountFromDensity(0.10)
+    const at10 = segmentCountFromDensity(0.1)
     const at11 = segmentCountFromDensity(0.11)
     expect(at9).toBeGreaterThanOrEqual(at10)
     expect(at10).toBeGreaterThanOrEqual(at11)

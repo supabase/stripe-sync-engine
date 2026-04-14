@@ -211,7 +211,10 @@
                                         "started",
                                         "running",
                                         "complete",
-                                        "incomplete"
+                                        "transient_error",
+                                        "system_error",
+                                        "config_error",
+                                        "auth_error"
                                       ],
                                       "description": "Final stream status."
                                     },
@@ -519,7 +522,10 @@
                                   "started",
                                   "running",
                                   "complete",
-                                  "incomplete"
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
                                 ],
                                 "description": "Final stream status."
                               },
@@ -795,7 +801,10 @@
                                   "started",
                                   "running",
                                   "complete",
-                                  "incomplete"
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
                                 ],
                                 "description": "Final stream status."
                               },
@@ -1125,7 +1134,10 @@
                                   "started",
                                   "running",
                                   "complete",
-                                  "incomplete"
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
                                 ],
                                 "description": "Final stream status."
                               },
