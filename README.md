@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This repository is deprecated.** Please use [stripe/sync-engine](https://github.com/stripe/sync-engine) instead.
+
 # Stripe Sync Engine Monorepo
 
 ![GitHub License](https://img.shields.io/github/license/stripe-experiments/sync-engine)
