@@ -36,16 +36,15 @@ export function errorToTrace(err: unknown, stream: string): TraceMessage {
 //   400 "This endpoint is not in live mode"                     → not in live mode
 //   400 "Must provide customer"                                 → Must provide customer
 //   400 "Must provide source or customer"                       → Must provide
-//   400 "Missing required param: customer"                      → Missing required param
-//   400 "Unrecognized request URL (GET: /v1/exchange_rates)"    → Unrecognized request URL
+//   400 "This API surface is not enabled for testmode usage."   → not enabled for
+//   400 "Accounts v2 is not enabled for your platform."         → not enabled for
 //   400 "Your account is not set up to use Issuing."            → not set up to use
 const SKIPPABLE_ERROR_PATTERNS = [
   'only available in testmode',
   'not in live mode',
+  'not enabled for',
   'Must provide customer',
   'Must provide ',
-  'Missing required param',
-  'Unrecognized request URL',
   'not set up to use',
 ]
 
