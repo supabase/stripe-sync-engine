@@ -1,6 +1,6 @@
 {
   "name": "@stripe/sync-integration-supabase",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": false,
   "description": "Supabase integration for Stripe Sync Engine — edge functions and deployment",
   "type": "module",

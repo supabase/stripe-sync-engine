@@ -80,6 +80,7 @@ if [ -z "$TGZ_FILES" ]; then
   echo "FAIL: no tarballs to publish (all packs failed)"
   exit 1
 fi
+PUBLISH_FAILURES=0
 for tgz in $TGZ_FILES; do
   echo "Publishing $tgz"
   if PUBLISH_OUTPUT=$(npm publish "$tgz" \
@@ -87,24 +88,29 @@ for tgz in $TGZ_FILES; do
     --access public 2>&1); then
     echo "$PUBLISH_OUTPUT"
   else
-    status=$?
     echo "$PUBLISH_OUTPUT"
     if echo "$PUBLISH_OUTPUT" | grep -Eqi 'Cannot publish over existing version|previously published versions|EPUBLISHCONFLICT'; then
       echo "WARNING: $tgz already exists on npmjs.org, skipping"
       ALREADY_PUBLISHED=$((ALREADY_PUBLISHED + 1))
+    elif echo "$PUBLISH_OUTPUT" | grep -Eqi 'E404|Not Found|not have permission'; then
+      echo "WARNING: $tgz not found or no permission on npmjs.org, skipping"
+      PUBLISH_FAILURES=$((PUBLISH_FAILURES + 1))
     else
       echo "FAIL: npm publish failed for $tgz"
-      exit "$status"
+      PUBLISH_FAILURES=$((PUBLISH_FAILURES + 1))
     fi
   fi
 done
 
+if [ "$PUBLISH_FAILURES" -gt 0 ] && [ "$PUBLISH_FAILURES" -eq "$(echo "$TGZ_FILES" | wc -w)" ]; then
+  echo "FAIL: all $PUBLISH_FAILURES publishes failed"
+  exit 1
+fi
+
 echo ""
-WARNINGS=0
-[ "$ALREADY_PUBLISHED" -gt 0 ] && WARNINGS=$((WARNINGS + ALREADY_PUBLISHED))
-[ "$PACK_FAILURES" -gt 0 ] && WARNINGS=$((WARNINGS + PACK_FAILURES))
-if [ "$WARNINGS" -gt 0 ]; then
-  echo "=== Done with $ALREADY_PUBLISHED already-published and $PACK_FAILURES pack-skip warning(s) ==="
+TOTAL_WARNINGS=$((ALREADY_PUBLISHED + PACK_FAILURES + PUBLISH_FAILURES))
+if [ "$TOTAL_WARNINGS" -gt 0 ]; then
+  echo "=== Done: $PACK_FAILURES pack-skips, $ALREADY_PUBLISHED already-published, $PUBLISH_FAILURES publish-failures ==="
 else
   echo "=== Done ==="
 fi
