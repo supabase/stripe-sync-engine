@@ -18,3 +18,23 @@ The npmjs auto-publish flow has three correctness gaps:
 
 1. Run targeted shell validation for the promotion script with mocked npm/curl responses.
 2. Inspect the workflow diff to confirm the publish gate and job dependencies match the intended release flow.
+
+## TODO: Switch to npm Trusted Publishing (OIDC)
+
+The current flow uses a long-lived `NPM_TOKEN` secret for publishing to
+npmjs.org. This should be replaced with npm's [trusted publishing][tp]
+(also called "provenance" or OIDC publishing), which:
+
+- Eliminates stored npm tokens entirely — GitHub Actions gets a
+  short-lived OIDC token from npm on each run.
+- Adds provenance attestation to published packages (visible on npmjs.org).
+- Removes the risk of leaked/expired tokens breaking publishes.
+
+Steps to migrate:
+1. Link each `@stripe/sync-*` package to the GitHub repo in npm's
+   trusted publishing settings.
+2. Add `permissions: id-token: write` to the `publish_npmjs` job.
+3. Use `npm publish --provenance` instead of token-based auth.
+4. Remove the `NPM_TOKEN` secret from the repo.
+
+[tp]: https://docs.npmjs.com/generating-provenance-statements
