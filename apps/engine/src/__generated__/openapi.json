@@ -1449,6 +1449,10 @@
                 "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
                 "type": "number"
               },
+              "state": {
+                "description": "Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume.",
+                "$ref": "#/components/schemas/SyncState"
+              },
               "global_progress": {
                 "description": "Final global aggregates. Same shape as trace/progress.",
                 "type": "object",
@@ -2002,6 +2006,95 @@
         ],
         "additionalProperties": false
       },
+      "SyncState": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "description": "Source connector state — cursors, backfill progress, events cursors."
+          },
+          "destination": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "description": "Destination connector state — reserved for future use."
+          },
+          "engine": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "description": "Engine-managed state — cumulative record counts, sync metadata not owned by connectors."
+          }
+        },
+        "required": [
+          "source",
+          "destination",
+          "engine"
+        ],
+        "description": "Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing."
+      },
       "Message": {
         "oneOf": [
           {
@@ -2257,99 +2350,6 @@
           "destination"
         ],
         "additionalProperties": false
-      },
-      "SyncState": {
-        "type": "object",
-        "properties": {
-          "source": {
-            "type": "object",
-            "properties": {
-              "streams": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Per-stream checkpoint data, keyed by stream name."
-              },
-              "global": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Section-wide state shared across all streams."
-              }
-            },
-            "required": [
-              "streams",
-              "global"
-            ],
-            "additionalProperties": false,
-            "description": "Source connector state — cursors, backfill progress, events cursors."
-          },
-          "destination": {
-            "type": "object",
-            "properties": {
-              "streams": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Per-stream checkpoint data, keyed by stream name."
-              },
-              "global": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Section-wide state shared across all streams."
-              }
-            },
-            "required": [
-              "streams",
-              "global"
-            ],
-            "additionalProperties": false,
-            "description": "Destination connector state — reserved for future use."
-          },
-          "engine": {
-            "type": "object",
-            "properties": {
-              "streams": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Per-stream checkpoint data, keyed by stream name."
-              },
-              "global": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {},
-                "description": "Section-wide state shared across all streams."
-              }
-            },
-            "required": [
-              "streams",
-              "global"
-            ],
-            "additionalProperties": false,
-            "description": "Engine-managed state — cumulative record counts, sync metadata not owned by connectors."
-          }
-        },
-        "required": [
-          "source",
-          "destination",
-          "engine"
-        ],
-        "additionalProperties": false,
-        "description": "Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing."
       }
     }
   }

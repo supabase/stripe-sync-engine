@@ -419,6 +419,11 @@ export const EofPayload = z
       .describe(
         'Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.'
       ),
+    state: SyncState.optional().describe(
+      'Full sync state at the end of the run. source: accumulated from source_state messages; ' +
+        'engine: updated cumulative record counts; destination: reserved. ' +
+        'Consumers can persist this directly and pass it back on resume.'
+    ),
     global_progress: TraceProgress.optional().describe(
       'Final global aggregates. Same shape as trace/progress.'
     ),

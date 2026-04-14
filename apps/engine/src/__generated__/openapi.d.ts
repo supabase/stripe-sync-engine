@@ -535,6 +535,8 @@ export interface components {
                 cutoff?: "soft" | "hard";
                 /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                 elapsed_ms?: number;
+                /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+                state?: components["schemas"]["SyncState"];
                 /** @description Final global aggregates. Same shape as trace/progress. */
                 global_progress?: {
                     /** @description Wall-clock milliseconds since the sync run started. */
@@ -718,35 +720,6 @@ export interface components {
              */
             batch_size: number;
         };
-        Message: components["schemas"]["RecordMessage"] | components["schemas"]["SourceStateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
-        DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        DestinationOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
-        SyncOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
-        CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        SourceInputMessage: {
-            /** @constant */
-            type: "source_input";
-            source_input: components["schemas"]["SourceStripeInput"];
-        };
-        PipelineConfig: {
-            source: components["schemas"]["SourceConfig"];
-            destination: components["schemas"]["DestinationConfig"];
-            streams?: {
-                /** @description Stream (table) name to sync. */
-                name: string;
-                /**
-                 * @description How the source reads this stream. Defaults to full_refresh.
-                 * @enum {string}
-                 */
-                sync_mode?: "incremental" | "full_refresh";
-                /** @description If set, only these fields are synced. */
-                fields?: string[];
-                /** @description Cap backfill to this many records, then mark the stream complete. */
-                backfill_limit?: number;
-            }[];
-        };
         /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
         SyncState: {
             /** @description Source connector state — cursors, backfill progress, events cursors. */
@@ -782,6 +755,35 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        Message: components["schemas"]["RecordMessage"] | components["schemas"]["SourceStateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
+        DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        DestinationOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
+        SyncOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
+        CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
+        SourceInputMessage: {
+            /** @constant */
+            type: "source_input";
+            source_input: components["schemas"]["SourceStripeInput"];
+        };
+        PipelineConfig: {
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description If set, only these fields are synced. */
+                fields?: string[];
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
         };
     };
     responses: never;

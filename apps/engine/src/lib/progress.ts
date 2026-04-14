@@ -1,11 +1,13 @@
 import type {
   Message,
+  SyncState,
   SyncOutput,
   TraceStreamStatus,
   TraceProgress,
   EofPayload,
   EofStreamProgress,
 } from '@stripe/sync-protocol'
+import { emptySyncState } from '@stripe/sync-protocol'
 
 type FailureType = 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
 type StreamError = { message: string; failure_type?: FailureType }
@@ -36,6 +38,7 @@ export function createRecordCounter() {
 
 export function trackProgress(opts: {
   interval_ms?: number
+  initial_state?: SyncState
   initial_cumulative_counts?: Record<string, number>
   /** Shared counter fed by createRecordCounter().tap() on the data path. */
   recordCounter?: ReturnType<typeof createRecordCounter>
@@ -43,13 +46,23 @@ export function trackProgress(opts: {
   const intervalMs = opts.interval_ms ?? 2000
 
   return async function* (messages) {
-    const cumulativeRecordCount = new Map<string, number>(
-      Object.entries(opts.initial_cumulative_counts ?? {})
-    )
+    const initialCumulativeCounts = opts.initial_state?.engine?.streams
+      ? Object.fromEntries(
+          Object.entries(opts.initial_state.engine.streams)
+            .map(([k, v]) => [
+              k,
+              (v as { cumulative_record_count?: number })?.cumulative_record_count ?? 0,
+            ])
+            .filter(([, v]) => typeof v === 'number' && v >= 0)
+        )
+      : (opts.initial_cumulative_counts ?? {})
+    const cumulativeRecordCount = new Map<string, number>(Object.entries(initialCumulativeCounts))
     const prevSnapshotCounts = new Map<string, number>()
     let stateCheckpointCount = 0
     const streamStatus = new Map<string, Status>()
     const streamErrors = new Map<string, StreamError[]>()
+    const hadInitialState = opts.initial_state != null
+    const finalState: SyncState = structuredClone(opts.initial_state ?? emptySyncState())
 
     const startedAt = Date.now()
     let lastWindowAt = startedAt
@@ -152,6 +165,31 @@ export function trackProgress(opts: {
       }
     }
 
+    function buildAccumulatedState(): SyncState | undefined {
+      for (const stream of allStreams()) {
+        const run = runRecordCount(stream)
+        const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
+        const existing =
+          finalState.engine.streams[stream] && typeof finalState.engine.streams[stream] === 'object'
+            ? (finalState.engine.streams[stream] as Record<string, unknown>)
+            : {}
+        finalState.engine.streams[stream] = {
+          ...existing,
+          cumulative_record_count: cumulative,
+        }
+      }
+
+      const hasAnyState =
+        Object.keys(finalState.source.streams).length > 0 ||
+        Object.keys(finalState.source.global).length > 0 ||
+        Object.keys(finalState.destination.streams).length > 0 ||
+        Object.keys(finalState.destination.global).length > 0 ||
+        Object.keys(finalState.engine.streams).length > 0 ||
+        Object.keys(finalState.engine.global).length > 0
+
+      return hadInitialState || hasAnyState ? finalState : undefined
+    }
+
     function buildEnrichedEof(reason: EofPayload['reason']): SyncOutput {
       const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
       const streams = allStreams()
@@ -164,6 +202,7 @@ export function trackProgress(opts: {
       }
       const eof: EofPayload = {
         reason,
+        state: buildAccumulatedState(),
         global_progress: {
           elapsed_ms: elapsedMs(),
           run_record_count: totalRunRecords(),
@@ -198,7 +237,10 @@ export function trackProgress(opts: {
         stateCheckpointCount++
         if (msg.source_state.state_type === 'stream') {
           const stream = msg.source_state.stream
+          finalState.source.streams[stream] = msg.source_state.data
           if (!streamStatus.has(stream)) streamStatus.set(stream, 'running')
+        } else if (msg.source_state.state_type === 'global') {
+          finalState.source.global = msg.source_state.data as Record<string, unknown>
         }
       } else if (msg.type === 'trace') {
         if (msg.trace.trace_type === 'stream_status') {

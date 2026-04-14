@@ -526,19 +526,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       })(merge(taggedDest, taggedSource))
 
       const normalizedState = coerceSyncState(opts?.state)
-      const initialCounts = normalizedState?.engine?.streams
-        ? Object.fromEntries(
-            Object.entries(normalizedState.engine.streams)
-              .map(([k, v]) => [
-                k,
-                (v as { cumulative_record_count?: number })?.cumulative_record_count ?? 0,
-              ])
-              .filter(([, v]) => typeof v === 'number' && v > 0)
-          )
-        : undefined
 
       yield* trackProgress({
-        initial_cumulative_counts: initialCounts as Record<string, number> | undefined,
+        initial_state: normalizedState,
         recordCounter,
       })(limited)
     },

@@ -189,6 +189,42 @@ export interface components {
              */
             batch_size: number;
         };
+        /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
+        SyncState: {
+            /** @description Source connector state — cursors, backfill progress, events cursors. */
+            source: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
+            };
+            /** @description Destination connector state — reserved for future use. */
+            destination: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
+            };
+            /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
+            engine: {
+                /** @description Per-stream checkpoint data, keyed by stream name. */
+                streams: {
+                    [key: string]: unknown;
+                };
+                /** @description Section-wide state shared across all streams. */
+                global: {
+                    [key: string]: unknown;
+                };
+            };
+        };
     };
     responses: never;
     parameters: never;
@@ -281,6 +317,8 @@ export interface operations {
                                 cutoff?: "soft" | "hard";
                                 /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                                 elapsed_ms?: number;
+                                /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+                                state?: components["schemas"]["SyncState"];
                                 /** @description Final global aggregates. Same shape as trace/progress. */
                                 global_progress?: {
                                     /** @description Wall-clock milliseconds since the sync run started. */
@@ -411,6 +449,8 @@ export interface operations {
                             cutoff?: "soft" | "hard";
                             /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                             elapsed_ms?: number;
+                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+                            state?: components["schemas"]["SyncState"];
                             /** @description Final global aggregates. Same shape as trace/progress. */
                             global_progress?: {
                                 /** @description Wall-clock milliseconds since the sync run started. */
@@ -533,6 +573,8 @@ export interface operations {
                             cutoff?: "soft" | "hard";
                             /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                             elapsed_ms?: number;
+                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+                            state?: components["schemas"]["SyncState"];
                             /** @description Final global aggregates. Same shape as trace/progress. */
                             global_progress?: {
                                 /** @description Wall-clock milliseconds since the sync run started. */
@@ -716,6 +758,8 @@ export interface operations {
                             cutoff?: "soft" | "hard";
                             /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
                             elapsed_ms?: number;
+                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+                            state?: components["schemas"]["SyncState"];
                             /** @description Final global aggregates. Same shape as trace/progress. */
                             global_progress?: {
                                 /** @description Wall-clock milliseconds since the sync run started. */

@@ -731,6 +731,209 @@ describe('engine.pipeline_sync() pipeline', () => {
     })
   })
 
+  it('returns final eof state by merging run updates into the initial sync state', async () => {
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'invoices', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'record' as const,
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        }
+        yield {
+          type: 'source_state' as const,
+          source_state: { state_type: 'global', data: { events_cursor: 'evt_new' } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const results = await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: {
+          source: {
+            streams: {
+              customers: { cursor: 'cus_0' },
+              invoices: { cursor: 'inv_2' },
+            },
+            global: { events_cursor: 'evt_old' },
+          },
+          destination: {
+            streams: { customers: { watermark: 10 } },
+            global: { schema_version: 1 },
+          },
+          engine: {
+            streams: {
+              customers: { cumulative_record_count: 5, note: 'keep-me' },
+              invoices: { cumulative_record_count: 2, untouched: true },
+            },
+            global: { sync_id: 'prev' },
+          },
+        },
+      })
+    )
+
+    const eof = results.find((msg) => msg.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        state: {
+          source: {
+            streams: {
+              customers: { cursor: 'cus_1' },
+              invoices: { cursor: 'inv_2' },
+            },
+            global: { events_cursor: 'evt_new' },
+          },
+          destination: {
+            streams: { customers: { watermark: 10 } },
+            global: { schema_version: 1 },
+          },
+          engine: {
+            streams: {
+              customers: { cumulative_record_count: 6, note: 'keep-me' },
+              invoices: { cumulative_record_count: 2, untouched: true },
+            },
+            global: { sync_id: 'prev' },
+          },
+        },
+      },
+    })
+  })
+
+  it('returns the initial sync state unchanged on a no-op resumed run', async () => {
+    const idleSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {},
+    }
+
+    const initialState = {
+      source: {
+        streams: { customers: { cursor: 'cus_9' } },
+        global: { events_cursor: 'evt_9' },
+      },
+      destination: {
+        streams: { customers: { watermark: 99 } },
+        global: { schema_version: 2 },
+      },
+      engine: {
+        streams: { customers: { cumulative_record_count: 9 } },
+        global: { sync_id: 'resume-9' },
+      },
+    }
+
+    const engine = await createEngine(makeResolver(idleSource, destinationTest))
+    const results = await drain(engine.pipeline_sync(defaultPipeline, { state: initialState }))
+
+    const eof = results.find((msg) => msg.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: { state: initialState },
+    })
+  })
+
+  it('preserves initial source and destination state when only engine counts change', async () => {
+    const recordsOnlySource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'record' as const,
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_10' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(recordsOnlySource, destinationTest))
+    const results = await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: {
+          source: {
+            streams: { customers: { cursor: 'cus_9' } },
+            global: { events_cursor: 'evt_9' },
+          },
+          destination: {
+            streams: { customers: { watermark: 99 } },
+            global: { schema_version: 2 },
+          },
+          engine: {
+            streams: { customers: { cumulative_record_count: 9, note: 'persist' } },
+            global: { sync_id: 'resume-9' },
+          },
+        },
+      })
+    )
+
+    const eof = results.find((msg) => msg.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        state: {
+          source: {
+            streams: { customers: { cursor: 'cus_9' } },
+            global: { events_cursor: 'evt_9' },
+          },
+          destination: {
+            streams: { customers: { watermark: 99 } },
+            global: { schema_version: 2 },
+          },
+          engine: {
+            streams: { customers: { cumulative_record_count: 10, note: 'persist' } },
+            global: { sync_id: 'resume-9' },
+          },
+        },
+      },
+    })
+  })
+
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
