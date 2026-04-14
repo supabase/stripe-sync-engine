@@ -52,20 +52,29 @@ echo ""
 
 # Pack each package from GitHub Packages
 echo "=== Packing from GitHub Packages ==="
+PACK_FAILURES=0
 for pkg in $PACKAGES; do
   echo "--- $pkg ---"
   package_spec="$pkg"
   if [ -n "$RELEASE_VERSION" ]; then
     package_spec="${pkg}@${RELEASE_VERSION}"
   fi
-  npm pack "$package_spec" --registry https://npm.pkg.github.com
+  if ! npm pack "$package_spec" --registry https://npm.pkg.github.com 2>&1; then
+    echo "WARNING: failed to pack $package_spec — skipping (stale or missing version)"
+    PACK_FAILURES=$((PACK_FAILURES + 1))
+  fi
 done
 
 # Publish all tarballs to npmjs.org
 echo ""
 echo "=== Publishing to npmjs.org ==="
 ALREADY_PUBLISHED=0
-for tgz in *.tgz; do
+TGZ_FILES=$(ls *.tgz 2>/dev/null || true)
+if [ -z "$TGZ_FILES" ]; then
+  echo "FAIL: no tarballs to publish (all packs failed)"
+  exit 1
+fi
+for tgz in $TGZ_FILES; do
   echo "Publishing $tgz"
   if PUBLISH_OUTPUT=$(npm publish "$tgz" \
     --registry https://registry.npmjs.org \
@@ -86,8 +95,11 @@ for tgz in *.tgz; do
 done
 
 echo ""
-if [ "$ALREADY_PUBLISHED" -gt 0 ]; then
-  echo "=== Done with $ALREADY_PUBLISHED already-published warning(s) ==="
+WARNINGS=0
+[ "$ALREADY_PUBLISHED" -gt 0 ] && WARNINGS=$((WARNINGS + ALREADY_PUBLISHED))
+[ "$PACK_FAILURES" -gt 0 ] && WARNINGS=$((WARNINGS + PACK_FAILURES))
+if [ "$WARNINGS" -gt 0 ]; then
+  echo "=== Done with $ALREADY_PUBLISHED already-published and $PACK_FAILURES pack-skip warning(s) ==="
 else
   echo "=== Done ==="
 fi
