@@ -142,7 +142,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Publish GitHub Registry — publish @stripe/* packages to GitHub Packages
   # ---------------------------------------------------------------------------
-  publish_github_registry:
+  publish_to_github_registry:
     name: Publish to GitHub Registry
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
@@ -175,7 +175,7 @@ jobs:
   # ---------------------------------------------------------------------------
   promote_to_npm_registry:
     name: Promote to npm Registry
-    needs: [test, publish_github_registry, changes]
+    needs: [test, publish_to_github_registry, changes]
     if: >-
       github.event_name == 'push'
       && needs.changes.outputs.code == 'true'
