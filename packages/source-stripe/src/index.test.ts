@@ -653,7 +653,6 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter: async () => 0,
-          backfillConcurrency: 2,
         })
       )
 
@@ -1925,7 +1924,6 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
-          backfillConcurrency: 3,
         })
       )
 
@@ -1980,7 +1978,6 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
-          backfillConcurrency: 3,
         })
       )
 
@@ -2122,11 +2119,15 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
-          backfillConcurrency: 3,
         })
       )
 
-      for (const call of parallelListFn.mock.calls) {
+      // First call is the density probe — verify it includes created filter
+      expect(parallelListFn.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ limit: 100, created: expect.any(Object) })
+      )
+
+      for (const call of parallelListFn.mock.calls.slice(1)) {
         expect(call[0]).toHaveProperty('created')
       }
 

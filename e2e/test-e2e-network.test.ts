@@ -217,7 +217,6 @@ describe('network interruption e2e via Docker service', () => {
       })
 
       pipelineId = await createCustomersPipeline(harness, schema, {
-        backfill_concurrency: 1,
         rate_limit: 1000,
       })
 
@@ -245,7 +244,6 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        backfill_concurrency: 1,
         rate_limit: 1,
       })
 
@@ -274,7 +272,6 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        backfill_concurrency: 1,
         rate_limit: 1,
       })
 
@@ -309,7 +306,6 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        backfill_concurrency: 1,
         rate_limit: 1,
       })
 

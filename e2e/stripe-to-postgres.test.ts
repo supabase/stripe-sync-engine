@@ -65,7 +65,6 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         stripe: {
           api_key: STRIPE_API_KEY,
           backfill_limit: BACKFILL_LIMIT,
-          backfill_concurrency: 1,
           ...(opts.websocket && { websocket: true }),
         },
       },

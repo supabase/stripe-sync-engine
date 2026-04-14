@@ -271,7 +271,6 @@ describe('Stripe failure handling via Docker engine', () => {
       baseUrl: server.url,
       sourceOverrides: {
         api_key: 'sk_test_bad',
-        backfill_concurrency: 1,
       },
     })
 
@@ -320,7 +319,6 @@ describe('Stripe failure handling via Docker engine', () => {
         { name: 'customers', sync_mode: 'full_refresh' },
         { name: 'products', sync_mode: 'full_refresh' },
       ],
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     const customerError = getErrorTrace(messages, 'customers')
@@ -363,7 +361,6 @@ describe('Stripe failure handling via Docker engine', () => {
     const { messages, state } = await runSync({
       destSchema,
       baseUrl: server.url,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     expect(getErrorTrace(messages, 'customers')).toBeUndefined()

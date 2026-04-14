@@ -1538,12 +1538,6 @@
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991,
             "description": "Max Stripe API requests per second (default: 25)"
-          },
-          "backfill_concurrency": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Number of time-range segments for parallel backfill (default: 10)"
           }
         },
         "required": [

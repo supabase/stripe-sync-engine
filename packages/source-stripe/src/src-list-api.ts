@@ -1,10 +1,22 @@
 import type { Message, TraceMessage } from '@stripe/sync-protocol'
 import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
+import type { ListFn, ListResult } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { SegmentState, BackfillState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
+import { MAX_SEGMENTS, MAX_CONCURRENCY } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
+
+// MARK: - Rate-limit wrapper
+
+function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter): ListFn {
+  return async (params) => {
+    const wait = await rateLimiter()
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000))
+    return listFn(params)
+  }
+}
 
 export function errorToTrace(err: unknown, stream: string): TraceMessage {
   const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
@@ -47,8 +59,6 @@ const SKIPPABLE_ERROR_PATTERNS = [
   'Must provide ',
   'not set up to use',
 ]
-
-const DEFAULT_BACKFILL_CONCURRENCY = 10
 
 // MARK: - Compact state (generative — O(concurrency) not O(total segments))
 
@@ -231,7 +241,7 @@ async function getAccountCreatedTimestamp(client: StripeClient): Promise<number>
 function buildSegments(
   startTimestamp: number,
   endTimestamp: number,
-  numSegments = DEFAULT_BACKFILL_CONCURRENCY
+  numSegments: number
 ): SegmentState[] {
   const range = endTimestamp - startTimestamp
   const segmentSize = Math.max(1, Math.ceil(range / numSegments))
@@ -247,10 +257,69 @@ function buildSegments(
   return segments
 }
 
+// MARK: - Density probe + segment construction
+
+/**
+ * Smooth mapping from density to segment count. `timeProgress` is the fraction
+ * of the backfill time range covered by the first 100 items. The inverse
+ * relationship avoids the cliff edges of discrete tiers.
+ */
+export function segmentCountFromDensity(timeProgress: number): number {
+  if (timeProgress <= 0) return MAX_SEGMENTS
+  return Math.max(1, Math.min(MAX_SEGMENTS, Math.ceil(1 / timeProgress)))
+}
+
+/**
+ * Probe data density with a single list call, then build the segment array.
+ * The probe fetches with a `created` filter (forward-compatible if the range
+ * narrows later) and returns its response so the caller can yield the records
+ * directly — zero wasted API calls.
+ *
+ * Stripe returns data in descending `created` order. If 100 items span a
+ * large fraction of the time range the resource is sparse and fewer segments
+ * suffice; if they cluster in a narrow window the resource is dense and more
+ * segments help parallelise.
+ */
+export async function probeAndBuildSegments(opts: {
+  listFn: ListFn
+  range: { gte: number; lt: number }
+}): Promise<{ segments: SegmentState[]; numSegments: number; firstPage: ListResult }> {
+  const { listFn, range } = opts
+
+  const firstPage = await listFn({
+    limit: 100,
+    created: { gte: range.gte, lt: range.lt },
+  })
+
+  if (!firstPage.has_more) {
+    return {
+      segments: [{ index: 0, gte: range.gte, lt: range.lt, page_cursor: null, status: 'pending' }],
+      numSegments: 1,
+      firstPage,
+    }
+  }
+
+  const lastItem = firstPage.data[firstPage.data.length - 1] as { created?: number }
+  const totalSpan = range.lt - range.gte
+  if (totalSpan <= 0) {
+    return {
+      segments: [{ index: 0, gte: range.gte, lt: range.lt, page_cursor: null, status: 'pending' }],
+      numSegments: 1,
+      firstPage,
+    }
+  }
+
+  const timeProgress = (range.lt - (lastItem?.created ?? range.gte)) / totalSpan
+  const numSegments = segmentCountFromDensity(timeProgress)
+  const segments = buildSegments(range.gte, range.lt - 1, numSegments)
+
+  return { segments, numSegments, firstPage }
+}
+
 // MARK: - Segment pagination
 
 async function* paginateSegment(opts: {
-  listFn: NonNullable<ResourceConfig['listFn']>
+  listFn: ListFn
   segment: SegmentState
   segments: SegmentState[]
   range: { gte: number; lt: number }
@@ -261,7 +330,6 @@ async function* paginateSegment(opts: {
   supportsForwardPagination: boolean
   backfillLimit?: number
   totalEmitted: { count: number }
-  rateLimiter: RateLimiter
 }): AsyncGenerator<Message> {
   const {
     listFn,
@@ -275,7 +343,6 @@ async function* paginateSegment(opts: {
     supportsForwardPagination,
     backfillLimit,
     totalEmitted,
-    rateLimiter,
   } = opts
 
   let pageCursor: string | null = segment.page_cursor
@@ -292,8 +359,6 @@ async function* paginateSegment(opts: {
       params.starting_after = pageCursor
     }
 
-    const wait = await rateLimiter()
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000))
     const response = await listFn(params as Parameters<typeof listFn>[0])
 
     for (const item of response.data) {
@@ -334,15 +399,14 @@ async function* paginateSegment(opts: {
 // MARK: - Sequential fallback (original logic)
 
 async function* sequentialBackfillStream(opts: {
-  resourceConfig: ResourceConfig
+  resourceConfig: ResourceConfig & { listFn: ListFn }
   streamName: string
   accountId: string
   pageCursor: string | null
   backfillLimit?: number
-  rateLimiter: RateLimiter
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
-  const { resourceConfig, streamName, accountId, backfillLimit, rateLimiter, drainQueue } = opts
+  const { resourceConfig, streamName, accountId, backfillLimit, drainQueue } = opts
   let pageCursor = opts.pageCursor
   let hasMore = true
   let totalEmitted = 0
@@ -362,10 +426,8 @@ async function* sequentialBackfillStream(opts: {
       params.starting_after = pageCursor
     }
 
-    const wait = await rateLimiter()
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait * 1000))
-    const response = await resourceConfig.listFn!(
-      params as Parameters<NonNullable<typeof resourceConfig.listFn>>[0]
+    const response = await resourceConfig.listFn(
+      params as Parameters<typeof resourceConfig.listFn>[0]
     )
 
     for (const item of response.data) {
@@ -417,7 +479,6 @@ export async function* listApiBackfill(opts: {
   accountId: string
   rateLimiter: RateLimiter
   backfillLimit?: number
-  backfillConcurrency?: number
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
   const {
@@ -428,7 +489,6 @@ export async function* listApiBackfill(opts: {
     accountId,
     rateLimiter,
     backfillLimit,
-    backfillConcurrency = DEFAULT_BACKFILL_CONCURRENCY,
     drainQueue,
   } = opts
 
@@ -468,11 +528,14 @@ export async function* listApiBackfill(opts: {
     } satisfies TraceMessage
 
     try {
+      const rateLimitedListFn = withRateLimit(resourceConfig.listFn!, rateLimiter)
+
       // Parallel path: streams that support created filter
       if (resourceConfig.supportsCreatedFilter) {
         let segments: SegmentState[]
         let range: { gte: number; lt: number }
         let numSegments: number
+        let firstPage: ListResult | null = null
 
         if (streamState?.backfill) {
           // Resume from compact backfill state
@@ -483,24 +546,61 @@ export async function* listApiBackfill(opts: {
           // Legacy: resume from old segment array format
           segments = streamState.segments.map((s) => ({ ...s }))
           range = { gte: segments[0].gte, lt: segments[segments.length - 1].lt }
-          numSegments = backfillConcurrency
+          numSegments = segments.length
         } else {
-          // First run: fetch account creation date and build segments
+          // First run: probe density and build segments in one call
           if (accountCreated === null) {
             accountCreated = await getAccountCreatedTimestamp(client)
           }
           const now = Math.floor(Date.now() / 1000)
           range = { gte: accountCreated, lt: now + 1 }
-          numSegments = backfillConcurrency
-          segments = buildSegments(accountCreated, now, backfillConcurrency)
+          const probe = await probeAndBuildSegments({
+            listFn: rateLimitedListFn,
+            range,
+          })
+          segments = probe.segments
+          numSegments = probe.numSegments
+          firstPage = probe.firstPage
         }
 
         const incompleteSegments = segments.filter((s) => s.status !== 'complete')
         if (incompleteSegments.length > 0) {
           const totalEmitted = { count: 0 }
-          const generators = incompleteSegments.map((segment) =>
+
+          // For single-segment streams, yield probe data directly (zero waste).
+          // Multi-segment streams skip this because the probe fetches newest-first
+          // across the full range, and attributing those items to a specific segment
+          // would cause cursor/range mismatches during pagination.
+          if (firstPage && firstPage.data.length > 0 && numSegments === 1) {
+            const onlySegment = incompleteSegments[0]
+            for (const item of firstPage.data) {
+              yield toRecordMessage(stream.name, {
+                ...(item as Record<string, unknown>),
+                _account_id: accountId,
+              })
+              totalEmitted.count++
+            }
+            if (firstPage.has_more) {
+              const lastId = (firstPage.data[firstPage.data.length - 1] as { id: string }).id
+              onlySegment.page_cursor = lastId
+            } else {
+              onlySegment.status = 'complete'
+            }
+            const allComplete = segments.every((s) => s.status === 'complete')
+            yield stateMsg({
+              stream: stream.name,
+              data: {
+                page_cursor: null,
+                status: allComplete ? 'complete' : 'pending',
+                backfill: compactState(segments, range, numSegments),
+              },
+            })
+          }
+
+          const stillIncomplete = segments.filter((s) => s.status !== 'complete')
+          const generators = stillIncomplete.map((segment) =>
             paginateSegment({
-              listFn: resourceConfig.listFn!,
+              listFn: rateLimitedListFn,
               segment,
               segments,
               range,
@@ -511,22 +611,20 @@ export async function* listApiBackfill(opts: {
               supportsForwardPagination: resourceConfig.supportsForwardPagination !== false,
               backfillLimit: streamBackfillLimit,
               totalEmitted,
-              rateLimiter,
             })
           )
 
-          yield* mergeAsync(generators, backfillConcurrency)
+          yield* mergeAsync(generators, MAX_CONCURRENCY)
         }
       } else {
         // Sequential path: no created filter support
         const pageCursor: string | null = streamState?.page_cursor ?? null
         yield* sequentialBackfillStream({
-          resourceConfig,
+          resourceConfig: { ...resourceConfig, listFn: rateLimitedListFn },
           streamName: stream.name,
           accountId,
           pageCursor,
           backfillLimit: streamBackfillLimit,
-          rateLimiter,
           drainQueue,
         })
       }

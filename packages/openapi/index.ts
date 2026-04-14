@@ -20,6 +20,7 @@ export type {
   ListEndpoint,
   NestedEndpoint,
   ListFn,
+  ListResult,
   RetrieveFn,
   ListParams,
 } from './listFnResolver.js'

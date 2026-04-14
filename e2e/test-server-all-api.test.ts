@@ -195,7 +195,6 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
           api_version: endpointSet.apiVersion,
           base_url: versionTestServer.url,
           rate_limit: RATE_LIMIT,
-          backfill_concurrency: 12,
         },
       },
       destination: {

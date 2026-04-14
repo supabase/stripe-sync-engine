@@ -50,12 +50,6 @@ export const configSchema = z.object({
     .positive()
     .optional()
     .describe('Max Stripe API requests per second (default: 25)'),
-  backfill_concurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of time-range segments for parallel backfill (default: 10)'),
 })
 
 export type Config = z.infer<typeof configSchema>

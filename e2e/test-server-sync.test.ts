@@ -284,7 +284,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC },
       state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
     })
 
@@ -320,7 +319,6 @@ describe('test-server sync via Docker engine', () => {
     await seedCustomers([...inRange, ...outOfRange])
     await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
       state: sourceState({ customers: pendingState({ num_segments: 1 }) }),
     })
 
@@ -342,7 +340,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(COUNT)
@@ -372,7 +369,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages } = await runRead({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC },
       state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
     })
 
@@ -403,7 +399,6 @@ describe('test-server sync via Docker engine', () => {
     const completedRange = { gte: segments[0].gte, lt: segments[2].lt }
     await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC },
       state: sourceState({
         customers: pendingState({
           num_segments: CONC,
@@ -444,7 +439,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC },
       state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
     })
 
@@ -474,7 +468,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
       streams: [{ name: 'customers', sync_mode: 'full_refresh', backfill_limit: 5 }],
     })
 
@@ -495,7 +488,6 @@ describe('test-server sync via Docker engine', () => {
     await seedCustomers(objects)
     await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     const destIds = new Set(await listIds(destSchema, 'customers'))
@@ -530,7 +522,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
       streams: [
         { name: 'customers', sync_mode: 'full_refresh' },
         { name: 'products', sync_mode: 'full_refresh' },
@@ -550,7 +541,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(0)
@@ -564,7 +554,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     const ids = await listIds(destSchema, 'customers')
@@ -579,7 +568,6 @@ describe('test-server sync via Docker engine', () => {
     await seedCustomers(sourceObjects)
     await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: 1 },
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(sourceObjects.length)
@@ -616,7 +604,6 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages, state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC },
       state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
     })
 
@@ -650,7 +637,7 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { backfill_concurrency: CONC, rate_limit: 1_000 },
+      sourceOverrides: { rate_limit: 1_000 },
       state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
     })
 
@@ -678,7 +665,7 @@ describe('test-server sync via Docker engine', () => {
       const destSchema = uniqueSchema(`multikey_${apiKey.slice(-5)}`)
       const { state } = await runSync({
         destSchema,
-        sourceOverrides: { api_key: apiKey, backfill_concurrency: 3 },
+        sourceOverrides: { api_key: apiKey },
       })
       return { apiKey, destSchema, state }
     })
