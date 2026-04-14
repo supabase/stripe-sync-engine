@@ -80,7 +80,8 @@ export function createRemoteEngine(engineUrl: string): Engine {
       | '/pipeline_teardown',
     pipeline: PipelineConfig,
     opts?: SourceReadOptions,
-    body?: ReadableStream<Uint8Array>
+    body?: ReadableStream<Uint8Array>,
+    signal?: AbortSignal
   ): Promise<Response> {
     const ph = JSON.stringify(pipeline)
     const headers = { ...stateHeaders(opts) }
@@ -88,6 +89,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       params: { header: { 'x-pipeline': ph }, query: queryParams(opts) },
       parseAs: 'stream',
       headers,
+      signal,
       ...(body
         ? {
             body,
@@ -160,28 +162,31 @@ export function createRemoteEngine(engineUrl: string): Engine {
     async *pipeline_read(
       pipeline: PipelineConfig,
       opts?: SourceReadOptions,
-      input?: AsyncIterable<unknown>
+      input?: AsyncIterable<unknown>,
+      signal?: AbortSignal
     ): AsyncIterable<Message> {
       const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/pipeline_read', pipeline, opts, body)
+      const res = await post('/pipeline_read', pipeline, opts, body, signal)
       yield* parseNdjsonStream<Message>(res.body!)
     },
 
     async *pipeline_write(
       pipeline: PipelineConfig,
-      messages: AsyncIterable<Message>
+      messages: AsyncIterable<Message>,
+      signal?: AbortSignal
     ): AsyncIterable<DestinationOutput> {
-      const res = await post('/pipeline_write', pipeline, undefined, toNdjsonStream(messages))
+      const res = await post('/pipeline_write', pipeline, undefined, toNdjsonStream(messages), signal)
       yield* parseNdjsonStream<DestinationOutput>(res.body!)
     },
 
     async *pipeline_sync(
       pipeline: PipelineConfig,
       opts?: SourceReadOptions,
-      input?: AsyncIterable<unknown>
+      input?: AsyncIterable<unknown>,
+      signal?: AbortSignal
     ): AsyncIterable<SyncOutput> {
       const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/pipeline_sync', pipeline, opts, body)
+      const res = await post('/pipeline_sync', pipeline, opts, body, signal)
       yield* parseNdjsonStream<SyncOutput>(res.body!)
     },
   }

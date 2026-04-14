@@ -660,7 +660,7 @@ describe('takeLimits()', () => {
     })
   })
 
-  it('stops on time limit at any message boundary', async () => {
+  it('stops on time limit at any message boundary (short time_limit)', async () => {
     async function* slowMessages(): AsyncIterable<Message> {
       yield {
         type: 'record',
@@ -686,10 +686,168 @@ describe('takeLimits()', () => {
     }
 
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
-    // Should get first record + eof (time expired before second record)
     expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { reason: 'time_limit' } })
-    // Should have stopped before all 3 messages were yielded
     expect(result.length).toBeLessThanOrEqual(3)
+  })
+
+  it('soft cutoff: emits eof with cutoff=soft between messages when deadline-1s crossed', async () => {
+    async function* fastMessages(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 50))
+      }
+    }
+
+    const start = Date.now()
+    const result = await drain(takeLimits({ time_limit: 3 })(fastMessages()))
+    const elapsed = Date.now() - start
+    const eof = result.at(-1) as any
+    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'soft' } })
+    expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
+    expect(eof.eof.elapsed_ms).toBeLessThan(4000)
+    // Soft deadline fires at ~2s (deadline - 1s buffer)
+    expect(elapsed).toBeGreaterThan(1500)
+    expect(elapsed).toBeLessThan(4000)
+  })
+
+  it('hard cutoff: forces return when source blocks past deadline+1s', async () => {
+    async function* blockingSource(): AsyncIterable<Message> {
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      }
+      // Block for 10 seconds — way past the hard deadline
+      await new Promise((r) => setTimeout(r, 10_000))
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_2' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      }
+    }
+
+    const start = Date.now()
+    const result = await drain(takeLimits({ time_limit: 2 })(blockingSource()))
+    const elapsed = Date.now() - start
+    const eof = result.at(-1) as any
+    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'hard' } })
+    expect(eof.eof.elapsed_ms).toBeGreaterThan(2000)
+    expect(eof.eof.elapsed_ms).toBeLessThan(5000)
+    // Hard deadline fires at ~3s (deadline + 1s), NOT at 10s
+    expect(elapsed).toBeGreaterThan(2000)
+    expect(elapsed).toBeLessThan(5000)
+  }, 10_000)
+
+  it('abort signal: terminates immediately when signal is aborted', async () => {
+    async function* infiniteSource(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 50))
+      }
+    }
+
+    const ac = new AbortController()
+    setTimeout(() => ac.abort(), 500)
+
+    const start = Date.now()
+    const result = await drain(takeLimits({ signal: ac.signal })(infiniteSource()))
+    const elapsed = Date.now() - start
+    const eof = result.at(-1) as any
+    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
+    expect(eof.eof.elapsed_ms).toBeGreaterThan(300)
+    expect(eof.eof.elapsed_ms).toBeLessThan(2000)
+    expect(elapsed).toBeGreaterThan(300)
+    expect(elapsed).toBeLessThan(2000)
+  })
+
+  it('abort signal: terminates immediately when signal is already aborted', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+    ]
+    const result = await drain(takeLimits({ signal: ac.signal })(toAsync(msgs)))
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
+  })
+
+  it('elapsed_ms is included in time_limit eof', async () => {
+    async function* slowMessages(): AsyncIterable<Message> {
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      }
+      await new Promise((r) => setTimeout(r, 50))
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_2' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      }
+      await new Promise((r) => setTimeout(r, 50))
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_3' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      }
+    }
+    const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
+    const eof = result.at(-1) as any
+    expect(eof.eof.reason).toBe('time_limit')
+    expect(typeof eof.eof.elapsed_ms).toBe('number')
+    expect(eof.eof.elapsed_ms).toBeGreaterThanOrEqual(0)
+  })
+
+  it('elapsed_ms is NOT included in complete or state_limit eof', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
+      },
+    ]
+    const completeResult = await drain(takeLimits()(toAsync(msgs)))
+    expect((completeResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
+
+    const limitResult = await drain(takeLimits({ state_limit: 1 })(toAsync(msgs)))
+    expect((limitResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
   })
 
   it('time limit and state limit: whichever fires first wins', async () => {

@@ -7,6 +7,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1",
+    "hono": "^4",
     "@stripe/sync-destination-google-sheets": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-engine": "workspace:*",

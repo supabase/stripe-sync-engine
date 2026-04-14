@@ -26,10 +26,20 @@ export async function spawnAndCollect(bin: string, args: string[]): Promise<stri
 }
 
 /** Spawn a process and yield parsed NDJSON lines from stdout. */
-export async function* spawnAndStream<T>(bin: string, args: string[]): AsyncIterable<T> {
+export async function* spawnAndStream<T>(
+  bin: string,
+  args: string[],
+  signal?: AbortSignal
+): AsyncIterable<T> {
   const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
   const stderrChunks: Buffer[] = []
   child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+
+  if (signal) {
+    const onAbort = () => child.kill()
+    signal.addEventListener('abort', onAbort, { once: true })
+    child.on('close', () => signal.removeEventListener('abort', onAbort))
+  }
 
   let exitCode: number | null = null
   const exitPromise = new Promise<void>((resolve) => {
@@ -42,7 +52,7 @@ export async function* spawnAndStream<T>(bin: string, args: string[]): AsyncIter
   yield* parseNdjsonChunks<T>(child.stdout)
   await exitPromise
 
-  if (exitCode !== 0) {
+  if (exitCode !== 0 && !(signal?.aborted)) {
     const stderr = Buffer.concat(stderrChunks).toString()
     throw new Error(`${bin} exited with code ${exitCode}: ${stderr}`)
   }
@@ -52,11 +62,18 @@ export async function* spawnAndStream<T>(bin: string, args: string[]): AsyncIter
 export async function* spawnWithStdin<TIn, TOut>(
   bin: string,
   args: string[],
-  input: AsyncIterable<TIn>
+  input: AsyncIterable<TIn>,
+  signal?: AbortSignal
 ): AsyncIterable<TOut> {
   const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] })
   const stderrChunks: Buffer[] = []
   child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+
+  if (signal) {
+    const onAbort = () => child.kill()
+    signal.addEventListener('abort', onAbort, { once: true })
+    child.on('close', () => signal.removeEventListener('abort', onAbort))
+  }
 
   let exitCode: number | null = null
   const exitPromise = new Promise<void>((resolve) => {
@@ -88,7 +105,7 @@ export async function* spawnWithStdin<TIn, TOut>(
   yield* parseNdjsonChunks<TOut>(child.stdout)
   await exitPromise
 
-  if (exitCode !== 0) {
+  if (exitCode !== 0 && !(signal?.aborted)) {
     const stderr = Buffer.concat(stderrChunks).toString()
     throw new Error(`${bin} exited with code ${exitCode}: ${stderr}`)
   }

@@ -129,10 +129,29 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
+      - name: Disconnect & time-limit tests (Node)
+        run: |
+          pnpm --filter @stripe/sync-e2e exec vitest run test-disconnect.test.ts
+        env:
+          DISCONNECT_TEST_NODE: '1'
+          SKIP_SETUP: '1'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Disconnect & time-limit tests (Bun)
+        run: |
+          pnpm --filter @stripe/sync-e2e exec vitest run test-disconnect.test.ts
+        env:
+          DISCONNECT_TEST_BUN: '1'
+          SKIP_SETUP: '1'
+
       - name: Connector loading test
         run: bash e2e/connector-loading.test.sh
 
-      - name: esbuild binary path test
+      - name: ESBUILD binary path test
         run: bash e2e/esbuild-binary-path.test.sh
 
       - name: Skipped test warnings
@@ -140,10 +159,10 @@ jobs:
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
 
   # ---------------------------------------------------------------------------
-  # Publish GitHub Registry — publish @stripe/* packages to GitHub Packages
+  # Publish npm — publish @stripe/* packages to GitHub Packages
   # ---------------------------------------------------------------------------
-  publish_to_github_registry:
-    name: Publish to GitHub Registry
+  publish_npm:
+    name: Publish npm packages
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04-arm
@@ -171,11 +190,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Promote to npm Registry — promote from GitHub Packages to npmjs.org
+  # Publish npmjs.org — auto-publish when version changes
   # ---------------------------------------------------------------------------
-  promote_to_npm_registry:
-    name: Promote to npm Registry
-    needs: [test, publish_to_github_registry, changes]
+  publish_npmjs:
+    name: Publish to npmjs.org
+    needs: [test, publish_npm, changes]
     if: >-
       github.event_name == 'push'
       && needs.changes.outputs.code == 'true'
@@ -456,6 +475,14 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GOOGLE_SPREADSHEET_ID: ${{ vars.GOOGLE_SPREADSHEET_ID }}
 
+      - name: Disconnect & time-limit tests (Docker)
+        run: |
+          pnpm --filter @stripe/sync-e2e exec vitest run test-disconnect.test.ts
+        env:
+          DISCONNECT_TEST_DOCKER: '1'
+          DISCONNECT_TEST_DOCKER_HOST_NETWORK: '1'
+          ENGINE_IMAGE: 'ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64'
+
       - name: Smokescreen proxy e2e
         run: |
           if [ -z "${STRIPE_API_KEY:-}" ]; then
@@ -547,7 +574,8 @@ jobs:
             --exclude 'test-server-sync.test.ts' \
             --exclude 'test-sync-e2e.test.ts' \
             --exclude 'test-sync-engine.test.ts' \
-            --exclude 'test-e2e-network.test.ts'  # ↑ run in e2e_test_server job
+            --exclude 'test-e2e-network.test.ts' \
+            --exclude 'test-disconnect.test.ts'  # ↑ run in main test job
         env:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           POSTGRES_URL: 'postgres://postgres:postgres@localhost:55432/postgres'

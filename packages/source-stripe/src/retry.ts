@@ -65,8 +65,14 @@ export function isRetryableHttpError(err: unknown): boolean {
     return false
   }
 
-  if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+  // TimeoutError (from AbortSignal.timeout) is retryable — the request timed out.
+  // AbortError (from AbortController.abort) is NOT — it means deliberate cancellation
+  // (e.g. pipeline signal, client disconnect).
+  if (err.name === 'TimeoutError') {
     return true
+  }
+  if (err.name === 'AbortError') {
+    return false
   }
 
   const code = getNestedErrorCode(err)

@@ -25,7 +25,11 @@ export { StripeApiRequestError as StripeRequestError }
 
 export type StripeClient = ReturnType<typeof makeClient>
 
-export function makeClient(config: StripeClientConfig, env: TransportEnv = process.env) {
+export function makeClient(
+  config: StripeClientConfig,
+  env: TransportEnv = process.env,
+  pipelineSignal?: AbortSignal
+) {
   const baseUrl = (config.base_url ?? DEFAULT_STRIPE_API_BASE).replace(/\/$/, '')
   const timeoutMs = parsePositiveInteger(
     'STRIPE_REQUEST_TIMEOUT_MS',
@@ -52,13 +56,17 @@ export function makeClient(config: StripeClientConfig, env: TransportEnv = proce
       body = encodeFormData(params)
     }
 
+    const signals: AbortSignal[] = [AbortSignal.timeout(timeoutMs)]
+    if (pipelineSignal) signals.push(pipelineSignal)
+    const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
+
     const response = await fetchWithProxy(
       url.toString(),
       {
         method,
         headers,
         body,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal,
       },
       env
     )

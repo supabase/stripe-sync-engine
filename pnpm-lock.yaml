@@ -451,6 +451,9 @@ importers:
       googleapis:
         specifier: ^144
         version: 144.0.0
+      hono:
+        specifier: ^4
+        version: 4.12.8
       pg:
         specifier: ^8.16.0
         version: 8.16.3

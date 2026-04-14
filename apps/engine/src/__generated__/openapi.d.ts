@@ -501,7 +501,14 @@ export interface components {
                  * @description Why the stream ended.
                  * @enum {string}
                  */
-                reason: "complete" | "state_limit" | "time_limit" | "error";
+                reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
+                /**
+                 * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+                 * @enum {string}
+                 */
+                cutoff?: "soft" | "hard";
+                /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+                elapsed_ms?: number;
                 /** @description Per-stream record counts: { stream_name: count }. */
                 record_count?: {
                     [key: string]: number;

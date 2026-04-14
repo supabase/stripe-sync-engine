@@ -233,11 +233,11 @@ export function createStripeSource(
       }
     },
 
-    async *read({ config, catalog, state }, $stdin?) {
+    async *read({ config, catalog, state }, $stdin?, signal?) {
       const apiVersion = config.api_version ?? BUNDLED_API_VERSION
       const rateLimiter =
         externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
-      const client = makeClient({ ...config, api_version: apiVersion })
+      const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
       const resolved = await resolveOpenApiSpec({ apiVersion }, apiFetch)
       const registry = buildResourceRegistry(
         resolved.spec,
