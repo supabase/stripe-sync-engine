@@ -140,10 +140,10 @@ jobs:
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
 
   # ---------------------------------------------------------------------------
-  # Publish npm — publish @stripe/* packages to GitHub Packages
+  # Publish GitHub Registry — publish @stripe/* packages to GitHub Packages
   # ---------------------------------------------------------------------------
-  publish_npm:
-    name: Publish npm packages
+  publish_github_registry:
+    name: Publish to GitHub Registry
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04-arm
@@ -171,11 +171,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Publish npmjs.org — auto-publish when version changes
+  # Promote to npm Registry — promote from GitHub Packages to npmjs.org
   # ---------------------------------------------------------------------------
-  publish_npmjs:
-    name: Publish to npmjs.org
-    needs: [test, publish_npm, changes]
+  promote_to_npm_registry:
+    name: Promote to npm Registry
+    needs: [test, publish_github_registry, changes]
     if: >-
       github.event_name == 'push'
       && needs.changes.outputs.code == 'true'
