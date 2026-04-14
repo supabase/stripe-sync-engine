@@ -1,6 +1,23 @@
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 import { builtinModules } from 'node:module'
-import * as esbuild from 'esbuild'
+
+// Prefer system esbuild (e.g. Homebrew) over the npm-bundled binary, which
+// may be blocked by endpoint-security tools like Santa on macOS.
+// Search well-known system paths only — node_modules/.bin must be excluded
+// because its esbuild shim delegates to the same blocked platform binary.
+if (!process.env.ESBUILD_BINARY_PATH) {
+  const candidates = ['/opt/homebrew/bin/esbuild', '/usr/local/bin/esbuild']
+  for (const c of candidates) {
+    try {
+      execSync(`${c} --version`, { encoding: 'utf8', stdio: 'pipe' })
+      process.env.ESBUILD_BINARY_PATH = c
+      break
+    } catch {}
+  }
+}
+
+const esbuild = await import('esbuild')
 
 function denoImportsPlugin() {
   const builtins = new Set(builtinModules.map((m) => (m.startsWith('node:') ? m.slice(5) : m)))
@@ -87,5 +104,4 @@ await esbuild.build({
 })
 
 // Generate declarations
-const { execSync } = await import('node:child_process')
 execSync('tsc --emitDeclarationOnly', { stdio: 'inherit' })

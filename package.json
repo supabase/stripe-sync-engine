@@ -40,6 +40,11 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.11"
   },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.28.0"
+    }
+  },
   "engines": {
     "node": ">=24"
   },

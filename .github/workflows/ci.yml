@@ -132,6 +132,9 @@ jobs:
       - name: Connector loading test
         run: bash e2e/connector-loading.test.sh
 
+      - name: esbuild binary path test
+        run: bash e2e/esbuild-binary-path.test.sh
+
       - name: Skipped test warnings
         if: always()
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'

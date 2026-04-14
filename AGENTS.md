@@ -84,7 +84,7 @@ See [docs/architecture/principles.md](docs/architecture/principles.md) for the c
 - `tsx` fails on `apps/supabase` — `?raw` imports pull in Deno-only code. Other packages work fine with `npx tsx`.
 - `packages/sync-engine/src/supabase` is Deno, not Node. Don't run those files with Node/tsx.
 - E2E tests need Stripe keys with **write** permissions (they create real objects).
-- Do not add `esbuild` as a dependency — its native binaries fail on this machine. Use `tsup` (already in the repo).
+- The npm-bundled `esbuild` binary is blocked by Santa (endpoint security). Set `ESBUILD_BINARY_PATH` to the Homebrew-installed binary: `source scripts/prefer-system-esbuild.sh` or add it to your `.envrc`. `apps/supabase/build.mjs` auto-detects the system binary, but tools like `vite` and `tsx` need the env var set in the shell.
 
 ## Worktrees
 
