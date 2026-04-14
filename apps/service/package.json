@@ -1,6 +1,6 @@
 {
   "name": "@stripe/sync-service",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": false,
   "description": "Stripe Sync Service — pipeline management and webhook ingress via Temporal",
   "type": "module",

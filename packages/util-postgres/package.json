@@ -1,6 +1,6 @@
 {
   "name": "@stripe/sync-util-postgres",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": false,
   "type": "module",
   "exports": {

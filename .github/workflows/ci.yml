@@ -223,7 +223,7 @@ jobs:
         run: bash scripts/promote-to-npmjs.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN_TX_STRIPE }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           RELEASE_VERSION: ${{ steps.version-check.outputs.local }}
