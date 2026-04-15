@@ -7,7 +7,7 @@ import type {
   SetupOutput,
   TeardownOutput,
 } from '@stripe/sync-protocol'
-import { sourceControlMsg } from '@stripe/sync-protocol'
+import { sourceControlMsg, withAbortOnReturn } from '@stripe/sync-protocol'
 import { z } from 'zod'
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
@@ -33,8 +33,20 @@ import { createInMemoryRateLimiter, DEFAULT_MAX_RPS } from './rate-limiter.js'
 import { fetchWithProxy } from './transport.js'
 import { stripeEventSchema } from './spec.js'
 
-const apiFetch: typeof globalThis.fetch = (input, init) =>
-  fetchWithProxy(input as URL | string, init ?? {})
+function combineSignals(...signals: Array<AbortSignal | null | undefined>): AbortSignal | undefined {
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal != null)
+  if (activeSignals.length === 0) return undefined
+  if (activeSignals.length === 1) return activeSignals[0]
+  return AbortSignal.any(activeSignals)
+}
+
+function makeApiFetch(signal?: AbortSignal): typeof globalThis.fetch {
+  return (input, init) =>
+    fetchWithProxy(input as URL | string, {
+      ...(init ?? {}),
+      signal: combineSignals(init?.signal, signal),
+    })
+}
 
 /** In-memory cache of discover results keyed by api_version. */
 export const discoverCache = new Map<string, CatalogPayload>()
@@ -140,7 +152,7 @@ export function createStripeSource(
         return
       }
 
-      const resolved = await resolveOpenApiSpec({ apiVersion }, apiFetch)
+      const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch())
       const registry = buildResourceRegistry(
         resolved.spec,
         config.api_key,
@@ -235,114 +247,35 @@ export function createStripeSource(
       }
     },
 
-    async *read({ config, catalog, state }, $stdin?, signal?) {
-      const apiVersion = config.api_version ?? BUNDLED_API_VERSION
-      const rateLimiter =
-        externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
-      const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
-      const resolved = await resolveOpenApiSpec({ apiVersion }, apiFetch)
-      const registry = buildResourceRegistry(
-        resolved.spec,
-        config.api_key,
-        resolved.apiVersion,
-        config.base_url
-      )
-      const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
-      let accountId: string
-      try {
-        accountId = await resolveAccountId(config, client)
-      } catch (err) {
-        yield errorToTrace(err, catalog.streams[0]?.stream.name ?? 'unknown')
-        return
-      }
-
-      // Event-driven mode: iterate over incoming webhook inputs
-      if ($stdin) {
-        for await (const input of $stdin) {
-          if ('body' in (input as object)) {
-            yield* processWebhookInput(
-              input as WebhookInput,
-              config,
-              catalog,
-              registry,
-              streamNames,
-              accountId
-            )
-          } else {
-            yield* processStripeEvent(
-              input as StripeEvent,
-              config,
-              catalog,
-              registry,
-              streamNames,
-              accountId
-            )
+    read({ config, catalog, state }, $stdin?) {
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          const apiVersion = config.api_version ?? BUNDLED_API_VERSION
+          const rateLimiter =
+            externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
+          const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
+          const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch(signal))
+          const registry = buildResourceRegistry(
+            resolved.spec,
+            config.api_key,
+            resolved.apiVersion,
+            config.base_url
+          )
+          const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
+          let accountId: string
+          try {
+            accountId = await resolveAccountId(config, client)
+          } catch (err) {
+            yield errorToTrace(err, catalog.streams[0]?.stream.name ?? 'unknown')
+            return
           }
-        }
-        return
-      }
 
-      const inputQueue = createInputQueue()
-
-      let wsClient: StripeWebSocketClient | null = null
-      if (config.websocket) {
-        wsClient = await createStripeWebSocketClient({
-          stripeApiKey: config.api_key,
-          onEvent: (wsEvent: StripeWebhookEvent) => {
-            const event = stripeEventSchema.parse(JSON.parse(wsEvent.event_payload))
-            inputQueue.push({ data: event })
-          },
-        })
-      }
-
-      let httpServer: ReturnType<typeof startWebhookServer> | null = null
-
-      try {
-        const startTimestamp = Math.floor(Date.now() / 1000)
-
-        // Backfill: paginate through each configured stream
-        yield* listApiBackfill({
-          catalog,
-          state: state?.streams as Parameters<typeof listApiBackfill>[0]['state'],
-          registry,
-          rateLimiter,
-          client,
-          accountId,
-          backfillLimit: config.backfill_limit,
-          drainQueue: wsClient
-            ? () => inputQueue.drain(config, catalog, registry, streamNames, accountId)
-            : undefined,
-        })
-
-        // Events polling: incremental sync via /v1/events after backfill
-        yield* pollEvents({
-          config,
-          client,
-          catalog,
-          registry,
-          streamNames,
-          state: state?.streams as Record<string, StripeStreamState> | undefined,
-          startTimestamp,
-          accountId,
-        })
-
-        // Start HTTP server for live mode if configured
-        if (config.webhook_port) {
-          httpServer = startWebhookServer(config.webhook_port, inputQueue.push)
-        }
-
-        // After backfill: stream live events from WebSocket and/or HTTP
-        if (wsClient || httpServer) {
-          // Drain anything that arrived during backfill
-          yield* inputQueue.drain(config, catalog, registry, streamNames, accountId)
-
-          // Block on new events (infinite loop until all live sources close)
-          while (wsClient || httpServer) {
-            const queued = await inputQueue.wait()
-            try {
-              if ('body' in queued.data) {
+          // Event-driven mode: iterate over incoming webhook inputs
+          if ($stdin) {
+            for await (const input of $stdin) {
+              if ('body' in (input as object)) {
                 yield* processWebhookInput(
-                  queued.data,
+                  input as WebhookInput,
                   config,
                   catalog,
                   registry,
@@ -351,7 +284,7 @@ export function createStripeSource(
                 )
               } else {
                 yield* processStripeEvent(
-                  queued.data,
+                  input as StripeEvent,
                   config,
                   catalog,
                   registry,
@@ -359,22 +292,106 @@ export function createStripeSource(
                   accountId
                 )
               }
-              queued.resolve?.()
-            } catch (err) {
-              queued.reject?.(err instanceof Error ? err : new Error(String(err)))
+            }
+            return
+          }
+
+          const inputQueue = createInputQueue()
+
+          let wsClient: StripeWebSocketClient | null = null
+          if (config.websocket) {
+            wsClient = await createStripeWebSocketClient({
+              stripeApiKey: config.api_key,
+              onEvent: (wsEvent: StripeWebhookEvent) => {
+                const event = stripeEventSchema.parse(JSON.parse(wsEvent.event_payload))
+                inputQueue.push({ data: event })
+              },
+            })
+          }
+
+          let httpServer: ReturnType<typeof startWebhookServer> | null = null
+
+          try {
+            const startTimestamp = Math.floor(Date.now() / 1000)
+
+            // Backfill: paginate through each configured stream
+            yield* listApiBackfill({
+              catalog,
+              state: state?.streams as Parameters<typeof listApiBackfill>[0]['state'],
+              registry,
+              rateLimiter,
+              client,
+              accountId,
+              backfillLimit: config.backfill_limit,
+              signal,
+              drainQueue: wsClient
+                ? () => inputQueue.drain(config, catalog, registry, streamNames, accountId)
+                : undefined,
+            })
+
+            // Events polling: incremental sync via /v1/events after backfill
+            yield* pollEvents({
+              config,
+              client,
+              catalog,
+              registry,
+              streamNames,
+              state: state?.streams as Record<string, StripeStreamState> | undefined,
+              startTimestamp,
+              accountId,
+            })
+
+            // Start HTTP server for live mode if configured
+            if (config.webhook_port) {
+              httpServer = startWebhookServer(config.webhook_port, inputQueue.push)
+            }
+
+            // After backfill: stream live events from WebSocket and/or HTTP
+            if (wsClient || httpServer) {
+              // Drain anything that arrived during backfill
+              yield* inputQueue.drain(config, catalog, registry, streamNames, accountId)
+
+              // Block on new events (infinite loop until all live sources close)
+              while (wsClient || httpServer) {
+                const queued = await inputQueue.wait(signal)
+                try {
+                  if ('body' in queued.data) {
+                    yield* processWebhookInput(
+                      queued.data,
+                      config,
+                      catalog,
+                      registry,
+                      streamNames,
+                      accountId
+                    )
+                  } else {
+                    yield* processStripeEvent(
+                      queued.data,
+                      config,
+                      catalog,
+                      registry,
+                      streamNames,
+                      accountId
+                    )
+                  }
+                  queued.resolve?.()
+                } catch (err) {
+                  queued.reject?.(err instanceof Error ? err : new Error(String(err)))
+                }
+              }
+            }
+          } finally {
+            if (wsClient) {
+              wsClient.close()
+              wsClient = null
+            }
+            if (httpServer) {
+              httpServer.close()
+              httpServer = null
             }
           }
-        }
-      } finally {
-        if (wsClient) {
-          wsClient.close()
-          wsClient = null
-        }
-        if (httpServer) {
-          httpServer.close()
-          httpServer = null
-        }
-      }
+        })()
+      )
     },
   }
 }

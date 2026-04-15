@@ -8,6 +8,7 @@ import type {
   DestinationInput,
   DestinationOutput,
 } from '@stripe/sync-protocol'
+import { withAbortOnReturn } from '@stripe/sync-protocol'
 import { splitCmd, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
 
 /**
@@ -38,17 +39,20 @@ export function createDestinationFromExec(cmd: string): Destination {
       params: { config: Record<string, unknown>; catalog: ConfiguredCatalog },
       $stdin: AsyncIterable<DestinationInput>
     ): AsyncIterable<DestinationOutput> {
-      return spawnWithStdin<DestinationInput, DestinationOutput>(
-        bin,
-        [
-          ...baseArgs,
-          'write',
-          '--config',
-          JSON.stringify(params.config),
-          '--catalog',
-          JSON.stringify(params.catalog),
-        ],
-        $stdin
+      return withAbortOnReturn((signal) =>
+        spawnWithStdin<DestinationInput, DestinationOutput>(
+          bin,
+          [
+            ...baseArgs,
+            'write',
+            '--config',
+            JSON.stringify(params.config),
+            '--catalog',
+            JSON.stringify(params.catalog),
+          ],
+          $stdin,
+          signal
+        )
       )
     },
 

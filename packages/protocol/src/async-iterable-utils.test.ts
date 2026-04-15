@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { channel, merge, split, map } from './async-iterable-utils.js'
+import { channel, merge, split, map, withAbortOnReturn } from './async-iterable-utils.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = []
@@ -99,29 +99,46 @@ describe('merge', () => {
     let aClosed = false
     let bClosed = false
 
-    async function* a(): AsyncIterable<number> {
-      try {
-        yield 1
-        await new Promise(() => {})
-      } finally {
-        aClosed = true
-      }
-    }
+    const a = withAbortOnReturn((signal) =>
+      (async function* () {
+        try {
+          yield 1
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              resolve()
+              return
+            }
+            signal.addEventListener('abort', () => resolve(), { once: true })
+          })
+        } finally {
+          aClosed = true
+        }
+      })()
+    )
 
-    async function* b(): AsyncIterable<number> {
-      try {
-        yield 2
-        await new Promise(() => {})
-      } finally {
-        bClosed = true
-      }
-    }
+    const b = withAbortOnReturn((signal) =>
+      (async function* () {
+        try {
+          yield 2
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              resolve()
+              return
+            }
+            signal.addEventListener('abort', () => resolve(), { once: true })
+          })
+        } finally {
+          bClosed = true
+        }
+      })()
+    )
 
-    const iter = merge(a(), b())[Symbol.asyncIterator]()
+    const iter = merge(a, b)
     await iter.next()
     await iter.return?.()
     await new Promise((r) => setTimeout(r, 0))
-    expect(aClosed || bClosed).toBe(true)
+    expect(aClosed).toBe(true)
+    expect(bClosed).toBe(true)
   })
 })
 
@@ -214,5 +231,30 @@ describe('map', () => {
   it('handles empty iterable', async () => {
     const result = await collect(map(fromArray([]), (n) => n))
     expect(result).toEqual([])
+  })
+})
+
+describe('withAbortOnReturn', () => {
+  it('aborts the local signal before awaiting inner return()', async () => {
+    let abortedDuringReturn = false
+
+    const iter = withAbortOnReturn((signal) => ({
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            return new Promise<IteratorResult<number>>(() => {})
+          },
+          async return() {
+            abortedDuringReturn = signal.aborted
+            return { value: undefined, done: true }
+          },
+        }
+      },
+    }))
+
+    const iterator = iter[Symbol.asyncIterator]()
+    void iterator.next()
+    await expect(iterator.return?.()).resolves.toEqual({ value: undefined, done: true })
+    expect(abortedDuringReturn).toBe(true)
   })
 })

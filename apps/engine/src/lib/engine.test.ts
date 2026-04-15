@@ -20,6 +20,7 @@ import {
   SourceStateMessage,
   Stream,
   TraceMessage,
+  withAbortOnReturn,
 } from '@stripe/sync-protocol'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -1107,5 +1108,229 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(sourceSignals.length).toBeGreaterThan(0)
 
     vi.restoreAllMocks()
+  })
+})
+
+function waitForAbortOrRelease(
+  signal: AbortSignal,
+  onAbort: () => void,
+  setRelease: (release: () => void) => void
+): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      signal.removeEventListener('abort', onSignalAbort)
+      setRelease(() => undefined)
+      resolve()
+    }
+
+    const onSignalAbort = () => {
+      onAbort()
+      finish()
+    }
+
+    setRelease(finish)
+
+    if (signal.aborted) {
+      onSignalAbort()
+      return
+    }
+
+    signal.addEventListener('abort', onSignalAbort, { once: true })
+  })
+}
+
+describe('engine cancellation integration', () => {
+  it('pipeline_read() return() aborts a blocked source read', async () => {
+    let sourceAborted = false
+    let releaseSource = () => undefined
+
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      read() {
+        return withAbortOnReturn((signal) =>
+          (async function* () {
+            yield {
+              type: 'record',
+              record: {
+                stream: 'customers',
+                data: { id: 'cus_1' },
+                emitted_at: '2024-01-01T00:00:00.000Z',
+              },
+            } satisfies RecordMessage
+
+            await waitForAbortOrRelease(
+              signal,
+              () => {
+                sourceAborted = true
+              },
+              (release) => {
+                releaseSource = release
+              }
+            )
+          })()
+        )
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const iter = engine.pipeline_read(defaultPipeline)[Symbol.asyncIterator]()
+
+    expect(await iter.next()).toMatchObject({
+      value: { type: 'record', record: { stream: 'customers', data: { id: 'cus_1' } } },
+      done: false,
+    })
+
+    const blockedNext = iter.next()
+    void blockedNext.catch(() => undefined)
+
+    const returnPromise = iter.return?.()
+
+    try {
+      await expect(
+        Promise.race([
+          returnPromise!,
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('timed out waiting for pipeline_read teardown')), 50)
+          }),
+        ])
+      ).resolves.toEqual({ value: undefined, done: true })
+    } finally {
+      releaseSource()
+      await Promise.race([
+        returnPromise?.catch(() => undefined) ?? Promise.resolve(),
+        new Promise((resolve) => setTimeout(resolve, 50)),
+      ])
+    }
+
+    expect(sourceAborted).toBe(true)
+  })
+
+  it('pipeline_sync() return() aborts both source and destination work', async () => {
+    let sourceAborted = false
+    let destinationAborted = false
+    let releaseSource = () => undefined
+    let releaseDestination = () => undefined
+    let markDestinationWaiting = () => undefined
+    const destinationWaiting = new Promise<void>((resolve) => {
+      markDestinationWaiting = resolve
+    })
+
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      read() {
+        return withAbortOnReturn((signal) =>
+          (async function* () {
+            yield {
+              type: 'record',
+              record: {
+                stream: 'customers',
+                data: { id: 'cus_1' },
+                emitted_at: '2024-01-01T00:00:00.000Z',
+              },
+            } satisfies RecordMessage
+
+            await waitForAbortOrRelease(
+              signal,
+              () => {
+                sourceAborted = true
+              },
+              (release) => {
+                releaseSource = release
+              }
+            )
+          })()
+        )
+      },
+    }
+
+    const destination: Destination = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      write(_params, messages) {
+        return withAbortOnReturn((signal) =>
+          (async function* () {
+            for await (const msg of messages) {
+              if (msg.type !== 'record') continue
+
+              yield {
+                type: 'source_state',
+                source_state: {
+                  stream: 'customers',
+                  data: { cursor: 'cus_1' },
+                },
+              } satisfies SourceStateMessage
+
+              markDestinationWaiting()
+              await waitForAbortOrRelease(
+                signal,
+                () => {
+                  destinationAborted = true
+                },
+                (release) => {
+                  releaseDestination = release
+                }
+              )
+            }
+          })()
+        )
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destination))
+    const iter = engine.pipeline_sync(defaultPipeline)[Symbol.asyncIterator]()
+
+    expect(await iter.next()).toMatchObject({
+      value: { type: 'source_state', source_state: { stream: 'customers', data: { cursor: 'cus_1' } } },
+      done: false,
+    })
+
+    const blockedNext = iter.next()
+    void blockedNext.catch(() => undefined)
+    await Promise.race([
+      destinationWaiting,
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('destination never entered the blocked section')), 50)
+      }),
+    ])
+
+    const returnPromise = iter.return?.()
+
+    try {
+      await expect(
+        Promise.race([
+          returnPromise!,
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('timed out waiting for pipeline_sync teardown')), 50)
+          }),
+        ])
+      ).resolves.toEqual({ value: undefined, done: true })
+    } finally {
+      releaseSource()
+      releaseDestination()
+      await Promise.race([
+        returnPromise?.catch(() => undefined) ?? Promise.resolve(),
+        new Promise((resolve) => setTimeout(resolve, 50)),
+      ])
+    }
+
+    expect(sourceAborted).toBe(true)
+    expect(destinationAborted).toBe(true)
   })
 })

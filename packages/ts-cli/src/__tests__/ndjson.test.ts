@@ -44,4 +44,52 @@ describe('ndjsonResponse', () => {
     // Only the item before the error — no error message emitted
     expect(lines).toEqual([{ type: 'ok' }])
   })
+
+  it('cancels the underlying iterator when the response body is cancelled', async () => {
+    let returned = false
+
+    const res = ndjsonResponse({
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            return new Promise<IteratorResult<unknown>>(() => {})
+          },
+          async return() {
+            returned = true
+            return { value: undefined, done: true }
+          },
+        }
+      },
+    })
+
+    await res.body!.cancel()
+    expect(returned).toBe(true)
+  })
+
+  it('cancels the underlying iterator when an external signal aborts', async () => {
+    let returned = false
+    const ac = new AbortController()
+
+    const res = ndjsonResponse(
+      {
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return new Promise<IteratorResult<unknown>>(() => {})
+            },
+            async return() {
+              returned = true
+              return { value: undefined, done: true }
+            },
+          }
+        },
+      },
+      { signal: ac.signal }
+    )
+
+    ac.abort()
+    await Promise.resolve()
+    expect(returned).toBe(true)
+    await res.body!.cancel().catch(() => undefined)
+  })
 })

@@ -8,6 +8,7 @@ import type {
   ConfiguredCatalog,
   Message,
 } from '@stripe/sync-protocol'
+import { withAbortOnReturn } from '@stripe/sync-protocol'
 import { splitCmd, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
 
 /**
@@ -52,8 +53,7 @@ export function createSourceFromExec(cmd: string): Source {
         catalog: ConfiguredCatalog
         state?: Record<string, unknown>
       },
-      $stdin?: AsyncIterable<unknown>,
-      signal?: AbortSignal
+      $stdin?: AsyncIterable<unknown>
     ): AsyncIterable<Message> {
       const args = [
         ...baseArgs,
@@ -66,10 +66,12 @@ export function createSourceFromExec(cmd: string): Source {
       if (params.state) {
         args.push('--state', JSON.stringify(params.state))
       }
-      if ($stdin) {
-        return spawnWithStdin<unknown, Message>(bin, args, $stdin, signal)
-      }
-      return spawnAndStream<Message>(bin, args, signal)
+      return withAbortOnReturn((signal) => {
+        if ($stdin) {
+          return spawnWithStdin<unknown, Message>(bin, args, $stdin, signal)
+        }
+        return spawnAndStream<Message>(bin, args, signal)
+      })
     },
 
     async *setup(params: {

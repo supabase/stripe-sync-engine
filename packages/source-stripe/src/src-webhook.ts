@@ -53,9 +53,30 @@ export function createInputQueue() {
     }
   }
 
-  function wait(): Promise<LiveInput> {
-    return new Promise<LiveInput>((resolve) => {
-      inputWaiter = resolve
+  function wait(signal?: AbortSignal): Promise<LiveInput> {
+    if (queue.length > 0) {
+      return Promise.resolve(queue.shift()!)
+    }
+
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason)
+    }
+
+    return new Promise<LiveInput>((resolve, reject) => {
+      const waiter = (input: LiveInput) => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve(input)
+      }
+
+      const onAbort = () => {
+        if (inputWaiter === waiter) {
+          inputWaiter = null
+        }
+        reject(signal!.reason)
+      }
+
+      inputWaiter = waiter
+      signal?.addEventListener('abort', onAbort, { once: true })
     })
   }
 

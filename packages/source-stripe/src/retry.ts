@@ -18,6 +18,7 @@ export type HttpRetryOptions = {
   maxRetries?: number
   baseDelayMs?: number
   maxDelayMs?: number
+  signal?: AbortSignal
 }
 
 export function getHttpErrorStatus(err: unknown): number | undefined {
@@ -86,8 +87,23 @@ export function isRetryableHttpError(err: unknown): boolean {
   )
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    const onAbort = () => {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
+      reject(signal!.reason)
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 export async function withHttpRetry<T>(
@@ -99,6 +115,8 @@ export async function withHttpRetry<T>(
   let delayMs = opts.baseDelayMs ?? BACKOFF_BASE_MS
 
   for (let attempt = 0; ; attempt++) {
+    opts.signal?.throwIfAborted()
+
     try {
       return await fn()
     } catch (err) {
@@ -112,7 +130,7 @@ export async function withHttpRetry<T>(
         `[source-stripe] retry attempt=${attempt + 1}/${maxRetries} delay=${delayMs}ms status=${status ?? 'n/a'} error=${errName}`
       )
 
-      await sleep(delayMs)
+      await sleep(delayMs, opts.signal)
       delayMs = Math.min(delayMs * 2, maxDelayMs)
     }
   }

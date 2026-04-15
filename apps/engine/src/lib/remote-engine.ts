@@ -12,6 +12,7 @@ import type {
   PipelineConfig,
   SyncOutput,
 } from '@stripe/sync-protocol'
+import { withAbortOnReturn } from '@stripe/sync-protocol'
 
 // openapi-typescript does not model NDJSON streaming bodies correctly:
 // - /read and /sync accept an optional NDJSON body but the generated types declare `requestBody?: never`
@@ -159,41 +160,50 @@ export function createRemoteEngine(engineUrl: string): Engine {
       yield* parseNdjsonStream<TeardownOutput>(res.body!)
     },
 
-    async *pipeline_read(
+    pipeline_read(
       pipeline: PipelineConfig,
       opts?: SourceReadOptions,
-      input?: AsyncIterable<unknown>,
-      signal?: AbortSignal
+      input?: AsyncIterable<unknown>
     ): AsyncIterable<Message> {
-      const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/pipeline_read', pipeline, opts, body, signal)
-      yield* parseNdjsonStream<Message>(res.body!)
-    },
-
-    async *pipeline_write(
-      pipeline: PipelineConfig,
-      messages: AsyncIterable<Message>,
-      signal?: AbortSignal
-    ): AsyncIterable<DestinationOutput> {
-      const res = await post(
-        '/pipeline_write',
-        pipeline,
-        undefined,
-        toNdjsonStream(messages),
-        signal
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          const body = input ? toNdjsonStream(input) : undefined
+          const res = await post('/pipeline_read', pipeline, opts, body, signal)
+          yield* parseNdjsonStream<Message>(res.body!)
+        })()
       )
-      yield* parseNdjsonStream<DestinationOutput>(res.body!)
     },
 
-    async *pipeline_sync(
+    pipeline_write(
+      pipeline: PipelineConfig,
+      messages: AsyncIterable<Message>
+    ): AsyncIterable<DestinationOutput> {
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          const res = await post(
+            '/pipeline_write',
+            pipeline,
+            undefined,
+            toNdjsonStream(messages),
+            signal
+          )
+          yield* parseNdjsonStream<DestinationOutput>(res.body!)
+        })()
+      )
+    },
+
+    pipeline_sync(
       pipeline: PipelineConfig,
       opts?: SourceReadOptions,
-      input?: AsyncIterable<unknown>,
-      signal?: AbortSignal
+      input?: AsyncIterable<unknown>
     ): AsyncIterable<SyncOutput> {
-      const body = input ? toNdjsonStream(input) : undefined
-      const res = await post('/pipeline_sync', pipeline, opts, body, signal)
-      yield* parseNdjsonStream<SyncOutput>(res.body!)
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          const body = input ? toNdjsonStream(input) : undefined
+          const res = await post('/pipeline_sync', pipeline, opts, body, signal)
+          yield* parseNdjsonStream<SyncOutput>(res.body!)
+        })()
+      )
     },
   }
 }

@@ -34,4 +34,4 @@ export {
   drain,
 } from './helpers.js'
 export { parseNdjsonChunks, writeLine } from './ndjson.js'
-export { channel, merge, split, map } from './async-iterable-utils.js'
+export { channel, merge, split, map, withAbortOnReturn } from './async-iterable-utils.js'

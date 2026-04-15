@@ -19,6 +19,7 @@ import {
   split,
   merge,
   map,
+  withAbortOnReturn,
 } from '@stripe/sync-protocol'
 
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
@@ -119,8 +120,7 @@ export interface Engine {
   pipeline_read(
     pipeline: PipelineConfig,
     opts?: SourceReadOptions,
-    input?: AsyncIterable<unknown>,
-    signal?: AbortSignal
+    input?: AsyncIterable<unknown>
   ): AsyncIterable<Message>
 
   /**
@@ -130,8 +130,7 @@ export interface Engine {
    */
   pipeline_write(
     pipeline: PipelineConfig,
-    messages: AsyncIterable<Message>,
-    signal?: AbortSignal
+    messages: AsyncIterable<Message>
   ): AsyncIterable<DestinationOutput>
 
   /**
@@ -142,8 +141,7 @@ export interface Engine {
   pipeline_sync(
     pipeline: PipelineConfig,
     opts?: SourceReadOptions,
-    input?: AsyncIterable<unknown>,
-    signal?: AbortSignal
+    input?: AsyncIterable<unknown>
   ): AsyncIterable<SyncOutput>
 }
 
@@ -156,26 +154,74 @@ function engineLogContext(pipeline: PipelineConfig): Record<string, unknown> {
   }
 }
 
-async function* withLoggedStream<T>(
+function withLoggedStream<T>(
   label: string,
   context: Record<string, unknown>,
   iter: AsyncIterable<T>
-): AsyncIterable<T> {
+): AsyncIterableIterator<T> {
+  const iterator = iter[Symbol.asyncIterator]()
   const startedAt = Date.now()
   let itemCount = 0
-  logger.info(context, `${label} started`)
-  try {
-    for await (const item of iter) {
-      itemCount++
-      yield item
-    }
+  let settled = false
+
+  const logCompleted = () => {
+    if (settled) return
+    settled = true
     logger.info({ ...context, itemCount, durationMs: Date.now() - startedAt }, `${label} completed`)
-  } catch (error) {
+  }
+
+  const logFailed = (error: unknown) => {
+    if (settled) return
+    settled = true
     logger.error(
       { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
       `${label} failed`
     )
-    throw error
+  }
+
+  logger.info(context, `${label} started`)
+
+  return {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    async next() {
+      try {
+        const result = await iterator.next()
+        if (result.done) {
+          logCompleted()
+          return result
+        }
+        itemCount++
+        return result
+      } catch (error) {
+        logFailed(error)
+        throw error
+      }
+    },
+    async return(value?: unknown) {
+      try {
+        if (iterator.return) {
+          await iterator.return(value)
+        }
+        logCompleted()
+        return { value: value as T, done: true }
+      } catch (error) {
+        logFailed(error)
+        throw error
+      }
+    },
+    async throw(error?: unknown) {
+      try {
+        if (iterator.throw) {
+          return await iterator.throw(error)
+        }
+        throw error
+      } catch (thrown) {
+        logFailed(thrown)
+        throw thrown
+      }
+    },
   }
 }
 
@@ -414,123 +460,128 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       )
     },
 
-    async *pipeline_read(pipeline, opts?, input?, signal?) {
+    pipeline_read(pipeline, opts?, input?) {
       const baseContext = engineLogContext(pipeline)
-      const connector = await resolver.resolveSource(pipeline.source.type)
-      const rawSrc = configPayload(pipeline.source)
-      const sourceConfig = await getSpecConfig(connector, rawSrc)
-      const { catalog } = await discoverCatalog(engine, pipeline)
-      const normalizedState = coerceSyncState(opts?.state)
-      const state = normalizedState?.source
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          const connector = await resolver.resolveSource(pipeline.source.type)
+          const rawSrc = configPayload(pipeline.source)
+          const sourceConfig = await getSpecConfig(connector, rawSrc)
+          const { catalog } = await discoverCatalog(engine, pipeline)
+          const normalizedState = coerceSyncState(opts?.state)
+          const state = normalizedState?.source
 
-      const raw = connector.read({ config: sourceConfig, catalog, state }, input, signal)
-      const logged = withLoggedStream(
-        'Engine source read',
-        {
-          ...baseContext,
-          inputProvided: input !== undefined,
-          stateProvided: state !== undefined,
-        },
-        raw
+          const raw = connector.read({ config: sourceConfig, catalog, state }, input)
+          const logged = withLoggedStream(
+            'Engine source read',
+            {
+              ...baseContext,
+              inputProvided: input !== undefined,
+              stateProvided: state !== undefined,
+            },
+            raw
+          )
+          const parsed = map(logged, (msg) => Message.parse(msg))
+          yield* takeLimits({
+            state_limit: opts?.state_limit,
+            time_limit: opts?.time_limit,
+            signal,
+          })(parsed)
+        })()
       )
-      const parsed: AsyncIterable<Message> = (async function* () {
-        for await (const msg of logged) {
-          yield Message.parse(msg)
-        }
-      })()
-      yield* takeLimits({
-        state_limit: opts?.state_limit,
-        time_limit: opts?.time_limit,
-        signal,
-      })(parsed)
     },
 
-    async *pipeline_write(pipeline, messages, signal?) {
+    pipeline_write(pipeline, messages) {
       const baseContext = engineLogContext(pipeline)
-      const connector = await resolver.resolveDestination(pipeline.destination.type)
-      const rawDest = configPayload(pipeline.destination)
-      const destConfig = await getSpecConfig(connector, rawDest)
-      const { filteredCatalog } = await discoverCatalog(engine, pipeline)
+      return withAbortOnReturn(() =>
+        (async function* () {
+          const connector = await resolver.resolveDestination(pipeline.destination.type)
+          const rawDest = configPayload(pipeline.destination)
+          const destConfig = await getSpecConfig(connector, rawDest)
+          const { filteredCatalog } = await discoverCatalog(engine, pipeline)
 
-      const destInput = pipe(
-        messages,
-        enforceCatalog(filteredCatalog),
-        log,
-        filterType('record', 'source_state')
+          const destInput = pipe(
+            messages,
+            enforceCatalog(filteredCatalog),
+            log,
+            filterType('record', 'source_state')
+          )
+          const destOutput = connector.write(
+            { config: destConfig, catalog: filteredCatalog },
+            destInput
+          )
+          for await (const msg of withLoggedStream(
+            'Engine destination write',
+            baseContext,
+            destOutput
+          )) {
+            yield DestinationOutput.parse(msg)
+          }
+        })()
       )
-      const destOutput = connector.write(
-        { config: destConfig, catalog: filteredCatalog },
-        destInput,
-        signal
-      )
-      for await (const msg of withLoggedStream(
-        'Engine destination write',
-        baseContext,
-        destOutput
-      )) {
-        if (signal?.aborted) return
-        yield DestinationOutput.parse(msg)
-      }
     },
 
-    async *pipeline_sync(pipeline, opts?, input?, signal?) {
+    pipeline_sync(pipeline, opts?, input?) {
       const baseContext = engineLogContext(pipeline)
       const sourceTag = `source/${pipeline.source.type}`
       const destTag = `destination/${pipeline.destination.type}`
       const now = () => new Date().toISOString()
+      return withAbortOnReturn((signal) =>
+        (async function* () {
+          // Read from source (pass state but not state_limit — state_limit controls sync output)
+          const readOutput = engine.pipeline_read(pipeline, { state: opts?.state }, input)
 
-      // Read from source (pass state + signal but not state_limit — state_limit controls sync output)
-      const readOutput = engine.pipeline_read(pipeline, { state: opts?.state }, input, signal)
+          // Split: data + eof → destination path, source signals → caller
+          // Eof from pipeline_read is excluded from source signals (pipeline_sync adds its own)
+          const isDataOrEof = (msg: Message): msg is RecordMessage | SourceStateMessage =>
+            msg.type === 'record' || msg.type === 'source_state' || msg.type === 'eof'
+          const [dataStream, sourceSignals] = split(readOutput, isDataOrEof)
 
-      // Split: data + eof → destination path, source signals → caller
-      // Eof from pipeline_read is excluded from source signals (pipeline_sync adds its own)
-      const isDataOrEof = (msg: Message): msg is RecordMessage | SourceStateMessage =>
-        msg.type === 'record' || msg.type === 'source_state' || msg.type === 'eof'
-      const [dataStream, sourceSignals] = split(readOutput, isDataOrEof)
+          // Set up destination inline — we need control of the stream split
+          const destConnector = await resolver.resolveDestination(pipeline.destination.type)
+          const rawDest = configPayload(pipeline.destination)
+          const destConfig = await getSpecConfig(destConnector, rawDest)
+          const { filteredCatalog } = await discoverCatalog(engine, pipeline)
 
-      // Set up destination inline — we need control of the stream split
-      const destConnector = await resolver.resolveDestination(pipeline.destination.type)
-      const rawDest = configPayload(pipeline.destination)
-      const destConfig = await getSpecConfig(destConnector, rawDest)
-      const { filteredCatalog } = await discoverCatalog(engine, pipeline)
+          const recordCounter = createRecordCounter()
+          const destInput = pipe(
+            dataStream,
+            enforceCatalog(filteredCatalog),
+            log,
+            recordCounter.tap.bind(recordCounter),
+            filterType('record', 'source_state')
+          )
+          const destOutput = destConnector.write(
+            { config: destConfig, catalog: filteredCatalog },
+            destInput
+          )
+          const parsedDest = withLoggedStream('Engine destination write', baseContext, destOutput)
 
-      const recordCounter = createRecordCounter()
-      const destInput = pipe(
-        dataStream,
-        enforceCatalog(filteredCatalog),
-        log,
-        recordCounter.tap.bind(recordCounter),
-        filterType('record', 'source_state')
+          // Tag origin on both streams, narrowing to SyncOutput
+          const taggedDest: AsyncIterable<SyncOutput> = map(parsedDest, (msg) => ({
+            ...DestinationOutput.parse(msg),
+            _emitted_by: destTag,
+            _ts: now(),
+          }))
+          const taggedSource: AsyncIterable<SyncOutput> = map(sourceSignals, (msg) =>
+            SyncOutput.parse({ ...msg, _emitted_by: sourceTag, _ts: now() })
+          )
+
+          // Merge both streams, apply limits, and track progress
+          const limited = takeLimits<SyncOutput>({
+            state_limit: opts?.state_limit,
+            time_limit: opts?.time_limit,
+            signal,
+          })(merge(taggedDest, taggedSource))
+
+          const normalizedState = coerceSyncState(opts?.state)
+
+          yield* trackProgress({
+            initial_state: normalizedState,
+            recordCounter,
+          })(limited)
+        })()
       )
-      const destOutput = destConnector.write(
-        { config: destConfig, catalog: filteredCatalog },
-        destInput
-      )
-      const parsedDest = withLoggedStream('Engine destination write', baseContext, destOutput)
-
-      // Tag origin on both streams, narrowing to SyncOutput
-      const taggedDest: AsyncIterable<SyncOutput> = map(parsedDest, (msg) => ({
-        ...DestinationOutput.parse(msg),
-        _emitted_by: destTag,
-        _ts: now(),
-      }))
-      const taggedSource: AsyncIterable<SyncOutput> = map(sourceSignals, (msg) =>
-        SyncOutput.parse({ ...msg, _emitted_by: sourceTag, _ts: now() })
-      )
-
-      // Merge both streams, apply limits, and track progress
-      const limited = takeLimits<SyncOutput>({
-        state_limit: opts?.state_limit,
-        time_limit: opts?.time_limit,
-        signal,
-      })(merge(taggedDest, taggedSource))
-
-      const normalizedState = coerceSyncState(opts?.state)
-
-      yield* trackProgress({
-        initial_state: normalizedState,
-        recordCounter,
-      })(limited)
     },
   }
   return engine

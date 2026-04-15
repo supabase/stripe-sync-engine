@@ -81,6 +81,46 @@ export function channel<T>(): AsyncIterable<T> & {
 }
 
 /**
+ * Create an async iterable that owns a local AbortController and aborts it
+ * when the consumer stops early via return()/throw().
+ */
+export function withAbortOnReturn<T>(
+  create: (signal: AbortSignal) => AsyncIterable<T>
+): AsyncIterableIterator<T> {
+  const controller = new AbortController()
+  const iterator = create(controller.signal)[Symbol.asyncIterator]()
+
+  function abortLocal() {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error('iterator returned'))
+    }
+  }
+
+  return {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    next(value?: unknown) {
+      return iterator.next(value)
+    },
+    async return(value?: unknown) {
+      abortLocal()
+      if (iterator.return) {
+        return await iterator.return(value)
+      }
+      return { value: value as T, done: true }
+    },
+    async throw(error?: unknown) {
+      abortLocal()
+      if (iterator.throw) {
+        return await iterator.throw(error)
+      }
+      throw error
+    },
+  }
+}
+
+/**
  * Merge multiple async iterables, yielding whichever produces next.
  * Falsy entries are ignored.
  *
@@ -91,13 +131,14 @@ export function channel<T>(): AsyncIterable<T> & {
  * Node's unhandled-rejection detector from crashing the process — the
  * rejection is still observed when `Promise.race` settles on it next.
  */
-export async function* merge<T>(
+export function merge<T>(
   ...iterables: (AsyncIterable<T> | false | null | undefined)[]
-): AsyncIterable<T> {
+): AsyncIterableIterator<T> {
   const iterators = iterables
     .filter((x): x is AsyncIterable<T> => !!x)
     .map((it) => it[Symbol.asyncIterator]())
   const pending = new Map<number, Promise<{ index: number; result: IteratorResult<T> }>>()
+  let closed = false
 
   const suppress = (p: Promise<unknown>) => {
     p.catch(() => {})
@@ -113,19 +154,47 @@ export async function* merge<T>(
     enqueue(i)
   }
 
-  try {
-    while (pending.size > 0) {
-      const { index, result } = await Promise.race(pending.values())
-      if (result.done) {
-        pending.delete(index)
-      } else {
-        yield result.value
-        enqueue(index)
-      }
+  function closeAll() {
+    if (closed) return
+    closed = true
+    pending.clear()
+    void Promise.allSettled(iterators.map((it) => it.return?.()))
+  }
+
+  return {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    async next() {
+      if (closed) {
+        return { value: undefined as T, done: true }
     }
-  } finally {
-    for (const it of iterators) {
-      it.return?.()
+
+      while (pending.size > 0) {
+        try {
+          const { index, result } = await Promise.race(pending.values())
+          pending.delete(index)
+          if (result.done) {
+            continue
+          }
+          enqueue(index)
+          return { value: result.value, done: false }
+        } catch (error) {
+          closeAll()
+          throw error
+        }
+      }
+
+      closed = true
+      return { value: undefined as T, done: true }
+    },
+    async return(value?: unknown) {
+      closeAll()
+      return { value: value as T, done: true }
+    },
+    async throw(error?: unknown) {
+      closeAll()
+      throw error
     }
   }
 }
@@ -189,11 +258,38 @@ export function split<T, U extends T>(
  * machinery is needed because `map` is a simple pass-through generator with
  * a single consumer.
  */
-export async function* map<T, U>(
+export function map<T, U>(
   iterable: AsyncIterable<T>,
   fn: (item: T) => U | Promise<U>
-): AsyncIterable<U> {
-  for await (const item of iterable) {
-    yield await fn(item)
+): AsyncIterableIterator<U> {
+  const iterator = iterable[Symbol.asyncIterator]()
+
+  return {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    async next() {
+      const result = await iterator.next()
+      if (result.done) {
+        return { value: undefined as U, done: true }
+      }
+      return { value: await fn(result.value), done: false }
+    },
+    async return(value?: unknown) {
+      if (iterator.return) {
+        await iterator.return(value)
+      }
+      return { value: value as U, done: true }
+    },
+    async throw(error?: unknown) {
+      if (iterator.throw) {
+        const result = await iterator.throw(error)
+        if (result.done) {
+          return { value: undefined as U, done: true }
+        }
+        return { value: await fn(result.value), done: false }
+      }
+      throw error
+    },
   }
 }

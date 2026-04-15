@@ -81,6 +81,50 @@ describe('makeClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('stops retrying when the pipeline signal aborts during backoff', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { type: 'api_error', message: 'Temporary outage' },
+          }),
+          { status: 500 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'acct_test', object: 'account', created: 123 }), {
+          status: 200,
+        })
+      )
+    globalThis.fetch = fetchMock
+
+    const ac = new AbortController()
+    const client = makeClient(
+      { api_key: 'sk_test_fake', api_version: '2025-04-30.basil', base_url: 'http://stripe.test' },
+      {},
+      ac.signal
+    )
+
+    const pending = client.getAccount()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    const settled = vi.fn()
+    pending.then(
+      (value) => settled(value),
+      (error) => settled(error)
+    )
+
+    ac.abort()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(settled.mock.calls[0]?.[0]).toMatchObject({ name: 'AbortError' })
+  })
+
   it('does not retry auth failures on GET requests', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
       new Response(

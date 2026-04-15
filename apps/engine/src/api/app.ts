@@ -214,25 +214,41 @@ function formatEof(eof: EofPayload): string {
 }
 
 /**
- * Create an AbortController that fires on client disconnect.
+ * AbortController that fires when the HTTP client disconnects.
  *
- * Under @hono/node-server the Node ServerResponse is at `c.env.outgoing` —
- * we listen for `close` while `writableFinished` is still false.
- * Under Bun.serve() the ReadableStream.cancel() callback handles this instead
- * (wired via ndjsonResponse onCancel).
+ * Primary: `Request.signal` — standard Web API, works in Bun, Deno, and any
+ * runtime that wires request lifetime to the signal.
+ *
+ * Fallback: `@hono/node-server` doesn't wire `Request.signal` to connection
+ * close, so we also listen on the Node.js `ServerResponse` close event.
+ *
+ * Whichever fires first wins; `fireOnce` ensures the abort only happens once.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createConnectionAbort(c: any, onDisconnect?: () => void): AbortController {
   const ac = new AbortController()
+
+  const fireOnce = () => {
+    if (!ac.signal.aborted) {
+      onDisconnect?.()
+      ac.abort()
+    }
+  }
+
+  // Standard: Request.signal aborts on client disconnect
+  const reqSignal = c.req?.raw?.signal as AbortSignal | undefined
+  if (reqSignal && !reqSignal.aborted) {
+    reqSignal.addEventListener('abort', fireOnce, { once: true })
+  }
+
+  // Fallback: @hono/node-server exposes ServerResponse at c.env.outgoing
   const outgoing = c.env?.outgoing as import('node:http').ServerResponse | undefined
   if (outgoing && typeof outgoing.on === 'function') {
     outgoing.on('close', () => {
-      if (!ac.signal.aborted && outgoing.writableFinished === false) {
-        onDisconnect?.()
-        ac.abort()
-      }
+      if (outgoing.writableFinished === false) fireOnce()
     })
   }
+
   return ac
 }
 
@@ -648,14 +664,9 @@ export async function createApp(resolver: ConnectorResolver) {
         input = verboseInput('pipeline_read', parseNdjsonStream(c.req.raw.body!))
       }
     }
-    const output = engine.pipeline_read(
-      pipeline,
-      { state, state_limit, time_limit },
-      input,
-      ac.signal
-    )
+    const output = engine.pipeline_read(pipeline, { state, state_limit, time_limit }, input)
     return ndjsonResponse(logApiStream('Engine API /pipeline_read', output, context, startedAt), {
-      onCancel: onDisconnect,
+      signal: ac.signal,
     })
   })
 
@@ -704,11 +715,11 @@ export async function createApp(resolver: ConnectorResolver) {
     return ndjsonResponse(
       logApiStream(
         'Engine API /write',
-        engine.pipeline_write(pipeline, messages, ac.signal),
+        engine.pipeline_write(pipeline, messages),
         context,
         startedAt
       ),
-      { onCancel: onDisconnect }
+      { signal: ac.signal }
     )
   })
 
@@ -756,14 +767,9 @@ export async function createApp(resolver: ConnectorResolver) {
     const input = hasBody(c)
       ? verboseInput('pipeline_sync', parseNdjsonStream(c.req.raw.body!))
       : undefined
-    const output = engine.pipeline_sync(
-      pipeline,
-      { state, state_limit, time_limit },
-      input,
-      ac.signal
-    )
+    const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit }, input)
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {
-      onCancel: onDisconnect,
+      signal: ac.signal,
     })
   })
 

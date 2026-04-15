@@ -129,6 +129,10 @@ beforeEach(() => {
   consoleError.mockClear()
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('StripeSource', () => {
   describe('discover()', () => {
     it('returns a CatalogMessage with known streams', async () => {
@@ -1889,6 +1893,62 @@ describe('StripeSource', () => {
       await iter.return()
     })
 
+    it('return() stops an idle websocket stream without waiting for another event', async () => {
+      const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({ order: 1, tableName: 'customers', listFn }),
+      }
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+
+      const iter = source
+        .read({
+          config: {
+            api_key: 'sk_test_fake',
+            api_version: '2025-04-30.basil' as const,
+            websocket: true,
+          },
+          catalog: catalog({ name: 'customers' }),
+          state: { streams: {}, global: {} },
+        })
+        [Symbol.asyncIterator]()
+
+      for (let i = 0; i < 3; i++) {
+        await iter.next()
+      }
+
+      const blockedNext = iter.next()
+      void blockedNext.catch(() => undefined)
+
+      const returnPromise = iter.return()
+
+      try {
+        await expect(
+          Promise.race([
+            returnPromise,
+            new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('timed out waiting for websocket teardown')), 50)
+            }),
+          ])
+        ).resolves.toEqual({ value: undefined, done: true })
+      } finally {
+        capturedOnEvent?.({
+          event_payload: JSON.stringify(
+            makeEvent({
+              id: 'evt_teardown_cleanup',
+              type: 'customer.updated',
+              dataObject: { id: 'cus_cleanup', object: 'customer' },
+            })
+          ),
+        })
+        await Promise.race([
+          returnPromise.catch(() => undefined),
+          new Promise((resolve) => setTimeout(resolve, 50)),
+        ])
+      }
+
+      expect(mockClose).toHaveBeenCalled()
+    })
+
     it('teardown() is safe when no websocket was configured', async () => {
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
       // No setup() call — teardown should not throw
@@ -2408,6 +2468,55 @@ describe('StripeSource', () => {
       )
 
       expect(rateLimiterSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('return() interrupts a pending rate-limit wait before the next page fetch', async () => {
+      vi.useFakeTimers()
+
+      const externalLimiter = vi.fn().mockResolvedValue(60) as unknown as RateLimiter
+      const customSource = createStripeSource({ rateLimiter: externalLimiter })
+      const listFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_1' }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+
+      const iter = customSource
+        .read({
+          config: { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' as const },
+          catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+          state: { streams: {}, global: {} },
+        })
+        [Symbol.asyncIterator]()
+
+      expect((await iter.next()).value).toMatchObject({
+        type: 'trace',
+        trace: { trace_type: 'stream_status', stream_status: { stream: 'customers', status: 'started' } },
+      })
+
+      const blockedNext = iter.next()
+      void blockedNext.catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(listFn).not.toHaveBeenCalled()
+
+      const settled = vi.fn()
+      const returnPromise = iter.return()
+      returnPromise.then((result) => settled(result))
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(settled).toHaveBeenCalledWith({ value: undefined, done: true })
+      expect(listFn).not.toHaveBeenCalled()
     })
 
     it('createStripeSource uses external rate limiter when provided via deps', async () => {

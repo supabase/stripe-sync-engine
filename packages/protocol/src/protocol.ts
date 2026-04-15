@@ -680,15 +680,19 @@ export interface Source<
   /** Discover available streams. */
   discover(params: { config: TConfig }): AsyncIterable<DiscoverOutput>
 
-  /** Emit messages (record, state, log, trace). Finite for backfill, infinite for live. */
+  /**
+   * Emit messages (record, state, log, trace). Finite for backfill, infinite for live.
+   *
+   * Cancellation is cooperative and iterator-driven: consumers stop work by
+   * calling `return()` (for example via early exit from `for await`).
+   */
   read(
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
       state?: SourceState
     },
-    $stdin?: AsyncIterable<TInput>,
-    signal?: AbortSignal
+    $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). */
@@ -731,8 +735,7 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
    */
   write(
     params: { config: TConfig; catalog: ConfiguredCatalog },
-    $stdin: AsyncIterable<DestinationInput>,
-    signal?: AbortSignal
+    $stdin: AsyncIterable<DestinationInput>
   ): AsyncIterable<DestinationOutput>
 
   /** Provision downstream resources (schemas, tables, etc.). */

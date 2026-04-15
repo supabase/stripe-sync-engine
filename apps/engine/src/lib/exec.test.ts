@@ -34,7 +34,7 @@ describe('createSourceFromExec', () => {
 
   it('read() accepts $stdin parameter', () => {
     // Just check it accepts the parameter signature — no actual subprocess invocation
-    expect(source.read.length).toBe(3)
+    expect(source.read.length).toBe(2)
   })
 })
 

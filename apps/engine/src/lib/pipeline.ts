@@ -192,9 +192,22 @@ export function takeLimits<T extends Message>(
     // Slow path: manual iterator + Promise.race for hard deadline / signal
     const iterator = messages[Symbol.asyncIterator]()
     let hardTimer: ReturnType<typeof setTimeout> | undefined
+    let iteratorClosed = false
 
     function cleanup() {
       if (hardTimer != null) clearTimeout(hardTimer)
+    }
+
+    async function closeIterator() {
+      if (iteratorClosed) return
+      iteratorClosed = true
+      await iterator.return?.(undefined)
+    }
+
+    function closeIteratorInBackground() {
+      if (iteratorClosed) return
+      iteratorClosed = true
+      void iterator.return?.(undefined)?.catch(() => {})
     }
 
     // Create the abort promise once so we don't leak listeners per iteration
@@ -217,7 +230,7 @@ export function takeLimits<T extends Message>(
           cleanup()
           logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof('aborted')
-          await iterator.return?.(undefined)
+          await closeIterator()
           return
         }
 
@@ -254,14 +267,14 @@ export function takeLimits<T extends Message>(
           )
           yield makeEof('time_limit', { cutoff: 'hard' })
           // Fire-and-forget: don't await return() since the iterator may be blocked
-          iterator.return?.(undefined)
+          closeIteratorInBackground()
           return
         }
 
         if (winner.kind === 'aborted') {
           logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof('aborted')
-          iterator.return?.(undefined)
+          await closeIterator()
           return
         }
 
@@ -286,19 +299,20 @@ export function takeLimits<T extends Message>(
             'SYNC_TIME_LIMIT_SOFT'
           )
           yield makeEof('time_limit', { cutoff: 'soft' })
-          await iterator.return?.(undefined)
+          await closeIterator()
           return
         }
 
         // Check state limit
         if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
           yield makeEof('state_limit')
-          await iterator.return?.(undefined)
+          await closeIterator()
           return
         }
       }
     } finally {
       cleanup()
+      await closeIterator()
     }
   }
 }
