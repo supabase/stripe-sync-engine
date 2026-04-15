@@ -112,7 +112,7 @@ export interface paths {
         put?: never;
         /**
          * Read records from source
-         * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input. Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
+         * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.
          */
         post: operations["pipeline_read"];
         delete?: never;
@@ -132,7 +132,7 @@ export interface paths {
         put?: never;
         /**
          * Write records to destination
-         * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input. Alternatively, send Content-Type: application/json with {pipeline, body: [...messages]}.
+         * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.
          */
         post: operations["pipeline_write"];
         delete?: never;
@@ -152,7 +152,7 @@ export interface paths {
         put?: never;
         /**
          * Run sync pipeline (read → write)
-         * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events). Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
+         * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).
          */
         post: operations["pipeline_sync"];
         delete?: never;
@@ -233,128 +233,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        PipelineConfig: {
-            source: components["schemas"]["SourceConfig"];
-            destination: components["schemas"]["DestinationConfig"];
-            streams?: {
-                /** @description Stream (table) name to sync. */
-                name: string;
-                /**
-                 * @description How the source reads this stream. Defaults to full_refresh.
-                 * @enum {string}
-                 */
-                sync_mode?: "incremental" | "full_refresh";
-                /** @description If set, only these fields are synced. */
-                fields?: string[];
-                /** @description Cap backfill to this many records, then mark the stream complete. */
-                backfill_limit?: number;
-            }[];
-        };
-        SourceConfig: {
-            /** @constant */
-            type: "stripe";
-            stripe: components["schemas"]["SourceStripeConfig"];
-        };
-        SourceStripeConfig: {
-            /** @description Stripe API key (sk_test_... or sk_live_...) */
-            api_key: string;
-            /** @description Stripe account ID (resolved from API if omitted) */
-            account_id?: string;
-            /** @description Whether this is a live mode sync */
-            livemode?: boolean;
-            /** @enum {string} */
-            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
-            /**
-             * Format: uri
-             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-             */
-            base_url?: string;
-            /**
-             * Format: uri
-             * @description URL for managed webhook endpoint registration
-             */
-            webhook_url?: string;
-            /** @description Webhook signing secret (whsec_...) for signature verification */
-            webhook_secret?: string;
-            /** @description Enable WebSocket streaming for live events */
-            websocket?: boolean;
-            /** @description Enable events API polling for incremental sync after backfill */
-            poll_events?: boolean;
-            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-            webhook_port?: number;
-            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-            revalidate_objects?: string[];
-            /** @description Max objects to backfill per stream (useful for testing) */
-            backfill_limit?: number;
-            /** @description Max Stripe API requests per second (default: 25) */
-            rate_limit?: number;
-        };
-        DestinationConfig: {
-            /** @constant */
-            type: "postgres";
-            postgres: components["schemas"]["DestinationPostgresConfig"];
-        } | {
-            /** @constant */
-            type: "google_sheets";
-            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
-        };
-        DestinationPostgresConfig: {
-            /** @description Postgres connection string (alias for connection_string) */
-            url?: string;
-            /** @description Postgres connection string */
-            connection_string?: string;
-            /** @description Postgres host (required for AWS IAM) */
-            host?: string;
-            /**
-             * @description Postgres port
-             * @default 5432
-             */
-            port: number;
-            /** @description Database name (required for AWS IAM) */
-            database?: string;
-            /** @description Database user (required for AWS IAM) */
-            user?: string;
-            /** @description Target schema name (e.g. "stripe_sync") */
-            schema: string;
-            /**
-             * @description Records to buffer before flushing
-             * @default 100
-             */
-            batch_size: number;
-            /** @description AWS RDS IAM authentication config */
-            aws?: {
-                /** @description AWS region for RDS instance */
-                region: string;
-                /** @description IAM role ARN to assume (cross-account) */
-                role_arn?: string;
-                /** @description External ID for STS AssumeRole */
-                external_id?: string;
-            };
-            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-            ssl_ca_pem?: string;
-        };
-        DestinationGoogleSheetsConfig: {
-            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-            client_id?: string;
-            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-            client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
-            /** @description OAuth2 refresh token */
-            refresh_token: string;
-            /** @description Target spreadsheet ID (created if omitted) */
-            spreadsheet_id?: string;
-            /**
-             * @description Title when creating a new spreadsheet
-             * @default Stripe Sync
-             */
-            spreadsheet_title: string;
-            /**
-             * @description Rows per Sheets API append call
-             * @default 50
-             */
-            batch_size: number;
-        };
         RecordMessage: {
             /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
             _emitted_by?: string;
@@ -731,6 +609,111 @@ export interface components {
             /** @description Description of the event (for example, `invoice.created` or `charge.refunded`). */
             type: string;
         };
+        SourceConfig: {
+            /** @constant */
+            type: "stripe";
+            stripe: components["schemas"]["SourceStripeConfig"];
+        };
+        SourceStripeConfig: {
+            /** @description Stripe API key (sk_test_... or sk_live_...) */
+            api_key: string;
+            /** @description Stripe account ID (resolved from API if omitted) */
+            account_id?: string;
+            /** @description Whether this is a live mode sync */
+            livemode?: boolean;
+            /** @enum {string} */
+            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
+            /**
+             * Format: uri
+             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+             */
+            base_url?: string;
+            /**
+             * Format: uri
+             * @description URL for managed webhook endpoint registration
+             */
+            webhook_url?: string;
+            /** @description Webhook signing secret (whsec_...) for signature verification */
+            webhook_secret?: string;
+            /** @description Enable WebSocket streaming for live events */
+            websocket?: boolean;
+            /** @description Enable events API polling for incremental sync after backfill */
+            poll_events?: boolean;
+            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+            webhook_port?: number;
+            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+            revalidate_objects?: string[];
+            /** @description Max objects to backfill per stream (useful for testing) */
+            backfill_limit?: number;
+            /** @description Max Stripe API requests per second (default: 25) */
+            rate_limit?: number;
+        };
+        DestinationConfig: {
+            /** @constant */
+            type: "postgres";
+            postgres: components["schemas"]["DestinationPostgresConfig"];
+        } | {
+            /** @constant */
+            type: "google_sheets";
+            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
+        };
+        DestinationPostgresConfig: {
+            /** @description Postgres connection string (alias for connection_string) */
+            url?: string;
+            /** @description Postgres connection string */
+            connection_string?: string;
+            /** @description Postgres host (required for AWS IAM) */
+            host?: string;
+            /**
+             * @description Postgres port
+             * @default 5432
+             */
+            port: number;
+            /** @description Database name (required for AWS IAM) */
+            database?: string;
+            /** @description Database user (required for AWS IAM) */
+            user?: string;
+            /** @description Target schema name (e.g. "stripe_sync") */
+            schema: string;
+            /**
+             * @description Records to buffer before flushing
+             * @default 100
+             */
+            batch_size: number;
+            /** @description AWS RDS IAM authentication config */
+            aws?: {
+                /** @description AWS region for RDS instance */
+                region: string;
+                /** @description IAM role ARN to assume (cross-account) */
+                role_arn?: string;
+                /** @description External ID for STS AssumeRole */
+                external_id?: string;
+            };
+            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+            ssl_ca_pem?: string;
+        };
+        DestinationGoogleSheetsConfig: {
+            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+            client_id?: string;
+            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+            client_secret?: string;
+            /** @description OAuth2 access token */
+            access_token: string;
+            /** @description OAuth2 refresh token */
+            refresh_token: string;
+            /** @description Target spreadsheet ID (created if omitted) */
+            spreadsheet_id?: string;
+            /**
+             * @description Title when creating a new spreadsheet
+             * @default Stripe Sync
+             */
+            spreadsheet_title: string;
+            /**
+             * @description Rows per Sheets API append call
+             * @default 50
+             */
+            batch_size: number;
+        };
         /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
         SyncState: {
             /** @description Source connector state — cursors, backfill progress, events cursors. */
@@ -779,6 +762,23 @@ export interface components {
             type: "source_input";
             source_input: components["schemas"]["SourceStripeInput"];
         };
+        PipelineConfig: {
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description If set, only these fields are synced. */
+                fields?: string[];
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+        };
     };
     responses: never;
     parameters: never;
@@ -818,19 +818,14 @@ export interface operations {
     pipeline_check: {
         parameters: {
             query?: never;
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description NDJSON stream of check messages */
             200: {
@@ -860,19 +855,14 @@ export interface operations {
                 /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
                 only?: "source" | "destination";
             };
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description NDJSON stream of setup messages */
             200: {
@@ -902,19 +892,14 @@ export interface operations {
                 /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
                 only?: "source" | "destination";
             };
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description NDJSON stream of teardown messages */
             200: {
@@ -941,23 +926,14 @@ export interface operations {
     source_discover: {
         parameters: {
             query?: never;
-            header?: {
-                "x-source"?: string;
+            header: {
+                /** @description JSON-encoded source config ({ type, ...config }) */
+                "x-source": string;
             };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    source?: {
-                        type: string;
-                    } & {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description NDJSON stream of discover messages */
             200: {
@@ -989,8 +965,9 @@ export interface operations {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
             };
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
                 /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
                 "x-state"?: string;
             };
@@ -1000,11 +977,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/x-ndjson": components["schemas"]["SourceInputMessage"];
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                    state?: components["schemas"]["SyncState"];
-                    body?: unknown[];
-                };
             };
         };
         responses: {
@@ -1033,8 +1005,9 @@ export interface operations {
     pipeline_write: {
         parameters: {
             query?: never;
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -1042,10 +1015,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/x-ndjson": components["schemas"]["Message"];
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                    body?: unknown[];
-                };
             };
         };
         responses: {
@@ -1079,8 +1048,9 @@ export interface operations {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
             };
-            header?: {
-                "x-pipeline"?: string;
+            header: {
+                /** @description JSON-encoded PipelineConfig */
+                "x-pipeline": string;
                 /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
                 "x-state"?: string;
             };
@@ -1090,11 +1060,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/x-ndjson": components["schemas"]["SourceInputMessage"];
-                "application/json": {
-                    pipeline?: components["schemas"]["PipelineConfig"];
-                    state?: components["schemas"]["SyncState"];
-                    body?: unknown[];
-                };
             };
         };
         responses: {
