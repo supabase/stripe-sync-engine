@@ -32,12 +32,14 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
       const queryParams = params.filter((p: OpenAPIParameter) => p.in === 'query')
       const headerParams = params.filter((p: OpenAPIParameter) => p.in === 'header')
 
-      // Extract body schema from application/json or application/x-ndjson
+      // Prefer NDJSON when both content types are available so the generated CLI
+      // preserves streaming stdin behavior instead of flattening the JSON-body
+      // alternative into required --flags.
       const content = operation.requestBody?.content ?? {}
       const jsonContent = content['application/json']
       const ndjsonContent = content['application/x-ndjson']
-      const bodySchema = jsonContent?.schema ?? ndjsonContent?.schema
-      const ndjsonRequest = !!ndjsonContent && !jsonContent
+      const bodySchema = ndjsonContent?.schema ?? jsonContent?.schema
+      const ndjsonRequest = !!ndjsonContent
 
       operations.push({
         method,

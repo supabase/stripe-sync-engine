@@ -104,6 +104,41 @@ describe('parseSpec', () => {
     expect(createSync.bodyRequired).toBe(true)
   })
 
+  it('prefers NDJSON request bodies when both NDJSON and JSON are available', () => {
+    const spec: OpenAPISpec = {
+      paths: {
+        '/sync': {
+          post: {
+            operationId: 'pipelineSync',
+            requestBody: {
+              required: false,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      pipeline: { type: 'object' },
+                    },
+                    required: ['pipeline'],
+                  },
+                },
+                'application/x-ndjson': {
+                  schema: { type: 'string' },
+                },
+              },
+            },
+            responses: { '200': { description: 'OK' } },
+          },
+        },
+      },
+    }
+
+    const ops = parseSpec(spec)
+    const sync = ops.find((o) => o.operationId === 'pipelineSync')!
+    expect(sync.ndjsonRequest).toBe(true)
+    expect(sync.bodySchema).toEqual({ type: 'string' })
+  })
+
   it('detects NDJSON response', () => {
     const ops = parseSpec(basicSpec)
     const runSync = ops.find((o) => o.operationId === 'runSync')!

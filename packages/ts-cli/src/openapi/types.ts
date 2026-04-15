@@ -22,6 +22,7 @@ export interface OpenAPIParameter {
   in: 'path' | 'query' | 'header' | 'cookie'
   required?: boolean
   schema?: OpenAPISchema
+  content?: Record<string, { schema?: OpenAPISchema }>
   description?: string
 }
 

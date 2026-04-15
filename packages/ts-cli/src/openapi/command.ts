@@ -116,6 +116,14 @@ function getOpName(
     : defaultOperationName(op.method, op.path, rawOp)
 }
 
+function hasAlternativeJsonHeader(operation: ParsedOperation, propName: string): boolean {
+  const normalizedProp = toCliFlag(propName)
+  return operation.headerParams.some((param) => {
+    if (!param.content?.['application/json']) return false
+    return toCliFlag(param.name).replace(/^x-/, '') === normalizedProp
+  })
+}
+
 /** Build a single citty CommandDef from a ParsedOperation. */
 export function buildCommand(
   operation: ParsedOperation,
@@ -180,7 +188,8 @@ export function buildCommand(
         const key = toOptName(propName)
         args[key] = {
           type: 'string',
-          required: requiredFields.includes(propName),
+          required:
+            requiredFields.includes(propName) && !hasAlternativeJsonHeader(operation, propName),
           description: propSchema.description ?? '',
         }
       }

@@ -215,6 +215,40 @@ describe('buildCommand', () => {
     expect(flags).toContain('--source')
   })
 
+  it('does not require a JSON body flag when an equivalent JSON header exists', () => {
+    const op: ParsedOperation = {
+      method: 'post',
+      path: '/pipeline-check',
+      operationId: 'pipelineCheck',
+      tags: [],
+      pathParams: [],
+      queryParams: [],
+      headerParams: [
+        {
+          name: 'x-pipeline',
+          in: 'header',
+          required: false,
+          content: { 'application/json': { schema: { type: 'object' } } },
+        },
+      ],
+      bodySchema: {
+        type: 'object',
+        properties: {
+          pipeline: { type: 'object' },
+        },
+        required: ['pipeline'],
+      },
+      bodyRequired: false,
+      ndjsonResponse: false,
+      ndjsonRequest: false,
+      noContent: false,
+    }
+
+    const handler = vi.fn()
+    const cmd = buildCommand(op, handler)
+    expect(cmd.args?.['pipeline']?.required).toBe(false)
+  })
+
   it('creates --body for complex/nested body', () => {
     const op: ParsedOperation = {
       method: 'post',
@@ -338,6 +372,68 @@ describe('createCliFromSpec', () => {
     })
     const names = subCommandNames(root)
     expect(names).toContain('GET:/syncs')
+  })
+
+  it('allows header-mode invocation when JSON body is an alternative transport', async () => {
+    const spec: OpenAPISpec = {
+      paths: {
+        '/pipeline_check': {
+          post: {
+            operationId: 'pipeline_check',
+            parameters: [
+              {
+                name: 'x-pipeline',
+                in: 'header',
+                required: false,
+                description: 'JSON-encoded PipelineConfig',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        source: { type: 'object' },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+            requestBody: {
+              required: false,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      pipeline: { type: 'object', description: 'Pipeline config' },
+                    },
+                    required: ['pipeline'],
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'OK' } },
+          },
+        },
+      },
+    }
+
+    const capturedRequests: Request[] = []
+    const handler = vi.fn().mockImplementation((req: Request) => {
+      capturedRequests.push(req)
+      return Promise.resolve(new Response('{}', { headers: { 'content-type': 'application/json' } }))
+    })
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    const root = createCliFromSpec({ spec, handler })
+    await runCommand(root, {
+      rawArgs: ['pipeline-check', '--x-pipeline', '{"source":{"type":"stripe"}}'],
+    })
+
+    writeSpy.mockRestore()
+
+    expect(capturedRequests).toHaveLength(1)
+    expect(capturedRequests[0]!.headers.get('x-pipeline')).toContain('"source"')
   })
 })
 
