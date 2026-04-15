@@ -15,6 +15,8 @@ const RETRYABLE_NETWORK_CODES = new Set([
 ])
 
 export type HttpRetryOptions = {
+  /** Human-readable label for log messages (e.g. "GET /v1/customers") */
+  label?: string
   maxRetries?: number
   baseDelayMs?: number
   maxDelayMs?: number
@@ -126,8 +128,10 @@ export async function withHttpRetry<T>(
 
       const status = getHttpErrorStatus(err)
       const errName = err instanceof Error ? err.name : 'UnknownError'
+      const errMsg = err instanceof Error ? err.message : String(err)
+      const labelPart = opts.label ? ` ${opts.label}` : ''
       console.error(
-        `[source-stripe] retry attempt=${attempt + 1}/${maxRetries} delay=${delayMs}ms status=${status ?? 'n/a'} error=${errName}`
+        `[source-stripe] retry${labelPart} attempt=${attempt + 1}/${maxRetries} delay=${delayMs}ms status=${status ?? 'n/a'} error=${errName}: ${errMsg}`
       )
 
       await sleep(delayMs, opts.signal)

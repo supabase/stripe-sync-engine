@@ -1,4 +1,5 @@
 export { envPrefix, configFromFile, mergeConfig, parseJsonOrFile, parseStreams } from './config.js'
+export { getProxyUrl, assertUseEnvProxy } from './env-proxy.js'
 export { createCliFromSpec, buildCommand } from './openapi/command.js'
 export type { CreateCliFromSpecOptions, Handler } from './openapi/command.js'
 export type {

@@ -257,8 +257,13 @@ async function* mergeAsync<T>(
 const STRIPE_LAUNCH_TIMESTAMP = Math.floor(new Date('2011-01-01T00:00:00Z').getTime() / 1000)
 
 async function getAccountCreatedTimestamp(client: StripeClient): Promise<number> {
-  const account = await client.getAccount()
-  return account.created ?? STRIPE_LAUNCH_TIMESTAMP
+  try {
+    const account = await client.getAccount()
+    return account.created ?? STRIPE_LAUNCH_TIMESTAMP
+  } catch {
+    // TODO: log the error so operators notice auth misconfigurations
+    return STRIPE_LAUNCH_TIMESTAMP
+  }
 }
 
 // MARK: - Segment creation

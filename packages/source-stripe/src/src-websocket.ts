@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { fetchWithProxy, getHttpsProxyAgentForTarget } from './transport.js'
+import { tracedFetch, getHttpsProxyAgentForTarget } from './transport.js'
 
 const CLI_VERSION = '1.33.0'
 
@@ -87,7 +87,7 @@ async function createCliSession(stripeApiKey: string): Promise<CliSession> {
   params.append('device_name', 'stripe-sync-engine')
   params.append('websocket_features[]', 'webhooks')
 
-  const response = await fetchWithProxy('https://api.stripe.com/v1/stripecli/sessions', {
+  const response = await tracedFetch('https://api.stripe.com/v1/stripecli/sessions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${stripeApiKey}`,

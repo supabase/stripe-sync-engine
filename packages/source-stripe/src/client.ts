@@ -9,7 +9,7 @@ import {
 } from '@stripe/sync-openapi'
 import { withHttpRetry } from './retry.js'
 import { stripeEventSchema, type StripeEvent } from './spec.js'
-import { fetchWithProxy, parsePositiveInteger, type TransportEnv } from './transport.js'
+import { tracedFetch, parsePositiveInteger, type TransportEnv } from './transport.js'
 
 export type StripeClientConfig = {
   api_key: string
@@ -60,16 +60,7 @@ export function makeClient(
     if (pipelineSignal) signals.push(pipelineSignal)
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
 
-    const response = await fetchWithProxy(
-      url.toString(),
-      {
-        method,
-        headers,
-        body,
-        signal,
-      },
-      env
-    )
+    const response = await tracedFetch(url.toString(), { method, headers, body, signal })
 
     const json = (await response.json()) as unknown
 
@@ -91,7 +82,7 @@ export function makeClient(
     params?: Record<string, unknown>
   ): Promise<unknown> {
     if (method === 'GET') {
-      return withHttpRetry(() => request(method, path, params), { signal: pipelineSignal })
+      return withHttpRetry(() => request(method, path, params), { label: `${method} ${path}`, signal: pipelineSignal })
     }
     return request(method, path, params)
   }

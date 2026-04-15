@@ -6,6 +6,7 @@ import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import { createConnectorResolver, createEngine } from '../lib/index.js'
 import { createApp } from '../api/app.js'
 import { serveAction } from '../serve-command.js'
+import { backfillCmd } from './backfill.js'
 import { supabaseCmd } from './supabase.js'
 import { createSyncCmd } from './sync.js'
 import { defaultConnectors } from '../lib/default-connectors.js'
@@ -100,6 +101,7 @@ export async function createProgram() {
   return defineCommand({
     ...specCli,
     subCommands: {
+      backfill: backfillCmd,
       serve: serveCmd,
       supabase: supabaseCmd,
       sync: createSyncCmd(engine, resolver),

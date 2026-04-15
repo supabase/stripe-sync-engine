@@ -49,7 +49,7 @@ ENV NODE_ENV=production
 ENV GIT_COMMIT=$GIT_COMMIT
 ENV BUILD_DATE=$BUILD_DATE
 ENV COMMIT_URL=$COMMIT_URL
-ENTRYPOINT ["node", "dist/cli/index.js"]
+ENTRYPOINT ["node", "--use-env-proxy", "dist/cli/index.js"]
 CMD ["serve"]
 
 # ===========================================================================
@@ -88,5 +88,5 @@ ENV NODE_ENV=production
 ENV GIT_COMMIT=$GIT_COMMIT
 ENV BUILD_DATE=$BUILD_DATE
 ENV COMMIT_URL=$COMMIT_URL
-ENTRYPOINT ["node", "dist/bin/sync-service.js"]
+ENTRYPOINT ["node", "--use-env-proxy", "dist/bin/sync-service.js"]
 CMD ["serve", "--temporal-address", "temporal:7233", "--temporal-task-queue", "sync-engine"]

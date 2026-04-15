@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { envPrefix, configFromFile, mergeConfig } from '../config.js'
+import { envPrefix, configFromFile, mergeConfig } from './config.js'
 
 // ---------------------------------------------------------------------------
 // envPrefix

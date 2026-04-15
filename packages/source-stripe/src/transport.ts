@@ -1,4 +1,3 @@
-import { ProxyAgent } from 'undici'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import pino from 'pino'
 
@@ -7,7 +6,6 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 export type TransportEnv = Record<string, string | undefined>
 type ProxyTarget = URL | string
 
-const proxyAgents = new Map<string, ProxyAgent>()
 const httpsProxyAgents = new Map<string, InstanceType<typeof HttpsProxyAgent>>()
 
 export function parsePositiveInteger(
@@ -158,15 +156,6 @@ export function getProxyUrlForTarget(
   return proxyUrl
 }
 
-function getProxyAgent(proxyUrl: string): ProxyAgent {
-  let agent = proxyAgents.get(proxyUrl)
-  if (!agent) {
-    agent = new ProxyAgent(proxyUrl)
-    proxyAgents.set(proxyUrl, agent)
-  }
-  return agent
-}
-
 function getHttpsProxyAgent(proxyUrl: string): InstanceType<typeof HttpsProxyAgent> {
   let agent = httpsProxyAgents.get(proxyUrl)
   if (!agent) {
@@ -186,56 +175,39 @@ export function getHttpsProxyAgentForTarget(
 
 const DANGEROUSLY_VERBOSE_LOGGING = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
 
-type ProxyAwareRequestInit = RequestInit & { dispatcher?: ProxyAgent }
-
-export function withFetchProxy(
-  init: RequestInit = {},
-  env: TransportEnv = process.env
-): ProxyAwareRequestInit {
-  const proxyUrl = getProxyUrl(env)
-  if (!proxyUrl) {
-    return init
-  }
-
-  return {
-    ...init,
-    dispatcher: getProxyAgent(proxyUrl),
-  }
-}
-
-export function fetchWithProxy(
-  input: URL | string,
-  init: RequestInit = {},
-  env: TransportEnv = process.env
-): Promise<Response> {
-  const proxyUrl = getProxyUrlForTarget(input, env)
-  const fetchInit: ProxyAwareRequestInit = proxyUrl
-    ? { ...init, dispatcher: getProxyAgent(proxyUrl) }
-    : init
-
+/** Wraps fetch with curl-style trace logging when DANGEROUSLY_VERBOSE_LOGGING=true. */
+export function tracedFetch(input: URL | string, init: RequestInit = {}): Promise<Response> {
   if (!DANGEROUSLY_VERBOSE_LOGGING || !logger.isLevelEnabled('trace')) {
-    return fetch(input, fetchInit)
+    return fetch(input, init)
   }
 
   const method = (init.method ?? 'GET').toUpperCase()
+  const url = String(input)
   const reqId = crypto.randomUUID().slice(0, 8)
   const start = Date.now()
-  const loggedHeaders: Record<string, string> = {}
+
+  const headerPairs: [string, string][] = []
   if (init.headers) {
     new Headers(init.headers as HeadersInit).forEach((v, k) => {
-      loggedHeaders[k] = k.toLowerCase() === 'authorization' ? '[redacted]' : v
+      headerPairs.push([k, v])
     })
   }
-  logger.trace(
-    { headers: loggedHeaders, ...(init.body != null ? { body: String(init.body) } : {}) },
-    `[http ${reqId}] → ${method} ${String(input)}`
-  )
 
-  return fetch(input, fetchInit).then((res) => {
+  const curlParts = [`curl -X ${method}`]
+  for (const [k, v] of headerPairs) {
+    curlParts.push(`-H '${k}: ${v}'`)
+  }
+  if (init.body != null) {
+    curlParts.push(`-d '${String(init.body).replaceAll("'", "'\\''")}'`)
+  }
+  curlParts.push(`'${url}'`)
+  const curl = curlParts.join(' \\\n  ')
+
+  logger.trace(`[http ${reqId}] → ${method} ${url}\n${curl}`)
+
+  return fetch(input, init).then((res) => {
     const resClone = res.clone()
-    logger.trace(
-      `[http ${reqId}] ← ${method} ${String(input)} ${res.status} (${Date.now() - start}ms)`
-    )
+    logger.trace(`[http ${reqId}] ← ${res.status} ${method} ${url} (${Date.now() - start}ms)`)
     resClone
       .text()
       .then((body) => {

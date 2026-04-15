@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ndjsonResponse } from '../ndjson.js'
+import { ndjsonResponse } from './ndjson.js'
 
 async function* fromArray<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item

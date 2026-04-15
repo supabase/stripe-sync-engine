@@ -30,7 +30,7 @@ import type { ResourceConfig } from './types.js'
 import { makeClient, type StripeClient } from './client.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { createInMemoryRateLimiter, DEFAULT_MAX_RPS } from './rate-limiter.js'
-import { fetchWithProxy } from './transport.js'
+import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
 
 function combineSignals(...signals: Array<AbortSignal | null | undefined>): AbortSignal | undefined {
@@ -42,7 +42,7 @@ function combineSignals(...signals: Array<AbortSignal | null | undefined>): Abor
 
 function makeApiFetch(signal?: AbortSignal): typeof globalThis.fetch {
   return (input, init) =>
-    fetchWithProxy(input as URL | string, {
+    tracedFetch(input as URL | string, {
       ...(init ?? {}),
       signal: combineSignals(init?.signal, signal),
     })

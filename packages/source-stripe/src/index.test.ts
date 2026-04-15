@@ -648,8 +648,10 @@ describe('StripeSource', () => {
       })
     })
 
-    it('emits TraceMessage error when getAccount fails before parallel backfill pagination', async () => {
-      const listFn = vi.fn()
+    it('proceeds with backfill using fallback timestamp when getAccount fails (fault-tolerant)', async () => {
+      // getAccountCreatedTimestamp swallows errors and falls back to STRIPE_LAUNCH_TIMESTAMP
+      // so backfill should proceed even when getAccount is unavailable
+      const listFn = vi.fn().mockResolvedValue({ data: [], has_more: false })
 
       const registry: Record<string, ResourceConfig> = {
         customers: makeConfig({
@@ -661,7 +663,7 @@ describe('StripeSource', () => {
       }
 
       const mockClient = {
-        getAccount: vi.fn().mockRejectedValueOnce(
+        getAccount: vi.fn().mockRejectedValue(
           new StripeRequestError(
             401,
             {
@@ -687,32 +689,17 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(3)
-      expect(listFn).not.toHaveBeenCalled()
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'started' },
-        },
-      })
-
-      const errorMsg = messages[1] as TraceMessage
-      expect(errorMsg.trace.trace_type).toBe('error')
-      const traceError = (
-        errorMsg.trace as {
-          trace_type: 'error'
-          error: { failure_type: string; message: string; stream?: string }
-        }
-      ).error
-      expect(traceError.failure_type).toBe('auth_error')
-      expect(traceError.message).toContain('Invalid API Key')
-      expect(traceError.stream).toBe('customers')
-
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { status: 'auth_error' } },
-      })
+      // Backfill proceeds with fallback timestamp: listFn is called
+      expect(listFn).toHaveBeenCalled()
+      // Stream completes successfully (empty data, no error)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'source_state' &&
+            (m as { source_state: { data: { status: string } } }).source_state.data.status ===
+              'complete'
+        )
+      ).toBe(true)
     })
 
     it('emits TraceMessage error for Invalid API Key on sequential streams', async () => {

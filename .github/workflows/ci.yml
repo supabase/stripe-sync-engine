@@ -159,6 +159,42 @@ jobs:
         run: '[ -f /tmp/vitest-skip-warnings.txt ] && cat /tmp/vitest-skip-warnings.txt || true'
 
   # ---------------------------------------------------------------------------
+  # mitmweb — proxy intercept smoke test (curl, Node, Bun → httpbin.org)
+  # ---------------------------------------------------------------------------
+  mitmweb:
+    name: mitmweb proxy intercept test
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ./.nvmrc
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install mitmproxy
+        run: pip3 install --quiet mitmproxy
+
+      - name: Run mitmweb intercept test
+        run: bash scripts/mitmweb-env.test.sh
+
+      - name: Stop mitmweb
+        if: always()
+        run: pkill -f mitmweb || true
+
+  # ---------------------------------------------------------------------------
   # Publish npm — publish @stripe/* packages to GitHub Packages
   # ---------------------------------------------------------------------------
   publish_npm:
