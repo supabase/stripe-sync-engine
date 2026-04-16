@@ -15,6 +15,7 @@ export {
   buildRetrieveFn,
   resolveTableName,
   StripeApiRequestError,
+  pickDebugHeaders,
 } from './listFnResolver.js'
 export type {
   ListEndpoint,

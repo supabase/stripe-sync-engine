@@ -3,6 +3,7 @@ import {
   StripeWebhookEndpointSchema,
   StripeApiListSchema,
   StripeApiRequestError,
+  pickDebugHeaders,
   type StripeAccount,
   type StripeApiList,
   type StripeWebhookEndpoint,
@@ -62,10 +63,25 @@ export function makeClient(
 
     const response = await tracedFetch(url.toString(), { method, headers, body, signal })
 
-    const json = (await response.json()) as unknown
+    const debugHeaders = pickDebugHeaders(response.headers)
+
+    const text = await response.text()
+    let json: unknown
+    try {
+      json = JSON.parse(text)
+    } catch {
+      const preview = text.slice(0, 200).replace(/[\r\n]+/g, '\\n')
+      throw new StripeApiRequestError(
+        response.status,
+        { error: { message: `Non-JSON response: ${preview}` } },
+        method,
+        path,
+        debugHeaders
+      )
+    }
 
     if (!response.ok) {
-      throw new StripeApiRequestError(response.status, json, method, path)
+      throw new StripeApiRequestError(response.status, json, method, path, debugHeaders)
     }
 
     return json

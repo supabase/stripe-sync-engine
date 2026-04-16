@@ -51,7 +51,8 @@ describe('makeClient', () => {
       '/v1/account'
     )
     expect(err.status).toBe(401)
-    expect(err.message).toBe('Invalid API Key')
+    expect(err.message).toContain('Invalid API Key')
+    expect(err.message).toContain('GET /v1/account (401)')
   })
 
   it('retries transient GET failures and eventually succeeds', async () => {
