@@ -1,0 +1,39 @@
+{
+  "name": "@stripe/sync-integration-supabase",
+  "version": "0.2.5",
+  "private": false,
+  "description": "Supabase integration for Stripe Sync Engine — edge functions and deployment",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-engine": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-state-postgres": "workspace:*",
+    "supabase-management-js": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.28.0",
+    "stripe": "^18.1.0",
+    "vitest": "^3.2.4"
+  }
+}

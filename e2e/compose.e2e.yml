@@ -1,0 +1,46 @@
+# E2E overlay — layers on top of compose.yml + compose.dev.yml.
+# Adds --data-dir (required by CLI), shared pipeline volume, and
+# extra_hosts so containers can reach host-bound test servers.
+#
+# Usage:
+#   docker compose -f compose.yml -f compose.dev.yml -f e2e/compose.e2e.yml up --build -d
+
+volumes:
+  pipeline-data:
+
+services:
+  engine:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  service:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - pipeline-data:/data
+    command:
+      - serve
+      - --temporal-address
+      - temporal:7233
+      - --temporal-task-queue
+      - sync-engine
+      - --data-dir
+      - /data/pipelines
+      - --port
+      - '4020'
+
+  worker:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - pipeline-data:/data
+    command:
+      - worker
+      - --temporal-address
+      - temporal:7233
+      - --temporal-task-queue
+      - sync-engine
+      - --engine-url
+      - http://engine:3000
+      - --data-dir
+      - /data/pipelines

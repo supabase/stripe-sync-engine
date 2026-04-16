@@ -1,3 +1,1 @@
-.vercel
-.next
-.env*.local
+.next/

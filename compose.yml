@@ -1,0 +1,104 @@
+services:
+  # --- Core services (used by unit + integration + e2e tests) ---
+
+  postgres:
+    image: postgres:18
+    ports:
+      - '55432:5432'
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+      -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  supabase-db:
+    image: supabase/postgres:15.1.1.4
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    ports:
+      - '54320:5432'
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    ports:
+      - '12111:12111'
+      - '12112:12112'
+    healthcheck:
+      test: ['CMD-SHELL', 'echo | nc -z localhost 12111']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Temporal (used by infra/temporal_ts and infra/temporal_ruby e2e tests) ---
+
+  temporal-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    healthcheck:
+      test: pg_isready -U temporal
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - '7233:7233'
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-db
+      - BIND_ON_IP=0.0.0.0
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'temporal', 'operator', 'cluster', 'health']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - '8080:8080'
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  # --- Local npm registry (for publish testing) ---
+
+  npm-registry:
+    image: verdaccio/verdaccio
+    profiles: [npm-registry]
+    ports:
+      - '4873:4873'
+    volumes:
+      - ./.verdaccio/config.yaml:/verdaccio/conf/config.yaml
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://0.0.0.0:4873/-/ping || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 5

@@ -1,0 +1,176 @@
+import net from 'node:net'
+import { Duplex } from 'node:stream'
+
+type PgTargetConfig = {
+  host?: string
+  port?: number
+}
+
+type PgProxyEnv = Record<string, string | undefined>
+
+type PgProxyOptions = {
+  proxyHost: string
+  proxyPort: number
+  connectTimeoutMs: number
+}
+
+function parsePositiveInteger(
+  name: string,
+  value: string | undefined,
+  defaultValue: number
+): number {
+  const parsed = Number(value ?? defaultValue)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return parsed
+}
+
+class HttpConnectStream extends Duplex {
+  private socket: net.Socket | null = null
+  private pendingNoDelay = true
+  private pendingKeepAliveDelay: number | undefined
+
+  constructor(
+    private readonly targetConfig: PgTargetConfig,
+    private readonly proxyOptions: PgProxyOptions
+  ) {
+    super()
+  }
+
+  connect(port?: number, host?: string) {
+    const socket = net.createConnection({
+      host: this.proxyOptions.proxyHost,
+      port: this.proxyOptions.proxyPort,
+    })
+
+    this.socket = socket
+    socket.setNoDelay(this.pendingNoDelay)
+    if (this.pendingKeepAliveDelay !== undefined) {
+      socket.setKeepAlive(true, this.pendingKeepAliveDelay)
+    }
+
+    socket.setTimeout(this.proxyOptions.connectTimeoutMs, () => {
+      socket.destroy(new Error('proxy connect timeout'))
+    })
+
+    socket.on('error', (error) => this.emit('error', error))
+    socket.on('close', () => {
+      this.push(null)
+      this.emit('close')
+    })
+
+    socket.once('connect', () => {
+      const targetHost = host ?? this.targetConfig.host
+      const targetPort = port ?? this.targetConfig.port ?? 5432
+
+      if (!targetHost) {
+        socket.destroy(new Error('pg proxy target host is required'))
+        return
+      }
+
+      socket.write(
+        `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\nHost: ${targetHost}:${targetPort}\r\n\r\n`
+      )
+    })
+
+    let response = Buffer.alloc(0)
+    const onHandshakeData = (chunk: Buffer) => {
+      response = Buffer.concat([response, chunk])
+      const boundary = response.indexOf('\r\n\r\n')
+      if (boundary === -1) return
+
+      socket.off('data', onHandshakeData)
+      socket.setTimeout(0)
+
+      const header = response.subarray(0, boundary).toString('latin1')
+      const statusLine = header.split('\r\n', 1)[0] ?? ''
+      if (!/^HTTP\/\d\.\d 200\b/.test(statusLine)) {
+        socket.destroy(new Error(`proxy CONNECT failed: ${statusLine}`))
+        return
+      }
+
+      const leftover = response.subarray(boundary + 4)
+      socket.on('data', (data) => this.push(data))
+      if (leftover.length > 0) {
+        this.push(leftover)
+      }
+      this.emit('connect')
+    }
+
+    socket.on('data', onHandshakeData)
+  }
+
+  setNoDelay(noDelay = true) {
+    this.pendingNoDelay = noDelay
+    this.socket?.setNoDelay(noDelay)
+  }
+
+  setKeepAlive(enabled = false, initialDelay = 0) {
+    if (enabled) {
+      this.pendingKeepAliveDelay = initialDelay
+    } else {
+      this.pendingKeepAliveDelay = undefined
+    }
+    this.socket?.setKeepAlive(enabled, initialDelay)
+  }
+
+  setTimeout(timeout: number, callback?: () => void) {
+    this.socket?.setTimeout(timeout, callback)
+    return this
+  }
+
+  ref() {
+    this.socket?.ref()
+    return this
+  }
+
+  unref() {
+    this.socket?.unref()
+    return this
+  }
+
+  _read() {}
+
+  _write(chunk: Buffer, encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    if (!this.socket) {
+      callback(new Error('socket not connected'))
+      return
+    }
+    this.socket.write(chunk, encoding, callback)
+  }
+
+  _final(callback: (error?: Error | null) => void) {
+    this.socket?.end()
+    callback()
+  }
+
+  _destroy(error: Error | null, callback: (error?: Error | null) => void) {
+    this.socket?.destroy(error ?? undefined)
+    callback(error)
+  }
+}
+
+export function createPgHttpConnectStreamFactory(options: PgProxyOptions) {
+  return (config: PgTargetConfig) => new HttpConnectStream(config, options)
+}
+
+export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv = process.env): T {
+  const proxyHost = env.PG_PROXY_HOST?.trim()
+  if (!proxyHost) {
+    return config
+  }
+
+  return {
+    ...config,
+    stream: createPgHttpConnectStreamFactory({
+      proxyHost,
+      proxyPort: parsePositiveInteger('PG_PROXY_PORT', env.PG_PROXY_PORT, 10072),
+      connectTimeoutMs: parsePositiveInteger(
+        'PG_CONNECT_TIMEOUT_MS',
+        env.PG_CONNECT_TIMEOUT_MS,
+        10_000
+      ),
+    }),
+  } as T
+}

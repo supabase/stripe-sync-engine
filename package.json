@@ -1,18 +1,24 @@
 {
   "name": "stripe-sync-engine",
   "private": true,
-  "version": "1.0.0",
+  "type": "module",
+  "version": "0.2.5",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "pnpm -r run build",
+    "clean": "rimraf --glob \"packages/*/dist\" \"apps/*/dist\" \"packages/**/*.tsbuildinfo\" \"apps/**/*.tsbuildinfo\"",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dashboard": "pnpm --filter @supabase/stripe-sync-dashboard dev"
+    "down": "docker compose down && (lsof -ti:4010,4020,5173 | xargs kill -9 2>/dev/null; true)",
+    "dev:engine": "pnpm --filter @stripe/sync-engine dev",
+    "dev": "docker compose up -d; concurrently -n engine,service,worker,dashboard -c cyan,green,yellow,magenta \"pnpm --filter @stripe/sync-engine dev\" \"pnpm --filter @stripe/sync-service dev:serve\" \"pnpm --filter @stripe/sync-service dev:worker\" \"pnpm --filter @stripe/sync-dashboard dev\"",
+    "visualizer": "pnpm --filter @stripe/sync-visualizer dev"
   },
   "dependencies": {
     "pino": "^10.0.0"
@@ -20,17 +26,27 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.35.0",
+    "@terrastruct/d2": "^0.1.33",
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
+    "@webhooksite/cli": "^0.2.7",
+    "concurrently": "^9.2.1",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
-    "tsup": "^8.5.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.28.0"
+    }
+  },
+  "engines": {
+    "node": ">=24"
   },
   "packageManager": "pnpm@10.21.0"
 }

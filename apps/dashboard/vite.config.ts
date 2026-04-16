@@ -1,0 +1,29 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  build: { target: 'esnext' },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
+  resolve: {
+    alias: { '@': path.resolve(__dirname, './src') },
+  },
+  server: {
+    proxy: {
+      '/api/engine': {
+        target: process.env.ENGINE_URL ?? 'http://localhost:4010',
+        rewrite: (p) => p.replace(/^\/api\/engine/, ''),
+      },
+      '/api/service': {
+        target: process.env.SERVICE_URL ?? 'http://localhost:4020',
+        rewrite: (p) => p.replace(/^\/api\/service/, ''),
+      },
+    },
+  },
+})

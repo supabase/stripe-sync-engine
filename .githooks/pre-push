@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Pre-push hook: verify generated OpenAPI specs are up to date.
+# Install: git config core.hooksPath .githooks
+set -euo pipefail
+
+echo "pre-push: checking OpenAPI specs..."
+./scripts/generate-openapi.sh --check

@@ -1,0 +1,43 @@
+{
+  "name": "@stripe/sync-source-stripe",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "bun": "./src/openapi/browser.ts",
+      "types": "./dist/openapi/browser.d.ts",
+      "import": "./dist/openapi/browser.js"
+    }
+  },
+  "bin": {
+    "source-stripe": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@stripe/sync-openapi": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "https-proxy-agent": "^7.0.6",
+    "pino": "^10",
+    "undici": "^7.16.0",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.0",
+    "@types/ws": "^8.18.0",
+    "vitest": "^3.2.4"
+  }
+}

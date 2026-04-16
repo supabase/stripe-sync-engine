@@ -6,4 +6,8 @@ docker*
 Pulumi.*.yaml
 LICENSE.md
 dist/
+docs/out/
+apps/visualizer/out/
 .claude/
+**/.terraform/
+__generated__

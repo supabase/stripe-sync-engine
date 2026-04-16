@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Universal TypeScript runner.
+# Uses bun if available; otherwise falls back to tsx with the "bun" condition
+# so cross-package imports resolve to source .ts files (no dist/ needed).
+#
+# Usage: scripts/ts-run <src/path/to/file.ts> [args...]
+
+FILE="$1"; shift
+
+if command -v bun &>/dev/null; then
+  exec bun "$FILE" "$@"
+else
+  exec npx tsx --conditions bun "$FILE" "$@"
+fi

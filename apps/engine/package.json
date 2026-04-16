@@ -1,0 +1,85 @@
+{
+  "name": "@stripe/sync-engine",
+  "version": "0.2.5",
+  "private": false,
+  "description": "Stripe Sync Engine — sync Stripe data to Postgres",
+  "type": "module",
+  "bin": {
+    "sync-engine": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "bun": "./src/cli/command.ts",
+      "types": "./dist/cli/command.d.ts",
+      "import": "./dist/cli/command.js"
+    },
+    "./api": {
+      "bun": "./src/api/app.ts",
+      "types": "./dist/api/app.d.ts",
+      "import": "./dist/api/app.js"
+    },
+    "./api/openapi-utils": {
+      "bun": "./src/api/openapi-utils.ts",
+      "types": "./dist/api/openapi-utils.d.ts",
+      "import": "./dist/api/openapi-utils.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
+    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/api/index.ts",
+    "test": "vitest run",
+    "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@hono/node-server": "^1",
+    "@scalar/hono-api-reference": "^0.6",
+    "@stripe/sync-destination-google-sheets": "workspace:*",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-hono-zod-openapi": "workspace:*",
+    "@stripe/sync-integration-supabase": "workspace:*",
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-source-stripe": "workspace:*",
+    "@stripe/sync-state-postgres": "workspace:*",
+    "@stripe/sync-ts-cli": "workspace:*",
+    "@stripe/sync-util-postgres": "workspace:*",
+    "citty": "^0.1.6",
+    "dotenv": "^16.4.7",
+    "googleapis": "^148.0.0",
+    "hono": "^4",
+    "openapi-fetch": "^0.17.0",
+    "pg": "^8.16.3",
+    "pino": "^10",
+    "pino-pretty": "^13",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@hyperjump/json-schema": "^1.17.5",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.4",
+    "openapi-typescript": "^7.13.0",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stripe/sync-engine.git"
+  },
+  "homepage": "https://github.com/stripe/sync-engine#readme",
+  "keywords": [
+    "stripe",
+    "sync",
+    "database",
+    "typescript"
+  ],
+  "author": "Stripe <https://stripe.com/>"
+}

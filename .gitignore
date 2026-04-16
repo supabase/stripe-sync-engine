@@ -1,6 +1,7 @@
 dist/
 .DS_Store
 node_modules/
+.pnpm-store/
 .env
 .env.*
 !.env.sample
@@ -13,3 +14,39 @@ private/
 .mcp.*
 .vercel
 .env*.local
+
+# Generated diagram outputs
+scripts/*.svg
+
+# OpenAPI publishing copies (source of truth is apps/*/src/__generated__/openapi.json)
+docs/openapi/
+.prose/
+docs/sync2-architecture/
+docs/out/
+private/
+
+# Local cred storage
+.credentials/
+
+# Git worktrees
+.worktrees/
+
+# Claude Code local state
+.claude/
+
+# OMC agent state
+.omc/
+.omx/
+
+# Build artifacts
+*.tsbuildinfo
+test-results/
+
+# Terraform state (contains secrets)
+*.tfstate
+*.tfstate.backup
+
+
+apps/visualizer/out/
+
+.sync-state*.json

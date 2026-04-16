@@ -1,6 +1,5 @@
 db
 test
-dist
 node_modules
 .tours
 .vscode

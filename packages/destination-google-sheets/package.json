@@ -1,0 +1,33 @@
+{
+  "name": "@stripe/sync-destination-google-sheets",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "destination-google-sheets": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "googleapis": "^148.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "vitest": "^3.2.4"
+  }
+}

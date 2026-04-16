@@ -1,0 +1,1764 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stripe Sync Service",
+    "version": "1.0.0",
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "tags": [
+          "Status"
+        ],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "hostname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "hostname"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines": {
+      "get": {
+        "operationId": "pipelines.list",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "List pipelines",
+        "responses": {
+          "200": {
+            "description": "List of pipelines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+                          },
+                          "source": {
+                            "$ref": "#/components/schemas/SourceConfig"
+                          },
+                          "destination": {
+                            "$ref": "#/components/schemas/DestinationConfig"
+                          },
+                          "streams": {
+                            "description": "Selected streams to sync. All streams synced if omitted.",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "description": "Stream (table) name to sync."
+                                },
+                                "sync_mode": {
+                                  "description": "How the source reads this stream. Defaults to full_refresh.",
+                                  "type": "string",
+                                  "enum": [
+                                    "incremental",
+                                    "full_refresh"
+                                  ]
+                                },
+                                "backfill_limit": {
+                                  "description": "Cap backfill to this many records, then mark the stream complete.",
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "desired_status": {
+                            "default": "active",
+                            "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "paused",
+                              "deleted"
+                            ]
+                          },
+                          "status": {
+                            "default": "setup",
+                            "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                            "type": "string",
+                            "enum": [
+                              "setup",
+                              "backfill",
+                              "ready",
+                              "paused",
+                              "teardown",
+                              "error"
+                            ]
+                          },
+                          "progress": {
+                            "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                            "type": "object",
+                            "properties": {
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "complete",
+                                  "state_limit",
+                                  "time_limit",
+                                  "error",
+                                  "aborted"
+                                ],
+                                "description": "Why the sync run ended."
+                              },
+                              "cutoff": {
+                                "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                                "type": "string",
+                                "enum": [
+                                  "soft",
+                                  "hard"
+                                ]
+                              },
+                              "elapsed_ms": {
+                                "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                                "type": "number"
+                              },
+                              "state": {
+                                "description": "Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume.",
+                                "$ref": "#/components/schemas/SyncState"
+                              },
+                              "global_progress": {
+                                "description": "Final global aggregates. Same shape as trace/progress.",
+                                "type": "object",
+                                "properties": {
+                                  "elapsed_ms": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Wall-clock milliseconds since the sync run started."
+                                  },
+                                  "run_record_count": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Total records synced across all streams in this run."
+                                  },
+                                  "rows_per_second": {
+                                    "type": "number",
+                                    "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                                  },
+                                  "window_rows_per_second": {
+                                    "type": "number",
+                                    "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                                  },
+                                  "state_checkpoint_count": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991,
+                                    "description": "Total source_state messages observed so far in this sync run."
+                                  }
+                                },
+                                "required": [
+                                  "elapsed_ms",
+                                  "run_record_count",
+                                  "rows_per_second",
+                                  "window_rows_per_second",
+                                  "state_checkpoint_count"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "stream_progress": {
+                                "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "started",
+                                        "running",
+                                        "complete",
+                                        "transient_error",
+                                        "system_error",
+                                        "config_error",
+                                        "auth_error"
+                                      ],
+                                      "description": "Final stream status."
+                                    },
+                                    "cumulative_record_count": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Cumulative records synced for this stream across all runs."
+                                    },
+                                    "run_record_count": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Records synced in this run."
+                                    },
+                                    "records_per_second": {
+                                      "description": "Average records/sec for this stream over the run.",
+                                      "type": "number"
+                                    },
+                                    "requests_per_second": {
+                                      "description": "Average requests/sec for this stream over the run.",
+                                      "type": "number"
+                                    },
+                                    "errors": {
+                                      "description": "All accumulated errors for this stream during this run.",
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "message": {
+                                            "type": "string",
+                                            "description": "Human-readable error description."
+                                          },
+                                          "failure_type": {
+                                            "description": "Error category matching TraceError.failure_type.",
+                                            "type": "string",
+                                            "enum": [
+                                              "config_error",
+                                              "system_error",
+                                              "transient_error",
+                                              "auth_error"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "message"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "cumulative_record_count",
+                                    "run_record_count"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "End-of-sync summary for a single stream."
+                                }
+                              }
+                            },
+                            "required": [
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "source",
+                          "destination",
+                          "desired_status",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "pipelines.create",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Create pipeline",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "destination"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created pipeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+                    },
+                    "source": {
+                      "$ref": "#/components/schemas/SourceConfig"
+                    },
+                    "destination": {
+                      "$ref": "#/components/schemas/DestinationConfig"
+                    },
+                    "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
+                          },
+                          "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
+                            "type": "string",
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
+                          },
+                          "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "state": {
+                          "description": "Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume.",
+                          "$ref": "#/components/schemas/SyncState"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "destination",
+                    "desired_status",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}": {
+      "get": {
+        "operationId": "pipelines.get",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Retrieve pipeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "example": "pipe_abc123"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved pipeline with status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+                    },
+                    "source": {
+                      "$ref": "#/components/schemas/SourceConfig"
+                    },
+                    "destination": {
+                      "$ref": "#/components/schemas/DestinationConfig"
+                    },
+                    "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
+                          },
+                          "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
+                            "type": "string",
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
+                          },
+                          "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "state": {
+                          "description": "Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume.",
+                          "$ref": "#/components/schemas/SyncState"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "destination",
+                    "desired_status",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "pipelines.update",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Update pipeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "example": "pipe_abc123"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "desired_status": {
+                    "description": "Set to \"paused\" to pause, \"active\" to resume, \"deleted\" to tear down.",
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "deleted"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated pipeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+                    },
+                    "source": {
+                      "$ref": "#/components/schemas/SourceConfig"
+                    },
+                    "destination": {
+                      "$ref": "#/components/schemas/DestinationConfig"
+                    },
+                    "streams": {
+                      "description": "Selected streams to sync. All streams synced if omitted.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Stream (table) name to sync."
+                          },
+                          "sync_mode": {
+                            "description": "How the source reads this stream. Defaults to full_refresh.",
+                            "type": "string",
+                            "enum": [
+                              "incremental",
+                              "full_refresh"
+                            ]
+                          },
+                          "backfill_limit": {
+                            "description": "Cap backfill to this many records, then mark the stream complete.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "desired_status": {
+                      "default": "active",
+                      "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "deleted"
+                      ]
+                    },
+                    "status": {
+                      "default": "setup",
+                      "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
+                      "type": "string",
+                      "enum": [
+                        "setup",
+                        "backfill",
+                        "ready",
+                        "paused",
+                        "teardown",
+                        "error"
+                      ]
+                    },
+                    "progress": {
+                      "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "complete",
+                            "state_limit",
+                            "time_limit",
+                            "error",
+                            "aborted"
+                          ],
+                          "description": "Why the sync run ended."
+                        },
+                        "cutoff": {
+                          "description": "Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.",
+                          "type": "string",
+                          "enum": [
+                            "soft",
+                            "hard"
+                          ]
+                        },
+                        "elapsed_ms": {
+                          "description": "Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.",
+                          "type": "number"
+                        },
+                        "state": {
+                          "description": "Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume.",
+                          "$ref": "#/components/schemas/SyncState"
+                        },
+                        "global_progress": {
+                          "description": "Final global aggregates. Same shape as trace/progress.",
+                          "type": "object",
+                          "properties": {
+                            "elapsed_ms": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Wall-clock milliseconds since the sync run started."
+                            },
+                            "run_record_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total records synced across all streams in this run."
+                            },
+                            "rows_per_second": {
+                              "type": "number",
+                              "description": "Overall throughput for the entire run: run_record_count / elapsed seconds."
+                            },
+                            "window_rows_per_second": {
+                              "type": "number",
+                              "description": "Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval."
+                            },
+                            "state_checkpoint_count": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Total source_state messages observed so far in this sync run."
+                            }
+                          },
+                          "required": [
+                            "elapsed_ms",
+                            "run_record_count",
+                            "rows_per_second",
+                            "window_rows_per_second",
+                            "state_checkpoint_count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stream_progress": {
+                          "description": "Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "started",
+                                  "running",
+                                  "complete",
+                                  "transient_error",
+                                  "system_error",
+                                  "config_error",
+                                  "auth_error"
+                                ],
+                                "description": "Final stream status."
+                              },
+                              "cumulative_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Cumulative records synced for this stream across all runs."
+                              },
+                              "run_record_count": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Records synced in this run."
+                              },
+                              "records_per_second": {
+                                "description": "Average records/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "requests_per_second": {
+                                "description": "Average requests/sec for this stream over the run.",
+                                "type": "number"
+                              },
+                              "errors": {
+                                "description": "All accumulated errors for this stream during this run.",
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "message": {
+                                      "type": "string",
+                                      "description": "Human-readable error description."
+                                    },
+                                    "failure_type": {
+                                      "description": "Error category matching TraceError.failure_type.",
+                                      "type": "string",
+                                      "enum": [
+                                        "config_error",
+                                        "system_error",
+                                        "transient_error",
+                                        "auth_error"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "cumulative_record_count",
+                              "run_record_count"
+                            ],
+                            "additionalProperties": false,
+                            "description": "End-of-sync summary for a single stream."
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "source",
+                    "destination",
+                    "desired_status",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid status transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "pipelines.delete",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Delete pipeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "example": "pipe_abc123"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted pipeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{pipeline_id}": {
+      "post": {
+        "operationId": "webhooks.push",
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Ingest a Stripe webhook event",
+        "description": "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "schema": {
+              "type": "string",
+              "example": "pipe_abc123"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "const": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SourceConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "stripe"
+              },
+              "stripe": {
+                "$ref": "#/components/schemas/SourceStripeConfig"
+              }
+            },
+            "required": [
+              "type",
+              "stripe"
+            ]
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "type"
+        }
+      },
+      "SourceStripeConfig": {
+        "type": "object",
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "description": "Stripe API key (sk_test_... or sk_live_...)"
+          },
+          "account_id": {
+            "type": "string",
+            "description": "Stripe account ID (resolved from API if omitted)"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "Whether this is a live mode sync"
+          },
+          "api_version": {
+            "type": "string",
+            "enum": [
+              "2026-03-25.dahlia",
+              "2026-02-25.clover",
+              "2026-01-28.clover",
+              "2025-12-15.clover",
+              "2025-11-17.clover",
+              "2025-10-29.clover",
+              "2025-09-30.clover",
+              "2025-08-27.basil",
+              "2025-07-30.basil",
+              "2025-06-30.basil",
+              "2025-05-28.basil",
+              "2025-04-30.basil",
+              "2025-03-31.basil",
+              "2025-02-24.acacia",
+              "2025-01-27.acacia",
+              "2024-12-18.acacia",
+              "2024-11-20.acacia",
+              "2024-10-28.acacia",
+              "2024-09-30.acacia",
+              "2024-06-20",
+              "2024-04-10",
+              "2024-04-03",
+              "2023-10-16",
+              "2023-08-16",
+              "2022-11-15",
+              "2022-08-01",
+              "2020-08-27",
+              "2020-03-02",
+              "2019-12-03",
+              "2019-11-05",
+              "2019-10-17",
+              "2019-10-08",
+              "2019-09-09",
+              "2019-08-14",
+              "2019-05-16",
+              "2019-03-14",
+              "2019-02-19",
+              "2019-02-11",
+              "2018-11-08",
+              "2018-10-31",
+              "2018-09-24",
+              "2018-09-06",
+              "2018-08-23",
+              "2018-07-27",
+              "2018-05-21",
+              "2018-02-28",
+              "2018-02-06",
+              "2018-02-05",
+              "2018-01-23",
+              "2017-12-14",
+              "2017-08-15"
+            ]
+          },
+          "base_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)"
+          },
+          "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL for managed webhook endpoint registration"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "description": "Webhook signing secret (whsec_...) for signature verification"
+          },
+          "websocket": {
+            "type": "boolean",
+            "description": "Enable WebSocket streaming for live events"
+          },
+          "poll_events": {
+            "type": "boolean",
+            "description": "Enable events API polling for incremental sync after backfill"
+          },
+          "webhook_port": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Port for built-in webhook HTTP listener (e.g. 4242)"
+          },
+          "revalidate_objects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Object types to re-fetch from Stripe API on webhook (e.g. [\"subscription\"])"
+          },
+          "backfill_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Max objects to backfill per stream (useful for testing)"
+          },
+          "rate_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Max Stripe API requests per second (default: 25)"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "additionalProperties": false
+      },
+      "DestinationConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "postgres"
+              },
+              "postgres": {
+                "$ref": "#/components/schemas/DestinationPostgresConfig"
+              }
+            },
+            "required": [
+              "type",
+              "postgres"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "google_sheets"
+              },
+              "google_sheets": {
+                "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
+              }
+            },
+            "required": [
+              "type",
+              "google_sheets"
+            ]
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "type"
+        }
+      },
+      "DestinationPostgresConfig": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Postgres connection string (alias for connection_string)"
+          },
+          "connection_string": {
+            "type": "string",
+            "description": "Postgres connection string"
+          },
+          "host": {
+            "type": "string",
+            "description": "Postgres host (required for AWS IAM)"
+          },
+          "port": {
+            "default": 5432,
+            "type": "number",
+            "description": "Postgres port"
+          },
+          "database": {
+            "type": "string",
+            "description": "Database name (required for AWS IAM)"
+          },
+          "user": {
+            "type": "string",
+            "description": "Database user (required for AWS IAM)"
+          },
+          "schema": {
+            "type": "string",
+            "description": "Target schema name (e.g. \"stripe_sync\")"
+          },
+          "batch_size": {
+            "default": 100,
+            "type": "number",
+            "description": "Records to buffer before flushing"
+          },
+          "aws": {
+            "type": "object",
+            "properties": {
+              "region": {
+                "type": "string",
+                "description": "AWS region for RDS instance"
+              },
+              "role_arn": {
+                "type": "string",
+                "description": "IAM role ARN to assume (cross-account)"
+              },
+              "external_id": {
+                "type": "string",
+                "description": "External ID for STS AssumeRole"
+              }
+            },
+            "required": [
+              "region"
+            ],
+            "additionalProperties": false,
+            "description": "AWS RDS IAM authentication config"
+          },
+          "ssl_ca_pem": {
+            "type": "string",
+            "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)"
+          }
+        },
+        "required": [
+          "schema"
+        ],
+        "additionalProperties": false
+      },
+      "DestinationGoogleSheetsConfig": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)"
+          },
+          "access_token": {
+            "type": "string",
+            "description": "OAuth2 access token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "OAuth2 refresh token"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "description": "Target spreadsheet ID (created if omitted)"
+          },
+          "spreadsheet_title": {
+            "default": "Stripe Sync",
+            "type": "string",
+            "description": "Title when creating a new spreadsheet"
+          },
+          "batch_size": {
+            "default": 50,
+            "type": "number",
+            "description": "Rows per Sheets API append call"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token"
+        ],
+        "additionalProperties": false
+      },
+      "SyncState": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "additionalProperties": false,
+            "description": "Source connector state — cursors, backfill progress, events cursors."
+          },
+          "destination": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "additionalProperties": false,
+            "description": "Destination connector state — reserved for future use."
+          },
+          "engine": {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Per-stream checkpoint data, keyed by stream name."
+              },
+              "global": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Section-wide state shared across all streams."
+              }
+            },
+            "required": [
+              "streams",
+              "global"
+            ],
+            "additionalProperties": false,
+            "description": "Engine-managed state — cumulative record counts, sync metadata not owned by connectors."
+          }
+        },
+        "required": [
+          "source",
+          "destination",
+          "engine"
+        ],
+        "additionalProperties": false,
+        "description": "Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing."
+      }
+    }
+  }
+}

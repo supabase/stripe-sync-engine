@@ -1,0 +1,48 @@
+{
+  "name": "@stripe/sync-destination-postgres",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "destination-postgres": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@stripe/sync-util-postgres": "workspace:*",
+    "pg": "^8.16.3",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-sts": "^3",
+    "@aws-sdk/rds-signer": "^3"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-sts": {
+      "optional": true
+    },
+    "@aws-sdk/rds-signer": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aws-sdk/client-sts": "^3.1013.0",
+    "@aws-sdk/rds-signer": "^3.1013.0",
+    "@types/pg": "^8.15.5",
+    "vitest": "^3.2.4"
+  }
+}

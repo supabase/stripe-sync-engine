@@ -1,0 +1,48 @@
+{
+  "name": "@stripe/sync-ts-cli",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "bun": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./ndjson": {
+      "bun": "./src/ndjson.ts",
+      "types": "./dist/ndjson.d.ts",
+      "import": "./dist/ndjson.js"
+    },
+    "./openapi": {
+      "bun": "./src/openapi/index.ts",
+      "types": "./dist/openapi/index.d.ts",
+      "import": "./dist/openapi/index.js"
+    },
+    "./env-proxy": {
+      "bun": "./src/env-proxy.ts",
+      "types": "./dist/env-proxy.d.ts",
+      "import": "./dist/env-proxy.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "citty": "^0.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "vitest": "^3.2"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}

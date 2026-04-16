@@ -1,55 +1,95 @@
-# Sync Engine — Agent Instructions
+# Sync Engine
 
-## Build & Run
+Sync Stripe data to PostgreSQL (and other destinations) via a message-based protocol.
+Sources read from APIs, destinations write to databases, and the engine wires them together
+through typed async iterable streams. Connectors communicate via NDJSON when running as subprocesses.
 
-This is a pnpm monorepo. The main package is `packages/sync-engine`.
+## Quick Reference
 
 ```sh
 pnpm install
 pnpm build          # required before running CLI or e2e tests
+pnpm test           # unit tests (no deps needed)
+pnpm test:integration  # needs local Postgres
+pnpm test:e2e       # needs Docker + Stripe API keys in .env
 ```
 
-**You must build before running the CLI.** `tsx` and `node --experimental-strip-types`
-do not work because the codebase uses `?raw` imports (bundler feature) and
-`import ... with { type: 'json' }` (import attributes).
-
-For dev with auto-rebuild: `cd packages/sync-engine && pnpm dev`
-
-## Testing
+Before committing (CI enforces all three):
 
 ```sh
-pnpm test                # unit tests (no deps needed)
-pnpm test:integration    # needs local Postgres
-pnpm test:e2e            # needs Docker + Stripe API keys in .env
-```
-
-## Before Committing
-
-Always run these — CI enforces them:
-
-```sh
-pnpm format          # prettier (CI runs format:check)
+pnpm format          # prettier
 pnpm lint
 pnpm build
 ```
 
-If you edit migrations, also verify `migrations-embedded.ts` is up to date:
-`pnpm build && pnpm format` then check `git diff`.
+Minimum Node.js version: **24**. Dev with auto-rebuild: `pnpm --filter sync-engine dev`
 
-## Monorepo Layout
+If you add a migration, register it in `packages/state-postgres/src/migrations/index.ts`.
 
-- `packages/sync-engine` — core sync engine + CLI (published as `@stripe/sync-engine`)
-- `packages/fastify-app` — demo/reference Fastify app
-- `packages/sync-engine/src/supabase` — Supabase edge functions (Deno runtime, not Node)
+## Architecture at a Glance
 
-## GitHub Workflow
+Sources and destinations are isolated connectors that only depend on `protocol`.
+The engine loads connectors (in-process or subprocess), pipes source output through
+destination input, and manages state checkpoints. See [docs/architecture/packages.md](docs/architecture/packages.md)
+for the full dependency graph.
 
-When asked to push to GitHub, monitor CI checks until they all pass before
-reporting back. Don't just push and return — keep polling `gh pr checks` or
-`gh run watch` until all checks are green (or report failures if they occur).
+## Package Map
+
+| Package                              | Purpose                                                   | Depends on                               |
+| ------------------------------------ | --------------------------------------------------------- | ---------------------------------------- |
+| `packages/protocol`                  | Message types, Source/Destination interfaces, Zod schemas | `zod` only                               |
+| `packages/openapi`                   | Stripe OpenAPI spec fetching and parsing                  | standalone                               |
+| `packages/source-stripe`             | Stripe API source connector                               | `protocol`, `openapi`                    |
+| `packages/destination-postgres`      | Postgres destination connector                            | `protocol`, `util-postgres`              |
+| `packages/destination-google-sheets` | Google Sheets destination connector                       | `protocol`                               |
+| `packages/state-postgres`            | Postgres state store + migrations                         | `util-postgres`                          |
+| `packages/util-postgres`             | Shared Postgres utilities (upsert, rate limiter)          | standalone                               |
+| `packages/ts-cli`                    | Generic TypeScript module CLI runner                      | standalone                               |
+| `apps/engine`                        | Sync engine library + stateless CLI + HTTP API            | `protocol`, connectors, `state-postgres` |
+| `apps/service`                       | Stateful service (credentials, state management)          | `engine`                                 |
+| `apps/supabase`                      | Supabase edge functions (Deno runtime)                    | `protocol`, `engine`, connectors         |
+| `e2e/`                               | Cross-package conformance and layer tests                 | all packages                             |
+
+## Key Rules
+
+0. **This file is an index, not a rulebook** — before adding anything here, check if it belongs in [docs/architecture/principles.md](docs/architecture/principles.md), [docs/architecture/decisions.md](docs/architecture/decisions.md), or another doc first. Only add to AGENTS.md if no better home exists.
+1. **Connector isolation** — sources never import destinations, both depend only on `protocol`. Enforced by `e2e/layers.test.ts`.
+2. **State is a message** — connectors never access state storage directly. State in = `cursor_in`; state out = `SourceStateMessage`.
+3. **Snake_case on the wire** — all Zod schemas and JSON wire format use snake_case.
+4. **api_version is required** — always mandatory in Stripe source config. Never optional.
+5. **Tests fail loud** — no silent skips when dependencies are unavailable.
+
+See [docs/architecture/principles.md](docs/architecture/principles.md) for the complete list.
+
+## Where to Find Things
+
+- **Architecture & layers:** [docs/architecture/](docs/architecture/)
+- **Design decisions:** [docs/architecture/decisions.md](docs/architecture/decisions.md)
+- **Engine internals:** [docs/engine/](docs/engine/)
+- **Service internals:** [docs/service/](docs/service/)
+- **Plans & RFCs:** [docs/plans/](docs/plans/)
+- **Guides (CLI, publishing, tsconfig):** [docs/guides/](docs/guides/)
+- **OpenAPI specs:** `apps/{engine,service}/src/__generated__/openapi.json`
+- **CI:** [.github/workflows/ci.yml](.github/workflows/ci.yml)
+
+## Conventions
+
+- All serializable inputs/outputs (Zod schemas, JSON wire format) must use **snake_case** field names.
+- Source connectors must use `console.error` for logging (stdout is the NDJSON stream).
+- Generated OpenAPI specs live in each package's `src/__generated__/openapi.json`. Run `./scripts/generate-openapi.sh` and commit the output before pushing when schemas change. Never edit generated files by hand.
+- Non-trivial PRs should be accompanied by a plan artifact in `docs/plans/YYYY-MM-DD-<slug>.md`. Save it before or alongside the first implementation commit.
 
 ## Key Gotchas
 
-- `tsx` fails on this project — `?raw` imports pull in Deno-only code. Use built output.
-- `packages/sync-engine/src/supabase` is Deno, not Node. Don't try to run those files with Node/tsx.
+- `tsx` fails on `apps/supabase` — `?raw` imports pull in Deno-only code. Other packages work fine with `npx tsx`.
+- `packages/sync-engine/src/supabase` is Deno, not Node. Don't run those files with Node/tsx.
 - E2E tests need Stripe keys with **write** permissions (they create real objects).
+- The npm-bundled `esbuild` binary is blocked by Santa (endpoint security). Set `ESBUILD_BINARY_PATH` to the Homebrew-installed binary: `source scripts/prefer-system-esbuild.sh` or add it to your `.envrc`. `apps/supabase/build.mjs` auto-detects the system binary, but tools like `vite` and `tsx` need the env var set in the shell.
+
+## Worktrees
+
+When creating git worktrees, always use `.worktrees/` at the repo root — **not** `.claude/worktrees/`.
+
+```sh
+git worktree add .worktrees/<name> <branch>
+```

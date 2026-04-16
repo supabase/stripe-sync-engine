@@ -1,29 +1,50 @@
-![Sync Stripe with PostgreSQL](./stripe-sync-engine.jpg)
+---
+title: Stripe Sync Engine
+---
 
 # Stripe Sync Engine
 
-Sync Stripe data into PostgreSQL for analytics, reporting, and operational workflows.
+Sync your Stripe data to PostgreSQL — backfill historical objects, then keep them
+up to date with live events via webhooks or WebSocket.
 
-This project keeps your Stripe resources in sync with a `stripe` schema in Postgres and supports both one-off backfills and continuous sync.
+## Features
 
----
+- **Full backfill** — paginate through Stripe list APIs and upsert into Postgres
+- **Live sync** — receive events via webhook server or WebSocket and apply changes in real time
+- **Resumable** — cursor-based state tracking lets you stop and restart without re-syncing
+- **Schema projection** — automatically creates and evolves Postgres tables from Stripe's OpenAPI spec
+- **Pluggable** — source and destination are separate connectors; Postgres is the default destination
 
-## How It Works
+## Quick start
 
-![How it works](./sync-engine-how.png)
-
-- Creates and migrates the `stripe` schema in your Postgres database
-- Processes Stripe events through webhook or websocket listeners
-- Upserts Stripe objects into Postgres tables designed for queryability
-- Tracks sync progress with resumable status metadata
-
----
+```sh
+npx @stripe/sync-engine sync \
+  --stripe-api-key sk_live_... \
+  --database-url postgresql://localhost:5432/mydb \
+  --schema stripe
+```
 
 ## Documentation
 
-- [TypeScript usage](./typescript.md)
-- [Docker deployment](./docker.md)
-- [Supabase Edge Functions](./edge-function.md)
-- [Postgres schema reference](./postgres-schema.md)
-- [Webhook event support matrix](./webhook-event-support.md)
-- [Contributing](./contributing.md)
+- [Architecture & packages](/architecture/packages.html)
+- [Cloud architecture](/architecture/cloud.html)
+- [Engine internals](/engine/ARCHITECTURE.html)
+- [Service internals](/service/ARCHITECTURE.html)
+- [Plans & RFCs](/plans/)
+- [Guides](/guides/)
+
+## API Reference
+
+- [Engine API](/engine.html) — HTTP API for running syncs
+- [Stripe API Specs](/stripe-api-specs/) — CDN mirror of official Stripe OpenAPI specs (all versions)
+
+## Slides
+
+- [Architecture overview](/slides/architecture/)
+- [Protocol demo — live coding](/slides/demo/)
+
+## Links
+
+- [Docs](https://stripe-sync-engine.dev/)
+- [GitHub](https://github.com/stripe/sync-engine)
+- [npm](https://www.npmjs.com/package/@stripe/sync-engine)

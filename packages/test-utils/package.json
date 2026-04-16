@@ -1,0 +1,35 @@
+{
+  "name": "@stripe/sync-test-utils",
+  "version": "0.2.5",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "sync-test-utils-server": "./dist/bin/start-test-server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@stripe/sync-destination-postgres": "workspace:*",
+    "@stripe/sync-openapi": "workspace:*",
+    "hono": "^4.12.8",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.5",
+    "vitest": "^3.2.4"
+  }
+}

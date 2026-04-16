@@ -1,0 +1,18 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/protocol" },
+    { "path": "packages/openapi" },
+    { "path": "packages/source-stripe" },
+    { "path": "packages/destination-postgres" },
+    { "path": "packages/destination-google-sheets" },
+    { "path": "packages/state-postgres" },
+    { "path": "packages/util-postgres" },
+    { "path": "packages/hono-zod-openapi" },
+    { "path": "packages/ts-cli" },
+    { "path": "packages/test-utils" },
+    { "path": "apps/engine" },
+    { "path": "apps/service" },
+    { "path": "e2e" }
+  ]
+}

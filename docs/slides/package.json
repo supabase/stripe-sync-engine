@@ -1,0 +1,12 @@
+{
+  "name": "sync-engine-slides",
+  "private": true,
+  "scripts": {
+    "demo": "docker build --build-arg SLIDES=demo.md -t slides-demo . && exec docker run --rm -p 3030:3030 slides-demo",
+    "arch": "docker build --build-arg SLIDES=architecture.md -t slides-arch . && exec docker run --rm -p 3030:3030 slides-arch"
+  },
+  "dependencies": {
+    "@slidev/cli": "latest",
+    "@slidev/theme-default": "latest"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@stripe/sync-util-postgres",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "^8.16.3",
+    "pino": "^10"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.5",
+    "vitest": "^3.2.1"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}
