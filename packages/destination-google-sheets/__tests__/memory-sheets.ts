@@ -195,5 +195,9 @@ export function createMemorySheets() {
     return ss.sheets.get(sheetName)?.values
   }
 
-  return { sheets, getData }
+  function getSpreadsheetIds(): string[] {
+    return Array.from(store.keys())
+  }
+
+  return { sheets, getData, getSpreadsheetIds }
 }

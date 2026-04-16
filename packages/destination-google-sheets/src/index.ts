@@ -114,28 +114,16 @@ function extendHeaders(
  * Pass a `sheetsClient` to inject a fake for testing; omit it for production
  * (each method creates a real client from config credentials).
  */
-export function createDestination(
-  sheetsClient?: sheets_v4.Sheets
-): Destination<Config> & { readonly spreadsheetId: string | undefined } {
-  let spreadsheetId: string | undefined
-
+export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<Config> {
   const destination = {
-    /** The spreadsheet ID after write() has created/resolved it. */
-    get spreadsheetId() {
-      return spreadsheetId
-    },
-
     async *spec() {
       yield { type: 'spec' as const, spec: defaultSpec }
     },
 
     async *setup({ config, catalog }) {
-      if (config.spreadsheet_id) {
-        spreadsheetId = config.spreadsheet_id
-        return
-      }
+      if (config.spreadsheet_id) return
       const sheets = sheetsClient ?? makeSheetsClient(config)
-      spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
+      const spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
       // Create the Overview intro tab first (handles "Sheet1" rename if needed)
       const streamNames = catalog.streams.map((s) => s.stream.name)
@@ -193,11 +181,9 @@ export function createDestination(
         ])
       )
 
-      if (config.spreadsheet_id) {
-        spreadsheetId = config.spreadsheet_id
-      } else {
-        spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
-      }
+      const spreadsheetId = config.spreadsheet_id
+        ? config.spreadsheet_id
+        : await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
       // Per-stream state: column headers plus buffered appends/updates.
       const streamHeaders = new Map<string, string[]>()
@@ -220,7 +206,7 @@ export function createDestination(
 
         if (!headers) {
           try {
-            headers = await readHeaderRow(sheets, spreadsheetId!, streamName)
+            headers = await readHeaderRow(sheets, spreadsheetId, streamName)
           } catch (error) {
             const code =
               error instanceof Error && 'code' in error
@@ -236,7 +222,7 @@ export function createDestination(
             const pkFields = pk?.map((path) => path[0]) ?? []
             const rest = Object.keys(cleanData).filter((k) => !pkFields.includes(k))
             headers = [...pkFields.filter((k) => k in cleanData), ...rest]
-            await ensureSheet(sheets, spreadsheetId!, streamName, headers)
+            await ensureSheet(sheets, spreadsheetId, streamName, headers)
           }
 
           streamHeaders.set(streamName, headers)
@@ -247,7 +233,7 @@ export function createDestination(
 
         const next = extendHeaders(headers, cleanData)
         if (next.changed) {
-          await ensureSheet(sheets, spreadsheetId!, streamName, next.headers)
+          await ensureSheet(sheets, spreadsheetId, streamName, next.headers)
           streamHeaders.set(streamName, next.headers)
           headers = next.headers
         }
@@ -262,7 +248,7 @@ export function createDestination(
           const headers = streamHeaders.get(streamName)
           if (primaryKey && primaryKey.length > 0 && headers) {
             try {
-              map = await buildRowMap(sheets, spreadsheetId!, streamName, headers, primaryKey)
+              map = await buildRowMap(sheets, spreadsheetId, streamName, headers, primaryKey)
               rowMapRefreshed.add(streamName)
             } catch {
               map = new Map() // sheet doesn't exist yet or is empty
@@ -278,7 +264,7 @@ export function createDestination(
       const flushStream = async (streamName: string) => {
         const updates = updateBuffers.get(streamName)
         if (updates && updates.length > 0) {
-          await updateRows(sheets, spreadsheetId!, streamName, updates)
+          await updateRows(sheets, spreadsheetId, streamName, updates)
           updateBuffers.set(streamName, [])
         }
 
@@ -286,9 +272,8 @@ export function createDestination(
         if (!appends || appends.length === 0) return
 
         // On the first flush per stream, refresh the row map from the sheet
-        // to catch rows written by concurrent write() calls (e.g. liveLoop +
-        // reconcileLoop) or Temporal activity retries. Only done once per
-        // write() to avoid excessive API calls.
+        // to catch rows written by previous write() calls or Temporal activity
+        // retries. Only done once per write() to avoid excessive API calls.
         const primaryKey = primaryKeys.get(streamName)
         const headers = streamHeaders.get(streamName)
         if (
@@ -300,7 +285,13 @@ export function createDestination(
         ) {
           rowMapRefreshed.add(streamName)
           try {
-            const freshMap = await buildRowMap(sheets, spreadsheetId!, streamName, headers, primaryKey)
+            const freshMap = await buildRowMap(
+              sheets,
+              spreadsheetId,
+              streamName,
+              headers,
+              primaryKey
+            )
             rowMaps.set(streamName, freshMap)
 
             const lateUpdates: Array<{ rowNumber: number; values: string[] }> = []
@@ -315,7 +306,7 @@ export function createDestination(
             }
 
             if (lateUpdates.length > 0) {
-              await updateRows(sheets, spreadsheetId!, streamName, lateUpdates)
+              await updateRows(sheets, spreadsheetId, streamName, lateUpdates)
             }
             appends = remaining
           } catch {
@@ -331,7 +322,7 @@ export function createDestination(
 
         const range = await appendRows(
           sheets,
-          spreadsheetId!,
+          spreadsheetId,
           streamName,
           appends.map((entry) => entry.row)
         )
@@ -461,7 +452,7 @@ export function createDestination(
         },
       }
     },
-  } satisfies Destination<Config> & { spreadsheetId?: string }
+  } satisfies Destination<Config>
 
   return destination
 }

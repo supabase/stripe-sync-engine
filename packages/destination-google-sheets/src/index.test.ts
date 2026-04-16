@@ -51,7 +51,7 @@ function cfg(overrides: Partial<Config> = {}): Config {
 
 describe('destination-google-sheets', () => {
   it('header discovery — first record keys become header row', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -60,14 +60,14 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'users')!
     expect(rows[0]).toEqual(['id', 'name', 'email'])
     expect(rows[1]).toEqual(['u1', 'Alice', 'alice@test.invalid'])
   })
 
   it('batching — flushes when batch_size is reached', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -80,7 +80,7 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg({ batch_size: 3 }), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'items')!
     // header + 5 data rows (batch at 3, then remaining 2 flushed at end)
     expect(rows).toHaveLength(6)
@@ -89,7 +89,7 @@ describe('destination-google-sheets', () => {
   })
 
   it('state passthrough — flushes buffer then re-emits state', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -112,13 +112,13 @@ describe('destination-google-sheets', () => {
     })
 
     // All 3 records should be written (2 flushed by state, 1 flushed at end)
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'orders')!
     expect(rows).toHaveLength(4) // header + 3 rows
   })
 
   it('multi-stream — two streams get independent tabs and headers', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -130,7 +130,7 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
 
     const customerRows = getData(id, 'customers')!
     expect(customerRows[0]).toEqual(['id', 'name'])
@@ -142,7 +142,7 @@ describe('destination-google-sheets', () => {
   })
 
   it('spreadsheet creation — auto-creates when no spreadsheet_id given', async () => {
-    const { sheets } = createMemorySheets()
+    const { sheets, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('data', { x: 1 })]
@@ -151,12 +151,12 @@ describe('destination-google-sheets', () => {
       dest.write({ config: cfg({ spreadsheet_id: '' }), catalog }, toAsyncIter(messages))
     )
 
-    expect(dest.spreadsheetId).toBeTruthy()
-    expect(dest.spreadsheetId).toMatch(/^mem_ss_/)
+    expect(getSpreadsheetIds()[0]).toBeTruthy()
+    expect(getSpreadsheetIds()[0]).toMatch(/^mem_ss_/)
   })
 
   it('uses existing spreadsheet_id when provided', async () => {
-    const { sheets } = createMemorySheets()
+    const { sheets, getData } = createMemorySheets()
 
     // Pre-create a spreadsheet
     const res = await sheets.spreadsheets.create({
@@ -171,25 +171,25 @@ describe('destination-google-sheets', () => {
       dest.write({ config: cfg({ spreadsheet_id: existingId }), catalog }, toAsyncIter(messages))
     )
 
-    expect(dest.spreadsheetId).toBe(existingId)
+    expect(getData(existingId, 'data')).toBeDefined()
   })
 
   it('Sheet1 rename — first stream renames the default tab', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [record('my_stream', { a: 1 })]
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     // Default "Sheet1" should have been renamed to "my_stream"
     expect(getData(id, 'Sheet1')).toBeUndefined()
     expect(getData(id, 'my_stream')).toBeDefined()
   })
 
   it('end-of-stream flush — remaining buffered rows written when input ends', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -200,13 +200,13 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'events')!
     expect(rows).toHaveLength(3) // header + 2 rows
   })
 
   it('value stringification — null, numbers, booleans, objects', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -221,13 +221,13 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const id = dest.spreadsheetId!
+    const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'types')!
     expect(rows[1]).toEqual(['hello', '42', 'true', '', '{"nested":true}'])
   })
 
   it('readSheet helper — reads back data through the fake client', async () => {
-    const { sheets } = createMemorySheets()
+    const { sheets, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     const messages: DestinationInput[] = [
@@ -237,7 +237,7 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const rows = await readSheet(sheets, dest.spreadsheetId!, 'test')
+    const rows = await readSheet(sheets, getSpreadsheetIds()[0], 'test')
     expect(rows).toEqual([
       ['a', 'b'],
       ['1', '2'],
@@ -294,7 +294,7 @@ describe('check', () => {
   })
 
   it('updates existing rows and emits row assignments for new appends', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const configuredCatalog: ConfiguredCatalog = {
       streams: [
@@ -332,7 +332,7 @@ describe('check', () => {
     const output = await collect(
       dest.write(
         {
-          config: cfg({ spreadsheet_id: dest.spreadsheetId! }),
+          config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }),
           catalog: configuredCatalog,
         },
         toAsyncIter([
@@ -351,7 +351,7 @@ describe('check', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -370,7 +370,7 @@ describe('check', () => {
   })
 
   it('extends existing headers when a later write introduces new fields', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
     await collect(
@@ -382,7 +382,7 @@ describe('check', () => {
 
     await collect(
       dest.write(
-        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog },
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog },
         toAsyncIter([
           record('customers', {
             id: 'cus_2',
@@ -393,7 +393,7 @@ describe('check', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows[0]).toEqual(['id', 'name', 'email'])
     expect(rows[1]).toEqual(['cus_1', 'Alice'])
     expect(rows[2]).toEqual(['cus_2', 'Bob', 'bob@test.invalid'])
@@ -419,7 +419,7 @@ describe('native upsert', () => {
   })
 
   it('updates existing row by primary key without _row_number', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -434,12 +434,12 @@ describe('native upsert', () => {
     // Second write: same PK, no _row_number — should update in place
     await collect(
       dest.write(
-        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -447,7 +447,7 @@ describe('native upsert', () => {
   })
 
   it('appends new key alongside existing rows', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -460,12 +460,12 @@ describe('native upsert', () => {
 
     await collect(
       dest.write(
-        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob' })])
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -474,7 +474,7 @@ describe('native upsert', () => {
   })
 
   it('duplicate key within same write — second occurrence updates', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -489,7 +489,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -497,7 +497,7 @@ describe('native upsert', () => {
   })
 
   it('duplicate key within same batch — deduped before flush', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -512,7 +512,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -520,7 +520,7 @@ describe('native upsert', () => {
   })
 
   it('concurrent writes — flush-time refresh prevents duplicates', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest1 = createDestination(sheets)
     const cat = catalogWith()
 
@@ -538,20 +538,59 @@ describe('native upsert', () => {
     const dest2 = createDestination(sheets)
     await collect(
       dest2.write(
-        { config: cfg({ spreadsheet_id: dest1.spreadsheetId! }), catalog: cat },
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
       )
     )
 
-    const rows = getData(dest1.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
     ])
   })
 
+  it('concurrent setup — two pipelines get independent spreadsheets', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    const [out1, out2] = await Promise.all([
+      collect(
+        dest.write(
+          { config: cfg({ spreadsheet_title: 'Pipeline A' }), catalog: cat },
+          toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+        )
+      ),
+      collect(
+        dest.write(
+          { config: cfg({ spreadsheet_title: 'Pipeline B' }), catalog: cat },
+          toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob' })])
+        )
+      ),
+    ])
+
+    const ids = getSpreadsheetIds()
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).not.toBe(ids[1])
+
+    const rowsA = getData(ids[0], 'customers')!
+    const rowsB = getData(ids[1], 'customers')!
+    expect(rowsA).toHaveLength(2)
+    expect(rowsB).toHaveLength(2)
+
+    const names = [rowsA[1]![1], rowsB[1]![1]].sort()
+    expect(names).toEqual(['Alice', 'Bob'])
+
+    const logsA = out1.filter((m) => m.type === 'log' && m.log.level === 'info')
+    const logsB = out2.filter((m) => m.type === 'log' && m.log.level === 'info')
+    const ssidA = logsA[0]?.log.message.match(/spreadsheet (.+)/)?.[1]
+    const ssidB = logsB[0]?.log.message.match(/spreadsheet (.+)/)?.[1]
+    expect(ssidA).not.toBe(ssidB)
+  })
+
   it('explicit _row_number takes priority over row map lookup', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -569,7 +608,7 @@ describe('native upsert', () => {
     // Send cus_1 with explicit _row_number=3 (Bob's row) — should override map lookup
     await collect(
       dest.write(
-        { config: cfg({ spreadsheet_id: dest.spreadsheetId! }), catalog: cat },
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
         toAsyncIter([
           record('customers', {
             id: 'cus_1',
@@ -580,7 +619,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -589,7 +628,7 @@ describe('native upsert', () => {
   })
 
   it('no primary key — append-only, no dedup', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith([]) // empty primary key
 
@@ -603,7 +642,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -612,7 +651,7 @@ describe('native upsert', () => {
   })
 
   it('PK-first header ordering — id column is first', async () => {
-    const { sheets, getData } = createMemorySheets()
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
     const cat = catalogWith()
 
@@ -626,7 +665,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(dest.spreadsheetId!, 'customers')!
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
     // id should be first column despite being last in the record
     expect(rows[0]).toEqual(['id', 'name', 'email'])
   })
