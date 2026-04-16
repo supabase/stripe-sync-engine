@@ -496,6 +496,60 @@ describe('native upsert', () => {
     ])
   })
 
+  it('duplicate key within same batch — deduped before flush', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // Both records land in the same batch (default batch_size=50), so no flush in between
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice' }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated' }),
+        ])
+      )
+    )
+
+    const rows = getData(dest.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice Updated'],
+    ])
+  })
+
+  it('concurrent writes — flush-time refresh prevents duplicates', async () => {
+    const { sheets, getData } = createMemorySheets()
+    const dest1 = createDestination(sheets)
+    const cat = catalogWith()
+
+    // dest1 writes cus_1
+    await collect(
+      dest1.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+      )
+    )
+
+    // dest2 simulates a concurrent write() call (e.g. from reconcileLoop)
+    // that has cus_1 buffered. Because it shares the same sheets backend,
+    // flushStream's row map refresh sees the row dest1 already wrote.
+    const dest2 = createDestination(sheets)
+    await collect(
+      dest2.write(
+        { config: cfg({ spreadsheet_id: dest1.spreadsheetId! }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice Updated' })])
+      )
+    )
+
+    const rows = getData(dest1.spreadsheetId!, 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name'],
+      ['cus_1', 'Alice Updated'],
+    ])
+  })
+
   it('explicit _row_number takes priority over row map lookup', async () => {
     const { sheets, getData } = createMemorySheets()
     const dest = createDestination(sheets)

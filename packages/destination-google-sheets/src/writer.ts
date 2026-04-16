@@ -210,14 +210,19 @@ export async function createIntroSheet(
   }
 
   const now = new Date().toISOString()
-  const rows = [
+  const rows: string[][] = [
     ['Stripe Sync Engine'],
     [''],
     ['This spreadsheet is managed by Stripe Sync Engine.'],
     ['Data is synced automatically from your Stripe account.'],
     [''],
-    ['Synced streams:'],
-    ...streamNames.map((name) => [`  • ${name}`]),
+    ['Synced streams:', '', 'Unique rows', 'Duplicate rows'],
+    ...streamNames.map((name) => [
+      `  • ${name}`,
+      '',
+      `=COUNTUNIQUE('${name}'!A2:A)`,
+      `=COUNTA('${name}'!A2:A)-COUNTUNIQUE('${name}'!A2:A)`,
+    ]),
     [''],
     [`Last setup: ${now}`],
     [''],
@@ -228,7 +233,7 @@ export async function createIntroSheet(
     sheets.spreadsheets.values.update({
       spreadsheetId,
       range: `'${TITLE}'!A1`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       requestBody: { values: rows },
     })
   )

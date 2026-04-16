@@ -206,6 +206,11 @@ export function createDestination(
       const rowAssignments: Record<string, Record<string, number>> = {}
       // Row maps for native upsert: rowKey → 1-based row number per stream
       const rowMaps = new Map<string, Map<string, number>>()
+      // Tracks whether we've refreshed the row map from the sheet for each stream
+      // (once per write() call, on first flush)
+      const rowMapRefreshed = new Set<string>()
+      // Pending append index: rowKey → index in appendBuffers for O(1) in-batch dedup
+      const appendKeyIndex = new Map<string, Map<string, number>>()
 
       const ensureHeadersForRecord = async (
         streamName: string,
@@ -236,6 +241,7 @@ export function createDestination(
 
           streamHeaders.set(streamName, headers)
           appendBuffers.set(streamName, [])
+          appendKeyIndex.set(streamName, new Map())
           updateBuffers.set(streamName, [])
         }
 
@@ -257,6 +263,7 @@ export function createDestination(
           if (primaryKey && primaryKey.length > 0 && headers) {
             try {
               map = await buildRowMap(sheets, spreadsheetId!, streamName, headers, primaryKey)
+              rowMapRefreshed.add(streamName)
             } catch {
               map = new Map() // sheet doesn't exist yet or is empty
             }
@@ -275,8 +282,52 @@ export function createDestination(
           updateBuffers.set(streamName, [])
         }
 
-        const appends = appendBuffers.get(streamName)
+        let appends = appendBuffers.get(streamName)
         if (!appends || appends.length === 0) return
+
+        // On the first flush per stream, refresh the row map from the sheet
+        // to catch rows written by concurrent write() calls (e.g. liveLoop +
+        // reconcileLoop) or Temporal activity retries. Only done once per
+        // write() to avoid excessive API calls.
+        const primaryKey = primaryKeys.get(streamName)
+        const headers = streamHeaders.get(streamName)
+        if (
+          !rowMapRefreshed.has(streamName) &&
+          primaryKey &&
+          primaryKey.length > 0 &&
+          headers &&
+          appends.some((e) => e.rowKey)
+        ) {
+          rowMapRefreshed.add(streamName)
+          try {
+            const freshMap = await buildRowMap(sheets, spreadsheetId!, streamName, headers, primaryKey)
+            rowMaps.set(streamName, freshMap)
+
+            const lateUpdates: Array<{ rowNumber: number; values: string[] }> = []
+            const remaining: typeof appends = []
+            for (const entry of appends) {
+              const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
+              if (existing !== undefined) {
+                lateUpdates.push({ rowNumber: existing, values: entry.row })
+              } else {
+                remaining.push(entry)
+              }
+            }
+
+            if (lateUpdates.length > 0) {
+              await updateRows(sheets, spreadsheetId!, streamName, lateUpdates)
+            }
+            appends = remaining
+          } catch {
+            // Sheet read failed — proceed with append (best effort)
+          }
+        }
+
+        if (appends.length === 0) {
+          appendBuffers.set(streamName, [])
+          appendKeyIndex.get(streamName)?.clear()
+          return
+        }
 
         const range = await appendRows(
           sheets,
@@ -292,10 +343,11 @@ export function createDestination(
             const rowNumber = range.startRow + index
             rowAssignments[streamName] ??= {}
             rowAssignments[streamName][rowKey] = rowNumber
-            map?.set(rowKey, rowNumber) // keep row map in sync for subsequent records
+            map?.set(rowKey, rowNumber)
           }
         }
         appendBuffers.set(streamName, [])
+        appendKeyIndex.get(streamName)?.clear()
       }
 
       const flushAll = async () => {
@@ -317,7 +369,7 @@ export function createDestination(
             const rowKey =
               typeof data[ROW_KEY_FIELD] === 'string'
                 ? data[ROW_KEY_FIELD]
-                : primaryKey
+                : primaryKey && primaryKey.length > 0
                   ? serializeRowKey(primaryKey, cleanData)
                   : undefined
 
@@ -331,7 +383,15 @@ export function createDestination(
               if (existingRow !== undefined) {
                 updateBuffers.get(stream)!.push({ rowNumber: existingRow, values: row })
               } else {
-                appendBuffers.get(stream)!.push({ row, rowKey })
+                const buffer = appendBuffers.get(stream)!
+                const keyIdx = appendKeyIndex.get(stream)!
+                const pendingIdx = keyIdx.get(rowKey)
+                if (pendingIdx !== undefined) {
+                  buffer[pendingIdx] = { row, rowKey }
+                } else {
+                  keyIdx.set(rowKey, buffer.length)
+                  buffer.push({ row, rowKey })
+                }
               }
             } else {
               // 3. No key at all — pure append
