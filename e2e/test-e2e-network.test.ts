@@ -244,7 +244,7 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 10,
       })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
@@ -272,7 +272,7 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 10,
       })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
@@ -306,7 +306,7 @@ describe('network interruption e2e via Docker service', () => {
     try {
       harness = await startServiceHarness({ customerCount: 400 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 10,
       })
 
       const rowsBeforePause = await waitForPartialRows(harness, schema, harness.expectedIds.length)
