@@ -34,7 +34,6 @@ describe('test-server sync via Docker service: 10k customers', () => {
               api_key: 'sk_test_fake',
               api_version: BUNDLED_API_VERSION,
               base_url: harness.testServerContainerUrl(),
-              rate_limit: 1000,
             },
           },
           destination: {
