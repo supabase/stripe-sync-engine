@@ -237,10 +237,10 @@ export function createStripeSource(
         (async function* () {
           const apiVersion = config.api_version ?? BUNDLED_API_VERSION
 
-          // Derive concurrency params from API key mode
+          // Derive concurrency params from API key mode (overridable via config)
           const liveMode =
             config.api_key.startsWith('sk_live_') || config.api_key.startsWith('rk_live_')
-          const maxRequestsPerSecond = liveMode ? 20 : 10
+          const maxRequestsPerSecond = config.rate_limit ?? (liveMode ? 20 : 10)
           const maxConcurrentStreams = Math.min(
             config.max_concurrent_streams ?? 5,
             catalog.streams.length

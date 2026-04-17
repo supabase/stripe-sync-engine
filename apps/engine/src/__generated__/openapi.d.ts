@@ -271,6 +271,8 @@ export interface components {
             backfill_limit?: number;
             /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
             max_concurrent_streams?: number;
+            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
+            rate_limit?: number;
         };
         DestinationConfig: {
             /** @constant */

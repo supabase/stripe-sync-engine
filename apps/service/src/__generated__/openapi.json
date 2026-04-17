@@ -1498,6 +1498,12 @@
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991,
             "description": "Max streams paginating in parallel (default: 5, capped at catalog size)."
+          },
+          "rate_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test)."
           }
         },
         "required": [

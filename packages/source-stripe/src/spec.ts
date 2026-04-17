@@ -50,6 +50,14 @@ export const configSchema = z.object({
     .positive()
     .optional()
     .describe('Max streams paginating in parallel (default: 5, capped at catalog size).'),
+  rate_limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test).'
+    ),
 })
 
 export type Config = z.infer<typeof configSchema>
