@@ -12,6 +12,7 @@ import {
   ConfiguredCatalog,
   SyncOutput,
   SyncState,
+  SectionState,
   RecordMessage,
   SourceStateMessage,
   coerceSyncState,
@@ -23,7 +24,7 @@ import {
 } from '@stripe/sync-protocol'
 
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
-import { trackProgress, createRecordCounter } from './progress.js'
+import { trackProgress, createRecordCounter, mergeRanges } from './progress.js'
 import { applySelection } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 import { logger } from '../logger.js'
@@ -304,6 +305,31 @@ async function discoverCatalog(
   return { catalog, filteredCatalog }
 }
 
+/**
+ * Inject `time_range` into each ConfiguredStream based on engine-tracked `completed_ranges`.
+ *
+ * If a stream has contiguous completed_ranges from the beginning, `time_range.gte` is set
+ * to the end of that contiguous block (resume from where we left off). The source's
+ * `remaining` state handles fine-grained resume within the assigned range.
+ *
+ * Mutates `catalog.streams` in place for efficiency.
+ */
+export function injectTimeRanges(catalog: ConfiguredCatalog, engineState?: SectionState): void {
+  if (!engineState?.streams) return
+  for (const cs of catalog.streams) {
+    const data = engineState.streams[cs.stream.name] as
+      | { completed_ranges?: Array<{ gte: string; lt: string }> }
+      | undefined
+    if (!data?.completed_ranges?.length) continue
+    const merged = mergeRanges(data.completed_ranges)
+    const maxLt = merged.reduce((max, r) => (r.lt > max ? r.lt : max), merged[0]!.lt)
+    cs.time_range = {
+      gte: maxLt,
+      lt: cs.time_range?.lt ?? new Date().toISOString(),
+    }
+  }
+}
+
 // MARK: - Factory
 
 /** Tag each message with `_emitted_by` and `_ts`. */
@@ -469,6 +495,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const sourceConfig = await getSpecConfig(connector, rawSrc)
           const { catalog } = await discoverCatalog(engine, pipeline)
           const normalizedState = coerceSyncState(opts?.state)
+          injectTimeRanges(catalog, normalizedState?.engine)
           const state = normalizedState?.source
 
           const raw = connector.read({ config: sourceConfig, catalog, state }, input)

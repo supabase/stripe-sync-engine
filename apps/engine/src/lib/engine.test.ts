@@ -25,7 +25,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { destinationTest } from './destination-test.js'
-import { createEngine } from './engine.js'
+import { buildCatalog, createEngine, injectTimeRanges } from './engine.js'
 import type { ConnectorResolver } from './resolver.js'
 import { sourceTest } from './source-test.js'
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -1335,5 +1335,81 @@ describe('engine cancellation integration', () => {
 
     expect(sourceAborted).toBe(true)
     expect(destinationAborted).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// injectTimeRanges tests
+// ---------------------------------------------------------------------------
+
+describe('injectTimeRanges', () => {
+  function mkCatalog(streamNames: string[]) {
+    return buildCatalog(streamNames.map((name) => ({ name, primary_key: [['id']] })))
+  }
+
+  it('does nothing when engineState is undefined', () => {
+    const catalog = mkCatalog(['customers'])
+    injectTimeRanges(catalog, undefined)
+    expect(catalog.streams[0]!.time_range).toBeUndefined()
+  })
+
+  it('does nothing when stream has no completed_ranges', () => {
+    const catalog = mkCatalog(['customers'])
+    injectTimeRanges(catalog, {
+      streams: { customers: { cumulative_record_count: 5 } },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range).toBeUndefined()
+  })
+
+  it('sets time_range.gte to max lt of completed_ranges', () => {
+    const catalog = mkCatalog(['customers'])
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [
+            { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+            { gte: '2024-06-01T00:00:00Z', lt: '2024-09-01T00:00:00Z' },
+          ],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-09-01T00:00:00Z')
+    expect(catalog.streams[0]!.time_range!.lt).toBeDefined()
+  })
+
+  it('preserves existing time_range.lt if already set', () => {
+    const catalog = mkCatalog(['customers'])
+    catalog.streams[0]!.time_range = {
+      gte: '2024-01-01T00:00:00Z',
+      lt: '2025-06-01T00:00:00Z',
+    }
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-09-01T00:00:00Z' }],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range).toEqual({
+      gte: '2024-09-01T00:00:00Z',
+      lt: '2025-06-01T00:00:00Z',
+    })
+  })
+
+  it('only injects into streams with completed_ranges', () => {
+    const catalog = mkCatalog(['customers', 'invoices'])
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
+    expect(catalog.streams[1]!.time_range).toBeUndefined()
   })
 })

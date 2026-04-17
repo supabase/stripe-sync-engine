@@ -1525,11 +1525,7 @@
                           "start",
                           "running",
                           "complete",
-                          "range_complete",
-                          "transient_error",
-                          "system_error",
-                          "config_error",
-                          "auth_error"
+                          "range_complete"
                         ],
                         "description": "Current phase of the stream within this sync run."
                       },
@@ -1965,11 +1961,7 @@
                         "start",
                         "running",
                         "complete",
-                        "range_complete",
-                        "transient_error",
-                        "system_error",
-                        "config_error",
-                        "auth_error"
+                        "range_complete"
                       ],
                       "description": "Final stream status."
                     },

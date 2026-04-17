@@ -271,16 +271,7 @@ export const TraceStreamStatus = z
   .object({
     stream: z.string().describe('Stream being reported on.'),
     status: z
-      .enum([
-        'start',
-        'running',
-        'complete',
-        'range_complete',
-        'transient_error',
-        'system_error',
-        'config_error',
-        'auth_error',
-      ])
+      .enum(['start', 'running', 'complete', 'range_complete'])
       .describe('Current phase of the stream within this sync run.'),
     range_complete: z
       .object({
@@ -398,16 +389,7 @@ export type TracePayload = z.infer<typeof TracePayload>
 export const EofStreamProgress = z
   .object({
     status: z
-      .enum([
-        'start',
-        'running',
-        'complete',
-        'range_complete',
-        'transient_error',
-        'system_error',
-        'config_error',
-        'auth_error',
-      ])
+      .enum(['start', 'running', 'complete', 'range_complete'])
       .describe('Final stream status.'),
     cumulative_record_count: z
       .number()

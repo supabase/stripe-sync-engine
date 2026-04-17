@@ -3,14 +3,36 @@ import type {
   SyncState,
   SyncOutput,
   TraceStreamStatus,
+  TraceError,
   TraceProgress,
   EofPayload,
   EofStreamProgress,
 } from '@stripe/sync-protocol'
 import { emptySyncState } from '@stripe/sync-protocol'
 
-type FailureType = 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
-type StreamError = { message: string; failure_type?: FailureType }
+type Range = { gte: string; lt: string }
+
+/**
+ * Merge overlapping or adjacent ISO 8601 ranges into a minimal sorted set.
+ * Assumes ranges use string-comparable timestamps (ISO 8601).
+ */
+export function mergeRanges(ranges: Range[]): Range[] {
+  if (ranges.length <= 1) return ranges.slice()
+  const sorted = ranges.slice().sort((a, b) => (a.gte < b.gte ? -1 : a.gte > b.gte ? 1 : 0))
+  const merged: Range[] = [{ ...sorted[0]! }]
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]!
+    const last = merged[merged.length - 1]!
+    if (cur.gte <= last.lt) {
+      last.lt = cur.lt > last.lt ? cur.lt : last.lt
+    } else {
+      merged.push({ ...cur })
+    }
+  }
+  return merged
+}
+
+type StreamError = { message: string; failure_type?: TraceError['failure_type'] }
 type Status = TraceStreamStatus['status']
 
 /**
@@ -60,13 +82,16 @@ export function trackProgress(opts: {
     const prevSnapshotCounts = new Map<string, number>()
     let stateCheckpointCount = 0
     const streamStatus = new Map<string, Status>()
+    const completedRanges = new Map<string, Range[]>()
 
-    // Restore stream statuses: engine state first, then source state overrides
-    // (source state is authoritative — streams the source skips emit no messages)
+    // Restore stream statuses and completed_ranges from engine state
     if (opts.initial_state?.engine?.streams) {
       for (const [stream, data] of Object.entries(opts.initial_state.engine.streams)) {
-        const status = (data as { status?: Status })?.status
-        if (status) streamStatus.set(stream, status)
+        const d = data as { status?: Status; completed_ranges?: Range[] }
+        if (d?.status) streamStatus.set(stream, d.status)
+        if (d?.completed_ranges && Array.isArray(d.completed_ranges)) {
+          completedRanges.set(stream, d.completed_ranges.slice())
+        }
       }
     }
     if (opts.initial_state?.source?.streams) {
@@ -118,6 +143,7 @@ export function trackProgress(opts: {
       }
       for (const k of cumulativeRecordCount.keys()) s.add(k)
       for (const k of streamStatus.keys()) s.add(k)
+      for (const k of completedRanges.keys()) s.add(k)
       return [...s]
     }
 
@@ -196,6 +222,7 @@ export function trackProgress(opts: {
           ...existing,
           cumulative_record_count: cumulative,
           ...(streamStatus.has(stream) ? { status: streamStatus.get(stream) } : {}),
+          ...(completedRanges.has(stream) ? { completed_ranges: completedRanges.get(stream) } : {}),
         }
       }
 
@@ -263,16 +290,19 @@ export function trackProgress(opts: {
       } else if (msg.type === 'trace') {
         if (msg.trace.trace_type === 'stream_status') {
           const ss = msg.trace.stream_status
-          streamStatus.set(ss.stream, ss.status)
+          if (ss.status === 'range_complete' && ss.range_complete) {
+            const existing = completedRanges.get(ss.stream) ?? []
+            existing.push({ gte: ss.range_complete.gte, lt: ss.range_complete.lt })
+            completedRanges.set(ss.stream, mergeRanges(existing))
+          } else {
+            streamStatus.set(ss.stream, ss.status)
+          }
         } else if (msg.trace.trace_type === 'error') {
           const err = msg.trace.error
           if (err.stream) {
             const errs = streamErrors.get(err.stream) ?? []
-            errs.push({ message: err.message, failure_type: err.failure_type as FailureType })
+            errs.push({ message: err.message, failure_type: err.failure_type })
             streamErrors.set(err.stream, errs)
-            if (err.failure_type && streamStatus.get(err.stream) !== 'complete') {
-              streamStatus.set(err.stream, err.failure_type as Status)
-            }
           }
         }
       }

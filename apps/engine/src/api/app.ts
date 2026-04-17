@@ -133,12 +133,9 @@ const REASON_EMOJI: Record<string, string> = {
 
 const STATUS_EMOJI: Record<string, string> = {
   complete: '✅',
-  started: '🔄',
+  start: '🔄',
   running: '🔄',
-  transient_error: '⚠️',
-  system_error: '❌',
-  config_error: '❌',
-  auth_error: '🔒',
+  range_complete: '🔄',
 }
 
 function formatEof(eof: EofPayload): string {
@@ -165,6 +162,11 @@ function formatEof(eof: EofPayload): string {
     const activeStreams: { name: string; rows: number; rps: string }[] = []
 
     for (const [name, s] of Object.entries(sp)) {
+      if (s.errors?.length) {
+        errored++
+        const errMsg = s.errors[0]?.message ?? 'unknown error'
+        errorStreams.push(`❌ ${name}: ${errMsg}`)
+      }
       if (s.status === 'complete') {
         complete++
         if (s.run_record_count > 0) {
@@ -183,15 +185,6 @@ function formatEof(eof: EofPayload): string {
             rps: s.records_per_second?.toFixed(1) ?? '0',
           })
         }
-      } else if (
-        s.status === 'transient_error' ||
-        s.status === 'system_error' ||
-        s.status === 'config_error' ||
-        s.status === 'auth_error'
-      ) {
-        errored++
-        const errMsg = s.errors?.[0]?.message ?? s.status
-        errorStreams.push(`${STATUS_EMOJI[s.status]} ${name}: ${errMsg}`)
       } else {
         pending++
       }

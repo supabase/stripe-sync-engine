@@ -103,10 +103,7 @@ export interface StreamStatusMessage {
     | 'started'
     | 'running'
     | 'complete'
-    | 'transient_error'
-    | 'system_error'
-    | 'config_error'
-    | 'auth_error'
+    | 'range_complete'
 }
 
 // MARK: - Message unions

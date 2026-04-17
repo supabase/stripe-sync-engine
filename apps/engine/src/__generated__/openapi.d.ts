@@ -494,7 +494,7 @@ export interface components {
                      * @description Current phase of the stream within this sync run.
                      * @enum {string}
                      */
-                    status: "start" | "running" | "complete" | "range_complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
+                    status: "start" | "running" | "complete" | "range_complete";
                     /** @description Present when status is range_complete. The sub-range that finished. */
                     range_complete?: {
                         /** @description Inclusive lower bound (ISO 8601). */
@@ -669,7 +669,7 @@ export interface components {
                          * @description Final stream status.
                          * @enum {string}
                          */
-                        status: "start" | "running" | "complete" | "range_complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
+                        status: "start" | "running" | "complete" | "range_complete";
                         /** @description Cumulative records synced for this stream across all runs. */
                         cumulative_record_count: number;
                         /** @description Records synced in this run. */

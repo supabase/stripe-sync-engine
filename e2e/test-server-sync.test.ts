@@ -412,7 +412,9 @@ describe('test-server sync via Docker engine', () => {
       }
     }
     for (const rangeIdx of [0, 1, 2]) {
-      expect(destIds.has(`cus_seg${rangeIdx}_0000`), `unexpected cus_seg${rangeIdx}_0000`).toBe(false)
+      expect(destIds.has(`cus_seg${rangeIdx}_0000`), `unexpected cus_seg${rangeIdx}_0000`).toBe(
+        false
+      )
     }
     expect(destIds.size).toBe(PER_RANGE * 2)
   }, 120_000)

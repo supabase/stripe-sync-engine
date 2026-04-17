@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Message, SyncOutput } from '@stripe/sync-protocol'
-import { createRecordCounter, trackProgress } from './progress.js'
+import { createRecordCounter, mergeRanges, trackProgress } from './progress.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = []
@@ -347,5 +347,226 @@ describe('trackProgress', () => {
     const eof = outputs.find((m) => m.type === 'eof')
     expect(eof).toBeDefined()
     expect((eof as any).eof.state).toBeUndefined()
+  })
+
+  it('accumulates range_complete into completed_ranges in engine state', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: { stream: 'customers', status: 'start' },
+            },
+          },
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: {
+                stream: 'customers',
+                status: 'range_complete',
+                range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+              },
+            },
+          },
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: {
+                stream: 'customers',
+                status: 'range_complete',
+                range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+              },
+            },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        state: {
+          engine: {
+            streams: {
+              customers: {
+                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' }],
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it('range_complete does not overwrite stream status', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: { stream: 'customers', status: 'running' },
+            },
+          },
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: {
+                stream: 'customers',
+                status: 'range_complete',
+                range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+              },
+            },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        stream_progress: {
+          customers: { status: 'running' },
+        },
+      },
+    })
+  })
+
+  it('seeds completed_ranges from initial engine state', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        initial_state: {
+          source: { streams: {}, global: {} },
+          destination: { streams: {}, global: {} },
+          engine: {
+            streams: {
+              customers: {
+                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+              },
+            },
+            global: {},
+          },
+        },
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'trace',
+            trace: {
+              trace_type: 'stream_status',
+              stream_status: {
+                stream: 'customers',
+                status: 'range_complete',
+                range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+              },
+            },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        state: {
+          engine: {
+            streams: {
+              customers: {
+                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' }],
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+})
+
+describe('mergeRanges', () => {
+  it('returns empty for empty input', () => {
+    expect(mergeRanges([])).toEqual([])
+  })
+
+  it('returns single range unchanged', () => {
+    const ranges = [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }]
+    expect(mergeRanges(ranges)).toEqual(ranges)
+  })
+
+  it('merges adjacent ranges', () => {
+    const ranges = [
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ]
+    expect(mergeRanges(ranges)).toEqual([
+      { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ])
+  })
+
+  it('merges overlapping ranges', () => {
+    const ranges = [
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-07-01T00:00:00Z' },
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ]
+    expect(mergeRanges(ranges)).toEqual([
+      { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ])
+  })
+
+  it('keeps non-overlapping ranges separate', () => {
+    const ranges = [
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-03-01T00:00:00Z' },
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ]
+    expect(mergeRanges(ranges)).toEqual(ranges)
+  })
+
+  it('sorts and merges out-of-order ranges', () => {
+    const ranges = [
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+    ]
+    expect(mergeRanges(ranges)).toEqual([
+      { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ])
+  })
+
+  it('merges multiple overlapping ranges into one', () => {
+    const ranges = [
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-04-01T00:00:00Z' },
+      { gte: '2024-03-01T00:00:00Z', lt: '2024-07-01T00:00:00Z' },
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ]
+    expect(mergeRanges(ranges)).toEqual([
+      { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+    ])
+  })
+
+  it('does not mutate input array', () => {
+    const ranges = [
+      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+      { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+    ]
+    const original = JSON.parse(JSON.stringify(ranges))
+    mergeRanges(ranges)
+    expect(ranges).toEqual(original)
   })
 })
