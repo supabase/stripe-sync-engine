@@ -6,6 +6,7 @@ import sheetsDestination from '@stripe/sync-destination-google-sheets'
 import { createConnectorResolver } from '../lib/index.js'
 import { createApp } from './app.js'
 import { logger } from '../logger.js'
+import { ENGINE_SERVER_OPTIONS } from '../http-server-options.js'
 
 const port = Number(process.env.PORT || 3001)
 
@@ -39,11 +40,7 @@ async function main() {
       {
         fetch: app.fetch,
         port,
-        // Pipeline config and connector state are passed via the X-Pipeline header.
-        // Node.js defaults to 16 KB which caps state at ~250 entries — too small for
-        // connectors like google-sheets that carry row mappings. 50 MB is a conservative
-        // ceiling; typical headers remain small. See docs/engine/header-size-limits.md
-        serverOptions: { maxHeaderSize: 50 * 1024 * 1024 },
+        serverOptions: ENGINE_SERVER_OPTIONS,
       },
       (info) => {
         logger.info(
