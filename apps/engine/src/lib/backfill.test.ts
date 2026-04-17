@@ -65,11 +65,14 @@ describe('pipelineSyncUntilComplete', () => {
     ])
     expect(result.attempts).toBe(2)
     expect(result.eof.reason).toBe('complete')
-    expect(onState).toHaveBeenLastCalledWith({
-      source: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
-      destination: { streams: {}, global: {} },
-      engine: { streams: {}, global: {} },
-    }, 1)
+    expect(onState).toHaveBeenLastCalledWith(
+      {
+        source: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
+        destination: { streams: {}, global: {} },
+        engine: { streams: {}, global: {} },
+      },
+      1
+    )
   })
 
   it('throws when pipeline_sync ends with an unexpected eof reason', async () => {
@@ -84,7 +87,9 @@ describe('pipelineSyncUntilComplete', () => {
       pipeline_teardown: vi.fn(),
       pipeline_read: vi.fn(),
       pipeline_write: vi.fn(),
-      pipeline_sync: vi.fn(() => toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'aborted' } }])),
+      pipeline_sync: vi.fn(() =>
+        toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'aborted' } }])
+      ),
     } as unknown as Engine
 
     await expect(pipelineSyncUntilComplete(engine, pipeline)).rejects.toThrow(

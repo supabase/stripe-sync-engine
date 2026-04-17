@@ -256,7 +256,7 @@ export function trackProgress(opts: {
         if (msg.source_state.state_type === 'stream') {
           const stream = msg.source_state.stream
           finalState.source.streams[stream] = msg.source_state.data
-          if (!streamStatus.has(stream)) streamStatus.set(stream, 'started')
+          if (!streamStatus.has(stream)) streamStatus.set(stream, 'start')
         } else if (msg.source_state.state_type === 'global') {
           finalState.source.global = msg.source_state.data as Record<string, unknown>
         }

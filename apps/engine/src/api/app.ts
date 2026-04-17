@@ -174,7 +174,7 @@ function formatEof(eof: EofPayload): string {
             rps: s.records_per_second?.toFixed(1) ?? '0',
           })
         }
-      } else if (s.status === 'started' || s.status === 'running') {
+      } else if (s.status === 'start' || s.status === 'running') {
         inProgress++
         if (s.run_record_count > 0) {
           activeStreams.push({
@@ -475,10 +475,7 @@ export async function createApp(resolver: ConnectorResolver) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function getPipeline(c: any): z.infer<typeof TypedPipelineConfig> {
     if (isJsonBody(c)) return c.req.valid('json').pipeline
-    return requireHeaderValue(
-      c.req.valid('header')['x-pipeline'],
-      'x-pipeline header is required'
-    )
+    return requireHeaderValue(c.req.valid('header')['x-pipeline'], 'x-pipeline header is required')
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

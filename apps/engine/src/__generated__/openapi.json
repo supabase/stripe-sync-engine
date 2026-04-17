@@ -1039,11 +1039,11 @@
             "maximum": 9007199254740991,
             "description": "Max objects to backfill per stream (useful for testing)"
           },
-          "rate_limit": {
+          "max_concurrent_streams": {
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991,
-            "description": "Max Stripe API requests per second (default: 25)"
+            "description": "Max streams paginating in parallel (default: 5, capped at catalog size)."
           }
         },
         "required": [
@@ -1522,15 +1522,34 @@
                       "status": {
                         "type": "string",
                         "enum": [
-                          "started",
+                          "start",
                           "running",
                           "complete",
+                          "range_complete",
                           "transient_error",
                           "system_error",
                           "config_error",
                           "auth_error"
                         ],
                         "description": "Current phase of the stream within this sync run."
+                      },
+                      "range_complete": {
+                        "description": "Present when status is range_complete. The sub-range that finished.",
+                        "type": "object",
+                        "properties": {
+                          "gte": {
+                            "type": "string",
+                            "description": "Inclusive lower bound (ISO 8601)."
+                          },
+                          "lt": {
+                            "type": "string",
+                            "description": "Exclusive upper bound (ISO 8601)."
+                          }
+                        },
+                        "required": [
+                          "gte",
+                          "lt"
+                        ]
                       },
                       "cumulative_record_count": {
                         "description": "Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source.",
@@ -1943,9 +1962,10 @@
                     "status": {
                       "type": "string",
                       "enum": [
-                        "started",
+                        "start",
                         "running",
                         "complete",
+                        "range_complete",
                         "transient_error",
                         "system_error",
                         "config_error",

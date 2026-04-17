@@ -421,7 +421,9 @@ describe('createCliFromSpec', () => {
     const capturedRequests: Request[] = []
     const handler = vi.fn().mockImplementation((req: Request) => {
       capturedRequests.push(req)
-      return Promise.resolve(new Response('{}', { headers: { 'content-type': 'application/json' } }))
+      return Promise.resolve(
+        new Response('{}', { headers: { 'content-type': 'application/json' } })
+      )
     })
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 

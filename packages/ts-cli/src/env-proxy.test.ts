@@ -67,9 +67,9 @@ describe('assertUseEnvProxy (unit)', () => {
   })
 
   it('throws when proxy is set via lowercase http_proxy and --use-env-proxy is absent', () => {
-    expect(() =>
-      assertUseEnvProxy({ http_proxy: 'http://proxy.example.test:8080' }, [])
-    ).toThrow(/--use-env-proxy/)
+    expect(() => assertUseEnvProxy({ http_proxy: 'http://proxy.example.test:8080' }, [])).toThrow(
+      /--use-env-proxy/
+    )
   })
 
   it('includes the proxy URL in the error message', () => {

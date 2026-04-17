@@ -263,9 +263,11 @@ describe('JSON body validation — content-type-aware', () => {
       },
     })
 
-    const PipelineSchema = z.object({
-      source: z.object({ type: z.string() }),
-    }).meta({ id: 'Pipeline' })
+    const PipelineSchema = z
+      .object({
+        source: z.object({ type: z.string() }),
+      })
+      .meta({ id: 'Pipeline' })
 
     app.openapi(
       createRoute({

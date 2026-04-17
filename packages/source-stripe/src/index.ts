@@ -29,11 +29,13 @@ import { createStripeWebSocketClient } from './src-websocket.js'
 import type { ResourceConfig } from './types.js'
 import { makeClient, type StripeClient } from './client.js'
 import type { RateLimiter } from './rate-limiter.js'
-import { createInMemoryRateLimiter, DEFAULT_MAX_RPS } from './rate-limiter.js'
+import { createInMemoryRateLimiter } from './rate-limiter.js'
 import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
 
-function combineSignals(...signals: Array<AbortSignal | null | undefined>): AbortSignal | undefined {
+function combineSignals(
+  ...signals: Array<AbortSignal | null | undefined>
+): AbortSignal | undefined {
   const activeSignals = signals.filter((signal): signal is AbortSignal => signal != null)
   if (activeSignals.length === 0) return undefined
   if (activeSignals.length === 1) return activeSignals[0]
@@ -63,31 +65,14 @@ export type WebhookInput = {
 
 // MARK: - Stream state
 
-export type SegmentState = {
-  index: number
-  gte: number
-  lt: number
-  page_cursor: string | null
-  status: 'pending' | 'complete'
+export type RemainingRange = {
+  gte: string // ISO 8601
+  lt: string // ISO 8601
+  cursor: string | null // Stripe pagination cursor; null = not yet started
 }
-
-/** Compact backfill state — O(concurrency) not O(total segments). */
-export type BackfillState = {
-  range: { gte: number; lt: number }
-  num_segments: number
-  completed: Array<{ gte: number; lt: number }>
-  in_flight: Array<{ gte: number; lt: number; page_cursor: string }>
-}
-
-export type StreamErrorStatus = 'transient_error' | 'system_error' | 'config_error' | 'auth_error'
 
 export type StripeStreamState = {
-  page_cursor: string | null
-  status: 'pending' | 'complete' | StreamErrorStatus
-  events_cursor?: number
-  /** @deprecated Legacy — use backfill instead */
-  segments?: SegmentState[]
-  backfill?: BackfillState
+  remaining: RemainingRange[]
 }
 
 // MARK: - Account ID resolution
@@ -251,8 +236,22 @@ export function createStripeSource(
       return withAbortOnReturn((signal) =>
         (async function* () {
           const apiVersion = config.api_version ?? BUNDLED_API_VERSION
-          const rateLimiter =
-            externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
+
+          // Derive concurrency params from API key mode
+          const liveMode =
+            config.api_key.startsWith('sk_live_') || config.api_key.startsWith('rk_live_')
+          const maxRequestsPerSecond = liveMode ? 20 : 10
+          const maxConcurrentStreams = Math.min(
+            config.max_concurrent_streams ?? 5,
+            catalog.streams.length
+          )
+          const effectiveStreams = Math.max(1, maxConcurrentStreams)
+          const maxSegmentsPerStream = Math.max(
+            1,
+            Math.floor(maxRequestsPerSecond / effectiveStreams)
+          )
+
+          const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)
           const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
           const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch(signal))
           const registry = buildResourceRegistry(
@@ -317,12 +316,14 @@ export function createStripeSource(
             // Backfill: paginate through each configured stream
             yield* listApiBackfill({
               catalog,
-              state: state?.streams as Parameters<typeof listApiBackfill>[0]['state'],
+              state: state?.streams as Record<string, unknown> | undefined,
               registry,
               rateLimiter,
               client,
               accountId,
               backfillLimit: config.backfill_limit,
+              maxConcurrentStreams: effectiveStreams,
+              maxSegmentsPerStream,
               signal,
               drainQueue: wsClient
                 ? () => inputQueue.drain(config, catalog, registry, streamNames, accountId)
@@ -337,6 +338,7 @@ export function createStripeSource(
               registry,
               streamNames,
               state: state?.streams as Record<string, StripeStreamState> | undefined,
+              globalState: state?.global as { events_cursor?: number } | undefined,
               startTimestamp,
               accountId,
             })
@@ -400,16 +402,11 @@ export default createStripeSource()
 
 // MARK: - Re-exports
 
-export { expandState } from './src-list-api.js'
+export { subdivideRanges } from './src-list-api.js'
 export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
 export { catalogFromRegistry } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'
 export type { ParsedResourceTable, ParsedOpenApiSpec } from './openapi/types.js'
 export type { RateLimiter } from './rate-limiter.js'
-export {
-  createInMemoryRateLimiter,
-  DEFAULT_MAX_RPS,
-  MAX_SEGMENTS,
-  MAX_CONCURRENCY,
-} from './rate-limiter.js'
+export { createInMemoryRateLimiter } from './rate-limiter.js'
 export { verifyWebhookSignature, WebhookSignatureError } from './webhookVerify.js'

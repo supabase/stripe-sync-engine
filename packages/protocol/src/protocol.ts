@@ -116,6 +116,17 @@ export const ConfiguredStream = z
       .positive()
       .optional()
       .describe('Cap backfill to this many records, then mark the stream complete.'),
+
+    time_range: z
+      .object({
+        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+      })
+      .optional()
+      .describe(
+        'Time window for this stream. The engine computes this from synced_ranges + started_at. ' +
+          'Sources use it as the created filter range. If absent, the source computes its own range.'
+      ),
   })
   .describe('A stream selected by the user with sync settings applied.')
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
@@ -261,15 +272,23 @@ export const TraceStreamStatus = z
     stream: z.string().describe('Stream being reported on.'),
     status: z
       .enum([
-        'started',
+        'start',
         'running',
         'complete',
+        'range_complete',
         'transient_error',
         'system_error',
         'config_error',
         'auth_error',
       ])
       .describe('Current phase of the stream within this sync run.'),
+    range_complete: z
+      .object({
+        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+      })
+      .optional()
+      .describe('Present when status is range_complete. The sub-range that finished.'),
     cumulative_record_count: z
       .number()
       .int()
@@ -380,9 +399,10 @@ export const EofStreamProgress = z
   .object({
     status: z
       .enum([
-        'started',
+        'start',
         'running',
         'complete',
+        'range_complete',
         'transient_error',
         'system_error',
         'config_error',

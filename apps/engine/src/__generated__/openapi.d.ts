@@ -269,8 +269,8 @@ export interface components {
             revalidate_objects?: string[];
             /** @description Max objects to backfill per stream (useful for testing) */
             backfill_limit?: number;
-            /** @description Max Stripe API requests per second (default: 25) */
-            rate_limit?: number;
+            /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
+            max_concurrent_streams?: number;
         };
         DestinationConfig: {
             /** @constant */
@@ -494,7 +494,14 @@ export interface components {
                      * @description Current phase of the stream within this sync run.
                      * @enum {string}
                      */
-                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
+                    status: "start" | "running" | "complete" | "range_complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
+                    /** @description Present when status is range_complete. The sub-range that finished. */
+                    range_complete?: {
+                        /** @description Inclusive lower bound (ISO 8601). */
+                        gte: string;
+                        /** @description Exclusive upper bound (ISO 8601). */
+                        lt: string;
+                    };
                     /** @description Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source. */
                     cumulative_record_count?: number;
                     /** @description Records synced for this stream in the current sync run. Set by the engine. */
@@ -662,7 +669,7 @@ export interface components {
                          * @description Final stream status.
                          * @enum {string}
                          */
-                        status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
+                        status: "start" | "running" | "complete" | "range_complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
                         /** @description Cumulative records synced for this stream across all runs. */
                         cumulative_record_count: number;
                         /** @description Records synced in this run. */

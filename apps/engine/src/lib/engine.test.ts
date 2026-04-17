@@ -1297,7 +1297,10 @@ describe('engine cancellation integration', () => {
     const iter = engine.pipeline_sync(defaultPipeline)[Symbol.asyncIterator]()
 
     expect(await iter.next()).toMatchObject({
-      value: { type: 'source_state', source_state: { stream: 'customers', data: { cursor: 'cus_1' } } },
+      value: {
+        type: 'source_state',
+        source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+      },
       done: false,
     })
 

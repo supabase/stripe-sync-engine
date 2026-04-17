@@ -2,8 +2,7 @@ import type { EofPayload, PipelineConfig, SourceStateMessage } from '@stripe/syn
 import { emptySyncState, type SyncOutput, type SyncState } from '@stripe/sync-protocol'
 import type { Engine, SourceReadOptions } from './engine.js'
 
-export interface PipelineSyncUntilCompleteOptions
-  extends Omit<SourceReadOptions, 'state'> {
+export interface PipelineSyncUntilCompleteOptions extends Omit<SourceReadOptions, 'state'> {
   state?: SyncState
   onAttempt?: (attempt: number, state: SyncState | undefined) => void | Promise<void>
   onMessage?: (message: SyncOutput, attempt: number) => void | Promise<void>
@@ -66,7 +65,9 @@ export async function pipelineSyncUntilComplete(
     }
 
     if (eof.reason !== 'state_limit' && eof.reason !== 'time_limit') {
-      throw new Error(`pipeline_sync attempt ${attempts} ended with unexpected eof reason: ${eof.reason}`)
+      throw new Error(
+        `pipeline_sync attempt ${attempts} ended with unexpected eof reason: ${eof.reason}`
+      )
     }
   }
 }

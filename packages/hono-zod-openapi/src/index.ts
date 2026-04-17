@@ -233,10 +233,13 @@ function processJsonContentHeaders(op: ZodOpenApiOperationObject): {
     // Look up description from the field schema or its inner schema (for optional wrappers)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fieldDef = (fieldSchema as any)._zod?.def
-    const innerSchema = (fieldDef?.type === 'optional' || fieldDef?.type === 'nullable')
-      ? fieldDef.innerType : fieldSchema
+    const innerSchema =
+      fieldDef?.type === 'optional' || fieldDef?.type === 'nullable'
+        ? fieldDef.innerType
+        : fieldSchema
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = (z.globalRegistry.get(fieldSchema as any) ?? z.globalRegistry.get(innerSchema as any)) as Record<string, unknown> | undefined
+    const meta = (z.globalRegistry.get(fieldSchema as any) ??
+      z.globalRegistry.get(innerSchema as any)) as Record<string, unknown> | undefined
     const description = meta?.description as string | undefined
 
     jsonParams.push({
@@ -309,7 +312,6 @@ async function validateJsonBody(
   }
 
   if (!result.success) return c.json(result, 400)
-
   ;(
     c.req as typeof c.req & {
       addValidatedData: (target: 'json', data: z.output<AnyZod>) => void

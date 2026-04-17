@@ -48,9 +48,13 @@ export function ndjsonResponse<T>(
           controller.close()
           return
         }
-        signal.addEventListener('abort', () => {
-          void stop().catch(() => {})
-        }, { once: true })
+        signal.addEventListener(
+          'abort',
+          () => {
+            void stop().catch(() => {})
+          },
+          { once: true }
+        )
       }
       try {
         while (true) {

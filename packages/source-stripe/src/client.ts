@@ -98,7 +98,10 @@ export function makeClient(
     params?: Record<string, unknown>
   ): Promise<unknown> {
     if (method === 'GET') {
-      return withHttpRetry(() => request(method, path, params), { label: `${method} ${path}`, signal: pipelineSignal })
+      return withHttpRetry(() => request(method, path, params), {
+        label: `${method} ${path}`,
+        signal: pipelineSignal,
+      })
     }
     return request(method, path, params)
   }

@@ -17,6 +17,7 @@ export async function* pollEvents(opts: {
   registry: Record<string, ResourceConfig>
   streamNames: Set<string>
   state: Record<string, StripeStreamState> | undefined
+  globalState?: { events_cursor?: number }
   startTimestamp: number
   accountId: string
 }): AsyncGenerator<Message> {
@@ -24,34 +25,25 @@ export async function* pollEvents(opts: {
 
   if (!config.poll_events) return
 
-  // Only poll when all streams are complete (backfill finished)
-  const allComplete = catalog.streams.every((cs) => state?.[cs.stream.name]?.status === 'complete')
+  // Only poll when all streams have empty remaining arrays (backfill finished)
+  const allComplete = catalog.streams.every((cs) => {
+    const streamState = state?.[cs.stream.name]
+    if (!streamState) return false
+    if (!('remaining' in streamState)) return false
+    return streamState.remaining.length === 0
+  })
   if (!allComplete) return
 
-  // Collect events_cursor values from all streams
-  const cursors: number[] = []
-  for (const cs of catalog.streams) {
-    const cursor = state?.[cs.stream.name]?.events_cursor
-    if (cursor != null) cursors.push(cursor)
-  }
+  const cursor = opts.globalState?.events_cursor
 
-  // First run after backfill: stamp initial events_cursor on all streams
-  if (cursors.length === 0) {
-    for (const cs of catalog.streams) {
-      const existing = state?.[cs.stream.name]
-      yield stateMsg({
-        stream: cs.stream.name,
-        data: {
-          page_cursor: existing?.page_cursor ?? null,
-          status: 'complete' as const,
-          events_cursor: startTimestamp,
-        },
-      })
-    }
+  // First run after backfill: stamp initial events_cursor in global state
+  if (cursor == null) {
+    yield stateMsg({
+      state_type: 'global' as const,
+      data: { events_cursor: startTimestamp },
+    })
     return
   }
-
-  const cursor = Math.min(...cursors)
 
   // Warn if cursor is too old (Stripe retains events for ~30 days)
   const ageInDays = (startTimestamp - cursor) / 86400
@@ -86,29 +78,19 @@ export async function* pollEvents(opts: {
   // Process oldest-first
   events.reverse()
 
+  let latestEventCreated = cursor
   for (const event of events) {
-    for await (const msg of processStripeEvent(
-      event,
-      config,
-      catalog,
-      registry,
-      streamNames,
-      accountId
-    )) {
-      if (msg.type === 'source_state' && msg.source_state.state_type !== 'global') {
-        // Intercept state messages to preserve complete status + update events_cursor
-        const existing = state?.[msg.source_state.stream]
-        yield stateMsg({
-          stream: msg.source_state.stream,
-          data: {
-            page_cursor: existing?.page_cursor ?? null,
-            status: 'complete' as const,
-            events_cursor: event.created,
-          },
-        })
-      } else {
-        yield msg
-      }
+    yield* processStripeEvent(event, config, catalog, registry, streamNames, accountId)
+    if (event.created > latestEventCreated) {
+      latestEventCreated = event.created
     }
+  }
+
+  // Update global events cursor
+  if (latestEventCreated > cursor) {
+    yield stateMsg({
+      state_type: 'global' as const,
+      data: { events_cursor: latestEventCreated },
+    })
   }
 }

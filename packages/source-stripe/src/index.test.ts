@@ -16,10 +16,51 @@ import { fromStripeEvent } from './process-event.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket.js'
-import type { SegmentState, StripeStreamState } from './index.js'
+import type { StripeStreamState } from './index.js'
 import { listApiBackfill } from './src-list-api.js'
 import { createInMemoryRateLimiter } from './rate-limiter.js'
 import type { RateLimiter } from './rate-limiter.js'
+
+/** Matches engine defaults passed into `listApiBackfill` from `read()`. */
+const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5, maxSegmentsPerStream: 4 } as const
+
+const TEST_RANGE_GTE = '2010-01-01T00:00:00.000Z'
+const TEST_RANGE_LT = '2030-01-01T00:00:00.000Z'
+
+function remainingInProgress(cursor: string | null): StripeStreamState {
+  return {
+    remaining: [{ gte: TEST_RANGE_GTE, lt: TEST_RANGE_LT, cursor }],
+  }
+}
+
+function expectRemainingShape(data: unknown): void {
+  expect(data).toEqual(
+    expect.objectContaining({
+      remaining: expect.any(Array),
+    })
+  )
+  const rem = (data as StripeStreamState).remaining
+  for (const r of rem) {
+    expect(r).toMatchObject({ gte: expect.any(String), lt: expect.any(String) })
+    expect(r).toHaveProperty('cursor')
+  }
+}
+
+/** Advance iterator until `stream_status` complete for a stream (default `customers`). */
+async function drainUntilStreamBackfillComplete(
+  iter: AsyncIterator<Message | undefined>,
+  stream = 'customers'
+): Promise<void> {
+  for (;;) {
+    const { value, done } = await iter.next()
+    if (done) return
+    if (value?.type !== 'trace' || value.trace.trace_type !== 'stream_status') continue
+    const ss = (value.trace as { stream_status?: { status?: string; stream?: string } })
+      .stream_status
+    if (ss?.status !== 'complete' || ss.stream !== stream) continue
+    return
+  }
+}
 
 // Mock the WebSocket module
 const mockClose = vi.fn()
@@ -200,44 +241,63 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      // Expected sequence:
-      // 1. trace(stream_status started)
-      // 2. record(cus_1)
-      // 3. record(cus_2)
-      // 4. state(page_cursor: cus_2, status: pending)
-      // 5. record(cus_3)
-      // 6. state(page_cursor: null, status: complete)
-      // 7. trace(stream_status complete)
-      expect(messages).toHaveLength(7)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .status === 'start' &&
+            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+        )
+      ).toBe(true)
+      for (const id of ['cus_1', 'cus_2', 'cus_3'] as const) {
+        expect(
+          messages.some(
+            (m) =>
+              m.type === 'record' &&
+              (m as RecordMessage).record.stream === 'customers' &&
+              (m as RecordMessage).record.data.id === id
+          )
+        ).toBe(true)
+      }
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .status === 'range_complete' &&
+            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .status === 'complete' &&
+            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+        )
+      ).toBe(true)
 
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'started' } },
-      })
-      expect(messages[1]).toMatchObject({
-        type: 'record',
-        record: { stream: 'customers', data: { id: 'cus_1', name: 'Alice' } },
-      })
-      expect(messages[2]).toMatchObject({
-        type: 'record',
-        record: { stream: 'customers', data: { id: 'cus_2', name: 'Bob' } },
-      })
-      expect(messages[3]).toMatchObject({
-        type: 'source_state',
-        source_state: { stream: 'customers', data: { page_cursor: 'cus_2', status: 'pending' } },
-      })
-      expect(messages[4]).toMatchObject({
-        type: 'record',
-        record: { stream: 'customers', data: { id: 'cus_3', name: 'Charlie' } },
-      })
-      expect(messages[5]).toMatchObject({
-        type: 'source_state',
-        source_state: { stream: 'customers', data: { page_cursor: null, status: 'complete' } },
-      })
-      expect(messages[6]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'complete' } },
-      })
+      const streamStates = messages.filter(
+        (m): m is SourceStateMessage => m.type === 'source_state'
+      )
+      expect(streamStates.length).toBeGreaterThanOrEqual(2)
+      const custStates = streamStates.filter(
+        (m) => (m.source_state as { stream?: string }).stream === 'customers'
+      )
+      // Checkpoints may use cursor: null while pages remain; assert progression + shape instead.
+      custStates.forEach((m) => expectRemainingShape(m.source_state.data))
+      expect(
+        custStates.some(
+          (m) => ((m.source_state.data as StripeStreamState).remaining?.length ?? 0) > 0
+        )
+      ).toBe(true)
+      const finalState = custStates.at(-1)
+      expect(finalState?.source_state.data).toEqual({ remaining: [] })
 
       // Verify pagination params
       expect(listFn).toHaveBeenCalledTimes(2)
@@ -279,50 +339,40 @@ describe('StripeSource', () => {
         })
       )
 
-      // Each stream: started + record + state + complete = 4 messages each
-      expect(messages).toHaveLength(8)
+      // Streams run in parallel — order is not fixed; each stream emits start, records,
+      // checkpoints, range_complete, final state, and complete (counts vary with ranges).
+      const custRecords = messages.filter(
+        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'customers'
+      )
+      const invRecords = messages.filter(
+        (m): m is RecordMessage => m.type === 'record' && m.record.stream === 'invoices'
+      )
+      expect(custRecords).toHaveLength(1)
+      expect(invRecords).toHaveLength(1)
 
-      // Customers first
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'started' },
-        },
-      })
-      expect(messages[1]).toMatchObject({ type: 'record', record: { stream: 'customers' } })
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: { stream: 'customers' },
-      })
-      expect(messages[3]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
-      })
+      const starts = messages.filter(
+        (m) =>
+          m.type === 'trace' &&
+          m.trace.trace_type === 'stream_status' &&
+          (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+      )
+      expect(starts).toHaveLength(2)
 
-      // Then invoices
-      expect(messages[4]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'started' },
-        },
-      })
-      expect(messages[5]).toMatchObject({ type: 'record', record: { stream: 'invoices' } })
-      expect(messages[6]).toMatchObject({
-        type: 'source_state',
-        source_state: { stream: 'invoices' },
-      })
-      expect(messages[7]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'complete' },
-        },
-      })
+      const completes = messages.filter(
+        (m) =>
+          m.type === 'trace' &&
+          m.trace.trace_type === 'stream_status' &&
+          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+      )
+      expect(completes).toHaveLength(2)
+
+      for (const name of ['customers', 'invoices'] as const) {
+        const finalState = messages
+          .filter((m): m is SourceStateMessage => m.type === 'source_state')
+          .filter((m) => m.source_state.stream === name)
+          .at(-1)
+        expect(finalState?.source_state.data).toEqual({ remaining: [] })
+      }
     })
 
     it('resumes from prior state cursor without re-emitting checkpointed records', async () => {
@@ -340,7 +390,7 @@ describe('StripeSource', () => {
       }
 
       const priorState = {
-        streams: { customers: { page_cursor: 'cus_2', status: 'pending' } },
+        streams: { customers: remainingInProgress('cus_2') },
         global: {},
       }
 
@@ -381,26 +431,46 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      // trace(stream_status started) + state(complete) + trace(stream_status complete)
-      expect(messages).toHaveLength(3)
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'started' },
-        },
-      })
-      expect(messages[1]).toMatchObject({
-        type: 'source_state',
-        source_state: { stream: 'customers', data: { page_cursor: null, status: 'complete' } },
-      })
-      expect(messages[2]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
-      })
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'source_state' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
+            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+              0
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+              'range_complete'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+        )
+      ).toBe(true)
     })
 
     // Covered by WebSocket streaming tests below — backfill + ws interleaved
@@ -544,13 +614,12 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      // trace(stream_status started) + trace(error) + source_state(transient_error)
-      expect(messages).toHaveLength(3)
+      expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'trace',
         trace: {
           trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'started' },
+          stream_status: { stream: 'customers', status: 'start' },
         },
       })
 
@@ -567,15 +636,6 @@ describe('StripeSource', () => {
       expect(traceError.message).toContain('Rate limit')
       expect(traceError.stream).toBe('customers')
       expect(traceError.stack_trace).toBeDefined()
-
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: {
-          state_type: 'stream',
-          stream: 'customers',
-          data: { status: 'transient_error' },
-        },
-      })
     })
 
     it('emits TraceMessage error with failure_type config_error for unknown stream', async () => {
@@ -587,7 +647,7 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(2)
+      expect(messages).toHaveLength(1)
 
       const errorMsg = messages[0] as TraceMessage
       expect(errorMsg.type).toBe('trace')
@@ -601,15 +661,6 @@ describe('StripeSource', () => {
       expect(traceError.failure_type).toBe('config_error')
       expect(traceError.message).toBe('Unknown stream: nonexistent')
       expect(traceError.stream).toBe('nonexistent')
-
-      expect(messages[1]).toMatchObject({
-        type: 'source_state',
-        source_state: {
-          state_type: 'stream',
-          stream: 'nonexistent',
-          data: { status: 'config_error' },
-        },
-      })
     })
 
     it('emits TraceMessage error with failure_type system_error on non-rate-limit error', async () => {
@@ -628,7 +679,7 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(3)
+      expect(messages).toHaveLength(2)
       const errorMsg = messages[1] as TraceMessage
       expect(errorMsg.type).toBe('trace')
       expect(errorMsg.trace.trace_type).toBe('error')
@@ -637,15 +688,6 @@ describe('StripeSource', () => {
       ).error
       expect(traceError.failure_type).toBe('system_error')
       expect(traceError.message).toContain('Connection refused')
-
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: {
-          state_type: 'stream',
-          stream: 'customers',
-          data: { status: 'system_error' },
-        },
-      })
     })
 
     it('proceeds with backfill using fallback timestamp when getAccount fails (fault-tolerant)', async () => {
@@ -686,18 +728,18 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter: async () => 0,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
       // Backfill proceeds with fallback timestamp: listFn is called
       expect(listFn).toHaveBeenCalled()
-      // Stream completes successfully (empty data, no error)
       expect(
         messages.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as { source_state: { data: { status: string } } }).source_state.data.status ===
-              'complete'
+            (m as { source_state: { data: StripeStreamState } }).source_state.data.remaining
+              ?.length === 0
         )
       ).toBe(true)
     })
@@ -745,8 +787,8 @@ describe('StripeSource', () => {
       expect(traceError.stream).toBe('tax_ids')
 
       expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'tax_ids', data: { status: 'auth_error' } },
+        type: 'log',
+        log: expect.objectContaining({ level: 'error' }),
       })
     })
 
@@ -768,7 +810,7 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(3)
+      expect(messages).toHaveLength(2)
       expect(messages[1]).toMatchObject({
         type: 'trace',
         trace: {
@@ -777,14 +819,6 @@ describe('StripeSource', () => {
             failure_type: 'system_error',
             stream: 'customers',
           },
-        },
-      })
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: {
-          state_type: 'stream',
-          stream: 'customers',
-          data: { status: 'system_error' },
         },
       })
     })
@@ -812,7 +846,7 @@ describe('StripeSource', () => {
         type: 'trace',
         trace: {
           trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'started' },
+          stream_status: { stream: 'invoices', status: 'start' },
         },
       })
       expect(messages[1]).toMatchObject({
@@ -855,46 +889,42 @@ describe('StripeSource', () => {
         })
       )
 
-      // customers: started + error + error_state = 3
-      // invoices: started + record + state + complete = 4
-      expect(messages).toHaveLength(7)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'error' &&
+            (m.trace as { error: { stream?: string } }).error.stream === 'customers'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'record' &&
+            (m as RecordMessage).record.stream === 'invoices' &&
+            (m as RecordMessage).record.data.id === 'inv_1'
+        )
+      ).toBe(true)
 
-      // Customers errored
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'started' },
-        },
-      })
-      expect(messages[1]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'error', error: { stream: 'customers' } },
-      })
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: {
-          state_type: 'stream',
-          stream: 'customers',
-          data: { status: 'system_error' },
-        },
-      })
+      const custComplete = messages.filter(
+        (m) =>
+          m.type === 'trace' &&
+          m.trace.trace_type === 'stream_status' &&
+          (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            .stream === 'customers' &&
+          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+      )
+      expect(custComplete).toHaveLength(0)
 
-      // Invoices succeeded
-      expect(messages[3]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'started' },
-        },
-      })
-      expect(messages[6]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'complete' },
-        },
-      })
+      const invComplete = messages.filter(
+        (m) =>
+          m.type === 'trace' &&
+          m.trace.trace_type === 'stream_status' &&
+          (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            .stream === 'invoices' &&
+          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+      )
+      expect(invComplete).toHaveLength(1)
     })
   })
 
@@ -929,8 +959,21 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(0)
-      expect(skipListFn).not.toHaveBeenCalled()
+      // Legacy error-shaped state is discarded — backfill starts fresh.
+      expect(
+        messages.some(
+          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
+        )
+      ).toBe(true)
+      expect(skipListFn).toHaveBeenCalled()
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+        )
+      ).toBe(true)
     })
 
     it('skips streams with system_error state (permanent)', async () => {
@@ -949,8 +992,20 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(0)
-      expect(skipListFn).not.toHaveBeenCalled()
+      expect(
+        messages.some(
+          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
+        )
+      ).toBe(true)
+      expect(skipListFn).toHaveBeenCalled()
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+        )
+      ).toBe(true)
     })
 
     it('skips streams with config_error state (permanent)', async () => {
@@ -969,8 +1024,20 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(messages).toHaveLength(0)
-      expect(skipListFn).not.toHaveBeenCalled()
+      expect(
+        messages.some(
+          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
+        )
+      ).toBe(true)
+      expect(skipListFn).toHaveBeenCalled()
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+        )
+      ).toBe(true)
     })
 
     it('retries streams with transient_error state (same as pending)', async () => {
@@ -994,13 +1061,16 @@ describe('StripeSource', () => {
 
       expect(skipListFn).toHaveBeenCalled()
       expect(messages.some((m) => m.type === 'record')).toBe(true)
-      expect(messages.at(-1)).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
-      })
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+        )
+      ).toBe(true)
     })
 
     it('preserves backfill progress in error state for later resume', async () => {
@@ -1029,16 +1099,20 @@ describe('StripeSource', () => {
         })
       )
 
-      const errorState = messages.find(
-        (m) =>
-          m.type === 'source_state' &&
-          (m as any).source_state.stream === 'customers' &&
-          (m as any).source_state.data.status === 'system_error'
-      ) as any
-      expect(errorState).toBeDefined()
-      // page_cursor reflects the last checkpointed state, not the mid-pagination
-      // cursor — the sequential paginator's local cursor is lost on error
-      expect(errorState.source_state.data.page_cursor).toBeNull()
+      const errorIdx = messages.findIndex(
+        (m) => m.type === 'trace' && m.trace.trace_type === 'error'
+      )
+      expect(errorIdx).toBeGreaterThan(-1)
+
+      const checkpointBeforeError = messages
+        .slice(0, errorIdx)
+        .filter((m): m is SourceStateMessage => m.type === 'source_state')
+        .filter((m) => m.source_state.stream === 'customers')
+        .at(-1)
+      expect(checkpointBeforeError).toBeDefined()
+      const rem = (checkpointBeforeError!.source_state.data as StripeStreamState).remaining
+      expect(rem.length).toBeGreaterThan(0)
+      expect(rem.some((r) => r.cursor === 'cus_1')).toBe(true)
     })
   })
 
@@ -1072,21 +1146,54 @@ describe('StripeSource', () => {
         })
       )
 
-      // Should paginate: started + record + state(complete) + complete
-      expect(messages).toHaveLength(4)
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'started' } },
-      })
-      expect(messages[1]).toMatchObject({ type: 'record', record: { stream: 'customers' } })
-      expect(messages[2]).toMatchObject({
-        type: 'source_state',
-        source_state: { data: { page_cursor: null, status: 'complete' } },
-      })
-      expect(messages[3]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'complete' } },
-      })
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'record' &&
+            (m as RecordMessage).record.stream === 'customers' &&
+            (m as RecordMessage).record.data.id === 'cus_1'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'source_state' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
+            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+              0
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+              'range_complete'
+        )
+      ).toBe(true)
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+              .stream === 'customers' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+        )
+      ).toBe(true)
 
       // No starting_after on first call
       expect(listFn).toHaveBeenCalledWith({ limit: 100 })
@@ -1192,7 +1299,7 @@ describe('StripeSource', () => {
           config,
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
-            streams: { customers: { page_cursor: 'cus_2', status: 'pending' } },
+            streams: { customers: remainingInProgress('cus_2') },
             global: {},
           },
           // no input → backfill mode, but with state from prior run
@@ -1223,7 +1330,7 @@ describe('StripeSource', () => {
           config,
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: {
-            streams: { customers: { page_cursor: 'cus_3', status: 'pending' } },
+            streams: { customers: remainingInProgress('cus_3') },
             global: {},
           },
         })
@@ -1235,12 +1342,8 @@ describe('StripeSource', () => {
       expect(records).toHaveLength(2)
       expect(records.map((r) => r.record.data.id)).toEqual(['cus_4', 'cus_5'])
 
-      // Final state should be complete
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
-      expect(states[states.length - 1].source_state.data).toMatchObject({
-        page_cursor: null,
-        status: 'complete',
-      })
+      expect(states.at(-1)?.source_state.data).toEqual({ remaining: [] })
     })
   })
 
@@ -1654,23 +1757,12 @@ describe('StripeSource', () => {
         })
         [Symbol.asyncIterator]()
 
-      // Backfill: empty stream produces started + state(complete) + complete
-      // capturedOnEvent is set during the first iter.next() (createStripeWebSocketClient is called inside read())
-      const m1 = await iter.next() // stream_status started
-      const m2 = await iter.next() // state complete
-      const m3 = await iter.next() // stream_status complete
+      const m1 = await iter.next()
       expect(m1.value).toMatchObject({
         type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'started' } },
+        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
       })
-      expect(m2.value).toMatchObject({
-        type: 'source_state',
-        source_state: { data: { status: 'complete' } },
-      })
-      expect(m3.value).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'complete' } },
-      })
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       // Now push a WebSocket event — capturedOnEvent is set, read() should yield it
       pushWsEvent(
@@ -1735,7 +1827,7 @@ describe('StripeSource', () => {
       const m1 = await iter.next()
       expect(m1.value).toMatchObject({
         type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'started' } },
+        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
       })
 
       // Queue an event AFTER stream_status started — capturedOnEvent is now set.
@@ -1767,23 +1859,51 @@ describe('StripeSource', () => {
       expect(m4.value).toMatchObject({ type: 'record', record: { data: { id: 'cus_1' } } })
       expect(m5.value).toMatchObject({
         type: 'source_state',
-        source_state: { data: { status: 'pending' } },
+        source_state: {
+          stream: 'customers',
+          data: expect.objectContaining({
+            remaining: expect.arrayContaining([expect.objectContaining({ cursor: 'cus_1' })]),
+          }),
+        },
       })
 
-      // Before page 2: no queued events, so straight to backfill
-      // Page 2: backfill record + state + stream_status complete
-      const m6 = await iter.next() // record cus_2
-      const m7 = await iter.next() // state complete
-      const m8 = await iter.next() // stream_status complete
-      expect(m6.value).toMatchObject({ type: 'record', record: { data: { id: 'cus_2' } } })
-      expect(m7.value).toMatchObject({
-        type: 'source_state',
-        source_state: { data: { status: 'complete' } },
-      })
-      expect(m8.value).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'complete' } },
-      })
+      const tail: Message[] = []
+      for (;;) {
+        const n = await iter.next()
+        if (n.done) break
+        tail.push(n.value!)
+        if (
+          n.value?.type === 'trace' &&
+          n.value.trace.trace_type === 'stream_status' &&
+          (n.value.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            .status === 'complete' &&
+          (n.value.trace as { stream_status: { stream?: string } }).stream_status.stream ===
+            'customers'
+        ) {
+          break
+        }
+      }
+      expect(
+        tail.some((m) => m.type === 'record' && (m as RecordMessage).record.data.id === 'cus_2')
+      ).toBe(true)
+      expect(
+        tail.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+              'range_complete'
+        )
+      ).toBe(true)
+      expect(
+        tail.some(
+          (m) =>
+            m.type === 'source_state' &&
+            (m as SourceStateMessage).source_state.stream === 'customers' &&
+            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+              0
+        )
+      ).toBe(true)
 
       // After backfill: push another WS event, verify it's yielded
       pushWsEvent(
@@ -1824,10 +1944,8 @@ describe('StripeSource', () => {
         })
         [Symbol.asyncIterator]()
 
-      // Skip backfill messages (empty stream: started + state + complete)
-      await iter.next()
-      await iter.next()
-      await iter.next()
+      await iter.next() // start
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       // Push event for invoices (not in catalog) — should be skipped
       pushWsEvent(
@@ -1899,9 +2017,8 @@ describe('StripeSource', () => {
         })
         [Symbol.asyncIterator]()
 
-      for (let i = 0; i < 3; i++) {
-        await iter.next()
-      }
+      await iter.next()
+      await drainUntilStreamBackfillComplete(iter, 'customers')
 
       const blockedNext = iter.next()
       void blockedNext.catch(() => undefined)
@@ -1968,21 +2085,33 @@ describe('StripeSource', () => {
       const messages: Message[] = []
       const iter = source.read({ config: cfg, catalog: cat, state: { streams: {}, global: {} } })
 
-      // Drain backfill messages (started, state, complete for the empty stream)
-      for (let i = 0; i < 3; i++) {
+      for (;;) {
         const { value, done } = await iter.next()
         if (done) break
         messages.push(value)
+        if (
+          value?.type === 'trace' &&
+          value.trace.trace_type === 'stream_status' &&
+          (value.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+        ) {
+          break
+        }
       }
 
       expect(messages[0]).toMatchObject({
         type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'started' } },
+        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
       })
-      expect(messages[2]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'complete' } },
-      })
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'trace' &&
+            m.trace.trace_type === 'stream_status' &&
+            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+              'range_complete'
+        )
+      ).toBe(true)
+      expect(messages.some((m) => m.type === 'source_state')).toBe(true)
 
       // Clean up: return the iterator which triggers the finally block
       await iter.return(undefined as unknown as Message)
@@ -2005,21 +2134,31 @@ describe('StripeSource', () => {
         source.read({
           config: { ...config, poll_events: true },
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          state: { streams: { customers: { page_cursor: null, status: 'complete' } }, global: {} },
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
       // listFn should NOT be called — stream is already complete
       expect(listFn).not.toHaveBeenCalled()
 
-      // Should not emit trace(stream_status started) for complete streams
       const started = messages.filter(
         (m): m is TraceMessage =>
           m.type === 'trace' &&
           m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'started'
+          (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
       )
       expect(started).toHaveLength(0)
+
+      expect(
+        messages.some(
+          (m) =>
+            m.type === 'source_state' &&
+            (m as SourceStateMessage).source_state.state_type === 'global' &&
+            (m as SourceStateMessage).source_state.data &&
+            typeof (m as { source_state: { data: { events_cursor?: number } } }).source_state.data
+              .events_cursor === 'number'
+        )
+      ).toBe(true)
     })
 
     it('stamps initial events_cursor after first backfill completes', async () => {
@@ -2038,18 +2177,18 @@ describe('StripeSource', () => {
         source.read({
           config: { ...config, poll_events: true },
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          state: { streams: { customers: { page_cursor: null, status: 'complete' } }, global: {} },
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
-      // Should emit a state message with events_cursor stamped
-      const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
-      expect(states).toHaveLength(1)
-      expect(states[0].source_state.stream).toBe('customers')
+      const globalStates = messages.filter(
+        (m): m is SourceStateMessage =>
+          m.type === 'source_state' && m.source_state.state_type === 'global'
+      )
+      expect(globalStates).toHaveLength(1)
       expect(
-        (states[0].source_state.data as { events_cursor: number }).events_cursor
+        (globalStates[0].source_state.data as { events_cursor: number }).events_cursor
       ).toBeGreaterThanOrEqual(now)
-      expect((states[0].source_state.data as { status: string }).status).toBe('complete')
     })
 
     it('does not run events polling when poll_events is false/absent', async () => {
@@ -2067,7 +2206,7 @@ describe('StripeSource', () => {
         source.read({
           config, // no poll_events
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
-          state: { customers: { page_cursor: null, status: 'complete' } },
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
@@ -2110,8 +2249,8 @@ describe('StripeSource', () => {
             { name: 'customers', primary_key: [['id']] },
             { name: 'invoices', primary_key: [['id']] }
           ),
-          // customers is complete, but invoices is pending
-          state: { streams: { customers: { page_cursor: null, status: 'complete' } }, global: {} },
+          // customers is complete, but invoices has no checkpoint yet
+          state: { streams: { customers: { remaining: [] } }, global: {} },
         })
       )
 
@@ -2149,10 +2288,14 @@ describe('StripeSource', () => {
         }),
       }
 
-      const priorSegments: SegmentState[] = [
-        { index: 0, gte: 1000000, lt: 1100000, page_cursor: null, status: 'complete' },
-        { index: 1, gte: 1100000, lt: 1200000, page_cursor: 'cus_halfway', status: 'pending' },
-        { index: 2, gte: 1200000, lt: 1300001, page_cursor: null, status: 'complete' },
+      const rangeGteSec = 1_100_000_000
+      const rangeLtSec = 1_200_000_000
+      const priorRemaining: StripeStreamState['remaining'] = [
+        {
+          gte: new Date(rangeGteSec * 1000).toISOString(),
+          lt: new Date(rangeLtSec * 1000).toISOString(),
+          cursor: 'cus_halfway',
+        },
       ]
 
       const mockClient = {} as unknown as StripeClient
@@ -2162,19 +2305,20 @@ describe('StripeSource', () => {
         listApiBackfill({
           catalog: catalog({ name: 'customers' }),
           state: {
-            customers: { page_cursor: null, status: 'pending', segments: priorSegments },
+            customers: { remaining: priorRemaining },
           },
           registry,
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
       expect(listFn).toHaveBeenCalledTimes(1)
       expect(listFn).toHaveBeenCalledWith(
         expect.objectContaining({
-          created: { gte: 1100000, lt: 1200000 },
+          created: { gte: rangeGteSec, lt: rangeLtSec },
           starting_after: 'cus_halfway',
           limit: 100,
         })
@@ -2186,10 +2330,7 @@ describe('StripeSource', () => {
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
       const lastState = states[states.length - 1]
-      expect(lastState.source_state.data).toMatchObject({ status: 'complete' })
-      const backfill = (lastState.source_state.data as StripeStreamState).backfill!
-      expect(backfill.in_flight).toEqual([])
-      expect(backfill.completed.length).toBeGreaterThan(0)
+      expect(lastState.source_state.data).toEqual({ remaining: [] })
     })
 
     it('emits state with full segment snapshots after each page for resumability', async () => {
@@ -2222,6 +2363,7 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
@@ -2229,15 +2371,11 @@ describe('StripeSource', () => {
       expect(states.length).toBeGreaterThan(0)
 
       for (const state of states) {
-        const data = state.source_state.data as StripeStreamState
-        expect(data.backfill).toBeDefined()
-        expect(data.backfill!.range).toBeDefined()
+        expectRemainingShape(state.source_state.data)
       }
 
       const lastData = states[states.length - 1].source_state.data as StripeStreamState
-      expect(lastData.status).toBe('complete')
-      // All work done — completed ranges should cover the full range
-      expect(lastData.backfill!.in_flight).toEqual([])
+      expect(lastData.remaining).toEqual([])
     })
   })
 
@@ -2268,6 +2406,7 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
@@ -2276,7 +2415,7 @@ describe('StripeSource', () => {
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
       for (const state of states) {
-        expect((state.source_state.data as StripeStreamState).segments).toBeUndefined()
+        expectRemainingShape(state.source_state.data)
       }
     })
 
@@ -2308,6 +2447,7 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
@@ -2315,10 +2455,7 @@ describe('StripeSource', () => {
       expect(listFn).toHaveBeenCalledWith({})
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
-      expect(states.at(-1)?.source_state.data).toMatchObject({
-        status: 'complete',
-        page_cursor: null,
-      })
+      expect(states.at(-1)?.source_state.data).toEqual({ remaining: [] })
     })
 
     it('parallel and sequential streams coexist in the same catalog', async () => {
@@ -2363,16 +2500,13 @@ describe('StripeSource', () => {
           client: mockClient,
           accountId: 'acct_test',
           rateLimiter,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
-      // First call is the density probe — verify it includes created filter
-      expect(parallelListFn.mock.calls[0][0]).toEqual(
-        expect.objectContaining({ limit: 100, created: expect.any(Object) })
-      )
-
-      for (const call of parallelListFn.mock.calls.slice(1)) {
-        expect(call[0]).toHaveProperty('created')
+      expect(parallelListFn).toHaveBeenCalled()
+      for (const call of parallelListFn.mock.calls) {
+        expect(call[0]).toEqual(expect.objectContaining({ created: expect.any(Object) }))
       }
 
       for (const call of sequentialListFn.mock.calls) {
@@ -2451,6 +2585,7 @@ describe('StripeSource', () => {
           client: {} as unknown as StripeClient,
           accountId: 'acct_test',
           rateLimiter: rateLimiterSpy,
+          ...LIST_BACKFILL_OPTS,
         })
       )
 
@@ -2487,7 +2622,10 @@ describe('StripeSource', () => {
 
       expect((await iter.next()).value).toMatchObject({
         type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { stream: 'customers', status: 'started' } },
+        trace: {
+          trace_type: 'stream_status',
+          stream_status: { stream: 'customers', status: 'start' },
+        },
       })
 
       const blockedNext = iter.next()

@@ -44,37 +44,26 @@ export const configSchema = z.object({
     .positive()
     .optional()
     .describe('Max objects to backfill per stream (useful for testing)'),
-  rate_limit: z
+  max_concurrent_streams: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe('Max Stripe API requests per second (default: 25)'),
+    .describe('Max streams paginating in parallel (default: 5, capped at catalog size).'),
 })
 
 export type Config = z.infer<typeof configSchema>
 
-const segmentStateSpec = z.object({
-  index: z.number(),
-  gte: z.number(),
-  lt: z.number(),
-  page_cursor: z.string().nullable(),
-  status: z.enum(['pending', 'complete']),
-})
-
-const backfillStateSpec = z.object({
-  range: z.object({ gte: z.number(), lt: z.number() }),
-  num_segments: z.number(),
-  completed: z.array(z.object({ gte: z.number(), lt: z.number() })),
-  in_flight: z.array(z.object({ gte: z.number(), lt: z.number(), page_cursor: z.string() })),
+const remainingRangeSpec = z.object({
+  gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+  lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+  cursor: z.string().nullable().describe('Stripe pagination cursor; null = not yet started.'),
 })
 
 export const streamStateSpec = z.object({
-  page_cursor: z.string().nullable(),
-  status: z.enum(['pending', 'complete']),
-  events_cursor: z.number().optional(),
-  segments: z.array(segmentStateSpec).optional(),
-  backfill: backfillStateSpec.optional(),
+  remaining: z
+    .array(remainingRangeSpec)
+    .describe('Ranges still to paginate. Empty array = stream complete for this time_range.'),
 })
 
 export const stripeEventSchema = z.object({

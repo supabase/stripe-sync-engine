@@ -302,7 +302,13 @@ async function readJson(response: Response): Promise<unknown> {
 
 function assertOk(response: Response, body: unknown, method: string, path: string): void {
   if (!response.ok) {
-    throw new StripeApiRequestError(response.status, body, method, path, pickDebugHeaders(response.headers))
+    throw new StripeApiRequestError(
+      response.status,
+      body,
+      method,
+      path,
+      pickDebugHeaders(response.headers)
+    )
   }
 }
 

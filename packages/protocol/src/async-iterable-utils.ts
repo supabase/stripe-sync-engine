@@ -168,7 +168,7 @@ export function merge<T>(
     async next() {
       if (closed) {
         return { value: undefined as T, done: true }
-    }
+      }
 
       while (pending.size > 0) {
         try {
@@ -195,7 +195,7 @@ export function merge<T>(
     async throw(error?: unknown) {
       closeAll()
       throw error
-    }
+    },
   }
 }
 
