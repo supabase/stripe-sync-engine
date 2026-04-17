@@ -335,7 +335,7 @@ describe('Stripe failure handling via Docker engine', () => {
     })
     expect(await countRows(destSchema, 'customers')).toBe(0)
     expect(await countRows(destSchema, 'products')).toBe(2)
-    expect(state.streams.products).toMatchObject({ status: 'complete' })
+    expect(state.streams.products).toMatchObject({ remaining: [] })
   }, 120_000)
 
   it('retries a later transient pagination failure and completes the stream', async () => {
@@ -364,6 +364,6 @@ describe('Stripe failure handling via Docker engine', () => {
 
     expect(getErrorTrace(messages, 'customers')).toBeUndefined()
     expect(await countRows(destSchema, 'customers')).toBe(150)
-    expect(state.streams.customers).toMatchObject({ status: 'complete' })
+    expect(state.streams.customers).toMatchObject({ remaining: [] })
   }, 120_000)
 })

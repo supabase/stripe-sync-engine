@@ -266,9 +266,9 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
       }
 
       const streamState = finalState[seed.tableName] as StripeStreamState | undefined
-      if (streamState?.status !== 'complete') {
+      if (!streamState || streamState.remaining.length !== 0) {
         failures.push(
-          `${apiVersion}/${seed.tableName}: final state was ${streamState?.status ?? 'missing'}`
+          `${apiVersion}/${seed.tableName}: final state was ${streamState ? `remaining=${streamState.remaining.length}` : 'missing'}`
         )
       }
     }
