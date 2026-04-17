@@ -144,6 +144,7 @@ describe('Stripe failure handling via Docker engine', () => {
           api_key: 'sk_test_fake',
           api_version: BUNDLED_API_VERSION,
           base_url: opts.baseUrl,
+          rate_limit: 1000,
           ...opts.sourceOverrides,
         },
       },

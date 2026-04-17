@@ -59,6 +59,7 @@ async function createCustomersPipeline(
           api_key: 'sk_test_fake',
           api_version: BUNDLED_API_VERSION,
           base_url: harness.testServerContainerUrl(),
+          rate_limit: 1000,
           ...sourceOverrides,
         },
       },
@@ -215,7 +216,9 @@ describe('network interruption e2e via Docker service', () => {
         },
       })
 
-      pipelineId = await createCustomersPipeline(harness, schema)
+      pipelineId = await createCustomersPipeline(harness, schema, {
+        rate_limit: 1000,
+      })
 
       await waitForCompletionWithoutFalseReady({
         harness,
@@ -240,7 +243,9 @@ describe('network interruption e2e via Docker service', () => {
 
     try {
       harness = await startServiceHarness({ customerCount: 400 })
-      pipelineId = await createCustomersPipeline(harness, schema)
+      pipelineId = await createCustomersPipeline(harness, schema, {
+        rate_limit: 1,
+      })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
       await harness.testServer.close()
@@ -266,7 +271,9 @@ describe('network interruption e2e via Docker service', () => {
 
     try {
       harness = await startServiceHarness({ customerCount: 400 })
-      pipelineId = await createCustomersPipeline(harness, schema)
+      pipelineId = await createCustomersPipeline(harness, schema, {
+        rate_limit: 1,
+      })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
 
@@ -298,7 +305,9 @@ describe('network interruption e2e via Docker service', () => {
 
     try {
       harness = await startServiceHarness({ customerCount: 400 })
-      pipelineId = await createCustomersPipeline(harness, schema)
+      pipelineId = await createCustomersPipeline(harness, schema, {
+        rate_limit: 1,
+      })
 
       const rowsBeforePause = await waitForPartialRows(harness, schema, harness.expectedIds.length)
 

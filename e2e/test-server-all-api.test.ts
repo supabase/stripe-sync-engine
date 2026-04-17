@@ -24,6 +24,7 @@ import { utc } from './test-server-harness.js'
 
 const SOURCE_SCHEMA = 'stripe'
 const OBJECTS_PER_STREAM = 1200
+const RATE_LIMIT = 100000
 
 const RANGE_START = utc('2025-01-01')
 const RANGE_END = utc('2026-01-01')
@@ -193,6 +194,7 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
           api_key: 'sk_test_fake',
           api_version: endpointSet.apiVersion,
           base_url: versionTestServer.url,
+          rate_limit: RATE_LIMIT,
         },
       },
       destination: {

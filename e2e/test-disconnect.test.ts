@@ -290,6 +290,7 @@ function makePipelineHeader(mockStripeUrl: string): string {
         api_key: 'sk_test_fake',
         api_version: BUNDLED_API_VERSION,
         base_url: mockStripeUrl,
+        rate_limit: 1000,
       },
     },
     destination: {
