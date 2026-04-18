@@ -507,7 +507,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           let progress = createInitialProgress(normalizedState?.sync_run?.progress)
 
           for await (const msg of limited) {
-            if (msg.type === 'eof') {
+            if (msg.type === 'eof' && 'eof' in msg) {
               yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: progress, request_progress: progress }))
               return
             }

@@ -531,23 +531,8 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 // MARK: - Message unions
 
 /** Core connector messages — the fundamental types that sources and destinations emit. */
-export const CoreMessage = z
-  .discriminatedUnion('type', [
-    RecordMessage,
-    SourceStateMessage,
-    CatalogMessage,
-    LogMessage,
-    SpecMessage,
-    ConnectionStatusMessage,
-    StreamStatusMessage,
-    ControlMessage,
-  ])
-  .meta({ id: 'CoreMessage' })
-export type CoreMessage = z.infer<typeof CoreMessage>
-
 /**
- * Extended messages — engine-level additions not part of the core connector protocol.
- * Includes progress snapshots, EOF signaling, and source input (webhook events).
+ * Extended message types (engine-level, not emitted by connectors directly).
  */
 export const SourceInputMessage = MessageBase.extend({
   type: z.literal('source_input'),
@@ -555,12 +540,10 @@ export const SourceInputMessage = MessageBase.extend({
 }).meta({ id: 'SourceInputMessage' })
 export type SourceInputMessage = z.infer<typeof SourceInputMessage>
 
-export const ExtendedMessage = z
-  .discriminatedUnion('type', [ProgressMessage, EofMessage, SourceInputMessage])
-  .meta({ id: 'ExtendedMessage' })
-export type ExtendedMessage = z.infer<typeof ExtendedMessage>
-
-/** Any message flowing through the engine — core + extended. */
+/**
+ * The single message union. All other message types are derived from this via Extract.
+ * One Zod schema = one TypeScript type = no structural mismatches.
+ */
 export const Message = z
   .discriminatedUnion('type', [
     RecordMessage,
@@ -578,16 +561,49 @@ export const Message = z
   .meta({ id: 'Message' })
 export type Message = z.infer<typeof Message>
 
-// MARK: - Message unions
+// MARK: - Derived message subsets
+//
+// All derived from the single Message union. Types use Extract for structural
+// compatibility. Runtime schemas share the same underlying Zod member schemas
+// so parsed values are assignable to Message without casts.
+
+/** Core connector messages — record, state, lifecycle, logs. */
+export const CoreMessage = z
+  .discriminatedUnion('type', [
+    RecordMessage,
+    SourceStateMessage,
+    CatalogMessage,
+    LogMessage,
+    SpecMessage,
+    ConnectionStatusMessage,
+    StreamStatusMessage,
+    ControlMessage,
+  ])
+  .meta({ id: 'CoreMessage' })
+export type CoreMessage = Extract<
+  Message,
+  | { type: 'record' }
+  | { type: 'source_state' }
+  | { type: 'catalog' }
+  | { type: 'log' }
+  | { type: 'spec' }
+  | { type: 'connection_status' }
+  | { type: 'stream_status' }
+  | { type: 'control' }
+>
+
+/** Extended messages — engine-level (progress, eof, source input). */
+export type ExtendedMessage = Extract<
+  Message,
+  { type: 'progress' } | { type: 'eof' } | { type: 'source_input' }
+>
 
 /**
  * Messages the destination receives on stdin. Destinations must handle `record`
  * and `source_state`; all other core message types must be yielded back as pass-through.
- * This ensures the destination is the sole consumer of the source stream,
- * giving natural pull-based backpressure without intermediate buffering.
  */
 export const DestinationInput = CoreMessage
-export type DestinationInput = z.infer<typeof DestinationInput>
+export type DestinationInput = CoreMessage
 
 /**
  * Messages the destination yields back to the orchestrator. Includes both
@@ -595,9 +611,9 @@ export type DestinationInput = z.infer<typeof DestinationInput>
  * messages from the source that the destination doesn't handle.
  */
 export const DestinationOutput = CoreMessage
-export type DestinationOutput = z.infer<typeof DestinationOutput>
+export type DestinationOutput = CoreMessage
 
-/** Output of pipeline_sync(): destination output plus source signals (controls, logs, stream status). */
+/** Output of pipeline_sync streamed to the client. */
 export const SyncOutput = z
   .discriminatedUnion('type', [
     SourceStateMessage,
@@ -609,7 +625,16 @@ export const SyncOutput = z
     ControlMessage,
   ])
   .meta({ id: 'SyncOutput' })
-export type SyncOutput = z.infer<typeof SyncOutput>
+export type SyncOutput = Extract<
+  Message,
+  | { type: 'source_state' }
+  | { type: 'stream_status' }
+  | { type: 'progress' }
+  | { type: 'connection_status' }
+  | { type: 'log' }
+  | { type: 'eof' }
+  | { type: 'control' }
+>
 
 // MARK: - Per-command output types
 
@@ -692,7 +717,7 @@ export interface Source<
       state?: { streams: Record<string, TSourceState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
-  ): AsyncIterable<Message>
+  ): AsyncIterable<CoreMessage>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). */
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>

@@ -4,7 +4,7 @@ import type {
   SpecOutput,
   CheckOutput,
   DiscoverOutput,
-  Message,
+  CoreMessage,
 } from '@stripe/sync-protocol'
 
 export const spec = z.object({
@@ -49,10 +49,10 @@ export const sourceTest = {
   async *read(
     { config }: { config: SourceTestConfig },
     $stdin?: AsyncIterable<unknown>
-  ): AsyncIterable<Message> {
+  ): AsyncIterable<CoreMessage> {
     if (!$stdin) return
     let recordCount = 0
-    for await (const msg of $stdin as AsyncIterable<Message>) {
+    for await (const msg of $stdin as AsyncIterable<CoreMessage>) {
       if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
         yield {
           type: 'log' as const,
