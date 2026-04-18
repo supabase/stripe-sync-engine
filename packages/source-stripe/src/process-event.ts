@@ -4,18 +4,11 @@ import type {
   RecordMessage,
   SourceStateMessage,
 } from '@stripe/sync-protocol'
-import { createSourceMessageFactory } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
 import type { Config } from './index.js'
+import { msg } from './index.js'
 import type { ResourceConfig } from './types.js'
 import { normalizeStripeObjectName } from './resourceRegistry.js'
-
-type EventState = { eventId: string; eventCreated: number }
-const msg = createSourceMessageFactory<
-  EventState,
-  Record<string, unknown>,
-  Record<string, unknown>
->()
 
 // MARK: - Delete event detection
 

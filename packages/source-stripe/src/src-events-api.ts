@@ -1,16 +1,10 @@
 import type { ConfiguredCatalog, Message } from '@stripe/sync-protocol'
-import { createSourceMessageFactory } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
 import type { Config, StreamState } from './index.js'
+import { msg } from './index.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeClient } from './client.js'
 import { processStripeEvent } from './process-event.js'
-
-const msg = createSourceMessageFactory<
-  StreamState,
-  { events_cursor: number },
-  Record<string, unknown>
->()
 
 // MARK: - Events polling
 

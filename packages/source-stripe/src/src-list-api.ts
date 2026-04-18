@@ -1,17 +1,11 @@
 import type { Message } from '@stripe/sync-protocol'
-import { createSourceMessageFactory } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
+import { msg } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
-
-const msg = createSourceMessageFactory<
-  StreamState,
-  Record<string, unknown>,
-  Record<string, unknown>
->()
 
 // MARK: - Rate-limit wrapper
 

@@ -9,12 +9,6 @@ import type {
 } from '@stripe/sync-protocol'
 import { createSourceMessageFactory, withAbortOnReturn } from '@stripe/sync-protocol'
 import { z } from 'zod'
-
-const msg = createSourceMessageFactory<
-  StreamState,
-  Record<string, unknown>,
-  Record<string, unknown>
->()
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'
@@ -84,6 +78,17 @@ export type StreamState = {
   }
   remaining: RemainingRange[]
 }
+
+export type EventState = { eventId: string; eventCreated: number }
+
+export type GlobalState = { events_cursor: number }
+
+/** Single message factory for the entire Stripe source. All files import this. */
+export const msg = createSourceMessageFactory<
+  StreamState | EventState,
+  GlobalState,
+  Record<string, unknown>
+>()
 
 // MARK: - Account ID resolution
 
