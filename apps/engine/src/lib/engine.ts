@@ -488,7 +488,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           // Track progress and accumulate state
           const syncState = structuredClone(normalizedState ?? emptySyncState())
           let progress = createInitialProgress(normalizedState?.sync_run?.progress)
-          const startedAtMs = Date.now()
 
           for await (const msg of limited) {
             // Accumulate sync state
@@ -504,21 +503,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
             // Emit eof with progress
             if (msg.type === 'eof') {
-              const elapsed = Date.now() - startedAtMs
-              const elapsedSec = Math.max(elapsed / 1000, 0.001)
-              let totalRecords = 0
-              for (const sp of Object.values(progress.streams)) totalRecords += sp.record_count
-              const finalProgress = {
-                ...progress,
-                elapsed_ms: elapsed,
-                derived: { ...progress.derived, records_per_second: totalRecords / elapsedSec, states_per_second: progress.global_state_count / elapsedSec },
-              }
               yield {
                 ...engineMsg.eof({
                   has_more: msg.eof.has_more,
                   ending_state: syncState,
-                  run_progress: finalProgress,
-                  request_progress: finalProgress,
+                  run_progress: progress,
+                  request_progress: progress,
                 }),
                 _emitted_by: 'engine',
                 _ts: new Date().toISOString(),

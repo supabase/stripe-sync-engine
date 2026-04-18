@@ -29,33 +29,60 @@ function deriveStatus(progress: ProgressPayload): 'started' | 'succeeded' | 'fai
   if (progress.connection_status?.status === 'failed') return 'failed'
   const streams = Object.values(progress.streams)
   if (streams.some((s) => s.status === 'errored')) return 'failed'
-  if (streams.length > 0 && streams.every((s) => s.status === 'completed' || s.status === 'skipped' || s.status === 'errored')) {
+  if (
+    streams.length > 0 &&
+    streams.every(
+      (s) => s.status === 'completed' || s.status === 'skipped' || s.status === 'errored'
+    )
+  ) {
     return 'succeeded'
   }
   return 'started'
 }
 
+function computeDerived(progress: ProgressPayload, elapsedMs: number): ProgressPayload['derived'] {
+  const elapsedSec = Math.max(elapsedMs / 1000, 0.001)
+  let totalRecords = 0
+  for (const sp of Object.values(progress.streams)) totalRecords += sp.record_count
+  return {
+    status: deriveStatus(progress),
+    records_per_second: totalRecords / elapsedSec,
+    states_per_second: progress.global_state_count / elapsedSec,
+  }
+}
+
 /** Pure reducer: (ProgressPayload, Message) → ProgressPayload */
 export function progressReducer(progress: ProgressPayload, msg: Message): ProgressPayload {
+  const elapsedMs = msg._ts
+    ? new Date(msg._ts).getTime() - new Date(progress.started_at).getTime()
+    : progress.elapsed_ms
+
   switch (msg.type) {
     case 'record': {
       const stream = (msg as { record: { stream: string } }).record.stream
       const sp = getStream(progress, stream)
-      return {
+      const next = {
         ...progress,
+        elapsed_ms: elapsedMs,
         streams: { ...progress.streams, [stream]: { ...sp, record_count: sp.record_count + 1 } },
       }
+      next.derived = computeDerived(next, elapsedMs)
+      return next
     }
 
     case 'source_state': {
-      const newProgress = { ...progress, global_state_count: progress.global_state_count + 1 }
+      const next = { ...progress, elapsed_ms: elapsedMs, global_state_count: progress.global_state_count + 1 }
       if (msg.source_state.state_type === 'stream') {
         const stream = msg.source_state.stream
         if (!progress.streams[stream]) {
-          newProgress.streams = { ...newProgress.streams, [stream]: { status: 'started', state_count: 0, record_count: 0 } }
+          next.streams = {
+            ...next.streams,
+            [stream]: { status: 'started', state_count: 0, record_count: 0 },
+          }
         }
       }
-      return newProgress
+      next.derived = computeDerived(next, elapsedMs)
+      return next
     }
 
     case 'stream_status': {
@@ -65,7 +92,16 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       if (ss.status === 'range_complete' && 'range_complete' in ss) {
         const rc = ss.range_complete as Range
         const existing = sp.completed_ranges ?? []
-        return { ...progress, streams: { ...progress.streams, [ss.stream]: { ...sp, completed_ranges: mergeRanges([...existing, rc]) } } }
+        const next = {
+          ...progress,
+          elapsed_ms: elapsedMs,
+          streams: {
+            ...progress.streams,
+            [ss.stream]: { ...sp, completed_ranges: mergeRanges([...existing, rc]) },
+          },
+        }
+        next.derived = computeDerived(next, elapsedMs)
+        return next
       }
 
       let status: StreamProgress['status'] = sp.status
@@ -74,16 +110,19 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       else if (ss.status === 'skip') status = 'skipped'
       else if (ss.status === 'error') status = 'errored'
 
-      const newSp = { ...sp, status }
-      const newProgress = { ...progress, streams: { ...progress.streams, [ss.stream]: newSp } }
-      newProgress.derived = { ...newProgress.derived, status: deriveStatus(newProgress) }
-      return newProgress
+      const next = {
+        ...progress,
+        elapsed_ms: elapsedMs,
+        streams: { ...progress.streams, [ss.stream]: { ...sp, status } },
+      }
+      next.derived = computeDerived(next, elapsedMs)
+      return next
     }
 
     case 'connection_status': {
-      const newProgress = { ...progress, connection_status: msg.connection_status }
-      newProgress.derived = { ...newProgress.derived, status: deriveStatus(newProgress) }
-      return newProgress
+      const next = { ...progress, elapsed_ms: elapsedMs, connection_status: msg.connection_status }
+      next.derived = computeDerived(next, elapsedMs)
+      return next
     }
 
     default:
