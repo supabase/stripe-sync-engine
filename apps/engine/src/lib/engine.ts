@@ -230,6 +230,16 @@ async function discoverCatalog(
   return { catalog, filteredCatalog }
 }
 
+/** Resolve source connector, config, catalog, and state for a pipeline. */
+async function resolvePipelineSource(resolver: ConnectorResolver, engine: Engine, pipeline: PipelineConfig, state?: unknown) {
+  const connector = await resolver.resolveSource(pipeline.source.type)
+  const { config, streamStateSchema } = await getSpec(connector, configPayload(pipeline.source))
+  const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
+  const normalizedState = parseSyncState(state, streamStateSchema)
+  const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
+  return { connector, config, catalog: catalogWithRanges, filteredCatalog, state: normalizedState }
+}
+
 /**
  * Inject `time_range.lt` into each ConfiguredStream from the frozen `time_ceiling`.
  *
@@ -413,15 +423,11 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_read(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
         (async function* () {
-          const connector = await resolver.resolveSource(pipeline.source.type)
-          const rawSrc = configPayload(pipeline.source)
-          const { config: sourceConfig, streamStateSchema } = await getSpec(connector, rawSrc)
-          const { catalog } = await discoverCatalog(engine, pipeline)
-          const normalizedState = parseSyncState(opts?.state, streamStateSchema)
-          const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
-          const state = normalizedState?.source
-
-          const raw = connector.read({ config: sourceConfig, catalog: catalogWithRanges, state }, input)
+          const src = await resolvePipelineSource(resolver, engine, pipeline, opts?.state)
+          const raw = src.connector.read(
+            { config: src.config, catalog: src.catalog, state: src.state?.source },
+            input
+          )
           const parsed = map(raw, (msg) => Message.parse(msg))
           yield* takeLimits({
             state_limit: opts?.state_limit,
@@ -460,36 +466,24 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_sync(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
         (async function* () {
-          // pipeline_sync calls connectors directly rather than delegating to
-          // pipeline_read/pipeline_write. Those methods each apply their own
-          // takeLimits and eof — pipeline_sync owns the full lifecycle and adds
-          // limits + eof once at the end via takeLimits/trackProgress.
-          const srcConnector = await resolver.resolveSource(pipeline.source.type)
-          const rawSrc = configPayload(pipeline.source)
-          const { config: sourceConfig, streamStateSchema } = await getSpec(srcConnector, rawSrc)
+          const src = await resolvePipelineSource(resolver, engine, pipeline, opts?.state)
 
           const destConnector = await resolver.resolveDestination(pipeline.destination.type)
-          const rawDest = configPayload(pipeline.destination)
-          const { config: destConfig } = await getSpec(destConnector, rawDest)
-
-          const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
-          const normalizedState = parseSyncState(opts?.state, streamStateSchema)
-          const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
-          const sourceState = normalizedState?.source
+          const { config: destConfig } = await getSpec(destConnector, configPayload(pipeline.destination))
 
           // Source → destination pipeline. The destination is the sole consumer,
           // giving natural pull-based backpressure with zero intermediate buffering.
-          const sourceOutput = srcConnector.read(
-            { config: sourceConfig, catalog: catalogWithRanges, state: sourceState },
+          const sourceOutput = src.connector.read(
+            { config: src.config, catalog: src.catalog, state: src.state?.source },
             input
           )
           const destInput = pipe(
             sourceOutput,
-            enforceCatalog(filteredCatalog),
+            enforceCatalog(src.filteredCatalog),
             log,
           )
           const destOutput = destConnector.write(
-            { config: destConfig, catalog: filteredCatalog },
+            { config: destConfig, catalog: src.filteredCatalog },
             destInput
           )
           // Apply limits (takeLimits appends eof)
@@ -499,8 +493,8 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             signal,
           })(destOutput)
 
-          let syncState = structuredClone(normalizedState ?? emptySyncState())
-          let progress = createInitialProgress(normalizedState?.sync_run?.progress)
+          let syncState = structuredClone(src.state ?? emptySyncState())
+          let progress = createInitialProgress(src.state?.sync_run?.progress)
 
           for await (const msg of limited) {
             if (msg.type === 'eof' && 'eof' in msg) {
