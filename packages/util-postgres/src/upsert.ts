@@ -4,18 +4,64 @@ import { ident, identList, qualifiedTable } from './sql.js'
 export type UpsertOptions = {
   schema?: string
   table: string
-  /** ON CONFLICT target columns. */
+
+  /** ON CONFLICT target columns — the unique constraint used to detect existing rows. */
   keyColumns: string[]
-  /** JSONB columns that get shallow-merged: COALESCE(tbl.col, '{}'::jsonb) || EXCLUDED.col */
+
+  /**
+   * JSONB columns that get shallow-merged instead of replaced.
+   * SQL: `col = COALESCE(tbl.col, '{}'::jsonb) || EXCLUDED.col`
+   *
+   * Example: A `metadata` column where each sync adds keys without clobbering
+   * existing ones. Source A writes `{"source": "stripe"}`, source B writes
+   * `{"tier": "premium"}` — the result is `{"source": "stripe", "tier": "premium"}`.
+   */
   shallowMergeJsonbColumns?: string[]
-  /** Columns excluded from IS DISTINCT FROM check (still updated). */
-  noDiffColumns?: string[]
-  /** Columns set on INSERT only — never overwritten on conflict. */
+
+  /**
+   * Columns excluded from the IS DISTINCT FROM no-op check, but still updated.
+   * Use for columns that change every write but shouldn't prevent the update
+   * from being skipped as a no-op.
+   *
+   * Example: A `synced_at` timestamp set to `now()` on every upsert. Without
+   * this option, every row would appear "changed" due to `synced_at` differing,
+   * defeating `skipNoopUpdates`.
+   */
+  volatileColumns?: string[]
+
+  /**
+   * Columns written on INSERT only — never overwritten on conflict.
+   *
+   * Example: A `first_seen_at` timestamp that records when the row was first
+   * created. On subsequent upserts the value is preserved regardless of what
+   * the incoming record contains.
+   */
   insertOnlyColumns?: string[]
-  /** Guard columns: update only proceeds if these match EXCLUDED values. */
-  mustMatchColumns?: string[]
+
+  /**
+   * Guard columns: the update only proceeds if the existing row's value for
+   * these columns matches the incoming EXCLUDED value.
+   * SQL: `WHERE tbl.col = EXCLUDED.col`
+   *
+   * Example: Multi-tenant table with a `account_id` column. Ensures an upsert
+   * cannot accidentally overwrite a row belonging to a different account, even
+   * if the primary key collides.
+   */
+  guardColumns?: string[]
+
+  /**
+   * Only update if the incoming row is newer than the existing row, based on
+   * this column. SQL: `WHERE EXCLUDED.col > tbl.col`
+   *
+   * Example: Stripe webhook events arriving out of order. Using `updated` as
+   * the newerThanColumn ensures a stale event (lower `updated` timestamp)
+   * cannot overwrite a row that was already updated by a more recent event.
+   */
+  newerThanColumn?: string
+
   /** Skip no-op updates via IS DISTINCT FROM (default: true). */
   skipNoopUpdates?: boolean
+
   /** Append RETURNING * (default: false). */
   returning?: boolean
 }
@@ -49,9 +95,10 @@ export function buildUpsertSql(
     table,
     keyColumns,
     shallowMergeJsonbColumns = [],
-    noDiffColumns = [],
+    volatileColumns = [],
     insertOnlyColumns = [],
-    mustMatchColumns = [],
+    guardColumns = [],
+    newerThanColumn,
     skipNoopUpdates = true,
     returning = false,
   } = options
@@ -61,7 +108,7 @@ export function buildUpsertSql(
   const tbl = qualifiedTable(schema, table)
   const shallowMergeSet = new Set(shallowMergeJsonbColumns)
   const insertOnlySet = new Set(insertOnlyColumns)
-  const noDiffSet = new Set(noDiffColumns)
+  const noDiffSet = new Set(volatileColumns)
   const keySet = new Set(keyColumns)
 
   // --- VALUES rows -----------------------------------------------------------
@@ -100,8 +147,14 @@ export function buildUpsertSql(
     }
   }
 
-  for (const col of mustMatchColumns) {
+  for (const col of guardColumns) {
     whereParts.push(`${ident(table)}.${ident(col)} = EXCLUDED.${ident(col)}`)
+  }
+
+  if (newerThanColumn) {
+    whereParts.push(
+      `EXCLUDED.${ident(newerThanColumn)} > ${ident(table)}.${ident(newerThanColumn)}`
+    )
   }
 
   // --- Assemble --------------------------------------------------------------

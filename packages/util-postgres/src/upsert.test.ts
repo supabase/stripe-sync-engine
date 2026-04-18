@@ -257,7 +257,7 @@ describe('insertOnlyColumns', () => {
   })
 })
 
-describe('noDiffColumns', () => {
+describe('volatileColumns', () => {
   let table: string
   beforeEach(async () => {
     table = nextTable()
@@ -274,14 +274,14 @@ describe('noDiffColumns', () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't1' }], {
       table,
       keyColumns: ['id'],
-      noDiffColumns: ['updated_at'],
+      volatileColumns: ['updated_at'],
     })
 
     // Only updated_at changes — should be skipped by IS DISTINCT FROM
     const result = await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't2' }], {
       table,
       keyColumns: ['id'],
-      noDiffColumns: ['updated_at'],
+      volatileColumns: ['updated_at'],
       returning: true,
     })
 
@@ -295,13 +295,13 @@ describe('noDiffColumns', () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't1' }], {
       table,
       keyColumns: ['id'],
-      noDiffColumns: ['updated_at'],
+      volatileColumns: ['updated_at'],
     })
 
     await upsert(pool, [{ id: '1', name: 'Bob', updated_at: 't2' }], {
       table,
       keyColumns: ['id'],
-      noDiffColumns: ['updated_at'],
+      volatileColumns: ['updated_at'],
     })
 
     const r = await rows(table)
@@ -309,7 +309,7 @@ describe('noDiffColumns', () => {
   })
 })
 
-describe('mustMatchColumns', () => {
+describe('guardColumns', () => {
   let table: string
   beforeEach(async () => {
     table = nextTable()
@@ -331,7 +331,7 @@ describe('mustMatchColumns', () => {
     const result = await upsert(pool, [{ id: '1', name: 'Updated', version: 1 }], {
       table,
       keyColumns: ['id'],
-      mustMatchColumns: ['version'],
+      guardColumns: ['version'],
       skipNoopUpdates: false,
       returning: true,
     })
@@ -349,7 +349,7 @@ describe('mustMatchColumns', () => {
     const result = await upsert(pool, [{ id: '1', name: 'Should Not Apply', version: 999 }], {
       table,
       keyColumns: ['id'],
-      mustMatchColumns: ['version'],
+      guardColumns: ['version'],
       skipNoopUpdates: false,
       returning: true,
     })
@@ -498,5 +498,85 @@ describe('NULL handling', () => {
     })
 
     expect(result.rows).toHaveLength(0) // skipped — no change
+  })
+})
+
+describe('newerThanColumn', () => {
+  let table: string
+  beforeEach(async () => {
+    table = nextTable()
+    await pool.query(`
+      CREATE TABLE "${table}" (
+        id text PRIMARY KEY,
+        name text,
+        updated int
+      )
+    `)
+  })
+
+  it('updates when incoming row is newer', async () => {
+    await upsert(pool, [{ id: '1', name: 'Alice', updated: 100 }], {
+      table,
+      keyColumns: ['id'],
+    })
+
+    await upsert(pool, [{ id: '1', name: 'Alice v2', updated: 200 }], {
+      table,
+      keyColumns: ['id'],
+      newerThanColumn: 'updated',
+    })
+
+    const r = await rows(table)
+    expect(r[0]).toMatchObject({ id: '1', name: 'Alice v2', updated: 200 })
+  })
+
+  it('skips update when incoming row is older', async () => {
+    await upsert(pool, [{ id: '1', name: 'Alice v2', updated: 200 }], {
+      table,
+      keyColumns: ['id'],
+    })
+
+    const result = await upsert(pool, [{ id: '1', name: 'Stale', updated: 100 }], {
+      table,
+      keyColumns: ['id'],
+      newerThanColumn: 'updated',
+      returning: true,
+    })
+
+    expect(result.rows).toHaveLength(0) // skipped — stale
+
+    const r = await rows(table)
+    expect(r[0]).toMatchObject({ id: '1', name: 'Alice v2', updated: 200 }) // unchanged
+  })
+
+  it('skips update when incoming row has equal timestamp', async () => {
+    await upsert(pool, [{ id: '1', name: 'Alice', updated: 100 }], {
+      table,
+      keyColumns: ['id'],
+    })
+
+    const result = await upsert(pool, [{ id: '1', name: 'Same time', updated: 100 }], {
+      table,
+      keyColumns: ['id'],
+      newerThanColumn: 'updated',
+      returning: true,
+    })
+
+    expect(result.rows).toHaveLength(0) // skipped — not strictly newer
+
+    const r = await rows(table)
+    expect(r[0].name).toBe('Alice') // unchanged
+  })
+
+  it('inserts normally when row does not exist', async () => {
+    await upsert(pool, [{ id: '1', name: 'New', updated: 50 }], {
+      table,
+      keyColumns: ['id'],
+      newerThanColumn: 'updated',
+    })
+
+    const r = await rows(table)
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ id: '1', name: 'New', updated: 50 })
   })
 })
