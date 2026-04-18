@@ -1,5 +1,5 @@
 import type { Message, TraceMessage, LogMessage } from '@stripe/sync-protocol'
-import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
+import { toRecordMessage, stateMsg, streamStatusMsg } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StripeStreamState } from './index.js'
@@ -149,6 +149,48 @@ export function subdivideRanges(
   return result
 }
 
+// MARK: - Time range reconciliation
+
+/**
+ * Reconcile `remaining` ranges when the incoming `time_range` differs from
+ * the previously `accounted_range`. Rules:
+ *   1. Drop ranges fully outside the new time_range
+ *   2. Trim ranges that partially overlap the new boundaries
+ *   3. Add new ranges for uncovered territory
+ *   4. Return the new accounted_range (= time_range)
+ */
+function reconcileRanges(
+  remaining: RemainingRange[],
+  accounted: { gte: string; lt: string },
+  incoming: { gte: string; lt: string }
+): RemainingRange[] {
+  const result: RemainingRange[] = []
+
+  for (const range of remaining) {
+    const rGte = range.gte
+    const rLt = range.lt
+    // Drop fully outside
+    if (rLt <= incoming.gte || rGte >= incoming.lt) continue
+    // Trim to fit
+    result.push({
+      gte: rGte < incoming.gte ? incoming.gte : rGte,
+      lt: rLt > incoming.lt ? incoming.lt : rLt,
+      cursor: rGte < incoming.gte ? null : range.cursor, // reset cursor if gte trimmed
+    })
+  }
+
+  // Add uncovered territory below
+  if (incoming.gte < accounted.gte) {
+    result.push({ gte: incoming.gte, lt: accounted.gte, cursor: null })
+  }
+  // Add uncovered territory above
+  if (incoming.lt > accounted.lt) {
+    result.push({ gte: accounted.lt, lt: incoming.lt, cursor: null })
+  }
+
+  return result
+}
+
 // MARK: - Account created timestamp
 
 const STRIPE_LAUNCH_TIMESTAMP = Math.floor(new Date('2011-01-01T00:00:00Z').getTime() / 1000)
@@ -224,6 +266,7 @@ function isLegacyState(data: unknown): boolean {
 async function* paginateRange(opts: {
   range: RemainingRange
   remaining: RemainingRange[]
+  accountedRange: { gte: string; lt: string }
   listFn: ListFn
   streamName: string
   accountId: string
@@ -238,6 +281,7 @@ async function* paginateRange(opts: {
   const {
     range,
     remaining,
+    accountedRange,
     listFn,
     streamName,
     accountId,
@@ -292,7 +336,10 @@ async function* paginateRange(opts: {
 
     yield stateMsg({
       stream: streamName,
-      data: { remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range) },
+      data: {
+        accounted_range: accountedRange,
+        remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range),
+      } satisfies StripeStreamState,
     })
   }
 
@@ -300,21 +347,18 @@ async function* paginateRange(opts: {
   const idx = remaining.indexOf(range)
   if (idx !== -1) remaining.splice(idx, 1)
 
-  yield {
-    type: 'trace',
-    trace: {
-      trace_type: 'stream_status',
-      stream_status: {
-        stream: streamName,
-        status: 'range_complete',
-        range_complete: { gte: range.gte, lt: range.lt },
-      },
-    },
-  } satisfies TraceMessage
+  yield streamStatusMsg({
+    stream: streamName,
+    status: 'range_complete',
+    range_complete: { gte: range.gte, lt: range.lt },
+  })
 
   yield stateMsg({
     stream: streamName,
-    data: { remaining: [...remaining] } satisfies StripeStreamState,
+    data: {
+      accounted_range: accountedRange,
+      remaining: [...remaining],
+    } satisfies StripeStreamState,
   })
 }
 
@@ -344,9 +388,23 @@ async function* backfillStream(opts: {
   } = opts
 
   let remaining: RemainingRange[]
+  const accountedRange = { gte: timeRange.gte, lt: timeRange.lt }
 
   if (opts.streamState && !isLegacyState(opts.streamState)) {
-    remaining = opts.streamState.remaining.map((r) => ({ ...r }))
+    const existingAccounted = opts.streamState.accounted_range
+    if (
+      existingAccounted &&
+      (existingAccounted.gte !== timeRange.gte || existingAccounted.lt !== timeRange.lt)
+    ) {
+      // time_range changed — reconcile remaining against new range
+      remaining = reconcileRanges(
+        opts.streamState.remaining.map((r) => ({ ...r })),
+        existingAccounted,
+        timeRange
+      )
+    } else {
+      remaining = opts.streamState.remaining.map((r) => ({ ...r }))
+    }
     if (remaining.length === 0) return
   } else {
     if (opts.streamState && isLegacyState(opts.streamState)) {
@@ -355,13 +413,7 @@ async function* backfillStream(opts: {
     remaining = [{ gte: timeRange.gte, lt: timeRange.lt, cursor: null }]
   }
 
-  yield {
-    type: 'trace',
-    trace: {
-      trace_type: 'stream_status',
-      stream_status: { stream: streamName, status: 'start' },
-    },
-  } satisfies TraceMessage
+  yield streamStatusMsg({ stream: streamName, status: 'start' })
 
   const rateLimitedListFn = withRateLimit(resourceConfig.listFn!, rateLimiter, opts.signal)
   const supportsCreatedFilter = resourceConfig.supportsCreatedFilter
@@ -388,6 +440,7 @@ async function* backfillStream(opts: {
       paginateRange({
         range,
         remaining,
+        accountedRange,
         listFn: rateLimitedListFn,
         streamName,
         accountId,
@@ -419,13 +472,7 @@ async function* backfillStream(opts: {
     }
   }
 
-  yield {
-    type: 'trace',
-    trace: {
-      trace_type: 'stream_status',
-      stream_status: { stream: streamName, status: 'complete' },
-    },
-  } satisfies TraceMessage
+  yield streamStatusMsg({ stream: streamName, status: 'complete' })
 }
 
 // MARK: - Main entry point
@@ -520,13 +567,11 @@ export async function* listApiBackfill(opts: {
           })
         } catch (err) {
           if (isSkippableError(err)) {
-            yield {
-              type: 'trace',
-              trace: {
-                trace_type: 'stream_status',
-                stream_status: { stream: stream.name, status: 'complete' },
-              },
-            } satisfies TraceMessage
+            yield streamStatusMsg({
+              stream: stream.name,
+              status: 'error',
+              error: err instanceof Error ? err.message : String(err),
+            })
             return
           }
           console.error({
@@ -534,15 +579,23 @@ export async function* listApiBackfill(opts: {
             stream: stream.name,
             error: err instanceof Error ? err.message : String(err),
           })
-          yield errorToTrace(err, stream.name)
 
           if (isGlobalError(err)) {
-            yield logMsg(
-              'error',
-              `global error: ${err instanceof Error ? err.message : String(err)}`
-            )
+            yield {
+              type: 'connection_status',
+              connection_status: {
+                status: 'failed',
+                message: err instanceof Error ? err.message : String(err),
+              },
+            } satisfies Message
             return
           }
+
+          yield streamStatusMsg({
+            stream: stream.name,
+            status: 'error',
+            error: err instanceof Error ? err.message : String(err),
+          })
         }
       })()
     )

@@ -82,11 +82,8 @@ describe('trackProgress', () => {
             source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
           },
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: { stream: 'customers', status: 'complete' },
-            },
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'complete' },
           },
           {
             type: 'trace',
@@ -357,32 +354,23 @@ describe('trackProgress', () => {
       })(
         toAsync<SyncOutput>([
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: { stream: 'customers', status: 'start' },
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'start' },
+          },
+          {
+            type: 'stream_status',
+            stream_status: {
+              stream: 'customers',
+              status: 'range_complete',
+              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
             },
           },
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: {
-                stream: 'customers',
-                status: 'range_complete',
-                range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-              },
-            },
-          },
-          {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: {
-                stream: 'customers',
-                status: 'range_complete',
-                range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
-              },
+            type: 'stream_status',
+            stream_status: {
+              stream: 'customers',
+              status: 'range_complete',
+              range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
             },
           },
           { type: 'eof', eof: { reason: 'complete' } },
@@ -415,21 +403,15 @@ describe('trackProgress', () => {
       })(
         toAsync<SyncOutput>([
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: { stream: 'customers', status: 'running' },
-            },
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'start' },
           },
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: {
-                stream: 'customers',
-                status: 'range_complete',
-                range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-              },
+            type: 'stream_status',
+            stream_status: {
+              stream: 'customers',
+              status: 'range_complete',
+              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
             },
           },
           { type: 'eof', eof: { reason: 'complete' } },
@@ -442,7 +424,7 @@ describe('trackProgress', () => {
       type: 'eof',
       eof: {
         stream_progress: {
-          customers: { status: 'running' },
+          customers: { status: 'start' },
         },
       },
     })
@@ -468,14 +450,11 @@ describe('trackProgress', () => {
       })(
         toAsync<SyncOutput>([
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'stream_status',
-              stream_status: {
-                stream: 'customers',
-                status: 'range_complete',
-                range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
-              },
+            type: 'stream_status',
+            stream_status: {
+              stream: 'customers',
+              status: 'range_complete',
+              range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
             },
           },
           { type: 'eof', eof: { reason: 'complete' } },

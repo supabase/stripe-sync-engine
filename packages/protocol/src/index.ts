@@ -8,6 +8,7 @@ export {
   stateData,
   recordMsg,
   stateMsg,
+  streamStatusMsg,
   sourceControlMsg,
   destinationControlMsg,
   // Type guards
@@ -18,6 +19,8 @@ export {
   isTraceMessage,
   isSpecMessage,
   isConnectionStatusMessage,
+  isStreamStatusMessage,
+  isProgressMessage,
   isControlMessage,
   isEofMessage,
   isDataMessage,

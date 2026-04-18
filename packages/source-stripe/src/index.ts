@@ -72,6 +72,10 @@ export type RemainingRange = {
 }
 
 export type StripeStreamState = {
+  accounted_range?: {
+    gte: string // ISO 8601 — inclusive lower bound
+    lt: string // ISO 8601 — exclusive upper bound
+  }
   remaining: RemainingRange[]
 }
 

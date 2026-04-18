@@ -298,19 +298,16 @@ describe('log()', () => {
     )
   })
 
-  it('logs trace stream_status messages via logger.info', async () => {
+  it('logs top-level stream_status messages via logger.info', async () => {
     const msgs: Message[] = [
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'orders', status: 'running' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'orders', status: 'start' },
       },
     ]
     await drain(log(toAsync(msgs)))
     expect(logger.info).toHaveBeenCalledWith(
-      { stream: 'orders', status: 'running' },
+      { stream: 'orders', status: 'start' },
       'stream_status'
     )
   })

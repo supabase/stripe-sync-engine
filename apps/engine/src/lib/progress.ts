@@ -2,7 +2,7 @@ import type {
   Message,
   SyncState,
   SyncOutput,
-  TraceStreamStatus,
+  StreamStatusPayload,
   TraceError,
   TraceProgress,
   EofPayload,
@@ -33,7 +33,7 @@ export function mergeRanges(ranges: Range[]): Range[] {
 }
 
 type StreamError = { message: string; failure_type?: TraceError['failure_type'] }
-type Status = TraceStreamStatus['status']
+type Status = StreamStatusPayload['status']
 
 /**
  * Shared record counter that can be tapped into the data pipeline (before the
@@ -101,6 +101,7 @@ export function trackProgress(opts: {
       }
     }
     const streamErrors = new Map<string, StreamError[]>()
+    let connectionStatus: { status: 'succeeded' | 'failed'; message?: string } | undefined
     const hadInitialState = opts.initial_state != null
     const finalState: SyncState = structuredClone(opts.initial_state ?? emptySyncState())
 
@@ -154,29 +155,6 @@ export function trackProgress(opts: {
       prevWindowTotal = totalRunRecords()
       lastWindowAt = Date.now()
       lastEmitAt = Date.now()
-    }
-
-    function buildStreamStatus(stream: string): SyncOutput | undefined {
-      const status = streamStatus.get(stream)
-      if (!status) return undefined
-      const run = runRecordCount(stream)
-      const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
-      return {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status' as const,
-          stream_status: {
-            stream,
-            status,
-            cumulative_record_count: cumulative,
-            run_record_count: run,
-            window_record_count: windowRecordCount(stream),
-            records_per_second: run / elapsedSec(),
-          },
-        },
-        _emitted_by: 'engine',
-        _ts: new Date().toISOString(),
-      } as SyncOutput
     }
 
     function buildGlobalProgress(): SyncOutput {
@@ -247,6 +225,7 @@ export function trackProgress(opts: {
       }
       const eof: EofPayload = {
         reason,
+        has_more: reason !== 'complete',
         state: buildAccumulatedState(),
         global_progress: {
           elapsed_ms: elapsedMs(),
@@ -269,10 +248,6 @@ export function trackProgress(opts: {
       const now = Date.now()
       if (now - lastEmitAt < intervalMs) return
 
-      for (const stream of allStreams()) {
-        const ss = buildStreamStatus(stream)
-        if (ss) yield ss
-      }
       yield buildGlobalProgress()
       snapshotWindow()
     }
@@ -287,17 +262,27 @@ export function trackProgress(opts: {
         } else if (msg.source_state.state_type === 'global') {
           finalState.source.global = msg.source_state.data as Record<string, unknown>
         }
+      } else if (msg.type === 'stream_status') {
+        // Top-level stream_status messages (new protocol)
+        const ss = msg.stream_status
+        if (ss.status === 'range_complete' && 'range_complete' in ss) {
+          const rc = ss.range_complete
+          const existing = completedRanges.get(ss.stream) ?? []
+          existing.push({ gte: rc.gte, lt: rc.lt })
+          completedRanges.set(ss.stream, mergeRanges(existing))
+        } else if (ss.status === 'error' && 'error' in ss) {
+          streamStatus.set(ss.stream, 'complete')
+          const errs = streamErrors.get(ss.stream) ?? []
+          errs.push({ message: ss.error })
+          streamErrors.set(ss.stream, errs)
+        } else {
+          streamStatus.set(ss.stream, ss.status)
+        }
+      } else if (msg.type === 'connection_status') {
+        // Global connection failure from source during read
+        connectionStatus = msg.connection_status
       } else if (msg.type === 'trace') {
-        if (msg.trace.trace_type === 'stream_status') {
-          const ss = msg.trace.stream_status
-          if (ss.status === 'range_complete' && ss.range_complete) {
-            const existing = completedRanges.get(ss.stream) ?? []
-            existing.push({ gte: ss.range_complete.gte, lt: ss.range_complete.lt })
-            completedRanges.set(ss.stream, mergeRanges(existing))
-          } else {
-            streamStatus.set(ss.stream, ss.status)
-          }
-        } else if (msg.trace.trace_type === 'error') {
+        if (msg.trace.trace_type === 'error') {
           const err = msg.trace.error
           if (err.stream) {
             const errs = streamErrors.get(err.stream) ?? []
@@ -308,10 +293,6 @@ export function trackProgress(opts: {
       }
 
       if (msg.type === 'eof') {
-        for (const stream of allStreams()) {
-          const ss = buildStreamStatus(stream)
-          if (ss) yield ss
-        }
         yield buildGlobalProgress()
         yield buildEnrichedEof(msg.eof.reason)
         return

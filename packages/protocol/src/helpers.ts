@@ -7,11 +7,14 @@ import type {
   GlobalStatePayload,
   LogMessage,
   Message,
+  ProgressMessage,
   RecordMessage,
   RecordPayload,
   SectionState,
   SourceStateMessage,
   SpecMessage,
+  StreamStatusMessage,
+  StreamStatusPayload,
   StreamStatePayload,
   SyncState,
   TraceMessage,
@@ -83,6 +86,14 @@ export function isConnectionStatusMessage(msg: Message): msg is ConnectionStatus
 
 export function isControlMessage(msg: Message): msg is ControlMessage {
   return msg.type === 'control'
+}
+
+export function isStreamStatusMessage(msg: Message): msg is StreamStatusMessage {
+  return msg.type === 'stream_status'
+}
+
+export function isProgressMessage(msg: Message): msg is ProgressMessage {
+  return msg.type === 'progress'
 }
 
 export function isEofMessage(msg: Message): msg is EofMessage {
@@ -271,4 +282,9 @@ export function stateMsg(
       ? (payload as GlobalStatePayload)
       : { state_type: 'stream' as const, ...(payload as { stream: string; data: unknown }) }
   return { type: 'source_state', source_state }
+}
+
+/** Shorthand to create a stream_status envelope message. */
+export function streamStatusMsg(payload: StreamStatusPayload): StreamStatusMessage {
+  return { type: 'stream_status', stream_status: payload }
 }

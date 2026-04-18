@@ -60,16 +60,20 @@ export function enforceCatalog(
 export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
   for await (const msg of messages) {
     if (msg.type === 'log') logger[msg.log.level](msg.log.message)
-    else if (msg.type === 'trace') {
+    else if (msg.type === 'stream_status') {
+      logger.info(
+        { stream: msg.stream_status.stream, status: msg.stream_status.status },
+        'stream_status'
+      )
+    } else if (msg.type === 'connection_status') {
+      if (msg.connection_status.status === 'failed') {
+        logger.error({ message: msg.connection_status.message }, 'connection_status: failed')
+      }
+    } else if (msg.type === 'trace') {
       if (msg.trace.trace_type === 'error') {
         logger.error(
           { stream: msg.trace.error.stream, failure_type: msg.trace.error.failure_type },
           msg.trace.error.message
-        )
-      } else if (msg.trace.trace_type === 'stream_status') {
-        logger.info(
-          { stream: msg.trace.stream_status.stream, status: msg.trace.stream_status.status },
-          'stream_status'
         )
       }
     }

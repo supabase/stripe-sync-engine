@@ -355,6 +355,7 @@ async function discoverCatalog(
 export function injectTimeRanges(catalog: ConfiguredCatalog, engineState?: SectionState): void {
   if (!engineState?.streams) return
   for (const cs of catalog.streams) {
+    if (cs.supports_time_range === false) continue
     const data = engineState.streams[cs.stream.name] as
       | { completed_ranges?: Array<{ gte: string; lt: string }> }
       | undefined

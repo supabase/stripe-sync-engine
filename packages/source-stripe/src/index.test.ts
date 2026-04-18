@@ -8,6 +8,7 @@ import type {
   Message,
   RecordMessage,
   SourceStateMessage,
+  StreamStatusMessage,
   TraceMessage,
 } from '@stripe/sync-protocol'
 import { collectFirst, drain } from '@stripe/sync-protocol'
@@ -46,6 +47,34 @@ function expectRemainingShape(data: unknown): void {
   }
 }
 
+/** Type-safe helper to find stream_status messages by status and optional stream name. */
+function hasStreamStatus(
+  messages: Message[],
+  status: string,
+  stream?: string
+): boolean {
+  return messages.some(
+    (m) =>
+      m.type === 'stream_status' &&
+      m.stream_status.status === status &&
+      (stream === undefined || m.stream_status.stream === stream)
+  )
+}
+
+/** Type-safe helper to find a stream_status message. */
+function findStreamStatus(
+  messages: Message[],
+  status: string,
+  stream?: string
+): StreamStatusMessage | undefined {
+  return messages.find(
+    (m): m is StreamStatusMessage =>
+      m.type === 'stream_status' &&
+      m.stream_status.status === status &&
+      (stream === undefined || m.stream_status.stream === stream)
+  )
+}
+
 /** Advance iterator until `stream_status` complete for a stream (default `customers`). */
 async function drainUntilStreamBackfillComplete(
   iter: AsyncIterator<Message | undefined>,
@@ -54,10 +83,8 @@ async function drainUntilStreamBackfillComplete(
   for (;;) {
     const { value, done } = await iter.next()
     if (done) return
-    if (value?.type !== 'trace' || value.trace.trace_type !== 'stream_status') continue
-    const ss = (value.trace as { stream_status?: { status?: string; stream?: string } })
-      .stream_status
-    if (ss?.status !== 'complete' || ss.stream !== stream) continue
+    if (value?.type !== 'stream_status') continue
+    if (value.stream_status.status !== 'complete' || value.stream_status.stream !== stream) continue
     return
   }
 }
@@ -244,11 +271,10 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .status === 'start' &&
-            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
       for (const id of ['cus_1', 'cus_2', 'cus_3'] as const) {
@@ -264,21 +290,19 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .status === 'range_complete' &&
-            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .status === 'complete' &&
-            (m.trace as { stream_status: { stream?: string } }).stream_status.stream === 'customers'
+            m.stream_status.stream === 'customers'
         )
       ).toBe(true)
 
@@ -297,7 +321,7 @@ describe('StripeSource', () => {
         )
       ).toBe(true)
       const finalState = custStates.at(-1)
-      expect(finalState?.source_state.data).toEqual({ remaining: [] })
+      expect(finalState?.source_state.data).toMatchObject({ remaining: [] })
 
       // Verify pagination params
       expect(listFn).toHaveBeenCalledTimes(2)
@@ -352,17 +376,15 @@ describe('StripeSource', () => {
 
       const starts = messages.filter(
         (m) =>
-          m.type === 'trace' &&
-          m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+          m.type === 'stream_status' &&
+            m.stream_status.status === 'start'
       )
       expect(starts).toHaveLength(2)
 
       const completes = messages.filter(
         (m) =>
-          m.type === 'trace' &&
-          m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+          m.type === 'stream_status' &&
+            m.stream_status.status === 'complete'
       )
       expect(completes).toHaveLength(2)
 
@@ -371,7 +393,7 @@ describe('StripeSource', () => {
           .filter((m): m is SourceStateMessage => m.type === 'source_state')
           .filter((m) => m.source_state.stream === name)
           .at(-1)
-        expect(finalState?.source_state.data).toEqual({ remaining: [] })
+        expect(finalState?.source_state.data).toMatchObject({ remaining: [] })
       }
     })
 
@@ -434,11 +456,10 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+            m.stream_status.status === 'start'
         )
       ).toBe(true)
       expect(
@@ -453,22 +474,20 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+            m.stream_status.status ===
               'range_complete'
         )
       ).toBe(true)
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+            m.stream_status.status === 'complete'
         )
       ).toBe(true)
     })
@@ -598,7 +617,7 @@ describe('StripeSource', () => {
   })
 
   describe('read() — error scenarios', () => {
-    it('emits TraceMessage error with failure_type transient_error on rate limit', async () => {
+    it('emits stream_status error on rate limit', async () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Rate limit exceeded'))
 
       const registry: Record<string, ResourceConfig> = {
@@ -616,26 +635,12 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'start' },
-        },
+        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
       })
-
-      const errorMsg = messages[1] as TraceMessage
-      expect(errorMsg.type).toBe('trace')
-      expect(errorMsg.trace.trace_type).toBe('error')
-      const traceError = (
-        errorMsg.trace as {
-          trace_type: 'error'
-          error: { failure_type: string; message: string; stream?: string; stack_trace?: string }
-        }
-      ).error
-      expect(traceError.failure_type).toBe('transient_error')
-      expect(traceError.message).toContain('Rate limit')
-      expect(traceError.stream).toBe('customers')
-      expect(traceError.stack_trace).toBeDefined()
+      expect(messages[1]).toMatchObject({
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'error', error: expect.stringContaining('Rate limit') },
+      })
     })
 
     it('emits TraceMessage error with failure_type config_error for unknown stream', async () => {
@@ -663,7 +668,7 @@ describe('StripeSource', () => {
       expect(traceError.stream).toBe('nonexistent')
     })
 
-    it('emits TraceMessage error with failure_type system_error on non-rate-limit error', async () => {
+    it('emits stream_status error on non-rate-limit error', async () => {
       const listFn = vi.fn().mockRejectedValueOnce(new Error('Connection refused'))
 
       const registry: Record<string, ResourceConfig> = {
@@ -680,14 +685,13 @@ describe('StripeSource', () => {
       )
 
       expect(messages).toHaveLength(2)
-      const errorMsg = messages[1] as TraceMessage
-      expect(errorMsg.type).toBe('trace')
-      expect(errorMsg.trace.trace_type).toBe('error')
-      const traceError = (
-        errorMsg.trace as { trace_type: 'error'; error: { failure_type: string; message: string } }
-      ).error
-      expect(traceError.failure_type).toBe('system_error')
-      expect(traceError.message).toContain('Connection refused')
+      expect(messages[0]).toMatchObject({
+        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'error', error: expect.stringContaining('Connection refused') },
+      })
     })
 
     it('proceeds with backfill using fallback timestamp when getAccount fails (fault-tolerant)', async () => {
@@ -744,7 +748,7 @@ describe('StripeSource', () => {
       ).toBe(true)
     })
 
-    it('emits TraceMessage error for Invalid API Key on sequential streams', async () => {
+    it('emits connection_status failed for Invalid API Key', async () => {
       const listFn = vi.fn().mockRejectedValueOnce(
         new StripeRequestError(
           401,
@@ -773,22 +777,13 @@ describe('StripeSource', () => {
         source.read({ config, catalog: catalog({ name: 'tax_ids', primary_key: [['id']] }) })
       )
 
-      expect(messages).toHaveLength(3)
-      const errorMsg = messages[1] as TraceMessage
-      expect(errorMsg.trace.trace_type).toBe('error')
-      const traceError = (
-        errorMsg.trace as {
-          trace_type: 'error'
-          error: { failure_type: string; message: string; stream?: string }
-        }
-      ).error
-      expect(traceError.failure_type).toBe('auth_error')
-      expect(traceError.message).toContain('Invalid API Key')
-      expect(traceError.stream).toBe('tax_ids')
-
-      expect(messages[2]).toMatchObject({
-        type: 'log',
-        log: expect.objectContaining({ level: 'error' }),
+      expect(messages).toHaveLength(2)
+      expect(messages[0]).toMatchObject({
+        type: 'stream_status', stream_status: { stream: 'tax_ids', status: 'start' },
+      })
+      expect(messages[1]).toMatchObject({
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: expect.stringContaining('Invalid API Key') },
       })
     })
 
@@ -812,18 +807,16 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[1]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: {
-            failure_type: 'system_error',
-            stream: 'customers',
-          },
+        type: 'stream_status',
+        stream_status: {
+          stream: 'customers',
+          status: 'error',
+          error: expect.stringContaining('Authentication failed'),
         },
       })
     })
 
-    it('marks known skippable Stripe list errors as complete without emitting error traces', async () => {
+    it('emits stream_status error for known skippable Stripe list errors', async () => {
       const listFn = vi
         .fn()
         .mockRejectedValueOnce(new Error('This object is only available in testmode'))
@@ -843,17 +836,14 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'start' },
-        },
+        type: 'stream_status', stream_status: { stream: 'invoices', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'complete' },
+        type: 'stream_status',
+        stream_status: {
+          stream: 'invoices',
+          status: 'error',
+          error: expect.stringContaining('only available in testmode'),
         },
       })
     })
@@ -889,14 +879,7 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(
-        messages.some(
-          (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'error' &&
-            (m.trace as { error: { stream?: string } }).error.stream === 'customers'
-        )
-      ).toBe(true)
+      expect(hasStreamStatus(messages, 'error', 'customers')).toBe(true)
       expect(
         messages.some(
           (m) =>
@@ -906,25 +889,8 @@ describe('StripeSource', () => {
         )
       ).toBe(true)
 
-      const custComplete = messages.filter(
-        (m) =>
-          m.type === 'trace' &&
-          m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
-            .stream === 'customers' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
-      )
-      expect(custComplete).toHaveLength(0)
-
-      const invComplete = messages.filter(
-        (m) =>
-          m.type === 'trace' &&
-          m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
-            .stream === 'invoices' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
-      )
-      expect(invComplete).toHaveLength(1)
+      expect(hasStreamStatus(messages, 'complete', 'customers')).toBe(false)
+      expect(hasStreamStatus(messages, 'complete', 'invoices')).toBe(true)
     })
   })
 
@@ -969,9 +935,8 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+            m.type === 'stream_status' &&
+            m.stream_status.status === 'start'
         )
       ).toBe(true)
     })
@@ -1001,9 +966,8 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+            m.type === 'stream_status' &&
+            m.stream_status.status === 'start'
         )
       ).toBe(true)
     })
@@ -1033,9 +997,8 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+            m.type === 'stream_status' &&
+            m.stream_status.status === 'start'
         )
       ).toBe(true)
     })
@@ -1064,11 +1027,10 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+            m.stream_status.status === 'complete'
         )
       ).toBe(true)
     })
@@ -1100,7 +1062,7 @@ describe('StripeSource', () => {
       )
 
       const errorIdx = messages.findIndex(
-        (m) => m.type === 'trace' && m.trace.trace_type === 'error'
+        (m) => m.type === 'stream_status' && m.stream_status.status === 'error'
       )
       expect(errorIdx).toBeGreaterThan(-1)
 
@@ -1149,11 +1111,10 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+            m.stream_status.status === 'start'
         )
       ).toBe(true)
       expect(
@@ -1176,22 +1137,20 @@ describe('StripeSource', () => {
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+            m.stream_status.status ===
               'range_complete'
         )
       ).toBe(true)
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string; stream?: string } }).stream_status
+            m.type === 'stream_status' &&
+            m.stream_status
               .stream === 'customers' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+            m.stream_status.status === 'complete'
         )
       ).toBe(true)
 
@@ -1343,7 +1302,7 @@ describe('StripeSource', () => {
       expect(records.map((r) => r.record.data.id)).toEqual(['cus_4', 'cus_5'])
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
-      expect(states.at(-1)?.source_state.data).toEqual({ remaining: [] })
+      expect(states.at(-1)?.source_state.data).toMatchObject({ remaining: [] })
     })
   })
 
@@ -1758,10 +1717,7 @@ describe('StripeSource', () => {
         [Symbol.asyncIterator]()
 
       const m1 = await iter.next()
-      expect(m1.value).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
-      })
+      expect(m1.value).toMatchObject({ type: 'stream_status', stream_status: { status: 'start' } })
       await drainUntilStreamBackfillComplete(iter, 'customers')
 
       // Now push a WebSocket event — capturedOnEvent is set, read() should yield it
@@ -1825,10 +1781,7 @@ describe('StripeSource', () => {
 
       // stream_status started — also triggers createStripeWebSocketClient, setting capturedOnEvent
       const m1 = await iter.next()
-      expect(m1.value).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
-      })
+      expect(m1.value).toMatchObject({ type: 'stream_status', stream_status: { status: 'start' } })
 
       // Queue an event AFTER stream_status started — capturedOnEvent is now set.
       // The generator is paused before the drain, so this event will be drained before page 1.
@@ -1873,11 +1826,10 @@ describe('StripeSource', () => {
         if (n.done) break
         tail.push(n.value!)
         if (
-          n.value?.type === 'trace' &&
-          n.value.trace.trace_type === 'stream_status' &&
-          (n.value.trace as { stream_status: { status: string; stream?: string } }).stream_status
+          n.value?.type === 'stream_status' &&
+          n.value.stream_status
             .status === 'complete' &&
-          (n.value.trace as { stream_status: { stream?: string } }).stream_status.stream ===
+          n.value.stream_status.stream ===
             'customers'
         ) {
           break
@@ -1889,9 +1841,8 @@ describe('StripeSource', () => {
       expect(
         tail.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+            m.type === 'stream_status' &&
+            m.stream_status.status ===
               'range_complete'
         )
       ).toBe(true)
@@ -2090,24 +2041,19 @@ describe('StripeSource', () => {
         if (done) break
         messages.push(value)
         if (
-          value?.type === 'trace' &&
-          value.trace.trace_type === 'stream_status' &&
-          (value.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+          value?.type === 'stream_status' &&
+          value.stream_status.status === 'complete'
         ) {
           break
         }
       }
 
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: { trace_type: 'stream_status', stream_status: { status: 'start' } },
-      })
+      expect(messages[0]).toMatchObject({ type: 'stream_status', stream_status: { status: 'start' } })
       expect(
         messages.some(
           (m) =>
-            m.type === 'trace' &&
-            m.trace.trace_type === 'stream_status' &&
-            (m.trace as { stream_status: { status: string } }).stream_status.status ===
+            m.type === 'stream_status' &&
+            m.stream_status.status ===
               'range_complete'
         )
       ).toBe(true)
@@ -2143,9 +2089,8 @@ describe('StripeSource', () => {
 
       const started = messages.filter(
         (m): m is TraceMessage =>
-          m.type === 'trace' &&
-          m.trace.trace_type === 'stream_status' &&
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'start'
+          m.type === 'stream_status' &&
+            m.stream_status.status === 'start'
       )
       expect(started).toHaveLength(0)
 
@@ -2330,7 +2275,7 @@ describe('StripeSource', () => {
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
       const lastState = states[states.length - 1]
-      expect(lastState.source_state.data).toEqual({ remaining: [] })
+      expect(lastState.source_state.data).toMatchObject({ remaining: [] })
     })
 
     it('emits state with full segment snapshots after each page for resumability', async () => {
@@ -2455,7 +2400,7 @@ describe('StripeSource', () => {
       expect(listFn).toHaveBeenCalledWith({})
 
       const states = messages.filter((m): m is SourceStateMessage => m.type === 'source_state')
-      expect(states.at(-1)?.source_state.data).toEqual({ remaining: [] })
+      expect(states.at(-1)?.source_state.data).toMatchObject({ remaining: [] })
     })
 
     it('parallel and sequential streams coexist in the same catalog', async () => {
@@ -2514,11 +2459,10 @@ describe('StripeSource', () => {
       }
 
       const statusMsgs = messages.filter(
-        (m): m is TraceMessage => m.type === 'trace' && m.trace.trace_type === 'stream_status'
+        (m): m is StreamStatusMessage => m.type === 'stream_status'
       )
       const completes = statusMsgs.filter(
-        (m) =>
-          (m.trace as { stream_status: { status: string } }).stream_status.status === 'complete'
+        (m) => m.stream_status.status === 'complete'
       )
       expect(completes).toHaveLength(2)
     })
@@ -2621,11 +2565,7 @@ describe('StripeSource', () => {
         [Symbol.asyncIterator]()
 
       expect((await iter.next()).value).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'start' },
-        },
+        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
       })
 
       const blockedNext = iter.next()
