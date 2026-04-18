@@ -235,7 +235,7 @@ const destination = {
     }
 
     try {
-      for await (const msg of $stdin as AsyncIterable<DestinationInput>) {
+      for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg.record
 
@@ -253,6 +253,9 @@ const destination = {
           if (msg.source_state.state_type !== 'global') {
             await flushStream(msg.source_state.stream)
           }
+          yield msg
+        } else {
+          // Pass through messages the destination doesn't handle
           yield msg
         }
       }

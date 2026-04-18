@@ -43,9 +43,9 @@ function stubActivities(overrides: Partial<SyncActivities> = {}): SyncActivities
   } as SyncActivities
 }
 
-/** Signal the workflow to delete. */
-async function signalDelete(handle: { signal: (name: string, arg: string) => Promise<void> }) {
-  await handle.signal('desired_status', 'deleted')
+/** Cancel the workflow to trigger teardown. */
+async function cancelWorkflow(handle: { cancel: () => Promise<void> }) {
+  await handle.cancel()
 }
 
 async function signalSourceInput(
@@ -98,7 +98,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       const status = await handle.query('status')
       expect((status as { iteration: number }).iteration).toBeGreaterThan(0)
 
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(setupCalled).toBe(true)
@@ -142,7 +142,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 2000))
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       // Find event-bearing sync calls (input is defined)
@@ -164,10 +164,8 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
     })
   })
 
-  it('runs optimistic updates concurrently with reconciliation when both are pending', async () => {
-    let inputInFlight = 0
-    let backfillInFlight = 0
-    let overlapped = false
+  it('processes queued live events after initial backfill completes', async () => {
+    const syncCalls: { phase: 'backfill' | 'live' }[] = []
 
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
@@ -176,17 +174,10 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       activities: stubActivities({
         pipelineSync: async (_pipelineId: string, opts?) => {
           if (opts?.input) {
-            inputInFlight++
-            if (backfillInFlight > 0) overlapped = true
-            await new Promise((r) => setTimeout(r, 250))
-            inputInFlight--
-            return noErrors
+            syncCalls.push({ phase: 'live' })
+          } else {
+            syncCalls.push({ phase: 'backfill' })
           }
-
-          backfillInFlight++
-          if (inputInFlight > 0) overlapped = true
-          await new Promise((r) => setTimeout(r, 250))
-          backfillInFlight--
           return noErrors
         },
       }),
@@ -204,17 +195,19 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
         taskQueue: 'test-queue-2b',
       })
 
-      await new Promise((r) => setTimeout(r, 600))
-      await signalDelete(handle)
+      await new Promise((r) => setTimeout(r, 2000))
+      await cancelWorkflow(handle)
       await handle.result()
 
-      expect(overlapped).toBe(true)
+      // Backfill runs first (in child workflow), then live events are processed
+      expect(syncCalls.length).toBeGreaterThanOrEqual(2)
+      const backfillIdx = syncCalls.findIndex((c) => c.phase === 'backfill')
+      const liveIdx = syncCalls.findIndex((c) => c.phase === 'live')
+      expect(backfillIdx).toBeLessThan(liveIdx)
     })
   })
 
-  it('keeps draining live batches while a backfill slice is still running', async () => {
-    let backfillInFlight = 0
-    let liveStartsWhileBackfill = 0
+  it('drains all queued live events after backfill completes', async () => {
     let liveBatchCount = 0
     let liveEventCount = 0
 
@@ -227,18 +220,9 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
           if (opts?.input) {
             liveBatchCount++
             liveEventCount += opts.input.length
-            if (backfillInFlight > 0) liveStartsWhileBackfill++
             await new Promise((r) => setTimeout(r, 80))
-            return noErrors
           }
-
-          backfillInFlight++
-          try {
-            await new Promise((r) => setTimeout(r, 600))
-            return noErrors
-          } finally {
-            backfillInFlight--
-          }
+          return noErrors
         },
       }),
     })
@@ -250,6 +234,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
         taskQueue: 'test-queue-2c',
       })
 
+      // Send events while backfill is running — they queue up
       await new Promise((r) => setTimeout(r, 50))
       for (let i = 0; i < 12; i++) {
         await signalSourceInput(handle, {
@@ -258,17 +243,17 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
         })
       }
 
-      await new Promise((r) => setTimeout(r, 350))
-      await signalDelete(handle)
+      // Wait for backfill + live processing
+      await new Promise((r) => setTimeout(r, 3000))
+      await cancelWorkflow(handle)
       await handle.result()
 
-      expect(liveBatchCount).toBeGreaterThanOrEqual(2)
-      expect(liveStartsWhileBackfill).toBeGreaterThanOrEqual(1)
+      expect(liveBatchCount).toBeGreaterThanOrEqual(1)
       expect(liveEventCount).toBe(12)
     })
   })
 
-  it('pauses and resumes via desired_status signal', async () => {
+  it('pauses and resumes via paused signal', async () => {
     const statusWrites: string[] = []
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
@@ -289,14 +274,14 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 1000))
-      await handle.signal('desired_status', 'paused')
+      await handle.signal('paused', true)
       await new Promise((r) => setTimeout(r, 500))
 
       expect(statusWrites).toContain('paused')
 
-      await handle.signal('desired_status', 'active')
+      await handle.signal('paused', false)
       await new Promise((r) => setTimeout(r, 500))
-      await handle.signal('desired_status', 'deleted')
+      await cancelWorkflow(handle)
       await handle.result()
     })
   })
@@ -330,9 +315,9 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 500))
-      await handle.signal('desired_status', 'paused')
+      await handle.signal('paused', true)
       await new Promise((r) => setTimeout(r, 500))
-      await handle.signal('desired_status', 'deleted')
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(statusWrites).toEqual(
@@ -367,7 +352,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 500))
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(statusWrites).toContain('error')
@@ -408,7 +393,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 2500))
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(reconcileCalls).toBeGreaterThanOrEqual(2)
@@ -441,7 +426,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 200))
-      await handle.signal('desired_status', 'paused')
+      await handle.signal('paused', true)
       await new Promise((r) => setTimeout(r, 200))
 
       await signalSourceInput(handle, {
@@ -452,9 +437,9 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       await new Promise((r) => setTimeout(r, 300))
       expect(syncCalls.filter((c) => c.input).length).toBe(0)
 
-      await handle.signal('desired_status', 'active')
+      await handle.signal('paused', false)
       await new Promise((r) => setTimeout(r, 400))
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       const liveCalls = syncCalls.filter((c) => c.input)
@@ -492,7 +477,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 300))
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(teardownCalled).toBe(true)
@@ -531,7 +516,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
 
       expect(syncCallCount).toBeGreaterThan(0)
 
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
     })
   })
@@ -569,7 +554,7 @@ describe('pipelineWorkflow (unit — stubbed activities)', () => {
       })
 
       await crossedThreshold
-      await signalDelete(handle)
+      await cancelWorkflow(handle)
       await handle.result()
 
       expect(syncCallCount).toBeGreaterThan(CONTINUE_AS_NEW_THRESHOLD)

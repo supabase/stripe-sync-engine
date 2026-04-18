@@ -1,4 +1,4 @@
-import type { Destination, DestinationInput } from '@stripe/sync-protocol'
+import type { Destination } from '@stripe/sync-protocol'
 import { destinationControlMsg } from '@stripe/sync-protocol'
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
@@ -348,7 +348,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       }
 
       try {
-        for await (const msg of $stdin as AsyncIterable<DestinationInput>) {
+        for await (const msg of $stdin) {
           if (msg.type === 'record') {
             const { stream, data } = msg.record
             const cleanData = stripSystemFields(data)
@@ -402,6 +402,9 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
               await flushStream(msg.source_state.stream)
             }
             yield msg
+          } else {
+            // Pass through messages the destination doesn't handle
+            yield msg as any
           }
         }
 

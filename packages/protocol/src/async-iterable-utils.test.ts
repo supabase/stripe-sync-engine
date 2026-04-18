@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { channel, merge, split, map, withAbortOnReturn } from './async-iterable-utils.js'
+import { merge, map, withAbortOnReturn } from './async-iterable-utils.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = []
@@ -10,47 +10,6 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
 async function* fromArray<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item
 }
-
-describe('channel', () => {
-  it('delivers pushed values to the async iterator', async () => {
-    const ch = channel<number>()
-    ch.push(1)
-    ch.push(2)
-    ch.push(3)
-    ch.close()
-    expect(await collect(ch)).toEqual([1, 2, 3])
-  })
-
-  it('resolves pending next() when push is called later', async () => {
-    const ch = channel<string>()
-    const p = ch[Symbol.asyncIterator]().next()
-    ch.push('hello')
-    const result = await p
-    expect(result).toEqual({ value: 'hello', done: false })
-    ch.close()
-  })
-
-  it('returns done after close with no pending values', async () => {
-    const ch = channel<number>()
-    ch.close()
-    const result = await ch[Symbol.asyncIterator]().next()
-    expect(result.done).toBe(true)
-  })
-
-  it('return() ends iteration and invokes onReturn', async () => {
-    const ch = channel<number>()
-    let returned = false
-    ch.onReturn = () => {
-      returned = true
-    }
-    ch.push(1)
-    const iter = ch[Symbol.asyncIterator]()
-    expect(await iter.next()).toEqual({ value: 1, done: false })
-    expect(await iter.return?.()).toEqual({ value: undefined, done: true })
-    expect(returned).toBe(true)
-    expect((await iter.next()).done).toBe(true)
-  })
-})
 
 describe('merge', () => {
   it('merges two async iterables', async () => {
@@ -139,81 +98,6 @@ describe('merge', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(aClosed).toBe(true)
     expect(bClosed).toBe(true)
-  })
-})
-
-describe('split', () => {
-  it('closes both channels when source throws (no unhandled rejection)', async () => {
-    async function* failing(): AsyncIterable<number> {
-      yield 1
-      yield 2
-      throw new Error('source failed')
-    }
-    const isEven = (n: number): n is number => n % 2 === 0
-    const [evens, odds] = split(failing(), isEven)
-
-    // Both channels should close (the error is swallowed, but iteration ends)
-    const [evenResult, oddResult] = await Promise.all([collect(evens), collect(odds)])
-    expect(evenResult).toEqual([2])
-    expect(oddResult).toEqual([1])
-  })
-
-  it('splits by predicate into two streams', async () => {
-    const source = fromArray([1, 2, 3, 4, 5, 6])
-    const isEven = (n: number): n is number => n % 2 === 0
-    const [evens, odds] = split(source, isEven)
-
-    const [evenResult, oddResult] = await Promise.all([collect(evens), collect(odds)])
-    expect(evenResult).toEqual([2, 4, 6])
-    expect(oddResult).toEqual([1, 3, 5])
-  })
-
-  it('handles all matching predicate', async () => {
-    const source = fromArray([2, 4, 6])
-    const isEven = (n: number): n is number => n % 2 === 0
-    const [evens, odds] = split(source, isEven)
-
-    const [evenResult, oddResult] = await Promise.all([collect(evens), collect(odds)])
-    expect(evenResult).toEqual([2, 4, 6])
-    expect(oddResult).toEqual([])
-  })
-
-  it('handles none matching predicate', async () => {
-    const source = fromArray([1, 3, 5])
-    const isEven = (n: number): n is number => n % 2 === 0
-    const [evens, odds] = split(source, isEven)
-
-    const [evenResult, oddResult] = await Promise.all([collect(evens), collect(odds)])
-    expect(evenResult).toEqual([])
-    expect(oddResult).toEqual([1, 3, 5])
-  })
-
-  it('propagates return() from a branch back to the source iterator', async () => {
-    let returnCalled = false
-    const source: AsyncIterable<number> = {
-      [Symbol.asyncIterator]() {
-        let i = 0
-        return {
-          async next() {
-            i++
-            if (i === 1) return { value: 1, done: false }
-            if (i === 2) return { value: 2, done: false }
-            return new Promise(() => {})
-          },
-          async return() {
-            returnCalled = true
-            return { value: undefined, done: true }
-          },
-        }
-      },
-    }
-
-    const isEven = (n: number): n is number => n % 2 === 0
-    const [evens] = split(source, isEven)
-    const iter = evens[Symbol.asyncIterator]()
-    expect(await iter.next()).toEqual({ value: 2, done: false })
-    await iter.return?.()
-    expect(returnCalled).toBe(true)
   })
 })
 

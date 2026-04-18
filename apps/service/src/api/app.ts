@@ -102,7 +102,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const stored = await pipelineStore.list()
-      const result = stored
+      const result = stored.filter((p) => p.desired_status !== 'deleted')
       return c.json({ data: result, has_more: false }, 200)
     }
   )
@@ -141,7 +141,7 @@ export function createApp(options: AppOptions) {
       await temporal.start('pipelineWorkflow', {
         workflowId: id,
         taskQueue,
-        args: [id, { desiredStatus: pipeline.desired_status }],
+        args: [id],
       })
       return c.json(pipeline, 201)
     }
@@ -235,10 +235,10 @@ export function createApp(options: AppOptions) {
 
       const updated = await pipelineStore.update(id, storePatch)
 
-      // Best-effort: notify the workflow of desired_status change
-      if (patch.desired_status) {
+      // Best-effort: notify the workflow of pause/resume
+      if (patch.desired_status === 'paused' || patch.desired_status === 'active') {
         try {
-          await temporal.getHandle(id).signal('desired_status', patch.desired_status)
+          await temporal.getHandle(id).signal('paused', patch.desired_status === 'paused')
         } catch {
           // Workflow may not be running — store is updated, that's fine
         }
@@ -280,14 +280,17 @@ export function createApp(options: AppOptions) {
         return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
 
-      // Best-effort: tell the workflow to tear down
+      // Soft-delete in store (workflow will hard-delete after teardown)
+      await pipelineStore.update(id, { desired_status: 'deleted' })
+
+      // Cancel the workflow — triggers teardown in non-cancellable scope
       try {
-        await temporal.getHandle(id).signal('desired_status', 'deleted')
+        await temporal.getHandle(id).cancel()
       } catch {
-        // Workflow may not be running — proceed to delete from store
+        // Workflow may not be running — hard-delete from store directly
+        await pipelineStore.delete(id)
       }
 
-      await pipelineStore.delete(id)
       return c.json({ id, deleted: true as const }, 200)
     }
   )

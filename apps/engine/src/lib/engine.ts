@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  DestinationInput,
   DestinationOutput,
   DiscoverOutput,
   CheckOutput,
@@ -13,11 +14,8 @@ import {
   SyncOutput,
   SyncState,
   SectionState,
-  RecordMessage,
-  SourceStateMessage,
   coerceSyncState,
   collectFirst,
-  split,
   merge,
   map,
   withAbortOnReturn,
@@ -590,7 +588,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
     pipeline_sync(pipeline, opts?, input?) {
       const baseContext = engineLogContext(pipeline)
-      const sourceTag = `source/${pipeline.source.type}`
       const destTag = `destination/${pipeline.destination.type}`
       const now = () => new Date().toISOString()
       return withAbortOnReturn((signal) =>
@@ -598,13 +595,8 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           // Read from source (pass state but not state_limit — state_limit controls sync output)
           const readOutput = engine.pipeline_read(pipeline, { state: opts?.state }, input)
 
-          // Split: data + eof → destination path, source signals → caller
-          // Eof from pipeline_read is excluded from source signals (pipeline_sync adds its own)
-          const isDataOrEof = (msg: Message): msg is RecordMessage | SourceStateMessage =>
-            msg.type === 'record' || msg.type === 'source_state' || msg.type === 'eof'
-          const [dataStream, sourceSignals] = split(readOutput, isDataOrEof)
-
-          // Set up destination inline — we need control of the stream split
+          // Set up destination — it receives the full source stream and passes
+          // through messages it doesn't handle, giving natural pull-based backpressure.
           const destConnector = await resolver.resolveDestination(pipeline.destination.type)
           const rawDest = configPayload(pipeline.destination)
           const destConfig = await getSpecConfig(destConnector, rawDest)
@@ -612,11 +604,10 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           const recordCounter = createRecordCounter()
           const destInput = pipe(
-            dataStream,
+            readOutput as AsyncIterable<DestinationInput>,
             enforceCatalog(filteredCatalog),
             log,
             recordCounter.tap.bind(recordCounter),
-            filterType('record', 'source_state')
           )
           const destOutput = destConnector.write(
             { config: destConfig, catalog: filteredCatalog },
@@ -624,22 +615,18 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           )
           const parsedDest = withLoggedStream('Engine destination write', baseContext, destOutput)
 
-          // Tag origin on both streams, narrowing to SyncOutput
-          const taggedDest: AsyncIterable<SyncOutput> = map(parsedDest, (msg) => ({
-            ...DestinationOutput.parse(msg),
+          const tagged: AsyncIterable<SyncOutput> = map(parsedDest, (msg) => ({
+            ...SyncOutput.parse(msg),
             _emitted_by: destTag,
             _ts: now(),
           }))
-          const taggedSource: AsyncIterable<SyncOutput> = map(sourceSignals, (msg) =>
-            SyncOutput.parse({ ...msg, _emitted_by: sourceTag, _ts: now() })
-          )
 
-          // Merge both streams, apply limits, and track progress
+          // Apply limits and track progress
           const limited = takeLimits<SyncOutput>({
             state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
-          })(merge(taggedDest, taggedSource))
+          })(tagged)
 
           const normalizedState = coerceSyncState(opts?.state)
 

@@ -1,21 +1,28 @@
-import { condition, continueAsNew, setHandler } from '@temporalio/workflow'
+import {
+  CancellationScope,
+  condition,
+  continueAsNew,
+  executeChild,
+  isCancellation,
+  setHandler,
+} from '@temporalio/workflow'
 
 import type { SourceInputMessage, SyncState, SectionState } from '@stripe/sync-protocol'
 import { emptySyncState } from '@stripe/sync-protocol'
-import type { DesiredStatus, PipelineStatus } from '../../lib/createSchemas.js'
-import { CONTINUE_AS_NEW_THRESHOLD } from '../../lib/utils.js'
-import { classifySyncErrors } from '../sync-errors.js'
+import type { PipelineStatus } from '../../lib/createSchemas.js'
 import {
-  desiredStatusSignal,
+  pausedSignal,
   pipelineSetup,
   sourceInputSignal,
   pipelineSync,
   pipelineTeardown,
   updatePipelineStatus,
 } from './_shared.js'
+import { pipelineBackfill } from './pipeline-backfill.js'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const LIVE_EVENT_BATCH_SIZE = 10
+const PIPELINE_CONTINUE_AS_NEW_THRESHOLD = 1000
 
 export type ReconcileState = 'backfilling' | 'reconciling' | 'ready'
 export type SetupState = 'started' | 'completed'
@@ -30,12 +37,12 @@ export interface PipelineWorkflowState {
 }
 
 export interface PipelineWorkflowOpts {
-  desiredStatus?: DesiredStatus
   syncState?: SyncState
   /** @deprecated Use syncState. Kept for backward compat with in-flight continueAsNew payloads. */
   sourceState?: SectionState
   inputQueue?: SourceInputMessage[]
   state?: PipelineWorkflowState
+  paused?: boolean
   errorRecoveryRequested?: boolean
 }
 
@@ -53,7 +60,7 @@ export async function pipelineWorkflow(
 ): Promise<void> {
   // Persisted through continue-as-new.
   const inputQueue: SourceInputMessage[] = opts?.inputQueue ? [...opts.inputQueue] : []
-  let desiredStatus: DesiredStatus = opts?.desiredStatus ?? 'active'
+  let paused = opts?.paused ?? false
   let syncState: SyncState = resolveSyncState(opts)
   let state: PipelineWorkflowState = { ...opts?.state }
   let errorRecoveryRequested = opts?.errorRecoveryRequested ?? false
@@ -64,9 +71,9 @@ export async function pipelineWorkflow(
   setHandler(sourceInputSignal, (event: SourceInputMessage) => {
     inputQueue.push(event)
   })
-  setHandler(desiredStatusSignal, (status: DesiredStatus) => {
-    desiredStatus = status
-    if (state.errored && status === 'active') {
+  setHandler(pausedSignal, (value: boolean) => {
+    paused = value
+    if (state.errored && !value) {
       errorRecoveryRequested = true
     }
   })
@@ -91,14 +98,8 @@ export async function pipelineWorkflow(
     }
   }
 
-  /**
-   * Returns whether active work in this run should stop because the pipeline is
-   * no longer active or because the workflow should roll over into continue-as-new.
-   */
   function runInterrupted() {
-    return (
-      desiredStatus !== 'active' || operationCount >= CONTINUE_AS_NEW_THRESHOLD || !!state.errored
-    )
+    return paused || operationCount >= PIPELINE_CONTINUE_AS_NEW_THRESHOLD || !!state.errored
   }
 
   async function markPermanentError(): Promise<void> {
@@ -106,11 +107,9 @@ export async function pipelineWorkflow(
   }
 
   async function waitForErrorRecovery(): Promise<void> {
-    await condition(() => desiredStatus === 'deleted' || errorRecoveryRequested)
+    await condition(() => errorRecoveryRequested)
     errorRecoveryRequested = false
-    if (desiredStatus === 'active') {
-      await setState({ errored: false })
-    }
+    await setState({ errored: false })
   }
 
   // MARK: - Live loop
@@ -132,89 +131,95 @@ export async function pipelineWorkflow(
 
       const result = await pipelineSync(pipelineId, { input: events })
       operationCount++
-      if (classifySyncErrors(result.errors).permanent.length > 0) {
+      if (result.errors.length > 0) {
         await markPermanentError()
         return
       }
     }
   }
 
-  // MARK: - Reconcile loop
+  // MARK: - Backfill (child workflow)
 
-  async function waitForReconcileTurn(): Promise<boolean> {
-    await condition(() => runInterrupted() || state.phase !== 'ready', ONE_WEEK_MS)
-
-    if (runInterrupted()) {
-      return false
-    }
-
-    return true
-  }
-
-  async function reconcileLoop(): Promise<void> {
-    while (await waitForReconcileTurn()) {
-      if (!state.phase) {
-        await setState({ phase: 'backfilling' })
-      } else if (state.phase === 'ready') {
-        await setState({ phase: 'reconciling' })
-      }
-
-      const result = await pipelineSync(pipelineId, {
-        state: syncState,
-        state_limit: 100,
-        time_limit: 10,
+  async function runBackfill(workflowId: string): Promise<boolean> {
+    try {
+      const result = await executeChild(pipelineBackfill, {
+        workflowId,
+        args: [pipelineId, { syncState }],
       })
       operationCount++
-      syncState = result.state
-      if (classifySyncErrors(result.errors).permanent.length > 0) {
-        await markPermanentError()
-        return
-      }
-      if (result.eof?.reason === 'complete' && !state.errored) {
-        await setState({ phase: 'ready' })
-      }
+      syncState = result.eof.state ?? syncState
+      return true
+    } catch (err) {
+      if (isCancellation(err)) throw err
+      await markPermanentError()
+      return false
+    }
+  }
+
+  async function reconcileScheduler(): Promise<void> {
+    while (!runInterrupted()) {
+      await condition(() => runInterrupted(), ONE_WEEK_MS)
+      if (runInterrupted()) return
+
+      await setState({ phase: 'reconciling' })
+      const ok = await runBackfill(`reconcile-${pipelineId}-${Date.now()}`)
+      if (!ok) return
+      await setState({ phase: 'ready' })
     }
   }
 
   // MARK: - Main logic
 
-  if (state.setup !== 'completed') {
-    await setState({ setup: 'started' })
-    await pipelineSetup(pipelineId)
-    await setState({ setup: 'completed' })
+  try {
+    if (state.setup !== 'completed') {
+      await setState({ setup: 'started' })
+      await pipelineSetup(pipelineId)
+      await setState({ setup: 'completed' })
+    }
+
+    // Initial backfill
+    if (state.phase !== 'ready') {
+      await setState({ phase: 'backfilling' })
+      const ok = await runBackfill(`backfill-${pipelineId}`)
+      if (ok) {
+        await setState({ phase: 'ready' })
+      }
+    }
+
+    // Main loop — runs until cancelled or continueAsNew threshold
+    while (true) {
+      if (state.errored) {
+        await waitForErrorRecovery()
+        continue
+      }
+
+      if (paused) {
+        await setState({ paused: true })
+        await condition(() => !paused)
+        await setState({ paused: false })
+        continue
+      }
+
+      await Promise.all([liveLoop(), reconcileScheduler()])
+
+      if (operationCount >= PIPELINE_CONTINUE_AS_NEW_THRESHOLD) {
+        return await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
+          syncState,
+          inputQueue,
+          state,
+          paused,
+          errorRecoveryRequested,
+        })
+      }
+    }
+  } catch (err) {
+    if (!isCancellation(err)) throw err
+
+    // Cancellation = delete. Run teardown in a non-cancellable scope.
+    await CancellationScope.nonCancellable(async () => {
+      await setState({ teardown: 'started' })
+      await pipelineTeardown(pipelineId)
+      await setState({ teardown: 'completed' })
+    })
   }
-
-  while (desiredStatus !== 'deleted') {
-    if (state.errored) {
-      await waitForErrorRecovery()
-      continue
-    }
-
-    if (desiredStatus === 'paused') {
-      await setState({ paused: true })
-      await condition(() => desiredStatus !== 'paused')
-      await setState({ paused: false })
-      // Re-enter root control flow after pause in case the pipeline resumed
-      // normally or was deleted while we were waiting.
-      continue
-    }
-
-    await Promise.all([liveLoop(), reconcileLoop()])
-
-    if (operationCount >= CONTINUE_AS_NEW_THRESHOLD) {
-      return await continueAsNew<typeof pipelineWorkflow>(pipelineId, {
-        desiredStatus,
-        syncState,
-        inputQueue,
-        state,
-        errorRecoveryRequested,
-      })
-    }
-  }
-
-  // Delete stays in normal workflow control flow instead of cancellation so teardown
-  // can run once in the terminal path after the active loops have stopped.
-  await setState({ teardown: 'started' })
-  await pipelineTeardown(pipelineId)
-  await setState({ teardown: 'completed' })
 }

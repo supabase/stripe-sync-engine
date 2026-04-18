@@ -1,84 +1,19 @@
 // Async iterable utilities — generic combinators for any AsyncIterable.
 // Pure primitives — no external deps, no engine-specific imports.
-
-/**
- * Async push/pull channel with unbounded buffer when push outpaces pull.
- *
- * **Error handling:** The channel itself never throws — it is a passive data
- * structure. Producers call `push()` and `close()`; neither can fail.
- * Errors must be handled by whoever drives the source that feeds the channel
- * (see `split` for an example).
- */
-export function channel<T>(): AsyncIterable<T> & {
-  push(value: T): void
-  close(): void
-  onReturn?: () => void | Promise<void>
-} {
-  let resolve: ((result: IteratorResult<T>) => void) | null = null
-  let done = false
-  const pending: T[] = [] // only used when push() is called before next()
-  let onReturn: (() => void | Promise<void>) | undefined
-
-  const iter: AsyncIterableIterator<T> = {
-    [Symbol.asyncIterator]() {
-      return iter
-    },
-    next() {
-      if (pending.length > 0) {
-        return Promise.resolve({ value: pending.shift()!, done: false })
-      }
-      if (done) return Promise.resolve({ value: undefined as any, done: true })
-      return new Promise<IteratorResult<T>>((r) => {
-        resolve = r
-      })
-    },
-    async return() {
-      done = true
-      pending.length = 0
-      if (resolve) {
-        const r = resolve
-        resolve = null
-        r({ value: undefined as any, done: true })
-      }
-      await onReturn?.()
-      return { value: undefined as any, done: true }
-    },
-  }
-
-  const api = Object.assign(iter, {
-    push(value: T) {
-      if (done) return
-      if (resolve) {
-        const r = resolve
-        resolve = null
-        r({ value, done: false })
-      } else {
-        pending.push(value)
-      }
-    },
-    close() {
-      done = true
-      if (resolve) {
-        const r = resolve
-        resolve = null
-        r({ value: undefined as any, done: true })
-      }
-    },
-  })
-
-  Object.defineProperty(api, 'onReturn', {
-    enumerable: true,
-    configurable: true,
-    get() {
-      return onReturn
-    },
-    set(fn: (() => void | Promise<void>) | undefined) {
-      onReturn = fn
-    },
-  })
-
-  return api
-}
+//
+// Backpressure model:
+//
+// Async iterables are pull-based: a generator only advances when .next() is
+// called. This gives natural backpressure — a slow consumer automatically
+// pauses a fast producer. The destination drives consumption: its for-await
+// loop pulls records one at a time, and the source generator only advances
+// when the destination is ready. No intermediate buffering is needed.
+//
+// Granularity: backpressure operates at the message level, not the page level.
+// A source that fetches a page of 100 records from an API holds one page in
+// memory, but yields records one at a time. The pull-based flow prevents the
+// source from fetching the NEXT page until the destination has consumed enough
+// records from the current one.
 
 /**
  * Create an async iterable that owns a local AbortController and aborts it
@@ -197,57 +132,6 @@ export function merge<T>(
       throw error
     },
   }
-}
-
-/**
- * Split an async iterable into two based on a type-guard predicate.
- * Returns [matches, rest] — both are async iterables connected by channels.
- * Consumption of either drives the source forward.
- *
- * **Error handling:** The source is consumed by a background async IIFE that
- * routes items into two channels. If the source throws, `finally` closes both
- * channels so consumers see a normal end-of-iteration. The error itself is
- * swallowed (`.catch(() => {})`) to prevent an unhandled rejection from
- * crashing the process. This is intentional: `split` has two independent
- * consumers and no single place to propagate an error to. If you need error
- * visibility, handle errors on the source *before* passing it to `split`.
- */
-export function split<T, U extends T>(
-  iterable: AsyncIterable<T>,
-  predicate: (item: T) => item is U
-): [AsyncIterable<U>, AsyncIterable<Exclude<T, U>>] {
-  const sourceIterator = iterable[Symbol.asyncIterator]()
-  const matches = channel<U>()
-  const rest = channel<Exclude<T, U>>()
-
-  let aborted = false
-  const abort = () => {
-    if (aborted) return
-    aborted = true
-    matches.close()
-    rest.close()
-    sourceIterator.return?.()
-  }
-  matches.onReturn = abort
-  rest.onReturn = abort
-  ;(async () => {
-    try {
-      while (true) {
-        const result = await sourceIterator.next()
-        if (result.done) break
-        if (predicate(result.value)) {
-          matches.push(result.value)
-        } else {
-          rest.push(result.value as Exclude<T, U>)
-        }
-      }
-    } finally {
-      matches.close()
-      rest.close()
-    }
-  })().catch(() => {})
-
-  return [matches, rest]
 }
 
 /**

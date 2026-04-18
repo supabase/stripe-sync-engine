@@ -530,7 +530,41 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 
 // MARK: - Message unions
 
-/** Any message flowing through the engine. One message per NDJSON line. */
+/** Core connector messages — the fundamental types that sources and destinations emit. */
+export const CoreMessage = z
+  .discriminatedUnion('type', [
+    RecordMessage,
+    SourceStateMessage,
+    CatalogMessage,
+    LogMessage,
+    SpecMessage,
+    ConnectionStatusMessage,
+    StreamStatusMessage,
+    ControlMessage,
+  ])
+  .meta({ id: 'CoreMessage' })
+export type CoreMessage = z.infer<typeof CoreMessage>
+
+/**
+ * Extended messages — engine-level additions not part of the core connector protocol.
+ * Includes progress snapshots, EOF signaling, and source input (webhook events).
+ */
+export const SourceInputMessage = MessageBase.extend({
+  type: z.literal('source_input'),
+  source_input: z.unknown(),
+}).meta({ id: 'SourceInputMessage' })
+export type SourceInputMessage = z.infer<typeof SourceInputMessage>
+
+export const ExtendedMessage = z
+  .discriminatedUnion('type', [
+    ProgressMessage,
+    EofMessage,
+    SourceInputMessage,
+  ])
+  .meta({ id: 'ExtendedMessage' })
+export type ExtendedMessage = z.infer<typeof ExtendedMessage>
+
+/** Any message flowing through the engine — core + extended. */
 export const Message = z
   .discriminatedUnion('type', [
     RecordMessage,
@@ -540,45 +574,31 @@ export const Message = z
     SpecMessage,
     ConnectionStatusMessage,
     StreamStatusMessage,
-    ProgressMessage,
     ControlMessage,
+    ProgressMessage,
     EofMessage,
+    SourceInputMessage,
   ])
   .meta({ id: 'Message' })
 export type Message = z.infer<typeof Message>
-
-/**
- * Wire envelope for a single source input item (e.g. a webhook event payload).
- * `source_input` carries the connector-specific payload; connectors narrow its type via
- * `Source<TConfig, TStreamState, TInput>`.
- */
-export const SourceInputMessage = MessageBase.extend({
-  type: z.literal('source_input'),
-  source_input: z.unknown(),
-}).meta({ id: 'SourceInputMessage' })
-export type SourceInputMessage = z.infer<typeof SourceInputMessage>
 
 // MARK: - Message unions
 
 /**
  * Messages the destination receives on stdin. Destinations must handle `record`
- * and `source_state`; all other message types must be yielded back as pass-through.
+ * and `source_state`; all other core message types must be yielded back as pass-through.
  * This ensures the destination is the sole consumer of the source stream,
  * giving natural pull-based backpressure without intermediate buffering.
  */
-export const DestinationInput = Message
+export const DestinationInput = CoreMessage
 export type DestinationInput = z.infer<typeof DestinationInput>
 
-/** Messages the destination yields back to the orchestrator (one per NDJSON line). */
-export const DestinationOutput = z
-  .discriminatedUnion('type', [
-    SourceStateMessage,
-    StreamStatusMessage,
-    ConnectionStatusMessage,
-    LogMessage,
-    EofMessage,
-  ])
-  .meta({ id: 'DestinationOutput' })
+/**
+ * Messages the destination yields back to the orchestrator. Includes both
+ * destination-originated messages (logs, connection_status) and pass-through
+ * messages from the source that the destination doesn't handle.
+ */
+export const DestinationOutput = CoreMessage
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
 /** Output of pipeline_sync(): destination output plus source signals (controls, logs, stream status). */
@@ -644,14 +664,14 @@ export type TeardownOutput = z.infer<typeof TeardownOutput>
  *
  * Type parameters:
  *   TConfig      — connector's configuration type, inferred from its Zod spec
- *   TSourceStreamState — per-stream checkpoint shape (opaque to the orchestrator)
+ *   TState       — per-stream checkpoint shape (opaque to the engine)
  *   TInput       — serializable data passed to read() for event-driven reads
  *                  (e.g. a single webhook event). When absent, read() performs
  *                  a pull-based backfill.
  */
 export interface Source<
   TConfig extends Record<string, unknown> = Record<string, unknown>,
-  TStreamState = unknown,
+  TState = unknown,
   TInput = unknown,
 > {
   /** Emit the connector's specification (config JSON Schema, etc.). */
@@ -673,7 +693,7 @@ export interface Source<
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
-      state?: SourceState
+      state?: { streams: Record<string, TState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
