@@ -242,14 +242,16 @@ async function discoverCatalog(
  *
  * Mutates `catalog.streams` in place.
  */
-export function injectTimeRanges(catalog: ConfiguredCatalog, timeCeiling?: string): void {
-  if (!timeCeiling) return
-  for (const cs of catalog.streams) {
-    if (cs.supports_time_range === false) continue
-    cs.time_range = {
-      gte: cs.time_range?.gte ?? '',
-      lt: timeCeiling,
-    }
+/** Pure: returns a new catalog with time_range.lt set to timeCeiling on eligible streams. */
+export function withTimeRanges(catalog: ConfiguredCatalog, timeCeiling?: string): ConfiguredCatalog {
+  if (!timeCeiling) return catalog
+  return {
+    ...catalog,
+    streams: catalog.streams.map((cs) =>
+      cs.supports_time_range === false
+        ? cs
+        : { ...cs, time_range: { gte: cs.time_range?.gte ?? '', lt: timeCeiling } }
+    ),
   }
 }
 
@@ -420,10 +422,10 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const sourceConfig = await getSpec(connector, rawSrc)
           const { catalog } = await discoverCatalog(engine, pipeline)
           const normalizedState = coerceSyncState(opts?.state)
-          injectTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
+          const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
           const state = normalizedState?.source
 
-          const raw = connector.read({ config: sourceConfig, catalog, state }, input)
+          const raw = connector.read({ config: sourceConfig, catalog: catalogWithRanges, state }, input)
           const parsed = map(raw, (msg) => Message.parse(msg))
           yield* takeLimits({
             state_limit: opts?.state_limit,
@@ -476,13 +478,13 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
           const normalizedState = coerceSyncState(opts?.state)
-          injectTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
+          const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
           const sourceState = normalizedState?.source
 
           // Source → destination pipeline. The destination is the sole consumer,
           // giving natural pull-based backpressure with zero intermediate buffering.
           const sourceOutput = srcConnector.read(
-            { config: sourceConfig, catalog, state: sourceState },
+            { config: sourceConfig, catalog: catalogWithRanges, state: sourceState },
             input
           )
           const destInput = pipe(

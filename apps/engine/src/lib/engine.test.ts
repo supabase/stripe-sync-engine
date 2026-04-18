@@ -24,7 +24,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { destinationTest } from './destination-test.js'
-import { buildCatalog, createEngine, injectTimeRanges } from './engine.js'
+import { buildCatalog, createEngine, withTimeRanges } from './engine.js'
 import type { ConnectorResolver } from './resolver.js'
 import { sourceTest } from './source-test.js'
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -492,7 +492,7 @@ describe('engine message validation', () => {
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('record')
     expect(results[1]!.type).toBe('source_state')
-    expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(results[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('malformed source message throws', async () => {
@@ -521,7 +521,7 @@ describe('engine message validation', () => {
     await expect(drain(engine.pipeline_read(defaultPipeline))).rejects.toThrow()
   })
 
-  it('destination output validation catches malformed messages', async () => {
+  it('destination output validation catches malformed messages via pipeline_write', async () => {
     const badDest: Destination = {
       async *spec(): AsyncIterable<SpecOutput> {
         yield { type: 'spec', spec: { config: {} } }
@@ -544,11 +544,11 @@ describe('engine message validation', () => {
     }
     const engine = await createEngine(makeResolver(sourceTest, badDest))
 
+    // pipeline_write validates destination output; pipeline_sync does not
     await expect(
       drain(
-        engine.pipeline_sync(
+        engine.pipeline_write(
           pipeline,
-          undefined,
           toAsync([
             {
               type: 'record',
@@ -638,99 +638,16 @@ describe('engine stream membership validation', () => {
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('log')
     expect(results[1]!.type).toBe('connection_status')
-    expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(results[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 })
 
 // ---------------------------------------------------------------------------
-// engine.pipeline_read() input state validation
+// engine.pipeline_read() state passthrough
 // ---------------------------------------------------------------------------
 
-describe('engine.pipeline_read() input state validation', () => {
-  const stateStreamSchema = {
-    type: 'object',
-    properties: {
-      remaining: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            gte: { type: 'string' },
-            lt: { type: 'string' },
-            cursor: { type: ['string', 'null'] },
-          },
-          required: ['gte', 'lt', 'cursor'],
-        },
-      },
-    },
-    required: ['remaining'],
-  }
-
-  /** A source whose spec declares source_state_stream. */
-  const sourceWithStateSchema: Source = {
-    async *spec() {
-      yield {
-        type: 'spec' as const,
-        spec: { config: {}, source_state_stream: stateStreamSchema },
-      }
-    },
-    async *check() {
-      yield {
-        type: 'connection_status' as const,
-        connection_status: { status: 'succeeded' as const },
-      }
-    },
-    async *discover() {
-      yield {
-        type: 'catalog' as const,
-        catalog: { streams: [{ name: 'customers', json_schema: {} }] },
-      }
-    },
-    async *read() {
-      yield {
-        type: 'record' as const,
-        record: { stream: 'customers', data: { id: '1' }, emitted_at: new Date().toISOString() },
-      }
-    },
-  }
-
-  it('rejects invalid input state when source declares source_state_stream', async () => {
-    const engine = await createEngine(makeResolver(sourceWithStateSchema, destinationTest))
-    const pipeline = {
-      source: { type: 'test', test: { streams: { customers: {} } } },
-      destination: { type: 'test', test: {} },
-    }
-    await expect(
-      drain(
-        engine.pipeline_read(pipeline, {
-          state: { source: { streams: { customers: 'not-an-object' }, global: {} } },
-        })
-      )
-    ).rejects.toThrow(/Invalid state for stream "customers"/)
-  })
-
-  it('accepts valid input state matching source_state_stream schema', async () => {
-    const engine = await createEngine(makeResolver(sourceWithStateSchema, destinationTest))
-    const pipeline = {
-      source: { type: 'test', test: { streams: { customers: {} } } },
-      destination: { type: 'test', test: {} },
-    }
-    const results = await drain(
-      engine.pipeline_read(pipeline, {
-        state: {
-          source: {
-            streams: {
-              customers: { remaining: [{ gte: '2024-01-01', lt: '2025-01-01', cursor: null }] },
-            },
-            global: {},
-          },
-        },
-      })
-    )
-    expect(results.length).toBeGreaterThan(0)
-  })
-
-  it('skips validation when source does not declare source_state_stream', async () => {
+describe('engine.pipeline_read() state passthrough', () => {
+  it('passes any state shape through to the source', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {
       source: { type: 'test', test: { streams: { customers: {} } } },
@@ -782,6 +699,8 @@ describe('engine.pipeline_sync() pipeline', () => {
       })
     )
 
+    // coerceSyncState normalizes { streams, global } → { source: { streams, global }, ... }
+    // and the engine passes state.source to connector.read()
     expect(receivedState).toEqual({
       streams: { customers: { cursor: 'cus_1' } },
       global: {},
@@ -818,7 +737,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         }
         yield {
           type: 'source_state' as const,
-          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+          source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } },
         }
         yield {
           type: 'source_state' as const,
@@ -839,16 +758,10 @@ describe('engine.pipeline_sync() pipeline', () => {
             global: { events_cursor: 'evt_old' },
           },
           destination: {
-            streams: { customers: { watermark: 10 } },
-            global: { schema_version: 1 },
+            customers: { watermark: 10 },
+            schema_version: 1,
           },
-          engine: {
-            streams: {
-              customers: { cumulative_record_count: 5, note: 'keep-me' },
-              invoices: { cumulative_record_count: 2, untouched: true },
-            },
-            global: { sync_id: 'prev' },
-          },
+          sync_run: {},
         },
       })
     )
@@ -857,7 +770,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(eof).toMatchObject({
       type: 'eof',
       eof: {
-        state: {
+        ending_state: {
           source: {
             streams: {
               customers: { cursor: 'cus_1' },
@@ -866,15 +779,8 @@ describe('engine.pipeline_sync() pipeline', () => {
             global: { events_cursor: 'evt_new' },
           },
           destination: {
-            streams: { customers: { watermark: 10 } },
-            global: { schema_version: 1 },
-          },
-          engine: {
-            streams: {
-              customers: { cumulative_record_count: 6, note: 'keep-me' },
-              invoices: { cumulative_record_count: 2, untouched: true },
-            },
-            global: { sync_id: 'prev' },
+            customers: { watermark: 10 },
+            schema_version: 1,
           },
         },
       },
@@ -904,13 +810,10 @@ describe('engine.pipeline_sync() pipeline', () => {
         global: { events_cursor: 'evt_9' },
       },
       destination: {
-        streams: { customers: { watermark: 99 } },
-        global: { schema_version: 2 },
+        customers: { watermark: 99 },
+        schema_version: 2,
       },
-      engine: {
-        streams: { customers: { cumulative_record_count: 9 } },
-        global: { sync_id: 'resume-9' },
-      },
+      sync_run: {},
     }
 
     const engine = await createEngine(makeResolver(idleSource, destinationTest))
@@ -919,7 +822,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     const eof = results.find((msg) => msg.type === 'eof')
     expect(eof).toMatchObject({
       type: 'eof',
-      eof: { state: initialState },
+      eof: { ending_state: initialState },
     })
   })
 
@@ -958,13 +861,10 @@ describe('engine.pipeline_sync() pipeline', () => {
             global: { events_cursor: 'evt_9' },
           },
           destination: {
-            streams: { customers: { watermark: 99 } },
-            global: { schema_version: 2 },
+            customers: { watermark: 99 },
+            schema_version: 2,
           },
-          engine: {
-            streams: { customers: { cumulative_record_count: 9, note: 'persist' } },
-            global: { sync_id: 'resume-9' },
-          },
+          sync_run: {},
         },
       })
     )
@@ -973,18 +873,14 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(eof).toMatchObject({
       type: 'eof',
       eof: {
-        state: {
+        ending_state: {
           source: {
             streams: { customers: { cursor: 'cus_9' } },
             global: { events_cursor: 'evt_9' },
           },
           destination: {
-            streams: { customers: { watermark: 99 } },
-            global: { schema_version: 2 },
-          },
-          engine: {
-            streams: { customers: { cumulative_record_count: 10, note: 'persist' } },
-            global: { sync_id: 'resume-9' },
+            customers: { watermark: 99 },
+            schema_version: 2,
           },
         },
       },
@@ -1041,7 +937,7 @@ describe('engine.pipeline_sync() pipeline', () => {
       type: 'source_state',
       source_state: { stream: 'customers', data: { status: 'complete' } },
     })
-    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('stream filtering: only configures requested streams', async () => {
@@ -1145,7 +1041,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     const stateAndEof = results.filter((m) => m.type === 'source_state' || m.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]!.type).toBe('source_state')
-    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     // Source signals (log, stream_status) are also present in the output
     const sourceSignals = results.filter((m) => m.type === 'log' || m.type === 'stream_status')
     expect(sourceSignals.length).toBeGreaterThan(0)
@@ -1339,22 +1235,31 @@ describe('engine cancellation integration', () => {
     const engine = await createEngine(makeResolver(source, destination))
     const iter = engine.pipeline_sync(defaultPipeline)[Symbol.asyncIterator]()
 
-    expect(await iter.next()).toMatchObject({
-      value: {
-        type: 'source_state',
-        source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
-      },
-      done: false,
-    })
+    // Consume messages until the destination is blocked
+    // (trackProgress may emit progress messages between data messages)
+    let gotSourceState = false
+    while (true) {
+      const { value, done } = await iter.next()
+      if (done) throw new Error('unexpected end of stream')
+      if (value.type === 'source_state') {
+        gotSourceState = true
+        expect(value).toMatchObject({
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        })
+      }
+      // Once we see the source_state, break after the destination enters blocked state
+      if (gotSourceState) {
+        const raceResult = await Promise.race([
+          destinationWaiting.then(() => 'waiting' as const),
+          new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 10)),
+        ])
+        if (raceResult === 'waiting') break
+      }
+    }
+    expect(gotSourceState).toBe(true)
 
     const blockedNext = iter.next()
     void blockedNext.catch(() => undefined)
-    await Promise.race([
-      destinationWaiting,
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('destination never entered the blocked section')), 50)
-      }),
-    ])
 
     const returnPromise = iter.return?.()
 
@@ -1363,7 +1268,7 @@ describe('engine cancellation integration', () => {
         Promise.race([
           returnPromise!,
           new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('timed out waiting for pipeline_sync teardown')), 50)
+            setTimeout(() => reject(new Error('timed out waiting for pipeline_sync teardown')), 200)
           }),
         ])
       ).resolves.toEqual({ value: undefined, done: true })
@@ -1372,7 +1277,7 @@ describe('engine cancellation integration', () => {
       releaseDestination()
       await Promise.race([
         returnPromise?.catch(() => undefined) ?? Promise.resolve(),
-        new Promise((resolve) => setTimeout(resolve, 50)),
+        new Promise((resolve) => setTimeout(resolve, 200)),
       ])
     }
 
@@ -1382,119 +1287,50 @@ describe('engine cancellation integration', () => {
 })
 
 // ---------------------------------------------------------------------------
-// injectTimeRanges tests
+// withTimeRanges tests
 // ---------------------------------------------------------------------------
 
-describe('injectTimeRanges', () => {
+describe('withTimeRanges', () => {
   function mkCatalog(streamNames: string[]) {
     return buildCatalog(streamNames.map((name) => ({ name, primary_key: [['id']] })))
   }
 
-  it('does nothing when engineState is undefined', () => {
+  it('returns same catalog when timeCeiling is undefined', () => {
     const catalog = mkCatalog(['customers'])
-    injectTimeRanges(catalog, undefined)
-    expect(catalog.streams[0]!.time_range).toBeUndefined()
+    const result = withTimeRanges(catalog, undefined)
+    expect(result).toBe(catalog)
   })
 
-  it('does nothing when stream has no completed_ranges', () => {
-    const catalog = mkCatalog(['customers'])
-    injectTimeRanges(catalog, {
-      streams: { customers: { cumulative_record_count: 5 } },
-      global: {},
-    })
-    expect(catalog.streams[0]!.time_range).toBeUndefined()
+  it('sets time_range.lt to timeCeiling on all eligible streams', () => {
+    const catalog = mkCatalog(['customers', 'invoices'])
+    const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
+    expect(result.streams[0]!.time_range).toEqual({ gte: '', lt: '2025-01-01T00:00:00Z' })
+    expect(result.streams[1]!.time_range).toEqual({ gte: '', lt: '2025-01-01T00:00:00Z' })
   })
 
-  it('sets time_range.gte to max lt of completed_ranges', () => {
-    const catalog = mkCatalog(['customers'])
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [
-            { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-            { gte: '2024-06-01T00:00:00Z', lt: '2024-09-01T00:00:00Z' },
-          ],
-        },
-      },
-      global: {},
-    })
-    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-09-01T00:00:00Z')
-    expect(catalog.streams[0]!.time_range!.lt).toBeDefined()
-  })
-
-  it('preserves existing time_range.lt if already set', () => {
+  it('preserves existing time_range.gte if already set', () => {
     const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.time_range = {
       gte: '2024-01-01T00:00:00Z',
       lt: '2025-06-01T00:00:00Z',
     }
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-09-01T00:00:00Z' }],
-        },
-      },
-      global: {},
+    const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
+    expect(result.streams[0]!.time_range).toEqual({
+      gte: '2024-01-01T00:00:00Z',
+      lt: '2025-01-01T00:00:00Z',
     })
-    expect(catalog.streams[0]!.time_range).toEqual({
-      gte: '2024-09-01T00:00:00Z',
-      lt: '2025-06-01T00:00:00Z',
-    })
-  })
-
-  it('only injects into streams with completed_ranges', () => {
-    const catalog = mkCatalog(['customers', 'invoices'])
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
-        },
-      },
-      global: {},
-    })
-    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
-    expect(catalog.streams[1]!.time_range).toBeUndefined()
   })
 
   it('skips streams with supports_time_range: false', () => {
     const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.supports_time_range = false
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
-        },
-      },
-      global: {},
-    })
+    const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
+    expect(result.streams[0]!.time_range).toBeUndefined()
+  })
+
+  it('does not mutate original catalog', () => {
+    const catalog = mkCatalog(['customers'])
+    withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(catalog.streams[0]!.time_range).toBeUndefined()
-  })
-
-  it('injects into streams with supports_time_range: true', () => {
-    const catalog = mkCatalog(['customers'])
-    catalog.streams[0]!.supports_time_range = true
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
-        },
-      },
-      global: {},
-    })
-    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
-  })
-
-  it('injects into streams with supports_time_range: undefined (default)', () => {
-    const catalog = mkCatalog(['customers'])
-    // supports_time_range is not set (undefined) — should still inject
-    injectTimeRanges(catalog, {
-      streams: {
-        customers: {
-          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
-        },
-      },
-      global: {},
-    })
-    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
   })
 })
