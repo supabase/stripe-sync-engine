@@ -69,13 +69,6 @@ export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Mess
       if (msg.connection_status.status === 'failed') {
         logger.error({ message: msg.connection_status.message }, 'connection_status: failed')
       }
-    } else if (msg.type === 'trace') {
-      if (msg.trace.trace_type === 'error') {
-        logger.error(
-          { stream: msg.trace.error.stream, failure_type: msg.trace.error.failure_type },
-          msg.trace.error.message
-        )
-      }
     }
     yield msg
   }

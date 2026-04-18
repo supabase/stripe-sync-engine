@@ -19,7 +19,6 @@ import {
   RecordMessage,
   SourceStateMessage,
   Stream,
-  TraceMessage,
   withAbortOnReturn,
 } from '@stripe/sync-protocol'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -225,40 +224,6 @@ describe('protocol schemas', () => {
       expect(msg.log.level).toBe('info')
     })
 
-    it('TraceMessage (error)', () => {
-      const msg = TraceMessage.parse({
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: {
-            failure_type: 'transient_error',
-            message: 'retry',
-            stream: 'customers',
-            stack_trace: 'Error at ...',
-          },
-        },
-      })
-      expect(msg.trace.trace_type).toBe('error')
-      if (msg.trace.trace_type === 'error') {
-        expect(msg.trace.error.failure_type).toBe('transient_error')
-        expect(msg.trace.error.stream).toBe('customers')
-      }
-    })
-
-    it('TraceMessage (stream_status)', () => {
-      const msg = TraceMessage.parse({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: {
-            stream: 'customers',
-            status: 'running',
-          },
-        },
-      })
-      expect(msg.trace.trace_type).toBe('stream_status')
-    })
-
     it('rejects missing type', () => {
       expect(() =>
         RecordMessage.parse({
@@ -292,18 +257,12 @@ describe('protocol schemas', () => {
         { type: 'catalog', catalog: { streams: [{ name: 's', primary_key: [['id']] }] } },
         { type: 'log', log: { level: 'info', message: 'hi' } },
         {
-          type: 'trace',
-          trace: {
-            trace_type: 'error',
-            error: { failure_type: 'system_error', message: 'bad' },
-          },
+          type: 'connection_status',
+          connection_status: { status: 'failed', message: 'bad' },
         },
         {
-          type: 'trace',
-          trace: {
-            trace_type: 'stream_status',
-            stream_status: { stream: 's', status: 'complete' },
-          },
+          type: 'stream_status',
+          stream_status: { stream: 's', status: 'complete' },
         },
       ]
       for (const msg of messages) {
@@ -341,7 +300,7 @@ describe('protocol schemas', () => {
   })
 
   describe('DestinationOutput', () => {
-    it('accepts state, trace, and log', () => {
+    it('accepts state, connection_status, and log', () => {
       expect(() =>
         DestinationOutput.parse({
           type: 'source_state',
@@ -350,11 +309,8 @@ describe('protocol schemas', () => {
       ).not.toThrow()
       expect(() =>
         DestinationOutput.parse({
-          type: 'trace',
-          trace: {
-            trace_type: 'error',
-            error: { failure_type: 'system_error', message: 'x' },
-          },
+          type: 'connection_status',
+          connection_status: { status: 'failed', message: 'x' },
         })
       ).not.toThrow()
       expect(() =>
@@ -649,7 +605,7 @@ describe('engine stream membership validation', () => {
   })
 
   it('non-stream messages pass through regardless of stream field', async () => {
-    // Source that emits log + trace error messages (which don't require stream membership)
+    // Source that emits log + connection_status messages (which don't require stream membership)
     const source: Source = {
       async *spec(): AsyncIterable<SpecOutput> {
         yield { type: 'spec', spec: { config: {} } }
@@ -668,14 +624,10 @@ describe('engine stream membership validation', () => {
       async *read() {
         yield { type: 'log' as const, log: { level: 'info' as const, message: 'hello' } }
         yield {
-          type: 'trace' as const,
-          trace: {
-            trace_type: 'error' as const,
-            error: {
-              failure_type: 'system_error' as const,
-              message: 'oops',
-              stream: 'nonexistent',
-            },
+          type: 'connection_status' as const,
+          connection_status: {
+            status: 'failed' as const,
+            message: 'oops',
           },
         }
       },
@@ -685,7 +637,7 @@ describe('engine stream membership validation', () => {
     const results = await drain(engine.pipeline_read(defaultPipeline))
     expect(results).toHaveLength(3)
     expect(results[0]!.type).toBe('log')
-    expect(results[1]!.type).toBe('trace')
+    expect(results[1]!.type).toBe('connection_status')
     expect(results[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
   })
 })
@@ -1139,7 +1091,7 @@ describe('engine.pipeline_sync() pipeline', () => {
   })
 
   it('non-data messages filtered: only record + state reach destination', async () => {
-    // Source that emits log, trace error, trace stream_status, record, and state —
+    // Source that emits log, stream_status, connection_status, record, and state —
     // only record + state should reach the destination (non-data messages are routed to callbacks)
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -1161,23 +1113,10 @@ describe('engine.pipeline_sync() pipeline', () => {
       async *read() {
         yield { type: 'log' as const, log: { level: 'info' as const, message: 'starting' } }
         yield {
-          type: 'trace' as const,
-          trace: {
-            trace_type: 'error' as const,
-            error: {
-              failure_type: 'transient_error' as const,
-              message: 'rate limited',
-            },
-          },
-        }
-        yield {
-          type: 'trace' as const,
-          trace: {
-            trace_type: 'stream_status' as const,
-            stream_status: {
-              stream: 'customers',
-              status: 'running' as const,
-            },
+          type: 'stream_status' as const,
+          stream_status: {
+            stream: 'customers',
+            status: 'start' as const,
           },
         }
         yield {
@@ -1201,14 +1140,14 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(mixedSource, destinationTest))
     const results = await drain(engine.pipeline_sync(defaultPipeline))
 
-    // pipeline_sync now yields source signals (log/trace) alongside dest output
+    // pipeline_sync now yields source signals (log/stream_status) alongside dest output
     // Filter to source_state+eof to verify destination processing
     const stateAndEof = results.filter((m) => m.type === 'source_state' || m.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]!.type).toBe('source_state')
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
-    // Source signals (log, trace) are also present in the output
-    const sourceSignals = results.filter((m) => m.type === 'log' || m.type === 'trace')
+    // Source signals (log, stream_status) are also present in the output
+    const sourceSignals = results.filter((m) => m.type === 'log' || m.type === 'stream_status')
     expect(sourceSignals.length).toBeGreaterThan(0)
 
     vi.restoreAllMocks()

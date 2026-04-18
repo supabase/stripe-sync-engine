@@ -55,14 +55,12 @@ export const sourceTest = {
     for await (const msg of $stdin as AsyncIterable<Message>) {
       if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
         yield {
-          type: 'trace' as const,
-          trace: {
-            trace_type: 'error' as const,
-            error: {
-              failure_type: 'auth_error' as const,
-              message: 'Simulated auth error',
-            },
-          },
+          type: 'log' as const,
+          log: { level: 'error' as const, message: 'Simulated auth error' },
+        }
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'failed' as const, message: 'Simulated auth error' },
         }
         return
       }

@@ -3,7 +3,6 @@ import type {
   SyncState,
   SyncOutput,
   StreamStatusPayload,
-  TraceError,
   EofStreamProgress,
 } from '@stripe/sync-protocol'
 import { emptySyncState, createEngineMessageFactory } from '@stripe/sync-protocol'
@@ -32,7 +31,7 @@ export function mergeRanges(ranges: Range[]): Range[] {
   return merged
 }
 
-type StreamError = { message: string; failure_type?: TraceError['failure_type'] }
+type StreamError = { message: string }
 type Status = StreamStatusPayload['status']
 type ProgressStatus = 'not_started' | 'started' | 'completed' | 'skipped' | 'errored'
 
@@ -261,7 +260,7 @@ export function trackProgress(opts: {
           reason,
           has_more: reason !== 'complete',
           state: buildAccumulatedState(),
-          global_progress: {
+          request_progress: {
             elapsed_ms: elapsedMs(),
             run_record_count: totalRunRecords(),
             rows_per_second: totalRunRecords() / elapsedSec(),
@@ -311,17 +310,7 @@ export function trackProgress(opts: {
           streamStatus.set(ss.stream, ss.status)
         }
       } else if (msg.type === 'connection_status') {
-        // Global connection failure from source during read
         connectionStatus = msg.connection_status
-      } else if (msg.type === 'trace') {
-        if (msg.trace.trace_type === 'error') {
-          const err = msg.trace.error
-          if (err.stream) {
-            const errs = streamErrors.get(err.stream) ?? []
-            errs.push({ message: err.message, failure_type: err.failure_type })
-            streamErrors.set(err.stream, errs)
-          }
-        }
       }
 
       if (msg.type === 'eof') {

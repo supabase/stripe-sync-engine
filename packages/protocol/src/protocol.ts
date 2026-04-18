@@ -260,95 +260,17 @@ export const ControlPayload = z
   .describe('Control signal from a connector to the orchestrator.')
 export type ControlPayload = z.infer<typeof ControlPayload>
 
-// Trace subtypes
-
-export const TraceError = z
+/** Per-request aggregate stats. Used in EOF and periodic progress snapshots. */
+export const RequestProgress = z
   .object({
-    failure_type: z
-      .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
-      .describe('Error category — lets the orchestrator decide whether to retry, alert, or abort.'),
-    message: z.string().describe('Human-readable error description.'),
-    stream: z.string().optional().describe('Stream that triggered the error, if applicable.'),
-    stack_trace: z.string().optional().describe('Full stack trace for debugging.'),
-  })
-  .describe('Structured error from a connector.')
-export type TraceError = z.infer<typeof TraceError>
-
-export const TraceStreamStatus = z
-  .object({
-    stream: z.string().describe('Stream being reported on.'),
-    status: z
-      .enum(['start', 'running', 'complete', 'range_complete'])
-      .describe('Current phase of the stream within this sync run.'),
-    range_complete: z
-      .object({
-        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
-        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
-      })
-      .optional()
-      .describe('Present when status is range_complete. The sub-range that finished.'),
-    cumulative_record_count: z
-      .number()
-      .int()
-      .optional()
-      .describe(
-        'Cumulative records synced for this stream across all sync runs. ' +
-          'Monotonically increasing; initialized from engine state on resume. ' +
-          'Set by the engine, not the source.'
-      ),
+    elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the request started.'),
     run_record_count: z
       .number()
       .int()
-      .optional()
-      .describe('Records synced for this stream in the current sync run. Set by the engine.'),
-    window_record_count: z
-      .number()
-      .int()
-      .optional()
-      .describe(
-        'Records synced since the last stream_status emission for this stream. ' +
-          'Set by the engine. Used for instantaneous per-stream throughput.'
-      ),
-    records_per_second: z
-      .number()
-      .optional()
-      .describe(
-        'Average records per second for this stream over the entire run: ' +
-          'run_record_count / elapsed seconds. Set by the engine.'
-      ),
-    requests_per_second: z
-      .number()
-      .optional()
-      .describe(
-        'Average API requests per second for this stream over the entire run. ' +
-          'Set by the engine from source-reported request counts.'
-      ),
-  })
-  .describe(
-    'Per-stream status update. Sources emit the minimal form (stream + status). ' +
-      'The engine emits enriched versions with record counts and throughput rates.'
-  )
-export type TraceStreamStatus = z.infer<typeof TraceStreamStatus>
-
-export const TraceEstimate = z
-  .object({
-    stream: z.string().describe('Stream being estimated.'),
-    row_count: z.number().int().optional().describe('Estimated total row count for this stream.'),
-    byte_count: z.number().int().optional().describe('Estimated total byte count for this stream.'),
-  })
-  .describe('Sync progress estimate for a stream.')
-export type TraceEstimate = z.infer<typeof TraceEstimate>
-
-export const TraceProgress = z
-  .object({
-    elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the sync run started.'),
-    run_record_count: z
-      .number()
-      .int()
-      .describe('Total records synced across all streams in this run.'),
+      .describe('Total records synced across all streams in this request.'),
     rows_per_second: z
       .number()
-      .describe('Overall throughput for the entire run: run_record_count / elapsed seconds.'),
+      .describe('Overall throughput for this request: run_record_count / elapsed seconds.'),
     window_rows_per_second: z
       .number()
       .describe(
@@ -358,38 +280,10 @@ export const TraceProgress = z
     state_checkpoint_count: z
       .number()
       .int()
-      .describe('Total source_state messages observed so far in this sync run.'),
+      .describe('Total source_state messages observed so far in this request.'),
   })
-  .describe(
-    'Periodic global sync progress emitted by the engine. ' +
-      'Aggregate stats only — per-stream detail is in stream_status messages. ' +
-      'Each emission is a full replacement.'
-  )
-export type TraceProgress = z.infer<typeof TraceProgress>
-
-export const TracePayload = z
-  .discriminatedUnion('trace_type', [
-    z.object({
-      trace_type: z.literal('error'),
-      error: TraceError,
-    }),
-    z.object({
-      trace_type: z.literal('stream_status'),
-      stream_status: TraceStreamStatus,
-    }),
-    z.object({
-      trace_type: z.literal('estimate'),
-      estimate: TraceEstimate,
-    }),
-    z.object({
-      trace_type: z.literal('progress'),
-      progress: TraceProgress,
-    }),
-  ])
-  .describe(
-    'Diagnostic/status payload with subtypes for error, stream status, estimates, and progress.'
-  )
-export type TracePayload = z.infer<typeof TracePayload>
+  .describe('Per-request aggregate stats.')
+export type RequestProgress = z.infer<typeof RequestProgress>
 
 // MARK: - Stream status payload (top-level message type)
 
@@ -529,7 +423,7 @@ export const EofStreamProgress = z
           failure_type: z
             .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
             .optional()
-            .describe('Error category matching TraceError.failure_type.'),
+            .describe('Error category.'),
         })
       )
       .optional()
@@ -567,8 +461,8 @@ export const EofPayload = z
         'engine: updated cumulative record counts; destination: reserved. ' +
         'Consumers can persist this directly and pass it back on resume.'
     ),
-    global_progress: TraceProgress.optional().describe(
-      'Final global aggregates. Same shape as trace/progress.'
+    request_progress: RequestProgress.optional().describe(
+      'Per-request aggregate stats (elapsed time, throughput, checkpoint count).'
     ),
     stream_progress: z
       .record(z.string(), EofStreamProgress)
@@ -578,8 +472,7 @@ export const EofPayload = z
       ),
   })
   .describe(
-    'Terminal message with two nested sections: ' +
-      'global_progress (same shape as trace/progress) and ' +
+    'Terminal message with request_progress (per-request stats) and ' +
       'stream_progress (final per-stream detail including accumulated errors).'
   )
 export type EofPayload = z.infer<typeof EofPayload>
@@ -630,12 +523,6 @@ export const LogMessage = MessageBase.extend({
   log: LogPayload,
 }).meta({ id: 'LogMessage' })
 export type LogMessage = z.infer<typeof LogMessage>
-
-export const TraceMessage = MessageBase.extend({
-  type: z.literal('trace'),
-  trace: TracePayload,
-}).meta({ id: 'TraceMessage' })
-export type TraceMessage = z.infer<typeof TraceMessage>
 
 export const SpecMessage = MessageBase.extend({
   type: z.literal('spec'),
@@ -711,21 +598,20 @@ export const DestinationOutput = z
   .discriminatedUnion('type', [
     SourceStateMessage,
     StreamStatusMessage,
-    TraceMessage,
+    ConnectionStatusMessage,
     LogMessage,
     EofMessage,
   ])
   .meta({ id: 'DestinationOutput' })
 export type DestinationOutput = z.infer<typeof DestinationOutput>
 
-/** Output of pipeline_sync(): destination output plus source signals (controls, logs, traces). */
+/** Output of pipeline_sync(): destination output plus source signals (controls, logs, stream status). */
 export const SyncOutput = z
   .discriminatedUnion('type', [
     SourceStateMessage,
     StreamStatusMessage,
     ProgressMessage,
     ConnectionStatusMessage,
-    TraceMessage,
     LogMessage,
     EofMessage,
     ControlMessage,
@@ -740,7 +626,6 @@ export const Message = z
     SourceStateMessage,
     CatalogMessage,
     LogMessage,
-    TraceMessage,
     SpecMessage,
     ConnectionStatusMessage,
     StreamStatusMessage,
@@ -764,33 +649,33 @@ export type SourceInputMessage = z.infer<typeof SourceInputMessage>
 
 // MARK: - Per-command output types
 
-/** Output of spec(): the connector's specification, plus optional logs/traces. */
+/** Output of spec(): the connector's specification, plus optional logs. */
 export const SpecOutput = z
-  .discriminatedUnion('type', [SpecMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [SpecMessage, LogMessage])
   .meta({ id: 'SpecOutput' })
 export type SpecOutput = z.infer<typeof SpecOutput>
 
-/** Output of check(): connection status, plus optional logs/traces. */
+/** Output of check(): connection status, plus optional logs. */
 export const CheckOutput = z
-  .discriminatedUnion('type', [ConnectionStatusMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [ConnectionStatusMessage, LogMessage])
   .meta({ id: 'CheckOutput' })
 export type CheckOutput = z.infer<typeof CheckOutput>
 
-/** Output of discover(): catalog of streams, plus optional logs/traces. */
+/** Output of discover(): catalog of streams, plus optional logs. */
 export const DiscoverOutput = z
-  .discriminatedUnion('type', [CatalogMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [CatalogMessage, LogMessage])
   .meta({ id: 'DiscoverOutput' })
 export type DiscoverOutput = z.infer<typeof DiscoverOutput>
 
-/** Output of setup(): config update controls, plus optional logs/traces. */
+/** Output of setup(): config update controls, plus optional logs. */
 export const SetupOutput = z
-  .discriminatedUnion('type', [ControlMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [ControlMessage, LogMessage])
   .meta({ id: 'SetupOutput' })
 export type SetupOutput = z.infer<typeof SetupOutput>
 
-/** Output of teardown(): optional logs/traces. */
+/** Output of teardown(): optional logs. */
 export const TeardownOutput = z
-  .discriminatedUnion('type', [LogMessage, TraceMessage])
+  .discriminatedUnion('type', [LogMessage])
   .meta({ id: 'TeardownOutput' })
 export type TeardownOutput = z.infer<typeof TeardownOutput>
 

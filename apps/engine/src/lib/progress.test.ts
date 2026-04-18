@@ -86,11 +86,8 @@ describe('trackProgress', () => {
             stream_status: { stream: 'customers', status: 'complete' },
           },
           {
-            type: 'trace',
-            trace: {
-              trace_type: 'error',
-              error: { message: 'boom', failure_type: 'system_error', stream: 'customers' },
-            },
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'error', error: 'boom' },
           },
           { type: 'eof', eof: { reason: 'complete' } },
         ])
@@ -117,7 +114,7 @@ describe('trackProgress', () => {
             global: {},
           },
         },
-        global_progress: {
+        request_progress: {
           run_record_count: 2,
           state_checkpoint_count: 1,
         },
@@ -126,7 +123,7 @@ describe('trackProgress', () => {
             status: 'complete',
             cumulative_record_count: 7,
             run_record_count: 2,
-            errors: [{ message: 'boom', failure_type: 'system_error' }],
+            errors: [{ message: 'boom' }],
           },
         },
       },

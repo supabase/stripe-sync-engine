@@ -22,7 +22,6 @@ import type {
   StreamStatusPayload,
   StreamStatePayload,
   SyncState,
-  TraceMessage,
 } from './protocol.js'
 
 // MARK: - Message constructors
@@ -77,10 +76,6 @@ export function isLogMessage(msg: Message): msg is LogMessage {
   return msg.type === 'log'
 }
 
-export function isTraceMessage(msg: Message): msg is TraceMessage {
-  return msg.type === 'trace'
-}
-
 export function isSpecMessage(msg: Message): msg is SpecMessage {
   return msg.type === 'spec'
 }
@@ -108,27 +103,6 @@ export function isEofMessage(msg: Message): msg is EofMessage {
 /** Type guard for "data" messages: record + source_state (the DestinationInput union). */
 export function isDataMessage(msg: Message): msg is DestinationInput {
   return msg.type === 'record' || msg.type === 'source_state'
-}
-
-/** Type guard for trace error messages. */
-export function isTraceError(
-  msg: Message
-): msg is TraceMessage & { trace: { trace_type: 'error' } } {
-  return msg.type === 'trace' && msg.trace.trace_type === 'error'
-}
-
-/** Type guard for trace stream_status messages. */
-export function isTraceStreamStatus(
-  msg: Message
-): msg is TraceMessage & { trace: { trace_type: 'stream_status' } } {
-  return msg.type === 'trace' && msg.trace.trace_type === 'stream_status'
-}
-
-/** Type guard for trace progress messages. */
-export function isTraceProgress(
-  msg: Message
-): msg is TraceMessage & { trace: { trace_type: 'progress' } } {
-  return msg.type === 'trace' && msg.trace.trace_type === 'progress'
 }
 
 export function emptySectionState(): SectionState {
@@ -193,7 +167,7 @@ export function coerceSyncState(input: unknown): SyncState | undefined {
 /**
  * Generic stream collector. Drains the stream, accumulating messages whose
  * `type` matches one of the given types. Log messages are always collected
- * into `logs`. Trace errors always throw.
+ * into `logs`. Connection failures always throw.
  *
  * With no type arguments, acts as a drain (consumes all, returns logs only).
  *
@@ -204,7 +178,7 @@ export function coerceSyncState(input: unknown): SyncState | undefined {
  *   // Collect all control messages
  *   const { messages } = await collect(stream, 'control')
  *
- *   // Drain, collecting logs and throwing on trace errors
+ *   // Drain, collecting logs and throwing on connection failures
  *   const { logs } = await collect(stream)
  */
 export async function collectMessages<T extends Message['type']>(
@@ -218,8 +192,8 @@ export async function collectMessages<T extends Message['type']>(
     const msg = raw as Message
     if (msg.type === 'log') {
       logs.push(`[${msg.log.level}] ${msg.log.message}`)
-    } else if (msg.type === 'trace' && msg.trace.trace_type === 'error') {
-      throw new Error(msg.trace.error.message)
+    } else if (msg.type === 'connection_status' && msg.connection_status.status === 'failed') {
+      throw new Error(msg.connection_status.message ?? 'connection failed')
     }
     if (typeSet.has(msg.type)) {
       messages.push(msg as Extract<Message, { type: T }>)
@@ -231,7 +205,7 @@ export async function collectMessages<T extends Message['type']>(
 /**
  * Collect the first message of a given type from a stream.
  * Throws if the stream ends without emitting a matching message.
- * Log messages are collected; trace errors throw.
+ * Log messages are collected; connection failures throw.
  */
 export async function collectFirst<T extends Message['type']>(
   stream: AsyncIterable<{ type: string }>,
@@ -243,7 +217,7 @@ export async function collectFirst<T extends Message['type']>(
   return first
 }
 
-/** Drain a stream, collecting logs and throwing on trace errors. */
+/** Drain a stream, collecting logs and throwing on connection failures. */
 export async function drain(stream: AsyncIterable<{ type: string }>): Promise<{ logs: string[] }> {
   return collectMessages(stream)
 }

@@ -8,7 +8,8 @@ import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
 import { HTTPException } from 'hono/http-exception'
 import pg from 'pg'
-import type { Message, ConnectorResolver, TraceMessage } from '../lib/index.js'
+import type { Message, ConnectorResolver } from '../lib/index.js'
+import type { ConnectionStatusMessage, LogMessage } from '@stripe/sync-protocol'
 import type { EofPayload } from '@stripe/sync-protocol'
 import {
   createEngine,
@@ -69,25 +70,15 @@ function syncRequestContext(pipeline: {
   }
 }
 
-function traceError(err: unknown): TraceMessage {
-  let message: string
-  if (err instanceof Error) {
-    message = err.message || (err as NodeJS.ErrnoException).code || err.constructor.name
-  } else {
-    message = String(err)
-  }
-  const stack_trace = err instanceof Error ? err.stack : undefined
-  return {
-    type: 'trace',
-    trace: {
-      trace_type: 'error',
-      error: {
-        failure_type: 'system_error',
-        message,
-        ...(stack_trace ? { stack_trace } : {}),
-      },
-    },
-  }
+function errorMessages(err: unknown): [LogMessage, ConnectionStatusMessage] {
+  const message =
+    err instanceof Error
+      ? err.message || (err as NodeJS.ErrnoException).code || err.constructor.name
+      : String(err)
+  return [
+    { type: 'log', log: { level: 'error', message } },
+    { type: 'connection_status', connection_status: { status: 'failed', message } },
+  ]
 }
 
 async function* logApiStream<T>(
@@ -95,15 +86,16 @@ async function* logApiStream<T>(
   iter: AsyncIterable<T>,
   context: Record<string, unknown>,
   startedAt = Date.now()
-): AsyncIterable<T | TraceMessage> {
+): AsyncIterable<T | LogMessage | ConnectionStatusMessage> {
   let itemCount = 0
-  let hasErrorTrace = false
+  let hasError = false
   try {
     for await (const item of iter) {
       itemCount++
       if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
-      const msg = item as { type?: string; trace?: { trace_type?: string }; eof?: unknown }
-      if (msg?.type === 'trace' && msg?.trace?.trace_type === 'error') hasErrorTrace = true
+      const msg = item as { type?: string; connection_status?: { status?: string }; eof?: unknown }
+      if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
+        hasError = true
       if (msg?.type === 'eof')
         logger.info({ ...context, eof: msg.eof }, formatEof(msg.eof as EofPayload))
       yield item
@@ -117,7 +109,11 @@ async function* logApiStream<T>(
       { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
       `${label} failed`
     )
-    if (!hasErrorTrace) yield traceError(error)
+    if (!hasError) {
+      const [logMsg, connMsg] = errorMessages(error)
+      yield logMsg
+      yield connMsg
+    }
   }
 }
 
@@ -140,12 +136,12 @@ const STATUS_EMOJI: Record<string, string> = {
 
 function formatEof(eof: EofPayload): string {
   const emoji = REASON_EMOJI[eof.reason] ?? '❓'
-  const elapsed = eof.global_progress?.elapsed_ms
-    ? `${(eof.global_progress.elapsed_ms / 1000).toFixed(1)}s`
+  const elapsed = eof.request_progress?.elapsed_ms
+    ? `${(eof.request_progress.elapsed_ms / 1000).toFixed(1)}s`
     : ''
-  const totalRows = eof.global_progress?.run_record_count ?? 0
-  const rps = eof.global_progress?.rows_per_second?.toFixed(1) ?? '0'
-  const checkpoints = eof.global_progress?.state_checkpoint_count ?? 0
+  const totalRows = eof.request_progress?.run_record_count ?? 0
+  const rps = eof.request_progress?.rows_per_second?.toFixed(1) ?? '0'
+  const checkpoints = eof.request_progress?.state_checkpoint_count ?? 0
 
   const lines: string[] = []
   lines.push(

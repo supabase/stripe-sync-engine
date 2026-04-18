@@ -273,18 +273,10 @@ const destination = {
         // ignore flush errors during error handling
       }
 
+      yield { type: 'log' as const, log: { level: 'error' as const, message: errorMessage(err) } }
       yield {
-        type: 'trace' as const,
-        trace: {
-          trace_type: 'error' as const,
-          error: {
-            failure_type: isTransient(err)
-              ? ('transient_error' as const)
-              : ('system_error' as const),
-            message: errorMessage(err),
-            stack_trace: err instanceof Error ? err.stack : undefined,
-          },
-        },
+        type: 'connection_status' as const,
+        connection_status: { status: 'failed' as const, message: errorMessage(err) },
       }
       throw err
     } finally {

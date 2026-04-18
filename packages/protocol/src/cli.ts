@@ -247,18 +247,13 @@ export async function runConnectorCli(
     await runMain(program)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
-    const errorMsg = {
-      type: 'trace' as const,
-      trace: {
-        trace_type: 'error' as const,
-        error: {
-          failure_type: 'system_error' as const,
-          message,
-          stack_trace: err instanceof Error ? err.stack : undefined,
-        },
-      },
+    const logMsg = { type: 'log' as const, log: { level: 'error' as const, message } }
+    const connStatus = {
+      type: 'connection_status' as const,
+      connection_status: { status: 'failed' as const, message },
     }
-    process.stderr.write(JSON.stringify(errorMsg) + '\n')
+    process.stderr.write(JSON.stringify(logMsg) + '\n')
+    process.stderr.write(JSON.stringify(connStatus) + '\n')
     process.exitCode = 1
   }
 }

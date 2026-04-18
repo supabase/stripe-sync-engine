@@ -203,22 +203,16 @@ describe('enforceCatalog()', () => {
     })
   })
 
-  it('passes non-data messages (log, trace) through unchanged', async () => {
+  it('passes non-data messages (log, connection_status, stream_status) through unchanged', async () => {
     const msgs: Message[] = [
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'complete' },
       },
     ]
     const result = await drain(
@@ -226,8 +220,8 @@ describe('enforceCatalog()', () => {
     )
     expect(result).toHaveLength(3)
     expect(result[0]).toMatchObject({ type: 'log' })
-    expect(result[1]).toMatchObject({ type: 'trace' })
-    expect(result[2]).toMatchObject({ type: 'trace' })
+    expect(result[1]).toMatchObject({ type: 'connection_status' })
+    expect(result[2]).toMatchObject({ type: 'stream_status' })
   })
 })
 
@@ -252,18 +246,12 @@ describe('log()', () => {
       },
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'complete' },
       },
     ]
     const result = await drain(log(toAsync(msgs)))
@@ -271,31 +259,14 @@ describe('log()', () => {
     expect(result[0]).toMatchObject({ type: 'record' })
     expect(result[1]).toMatchObject({ type: 'source_state' })
     expect(result[2]).toMatchObject({ type: 'log' })
-    expect(result[3]).toMatchObject({ type: 'trace' })
-    expect(result[4]).toMatchObject({ type: 'trace' })
+    expect(result[3]).toMatchObject({ type: 'connection_status' })
+    expect(result[4]).toMatchObject({ type: 'stream_status' })
   })
 
   it('logs log messages via logger at the correct level', async () => {
     const msgs: Message[] = [{ type: 'log', log: { level: 'warn', message: 'careful' } }]
     await drain(log(toAsync(msgs)))
     expect(logger.warn).toHaveBeenCalledWith('careful')
-  })
-
-  it('logs trace error messages via logger.error', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'transient_error', message: 'retry' },
-        },
-      },
-    ]
-    await drain(log(toAsync(msgs)))
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ failure_type: 'transient_error' }),
-      'retry'
-    )
   })
 
   it('logs top-level stream_status messages via logger.info', async () => {
@@ -373,11 +344,8 @@ describe('filterType()', () => {
       },
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
     ]
     const result = await drain(filterType('record', 'source_state')(toAsync(msgs)))
@@ -390,11 +358,8 @@ describe('filterType()', () => {
     const msgs: Message[] = [
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
     ]
     const result = await drain(filterType('record')(toAsync(msgs)))
@@ -457,11 +422,8 @@ describe('persistState()', () => {
     const msgs: DestinationOutput[] = [
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
     ]
     await drain(persistState(store)(toAsync(msgs)))

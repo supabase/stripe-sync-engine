@@ -53,11 +53,15 @@ export function mergeStateMessage(state: SyncState, msg: SourceStateMessage): Sy
 }
 
 export function collectError(message: Message): RunResult['errors'][number] | null {
-  if (message.type === 'trace' && message.trace.trace_type === 'error') {
+  if (message.type === 'connection_status' && message.connection_status.status === 'failed') {
     return {
-      message: message.trace.error.message || 'Unknown error',
-      failure_type: message.trace.error.failure_type,
-      stream: message.trace.error.stream,
+      message: message.connection_status.message || 'Connection failed',
+    }
+  }
+  if (message.type === 'stream_status' && message.stream_status.status === 'error') {
+    return {
+      message: message.stream_status.error,
+      stream: message.stream_status.stream,
     }
   }
   return null

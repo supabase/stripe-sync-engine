@@ -18,7 +18,6 @@ export {
   isStateMessage,
   isCatalogMessage,
   isLogMessage,
-  isTraceMessage,
   isSpecMessage,
   isConnectionStatusMessage,
   isStreamStatusMessage,
@@ -26,9 +25,6 @@ export {
   isControlMessage,
   isEofMessage,
   isDataMessage,
-  isTraceError,
-  isTraceStreamStatus,
-  isTraceProgress,
   // State constructors
   coerceSyncState,
   emptySectionState,
