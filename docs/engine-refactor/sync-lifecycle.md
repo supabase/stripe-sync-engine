@@ -58,11 +58,11 @@ CLIENT  ←—start/end—→  ENGINE  ←—iterator—→  SOURCE
 | What to sync        | Provides catalog                      | Passes catalog through, may inject `time_range`           | Syncs what it's given                                  |
 | When to sync        | Decides                               | —                                                         | —                                                      |
 | Run identity        | Generates `sync_run_id`               | Tracks run continuity                                     | Unaware                                                |
-| Time range bounds   | —                                     | Freezes `started_at`, injects `time_range` when supported | Respects `time_range` if present                       |
+| Time range bounds   | —                                     | Freezes `time_ceiling`, injects `time_range` when supported | Respects `time_range` if present                       |
 | Internal pagination | —                                     | —                                                         | Manages `starting_after` / equivalent                  |
-| Stream lifecycle    | Consumes                              | Tracks progress                                           | Emits `started`, optional `range_complete`, `complete` |
-| Progress reporting  | Consumes                              | Emits run-level snapshots                                 | Emits records, checkpoints, traces                     |
-| Error reporting     | Decides retry policy above the engine | Passes through, stops on `global`                         | Classifies and emits trace errors                      |
+| Stream lifecycle    | Consumes                              | Tracks progress                                           | Emits `start`, optional `range_complete`, `complete`, `skip` |
+| Progress reporting  | Consumes                              | Emits run-level snapshots                                 | Emits records, checkpoints, stream_status              |
+| Error reporting     | Decides retry policy above the engine | Passes through logs                                       | Logs errors, exhausts if unrecoverable                 |
 | State               | Opaque round-trip                     | Manages engine section                                    | Manages source section                                 |
 | `has_more`          | Reads, acts                           | Derives from stream progress                              | —                                                      |
 
@@ -72,7 +72,7 @@ CLIENT  ←—start/end—→  ENGINE  ←—iterator—→  SOURCE
 
 The engine trusts only explicit stream status messages for lifecycle:
 
-- `started` means the stream is active for this request.
+- `start` means the stream is active for this request.
 - `range_complete` is progress telemetry only.
 - `complete` is the only terminal signal.
 
@@ -85,7 +85,7 @@ opaque cursor data.
 
 ### Source → engine
 
-Sources are iterators that yield these message types:
+Sources are iterators that yield five message types:
 
 ```ts
 // Data record
@@ -97,21 +97,27 @@ Sources are iterators that yield these message types:
 // Global checkpoint for source-wide state.
 { type: 'source_state', source_state: { state_type: 'global', data: unknown } }
 
-// Stream status
-{ type: 'trace', trace: { trace_type: 'stream_status', stream_status: StreamStatus } }
+// Stream lifecycle event
+{ type: 'stream_status', stream_status: StreamStatus }
 
-// Error
-{ type: 'trace', trace: { trace_type: 'error', error: SyncError & { stack_trace?: string } } }
+// Global error (unrecoverable — source exhausts after emitting this)
+{ type: 'connection_status', connection_status: { status: 'failed', message: string } }
 
-// Diagnostic log
-{ type: 'log', log: { level: 'debug' | 'info' | 'warn' | 'error', message: string } }
+// Log (diagnostics)
+{ type: 'log', log: { level: 'debug' | 'info' | 'warn' | 'error', message: string, stream?: string } }
 ```
+
+Global errors use `connection_status: failed` (same message type as `check()`).
+The source emits it then exhausts. Stream errors use `stream_status: error`.
+Logs are informational only — the engine passes them through but does not act
+on them.
 
 ### Engine → client
 
-The engine emits three message types: `progress`, `record`, and `log`.
+The engine streams these message types to the client (via destination re-emit):
 
 ```ts
+// Progress snapshot
 {
   type: 'progress',
   progress: {
@@ -122,20 +128,26 @@ The engine emits three message types: `progress`, `record`, and `log`.
       states_per_second: number,
     },
     streams: Record<string, StreamProgress>,
-    errors: SyncError[]
   }
 }
 
-{ type: 'record', record: { stream: string, data: Record<string, unknown>, emitted_at: string } }
+// State checkpoint (confirmed by destination)
+{ type: 'source_state', source_state: { state_type: 'stream', stream: string, data: unknown } }
 
-{ type: 'log', log: { level: 'info' | 'warn' | 'error', message: string } }
+// Stream lifecycle event (confirmed by destination)
+{ type: 'stream_status', stream_status: StreamStatus }
+
+// Log
+{ type: 'log', log: { level: 'info' | 'warn' | 'error', message: string, stream?: string } }
 ```
 
 For the future `start`/`end` request–response protocol, see
 [sync-lifecycle-start-end-message.md](./sync-lifecycle-start-end-message.md).
 
-The engine does not pass trace messages through to the client. It folds them
-into `progress` and `log`.
+The engine emits the first `progress` immediately after discover + catalog
+construction, before the source has sent any data. This gives the client
+immediate visibility into the configured streams and their initial statuses
+(all `not_started`, or reflecting prior run state on continuation).
 
 ---
 
@@ -145,23 +157,27 @@ into `progress` and `log`.
 
 ```ts
 type StreamStatus =
-  | { stream: string; status: 'started' }
+  | { stream: string; status: 'start' }
   | { stream: string; status: 'range_complete'; range_complete: { gte: string; lt: string } }
   | { stream: string; status: 'complete' }
+  | { stream: string; status: 'error'; error: string }
+  | { stream: string; status: 'skip'; reason: string }
 ```
 
-| Status           | Meaning                         | Engine action                   |
-| ---------------- | ------------------------------- | ------------------------------- |
-| `started`        | Stream is active                | Mark stream active for progress |
-| `range_complete` | A time range finished           | Update progress only            |
-| `complete`       | Stream is terminal for this run | Mark stream terminal            |
+| Status           | Meaning                              | Engine action                   |
+| ---------------- | ------------------------------------ | ------------------------------- |
+| `start`          | Stream is active                     | Mark stream active for progress |
+| `range_complete` | A time range finished                | Update progress only            |
+| `complete`       | Stream is done for this run          | Mark stream done                |
+| `error`          | Stream failed                        | Mark stream done, record error  |
+| `skip`           | Stream will not be processed         | No work, record reason          |
 
 `range_complete` is optional and only meaningful for streams that support
 engine-assigned `time_range`. It is not used to derive `has_more`.
 
-A source that decides to stop a stream after a stream-level error should still
-emit `complete` for that stream. That keeps lifecycle semantics explicit:
-errors explain _why_ the stream stopped; `complete` says it is terminal.
+Terminal statuses are `complete`, `error`, and `skip`. A stream ends with
+exactly one of these. `error` means the stream tried and failed. `skip` means
+it was never attempted. `complete` means it finished successfully.
 
 ---
 
@@ -200,37 +216,49 @@ type ConfiguredCatalog = {
 ### Progress message (engine → client)
 
 ```ts
-type SyncError =
-  | { error_level: 'global'; message: string }
-  | { error_level: 'stream'; message: string; stream: string }
-  | { error_level: 'transient'; message: string; stream?: string }
-
 type StreamProgress = {
+  status: 'not_started' | 'started' | 'completed' | 'skipped' | 'errored' // current state, derived from stream_status events
   state_count: number
   record_count: number
   completed_ranges?: Array<{ gte: string; lt: string }>
 }
 
 type ProgressPayload = {
+  started_at: string // when this sync started; generally equals time_ceiling
   elapsed_ms: number
   global_state_count: number
+  connection_status?: { status: 'failed'; message: string } // set when source emits connection_status: failed
   derived: {
+    status: 'started' | 'succeeded' | 'failed' // succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored
     records_per_second: number
     states_per_second: number
   }
   streams: Record<string, StreamProgress>
-  errors: SyncError[]
 }
 ```
 
 `completed_ranges` is progress data only. It does not determine completion.
+
+#### Deriving `StreamProgress.status` from events
+
+```ts
+stream_status event  →  StreamProgress.status
+─────────────────────────────────────────────
+(no event yet)       →  'not_started'
+'start'              →  'started'
+'complete'           →  'completed'
+'error'              →  'errored'
+'skip'               →  'skipped'
+'range_complete'     →  no status change (appends to completed_ranges)
+```
 
 ### SyncState
 
 ```ts
 type SyncState = {
   source: SourceState
-  engine: EngineState
+  destination: DestinationState
+  sync_run: SyncRunState
 }
 
 type SourceState = {
@@ -238,10 +266,12 @@ type SourceState = {
   global: Record<string, unknown>
 }
 
-type EngineState = {
+type DestinationState = Record<string, unknown>
+
+type SyncRunState = {
   sync_run_id?: string // omit for continuous sync
-  started_at?: string // set only when sync_run_id is present
-  run_progress: ProgressPayload
+  time_ceiling?: string // frozen upper bound; set only when sync_run_id is present
+  progress: ProgressPayload
 }
 ```
 
@@ -272,10 +302,13 @@ invocation — the sync never "finishes" and continuously chases new data.
 
 ### With `sync_run_id` (finite backfill)
 
-- The engine freezes `started_at = now()` on the first invocation and persists
-  it in `EngineState`.
-- On continuation (same `sync_run_id` in state), `started_at` is reused →
+- The engine freezes `time_ceiling = now()` on the first invocation and persists
+  it in `SyncRunState`.
+- On continuation (same `sync_run_id` in state), `time_ceiling` is reused →
   `time_range.lt` stays frozen.
+- On continuation, the engine removes streams with terminal statuses
+  (`completed`, `errored`, `skipped`) from the configured catalog passed to
+  the source. Only streams still in `started` or `not_started` are included.
 - The run is complete when the source iterator exhausts (returns naturally).
 - Progress accumulates across invocations.
 
@@ -292,9 +325,9 @@ invocation — the sync never "finishes" and continuously chases new data.
 
 |                   | With `sync_run_id`                        | Without `sync_run_id`     |
 | ----------------- | ----------------------------------------- | ------------------------- |
-| Upper bound       | Frozen at first `started_at`              | None                      |
+| Upper bound       | Frozen at first `time_ceiling`              | None                      |
 | Terminates?       | Yes — source exhausts within frozen bound | Not guaranteed            |
-| Progress tracking | Accumulated in `EngineState`              | Accumulated in `EngineState` |
+| Progress tracking | Accumulated in `SyncRunState`              | Accumulated in `SyncRunState` |
 | Use case          | Finite backfill                           | Testing only                 |
 
 ---
@@ -306,7 +339,7 @@ Time range support is optional per stream.
 ### Streams with `supports_time_range: true`
 
 - The engine injects `time_range`.
-- `time_range.lt` is frozen to `started_at` when `sync_run_id` is set.
+- `time_range.lt` is frozen to `time_ceiling` when `sync_run_id` is set.
   Without `sync_run_id`, no `time_range.lt` is injected.
 - The source resumes within that range using opaque source state.
 - The source may emit `range_complete` for progress reporting.
@@ -337,34 +370,39 @@ has_more = !iterator.done
 If the source yields all its messages and returns, `has_more: false`. If the
 source is cut off (time limit, backfill limit, signal), `has_more: true`.
 
-Stream status, `completed_ranges`, `run_progress`, and source-state shape do
+Stream status, `completed_ranges`, `progress`, and source-state shape do
 not participate in this decision.
 
 ---
 
 ## Error Handling
 
-### Error levels
+| Scenario | What the source does |
+|----------|---------------------|
+| Global error (invalid API key) | Emits `connection_status: failed` with reason, then exhausts |
+| Stream error (resource unavailable) | Emits `stream_status: error` for that stream, continues others |
+| Transient (rate limited, retried) | Logs warn, retries internally |
 
-| `error_level` | Blast radius        | Engine action                        | Example               |
-| ------------- | ------------------- | ------------------------------------ | --------------------- |
-| `global`      | Entire sync         | Abort all streams, `has_more: false` | Invalid API key       |
-| `stream`      | One stream          | Keep processing other streams        | Resource unavailable  |
-| `transient`   | One request or page | Informational                        | Rate limited, retried |
+### Global errors
 
-### Source → engine error flow
+The source emits `connection_status` (already used by `check()`) during
+`read()` when it hits an unrecoverable error:
 
 ```ts
-{ type: 'trace', trace: { trace_type: 'error', error: SyncError } }
+{ type: 'connection_status', connection_status: { status: 'failed', message: 'invalid API key' } }
 ```
 
-### Engine behavior
+The engine collects this into `progress.connection_status`. The source then
+exhausts — the engine sees iterator done and emits eof.
 
-- `global`: stop immediately and emit `end { has_more: false }`
-- `stream`: record the error and continue with other streams
-- `transient`: record the error only
+### Stream errors
 
-Errors are not stored in source state. They are separate from lifecycle.
+Per-stream failures use `stream_status: error`. Other streams continue.
+
+### Logs
+
+Error logs (`level: 'error'`) are informational only. The engine passes them
+through but does not act on them. Errors are not stored in source state.
 
 ---
 
@@ -376,17 +414,15 @@ The engine emits `log` messages for anomalies and failures only.
 
 | Message                          | When                                                          |
 | -------------------------------- | ------------------------------------------------------------- |
-| `state before started: {stream}` | Source emitted `source_state` before `stream_status: started` |
+| `state before start: {stream}` | Source emitted `source_state` before `stream_status: start` |
 | `state after complete: {stream}` | Source emitted `source_state` after `stream_status: complete` |
-| `duplicate started: {stream}`    | Source emitted `stream_status: started` twice                 |
+| `duplicate start: {stream}`    | Source emitted `stream_status: start` twice                 |
 | `unknown stream: {stream}`       | Source emitted a message for a stream not in the catalog      |
 
 ### error
 
 | Message                             | When                                 |
 | ----------------------------------- | ------------------------------------ |
-| `global error: {message}`           | Source emitted `error_level: global` |
-| `stream error: {stream}: {message}` | Source emitted `error_level: stream` |
 | `source crashed: {message}`         | Source iterator threw                |
 
 ---
