@@ -1,11 +1,14 @@
 import type {
   CatalogMessage,
   ConnectionStatusMessage,
+  ConnectionStatusPayload,
   ControlMessage,
+  ControlPayload,
   DestinationInput,
   EofMessage,
   GlobalStatePayload,
   LogMessage,
+  LogPayload,
   Message,
   ProgressMessage,
   RecordMessage,
@@ -287,4 +290,80 @@ export function stateMsg(
 /** Shorthand to create a stream_status envelope message. */
 export function streamStatusMsg(payload: StreamStatusPayload): StreamStatusMessage {
   return { type: 'stream_status', stream_status: payload }
+}
+
+// MARK: - Source message factory
+
+/** Per-stream state payload with typed data field. */
+type TypedStreamStatePayload<TStreamState> = {
+  state_type: 'stream'
+  stream: string
+  data: TStreamState
+}
+
+/** Global state payload with typed data field. */
+type TypedGlobalStatePayload<TGlobalState> = {
+  state_type: 'global'
+  data: TGlobalState
+}
+
+/**
+ * Type-safe message factory for source connectors.
+ *
+ * Every method is a 1:1 envelope wrapper: `(payload) => { type, payload }`.
+ * No transforms, no defaults, no magic. The caller provides the exact payload
+ * shape and gets the exact message shape.
+ *
+ * Generic parameters enforce connector-specific shapes at the call site:
+ * - `TStreamState` — per-stream checkpoint data (e.g. `StreamState` for Stripe)
+ * - `TGlobalState` — global state shared across streams
+ * - `TRecordData` — record data shape
+ *
+ * Discriminated unions use `Extract` generics so TS enforces per-variant fields.
+ *
+ * @example
+ *   const msg = createSourceMessageFactory<StreamState, { events_cursor: number }>()
+ *   yield msg.record({ stream: 'customers', data: { id: 'cus_1' }, emitted_at: ts })
+ *   yield msg.stream_status({ stream: 'customers', status: 'error', error: 'boom' })
+ *   yield msg.source_state({ state_type: 'stream', stream: 'customers', data: { remaining: [] } })
+ *   yield msg.source_state({ state_type: 'global', data: { events_cursor: 123 } })
+ *   yield msg.connection_status({ status: 'failed', message: 'bad key' })
+ *   yield msg.log({ level: 'warn', message: 'rate limited' })
+ */
+export function createSourceMessageFactory<
+  TStreamState = unknown,
+  TGlobalState extends Record<string, unknown> = Record<string, unknown>,
+  TRecordData extends Record<string, unknown> = Record<string, unknown>,
+>() {
+  return {
+    record(payload: { stream: string; data: TRecordData; emitted_at: string }): RecordMessage {
+      return { type: 'record', record: payload }
+    },
+
+    source_state(
+      payload: TypedStreamStatePayload<TStreamState> | TypedGlobalStatePayload<TGlobalState>
+    ): SourceStateMessage {
+      return { type: 'source_state', source_state: payload }
+    },
+
+    stream_status<S extends StreamStatusPayload['status']>(
+      payload: Extract<StreamStatusPayload, { status: S }>
+    ): StreamStatusMessage {
+      return { type: 'stream_status', stream_status: payload }
+    },
+
+    connection_status(payload: ConnectionStatusPayload): ConnectionStatusMessage {
+      return { type: 'connection_status', connection_status: payload }
+    },
+
+    log(payload: LogPayload): LogMessage {
+      return { type: 'log', log: payload }
+    },
+
+    control<C extends ControlPayload['control_type']>(
+      payload: Extract<ControlPayload, { control_type: C }>
+    ): ControlMessage {
+      return { type: 'control', control: payload }
+    },
+  }
 }

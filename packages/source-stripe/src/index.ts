@@ -22,7 +22,7 @@ import {
 } from '@stripe/sync-openapi'
 import { processStripeEvent } from './process-event.js'
 import { processWebhookInput, createInputQueue, startWebhookServer } from './src-webhook.js'
-import { listApiBackfill, errorToTrace } from './src-list-api.js'
+import { listApiBackfill, errorToConnectionStatus } from './src-list-api.js'
 import { pollEvents } from './src-events-api.js'
 import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket.js'
 import { createStripeWebSocketClient } from './src-websocket.js'
@@ -269,7 +269,7 @@ export function createStripeSource(
           try {
             accountId = await resolveAccountId(config, client)
           } catch (err) {
-            yield errorToTrace(err, catalog.streams[0]?.stream.name ?? 'unknown')
+            yield errorToConnectionStatus(err)
             return
           }
 

@@ -1,11 +1,13 @@
-import type { Message, TraceMessage, LogMessage } from '@stripe/sync-protocol'
-import { toRecordMessage, stateMsg, streamStatusMsg } from '@stripe/sync-protocol'
+import type { Message } from '@stripe/sync-protocol'
+import { createSourceMessageFactory } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
+
+const msg = createSourceMessageFactory<StreamState>()
 
 // MARK: - Rate-limit wrapper
 
@@ -38,27 +40,14 @@ function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortS
   }
 }
 
-// MARK: - Error classification
+// MARK: - Error helpers
 
-export function getFailureType(err: unknown): 'transient_error' | 'system_error' | 'auth_error' {
-  const isRateLimit = err instanceof Error && err.message.includes('Rate limit')
-  const isAuth = err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)
-  return isRateLimit ? 'transient_error' : isAuth ? 'auth_error' : 'system_error'
-}
-
-export function errorToTrace(err: unknown, stream: string): TraceMessage {
-  return {
-    type: 'trace',
-    trace: {
-      trace_type: 'error',
-      error: {
-        failure_type: getFailureType(err),
-        message: err instanceof Error ? err.message : String(err),
-        stream,
-        ...(err instanceof Error ? { stack_trace: err.stack } : {}),
-      },
-    },
-  }
+/** Convert an error to a connection_status: failed message. */
+export function errorToConnectionStatus(err: unknown): Message {
+  return msg.connection_status({
+    status: 'failed',
+    message: err instanceof Error ? err.message : String(err),
+  })
 }
 
 function isGlobalError(err: unknown): boolean {
@@ -82,11 +71,7 @@ function isSkippableError(err: unknown): boolean {
   return SKIPPABLE_ERROR_PATTERNS.some((p) => msg.includes(p))
 }
 
-// MARK: - Log message helpers
-
-function logMsg(level: LogMessage['log']['level'], message: string): LogMessage {
-  return { type: 'log', log: { level, message } }
-}
+// MARK: - Log message helpers (use msg.log directly where possible)
 
 // MARK: - Time helpers
 
@@ -316,7 +301,11 @@ async function* paginateRange(opts: {
       if (typeof record.created === 'number') {
         lastSeenCreated.set(rangeIndex, record.created)
       }
-      yield toRecordMessage(streamName, { ...record, _account_id: accountId })
+      yield msg.record({
+        stream: streamName,
+        data: { ...record, _account_id: accountId },
+        emitted_at: new Date().toISOString(),
+      })
       totalEmitted.count++
     }
 
@@ -334,12 +323,13 @@ async function* paginateRange(opts: {
     // Update range cursor in-place for state checkpoint
     range.cursor = hasMore ? cursor : null
 
-    yield stateMsg({
+    yield msg.source_state({
+      state_type: 'stream',
       stream: streamName,
       data: {
         accounted_range: accountedRange,
         remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range),
-      } satisfies StreamState,
+      },
     })
   }
 
@@ -347,18 +337,19 @@ async function* paginateRange(opts: {
   const idx = remaining.indexOf(range)
   if (idx !== -1) remaining.splice(idx, 1)
 
-  yield streamStatusMsg({
+  yield msg.stream_status({
     stream: streamName,
     status: 'range_complete',
     range_complete: { gte: range.gte, lt: range.lt },
   })
 
-  yield stateMsg({
+  yield msg.source_state({
+    state_type: 'stream',
     stream: streamName,
     data: {
       accounted_range: accountedRange,
       remaining: [...remaining],
-    } satisfies StreamState,
+    },
   })
 }
 
@@ -408,12 +399,15 @@ async function* backfillStream(opts: {
     if (remaining.length === 0) return
   } else {
     if (opts.streamState && isLegacyState(opts.streamState)) {
-      yield logMsg('warn', `${streamName}: discarding legacy state, starting fresh`)
+      yield msg.log({
+        level: 'warn',
+        message: `${streamName}: discarding legacy state, starting fresh`,
+      })
     }
     remaining = [{ gte: timeRange.gte, lt: timeRange.lt, cursor: null }]
   }
 
-  yield streamStatusMsg({ stream: streamName, status: 'start' })
+  yield msg.stream_status({ stream: streamName, status: 'start' })
 
   const rateLimitedListFn = withRateLimit(resourceConfig.listFn!, rateLimiter, opts.signal)
   const supportsCreatedFilter = resourceConfig.supportsCreatedFilter
@@ -472,7 +466,7 @@ async function* backfillStream(opts: {
     }
   }
 
-  yield streamStatusMsg({ stream: streamName, status: 'complete' })
+  yield msg.stream_status({ stream: streamName, status: 'complete' })
 }
 
 // MARK: - Main entry point
@@ -520,17 +514,11 @@ export async function* listApiBackfill(opts: {
     if (!resourceConfig) {
       streamGenerators.push(
         (async function* () {
-          yield {
-            type: 'trace',
-            trace: {
-              trace_type: 'error',
-              error: {
-                failure_type: 'config_error',
-                message: `Unknown stream: ${stream.name}`,
-                stream: stream.name,
-              },
-            },
-          } satisfies TraceMessage
+          yield msg.stream_status({
+            stream: stream.name,
+            status: 'error',
+            error: `Unknown stream: ${stream.name}`,
+          })
         })()
       )
       continue
@@ -567,7 +555,7 @@ export async function* listApiBackfill(opts: {
           })
         } catch (err) {
           if (isSkippableError(err)) {
-            yield streamStatusMsg({
+            yield msg.stream_status({
               stream: stream.name,
               status: 'error',
               error: err instanceof Error ? err.message : String(err),
@@ -581,17 +569,14 @@ export async function* listApiBackfill(opts: {
           })
 
           if (isGlobalError(err)) {
-            yield {
-              type: 'connection_status',
-              connection_status: {
-                status: 'failed',
-                message: err instanceof Error ? err.message : String(err),
-              },
-            } satisfies Message
+            yield msg.connection_status({
+              status: 'failed',
+              message: err instanceof Error ? err.message : String(err),
+            })
             return
           }
 
-          yield streamStatusMsg({
+          yield msg.stream_status({
             stream: stream.name,
             status: 'error',
             error: err instanceof Error ? err.message : String(err),

@@ -11,6 +11,7 @@ export {
   streamStatusMsg,
   sourceControlMsg,
   destinationControlMsg,
+  createSourceMessageFactory,
   // Type guards
   isRecordMessage,
   isStateMessage,

@@ -9,7 +9,6 @@ import type {
   RecordMessage,
   SourceStateMessage,
   StreamStatusMessage,
-  TraceMessage,
 } from '@stripe/sync-protocol'
 import { collectFirst, drain } from '@stripe/sync-protocol'
 import source, { createStripeSource, discoverCache } from './index.js'
@@ -309,9 +308,7 @@ describe('StripeSource', () => {
       // Checkpoints may use cursor: null while pages remain; assert progression + shape instead.
       custStates.forEach((m) => expectRemainingShape(m.source_state.data))
       expect(
-        custStates.some(
-          (m) => ((m.source_state.data as StreamState).remaining?.length ?? 0) > 0
-        )
+        custStates.some((m) => ((m.source_state.data as StreamState).remaining?.length ?? 0) > 0)
       ).toBe(true)
       const finalState = custStates.at(-1)
       expect(finalState?.source_state.data).toMatchObject({ remaining: [] })
@@ -455,8 +452,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
-              0
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
       expect(
@@ -633,7 +629,7 @@ describe('StripeSource', () => {
       })
     })
 
-    it('emits TraceMessage error with failure_type config_error for unknown stream', async () => {
+    it('emits stream_status error for unknown stream', async () => {
       vi.mocked(buildResourceRegistry).mockReturnValue({} as any)
       const messages = await collect(
         source.read({
@@ -643,19 +639,14 @@ describe('StripeSource', () => {
       )
 
       expect(messages).toHaveLength(1)
-
-      const errorMsg = messages[0] as TraceMessage
-      expect(errorMsg.type).toBe('trace')
-      expect(errorMsg.trace.trace_type).toBe('error')
-      const traceError = (
-        errorMsg.trace as {
-          trace_type: 'error'
-          error: { failure_type: string; message: string; stream?: string }
-        }
-      ).error
-      expect(traceError.failure_type).toBe('config_error')
-      expect(traceError.message).toBe('Unknown stream: nonexistent')
-      expect(traceError.stream).toBe('nonexistent')
+      expect(messages[0]).toMatchObject({
+        type: 'stream_status',
+        stream_status: {
+          stream: 'nonexistent',
+          status: 'error',
+          error: 'Unknown stream: nonexistent',
+        },
+      })
     })
 
     it('emits stream_status error on non-rate-limit error', async () => {
@@ -737,8 +728,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as { source_state: { data: StreamState } }).source_state.data.remaining
-              ?.length === 0
+            (m as { source_state: { data: StreamState } }).source_state.data.remaining?.length === 0
         )
       ).toBe(true)
     })
@@ -1116,8 +1106,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
-              0
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
       expect(
@@ -1827,8 +1816,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
-              0
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length === 0
         )
       ).toBe(true)
 
@@ -2061,7 +2049,8 @@ describe('StripeSource', () => {
       expect(listFn).not.toHaveBeenCalled()
 
       const started = messages.filter(
-        (m): m is TraceMessage => m.type === 'stream_status' && m.stream_status.status === 'start'
+        (m): m is StreamStatusMessage =>
+          m.type === 'stream_status' && m.stream_status.status === 'start'
       )
       expect(started).toHaveLength(0)
 
