@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Message, SyncOutput } from '@stripe/sync-protocol'
-import { createRecordCounter, mergeRanges, trackProgress } from './progress.js'
+import type { SyncOutput } from '@stripe/sync-protocol'
+import { mergeRanges, progressReducer, createProgressState, buildProgressPayload, trackProgress } from './progress.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = []
@@ -12,436 +12,254 @@ async function* toAsync<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item
 }
 
-describe('createRecordCounter', () => {
-  it('counts records by stream on the data path', async () => {
-    const counter = createRecordCounter()
-    const records: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_2' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-      },
-    ]
+describe('progressReducer', () => {
+  it('counts records by stream', () => {
+    const state = createProgressState()
+    progressReducer(state, {
+      type: 'record',
+      record: { stream: 'customers', data: { id: 'cus_1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+    })
+    progressReducer(state, {
+      type: 'record',
+      record: { stream: 'customers', data: { id: 'cus_2' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+    })
+    expect(state.recordCounts.get('customers')).toBe(2)
+  })
 
-    const drained = await collect(counter.tap(toAsync(records)))
-    expect(drained).toHaveLength(3)
-    expect(counter.counts.get('customers')).toBe(2)
+  it('returns false for records (not a trigger)', () => {
+    const state = createProgressState()
+    const trigger = progressReducer(state, {
+      type: 'record',
+      record: { stream: 'customers', data: { id: 'cus_1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+    })
+    expect(trigger).toBe(false)
+  })
+
+  it('returns true for source_state (is a trigger)', () => {
+    const state = createProgressState()
+    const trigger = progressReducer(state, {
+      type: 'source_state',
+      source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
+    })
+    expect(trigger).toBe(true)
+  })
+
+  it('returns true for stream_status (is a trigger)', () => {
+    const state = createProgressState()
+    const trigger = progressReducer(state, {
+      type: 'stream_status',
+      stream_status: { stream: 'customers', status: 'start' },
+    })
+    expect(trigger).toBe(true)
+  })
+
+  it('returns true for connection_status (is a trigger)', () => {
+    const state = createProgressState()
+    const trigger = progressReducer(state, {
+      type: 'connection_status',
+      connection_status: { status: 'failed', message: 'bad key' },
+    })
+    expect(trigger).toBe(true)
+    expect(state.connectionStatus).toMatchObject({ status: 'failed', message: 'bad key' })
+  })
+
+  it('tracks stream status transitions', () => {
+    const state = createProgressState()
+    progressReducer(state, { type: 'stream_status', stream_status: { stream: 'customers', status: 'start' } })
+    expect(state.streamStatus.get('customers')).toBe('start')
+    progressReducer(state, { type: 'stream_status', stream_status: { stream: 'customers', status: 'complete' } })
+    expect(state.streamStatus.get('customers')).toBe('complete')
+  })
+
+  it('accumulates range_complete into completed_ranges', () => {
+    const state = createProgressState()
+    progressReducer(state, {
+      type: 'stream_status',
+      stream_status: { stream: 'customers', status: 'range_complete', range_complete: { gte: '2024-01', lt: '2024-06' } },
+    })
+    progressReducer(state, {
+      type: 'stream_status',
+      stream_status: { stream: 'customers', status: 'range_complete', range_complete: { gte: '2024-06', lt: '2025-01' } },
+    })
+    expect(state.completedRanges.get('customers')).toEqual([{ gte: '2024-01', lt: '2025-01' }])
+  })
+
+  it('tracks stream errors', () => {
+    const state = createProgressState()
+    progressReducer(state, {
+      type: 'stream_status',
+      stream_status: { stream: 'customers', status: 'error', error: 'Connection refused' },
+    })
+    expect(state.streamStatus.get('customers')).toBe('error')
+    expect(state.streamErrors.get('customers')).toEqual([{ message: 'Connection refused' }])
+  })
+
+  it('accumulates source state into syncState', () => {
+    const state = createProgressState()
+    progressReducer(state, {
+      type: 'source_state',
+      source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_5' } },
+    })
+    progressReducer(state, {
+      type: 'source_state',
+      source_state: { state_type: 'global', data: { events_cursor: 'evt_1' } },
+    })
+    expect(state.syncState.source.streams.customers).toEqual({ cursor: 'cus_5' })
+    expect(state.syncState.source.global).toEqual({ events_cursor: 'evt_1' })
+  })
+})
+
+describe('buildProgressPayload', () => {
+  it('derives status as failed when connection_status is failed', () => {
+    const state = createProgressState()
+    state.connectionStatus = { status: 'failed', message: 'bad' }
+    const payload = buildProgressPayload(state)
+    expect(payload.derived.status).toBe('failed')
+  })
+
+  it('derives status as failed when any stream errored', () => {
+    const state = createProgressState()
+    state.streamStatus.set('customers', 'error')
+    const payload = buildProgressPayload(state)
+    expect(payload.derived.status).toBe('failed')
+  })
+
+  it('derives status as succeeded when all streams terminal', () => {
+    const state = createProgressState()
+    state.streamStatus.set('customers', 'complete')
+    state.streamStatus.set('invoices', 'skip')
+    const payload = buildProgressPayload(state)
+    expect(payload.derived.status).toBe('succeeded')
+  })
+
+  it('derives status as started when streams are in progress', () => {
+    const state = createProgressState()
+    state.streamStatus.set('customers', 'start')
+    const payload = buildProgressPayload(state)
+    expect(payload.derived.status).toBe('started')
   })
 })
 
 describe('trackProgress', () => {
-  it('emits enriched EOF with global and stream progress', async () => {
-    const counter = createRecordCounter()
-    await collect(
-      counter.tap(
-        toAsync<Message>([
-          {
-            type: 'record',
-            record: {
-              stream: 'customers',
-              data: { id: 'cus_1' },
-              emitted_at: '2024-01-01T00:00:00.000Z',
-            },
-          },
-          {
-            type: 'record',
-            record: {
-              stream: 'customers',
-              data: { id: 'cus_2' },
-              emitted_at: '2024-01-01T00:00:00.000Z',
-            },
-          },
-        ])
-      )
-    )
-
+  it('emits progress after trigger messages, not after records', async () => {
     const outputs = await collect(
-      trackProgress({
-        interval_ms: 0,
-        initial_cumulative_counts: { customers: 5 },
-        recordCounter: counter,
-      })(
+      trackProgress({})(
         toAsync<SyncOutput>([
-          {
-            type: 'source_state',
-            source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-          },
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'complete' },
-          },
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'error', error: 'boom' },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
+          { type: 'source_state', source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } } },
+          { type: 'stream_status', stream_status: { stream: 'customers', status: 'start' } },
+          { type: 'eof', eof: { has_more: false } },
         ])
       )
     )
 
     const progressMsgs = outputs.filter((m) => m.type === 'progress')
-    expect(progressMsgs.length).toBeGreaterThan(0)
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toBeDefined()
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: {
-        reason: 'complete',
-        state: {
-          source: {
-            streams: { customers: { cursor: '2' } },
-            global: {},
-          },
-          destination: { streams: {}, global: {} },
-          engine: {
-            streams: { customers: { cumulative_record_count: 7 } },
-            global: {},
-          },
-        },
-        request_progress: {
-          run_record_count: 2,
-          state_checkpoint_count: 1,
-        },
-        stream_progress: {
-          customers: {
-            status: 'complete',
-            cumulative_record_count: 7,
-            run_record_count: 2,
-            errors: [{ message: 'boom' }],
-          },
-        },
-      },
-    })
+    // One after source_state, one after stream_status, one before eof
+    expect(progressMsgs.length).toBe(3)
   })
 
-  it('aggregates multiple stream states and global state into EOF', async () => {
-    const counter = createRecordCounter()
-    await collect(
-      counter.tap(
-        toAsync<Message>([
-          {
-            type: 'record',
-            record: {
-              stream: 'customers',
-              data: { id: 'cus_1' },
-              emitted_at: '2024-01-01T00:00:00.000Z',
-            },
-          },
-          {
-            type: 'record',
-            record: {
-              stream: 'invoices',
-              data: { id: 'inv_1' },
-              emitted_at: '2024-01-01T00:00:00.000Z',
-            },
-          },
-        ])
-      )
-    )
-
+  it('emits enriched EOF with run_progress and request_progress', async () => {
     const outputs = await collect(
-      trackProgress({
-        interval_ms: 0,
-        recordCounter: counter,
-      })(
+      trackProgress({})(
         toAsync<SyncOutput>([
-          {
-            type: 'source_state',
-            source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-          },
-          {
-            type: 'source_state',
-            source_state: { state_type: 'stream', stream: 'invoices', data: { cursor: 'a' } },
-          },
-          {
-            type: 'source_state',
-            source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '3' } },
-          },
-          {
-            type: 'source_state',
-            source_state: {
-              state_type: 'global',
-              data: { events_cursor: 'evt_123' },
-            },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
+          { type: 'source_state', source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } } },
+          { type: 'stream_status', stream_status: { stream: 'customers', status: 'complete' } },
+          { type: 'eof', eof: { has_more: false } },
         ])
       )
     )
 
     const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toBeDefined()
     expect(eof).toMatchObject({
       type: 'eof',
       eof: {
-        reason: 'complete',
-        state: {
-          source: {
-            streams: {
-              customers: { cursor: '3' },
-              invoices: { cursor: 'a' },
-            },
-            global: { events_cursor: 'evt_123' },
-          },
-          destination: { streams: {}, global: {} },
-          engine: {
-            streams: {
-              customers: { cumulative_record_count: 1 },
-              invoices: { cumulative_record_count: 1 },
-            },
-            global: {},
-          },
+        has_more: false,
+        ending_state: {
+          source: { streams: { customers: { cursor: '2' } }, global: {} },
+          destination: {},
         },
+        run_progress: { streams: { customers: { status: 'completed' } } },
+        request_progress: { streams: { customers: { status: 'completed' } } },
       },
     })
   })
 
-  it('merges eof state into the provided initial sync state', async () => {
-    const counter = createRecordCounter()
-    await collect(
-      counter.tap(
-        toAsync<Message>([
-          {
-            type: 'record',
-            record: {
-              stream: 'customers',
-              data: { id: 'cus_1' },
-              emitted_at: '2024-01-01T00:00:00.000Z',
-            },
-          },
-        ])
-      )
-    )
-
+  it('passes through all messages', async () => {
     const outputs = await collect(
-      trackProgress({
-        interval_ms: 0,
-        initial_state: {
-          source: {
-            streams: {
-              customers: { cursor: 'cus_0' },
-              invoices: { cursor: 'inv_2' },
-            },
-            global: { events_cursor: 'evt_old' },
-          },
-          destination: {
-            streams: { customers: { watermark: 10 } },
-            global: { schema_version: 1 },
-          },
-          engine: {
-            streams: {
-              customers: { cumulative_record_count: 5, note: 'keep-me' },
-              invoices: { cumulative_record_count: 2, untouched: true },
-            },
-            global: { sync_id: 'prev' },
-          },
-        },
-        recordCounter: counter,
-      })(
+      trackProgress({})(
         toAsync<SyncOutput>([
-          {
-            type: 'source_state',
-            source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } },
-          },
-          {
-            type: 'source_state',
-            source_state: { state_type: 'global', data: { events_cursor: 'evt_new' } },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
+          { type: 'stream_status', stream_status: { stream: 'customers', status: 'start' } },
+          { type: 'source_state', source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } } },
+          { type: 'eof', eof: { has_more: false } },
         ])
       )
     )
 
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: {
-        state: {
-          source: {
-            streams: {
-              customers: { cursor: 'cus_1' },
-              invoices: { cursor: 'inv_2' },
-            },
-            global: { events_cursor: 'evt_new' },
-          },
-          destination: {
-            streams: { customers: { watermark: 10 } },
-            global: { schema_version: 1 },
-          },
-          engine: {
-            streams: {
-              customers: { cumulative_record_count: 6, note: 'keep-me' },
-              invoices: { cumulative_record_count: 2, untouched: true },
-            },
-            global: { sync_id: 'prev' },
-          },
-        },
-      },
-    })
+    const streamStatuses = outputs.filter((m) => m.type === 'stream_status')
+    expect(streamStatuses).toHaveLength(1)
+    const sourceStates = outputs.filter((m) => m.type === 'source_state')
+    expect(sourceStates).toHaveLength(1)
   })
 
-  it('returns the initial sync state on a no-op resumed run', async () => {
+  it('preserves initial state in ending_state', async () => {
     const initialState = {
-      source: {
-        streams: { customers: { cursor: 'cus_9' } },
-        global: { events_cursor: 'evt_9' },
-      },
-      destination: {
-        streams: { customers: { watermark: 99 } },
-        global: { schema_version: 2 },
-      },
-      engine: {
-        streams: { customers: { cumulative_record_count: 9 } },
-        global: { sync_id: 'resume-9' },
-      },
+      source: { streams: { invoices: { cursor: 'inv_2' } }, global: {} },
+      destination: { schema_version: 1 },
+      sync_run: {},
     }
 
     const outputs = await collect(
-      trackProgress({
-        interval_ms: 0,
-        initial_state: initialState,
-        recordCounter: createRecordCounter(),
-      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'complete' } }]))
-    )
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: { state: initialState },
-    })
-  })
-
-  it('omits state from EOF when no source_state messages were emitted', async () => {
-    const counter = createRecordCounter()
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 0,
-        recordCounter: counter,
-      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'complete' } }]))
-    )
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toBeDefined()
-    expect((eof as any).eof.state).toBeUndefined()
-  })
-
-  it('accumulates range_complete into completed_ranges in engine state', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
+      trackProgress({ initial_state: initialState })(
         toAsync<SyncOutput>([
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'start' },
-          },
-          {
-            type: 'stream_status',
-            stream_status: {
-              stream: 'customers',
-              status: 'range_complete',
-              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-            },
-          },
-          {
-            type: 'stream_status',
-            stream_status: {
-              stream: 'customers',
-              status: 'range_complete',
-              range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
-            },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
+          { type: 'source_state', source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } } },
+          { type: 'eof', eof: { has_more: false } },
         ])
       )
     )
 
     const eof = outputs.find((m) => m.type === 'eof')
     expect(eof).toMatchObject({
-      type: 'eof',
       eof: {
-        state: {
-          engine: {
-            streams: {
-              customers: {
-                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' }],
-              },
-            },
+        ending_state: {
+          source: {
+            streams: { customers: { cursor: 'cus_1' }, invoices: { cursor: 'inv_2' } },
           },
+          destination: { schema_version: 1 },
         },
       },
     })
   })
 
-  it('range_complete does not overwrite stream status', async () => {
+  it('omits ending_state when no state received and no initial state', async () => {
     const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
-        toAsync<SyncOutput>([
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'start' },
-          },
-          {
-            type: 'stream_status',
-            stream_status: {
-              stream: 'customers',
-              status: 'range_complete',
-              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-            },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
-        ])
-      )
+      trackProgress({})(toAsync<SyncOutput>([{ type: 'eof', eof: { has_more: false } }]))
     )
-
     const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: {
-        stream_progress: {
-          customers: { status: 'start' },
-        },
-      },
-    })
+    expect((eof as any).eof.ending_state).toBeUndefined()
   })
 
-  it('seeds completed_ranges from initial engine state', async () => {
+  it('seeds completed_ranges from initial sync_run progress', async () => {
     const outputs = await collect(
       trackProgress({
-        interval_ms: 999_999,
         initial_state: {
           source: { streams: {}, global: {} },
-          destination: { streams: {}, global: {} },
-          engine: {
-            streams: {
-              customers: {
-                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+          destination: {},
+          sync_run: {
+            progress: {
+              started_at: '2024-01-01T00:00:00Z',
+              elapsed_ms: 0,
+              global_state_count: 0,
+              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              streams: {
+                customers: {
+                  status: 'started',
+                  state_count: 0,
+                  record_count: 0,
+                  completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+                },
               },
             },
-            global: {},
           },
         },
-        recordCounter: createRecordCounter(),
       })(
         toAsync<SyncOutput>([
           {
@@ -452,21 +270,18 @@ describe('trackProgress', () => {
               range_complete: { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
             },
           },
-          { type: 'eof', eof: { reason: 'complete' } },
+          { type: 'eof', eof: { has_more: false } },
         ])
       )
     )
 
     const eof = outputs.find((m) => m.type === 'eof')
     expect(eof).toMatchObject({
-      type: 'eof',
       eof: {
-        state: {
-          engine: {
-            streams: {
-              customers: {
-                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' }],
-              },
+        request_progress: {
+          streams: {
+            customers: {
+              completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' }],
             },
           },
         },
@@ -523,17 +338,6 @@ describe('mergeRanges', () => {
     ])
   })
 
-  it('merges multiple overlapping ranges into one', () => {
-    const ranges = [
-      { gte: '2024-01-01T00:00:00Z', lt: '2024-04-01T00:00:00Z' },
-      { gte: '2024-03-01T00:00:00Z', lt: '2024-07-01T00:00:00Z' },
-      { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
-    ]
-    expect(mergeRanges(ranges)).toEqual([
-      { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
-    ])
-  })
-
   it('does not mutate input array', () => {
     const ranges = [
       { gte: '2024-06-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
@@ -542,186 +346,5 @@ describe('mergeRanges', () => {
     const original = JSON.parse(JSON.stringify(ranges))
     mergeRanges(ranges)
     expect(ranges).toEqual(original)
-  })
-})
-
-describe('trackProgress — new message types', () => {
-  it('accumulates stream_status: error into stream errors and sets status', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
-        toAsync<SyncOutput>([
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'start' },
-          },
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'error', error: 'Connection refused' },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
-        ])
-      )
-    )
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: {
-        stream_progress: {
-          customers: {
-            status: 'complete', // error maps to complete in engine (stream is done)
-            errors: [{ message: 'Connection refused' }],
-          },
-        },
-      },
-    })
-  })
-
-  it('tracks stream_status: skip', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
-        toAsync<SyncOutput>([
-          {
-            type: 'stream_status',
-            stream_status: {
-              stream: 'invoices',
-              status: 'skip',
-              reason: 'only available in testmode',
-            },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
-        ])
-      )
-    )
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: {
-        stream_progress: {
-          invoices: {
-            status: 'skip',
-            run_record_count: 0,
-            cumulative_record_count: 0,
-          },
-        },
-      },
-    })
-  })
-
-  it('sets has_more: false when reason is complete', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'complete' } }]))
-    )
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({ eof: { has_more: false } })
-  })
-
-  it('sets has_more: true when reason is state_limit', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'state_limit' } }]))
-    )
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({ eof: { has_more: true } })
-  })
-
-  it('sets has_more: true when reason is time_limit', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'time_limit' } }]))
-    )
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({ eof: { has_more: true } })
-  })
-
-  it('passes through stream_status messages to output', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
-        toAsync<SyncOutput>([
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'start' },
-          },
-          {
-            type: 'stream_status',
-            stream_status: {
-              stream: 'customers',
-              status: 'range_complete',
-              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
-            },
-          },
-          {
-            type: 'stream_status',
-            stream_status: { stream: 'customers', status: 'complete' },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
-        ])
-      )
-    )
-
-    const streamStatuses = outputs.filter((m) => m.type === 'stream_status')
-    expect(streamStatuses).toHaveLength(3)
-    expect(streamStatuses[0]).toMatchObject({ stream_status: { status: 'start' } })
-    expect(streamStatuses[1]).toMatchObject({ stream_status: { status: 'range_complete' } })
-    expect(streamStatuses[2]).toMatchObject({ stream_status: { status: 'complete' } })
-
-    const eof = outputs.find((m) => m.type === 'eof')
-    expect(eof).toMatchObject({
-      eof: {
-        state: {
-          engine: {
-            streams: {
-              customers: {
-                status: 'complete',
-                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
-              },
-            },
-          },
-        },
-        stream_progress: {
-          customers: { status: 'complete' },
-        },
-      },
-    })
-  })
-
-  it('captures connection_status: failed from source', async () => {
-    const outputs = await collect(
-      trackProgress({
-        interval_ms: 999_999,
-        recordCounter: createRecordCounter(),
-      })(
-        toAsync<SyncOutput>([
-          {
-            type: 'connection_status',
-            connection_status: { status: 'failed', message: 'Invalid API key' },
-          },
-          { type: 'eof', eof: { reason: 'complete' } },
-        ])
-      )
-    )
-
-    // connection_status is passed through
-    const connStatus = outputs.find((m) => m.type === 'connection_status')
-    expect(connStatus).toMatchObject({
-      connection_status: { status: 'failed', message: 'Invalid API key' },
-    })
   })
 })

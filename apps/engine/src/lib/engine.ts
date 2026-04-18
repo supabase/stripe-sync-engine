@@ -22,7 +22,7 @@ import {
 } from '@stripe/sync-protocol'
 
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
-import { trackProgress, createRecordCounter } from './progress.js'
+import { trackProgress } from './progress.js'
 import { applySelection } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 
@@ -465,12 +465,10 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             { config: sourceConfig, catalog, state: sourceState },
             input
           )
-          const recordCounter = createRecordCounter()
           const destInput = pipe(
             sourceOutput,
             enforceCatalog(filteredCatalog),
             log,
-            recordCounter.tap.bind(recordCounter),
           )
           const destOutput = destConnector.write(
             { config: destConfig, catalog: filteredCatalog },
@@ -485,7 +483,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           yield* trackProgress({
             initial_state: normalizedState,
-            recordCounter,
           })(limited)
         })()
       )

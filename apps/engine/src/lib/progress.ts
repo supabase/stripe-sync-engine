@@ -3,11 +3,11 @@ import type {
   SyncState,
   SyncOutput,
   StreamStatusPayload,
-  EofStreamProgress,
+  ProgressPayload,
 } from '@stripe/sync-protocol'
 import { emptySyncState, createEngineMessageFactory } from '@stripe/sync-protocol'
 
-const msg = createEngineMessageFactory()
+const engineMsg = createEngineMessageFactory()
 
 type Range = { gte: string; lt: string }
 
@@ -31,11 +31,13 @@ export function mergeRanges(ranges: Range[]): Range[] {
   return merged
 }
 
+// MARK: - Progress state & reducer
+
 type StreamError = { message: string }
 type Status = StreamStatusPayload['status']
 type ProgressStatus = 'not_started' | 'started' | 'completed' | 'skipped' | 'errored'
 
-function streamStatusToProgressStatus(status: Status | undefined): ProgressStatus {
+function statusToProgressStatus(status: Status | undefined): ProgressStatus {
   switch (status) {
     case 'start':
       return 'started'
@@ -52,275 +54,205 @@ function streamStatusToProgressStatus(status: Status | undefined): ProgressStatu
   }
 }
 
+export type ProgressState = {
+  startedAt: number
+  stateCheckpointCount: number
+  recordCounts: Map<string, number>
+  streamStatus: Map<string, Status>
+  completedRanges: Map<string, Range[]>
+  streamErrors: Map<string, StreamError[]>
+  connectionStatus?: { status: 'succeeded' | 'failed'; message?: string }
+  syncState: SyncState
+}
+
+export function createProgressState(initialState?: SyncState): ProgressState {
+  const state: ProgressState = {
+    startedAt: Date.now(),
+    stateCheckpointCount: 0,
+    recordCounts: new Map(),
+    streamStatus: new Map(),
+    completedRanges: new Map(),
+    streamErrors: new Map(),
+    connectionStatus: undefined,
+    syncState: structuredClone(initialState ?? emptySyncState()),
+  }
+
+  // Restore completed ranges from prior run
+  const priorProgress = initialState?.sync_run?.progress
+  if (priorProgress?.streams) {
+    for (const [stream, sp] of Object.entries(priorProgress.streams)) {
+      if (sp.completed_ranges) {
+        state.completedRanges.set(stream, sp.completed_ranges.slice())
+      }
+    }
+  }
+
+  return state
+}
+
 /**
- * Shared record counter that can be tapped into the data pipeline (before the
- * destination) to count records. The trackProgress() stage reads from it.
+ * Pure reducer: apply a message to progress state. Returns whether this message
+ * is a progress trigger (i.e., the caller should emit a progress snapshot).
  */
-export function createRecordCounter() {
-  const counts = new Map<string, number>()
-  return {
-    counts,
-    tap<T extends Message>(msgs: AsyncIterable<T>): AsyncIterable<T> {
-      const self = this
-      return (async function* () {
-        for await (const msg of msgs) {
-          if (msg.type === 'record' && 'record' in msg) {
-            const stream = (msg as { record: { stream: string } }).record.stream
-            self.counts.set(stream, (self.counts.get(stream) ?? 0) + 1)
-          }
-          yield msg
-        }
-      })()
-    },
+export function progressReducer(state: ProgressState, msg: Message): boolean {
+  switch (msg.type) {
+    case 'record': {
+      const stream = (msg as { record: { stream: string } }).record.stream
+      state.recordCounts.set(stream, (state.recordCounts.get(stream) ?? 0) + 1)
+      return false
+    }
+
+    case 'source_state': {
+      state.stateCheckpointCount++
+      if (msg.source_state.state_type === 'stream') {
+        const stream = msg.source_state.stream
+        state.syncState.source.streams[stream] = msg.source_state.data
+        if (!state.streamStatus.has(stream)) state.streamStatus.set(stream, 'start')
+      } else if (msg.source_state.state_type === 'global') {
+        state.syncState.source.global = msg.source_state.data as Record<string, unknown>
+      }
+      return true
+    }
+
+    case 'stream_status': {
+      const ss = msg.stream_status
+      if (ss.status === 'range_complete' && 'range_complete' in ss) {
+        const rc = ss.range_complete
+        const existing = state.completedRanges.get(ss.stream) ?? []
+        existing.push({ gte: rc.gte, lt: rc.lt })
+        state.completedRanges.set(ss.stream, mergeRanges(existing))
+      } else if (ss.status === 'error' && 'error' in ss) {
+        state.streamStatus.set(ss.stream, 'error')
+        const errs = state.streamErrors.get(ss.stream) ?? []
+        errs.push({ message: ss.error })
+        state.streamErrors.set(ss.stream, errs)
+      } else {
+        state.streamStatus.set(ss.stream, ss.status)
+      }
+      return true
+    }
+
+    case 'connection_status': {
+      state.connectionStatus = msg.connection_status
+      return true
+    }
+
+    default:
+      return false
   }
 }
 
+// MARK: - Snapshot builders
+
+export function buildProgressPayload(state: ProgressState): ProgressPayload {
+  const elapsedMs = Date.now() - state.startedAt
+  const elapsedSec = Math.max(elapsedMs / 1000, 0.001)
+
+  let totalRecords = 0
+  for (const v of state.recordCounts.values()) totalRecords += v
+
+  const allStreams = new Set<string>()
+  for (const k of state.recordCounts.keys()) allStreams.add(k)
+  for (const k of state.streamStatus.keys()) allStreams.add(k)
+  for (const k of state.completedRanges.keys()) allStreams.add(k)
+
+  const hasAnyError =
+    state.connectionStatus?.status === 'failed' ||
+    [...state.streamStatus.values()].some((s) => s === 'error')
+
+  const allTerminal = allStreams.size > 0 && [...allStreams].every((s) => {
+    const st = state.streamStatus.get(s)
+    return st === 'complete' || st === 'skip' || st === 'error'
+  })
+
+  let derivedStatus: 'started' | 'succeeded' | 'failed'
+  if (hasAnyError) derivedStatus = 'failed'
+  else if (allTerminal) derivedStatus = 'succeeded'
+  else derivedStatus = 'started'
+
+  return {
+    started_at: new Date(state.startedAt).toISOString(),
+    elapsed_ms: elapsedMs,
+    global_state_count: state.stateCheckpointCount,
+    connection_status: state.connectionStatus,
+    derived: {
+      status: derivedStatus,
+      records_per_second: totalRecords / elapsedSec,
+      states_per_second: state.stateCheckpointCount / elapsedSec,
+    },
+    streams: Object.fromEntries(
+      [...allStreams].map((s) => [
+        s,
+        {
+          status: statusToProgressStatus(state.streamStatus.get(s)),
+          state_count: 0,
+          record_count: state.recordCounts.get(s) ?? 0,
+          ...(state.completedRanges.has(s)
+            ? { completed_ranges: state.completedRanges.get(s) }
+            : {}),
+        },
+      ])
+    ),
+  }
+}
+
+// MARK: - Stream operator (event-driven progress emission)
+
+/**
+ * Tracks progress and emits progress snapshots on trigger messages
+ * (stream_status, connection_status, source_state). Emits eof at the end.
+ */
 export function trackProgress(opts: {
-  interval_ms?: number
   initial_state?: SyncState
-  initial_cumulative_counts?: Record<string, number>
-  /** Shared counter fed by createRecordCounter().tap() on the data path. */
-  recordCounter?: ReturnType<typeof createRecordCounter>
 }): (msgs: AsyncIterable<SyncOutput>) => AsyncIterable<SyncOutput> {
-  const intervalMs = opts.interval_ms ?? 2000
-
   return async function* (messages) {
-    const initialCumulativeCounts = opts.initial_state?.engine?.streams
-      ? Object.fromEntries(
-          Object.entries(opts.initial_state.engine.streams)
-            .map(([k, v]) => [
-              k,
-              (v as { cumulative_record_count?: number })?.cumulative_record_count ?? 0,
-            ])
-            .filter(([, v]) => typeof v === 'number' && v >= 0)
-        )
-      : (opts.initial_cumulative_counts ?? {})
-    const cumulativeRecordCount = new Map<string, number>(Object.entries(initialCumulativeCounts))
-    const prevSnapshotCounts = new Map<string, number>()
-    let stateCheckpointCount = 0
-    const streamStatus = new Map<string, Status>()
-    const completedRanges = new Map<string, Range[]>()
-
-    // Restore stream statuses and completed_ranges from engine state
-    if (opts.initial_state?.engine?.streams) {
-      for (const [stream, data] of Object.entries(opts.initial_state.engine.streams)) {
-        const d = data as { status?: Status; completed_ranges?: Range[] }
-        if (d?.status) streamStatus.set(stream, d.status)
-        if (d?.completed_ranges && Array.isArray(d.completed_ranges)) {
-          completedRanges.set(stream, d.completed_ranges.slice())
-        }
-      }
-    }
-    if (opts.initial_state?.source?.streams) {
-      for (const [stream, data] of Object.entries(opts.initial_state.source.streams)) {
-        const status = (data as { status?: string })?.status
-        if (status) streamStatus.set(stream, status as Status)
-      }
-    }
-    const streamErrors = new Map<string, StreamError[]>()
-    let connectionStatus: { status: 'succeeded' | 'failed'; message?: string } | undefined
+    const state = createProgressState(opts.initial_state)
     const hadInitialState = opts.initial_state != null
-    const finalState: SyncState = structuredClone(opts.initial_state ?? emptySyncState())
 
-    const startedAt = Date.now()
-    let lastWindowAt = startedAt
-    let lastEmitAt = startedAt
-    let prevWindowTotal = 0
-
-    function elapsedMs() {
-      return Date.now() - startedAt
-    }
-
-    function elapsedSec() {
-      return Math.max(elapsedMs() / 1000, 0.001)
-    }
-
-    function runRecordCount(stream: string): number {
-      return opts.recordCounter?.counts.get(stream) ?? 0
-    }
-
-    function totalRunRecords(): number {
-      if (!opts.recordCounter) return 0
-      let sum = 0
-      for (const v of opts.recordCounter.counts.values()) sum += v
-      return sum
-    }
-
-    function windowRecordCount(stream: string): number {
-      return runRecordCount(stream) - (prevSnapshotCounts.get(stream) ?? 0)
-    }
-
-    function totalWindowRecords(): number {
-      return totalRunRecords() - prevWindowTotal
-    }
-
-    function allStreams(): string[] {
-      const s = new Set<string>()
-      if (opts.recordCounter) {
-        for (const k of opts.recordCounter.counts.keys()) s.add(k)
-      }
-      for (const k of cumulativeRecordCount.keys()) s.add(k)
-      for (const k of streamStatus.keys()) s.add(k)
-      for (const k of completedRanges.keys()) s.add(k)
-      return [...s]
-    }
-
-    function snapshotWindow() {
-      if (opts.recordCounter) {
-        for (const [k, v] of opts.recordCounter.counts) prevSnapshotCounts.set(k, v)
-      }
-      prevWindowTotal = totalRunRecords()
-      lastWindowAt = Date.now()
-      lastEmitAt = Date.now()
-    }
-
-    function buildGlobalProgress(): SyncOutput {
-      const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
+    function emitProgress(): SyncOutput {
       return {
-        ...msg.progress({
-          started_at: new Date(startedAt).toISOString(),
-          elapsed_ms: elapsedMs(),
-          global_state_count: stateCheckpointCount,
-          connection_status: connectionStatus,
-          derived: {
-            status: 'started',
-            records_per_second: totalRunRecords() / elapsedSec(),
-            states_per_second: stateCheckpointCount / elapsedSec(),
-          },
-          streams: Object.fromEntries(
-            allStreams().map((s) => [
-              s,
-              {
-                status: streamStatusToProgressStatus(streamStatus.get(s)),
-                state_count: 0, // TODO: track per-stream state count
-                record_count: runRecordCount(s),
-                ...(completedRanges.has(s) ? { completed_ranges: completedRanges.get(s) } : {}),
-              },
-            ])
-          ),
-        }),
+        ...engineMsg.progress(buildProgressPayload(state)),
         _emitted_by: 'engine',
         _ts: new Date().toISOString(),
       } as SyncOutput
     }
 
-    function buildStreamProgress(stream: string): EofStreamProgress | undefined {
-      const status = streamStatus.get(stream)
-      if (!status) return undefined
-      const run = runRecordCount(stream)
-      const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
-      return {
-        status,
-        cumulative_record_count: cumulative,
-        run_record_count: run,
-        records_per_second: run / elapsedSec(),
-        errors: streamErrors.has(stream) ? streamErrors.get(stream) : undefined,
-      }
-    }
-
-    function buildAccumulatedState(): SyncState | undefined {
-      for (const stream of allStreams()) {
-        const run = runRecordCount(stream)
-        const cumulative = (cumulativeRecordCount.get(stream) ?? 0) + run
-        const existing =
-          finalState.engine.streams[stream] && typeof finalState.engine.streams[stream] === 'object'
-            ? (finalState.engine.streams[stream] as Record<string, unknown>)
-            : {}
-        finalState.engine.streams[stream] = {
-          ...existing,
-          cumulative_record_count: cumulative,
-          ...(streamStatus.has(stream) ? { status: streamStatus.get(stream) } : {}),
-          ...(completedRanges.has(stream) ? { completed_ranges: completedRanges.get(stream) } : {}),
-        }
-      }
-
+    function buildEndingState(): SyncState | undefined {
       const hasAnyState =
-        Object.keys(finalState.source.streams).length > 0 ||
-        Object.keys(finalState.source.global).length > 0 ||
-        Object.keys(finalState.destination.streams).length > 0 ||
-        Object.keys(finalState.destination.global).length > 0 ||
-        Object.keys(finalState.engine.streams).length > 0 ||
-        Object.keys(finalState.engine.global).length > 0
+        Object.keys(state.syncState.source.streams).length > 0 ||
+        Object.keys(state.syncState.source.global).length > 0 ||
+        Object.keys(state.syncState.destination).length > 0
 
-      return hadInitialState || hasAnyState ? finalState : undefined
+      return hadInitialState || hasAnyState ? state.syncState : undefined
     }
 
-    function buildEnrichedEof(
-      reason: 'complete' | 'state_limit' | 'time_limit' | 'error' | 'aborted'
-    ): SyncOutput {
-      const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
-      const streams = allStreams()
-      const streamProgressMap: Record<string, EofStreamProgress> = {}
-      for (const s of streams) {
-        const sp = buildStreamProgress(s)
-        if (sp) streamProgressMap[s] = sp
-      }
+    function emitEof(hasMore: boolean): SyncOutput {
       return {
-        ...msg.eof({
-          reason,
-          has_more: reason !== 'complete',
-          state: buildAccumulatedState(),
-          request_progress: {
-            elapsed_ms: elapsedMs(),
-            run_record_count: totalRunRecords(),
-            rows_per_second: totalRunRecords() / elapsedSec(),
-            window_rows_per_second: totalWindowRecords() / windowDuration,
-            state_checkpoint_count: stateCheckpointCount,
-          },
-          stream_progress:
-            Object.keys(streamProgressMap).length > 0 ? streamProgressMap : undefined,
+        ...engineMsg.eof({
+          has_more: hasMore,
+          ending_state: buildEndingState(),
+          run_progress: buildProgressPayload(state),
+          request_progress: buildProgressPayload(state),
         }),
         _emitted_by: 'engine',
         _ts: new Date().toISOString(),
       } as SyncOutput
-    }
-
-    function* maybeEmitProgress(): Iterable<SyncOutput> {
-      const now = Date.now()
-      if (now - lastEmitAt < intervalMs) return
-
-      yield buildGlobalProgress()
-      snapshotWindow()
     }
 
     for await (const msg of messages) {
-      if (msg.type === 'source_state') {
-        stateCheckpointCount++
-        if (msg.source_state.state_type === 'stream') {
-          const stream = msg.source_state.stream
-          finalState.source.streams[stream] = msg.source_state.data
-          if (!streamStatus.has(stream)) streamStatus.set(stream, 'start')
-        } else if (msg.source_state.state_type === 'global') {
-          finalState.source.global = msg.source_state.data as Record<string, unknown>
-        }
-      } else if (msg.type === 'stream_status') {
-        // Top-level stream_status messages (new protocol)
-        const ss = msg.stream_status
-        if (ss.status === 'range_complete' && 'range_complete' in ss) {
-          const rc = ss.range_complete
-          const existing = completedRanges.get(ss.stream) ?? []
-          existing.push({ gte: rc.gte, lt: rc.lt })
-          completedRanges.set(ss.stream, mergeRanges(existing))
-        } else if (ss.status === 'error' && 'error' in ss) {
-          streamStatus.set(ss.stream, 'complete')
-          const errs = streamErrors.get(ss.stream) ?? []
-          errs.push({ message: ss.error })
-          streamErrors.set(ss.stream, errs)
-        } else {
-          streamStatus.set(ss.stream, ss.status)
-        }
-      } else if (msg.type === 'connection_status') {
-        connectionStatus = msg.connection_status
-      }
+      const shouldEmitProgress = progressReducer(state, msg as Message)
 
       if (msg.type === 'eof') {
-        yield buildGlobalProgress()
-        yield buildEnrichedEof(msg.eof.reason)
+        yield emitProgress()
+        yield emitEof(msg.eof.has_more)
         return
       }
 
       yield msg
-      yield* maybeEmitProgress()
+
+      if (shouldEmitProgress) {
+        yield emitProgress()
+      }
     }
   }
 }
