@@ -8,7 +8,7 @@ PORT=3099
 trap "kill \$ENGINE_PID 2>/dev/null || true" EXIT
 
 kill $(lsof -ti:$PORT 2>/dev/null) 2>/dev/null || true
-(cd "$ROOT/apps/engine" && PORT=$PORT "$ROOT/scripts/ts-run" src/api/index.ts) &>/dev/null & ENGINE_PID=$!
+(cd "$ROOT/apps/engine" && PORT=$PORT "$ROOT/scripts/ts-run" src/bin/serve.ts) &>/dev/null & ENGINE_PID=$!
 until nc -z 127.0.0.1 $PORT 2>/dev/null; do sleep 0.3; done
 
 PARAMS='{"source":{"name":"stripe","api_key":"'"$STRIPE_API_KEY"'","backfill_limit":5},"destination":{"name":"postgres","connection_string":"'"$POSTGRES_URL"'","schema":"'"$SCHEMA"'"},"streams":[{"name":"products","fields":["id","name"]}]}'

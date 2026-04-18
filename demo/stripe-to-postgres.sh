@@ -22,7 +22,7 @@ echo "Postgres: $POSTGRES_URL" >&2
 
 
 # ── Option A: Simple shorthand (new sync command) ────────────────────────────
-$RUN apps/engine/src/cli/index.ts sync \
+$RUN apps/engine/src/bin/sync-engine.ts sync \
   --stripe-api-key "$STRIPE_API_KEY" \
   --postgres-url "$POSTGRES_URL" \
   --streams products,prices,customers \
@@ -34,4 +34,4 @@ $RUN apps/engine/src/cli/index.ts sync \
 #   destination: { type: 'postgres', postgres: { url: '$POSTGRES_URL', schema: 'public', port: 5432, batch_size: 100 } },
 #   streams: [{ name: 'products' }, { name: 'prices' }, { name: 'customers' }],
 # }))")
-# $RUN apps/engine/src/cli/index.ts pipeline-sync --xPipeline "$PIPELINE"
+# $RUN apps/engine/src/bin/sync-engine.ts pipeline-sync --xPipeline "$PIPELINE"

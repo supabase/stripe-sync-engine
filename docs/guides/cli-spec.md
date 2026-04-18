@@ -12,13 +12,15 @@ Product-quality CLI for the sync engine with a dead-simple one-liner experience 
 ## 1. Subcommands
 
 ```sh
-sync-engine [flags]           # default: start HTTP API server
 sync-engine serve [flags]     # start HTTP API server
 sync-engine sync [flags]      # run one sync pipeline
 sync-engine check [flags]     # validate source + destination connectivity
+sync-engine-serve             # start bundled-only HTTP API server
 ```
 
-The default action (bare `sync-engine`) starts the HTTP API server.
+`sync-engine` remains the full interactive CLI. `sync-engine-serve` is the minimal
+bundled-only server binary for Docker and local dev; it reads `PORT` from the environment
+and disables PATH/npm connector discovery.
 
 ---
 
@@ -32,6 +34,13 @@ The default action (bare `sync-engine`) starts the HTTP API server.
 | `--connectors-from-command-map` |         |         | Explicit connector command mappings (JSON or @file) |
 | `--no-connectors-from-path`     |         | false   | Disable PATH-based connector discovery              |
 | `--connectors-from-npm`         |         | false   | Enable npm auto-download of connectors              |
+
+### `sync-engine-serve`
+
+| Input      | Default | Description                                                      |
+| ---------- | ------- | ---------------------------------------------------------------- |
+| `PORT` env | `3000`  | Port to listen on                                                |
+| Connectors | bundled | Uses `defaultConnectors` only; dynamic PATH/npm discovery is off |
 
 ### `sync-engine sync` / `sync-engine check`
 
@@ -162,8 +171,9 @@ Starts the HTTP API server. Accepts sync requests via `POST /sync`.
 
 ```sh
 sync-engine serve --port 3000
-# or
-sync-engine --port 3000   # default action is serve
+
+# or use the minimal bundled-only server binary
+PORT=3000 sync-engine-serve
 ```
 
 ---
@@ -236,9 +246,11 @@ All sync logic stays in `apps/engine/src/lib/`. All connector logic stays in sou
 
 - `packages/protocol/src/protocol.ts` — `SyncParams`, `Source`, `Destination` interfaces
 - `apps/engine/src/lib/engine.ts` — `createEngine()`
-- `apps/engine/src/sync-command.ts` — `syncAction()` — CLI sync handler
-- `apps/engine/src/check-command.ts` — `checkAction()` — CLI check handler
-- `apps/engine/src/serve-command.ts` — `serveAction()` — starts HTTP API server
+- `apps/engine/src/api/app.ts` — `createApp()` — pure Hono app factory
+- `apps/engine/src/api/server.ts` — `startApiServer()` — runtime server startup helper
+- `apps/engine/src/bin/sync-engine.ts` — full citty/OpenAPI CLI binary
+- `apps/engine/src/bin/serve.ts` — bundled-only server binary
 - `apps/engine/src/cli/command.ts` — citty `CommandDef` (exported as `"./cli"`)
+- `apps/engine/src/cli/sync.ts` — sync command factory
 - `packages/source-stripe/src/index.ts` — Source spec, config schema, `read()`
 - `packages/destination-postgres/src/index.ts` — Destination spec, config schema, `write()`

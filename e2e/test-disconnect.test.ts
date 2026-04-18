@@ -21,8 +21,8 @@ import { BUNDLED_API_VERSION } from '@stripe/sync-openapi'
 // ── Constants ──────────────────────────────────────────────────
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..')
-const ENGINE_DIST = path.join(REPO_ROOT, 'apps/engine/dist/api/index.js')
-const ENGINE_SRC = path.join(REPO_ROOT, 'apps/engine/src/api/index.ts')
+const ENGINE_DIST = path.join(REPO_ROOT, 'apps/engine/dist/bin/serve.js')
+const ENGINE_SRC = path.join(REPO_ROOT, 'apps/engine/src/bin/serve.ts')
 
 function hasBun(): boolean {
   try {
