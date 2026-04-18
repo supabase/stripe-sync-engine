@@ -198,8 +198,7 @@ async function startEngineDocker(port: number): Promise<EngineContainer> {
         '--add-host',
         'host.docker.internal:host-gateway',
         image,
-        '/app/dist/cli/index.js',
-        'serve',
+        '/app/dist/bin/serve.js',
       ],
       {
         cwd: REPO_ROOT,

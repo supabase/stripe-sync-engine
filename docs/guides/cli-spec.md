@@ -12,13 +12,14 @@ Product-quality CLI for the sync engine with a dead-simple one-liner experience 
 ## 1. Subcommands
 
 ```sh
-sync-engine [flags]           # default: start HTTP API server
-sync-engine serve [flags]     # start HTTP API server
+sync-engine [flags]           # show help / select a subcommand
+sync-engine serve [flags]     # start HTTP API server via the full CLI path
 sync-engine sync [flags]      # run one sync pipeline
 sync-engine check [flags]     # validate source + destination connectivity
+sync-engine-serve             # start the minimal env-only HTTP API server
 ```
 
-The default action (bare `sync-engine`) starts the HTTP API server.
+Bare `sync-engine` shows help and requires a subcommand. Use `sync-engine serve` for the full citty/OpenAPI CLI path, or `sync-engine-serve` for the minimal server-only entrypoint.
 
 ---
 
@@ -238,7 +239,7 @@ All sync logic stays in `apps/engine/src/lib/`. All connector logic stays in sou
 - `apps/engine/src/lib/engine.ts` — `createEngine()`
 - `apps/engine/src/sync-command.ts` — `syncAction()` — CLI sync handler
 - `apps/engine/src/check-command.ts` — `checkAction()` — CLI check handler
-- `apps/engine/src/serve-command.ts` — `serveAction()` — starts HTTP API server
+- `apps/engine/src/api/server.ts` — `startApiServer()` — shared HTTP API server startup
 - `apps/engine/src/cli/command.ts` — citty `CommandDef` (exported as `"./cli"`)
 - `packages/source-stripe/src/index.ts` — Source spec, config schema, `read()`
 - `packages/destination-postgres/src/index.ts` — Destination spec, config schema, `write()`

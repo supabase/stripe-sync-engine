@@ -154,7 +154,7 @@ Published as the user-facing npm package.
 - `"./cli"` — CLI `CommandDef` (citty program, no side effects)
 - `"./api"` — `createApp` factory (Hono app, no side effects)
 
-**Binary:** `sync-engine` → `dist/cli/index.js`
+**Binaries:** `sync-engine` → `dist/bin/sync-engine.js`; `sync-engine-serve` → `dist/bin/serve.js`
 
 **Dependencies:** `@stripe/sync-protocol`, `@stripe/sync-state-postgres`, connectors, `citty`, `hono`, `dotenv`.
 

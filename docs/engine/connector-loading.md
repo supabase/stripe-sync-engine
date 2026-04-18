@@ -128,19 +128,19 @@ Multi-word commands are split on whitespace at spawn time — `"npx @stripe/sync
 
 ## When to use which
 
-The rule: **subprocess when the process outlives the sync.**
+The rule: **dynamic subprocess discovery is for the CLI; the standalone server stays bundled-only.**
 
-A long-running server (stateful API, Docker) needs crash isolation — a connector failure during sync execution shouldn't take down the CRUD plane or other concurrent syncs. Subprocess gives this for free.
+The dedicated server binary (`sync-engine-serve`, used by Docker and local `dev`) runs only the connectors compiled into the engine build. That keeps the serve path deterministic and avoids PATH/npm/command-map surprises in long-running deployments.
 
-A serverless function (Lambda) or CLI is ephemeral — the process dies when the sync ends anyway. In-process is fine; the platform provides isolation.
+The interactive CLI (`sync-engine`) is where dynamic connector discovery lives. It can still fall back to command-map, PATH, or npm when the user opts into those flows.
 
-| Deployment          | Connectors installed | Connector selected          | Loading                                   |
-| ------------------- | -------------------- | --------------------------- | ----------------------------------------- |
-| Lambda / serverless | Bundle time          | Deploy time (static import) | Registered, in-process                    |
-| Docker server       | Image build time     | Request time (sync config)  | Registered first, subprocess fallback     |
-| CLI                 | `pnpm add`           | Runtime (user flags)        | Registered first, subprocess fallback     |
-| Deno edge / Workers | Bundle time          | Deploy time                 | Registered only (no subprocess available) |
-| Tests               | Workspace deps       | Test setup                  | Registered, in-process                    |
+| Deployment             | Connectors installed | Connector selected          | Loading                                   |
+| ---------------------- | -------------------- | --------------------------- | ----------------------------------------- |
+| Lambda / serverless    | Bundle time          | Deploy time (static import) | Registered, in-process                    |
+| Docker / `sync-engine-serve` | Image build time     | Deploy time                 | Registered only (bundled, in-process)     |
+| CLI                    | `pnpm add`           | Runtime (user flags)        | Registered first, subprocess fallback     |
+| Deno edge / Workers    | Bundle time          | Deploy time                 | Registered only (no subprocess available) |
+| Tests                  | Workspace deps       | Test setup                  | Registered, in-process                    |
 
 ## Runtime details
 

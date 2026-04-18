@@ -1,11 +1,10 @@
-import 'dotenv/config'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import { createConnectorResolver, createEngine } from '../lib/index.js'
 import { createApp } from '../api/app.js'
-import { serveAction } from '../serve-command.js'
+import { startApiServer } from '../api/server.js'
 import { backfillCmd } from './backfill.js'
 import { supabaseCmd } from './supabase.js'
 import { createSyncCmd } from './sync.js'
@@ -29,6 +28,26 @@ const connectorArgs = {
   },
 }
 
+type CliConnectorFlags = {
+  connectorsFromPath: boolean
+  connectorsFromNpm: boolean
+  connectorsFromCommandMap?: string
+}
+
+async function createCliResolver(flags: CliConnectorFlags) {
+  return createConnectorResolver(defaultConnectors, {
+    path: flags.connectorsFromPath,
+    npm: flags.connectorsFromNpm,
+    commandMap: parseJsonOrFile(flags.connectorsFromCommandMap) as
+      | Record<string, string>
+      | undefined,
+  })
+}
+
+function resolveServePort(portArg?: string): number {
+  return portArg ? parseInt(portArg, 10) : Number(process.env.PORT || 3000)
+}
+
 // Hand-written workflow command: start HTTP server
 const serveCmd = defineCommand({
   meta: { name: 'serve', description: 'Start the HTTP API server' },
@@ -37,12 +56,12 @@ const serveCmd = defineCommand({
     ...connectorArgs,
   },
   async run({ args }) {
-    await serveAction({
-      port: args.port ? parseInt(args.port) : undefined,
+    const resolver = await createCliResolver({
       connectorsFromCommandMap: args.connectorsFromCommandMap,
       connectorsFromPath: !args.noConnectorsFromPath,
       connectorsFromNpm: args.connectorsFromNpm,
     })
+    await startApiServer({ resolver, port: resolveServePort(args.port) })
   },
 })
 
@@ -50,11 +69,7 @@ const serveCmd = defineCommand({
  * Pre-parse connector discovery flags from process.argv so the resolver
  * is configured before the one-shot CLI commands (check, read, etc.) run.
  */
-function parseConnectorFlags(): {
-  connectorsFromPath: boolean
-  connectorsFromNpm: boolean
-  connectorsFromCommandMap?: string
-} {
+function parseConnectorFlags(): CliConnectorFlags {
   const argv = process.argv
   const noPath = argv.includes('--no-connectors-from-path')
   const npm = argv.includes('--connectors-from-npm')
@@ -72,13 +87,7 @@ function parseConnectorFlags(): {
 
 export async function createProgram() {
   const flags = parseConnectorFlags()
-  const resolver = await createConnectorResolver(defaultConnectors, {
-    path: flags.connectorsFromPath,
-    npm: flags.connectorsFromNpm,
-    commandMap: parseJsonOrFile(flags.connectorsFromCommandMap) as
-      | Record<string, string>
-      | undefined,
-  })
+  const resolver = await createCliResolver(flags)
   const engine = await createEngine(resolver)
   const app = await createApp(resolver)
   const res = await app.request('/openapi.json')

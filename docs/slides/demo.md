@@ -399,7 +399,7 @@ The pipeline is just async iterables. The transport is whatever drives them.
 
 ```bash
 # Run directly — source stdout piped to dest stdin
-node dist/cli/index.js sync \
+node dist/bin/sync-engine.js sync \
   --source stripe \
   --source-config '{"api_key":"sk_test_...","backfill_limit":50}' \
   --destination postgres \

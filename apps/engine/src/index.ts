@@ -2,7 +2,7 @@
 export * from './lib/index.js'
 
 // Re-export the API app factory
-export { createApp } from './api/app.js'
+export { createApp } from './api/index.js'
 
 // Re-export ndjson response helper
 export { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'

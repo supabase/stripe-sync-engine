@@ -7,12 +7,13 @@ APP="${1:-engine}"
 RUN="$(dirname "$0")/ts-run"
 
 case "$APP" in
-  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/src/cli/index.ts";  CMD_ARGS="serve --port $PORT" ;;
+  engine)  PORT="${PORT:-3000}"; ENTRY="apps/engine/src/bin/serve.ts";  CMD_ARGS="" ;;
   service) PORT="${PORT:-4020}"; ENTRY="apps/service/src/bin/cli.ts";   CMD_ARGS="serve --port $PORT" ;;
   webhook) PORT="${PORT:-4030}"; ENTRY="apps/service/src/bin/cli.ts";   CMD_ARGS="webhook --port $PORT --temporal-address localhost:7233" ;;
   *) echo "Usage: $0 [engine|service|webhook]" >&2; exit 1 ;;
 esac
 
+export PORT
 CMD="$RUN $ENTRY $CMD_ARGS"
 
 cd "$(dirname "$0")/.."
