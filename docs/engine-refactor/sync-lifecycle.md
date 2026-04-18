@@ -1,8 +1,7 @@
 # Sync Lifecycle
 
-How finite sync runs work: run identity, opaque state, optional time ranges, and
-terminal stream status. For message types and connector interfaces, see
-[protocol.md](./protocol.md).
+How finite sync runs work: run identity, opaque state, and optional time ranges.
+For message types and connector interfaces, see [protocol.md](../engine/protocol.md).
 
 ## Scope
 
@@ -61,11 +60,11 @@ CLIENT  ←—start/end—→  ENGINE  ←—iterator—→  SOURCE
 | Run identity        | Generates `sync_run_id`               | Tracks run continuity                                     | Unaware                                                |
 | Time range bounds   | —                                     | Freezes `started_at`, injects `time_range` when supported | Respects `time_range` if present                       |
 | Internal pagination | —                                     | —                                                         | Manages `starting_after` / equivalent                  |
-| Stream lifecycle    | Consumes                              | Tracks terminal streams                                   | Emits `started`, optional `range_complete`, `complete` |
+| Stream lifecycle    | Consumes                              | Tracks progress                                           | Emits `started`, optional `range_complete`, `complete` |
 | Progress reporting  | Consumes                              | Emits run-level snapshots                                 | Emits records, checkpoints, traces                     |
 | Error reporting     | Decides retry policy above the engine | Passes through, stops on `global`                         | Classifies and emits trace errors                      |
 | State               | Opaque round-trip                     | Manages engine section                                    | Manages source section                                 |
-| `has_more`          | Reads, acts                           | Derives from explicit terminal stream state               | —                                                      |
+| `has_more`          | Reads, acts                           | Derives from stream progress                              | —                                                      |
 
 ---
 
@@ -83,22 +82,6 @@ opaque cursor data.
 ---
 
 ## Messages
-
-### `start` — client → engine
-
-Begins or continues a sync run. See [Types](#types) for `StartPayload`.
-
-### `end` — engine → client
-
-The request is done. See [Types](#types) for `EndPayload`.
-
-`has_more: true` means at least one configured stream has not emitted
-`stream_status: complete` for this run yet. Continue by sending another `start`
-with the same `sync_run_id` and the previous `ending_state` as the next
-`starting_state`.
-
-`has_more: false` means every configured stream is terminal for this run. The
-next sync should use a new `sync_run_id`.
 
 ### Source → engine
 
@@ -126,7 +109,7 @@ Sources are iterators that yield these message types:
 
 ### Engine → client
 
-The engine emits four message types: `progress`, `record`, `log`, and `end`.
+The engine emits three message types: `progress`, `record`, and `log`.
 
 ```ts
 {
@@ -146,16 +129,10 @@ The engine emits four message types: `progress`, `record`, `log`, and `end`.
 { type: 'record', record: { stream: string, data: Record<string, unknown>, emitted_at: string } }
 
 { type: 'log', log: { level: 'info' | 'warn' | 'error', message: string } }
-
-{
-  type: 'end',
-  end: {
-    has_more: boolean,
-    ending_state: SyncState,
-    request_progress: ProgressPayload,
-  }
-}
 ```
+
+For the future `start`/`end` request–response protocol, see
+[sync-lifecycle-start-end-message.md](./sync-lifecycle-start-end-message.md).
 
 The engine does not pass trace messages through to the client. It folds them
 into `progress` and `log`.
@@ -220,28 +197,6 @@ type ConfiguredCatalog = {
 }
 ```
 
-### Start message (client → engine)
-
-```ts
-type StartPayload = {
-  sync_run_id: string
-  source_config: Record<string, unknown>
-  destination_config: Record<string, unknown>
-  configured_catalog: ConfiguredCatalog
-  starting_state?: SyncState
-}
-```
-
-### End message (engine → client)
-
-```ts
-type EndPayload = {
-  has_more: boolean
-  ending_state: SyncState
-  request_progress: ProgressPayload
-}
-```
-
 ### Progress message (engine → client)
 
 ```ts
@@ -254,7 +209,6 @@ type StreamProgress = {
   state_count: number
   record_count: number
   completed_ranges?: Array<{ gte: string; lt: string }>
-  terminal: boolean
 }
 
 type ProgressPayload = {
@@ -271,7 +225,7 @@ type ProgressPayload = {
 
 `completed_ranges` is progress data only. It does not determine completion.
 
-### SyncState (round-tripped between start and end)
+### SyncState
 
 ```ts
 type SyncState = {
@@ -285,12 +239,14 @@ type SourceState = {
 }
 
 type EngineState = {
-  sync_run_id: string
-  started_at: string
-  terminal_streams: string[]
+  sync_run_id?: string // omit for continuous sync
+  started_at?: string // set only when sync_run_id is present
   run_progress: ProgressPayload
 }
 ```
+
+For the full start/end round-trip semantics, see
+[sync-lifecycle-start-end-message.md](./sync-lifecycle-start-end-message.md).
 
 ### Source state — Stripe example
 
@@ -310,42 +266,36 @@ source state.
 
 ## Sync Runs
 
-A sync run is identified by `sync_run_id`. Within a run, `started_at` is frozen.
+`sync_run_id` is optional. When provided, it freezes the upper bound so the
+backfill has a finite target. When omitted, the upper bound is `now()` on every
+invocation — the sync never "finishes" and continuously chases new data.
 
-### New run
+### With `sync_run_id` (finite backfill)
 
-1. Client sends `start` with a new `sync_run_id`.
-2. Engine freezes `started_at = now()` and stores it in engine state.
-3. For each configured stream where `supports_time_range` is true, the engine
-   injects `time_range.lt = started_at`.
-4. Source runs, emits records, checkpoints, and explicit stream statuses.
-5. Engine emits progress, forwards records to the destination, and returns
-   `end`.
+- The engine freezes `started_at = now()` on the first invocation and persists
+  it in `EngineState`.
+- On continuation (same `sync_run_id` in state), `started_at` is reused →
+  `time_range.lt` stays frozen.
+- The run is complete when the source iterator exhausts (returns naturally).
+- Progress accumulates across invocations.
 
-### Continuation
+### Without `sync_run_id` (continuous sync)
 
-1. Client sends `start` with the same `sync_run_id` and previous `ending_state`.
-2. Engine preserves `started_at` from engine state.
-3. The engine re-injects the same `time_range` into streams that support it.
-4. Source resumes from its opaque cursor state.
+- The engine does not inject `time_range.lt`. There is no upper bound.
+- The source paginates forward indefinitely. It may terminate if it catches
+  up to the present, but this is not guaranteed — new data can arrive faster
+  than the source reads it.
+- There is no progress tracking across invocations — each call is independent.
+- Useful for continuous polling where "done" is not a meaningful concept.
 
-### Completion
+### Summary
 
-When `has_more: false`:
-
-- Every configured stream is present in `engine.terminal_streams`.
-- The client should start the next sync with a new `sync_run_id`.
-
-### Example
-
-```
-sync_run_id: "sr_1"
-  request 1: customers [2018, 2024) → timed out → end { has_more: true }
-  request 2: customers [2018, 2024) → complete  → end { has_more: false }
-```
-
-The range is stable across requests. The source resumes within that range using
-its own cursor state.
+|                   | With `sync_run_id`                        | Without `sync_run_id`     |
+| ----------------- | ----------------------------------------- | ------------------------- |
+| Upper bound       | Frozen at first `started_at`              | None                      |
+| Terminates?       | Yes — source exhausts within frozen bound | Not guaranteed            |
+| Progress tracking | Accumulated in `EngineState`              | Accumulated in `EngineState` |
+| Use case          | Finite backfill                           | Testing only                 |
 
 ---
 
@@ -356,7 +306,8 @@ Time range support is optional per stream.
 ### Streams with `supports_time_range: true`
 
 - The engine injects `time_range`.
-- `time_range.lt` is frozen to `started_at` for the duration of the run.
+- `time_range.lt` is frozen to `started_at` when `sync_run_id` is set.
+  Without `sync_run_id`, no `time_range.lt` is injected.
 - The source resumes within that range using opaque source state.
 - The source may emit `range_complete` for progress reporting.
 
@@ -368,7 +319,8 @@ Time range support is optional per stream.
 
 ### Why this matters
 
-- Frozen upper bounds prevent moving-target backfills for eligible streams.
+- With `sync_run_id`: frozen upper bounds prevent moving-target backfills.
+- Without `sync_run_id`: no upper bound enables continuous sync.
 - Streams without time filtering still fit the same continuation contract.
 - The engine never needs to understand source-specific pagination tokens.
 
@@ -376,15 +328,17 @@ Time range support is optional per stream.
 
 ## `has_more` Derivation
 
-The engine derives `has_more` from explicit terminal stream state:
+`has_more` is determined solely by whether the source iterator is exhausted:
 
 ```ts
-has_more = configured_catalog.streams.some(
-  (stream) => !engine.terminal_streams.includes(stream.name)
-)
+has_more = !iterator.done
 ```
 
-`completed_ranges` and source-state shape do not participate in this decision.
+If the source yields all its messages and returns, `has_more: false`. If the
+source is cut off (time limit, backfill limit, signal), `has_more: true`.
+
+Stream status, `completed_ranges`, `run_progress`, and source-state shape do
+not participate in this decision.
 
 ---
 
@@ -436,39 +390,3 @@ The engine emits `log` messages for anomalies and failures only.
 | `source crashed: {message}`         | Source iterator threw                |
 
 ---
-
-## Wire Format
-
-NDJSON. One message per line.
-
-```json
-{"type":"start","sync_run_id":"sr_abc","source_config":{},"configured_catalog":{"streams":[{"name":"customers","sync_mode":"incremental","supports_time_range":true}]}}
-{"type":"progress","progress":{"elapsed_ms":100,"global_state_count":0,"derived":{"records_per_second":0,"states_per_second":0},"streams":{"customers":{"state_count":0,"record_count":0,"completed_ranges":[],"terminal":false}},"errors":[]}}
-{"type":"record","record":{"stream":"customers","data":{"id":"cus_123"}}}
-{"type":"progress","progress":{"elapsed_ms":1600,"global_state_count":1,"derived":{"records_per_second":1562,"states_per_second":0.6},"streams":{"customers":{"state_count":1,"record_count":2500,"completed_ranges":[],"terminal":false}},"errors":[]}}
-{"type":"progress","progress":{"elapsed_ms":3200,"global_state_count":2,"derived":{"records_per_second":1562,"states_per_second":0.6},"streams":{"customers":{"state_count":2,"record_count":5000,"completed_ranges":[{"gte":"2018-01-01T00:00:00Z","lt":"2024-04-17T00:00:00Z"}],"terminal":true}},"errors":[]}}
-{"type":"end","end":{"has_more":false,"ending_state":{"source":{"streams":{"customers":{"starting_after":null}},"global":{}},"engine":{"sync_run_id":"sr_abc","started_at":"2024-04-17T00:00:00Z","terminal_streams":["customers"],"run_progress":{"elapsed_ms":3200,"global_state_count":2,"derived":{"records_per_second":1562,"states_per_second":0.6},"streams":{"customers":{"state_count":2,"record_count":5000,"completed_ranges":[{"gte":"2018-01-01T00:00:00Z","lt":"2024-04-17T00:00:00Z"}],"terminal":true}},"errors":[]}}},"request_progress":{"elapsed_ms":3200,"global_state_count":2,"derived":{"records_per_second":1562,"states_per_second":0.6},"streams":{"customers":{"state_count":2,"record_count":5000,"completed_ranges":[{"gte":"2018-01-01T00:00:00Z","lt":"2024-04-17T00:00:00Z"}],"terminal":true}},"errors":[]}}}
-```
-
----
-
-## Client Loop
-
-```ts
-let state = undefined
-const syncRunId = crypto.randomUUID()
-
-do {
-  const { end } = await engine.sync({
-    sync_run_id: syncRunId,
-    source_config,
-    destination_config,
-    configured_catalog,
-    starting_state: state,
-  })
-  state = end.ending_state
-} while (end.has_more)
-```
-
-The client does not need to interpret source state. It only needs to round-trip
-`ending_state` and continue until `has_more` is false.

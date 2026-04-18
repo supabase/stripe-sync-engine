@@ -1,0 +1,113 @@
+@startuml
+title /pipeline_sync — Message Flow
+
+skinparam defaultFontName "Menlo"
+skinparam defaultFontSize 13
+skinparam backgroundColor #fafafa
+
+skinparam sequence {
+    ArrowThickness 2
+    ParticipantPadding 40
+    BoxPadding 10
+    LifeLineBorderColor #94a3b8
+    LifeLineBackgroundColor #fafafa
+
+    ParticipantBackgroundColor #f1f5f9
+    ParticipantBorderColor #475569
+    ParticipantFontSize 15
+    ParticipantFontStyle bold
+
+    DividerBackgroundColor #f8fafc
+    DividerBorderColor #cbd5e1
+    DividerFontSize 12
+    DividerFontStyle italic
+}
+
+participant Client as C
+participant Engine as E
+participant Source as S
+participant Destination as D
+
+C -[#475569]> E : POST /pipeline_sync\n{pipeline_config, state?, source_input_messages?}
+note right of C #FEFFDD
+  pipeline_config = {source, destination, streams}
+  state = {source, destination, engine}
+  source_input_messages = Stripe.Event[] from webhooks
+end note
+
+== Engine builds catalog ==
+
+E -[#475569]> S : discover(source_config)
+S -[#475569]> E : available streams + schemas
+E -[#475569]> E : build configured_catalog\n(merge discover result + streams selection)
+
+== Source & Destination start ==
+
+E -[#475569]> S : read(source_config, configured_catalog, source_state, source_input_messages)
+E -[#475569]> D : write(dest_config, configured_catalog, dest_state)
+
+== Source & Destination stream concurrently ==
+
+S -[#94a3b8]> E : trace {stream_status: {stream: "customers", status: "started"}}
+
+S -[#2563eb]> E : record {stream: "customers", data: {...}}
+E -[#2563eb]> D : record (forwarded)
+
+S -[#2563eb]> E : record {stream: "customers", data: {...}}
+E -[#2563eb]> D : record (forwarded)
+
+S -[#7c3aed]> E : source_state {stream: "customers", data: {remaining: [...]}}
+E -[#7c3aed]> D : source_state (forwarded)
+
+S -[#94a3b8]> E : trace {stream_status: "range_complete"}
+E -[#94a3b8]> D : trace (forwarded)
+
+S -[#2563eb]> E : record {stream: "customers", data: {...}}
+E -[#2563eb]> D : record (forwarded)
+
+S -[#7c3aed]> E : source_state {stream: "customers", data: {remaining: []}}
+E -[#7c3aed]> D : source_state (forwarded)
+
+S -[#94a3b8]> E : trace {stream_status: "complete"}
+E -[#94a3b8]> D : trace (forwarded)
+
+== Destination persists & re-emits ==
+
+D -[#16a34a]> D : upsert + flush
+D -[#7c3aed]> E : source_state (re-emitted after persist)
+D -[#94a3b8]> E : trace (re-emitted after persist)
+note right of E #FEFFDD : durability: state is only committed\nafter destination persists
+
+E -[#7c3aed]> C : source_state (streamed on response)
+E -[#94a3b8]> C : trace (streamed on response)
+E -[#16a34a]> C : progress (streamed on response)
+
+== Stream error example ==
+
+S -[#dc2626]> E : trace {error: {error_level: "stream", stream: "invoices", message: "403 forbidden"}}
+E -[#dc2626]> D : trace (forwarded)
+D -[#dc2626]> E : trace (re-emitted)
+E -[#dc2626]> C : trace (streamed on response)
+note right of E #FEFFDD : stream "invoices" stops,\nother streams continue
+
+== EOF — time limit hit (source iterator NOT done) ==
+
+E -[#16a34a]> C : eof {reason: "time_limit", has_more: true, state: {...}}
+
+note over C, D #f0fdf4
+  has_more: true — source iterator was not exhausted.
+  Client passes eof.state back as starting state.
+  Engine re-injects time_range (frozen lt from sync_run_id).
+  Source resumes from its opaque cursor in remaining[].
+end note
+
+== EOF — source iterator finished ==
+
+E -[#16a34a]> C : eof {reason: "complete", has_more: false, state: {...}}
+
+note over C, D #f0fdf4
+  has_more: false — source iterator exhausted naturally.
+  All data within the time_range has been synced.
+end note
+
+@enduml
