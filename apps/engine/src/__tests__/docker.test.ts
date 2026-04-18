@@ -32,12 +32,12 @@ describe('Docker image', { timeout: 180_000 }, () => {
   })
 
   it('--version prints version and exits', () => {
-    const out = docker('run', '--rm', IMAGE, '--version')
+    const out = docker('run', '--rm', '--entrypoint', 'node', IMAGE, 'dist/bin/sync-engine.js', '--version')
     expect(out).toMatch(/\d+\.\d+\.\d+/)
   })
 
   it('--help prints usage and exits', () => {
-    const out = docker('run', '--rm', IMAGE, '--help')
+    const out = docker('run', '--rm', '--entrypoint', 'node', IMAGE, 'dist/bin/sync-engine.js', '--help')
     expect(out).toContain('sync-engine')
     expect(out).toContain('serve')
     expect(out).toContain('sync')
@@ -73,7 +73,17 @@ describe('Docker image', { timeout: 180_000 }, () => {
 
   it('check exits non-zero without valid config', () => {
     expect(() =>
-      docker('run', '--rm', IMAGE, 'check', '--postgres-url', 'postgres://invalid:5432/db')
+      docker(
+        'run',
+        '--rm',
+        '--entrypoint',
+        'node',
+        IMAGE,
+        'dist/bin/sync-engine.js',
+        'check',
+        '--postgres-url',
+        'postgres://invalid:5432/db'
+      )
     ).toThrow()
   })
 })
