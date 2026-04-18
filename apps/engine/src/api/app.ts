@@ -119,91 +119,27 @@ async function* logApiStream<T>(
 
 const dangerouslyVerbose = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
 
-const REASON_EMOJI: Record<string, string> = {
-  complete: '✅',
-  time_limit: '⏱️',
-  state_limit: '📦',
-  error: '❌',
-  aborted: '🛑',
-}
-
-const STATUS_EMOJI: Record<string, string> = {
-  complete: '✅',
-  start: '🔄',
-  running: '🔄',
-  range_complete: '🔄',
-}
-
 function formatEof(eof: EofPayload): string {
-  const emoji = REASON_EMOJI[eof.reason] ?? '❓'
-  const elapsed = eof.request_progress?.elapsed_ms
-    ? `${(eof.request_progress.elapsed_ms / 1000).toFixed(1)}s`
-    : ''
-  const totalRows = eof.request_progress?.run_record_count ?? 0
-  const rps = eof.request_progress?.rows_per_second?.toFixed(1) ?? '0'
-  const checkpoints = eof.request_progress?.state_checkpoint_count ?? 0
+  const emoji = eof.has_more ? '⏱️' : '✅'
+  const rp = eof.request_progress
+  const elapsed = rp?.elapsed_ms ? `${(rp.elapsed_ms / 1000).toFixed(1)}s` : ''
+  const rps = rp?.derived?.records_per_second?.toFixed(1) ?? '0'
+  const states = rp?.global_state_count ?? 0
+
+  const streamEntries = rp?.streams ? Object.entries(rp.streams) : []
+  const totalRows = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
 
   const lines: string[] = []
   lines.push(
-    `${emoji} Sync ${eof.reason}${elapsed ? ` (${elapsed}` : ''}${totalRows ? ` | ${totalRows} rows, ${rps} rows/s` : ''}${checkpoints ? `, ${checkpoints} checkpoints` : ''}${elapsed ? ')' : ''}`
+    `${emoji} Sync ${eof.has_more ? 'paused' : 'complete'}${elapsed ? ` (${elapsed}` : ''}${totalRows ? ` | ${totalRows} rows, ${rps} rows/s` : ''}${states ? `, ${states} checkpoints` : ''}${elapsed ? ')' : ''}`
   )
 
-  const sp = eof.stream_progress
-  if (sp) {
-    let complete = 0
-    let inProgress = 0
-    let errored = 0
-    let pending = 0
-    const errorStreams: string[] = []
-    const activeStreams: { name: string; rows: number; rps: string }[] = []
-
-    for (const [name, s] of Object.entries(sp)) {
-      if (s.errors?.length) {
-        errored++
-        const errMsg = s.errors[0]?.message ?? 'unknown error'
-        errorStreams.push(`❌ ${name}: ${errMsg}`)
-      }
-      if (s.status === 'complete') {
-        complete++
-        if (s.run_record_count > 0) {
-          activeStreams.push({
-            name,
-            rows: s.run_record_count,
-            rps: s.records_per_second?.toFixed(1) ?? '0',
-          })
-        }
-      } else if (s.status === 'start' || s.status === 'running') {
-        inProgress++
-        if (s.run_record_count > 0) {
-          activeStreams.push({
-            name,
-            rows: s.run_record_count,
-            rps: s.records_per_second?.toFixed(1) ?? '0',
-          })
-        }
-      } else {
-        pending++
+  if (streamEntries.length > 0) {
+    for (const [name, s] of streamEntries) {
+      if (s.record_count > 0) {
+        lines.push(`  ✅ ${name}: ${s.record_count} rows`)
       }
     }
-
-    // Show streams that synced rows this run
-    for (const s of activeStreams.sort((a, b) => b.rows - a.rows)) {
-      lines.push(`  ✅ ${s.name}: ${s.rows} rows @ ${s.rps} rows/s`)
-    }
-
-    // Show errored streams
-    for (const e of errorStreams) {
-      lines.push(`  ${e}`)
-    }
-
-    // Summary line
-    const parts: string[] = []
-    if (complete) parts.push(`${complete} complete`)
-    if (inProgress) parts.push(`${inProgress} in progress`)
-    if (errored) parts.push(`${errored} errored`)
-    if (pending) parts.push(`${pending} pending`)
-    parts.push(`${totalRows} total rows this run`)
-    lines.push(`  📊 ${parts.join(', ')}`)
   }
 
   return lines.join('\n')
@@ -395,12 +331,10 @@ export async function createApp(resolver: ConnectorResolver) {
   const xStateHeader = z
     .string()
     .transform(jsonParse)
-    .transform((obj: Record<string, unknown>) => coerceSyncState(obj) ?? emptySyncState())
-    .pipe(SyncState)
+    .pipe(SyncState.catch(emptySyncState()))
     .optional()
     .meta({
-      description:
-        'JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats',
+      description: 'JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.',
       param: { content: { 'application/json': {} } },
     })
 

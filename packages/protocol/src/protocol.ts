@@ -556,11 +556,7 @@ export const SourceInputMessage = MessageBase.extend({
 export type SourceInputMessage = z.infer<typeof SourceInputMessage>
 
 export const ExtendedMessage = z
-  .discriminatedUnion('type', [
-    ProgressMessage,
-    EofMessage,
-    SourceInputMessage,
-  ])
+  .discriminatedUnion('type', [ProgressMessage, EofMessage, SourceInputMessage])
   .meta({ id: 'ExtendedMessage' })
 export type ExtendedMessage = z.infer<typeof ExtendedMessage>
 
@@ -664,14 +660,14 @@ export type TeardownOutput = z.infer<typeof TeardownOutput>
  *
  * Type parameters:
  *   TConfig      — connector's configuration type, inferred from its Zod spec
- *   TState       — per-stream checkpoint shape (opaque to the engine)
+ *   TSourceState       — per-stream checkpoint shape (opaque to the engine)
  *   TInput       — serializable data passed to read() for event-driven reads
  *                  (e.g. a single webhook event). When absent, read() performs
  *                  a pull-based backfill.
  */
 export interface Source<
   TConfig extends Record<string, unknown> = Record<string, unknown>,
-  TState = unknown,
+  TSourceState = unknown,
   TInput = unknown,
 > {
   /** Emit the connector's specification (config JSON Schema, etc.). */
@@ -693,10 +689,10 @@ export interface Source<
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
-      state?: { streams: Record<string, TState>; global: Record<string, unknown> }
+      state?: { streams: Record<string, TSourceState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
-  ): AsyncIterable<Message>
+  ): AsyncIterable<CoreMessage>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). */
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>
