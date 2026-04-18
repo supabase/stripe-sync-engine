@@ -55,6 +55,13 @@ export const Stream = z
       .describe(
         'Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }.'
       ),
+
+    newer_than_field: z
+      .string()
+      .optional()
+      .describe(
+        'Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. "created").'
+      ),
   })
   .describe('A named collection of records — analogous to a table or API resource.')
 export type Stream = z.infer<typeof Stream>
@@ -580,17 +587,7 @@ export const CoreMessage = z
     ControlMessage,
   ])
   .meta({ id: 'CoreMessage' })
-export type CoreMessage = Extract<
-  Message,
-  | { type: 'record' }
-  | { type: 'source_state' }
-  | { type: 'catalog' }
-  | { type: 'log' }
-  | { type: 'spec' }
-  | { type: 'connection_status' }
-  | { type: 'stream_status' }
-  | { type: 'control' }
->
+export type CoreMessage = z.infer<typeof CoreMessage>
 
 /** Extended messages — engine-level (progress, eof, source input). */
 export type ExtendedMessage = Extract<
@@ -600,18 +597,18 @@ export type ExtendedMessage = Extract<
 
 /**
  * Messages the destination receives on stdin. Destinations must handle `record`
- * and `source_state`; all other core message types must be yielded back as pass-through.
+ * and `source_state`; all other message types must be yielded back as pass-through.
  */
-export const DestinationInput = CoreMessage
-export type DestinationInput = CoreMessage
+export const DestinationInput = Message
+export type DestinationInput = Message
 
 /**
  * Messages the destination yields back to the orchestrator. Includes both
  * destination-originated messages (logs, connection_status) and pass-through
  * messages from the source that the destination doesn't handle.
  */
-export const DestinationOutput = CoreMessage
-export type DestinationOutput = CoreMessage
+export const DestinationOutput = Message
+export type DestinationOutput = Message
 
 /** Output of pipeline_sync streamed to the client. */
 export const SyncOutput = z
@@ -625,16 +622,7 @@ export const SyncOutput = z
     ControlMessage,
   ])
   .meta({ id: 'SyncOutput' })
-export type SyncOutput = Extract<
-  Message,
-  | { type: 'source_state' }
-  | { type: 'stream_status' }
-  | { type: 'progress' }
-  | { type: 'connection_status' }
-  | { type: 'log' }
-  | { type: 'eof' }
-  | { type: 'control' }
->
+export type SyncOutput = z.infer<typeof SyncOutput>
 
 // MARK: - Per-command output types
 
@@ -717,7 +705,7 @@ export interface Source<
       state?: { streams: Record<string, TSourceState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
-  ): AsyncIterable<CoreMessage>
+  ): AsyncIterable<Message>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). */
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>
