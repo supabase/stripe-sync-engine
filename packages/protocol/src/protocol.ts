@@ -12,39 +12,23 @@ import { z } from 'zod'
 
 // MARK: - Aggregate state
 
-export const SectionState = z
+export const SourceState = z
   .object({
     streams: z
       .record(z.string(), z.unknown())
       .describe('Per-stream checkpoint data, keyed by stream name.'),
     global: z
       .record(z.string(), z.unknown())
-      .describe('Section-wide state shared across all streams.'),
+      .describe('Source-wide state shared across all streams.'),
   })
-  .describe('A partition of sync state with per-stream and global slots.')
-export type SectionState = z.infer<typeof SectionState>
+  .describe('Source connector state — cursors, backfill progress, events cursors.')
+  .meta({ id: 'SourceState' })
+export type SourceState = z.infer<typeof SourceState>
 
-export const SyncState = z
-  .object({
-    source: SectionState.describe(
-      'Source connector state — cursors, backfill progress, events cursors.'
-    ),
-    destination: SectionState.describe('Destination connector state — reserved for future use.'),
-    engine: SectionState.describe(
-      'Engine-managed state — cumulative record counts, sync metadata not owned by connectors.'
-    ),
-  })
-  .describe(
-    'Full sync checkpoint with separate sections for source, destination, and engine. ' +
-      'Connectors only see their own section; the engine manages routing.'
-  )
-  .meta({ id: 'SyncState' })
-export type SyncState = z.infer<typeof SyncState>
-
-/** @deprecated Use SectionState. */
-export const SourceState = SectionState.meta({ id: 'SourceState' })
-/** @deprecated Use SectionState. */
-export type SourceState = SectionState
+/** @deprecated Use SourceState. */
+export const SectionState = SourceState
+/** @deprecated Use SourceState. */
+export type SectionState = SourceState
 
 // MARK: - Data model
 
@@ -261,29 +245,6 @@ export const ControlPayload = z
 export type ControlPayload = z.infer<typeof ControlPayload>
 
 /** Per-request aggregate stats. Used in EOF and periodic progress snapshots. */
-export const RequestProgress = z
-  .object({
-    elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the request started.'),
-    run_record_count: z
-      .number()
-      .int()
-      .describe('Total records synced across all streams in this request.'),
-    rows_per_second: z
-      .number()
-      .describe('Overall throughput for this request: run_record_count / elapsed seconds.'),
-    window_rows_per_second: z
-      .number()
-      .describe(
-        'Instantaneous throughput: total records in last window / window duration. ' +
-          'Measures only the most recent reporting interval.'
-      ),
-    state_checkpoint_count: z
-      .number()
-      .int()
-      .describe('Total source_state messages observed so far in this request.'),
-  })
-  .describe('Per-request aggregate stats.')
-export type RequestProgress = z.infer<typeof RequestProgress>
 
 // MARK: - Stream status payload (top-level message type)
 
@@ -353,7 +314,7 @@ export const ProgressPayload = z
     elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the sync run started.'),
     global_state_count: z.number().int().describe('Total source_state messages observed so far.'),
     connection_status: ConnectionStatusPayload.optional().describe(
-      'Set when source emits connection_status: failed.'
+      'Set when source or destination emits connection_status: failed.'
     ),
     derived: z
       .object({
@@ -396,85 +357,65 @@ export const SyncRunState = z
   .describe('Engine-managed run state — run identity, frozen bounds, accumulated progress.')
 export type SyncRunState = z.infer<typeof SyncRunState>
 
-// MARK: - EOF payload (depends on TraceProgress)
+export const SyncState = z
+  .object({
+    source: SourceState.describe(
+      'Source connector state — cursors, backfill progress, events cursors.'
+    ),
+    destination: z.record(z.string(), z.unknown()).describe('Destination connector state.'),
+    sync_run: SyncRunState.describe(
+      'Engine-managed run state — sync_run_id, time_ceiling, accumulated progress.'
+    ),
+  })
+  .describe(
+    'Full sync checkpoint with separate sections for source, destination, and sync run. ' +
+      'Connectors only see their own section; the engine manages routing.'
+  )
+  .meta({ id: 'SyncState' })
+export type SyncState = z.infer<typeof SyncState>
+
+// MARK: - EOF payload
 
 export const EofStreamProgress = z
   .object({
     status: z
-      .enum(['start', 'running', 'complete', 'range_complete', 'error', 'skip'])
-      .describe('Final stream status.'),
+      .enum(['not_started', 'started', 'completed', 'errored', 'skipped'])
+      .describe('Final stream status, derived from stream_status events.'),
     cumulative_record_count: z
       .number()
       .int()
       .describe('Cumulative records synced for this stream across all runs.'),
-    run_record_count: z.number().int().describe('Records synced in this run.'),
+    run_record_count: z.number().int().describe('Records synced in this request.'),
     records_per_second: z
       .number()
       .optional()
-      .describe('Average records/sec for this stream over the run.'),
-    requests_per_second: z
-      .number()
-      .optional()
-      .describe('Average requests/sec for this stream over the run.'),
+      .describe('Average records/sec for this stream over the request.'),
     errors: z
-      .array(
-        z.object({
-          message: z.string().describe('Human-readable error description.'),
-          failure_type: z
-            .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
-            .optional()
-            .describe('Error category.'),
-        })
-      )
+      .array(z.object({ message: z.string().describe('Human-readable error description.') }))
       .optional()
-      .describe('All accumulated errors for this stream during this run.'),
+      .describe('All accumulated errors for this stream during this request.'),
   })
-  .describe('End-of-sync summary for a single stream.')
+  .describe('Per-stream end-of-request summary.')
 export type EofStreamProgress = z.infer<typeof EofStreamProgress>
 
 export const EofPayload = z
   .object({
-    reason: z
-      .enum(['complete', 'state_limit', 'time_limit', 'error', 'aborted'])
-      .describe('Why the sync run ended.'),
     has_more: z
       .boolean()
-      .optional()
       .describe(
         'Whether the client should continue with another request. ' +
           'true when cut off by limits; false when the source iterator exhausted naturally.'
       ),
-    cutoff: z
-      .enum(['soft', 'hard'])
-      .optional()
-      .describe(
-        'Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.'
-      ),
-    elapsed_ms: z
-      .number()
-      .optional()
-      .describe(
-        'Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.'
-      ),
-    state: SyncState.optional().describe(
-      'Full sync state at the end of the run. source: accumulated from source_state messages; ' +
-        'engine: updated cumulative record counts; destination: reserved. ' +
-        'Consumers can persist this directly and pass it back on resume.'
+    ending_state: SyncState.optional().describe(
+      'Full sync state at the end of this request. ' +
+        'Round-trip this as starting_state on the next request.'
     ),
-    request_progress: RequestProgress.optional().describe(
-      'Per-request aggregate stats (elapsed time, throughput, checkpoint count).'
+    run_progress: ProgressPayload.describe(
+      'Accumulated progress across all requests in this sync run.'
     ),
-    stream_progress: z
-      .record(z.string(), EofStreamProgress)
-      .optional()
-      .describe(
-        'Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.'
-      ),
+    request_progress: ProgressPayload.describe('Progress for this specific request only.'),
   })
-  .describe(
-    'Terminal message with request_progress (per-request stats) and ' +
-      'stream_progress (final per-stream detail including accumulated errors).'
-  )
+  .describe('Terminal message signaling end of this request.')
 export type EofPayload = z.infer<typeof EofPayload>
 
 // MARK: - Envelope messages (the wire format)
@@ -589,36 +530,6 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 
 // MARK: - Message unions
 
-/** The subset of messages the destination receives on stdin. */
-export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, SourceStateMessage])
-export type DestinationInput = z.infer<typeof DestinationInput>
-
-/** Messages the destination yields back to the orchestrator (one per NDJSON line). */
-export const DestinationOutput = z
-  .discriminatedUnion('type', [
-    SourceStateMessage,
-    StreamStatusMessage,
-    ConnectionStatusMessage,
-    LogMessage,
-    EofMessage,
-  ])
-  .meta({ id: 'DestinationOutput' })
-export type DestinationOutput = z.infer<typeof DestinationOutput>
-
-/** Output of pipeline_sync(): destination output plus source signals (controls, logs, stream status). */
-export const SyncOutput = z
-  .discriminatedUnion('type', [
-    SourceStateMessage,
-    StreamStatusMessage,
-    ProgressMessage,
-    ConnectionStatusMessage,
-    LogMessage,
-    EofMessage,
-    ControlMessage,
-  ])
-  .meta({ id: 'SyncOutput' })
-export type SyncOutput = z.infer<typeof SyncOutput>
-
 /** Any message flowing through the engine. One message per NDJSON line. */
 export const Message = z
   .discriminatedUnion('type', [
@@ -646,6 +557,43 @@ export const SourceInputMessage = MessageBase.extend({
   source_input: z.unknown(),
 }).meta({ id: 'SourceInputMessage' })
 export type SourceInputMessage = z.infer<typeof SourceInputMessage>
+
+// MARK: - Message unions
+
+/**
+ * Messages the destination receives on stdin. Destinations must handle `record`
+ * and `source_state`; all other message types must be yielded back as pass-through.
+ * This ensures the destination is the sole consumer of the source stream,
+ * giving natural pull-based backpressure without intermediate buffering.
+ */
+export const DestinationInput = Message
+export type DestinationInput = z.infer<typeof DestinationInput>
+
+/** Messages the destination yields back to the orchestrator (one per NDJSON line). */
+export const DestinationOutput = z
+  .discriminatedUnion('type', [
+    SourceStateMessage,
+    StreamStatusMessage,
+    ConnectionStatusMessage,
+    LogMessage,
+    EofMessage,
+  ])
+  .meta({ id: 'DestinationOutput' })
+export type DestinationOutput = z.infer<typeof DestinationOutput>
+
+/** Output of pipeline_sync(): destination output plus source signals (controls, logs, stream status). */
+export const SyncOutput = z
+  .discriminatedUnion('type', [
+    SourceStateMessage,
+    StreamStatusMessage,
+    ProgressMessage,
+    ConnectionStatusMessage,
+    LogMessage,
+    EofMessage,
+    ControlMessage,
+  ])
+  .meta({ id: 'SyncOutput' })
+export type SyncOutput = z.infer<typeof SyncOutput>
 
 // MARK: - Per-command output types
 
@@ -779,10 +727,3 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   /** Clean up downstream resources. Called when a sync is deleted. */
   teardown?(params: { config: TConfig }): AsyncIterable<TeardownOutput>
 }
-
-// MARK: - Deprecated aliases (for migration)
-
-/** @deprecated Use ConnectionStatusPayload */
-export const CheckResult = ConnectionStatusPayload
-/** @deprecated Use ConnectionStatusPayload */
-export type CheckResult = ConnectionStatusPayload
