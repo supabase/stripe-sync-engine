@@ -43,6 +43,10 @@ export type UpsertOptions = {
    * these columns matches the incoming value.
    * SQL: `WHERE tbl.col = EXCLUDED.col`
    *
+   * Application-level tenant isolation for when RLS is not available.
+   * With Postgres RLS enabled, this option is unnecessary — the policy
+   * enforces isolation transparently.
+   *
    * Example: Multi-tenant table keyed on `(id)` with an `_account_id` system
    * column. Adding `_account_id` as a guard ensures a row written by account A
    * is only updated by account A — a conflicting upsert from account B becomes
