@@ -1,5 +1,5 @@
 import { ApplicationFailure } from '@temporalio/activity'
-import { coerceSyncState } from '@stripe/sync-engine'
+import { parseSyncState } from '@stripe/sync-engine'
 import type { SourceInputMessage, SourceReadOptions } from '@stripe/sync-engine'
 import type { EofPayload } from '@stripe/sync-protocol'
 import type { ActivitiesContext } from './_shared.js'
@@ -15,7 +15,7 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
     const { id: _, ...config } = pipeline
     const { input: inputArr, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
-    const initialState = coerceSyncState(readOpts.state)
+    const initialState = parseSyncState(readOpts.state)
     const { errors, state, sourceConfig, destConfig, eof } = await drainMessages(
       context.engine.pipeline_sync(config, readOpts, input),
       initialState

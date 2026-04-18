@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ControlPayload, ControlMessage } from '../protocol.js'
-import { sourceControlMsg, destinationControlMsg, isControlMessage } from '../helpers.js'
+import { destinationControlMsg } from '../helpers.js'
 
 describe('ControlPayload', () => {
   it('parses source_config variant', () => {
@@ -30,35 +30,6 @@ describe('ControlPayload', () => {
   })
 })
 
-describe('sourceControlMsg', () => {
-  it('creates a valid source_config ControlMessage', () => {
-    const msg = sourceControlMsg({ account_id: 'acct_123', webhook_secret: 'whsec_abc' })
-
-    expect(msg.type).toBe('control')
-    expect(msg.control.control_type).toBe('source_config')
-    expect(msg.control).toEqual({
-      control_type: 'source_config',
-      source_config: { account_id: 'acct_123', webhook_secret: 'whsec_abc' },
-    })
-
-    // Round-trips through the Zod schema
-    expect(ControlMessage.parse(msg)).toEqual(msg)
-  })
-
-  it('preserves generic type information', () => {
-    const msg = sourceControlMsg({ account_id: 'acct_123' })
-    // Type narrowing works after discriminant check
-    if (msg.control.control_type === 'source_config') {
-      expect(msg.control.source_config).toEqual({ account_id: 'acct_123' })
-    }
-  })
-
-  it('passes isControlMessage guard', () => {
-    const msg = sourceControlMsg({ foo: 'bar' })
-    expect(isControlMessage(msg)).toBe(true)
-  })
-})
-
 describe('destinationControlMsg', () => {
   it('creates a valid destination_config ControlMessage', () => {
     const msg = destinationControlMsg({ spreadsheet_id: 'sheet_123' })
@@ -74,8 +45,4 @@ describe('destinationControlMsg', () => {
     expect(ControlMessage.parse(msg)).toEqual(msg)
   })
 
-  it('passes isControlMessage guard', () => {
-    const msg = destinationControlMsg({ url: 'postgres://...' })
-    expect(isControlMessage(msg)).toBe(true)
-  })
 })

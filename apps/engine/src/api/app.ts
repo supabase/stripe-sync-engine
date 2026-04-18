@@ -28,9 +28,7 @@ import {
   SetupOutput as SetupOutputSchema,
   TeardownOutput as TeardownOutputSchema,
   SyncState,
-  coerceSyncState,
   emptySyncState,
-  emptySectionState,
 } from '@stripe/sync-protocol'
 
 // Raw $refs for NDJSON content schemas — avoids zod-openapi generating *Output
@@ -378,16 +376,6 @@ export async function createApp(resolver: ConnectorResolver) {
     source: z.object({ type: z.string() }).catchall(z.unknown()),
   })
 
-  function parseLegacyStateHeader(raw: string | undefined) {
-    if (!raw) return undefined
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      return coerceSyncState(parsed)
-    } catch {
-      return undefined
-    }
-  }
-
   function requireHeaderValue<T>(value: T | undefined, message: string): T {
     if (value === undefined) throw new HTTPException(400, { message })
     return value
@@ -416,8 +404,7 @@ export async function createApp(resolver: ConnectorResolver) {
         c.req.valid('header')['x-pipeline'],
         'x-pipeline header is required'
       ),
-      state:
-        c.req.valid('header')['x-state'] ?? parseLegacyStateHeader(c.req.header('x-source-state')),
+      state: c.req.valid('header')['x-state'],
     }
   }
 

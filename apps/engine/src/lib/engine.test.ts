@@ -695,12 +695,11 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(stateCapturingSource, destinationTest))
     await drain(
       engine.pipeline_sync(defaultPipeline, {
-        state: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
+        state: { source: { streams: { customers: { cursor: 'cus_1' } }, global: {} }, destination: {}, sync_run: {} },
       })
     )
 
-    // coerceSyncState normalizes { streams, global } → { source: { streams, global }, ... }
-    // and the engine passes state.source to connector.read()
+    // parseSyncState validates SyncState envelope, then passes state.source to connector.read()
     expect(receivedState).toEqual({
       streams: { customers: { cursor: 'cus_1' } },
       global: {},

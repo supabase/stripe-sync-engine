@@ -1,33 +1,17 @@
 export * from './protocol.js'
 export {
-  // Message constructors
-  toRecordMessage,
-  fromRecordMessage,
-  recordStream,
-  stateStream,
+  // Message accessors
   stateData,
-  recordMsg,
+  // Envelope constructors
   stateMsg,
-  streamStatusMsg,
-  sourceControlMsg,
   destinationControlMsg,
   createSourceMessageFactory,
   createEngineMessageFactory,
-  // Type guards
-  isRecordMessage,
-  isStateMessage,
-  isCatalogMessage,
-  isLogMessage,
-  isSpecMessage,
-  isConnectionStatusMessage,
-  isStreamStatusMessage,
-  isProgressMessage,
-  isControlMessage,
-  isEofMessage,
-  isDataMessage,
   // State constructors
+  parseSyncState,
   coerceSyncState,
   emptySectionState,
+  emptySourceState,
   emptySyncState,
   // Stream collectors
   collectMessages,

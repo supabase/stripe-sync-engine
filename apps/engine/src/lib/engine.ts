@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import {
-  DestinationInput,
   DestinationOutput,
   DiscoverOutput,
   CheckOutput,
@@ -13,8 +12,7 @@ import {
   ConfiguredCatalog,
   SyncOutput,
   SyncState,
-  type SourceState,
-  coerceSyncState,
+  parseSyncState,
   emptySyncState,
   createEngineMessageFactory,
   collectFirst,
@@ -207,19 +205,17 @@ function configPayload(envelope: {
   return (envelope[envelope.type] as Record<string, unknown>) ?? {}
 }
 
-/**
- * Validate per-stream state data against the source's declared state schema.
- * Throws ZodError if any stream's cursor data doesn't match the schema.
- * No-op when the connector doesn't declare a source_state_stream schema.
- */
-
 /** Helper to get spec from a connector and parse config. */
 async function getSpec(
   connector: { spec(): AsyncIterable<Message> },
   rawConfig: Record<string, unknown>
-): Promise<Record<string, unknown>> {
+): Promise<{ config: Record<string, unknown>; streamStateSchema?: z.ZodType }> {
   const specMsg = await collectFirst(connector.spec(), 'spec')
-  return z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
+  const config = z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
+  const streamStateSchema = specMsg.spec.source_state_stream
+    ? z.fromJSONSchema(specMsg.spec.source_state_stream)
+    : undefined
+  return { config, streamStateSchema }
 }
 
 
@@ -332,7 +328,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     async *source_discover(sourceInput) {
       const connector = await resolver.resolveSource(sourceInput.type)
       const rawSrc = configPayload(sourceInput)
-      const sourceConfig = await getSpec(connector, rawSrc)
+      const { config: sourceConfig } = await getSpec(connector, rawSrc)
       yield* connector.discover({ config: sourceConfig })
     },
 
@@ -343,7 +339,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       ])
       const rawSrc = configPayload(pipeline.source)
       const rawDest = configPayload(pipeline.destination)
-      const [sourceConfig, destConfig] = await Promise.all([
+      const [{ config: sourceConfig }, { config: destConfig }] = await Promise.all([
         getSpec(srcConnector, rawSrc),
         getSpec(destConnector, rawDest),
       ])
@@ -365,7 +361,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         runSource ? resolver.resolveSource(pipeline.source.type) : null,
         runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      const [sourceConfig, destConfig] = await Promise.all([
+      const [srcSpec, destSpec] = await Promise.all([
         srcConnector ? getSpec(srcConnector, configPayload(pipeline.source)) : null,
         destConnector ? getSpec(destConnector, configPayload(pipeline.destination)) : null,
       ])
@@ -378,11 +374,11 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       yield* merge(
         runSource &&
           srcConnector?.setup &&
-          map(srcConnector.setup({ config: sourceConfig!, catalog }), tag(sourceTag)),
+          map(srcConnector.setup({ config: srcSpec!.config, catalog }), tag(sourceTag)),
         runDest &&
           destConnector?.setup &&
           map(
-            destConnector.setup({ config: destConfig!, catalog: filteredCatalog }),
+            destConnector.setup({ config: destSpec!.config, catalog: filteredCatalog }),
             tag(destTag)
           )
       )
@@ -396,7 +392,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         runSource ? resolver.resolveSource(pipeline.source.type) : null,
         runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      const [sourceConfig, destConfig] = await Promise.all([
+      const [srcSpec, destSpec] = await Promise.all([
         srcConnector ? getSpec(srcConnector, configPayload(pipeline.source)) : null,
         destConnector ? getSpec(destConnector, configPayload(pipeline.destination)) : null,
       ])
@@ -407,10 +403,10 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       yield* merge(
         runSource &&
           srcConnector?.teardown &&
-          map(srcConnector.teardown({ config: sourceConfig! }), tag(sourceTag)),
+          map(srcConnector.teardown({ config: srcSpec!.config }), tag(sourceTag)),
         runDest &&
           destConnector?.teardown &&
-          map(destConnector.teardown({ config: destConfig! }), tag(destTag))
+          map(destConnector.teardown({ config: destSpec!.config }), tag(destTag))
       )
     },
 
@@ -419,9 +415,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         (async function* () {
           const connector = await resolver.resolveSource(pipeline.source.type)
           const rawSrc = configPayload(pipeline.source)
-          const sourceConfig = await getSpec(connector, rawSrc)
+          const { config: sourceConfig, streamStateSchema } = await getSpec(connector, rawSrc)
           const { catalog } = await discoverCatalog(engine, pipeline)
-          const normalizedState = coerceSyncState(opts?.state)
+          const normalizedState = parseSyncState(opts?.state, streamStateSchema)
           const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
           const state = normalizedState?.source
 
@@ -441,7 +437,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         (async function* () {
           const connector = await resolver.resolveDestination(pipeline.destination.type)
           const rawDest = configPayload(pipeline.destination)
-          const destConfig = await getSpec(connector, rawDest)
+          const { config: destConfig } = await getSpec(connector, rawDest)
           const { filteredCatalog } = await discoverCatalog(engine, pipeline)
 
           const destInput = pipe(
@@ -470,14 +466,14 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           // limits + eof once at the end via takeLimits/trackProgress.
           const srcConnector = await resolver.resolveSource(pipeline.source.type)
           const rawSrc = configPayload(pipeline.source)
-          const sourceConfig = await getSpec(srcConnector, rawSrc)
+          const { config: sourceConfig, streamStateSchema } = await getSpec(srcConnector, rawSrc)
 
           const destConnector = await resolver.resolveDestination(pipeline.destination.type)
           const rawDest = configPayload(pipeline.destination)
-          const destConfig = await getSpec(destConnector, rawDest)
+          const { config: destConfig } = await getSpec(destConnector, rawDest)
 
           const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
-          const normalizedState = coerceSyncState(opts?.state)
+          const normalizedState = parseSyncState(opts?.state, streamStateSchema)
           const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
           const sourceState = normalizedState?.source
 

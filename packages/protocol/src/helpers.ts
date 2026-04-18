@@ -1,10 +1,8 @@
 import type {
-  CatalogMessage,
   ConnectionStatusMessage,
   ConnectionStatusPayload,
   ControlMessage,
   ControlPayload,
-  DestinationInput,
   EofMessage,
   EofPayload,
   GlobalStatePayload,
@@ -14,153 +12,64 @@ import type {
   ProgressMessage,
   ProgressPayload,
   RecordMessage,
-  RecordPayload,
   SectionState,
+  SourceState,
   SourceStateMessage,
-  SpecMessage,
   StreamStatusMessage,
   StreamStatusPayload,
   StreamStatePayload,
   SyncState,
 } from './protocol.js'
+import { SyncState as SyncStateSchema } from './protocol.js'
+import type { z } from 'zod'
 
-// MARK: - Message constructors
-
-/** Wrap a raw object into an envelope RecordMessage. */
-export function toRecordMessage(stream: string, data: Record<string, unknown>): RecordMessage {
-  return {
-    type: 'record',
-    record: {
-      stream,
-      data,
-      emitted_at: new Date().toISOString(),
-    },
-  }
-}
-
-/** Extract the raw data from a RecordMessage. */
-export function fromRecordMessage(msg: RecordMessage): Record<string, unknown> {
-  return msg.record.data as Record<string, unknown>
-}
-
-/** Extract the stream name from a RecordMessage. */
-export function recordStream(msg: RecordMessage): string {
-  return msg.record.stream
-}
-
-/** Extract the stream name from a SourceStateMessage, or undefined for global state. */
-export function stateStream(msg: SourceStateMessage): string | undefined {
-  return msg.source_state.state_type === 'global' ? undefined : msg.source_state.stream
-}
+// MARK: - Message accessors
 
 /** Extract the state data from a SourceStateMessage. */
 export function stateData(msg: SourceStateMessage): unknown {
   return msg.source_state.data
 }
 
-// MARK: - Type guards
-
-export function isRecordMessage(msg: Message): msg is RecordMessage {
-  return msg.type === 'record'
-}
-
-export function isStateMessage(msg: Message): msg is SourceStateMessage {
-  return msg.type === 'source_state'
-}
-
-export function isCatalogMessage(msg: Message): msg is CatalogMessage {
-  return msg.type === 'catalog'
-}
-
-export function isLogMessage(msg: Message): msg is LogMessage {
-  return msg.type === 'log'
-}
-
-export function isSpecMessage(msg: Message): msg is SpecMessage {
-  return msg.type === 'spec'
-}
-
-export function isConnectionStatusMessage(msg: Message): msg is ConnectionStatusMessage {
-  return msg.type === 'connection_status'
-}
-
-export function isControlMessage(msg: Message): msg is ControlMessage {
-  return msg.type === 'control'
-}
-
-export function isStreamStatusMessage(msg: Message): msg is StreamStatusMessage {
-  return msg.type === 'stream_status'
-}
-
-export function isProgressMessage(msg: Message): msg is ProgressMessage {
-  return msg.type === 'progress'
-}
-
-export function isEofMessage(msg: Message): msg is EofMessage {
-  return msg.type === 'eof'
-}
-
-/** Type guard for "data" messages: record + source_state (the DestinationInput union). */
-export function isDataMessage(msg: Message): msg is DestinationInput {
-  return msg.type === 'record' || msg.type === 'source_state'
-}
-
 export function emptySectionState(): SectionState {
+  return { streams: {}, global: {} }
+}
+
+export function emptySourceState(): SourceState {
   return { streams: {}, global: {} }
 }
 
 export function emptySyncState(): SyncState {
   return {
-    source: emptySectionState(),
-    destination: emptySectionState(),
-    engine: emptySectionState(),
-  }
-}
-
-function coerceSectionState(input: unknown): SectionState {
-  if (!input || typeof input !== 'object') return emptySectionState()
-  const obj = input as Record<string, unknown>
-  return {
-    streams:
-      obj.streams && typeof obj.streams === 'object'
-        ? (obj.streams as Record<string, unknown>)
-        : {},
-    global:
-      obj.global && typeof obj.global === 'object' ? (obj.global as Record<string, unknown>) : {},
+    source: emptySourceState(),
+    destination: {},
+    sync_run: {},
   }
 }
 
 /**
- * Backward-compatible coercion for sync state.
- *
- * Accepts:
- * - SyncState { source, destination, engine }
- * - SourceState / SectionState { streams, global }
- * - legacy flat per-stream map { customers: { ... } }
+ * Parse sync state strictly. Returns undefined for null/undefined input,
+ * or empty state if validation fails. When a streamStateSchema is provided,
+ * every per-stream value is validated against it — any failure discards
+ * the entire state.
  */
-export function coerceSyncState(input: unknown): SyncState | undefined {
+export function parseSyncState(
+  input: unknown,
+  streamStateSchema?: z.ZodType
+): SyncState | undefined {
   if (input == null) return undefined
-  if (typeof input !== 'object') return undefined
-
-  const obj = input as Record<string, unknown>
-  if ('source' in obj || 'destination' in obj || 'engine' in obj) {
-    return {
-      source: coerceSectionState(obj.source),
-      destination: coerceSectionState(obj.destination),
-      engine: coerceSectionState(obj.engine),
+  const envelope = SyncStateSchema.safeParse(input)
+  if (!envelope.success) return emptySyncState()
+  if (!streamStateSchema) return envelope.data
+  for (const value of Object.values(envelope.data.source.streams)) {
+    if (value != null && !streamStateSchema.safeParse(value).success) {
+      return emptySyncState()
     }
   }
-  if ('streams' in obj || 'global' in obj) {
-    return {
-      ...emptySyncState(),
-      source: coerceSectionState(obj),
-    }
-  }
-  return {
-    ...emptySyncState(),
-    source: { streams: obj, global: {} },
-  }
+  return envelope.data
 }
+
+/** @deprecated Use parseSyncState */
+export const coerceSyncState = parseSyncState
 
 // MARK: - Stream collector
 
@@ -224,21 +133,6 @@ export async function drain(stream: AsyncIterable<{ type: string }>): Promise<{ 
 
 // MARK: - Envelope constructors
 
-/** Shorthand to create a record envelope message. */
-export function recordMsg(payload: RecordPayload): RecordMessage {
-  return { type: 'record', record: payload }
-}
-
-/** Shorthand to create a source_config control message. */
-export function sourceControlMsg<T extends Record<string, unknown>>(
-  source_config: T
-): ControlMessage {
-  return {
-    type: 'control',
-    control: { control_type: 'source_config', source_config },
-  }
-}
-
 /** Shorthand to create a destination_config control message. */
 export function destinationControlMsg<T extends Record<string, unknown>>(
   destination_config: T
@@ -261,11 +155,6 @@ export function stateMsg(
       ? (payload as GlobalStatePayload)
       : { state_type: 'stream' as const, ...(payload as { stream: string; data: unknown }) }
   return { type: 'source_state', source_state }
-}
-
-/** Shorthand to create a stream_status envelope message. */
-export function streamStatusMsg(payload: StreamStatusPayload): StreamStatusMessage {
-  return { type: 'stream_status', stream_status: payload }
 }
 
 // MARK: - Source message factory

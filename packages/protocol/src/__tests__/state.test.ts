@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SourceState, StatePayload, StreamStatePayload, GlobalStatePayload } from '../protocol.js'
-import { stateMsg, stateStream, stateData } from '../helpers.js'
+import { stateMsg, stateData } from '../helpers.js'
 
 describe('SourceState', () => {
   it('parses a full SourceState', () => {
@@ -100,18 +100,6 @@ describe('stateMsg helper', () => {
     expect(msg.type).toBe('source_state')
     expect(msg.source_state.state_type).toBe('global')
     expect(msg.source_state.data).toEqual({ events_cursor: 'evt_1' })
-  })
-})
-
-describe('stateStream helper', () => {
-  it('returns stream name for stream state', () => {
-    const msg = stateMsg({ stream: 'orders', data: {} })
-    expect(stateStream(msg)).toBe('orders')
-  })
-
-  it('returns undefined for global state', () => {
-    const msg = stateMsg({ state_type: 'global', data: {} })
-    expect(stateStream(msg)).toBeUndefined()
   })
 })
 
