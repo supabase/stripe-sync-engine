@@ -15,14 +15,18 @@ import {
   SyncState,
   type SourceState,
   coerceSyncState,
+  emptySyncState,
+  createEngineMessageFactory,
   collectFirst,
   merge,
   map,
   withAbortOnReturn,
 } from '@stripe/sync-protocol'
 
+const engineMsg = createEngineMessageFactory()
+
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
-import { trackProgress } from './progress.js'
+import { createInitialProgress, progressReducer } from './progress/index.js'
 import { applySelection } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 
@@ -474,16 +478,61 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             { config: destConfig, catalog: filteredCatalog },
             destInput
           )
-          // Apply limits and track progress (eof emitted here, not before)
+          // Apply limits
           const limited = takeLimits<SyncOutput>({
             state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
           })(destOutput as AsyncIterable<SyncOutput>)
 
-          yield* trackProgress({
-            initial_state: normalizedState,
-          })(limited)
+          // Track progress and accumulate state
+          const syncState = structuredClone(normalizedState ?? emptySyncState())
+          let progress = createInitialProgress(normalizedState?.sync_run?.progress)
+          const startedAtMs = Date.now()
+
+          for await (const msg of limited) {
+            // Accumulate sync state
+            if (msg.type === 'source_state') {
+              if (msg.source_state.state_type === 'stream') {
+                syncState.source.streams[msg.source_state.stream] = msg.source_state.data
+              } else if (msg.source_state.state_type === 'global') {
+                syncState.source.global = msg.source_state.data as Record<string, unknown>
+              }
+            }
+
+            progress = progressReducer(progress, msg as Message)
+
+            // Emit eof with progress
+            if (msg.type === 'eof') {
+              const elapsed = Date.now() - startedAtMs
+              const elapsedSec = Math.max(elapsed / 1000, 0.001)
+              let totalRecords = 0
+              for (const sp of Object.values(progress.streams)) totalRecords += sp.record_count
+              const finalProgress = {
+                ...progress,
+                elapsed_ms: elapsed,
+                derived: { ...progress.derived, records_per_second: totalRecords / elapsedSec, states_per_second: progress.global_state_count / elapsedSec },
+              }
+              yield {
+                ...engineMsg.eof({
+                  has_more: msg.eof.has_more,
+                  ending_state: syncState,
+                  run_progress: finalProgress,
+                  request_progress: finalProgress,
+                }),
+                _emitted_by: 'engine',
+                _ts: new Date().toISOString(),
+              } as SyncOutput
+              return
+            }
+
+            yield msg
+
+            // Emit progress on interesting messages
+            if (msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status') {
+              yield { ...engineMsg.progress(progress), _emitted_by: 'engine', _ts: new Date().toISOString() } as SyncOutput
+            }
+          }
         })()
       )
     },
