@@ -189,11 +189,17 @@ async function startEngineDocker(port: number): Promise<EngineContainer> {
         '-d',
         '--name',
         containerName,
+        '--entrypoint',
+        'node',
+        '-e',
+        'PORT=3000',
         '-p',
         `${port}:3000`,
         '--add-host',
         'host.docker.internal:host-gateway',
         image,
+        '/app/dist/cli/index.js',
+        'serve',
       ],
       {
         cwd: REPO_ROOT,
@@ -231,7 +237,7 @@ describe('docker serve header size', () => {
     await mockStripe?.close()
   })
 
-  it('accepts a pipeline header larger than Node default when run via the serve binary', async () => {
+  it('accepts a pipeline header larger than Node default when run via the CLI serve command', async () => {
     const pipelineHeader = makePipelineHeader(TEST_HEADER_SIZE, dockerVisibleUrl(mockStripe.url))
     expect(Buffer.byteLength(pipelineHeader)).toBeGreaterThan(DEFAULT_NODE_MAX_HEADER_SIZE)
 

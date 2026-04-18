@@ -1,11 +1,11 @@
+import 'dotenv/config'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { parseJsonOrFile } from '@stripe/sync-ts-cli'
 import { createConnectorResolver, createEngine } from '../lib/index.js'
-import type { ConnectorResolver } from '../lib/index.js'
 import { createApp } from '../api/app.js'
-import { startApiServer } from '../api/server.js'
+import { serveAction } from '../serve-command.js'
 import { backfillCmd } from './backfill.js'
 import { supabaseCmd } from './supabase.js'
 import { createSyncCmd } from './sync.js'
@@ -29,6 +29,23 @@ const connectorArgs = {
   },
 }
 
+// Hand-written workflow command: start HTTP server
+const serveCmd = defineCommand({
+  meta: { name: 'serve', description: 'Start the HTTP API server' },
+  args: {
+    port: { type: 'string', description: 'Port to listen on (or PORT env)' },
+    ...connectorArgs,
+  },
+  async run({ args }) {
+    await serveAction({
+      port: args.port ? parseInt(args.port) : undefined,
+      connectorsFromCommandMap: args.connectorsFromCommandMap,
+      connectorsFromPath: !args.noConnectorsFromPath,
+      connectorsFromNpm: args.connectorsFromNpm,
+    })
+  },
+})
+
 /**
  * Pre-parse connector discovery flags from process.argv so the resolver
  * is configured before the one-shot CLI commands (check, read, etc.) run.
@@ -51,22 +68,6 @@ function parseConnectorFlags(): {
     connectorsFromNpm: npm,
     connectorsFromCommandMap: commandMap,
   }
-}
-
-function createServeCmd(resolver: ConnectorResolver) {
-  return defineCommand({
-    meta: { name: 'serve', description: 'Start the HTTP API server' },
-    args: {
-      port: { type: 'string', description: 'Port to listen on (or PORT env)' },
-      ...connectorArgs,
-    },
-    async run({ args }) {
-      await startApiServer({
-        resolver,
-        port: args.port ? parseInt(args.port) : undefined,
-      })
-    },
-  })
 }
 
 export async function createProgram() {
@@ -96,8 +97,6 @@ export async function createProgram() {
       version: '0.1.0',
     },
   })
-
-  const serveCmd = createServeCmd(resolver)
 
   return defineCommand({
     ...specCli,

@@ -49,7 +49,8 @@ ENV NODE_ENV=production
 ENV GIT_COMMIT=$GIT_COMMIT
 ENV BUILD_DATE=$BUILD_DATE
 ENV COMMIT_URL=$COMMIT_URL
-ENTRYPOINT ["node", "--use-env-proxy", "dist/bin/serve.js"]
+ENTRYPOINT ["node", "--use-env-proxy", "dist/cli/index.js"]
+CMD ["serve"]
 
 # ===========================================================================
 # Service (also used for the worker container — same image, different CMD)

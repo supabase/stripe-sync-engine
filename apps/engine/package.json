@@ -5,8 +5,7 @@
   "description": "Stripe Sync Engine — sync Stripe data to Postgres",
   "type": "module",
   "bin": {
-    "sync-engine": "./dist/bin/sync-engine.js",
-    "sync-engine-serve": "./dist/bin/serve.js"
+    "sync-engine": "./dist/cli/index.js"
   },
   "exports": {
     ".": {
@@ -20,9 +19,9 @@
       "import": "./dist/cli/command.js"
     },
     "./api": {
-      "bun": "./src/api/index.ts",
-      "types": "./dist/api/index.d.ts",
-      "import": "./dist/api/index.js"
+      "bun": "./src/api/app.ts",
+      "types": "./dist/api/app.d.ts",
+      "import": "./dist/api/app.js"
     },
     "./api/openapi-utils": {
       "bun": "./src/api/openapi-utils.ts",
@@ -33,7 +32,7 @@
   "scripts": {
     "build": "tsc",
     "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
-    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/bin/serve.ts",
+    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/api/index.ts",
     "test": "vitest run",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },

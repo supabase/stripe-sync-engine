@@ -37,4 +37,4 @@ PIPELINE=$(node -e "console.log(JSON.stringify({
   streams: [{ name: 'products' }, { name: 'customers' }],
 }))")
 
-$RUN apps/engine/src/bin/sync-engine.ts pipeline-sync --xPipeline "$PIPELINE"
+$RUN apps/engine/src/cli/index.ts pipeline-sync --xPipeline "$PIPELINE"
