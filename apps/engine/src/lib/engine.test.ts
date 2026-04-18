@@ -691,6 +691,104 @@ describe('engine stream membership validation', () => {
 })
 
 // ---------------------------------------------------------------------------
+// engine.pipeline_read() input state validation
+// ---------------------------------------------------------------------------
+
+describe('engine.pipeline_read() input state validation', () => {
+  const stateStreamSchema = {
+    type: 'object',
+    properties: {
+      remaining: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            gte: { type: 'string' },
+            lt: { type: 'string' },
+            cursor: { type: ['string', 'null'] },
+          },
+          required: ['gte', 'lt', 'cursor'],
+        },
+      },
+    },
+    required: ['remaining'],
+  }
+
+  /** A source whose spec declares source_state_stream. */
+  const sourceWithStateSchema: Source = {
+    async *spec() {
+      yield {
+        type: 'spec' as const,
+        spec: { config: {}, source_state_stream: stateStreamSchema },
+      }
+    },
+    async *check() {
+      yield { type: 'connection_status' as const, connection_status: { status: 'succeeded' as const } }
+    },
+    async *discover() {
+      yield {
+        type: 'catalog' as const,
+        catalog: { streams: [{ name: 'customers', json_schema: {} }] },
+      }
+    },
+    async *read() {
+      yield { type: 'record' as const, record: { stream: 'customers', data: { id: '1' }, emitted_at: new Date().toISOString() } }
+    },
+  }
+
+  it('rejects invalid input state when source declares source_state_stream', async () => {
+    const engine = await createEngine(makeResolver(sourceWithStateSchema, destinationTest))
+    const pipeline = {
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
+    }
+    await expect(
+      drain(
+        engine.pipeline_read(pipeline, {
+          state: { source: { streams: { customers: 'not-an-object' }, global: {} } },
+        })
+      )
+    ).rejects.toThrow(/Invalid state for stream "customers"/)
+  })
+
+  it('accepts valid input state matching source_state_stream schema', async () => {
+    const engine = await createEngine(makeResolver(sourceWithStateSchema, destinationTest))
+    const pipeline = {
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
+    }
+    const results = await drain(
+      engine.pipeline_read(pipeline, {
+        state: {
+          source: {
+            streams: {
+              customers: { remaining: [{ gte: '2024-01-01', lt: '2025-01-01', cursor: null }] },
+            },
+            global: {},
+          },
+        },
+      })
+    )
+    expect(results.length).toBeGreaterThan(0)
+  })
+
+  it('skips validation when source does not declare source_state_stream', async () => {
+    const engine = await createEngine(makeResolver(sourceTest, destinationTest))
+    const pipeline = {
+      source: { type: 'test', test: { streams: { customers: {} } } },
+      destination: { type: 'test', test: {} },
+    }
+    // Any state shape should be accepted
+    const results = await drain(
+      engine.pipeline_read(pipeline, {
+        state: { source: { streams: { customers: { anything: 'goes' } }, global: {} } },
+      })
+    )
+    expect(results.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // engine.pipeline_sync() pipeline tests
 // ---------------------------------------------------------------------------
 

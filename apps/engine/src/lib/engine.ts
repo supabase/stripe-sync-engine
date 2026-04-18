@@ -284,14 +284,52 @@ function configPayload(envelope: {
   return (envelope[envelope.type] as Record<string, unknown>) ?? {}
 }
 
+/**
+ * Validate per-stream state data against the source's declared state schema.
+ * Throws ZodError if any stream's cursor data doesn't match the schema.
+ * No-op when the connector doesn't declare a source_state_stream schema.
+ */
+function validateInputState(
+  rawStateSchema: Record<string, unknown> | undefined,
+  state: SectionState | undefined
+): void {
+  if (!rawStateSchema || !state?.streams) return
+  const entries = Object.entries(state.streams)
+  if (entries.length === 0) return
+  const validator = z.fromJSONSchema(rawStateSchema)
+  for (const [stream, data] of entries) {
+    try {
+      validator.parse(data)
+    } catch (err) {
+      throw new Error(
+        `Invalid state for stream "${stream}": ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
+  }
+}
+
+/** Helper to get spec from a connector and parse config. */
+async function getSpec(
+  connector: { spec(): AsyncIterable<Message> },
+  rawConfig: Record<string, unknown>
+): Promise<{ config: Record<string, unknown>; stateStreamSchema?: Record<string, unknown> }> {
+  const specMsg = await collectFirst(connector.spec(), 'spec')
+  const config = z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
+  let stateStreamSchema: Record<string, unknown> | undefined
+  if (specMsg.spec.source_state_stream) {
+    const { $schema: _, ...schema } = specMsg.spec.source_state_stream
+    stateStreamSchema = schema
+  }
+  return { config, stateStreamSchema }
+}
+
 /** Helper to get spec config from a connector (spec() is now async iterable). */
 async function getSpecConfig(
   connector: { spec(): AsyncIterable<Message> },
   rawConfig: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const specMsg = await collectFirst(connector.spec(), 'spec')
-
-  return z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
+  const { config } = await getSpec(connector, rawConfig)
+  return config
 }
 
 /** Discover and build catalog for a pipeline. */
@@ -492,11 +530,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         (async function* () {
           const connector = await resolver.resolveSource(pipeline.source.type)
           const rawSrc = configPayload(pipeline.source)
-          const sourceConfig = await getSpecConfig(connector, rawSrc)
+          const { config: sourceConfig, stateStreamSchema } = await getSpec(connector, rawSrc)
           const { catalog } = await discoverCatalog(engine, pipeline)
           const normalizedState = coerceSyncState(opts?.state)
           injectTimeRanges(catalog, normalizedState?.engine)
           const state = normalizedState?.source
+          validateInputState(stateStreamSchema, state)
 
           const raw = connector.read({ config: sourceConfig, catalog, state }, input)
           const logged = withLoggedStream(
@@ -528,7 +567,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const { filteredCatalog } = await discoverCatalog(engine, pipeline)
 
           const destInput = pipe(
-            messages,
+            map(messages, (msg) => Message.parse(msg)),
             enforceCatalog(filteredCatalog),
             log,
             filterType('record', 'source_state')
