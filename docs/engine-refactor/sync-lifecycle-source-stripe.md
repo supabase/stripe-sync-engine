@@ -16,6 +16,10 @@ the right granularity by doing the work.
 
 ```ts
 type StripeStreamState = {
+  accounted_range: {
+    gte: string // ISO 8601 — inclusive lower bound
+    lt: string // ISO 8601 — exclusive upper bound
+  }
   remaining: Array<{
     gte: string // ISO 8601 — inclusive lower bound
     lt: string // ISO 8601 — exclusive upper bound
@@ -24,10 +28,19 @@ type StripeStreamState = {
 }
 ```
 
+- `accounted_range` → the `time_range` that `remaining` was computed against.
 - `cursor: null` → range planned but first page not yet fetched.
 - `cursor: "cus_abc"` → resume pagination after this object.
 - Range removed from list → complete.
-- `remaining: []` → source is done with the assigned `time_range`.
+- `remaining: []` → source is done with the `accounted_range`.
+
+### Constraints
+
+- Only resources with `created[gte]`/`created[lt]` filter support are
+  supported. Resources without created filter are out of scope.
+- Because `time_range.lt` is always in the past (frozen `time_ceiling`), no
+  new objects can appear within a completed range. This makes the n-ary
+  subdivision safe without needing a global `starting_after` safety cursor.
 
 ## Algorithm
 
@@ -104,21 +117,83 @@ Subdivision happens between requests, not mid-request.
 it gets split again next time. Each pass narrows the ranges until they're
 small enough to complete in a single request.
 
-### 4. Resumption (existing state)
+### 4. Resumption (existing state, same time_range)
 
-If the source has existing state (from a previous request in the same sync
-run), it resumes directly from `remaining`:
+If the source has existing state and the incoming `time_range` matches
+`accounted_range`, it resumes directly from `remaining`:
 
 ```
 Source receives time_range { gte: "2018-01-01", lt: "2024-04-17" }
 Existing state: {
+  accounted_range: { gte: "2018-01-01", lt: "2024-04-17" },
   remaining: [
     { gte: "2022-05-16", lt: "2024-04-17", cursor: "cus_xyz" }
   ]
 }
 
+→ accounted_range matches time_range — no reconciliation needed
 → Resume paginating from cus_xyz in [2022-05-16, 2024-04-17)
-→ No re-initialization
+```
+
+### 4b. Reconciliation (time_range changed)
+
+If the incoming `time_range` differs from `accounted_range`, the source
+reconciles `remaining` before resuming. This happens across sync runs (new
+`time_ceiling`) or when the client changes the catalog.
+
+**Rules:**
+
+1. Drop ranges fully outside the new `time_range`
+2. Trim ranges that partially overlap the new boundaries
+3. Add new ranges for uncovered territory:
+   - If `time_range.gte < accounted_range.gte`: add `[time_range.gte, accounted_range.gte)`
+   - If `time_range.lt > accounted_range.lt`: add `[accounted_range.lt, time_range.lt)`
+4. Set `accounted_range = time_range`
+
+**Example — lt extended (new run, new time_ceiling):**
+
+```
+accounted_range: { gte: "2018", lt: "2024" }
+remaining: []  (previous run completed)
+
+Incoming time_range: { gte: "2018", lt: "2026" }
+
+→ Gap: [2024, 2026) not covered
+→ Add { gte: "2024", lt: "2026", cursor: null }
+→ accounted_range = { gte: "2018", lt: "2026" }
+```
+
+**Example — gte advanced (engine advanced based on completed_ranges):**
+
+```
+accounted_range: { gte: "2018", lt: "2026" }
+remaining: [
+  { gte: "2018", lt: "2020", cursor: "cus_abc" },
+  { gte: "2022", lt: "2026", cursor: null }
+]
+
+Incoming time_range: { gte: "2020", lt: "2026" }
+
+→ Drop { gte: "2018", lt: "2020", cursor: "cus_abc" } (fully below new gte)
+→ remaining: [{ gte: "2022", lt: "2026", cursor: null }]
+→ accounted_range = { gte: "2020", lt: "2026" }
+```
+
+**Example — gte decreased (user widened backwards):**
+
+```
+accounted_range: { gte: "2018", lt: "2024" }
+remaining: [{ gte: "2022", lt: "2024", cursor: "cus_xyz" }]
+
+Incoming time_range: { gte: "2016", lt: "2024" }
+
+→ Gap: [2016, 2018) not covered
+→ Add { gte: "2016", lt: "2018", cursor: null }
+→ remaining: [
+    { gte: "2016", lt: "2018", cursor: null },
+    { gte: "2022", lt: "2024", cursor: "cus_xyz" }
+  ]
+→ accounted_range = { gte: "2016", lt: "2024" }
 ```
 
 ### 5. Completion
@@ -127,7 +202,7 @@ When a sub-range is exhausted, the source removes it from `remaining` and
 emits a `stream_status: range_complete`:
 
 ```
-→ emit trace { stream_status: { stream: 'customers', status: 'range_complete',
+→ emit stream_status: { stream: 'customers', status: 'range_complete',
     range_complete: { gte: '2018-01-01', lt: '2019-06-01' } } }
 ```
 
@@ -149,7 +224,7 @@ checkpoint.
 ```
 Source initializes: remaining: [{ gte: "2018", lt: "2024", cursor: null }]
 
-← trace   { stream_status: { stream: "customers", status: "start" } }
+← stream_status: { stream: "customers", status: "start" } }
 ← record  { stream: "customers", data: { id: "cus_001", ... } }
   ... 100 records (page 1) ...
 ← state   { stream: "customers", data: { remaining: [{ gte: "2018", lt: "2024", cursor: "cus_100" }] } }
@@ -180,7 +255,7 @@ Last record had created=2019-03. Range didn't complete → subdivide:
   ... 100 records (page) ...
 ← state   { ... }
   ... finishes [2018, 2019-03) after a few more pages ...
-← trace   { stream_status: { stream: "customers", status: "range_complete",
+← stream_status: { stream: "customers", status: "range_complete",
               range_complete: { gte: "2018", lt: "2019-03" } } }
 ← state   { stream: "customers", data: { remaining: [
               { gte: "2019-03", lt: "2021-09", cursor: null },
@@ -206,13 +281,13 @@ Source resumes: remaining: [
 These ranges made progress last request — no further subdivision, resume.
 
   ... paginates [2019-03, 2021-09) page by page ...
-← trace   { stream_status: { stream: "customers", status: "range_complete",
+← stream_status: { stream: "customers", status: "range_complete",
               range_complete: { gte: "2019-03", lt: "2021-09" } } }
   ... paginates [2021-09, 2024) page by page ...
-← trace   { stream_status: { stream: "customers", status: "range_complete",
+← stream_status: { stream: "customers", status: "range_complete",
               range_complete: { gte: "2021-09", lt: "2024" } } }
 ← state   { stream: "customers", data: { remaining: [] } }
-← trace   { stream_status: { stream: "customers", status: "complete" } }
+← stream_status: { stream: "customers", status: "complete" } }
 
 ← end     { has_more: false }
 ```
@@ -305,11 +380,11 @@ These are passed through by the engine.
 ## Error Handling
 
 - **Transient errors** (rate limits, 5xx, timeouts): Retried at the HTTP
-  layer with exponential backoff. Emit a `transient` error trace for
-  observability regardless of whether the retry succeeded.
-- **Stream errors** (resource not available, permission denied): Emit a
-  `stream` error trace, stop this stream, move to the next.
-- **Global errors** (invalid API key): Emit a `global` error trace, stop.
+  layer with exponential backoff. Log a warning for observability.
+- **Stream errors** (resource not available, permission denied): Log the
+  error, emit `stream_status: error`, move to the next stream.
+- **Global errors** (invalid API key): Emit `connection_status: failed`
+  with reason, then exhaust.
 
 The source does not store error state. If a range fails after all retries,
 the range stays in `remaining` with its cursor for the next attempt.
