@@ -147,14 +147,6 @@ export interface Engine {
   ): AsyncIterable<SyncOutput>
 }
 
-function engineLogContext(pipeline: PipelineConfig): Record<string, unknown> {
-  return {
-    sourceName: pipeline.source.type,
-    destinationName: pipeline.destination.type,
-    configuredStreamCount: pipeline.streams?.length ?? 0,
-    configuredStreams: pipeline.streams?.map((stream) => stream.name) ?? [],
-  }
-}
 
 
 /**
@@ -261,12 +253,42 @@ export function injectTimeRanges(catalog: ConfiguredCatalog, timeCeiling?: strin
   }
 }
 
-// MARK: - Factory
+// MARK: - Helpers
 
 /** Tag each message with `_emitted_by` and `_ts`. */
 function tag<T extends Message>(emitter: string): (msg: T) => T {
   return (msg) => ({ ...msg, _emitted_by: emitter, _ts: new Date().toISOString() })
 }
+
+/** Stamp a message as engine-emitted. */
+function emit<T extends Record<string, unknown>>(msg: T): SyncOutput {
+  return { ...msg, _emitted_by: 'engine', _ts: new Date().toISOString() } as SyncOutput
+}
+
+/** Accumulate source state from messages. Pure. */
+function stateReducer(state: SyncState, msg: Message): SyncState {
+  if (msg.type !== 'source_state') return state
+  if (msg.source_state.state_type === 'stream') {
+    return {
+      ...state,
+      source: { ...state.source, streams: { ...state.source.streams, [msg.source_state.stream]: msg.source_state.data } },
+    }
+  }
+  if (msg.source_state.state_type === 'global') {
+    return {
+      ...state,
+      source: { ...state.source, global: msg.source_state.data as Record<string, unknown> },
+    }
+  }
+  return state
+}
+
+/** Messages that should trigger a progress emission. */
+function isProgressTrigger(msg: { type: string }): boolean {
+  return msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status'
+}
+
+// MARK: - Factory
 
 /**
  * Create an in-process {@link Engine} backed by the given connector resolver.
@@ -313,7 +335,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     async *pipeline_check(pipeline) {
-      const baseContext = engineLogContext(pipeline)
       const [srcConnector, destConnector] = await Promise.all([
         resolver.resolveSource(pipeline.source.type),
         resolver.resolveDestination(pipeline.destination.type),
@@ -335,7 +356,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     async *pipeline_setup(pipeline, opts?) {
-      const baseContext = engineLogContext(pipeline)
       const runSource = opts?.only !== 'destination'
       const runDest = opts?.only !== 'source'
 
@@ -367,7 +387,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     async *pipeline_teardown(pipeline, opts?) {
-      const baseContext = engineLogContext(pipeline)
       const runSource = opts?.only !== 'destination'
       const runDest = opts?.only !== 'source'
 
@@ -394,7 +413,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     pipeline_read(pipeline, opts?, input?) {
-      const baseContext = engineLogContext(pipeline)
       return withAbortOnReturn((signal) =>
         (async function* () {
           const connector = await resolver.resolveSource(pipeline.source.type)
@@ -417,7 +435,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     pipeline_write(pipeline, messages) {
-      const baseContext = engineLogContext(pipeline)
       return withAbortOnReturn(() =>
         (async function* () {
           const connector = await resolver.resolveDestination(pipeline.destination.type)
@@ -443,7 +460,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     pipeline_sync(pipeline, opts?, input?) {
-      const baseContext = engineLogContext(pipeline)
       return withAbortOnReturn((signal) =>
         (async function* () {
           // pipeline_sync calls connectors directly rather than delegating to
@@ -485,43 +501,20 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             signal,
           })(destOutput as AsyncIterable<SyncOutput>)
 
-          // Track progress and accumulate state
-          const syncState = structuredClone(normalizedState ?? emptySyncState())
+          let syncState = structuredClone(normalizedState ?? emptySyncState())
           let progress = createInitialProgress(normalizedState?.sync_run?.progress)
 
           for await (const msg of limited) {
-            // Accumulate sync state
-            if (msg.type === 'source_state') {
-              if (msg.source_state.state_type === 'stream') {
-                syncState.source.streams[msg.source_state.stream] = msg.source_state.data
-              } else if (msg.source_state.state_type === 'global') {
-                syncState.source.global = msg.source_state.data as Record<string, unknown>
-              }
-            }
-
+            syncState = stateReducer(syncState, msg as Message)
             progress = progressReducer(progress, msg as Message)
 
-            // Emit eof with progress
             if (msg.type === 'eof') {
-              yield {
-                ...engineMsg.eof({
-                  has_more: msg.eof.has_more,
-                  ending_state: syncState,
-                  run_progress: progress,
-                  request_progress: progress,
-                }),
-                _emitted_by: 'engine',
-                _ts: new Date().toISOString(),
-              } as SyncOutput
+              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: progress, request_progress: progress }))
               return
             }
 
             yield msg
-
-            // Emit progress on interesting messages
-            if (msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status') {
-              yield { ...engineMsg.progress(progress), _emitted_by: 'engine', _ts: new Date().toISOString() } as SyncOutput
-            }
+            if (isProgressTrigger(msg)) yield emit(engineMsg.progress(progress))
           }
         })()
       )
