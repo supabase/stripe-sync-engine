@@ -404,7 +404,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
             yield msg
           } else {
             // Pass through messages the destination doesn't handle
-            yield msg as any
+            yield msg
           }
         }
 

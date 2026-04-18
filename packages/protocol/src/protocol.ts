@@ -692,7 +692,7 @@ export interface Source<
       state?: { streams: Record<string, TSourceState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
-  ): AsyncIterable<CoreMessage>
+  ): AsyncIterable<Message>
 
   /** Provision external resources (webhook endpoints, replication slots, etc.). */
   setup?(params: { config: TConfig; catalog: ConfiguredCatalog }): AsyncIterable<SetupOutput>
