@@ -12,7 +12,7 @@ import {
   type SourceState,
   type SyncOutput,
 } from '@stripe/sync-engine'
-import { type StripeStreamState } from '@stripe/sync-source-stripe'
+import { type StreamState } from '@stripe/sync-source-stripe'
 import { BUNDLED_API_VERSION } from '@stripe/sync-openapi'
 import {
   ENGINE_URL,
@@ -61,17 +61,17 @@ describe('test-server sync via Docker engine', () => {
     return ranges
   }
 
-  function pendingState(): StripeStreamState {
+  function pendingState(): StreamState {
     return {
       remaining: [{ gte: toIso(RANGE_START), lt: toIso(RANGE_END), cursor: null }],
     }
   }
 
-  function completeState(): StripeStreamState {
+  function completeState(): StreamState {
     return { remaining: [] }
   }
 
-  function sourceState(streams: Record<string, StripeStreamState>): SourceState {
+  function sourceState(streams: Record<string, StreamState>): SourceState {
     return { streams, global: {} }
   }
 
@@ -291,7 +291,7 @@ describe('test-server sync via Docker engine', () => {
     }
     expect(destIds.size).toBe(expected.length)
 
-    const finalState = state.streams.customers as StripeStreamState
+    const finalState = state.streams.customers as StreamState
     expect(finalState.remaining).toEqual([])
   }, 120_000)
 
@@ -442,7 +442,7 @@ describe('test-server sync via Docker engine', () => {
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(objects.length)
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('second sync after completion emits zero records', async () => {
@@ -529,8 +529,8 @@ describe('test-server sync via Docker engine', () => {
 
     expect(await countRows(destSchema, 'customers')).toBe(customers.length)
     expect(await countRows(destSchema, 'products')).toBe(products.length)
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
-    expect((state.streams.products as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
+    expect((state.streams.products as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('zero objects: empty source completes cleanly with no records', async () => {
@@ -543,7 +543,7 @@ describe('test-server sync via Docker engine', () => {
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(0)
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('single object: exactly one record syncs correctly', async () => {
@@ -557,7 +557,7 @@ describe('test-server sync via Docker engine', () => {
 
     const ids = await listIds(destSchema, 'customers')
     expect(ids).toEqual(['cus_only_one'])
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('data integrity: destination _raw_data matches source objects', async () => {
@@ -608,7 +608,7 @@ describe('test-server sync via Docker engine', () => {
 
     expect(await countRows(destSchema, 'customers')).toBe(objects.length)
     expect(messages.filter((msg) => msg.type === 'source_state').length).toBeGreaterThan(CONC)
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('stress: 25k objects synced successfully', async () => {
@@ -635,7 +635,7 @@ describe('test-server sync via Docker engine', () => {
     ).toBe(0)
     expect(unexpected.length, `unexpected ${unexpected.length} objects`).toBe(0)
     expect(destIds.size).toBe(TOTAL)
-    expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 600_000)
 
   it('multiple keys: concurrent syncs with different API keys do not interfere', async () => {
@@ -665,7 +665,7 @@ describe('test-server sync via Docker engine', () => {
         expect(destIds.has(expected), `key ${apiKey}: missing ${expected}`).toBe(true)
       }
 
-      expect((state.streams.customers as StripeStreamState).remaining).toEqual([])
+      expect((state.streams.customers as StreamState).remaining).toEqual([])
     }
   }, 180_000)
 
@@ -695,6 +695,6 @@ describe('test-server sync via Docker engine', () => {
       expect(destIds.has(object.id), `missing v2 object ${object.id}`).toBe(true)
     }
     expect(destIds.size).toBe(v2Objects.length)
-    expect((state.streams[STREAM] as StripeStreamState).remaining).toEqual([])
+    expect((state.streams[STREAM] as StreamState).remaining).toEqual([])
   }, 120_000)
 })

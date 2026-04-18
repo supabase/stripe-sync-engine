@@ -19,7 +19,7 @@ import {
   generateObjectsFromSchema,
 } from '@stripe/sync-openapi'
 import destinationPostgres from '@stripe/sync-destination-postgres'
-import sourceStripe, { type StripeStreamState } from '@stripe/sync-source-stripe'
+import sourceStripe, { type StreamState } from '@stripe/sync-source-stripe'
 import { utc } from './test-server-harness.js'
 
 const SOURCE_SCHEMA = 'stripe'
@@ -267,7 +267,7 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
         )
       }
 
-      const streamState = finalState[seed.tableName] as StripeStreamState | undefined
+      const streamState = finalState[seed.tableName] as StreamState | undefined
       if (!streamState || streamState.remaining.length !== 0) {
         failures.push(
           `${apiVersion}/${seed.tableName}: final state was ${streamState ? `remaining=${streamState.remaining.length}` : 'missing'}`

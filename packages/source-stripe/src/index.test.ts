@@ -17,7 +17,7 @@ import { fromStripeEvent } from './process-event.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeWebhookEvent, StripeWebSocketClient } from './src-websocket.js'
-import type { StripeStreamState } from './index.js'
+import type { StreamState } from './index.js'
 import { listApiBackfill } from './src-list-api.js'
 import { createInMemoryRateLimiter } from './rate-limiter.js'
 import type { RateLimiter } from './rate-limiter.js'
@@ -28,7 +28,7 @@ const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5, maxSegmentsPerStream: 4 } 
 const TEST_RANGE_GTE = '2010-01-01T00:00:00.000Z'
 const TEST_RANGE_LT = '2030-01-01T00:00:00.000Z'
 
-function remainingInProgress(cursor: string | null): StripeStreamState {
+function remainingInProgress(cursor: string | null): StreamState {
   return {
     remaining: [{ gte: TEST_RANGE_GTE, lt: TEST_RANGE_LT, cursor }],
   }
@@ -40,7 +40,7 @@ function expectRemainingShape(data: unknown): void {
       remaining: expect.any(Array),
     })
   )
-  const rem = (data as StripeStreamState).remaining
+  const rem = (data as StreamState).remaining
   for (const r of rem) {
     expect(r).toMatchObject({ gte: expect.any(String), lt: expect.any(String) })
     expect(r).toHaveProperty('cursor')
@@ -48,11 +48,7 @@ function expectRemainingShape(data: unknown): void {
 }
 
 /** Type-safe helper to find stream_status messages by status and optional stream name. */
-function hasStreamStatus(
-  messages: Message[],
-  status: string,
-  stream?: string
-): boolean {
+function hasStreamStatus(messages: Message[], status: string, stream?: string): boolean {
   return messages.some(
     (m) =>
       m.type === 'stream_status' &&
@@ -272,8 +268,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .status === 'start' &&
+            m.stream_status.status === 'start' &&
             m.stream_status.stream === 'customers'
         )
       ).toBe(true)
@@ -291,8 +286,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .status === 'range_complete' &&
+            m.stream_status.status === 'range_complete' &&
             m.stream_status.stream === 'customers'
         )
       ).toBe(true)
@@ -300,8 +294,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .status === 'complete' &&
+            m.stream_status.status === 'complete' &&
             m.stream_status.stream === 'customers'
         )
       ).toBe(true)
@@ -317,7 +310,7 @@ describe('StripeSource', () => {
       custStates.forEach((m) => expectRemainingShape(m.source_state.data))
       expect(
         custStates.some(
-          (m) => ((m.source_state.data as StripeStreamState).remaining?.length ?? 0) > 0
+          (m) => ((m.source_state.data as StreamState).remaining?.length ?? 0) > 0
         )
       ).toBe(true)
       const finalState = custStates.at(-1)
@@ -375,16 +368,12 @@ describe('StripeSource', () => {
       expect(invRecords).toHaveLength(1)
 
       const starts = messages.filter(
-        (m) =>
-          m.type === 'stream_status' &&
-            m.stream_status.status === 'start'
+        (m) => m.type === 'stream_status' && m.stream_status.status === 'start'
       )
       expect(starts).toHaveLength(2)
 
       const completes = messages.filter(
-        (m) =>
-          m.type === 'stream_status' &&
-            m.stream_status.status === 'complete'
+        (m) => m.type === 'stream_status' && m.stream_status.status === 'complete'
       )
       expect(completes).toHaveLength(2)
 
@@ -457,8 +446,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'start'
         )
       ).toBe(true)
@@ -467,7 +455,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
               0
         )
       ).toBe(true)
@@ -475,18 +463,15 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
-            m.stream_status.status ===
-              'range_complete'
+            m.stream_status.stream === 'customers' &&
+            m.stream_status.status === 'range_complete'
         )
       ).toBe(true)
       expect(
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -635,11 +620,16 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'error', error: expect.stringContaining('Rate limit') },
+        stream_status: {
+          stream: 'customers',
+          status: 'error',
+          error: expect.stringContaining('Rate limit'),
+        },
       })
     })
 
@@ -686,11 +676,16 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'error', error: expect.stringContaining('Connection refused') },
+        stream_status: {
+          stream: 'customers',
+          status: 'error',
+          error: expect.stringContaining('Connection refused'),
+        },
       })
     })
 
@@ -742,7 +737,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'source_state' &&
-            (m as { source_state: { data: StripeStreamState } }).source_state.data.remaining
+            (m as { source_state: { data: StreamState } }).source_state.data.remaining
               ?.length === 0
         )
       ).toBe(true)
@@ -779,11 +774,15 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'stream_status', stream_status: { stream: 'tax_ids', status: 'start' },
+        type: 'stream_status',
+        stream_status: { stream: 'tax_ids', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'connection_status',
-        connection_status: { status: 'failed', message: expect.stringContaining('Invalid API Key') },
+        connection_status: {
+          status: 'failed',
+          message: expect.stringContaining('Invalid API Key'),
+        },
       })
     })
 
@@ -836,7 +835,8 @@ describe('StripeSource', () => {
 
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
-        type: 'stream_status', stream_status: { stream: 'invoices', status: 'start' },
+        type: 'stream_status',
+        stream_status: { stream: 'invoices', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
         type: 'stream_status',
@@ -933,11 +933,7 @@ describe('StripeSource', () => {
       ).toBe(true)
       expect(skipListFn).toHaveBeenCalled()
       expect(
-        messages.some(
-          (m) =>
-            m.type === 'stream_status' &&
-            m.stream_status.status === 'start'
-        )
+        messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
       ).toBe(true)
     })
 
@@ -964,11 +960,7 @@ describe('StripeSource', () => {
       ).toBe(true)
       expect(skipListFn).toHaveBeenCalled()
       expect(
-        messages.some(
-          (m) =>
-            m.type === 'stream_status' &&
-            m.stream_status.status === 'start'
-        )
+        messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
       ).toBe(true)
     })
 
@@ -995,11 +987,7 @@ describe('StripeSource', () => {
       ).toBe(true)
       expect(skipListFn).toHaveBeenCalled()
       expect(
-        messages.some(
-          (m) =>
-            m.type === 'stream_status' &&
-            m.stream_status.status === 'start'
-        )
+        messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
       ).toBe(true)
     })
 
@@ -1028,8 +1016,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -1072,7 +1059,7 @@ describe('StripeSource', () => {
         .filter((m) => m.source_state.stream === 'customers')
         .at(-1)
       expect(checkpointBeforeError).toBeDefined()
-      const rem = (checkpointBeforeError!.source_state.data as StripeStreamState).remaining
+      const rem = (checkpointBeforeError!.source_state.data as StreamState).remaining
       expect(rem.length).toBeGreaterThan(0)
       expect(rem.some((r) => r.cursor === 'cus_1')).toBe(true)
     })
@@ -1112,8 +1099,7 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'start'
         )
       ).toBe(true)
@@ -1130,7 +1116,7 @@ describe('StripeSource', () => {
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
               0
         )
       ).toBe(true)
@@ -1138,18 +1124,15 @@ describe('StripeSource', () => {
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
-            m.stream_status.status ===
-              'range_complete'
+            m.stream_status.stream === 'customers' &&
+            m.stream_status.status === 'range_complete'
         )
       ).toBe(true)
       expect(
         messages.some(
           (m) =>
             m.type === 'stream_status' &&
-            m.stream_status
-              .stream === 'customers' &&
+            m.stream_status.stream === 'customers' &&
             m.stream_status.status === 'complete'
         )
       ).toBe(true)
@@ -1827,10 +1810,8 @@ describe('StripeSource', () => {
         tail.push(n.value!)
         if (
           n.value?.type === 'stream_status' &&
-          n.value.stream_status
-            .status === 'complete' &&
-          n.value.stream_status.stream ===
-            'customers'
+          n.value.stream_status.status === 'complete' &&
+          n.value.stream_status.stream === 'customers'
         ) {
           break
         }
@@ -1839,19 +1820,14 @@ describe('StripeSource', () => {
         tail.some((m) => m.type === 'record' && (m as RecordMessage).record.data.id === 'cus_2')
       ).toBe(true)
       expect(
-        tail.some(
-          (m) =>
-            m.type === 'stream_status' &&
-            m.stream_status.status ===
-              'range_complete'
-        )
+        tail.some((m) => m.type === 'stream_status' && m.stream_status.status === 'range_complete')
       ).toBe(true)
       expect(
         tail.some(
           (m) =>
             m.type === 'source_state' &&
             (m as SourceStateMessage).source_state.stream === 'customers' &&
-            ((m as SourceStateMessage).source_state.data as StripeStreamState).remaining.length ===
+            ((m as SourceStateMessage).source_state.data as StreamState).remaining.length ===
               0
         )
       ).toBe(true)
@@ -2040,21 +2016,18 @@ describe('StripeSource', () => {
         const { value, done } = await iter.next()
         if (done) break
         messages.push(value)
-        if (
-          value?.type === 'stream_status' &&
-          value.stream_status.status === 'complete'
-        ) {
+        if (value?.type === 'stream_status' && value.stream_status.status === 'complete') {
           break
         }
       }
 
-      expect(messages[0]).toMatchObject({ type: 'stream_status', stream_status: { status: 'start' } })
+      expect(messages[0]).toMatchObject({
+        type: 'stream_status',
+        stream_status: { status: 'start' },
+      })
       expect(
         messages.some(
-          (m) =>
-            m.type === 'stream_status' &&
-            m.stream_status.status ===
-              'range_complete'
+          (m) => m.type === 'stream_status' && m.stream_status.status === 'range_complete'
         )
       ).toBe(true)
       expect(messages.some((m) => m.type === 'source_state')).toBe(true)
@@ -2088,9 +2061,7 @@ describe('StripeSource', () => {
       expect(listFn).not.toHaveBeenCalled()
 
       const started = messages.filter(
-        (m): m is TraceMessage =>
-          m.type === 'stream_status' &&
-            m.stream_status.status === 'start'
+        (m): m is TraceMessage => m.type === 'stream_status' && m.stream_status.status === 'start'
       )
       expect(started).toHaveLength(0)
 
@@ -2235,7 +2206,7 @@ describe('StripeSource', () => {
 
       const rangeGteSec = 1_100_000_000
       const rangeLtSec = 1_200_000_000
-      const priorRemaining: StripeStreamState['remaining'] = [
+      const priorRemaining: StreamState['remaining'] = [
         {
           gte: new Date(rangeGteSec * 1000).toISOString(),
           lt: new Date(rangeLtSec * 1000).toISOString(),
@@ -2319,7 +2290,7 @@ describe('StripeSource', () => {
         expectRemainingShape(state.source_state.data)
       }
 
-      const lastData = states[states.length - 1].source_state.data as StripeStreamState
+      const lastData = states[states.length - 1].source_state.data as StreamState
       expect(lastData.remaining).toEqual([])
     })
   })
@@ -2461,9 +2432,7 @@ describe('StripeSource', () => {
       const statusMsgs = messages.filter(
         (m): m is StreamStatusMessage => m.type === 'stream_status'
       )
-      const completes = statusMsgs.filter(
-        (m) => m.stream_status.status === 'complete'
-      )
+      const completes = statusMsgs.filter((m) => m.stream_status.status === 'complete')
       expect(completes).toHaveLength(2)
     })
   })
@@ -2565,7 +2534,8 @@ describe('StripeSource', () => {
         [Symbol.asyncIterator]()
 
       expect((await iter.next()).value).toMatchObject({
-        type: 'stream_status', stream_status: { stream: 'customers', status: 'start' },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'start' },
       })
 
       const blockedNext = iter.next()

@@ -723,7 +723,10 @@ describe('engine.pipeline_read() input state validation', () => {
       }
     },
     async *check() {
-      yield { type: 'connection_status' as const, connection_status: { status: 'succeeded' as const } }
+      yield {
+        type: 'connection_status' as const,
+        connection_status: { status: 'succeeded' as const },
+      }
     },
     async *discover() {
       yield {
@@ -732,7 +735,10 @@ describe('engine.pipeline_read() input state validation', () => {
       }
     },
     async *read() {
-      yield { type: 'record' as const, record: { stream: 'customers', data: { id: '1' }, emitted_at: new Date().toISOString() } }
+      yield {
+        type: 'record' as const,
+        record: { stream: 'customers', data: { id: '1' }, emitted_at: new Date().toISOString() },
+      }
     },
   }
 
@@ -1509,5 +1515,47 @@ describe('injectTimeRanges', () => {
     })
     expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
     expect(catalog.streams[1]!.time_range).toBeUndefined()
+  })
+
+  it('skips streams with supports_time_range: false', () => {
+    const catalog = mkCatalog(['customers'])
+    catalog.streams[0]!.supports_time_range = false
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range).toBeUndefined()
+  })
+
+  it('injects into streams with supports_time_range: true', () => {
+    const catalog = mkCatalog(['customers'])
+    catalog.streams[0]!.supports_time_range = true
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
+  })
+
+  it('injects into streams with supports_time_range: undefined (default)', () => {
+    const catalog = mkCatalog(['customers'])
+    // supports_time_range is not set (undefined) — should still inject
+    injectTimeRanges(catalog, {
+      streams: {
+        customers: {
+          completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+        },
+      },
+      global: {},
+    })
+    expect(catalog.streams[0]!.time_range!.gte).toBe('2024-06-01T00:00:00Z')
   })
 })

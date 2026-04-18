@@ -6,7 +6,7 @@ import type {
   SourceStateMessage,
 } from '@stripe/sync-protocol'
 import source from '../index.js'
-import type { StripeStreamState } from '../index.js'
+import type { StreamState } from '../index.js'
 
 const STRIPE_MOCK_URL = process.env.STRIPE_MOCK_URL ?? 'http://localhost:12111'
 
@@ -48,7 +48,7 @@ describe('events polling (integration — stripe-mock)', () => {
 
   it('fetches and processes events from stripe-mock', async () => {
     // State: all streams complete with events_cursor in the past
-    const state: Record<string, StripeStreamState> = {
+    const state: Record<string, StreamState> = {
       customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 
@@ -74,7 +74,7 @@ describe('events polling (integration — stripe-mock)', () => {
   })
 
   it('preserves status: complete in all state messages during polling', async () => {
-    const state: Record<string, StripeStreamState> = {
+    const state: Record<string, StreamState> = {
       customers: { page_cursor: null, status: 'complete', events_cursor: 0 },
     }
 

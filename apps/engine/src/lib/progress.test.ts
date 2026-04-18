@@ -549,3 +549,184 @@ describe('mergeRanges', () => {
     expect(ranges).toEqual(original)
   })
 })
+
+describe('trackProgress — new message types', () => {
+  it('accumulates stream_status: error into stream errors and sets status', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'start' },
+          },
+          {
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'error', error: 'Connection refused' },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        stream_progress: {
+          customers: {
+            status: 'complete', // error maps to complete in engine (stream is done)
+            errors: [{ message: 'Connection refused' }],
+          },
+        },
+      },
+    })
+  })
+
+  it('tracks stream_status: skip', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'stream_status',
+            stream_status: {
+              stream: 'invoices',
+              status: 'skip',
+              reason: 'only available in testmode',
+            },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      type: 'eof',
+      eof: {
+        stream_progress: {
+          invoices: {
+            status: 'skip',
+            run_record_count: 0,
+            cumulative_record_count: 0,
+          },
+        },
+      },
+    })
+  })
+
+  it('sets has_more: false when reason is complete', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'complete' } }]))
+    )
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({ eof: { has_more: false } })
+  })
+
+  it('sets has_more: true when reason is state_limit', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'state_limit' } }]))
+    )
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({ eof: { has_more: true } })
+  })
+
+  it('sets has_more: true when reason is time_limit', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(toAsync<SyncOutput>([{ type: 'eof', eof: { reason: 'time_limit' } }]))
+    )
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({ eof: { has_more: true } })
+  })
+
+  it('passes through stream_status messages to output', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'start' },
+          },
+          {
+            type: 'stream_status',
+            stream_status: {
+              stream: 'customers',
+              status: 'range_complete',
+              range_complete: { gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' },
+            },
+          },
+          {
+            type: 'stream_status',
+            stream_status: { stream: 'customers', status: 'complete' },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    const streamStatuses = outputs.filter((m) => m.type === 'stream_status')
+    expect(streamStatuses).toHaveLength(3)
+    expect(streamStatuses[0]).toMatchObject({ stream_status: { status: 'start' } })
+    expect(streamStatuses[1]).toMatchObject({ stream_status: { status: 'range_complete' } })
+    expect(streamStatuses[2]).toMatchObject({ stream_status: { status: 'complete' } })
+
+    const eof = outputs.find((m) => m.type === 'eof')
+    expect(eof).toMatchObject({
+      eof: {
+        state: {
+          engine: {
+            streams: {
+              customers: {
+                status: 'complete',
+                completed_ranges: [{ gte: '2024-01-01T00:00:00Z', lt: '2024-06-01T00:00:00Z' }],
+              },
+            },
+          },
+        },
+        stream_progress: {
+          customers: { status: 'complete' },
+        },
+      },
+    })
+  })
+
+  it('captures connection_status: failed from source', async () => {
+    const outputs = await collect(
+      trackProgress({
+        interval_ms: 999_999,
+        recordCounter: createRecordCounter(),
+      })(
+        toAsync<SyncOutput>([
+          {
+            type: 'connection_status',
+            connection_status: { status: 'failed', message: 'Invalid API key' },
+          },
+          { type: 'eof', eof: { reason: 'complete' } },
+        ])
+      )
+    )
+
+    // connection_status is passed through
+    const connStatus = outputs.find((m) => m.type === 'connection_status')
+    expect(connStatus).toMatchObject({
+      connection_status: { status: 'failed', message: 'Invalid API key' },
+    })
+  })
+})

@@ -71,7 +71,7 @@ export type RemainingRange = {
   cursor: string | null // Stripe pagination cursor; null = not yet started
 }
 
-export type StripeStreamState = {
+export type StreamState = {
   accounted_range?: {
     gte: string // ISO 8601 — inclusive lower bound
     lt: string // ISO 8601 — exclusive upper bound
@@ -98,7 +98,7 @@ export type StripeSourceDeps = {
 
 export function createStripeSource(
   deps?: StripeSourceDeps
-): Source<Config, StripeStreamState, WebhookInput | StripeEvent> {
+): Source<Config, StreamState, WebhookInput | StripeEvent> {
   const externalRateLimiter = deps?.rateLimiter
 
   return {
@@ -341,7 +341,7 @@ export function createStripeSource(
               catalog,
               registry,
               streamNames,
-              state: state?.streams as Record<string, StripeStreamState> | undefined,
+              state: state?.streams as Record<string, StreamState> | undefined,
               globalState: state?.global as { events_cursor?: number } | undefined,
               startTimestamp,
               accountId,

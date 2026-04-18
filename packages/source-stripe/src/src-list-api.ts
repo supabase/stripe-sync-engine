@@ -2,7 +2,7 @@ import type { Message, TraceMessage, LogMessage } from '@stripe/sync-protocol'
 import { toRecordMessage, stateMsg, streamStatusMsg } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
-import type { RemainingRange, StripeStreamState } from './index.js'
+import type { RemainingRange, StreamState } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
@@ -159,7 +159,7 @@ export function subdivideRanges(
  *   3. Add new ranges for uncovered territory
  *   4. Return the new accounted_range (= time_range)
  */
-function reconcileRanges(
+export function reconcileRanges(
   remaining: RemainingRange[],
   accounted: { gte: string; lt: string },
   incoming: { gte: string; lt: string }
@@ -339,7 +339,7 @@ async function* paginateRange(opts: {
       data: {
         accounted_range: accountedRange,
         remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range),
-      } satisfies StripeStreamState,
+      } satisfies StreamState,
     })
   }
 
@@ -358,7 +358,7 @@ async function* paginateRange(opts: {
     data: {
       accounted_range: accountedRange,
       remaining: [...remaining],
-    } satisfies StripeStreamState,
+    } satisfies StreamState,
   })
 }
 
@@ -367,7 +367,7 @@ async function* paginateRange(opts: {
 async function* backfillStream(opts: {
   streamName: string
   timeRange: { gte: string; lt: string }
-  streamState: StripeStreamState | undefined
+  streamState: StreamState | undefined
   resourceConfig: ResourceConfig & { listFn: ListFn }
   accountId: string
   rateLimiter: RateLimiter
@@ -548,7 +548,7 @@ export async function* listApiBackfill(opts: {
       timeRange = { gte: toIso(accountCreated), lt: toIso(now) }
     }
 
-    const streamState = state?.[stream.name] as StripeStreamState | undefined
+    const streamState = state?.[stream.name] as StreamState | undefined
 
     streamGenerators.push(
       (async function* () {

@@ -1,7 +1,7 @@
 import type { ConfiguredCatalog, LogMessage, Message } from '@stripe/sync-protocol'
 import { stateMsg } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
-import type { Config, StripeStreamState } from './index.js'
+import type { Config, StreamState } from './index.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeClient } from './client.js'
 import { processStripeEvent } from './process-event.js'
@@ -16,7 +16,7 @@ export async function* pollEvents(opts: {
   catalog: ConfiguredCatalog
   registry: Record<string, ResourceConfig>
   streamNames: Set<string>
-  state: Record<string, StripeStreamState> | undefined
+  state: Record<string, StreamState> | undefined
   globalState?: { events_cursor?: number }
   startTimestamp: number
   accountId: string
