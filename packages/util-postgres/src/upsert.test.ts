@@ -86,7 +86,7 @@ describe('basic insert', () => {
   it('inserts a single row into an empty table', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const r = await rows(table)
@@ -97,7 +97,7 @@ describe('basic insert', () => {
   it('returns inserted data with returning: true', async () => {
     const result = await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       returning: true,
     })
 
@@ -112,14 +112,14 @@ describe('basic update', () => {
     table = await createTable(nextTable())
     await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
   })
 
   it('updates an existing row on conflict', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice Updated', score: 200 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const r = await rows(table)
@@ -134,14 +134,14 @@ describe('no-op skip (IS DISTINCT FROM)', () => {
     table = await createTable(nextTable())
     await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
   })
 
   it('skips update when row is identical', async () => {
     const result = await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       returning: true,
     })
 
@@ -152,7 +152,7 @@ describe('no-op skip (IS DISTINCT FROM)', () => {
   it('performs update when skipNoopUpdates is disabled', async () => {
     const result = await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       skipNoopUpdates: false,
       returning: true,
     })
@@ -176,13 +176,13 @@ describe('JSONB shallow merge', () => {
   it('merges new keys into existing jsonb', async () => {
     await upsert(pool, [{ id: '1', meta: { a: 1 } }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       shallowMergeJsonbColumns: ['meta'],
     })
 
     await upsert(pool, [{ id: '1', meta: { b: 2 } }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       shallowMergeJsonbColumns: ['meta'],
     })
 
@@ -193,13 +193,13 @@ describe('JSONB shallow merge', () => {
   it('preserves existing keys when new keys added', async () => {
     await upsert(pool, [{ id: '1', meta: { x: 'keep', y: 'keep' } }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       shallowMergeJsonbColumns: ['meta'],
     })
 
     await upsert(pool, [{ id: '1', meta: { z: 'new' } }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       shallowMergeJsonbColumns: ['meta'],
     })
 
@@ -214,7 +214,7 @@ describe('JSONB shallow merge', () => {
     // Upsert with shallow merge should work (COALESCE handles NULL)
     await upsert(pool, [{ id: '1', meta: { a: 1 } }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       shallowMergeJsonbColumns: ['meta'],
     })
 
@@ -239,13 +239,13 @@ describe('insertOnlyColumns', () => {
   it('sets created_at on insert, preserves it on update', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', created_at: '2024-01-01' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       insertOnlyColumns: ['created_at'],
     })
 
     await upsert(pool, [{ id: '1', name: 'Alice Updated', created_at: '2099-12-31' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       insertOnlyColumns: ['created_at'],
     })
 
@@ -273,14 +273,14 @@ describe('volatileColumns', () => {
   it('change to noDiffColumn alone does not trigger update', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't1' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       volatileColumns: ['updated_at'],
     })
 
     // Only updated_at changes — should be skipped by IS DISTINCT FROM
     const result = await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't2' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       volatileColumns: ['updated_at'],
       returning: true,
     })
@@ -294,13 +294,13 @@ describe('volatileColumns', () => {
   it('updates noDiffColumn when a real column also changes', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated_at: 't1' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       volatileColumns: ['updated_at'],
     })
 
     await upsert(pool, [{ id: '1', name: 'Bob', updated_at: 't2' }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       volatileColumns: ['updated_at'],
     })
 
@@ -325,12 +325,12 @@ describe('guardColumns', () => {
   it('updates when guard column matches', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', version: 1 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: 'Updated', version: 1 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       guardColumns: ['version'],
       skipNoopUpdates: false,
       returning: true,
@@ -343,12 +343,12 @@ describe('guardColumns', () => {
   it('skips update when guard column does not match', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', version: 1 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: 'Should Not Apply', version: 999 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       guardColumns: ['version'],
       skipNoopUpdates: false,
       returning: true,
@@ -378,7 +378,7 @@ describe('composite keys', () => {
   it('inserts with composite key', async () => {
     await upsert(pool, [{ account_id: 'a1', item_id: 'i1', value: 'hello' }], {
       table,
-      keyColumns: ['account_id', 'item_id'],
+      primaryKeyColumns: ['account_id', 'item_id'],
     })
 
     const r = await rows(table, 'account_id')
@@ -389,12 +389,12 @@ describe('composite keys', () => {
   it('updates on composite key conflict', async () => {
     await upsert(pool, [{ account_id: 'a1', item_id: 'i1', value: 'v1' }], {
       table,
-      keyColumns: ['account_id', 'item_id'],
+      primaryKeyColumns: ['account_id', 'item_id'],
     })
 
     await upsert(pool, [{ account_id: 'a1', item_id: 'i1', value: 'v2' }], {
       table,
-      keyColumns: ['account_id', 'item_id'],
+      primaryKeyColumns: ['account_id', 'item_id'],
     })
 
     const r = await rows(table, 'account_id')
@@ -417,7 +417,7 @@ describe('batch multi-row', () => {
         { id: '2', name: 'Bob', score: 200 },
         { id: '3', name: 'Charlie', score: 300 },
       ],
-      { table, keyColumns: ['id'] }
+      { table, primaryKeyColumns: ['id'] }
     )
 
     const r = await rows(table)
@@ -431,7 +431,7 @@ describe('batch multi-row', () => {
         { id: '1', name: 'Alice', score: 100 },
         { id: '2', name: 'Bob', score: 200 },
       ],
-      { table, keyColumns: ['id'] }
+      { table, primaryKeyColumns: ['id'] }
     )
 
     const result = await upsert(
@@ -440,7 +440,7 @@ describe('batch multi-row', () => {
         { id: '2', name: 'Bob Updated', score: 250 }, // update
         { id: '3', name: 'Charlie', score: 300 }, // insert
       ],
-      { table, keyColumns: ['id'], returning: true }
+      { table, primaryKeyColumns: ['id'], returning: true }
     )
 
     // Both rows returned (one updated, one inserted)
@@ -462,7 +462,7 @@ describe('NULL handling', () => {
   it('inserts NULL values', async () => {
     await upsert(pool, [{ id: '1', name: null, score: null }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const r = await rows(table)
@@ -472,12 +472,12 @@ describe('NULL handling', () => {
   it('NULL IS DISTINCT FROM non-NULL triggers update', async () => {
     await upsert(pool, [{ id: '1', name: null, score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       returning: true,
     })
 
@@ -488,12 +488,12 @@ describe('NULL handling', () => {
   it('NULL-to-NULL is a no-op', async () => {
     await upsert(pool, [{ id: '1', name: null, score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: null, score: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       returning: true,
     })
 
@@ -517,12 +517,12 @@ describe('newerThanColumn', () => {
   it('updates when incoming row is newer', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     await upsert(pool, [{ id: '1', name: 'Alice v2', updated: 200 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       newerThanColumn: 'updated',
     })
 
@@ -533,12 +533,12 @@ describe('newerThanColumn', () => {
   it('skips update when incoming row is older', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice v2', updated: 200 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: 'Stale', updated: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       newerThanColumn: 'updated',
       returning: true,
     })
@@ -552,12 +552,12 @@ describe('newerThanColumn', () => {
   it('skips update when incoming row has equal timestamp', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
     })
 
     const result = await upsert(pool, [{ id: '1', name: 'Same time', updated: 100 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       newerThanColumn: 'updated',
       returning: true,
     })
@@ -571,7 +571,7 @@ describe('newerThanColumn', () => {
   it('inserts normally when row does not exist', async () => {
     await upsert(pool, [{ id: '1', name: 'New', updated: 50 }], {
       table,
-      keyColumns: ['id'],
+      primaryKeyColumns: ['id'],
       newerThanColumn: 'updated',
     })
 

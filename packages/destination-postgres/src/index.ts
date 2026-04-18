@@ -69,7 +69,7 @@ export async function upsertMany(
   table: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entries: Record<string, any>[],
-  keyColumns: string[] = ['id']
+  primaryKeyColumns: string[] = ['id']
 ): Promise<void> {
   if (!entries.length) return
   await upsert(
@@ -78,7 +78,7 @@ export async function upsertMany(
     {
       schema,
       table,
-      keyColumns,
+      primaryKeyColumns,
     }
   )
 }

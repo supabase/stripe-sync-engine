@@ -2,11 +2,28 @@ import type pg from 'pg'
 import { ident, identList, qualifiedTable } from './sql.js'
 
 export type UpsertOptions = {
+  /**
+   * Postgres schema name (e.g. `public`, `stripe`). Omit for the default search_path.
+   *
+   * Example: Multi-tenant setup where each account's data lives in a separate
+   * schema — pass `schema: accountId` to write to the correct namespace.
+   */
   schema?: string
+
+  /**
+   * Target table name.
+   *
+   * Example: `"customers"` for a table storing Stripe customer objects.
+   */
   table: string
 
-  /** ON CONFLICT target columns — the unique constraint used to detect existing rows. */
-  keyColumns: string[]
+  /**
+   * ON CONFLICT target columns — the unique constraint used to detect existing rows.
+   *
+   * Example: `["id"]` for a Stripe resource table keyed on the object ID.
+   * For a composite key: `["account_id", "item_id"]`.
+   */
+  primaryKeyColumns: string[]
 
   /**
    * JSONB columns that get shallow-merged instead of replaced.
@@ -115,7 +132,7 @@ export function buildUpsertSql(
   const {
     schema,
     table,
-    keyColumns,
+    primaryKeyColumns,
     shallowMergeJsonbColumns = [],
     volatileColumns = [],
     insertOnlyColumns = [],
@@ -131,7 +148,7 @@ export function buildUpsertSql(
   const shallowMergeSet = new Set(shallowMergeJsonbColumns)
   const insertOnlySet = new Set(insertOnlyColumns)
   const noDiffSet = new Set(volatileColumns)
-  const keySet = new Set(keyColumns)
+  const keySet = new Set(primaryKeyColumns)
 
   // --- VALUES rows -----------------------------------------------------------
   const params: unknown[] = []
@@ -180,7 +197,7 @@ export function buildUpsertSql(
   }
 
   // --- Assemble --------------------------------------------------------------
-  let sql = `INSERT INTO ${tbl} (${identList(columns)})\nVALUES ${valueRows.join(',\n       ')}\nON CONFLICT (${identList(keyColumns)})`
+  let sql = `INSERT INTO ${tbl} (${identList(columns)})\nVALUES ${valueRows.join(',\n       ')}\nON CONFLICT (${identList(primaryKeyColumns)})`
 
   if (setClauses.length > 0) {
     sql += `\nDO UPDATE SET ${setClauses.join(',\n              ')}`
