@@ -28,7 +28,7 @@ echo "After backfill completes, the engine will keep running and stream" >&2
 echo "live events. Press Ctrl+C to stop." >&2
 echo "" >&2
 
-$RUN apps/engine/src/cli/index.ts sync \
+$RUN apps/engine/src/bin/sync-engine.ts sync \
   --stripe-api-key "$STRIPE_API_KEY" \
   --postgres-url "$POSTGRES_URL" \
   --streams products,prices,customers \
