@@ -40,12 +40,13 @@ export type UpsertOptions = {
 
   /**
    * Guard columns: the update only proceeds if the existing row's value for
-   * these columns matches the incoming EXCLUDED value.
+   * these columns matches the incoming value.
    * SQL: `WHERE tbl.col = EXCLUDED.col`
    *
-   * Example: Multi-tenant table with a `account_id` column. Ensures an upsert
-   * cannot accidentally overwrite a row belonging to a different account, even
-   * if the primary key collides.
+   * Example: Multi-tenant table keyed on `(id)` with an `_account_id` system
+   * column. Adding `_account_id` as a guard ensures a row written by account A
+   * is only updated by account A — a conflicting upsert from account B becomes
+   * a silent no-op instead of overwriting the row.
    */
   guardColumns?: string[]
 
