@@ -10,7 +10,11 @@ import type {
 import { createSourceMessageFactory, withAbortOnReturn } from '@stripe/sync-protocol'
 import { z } from 'zod'
 
-const msg = createSourceMessageFactory()
+const msg = createSourceMessageFactory<
+  StreamState,
+  Record<string, unknown>,
+  Record<string, unknown>
+>()
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'

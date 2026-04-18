@@ -10,7 +10,12 @@ import type { Config } from './index.js'
 import type { ResourceConfig } from './types.js'
 import { normalizeStripeObjectName } from './resourceRegistry.js'
 
-const msg = createSourceMessageFactory()
+type EventState = { eventId: string; eventCreated: number }
+const msg = createSourceMessageFactory<
+  EventState,
+  Record<string, unknown>,
+  Record<string, unknown>
+>()
 
 // MARK: - Delete event detection
 

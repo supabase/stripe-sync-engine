@@ -7,7 +7,11 @@ import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 
-const msg = createSourceMessageFactory<StreamState>()
+const msg = createSourceMessageFactory<
+  StreamState,
+  Record<string, unknown>,
+  Record<string, unknown>
+>()
 
 // MARK: - Rate-limit wrapper
 

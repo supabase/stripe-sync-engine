@@ -333,9 +333,9 @@ type TypedGlobalStatePayload<TGlobalState> = {
  *   yield msg.log({ level: 'warn', message: 'rate limited' })
  */
 export function createSourceMessageFactory<
-  TStreamState = unknown,
-  TGlobalState extends Record<string, unknown> = Record<string, unknown>,
-  TRecordData extends Record<string, unknown> = Record<string, unknown>,
+  TStreamState,
+  TGlobalState extends Record<string, unknown>,
+  TRecordData extends Record<string, unknown>,
 >() {
   return {
     record(payload: { stream: string; data: TRecordData; emitted_at: string }): RecordMessage {
