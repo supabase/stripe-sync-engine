@@ -4,11 +4,11 @@ import type {
   SyncOutput,
   StreamStatusPayload,
   TraceError,
-  TraceProgress,
-  EofPayload,
   EofStreamProgress,
 } from '@stripe/sync-protocol'
-import { emptySyncState } from '@stripe/sync-protocol'
+import { emptySyncState, createEngineMessageFactory } from '@stripe/sync-protocol'
+
+const msg = createEngineMessageFactory()
 
 type Range = { gte: string; lt: string }
 
@@ -34,6 +34,24 @@ export function mergeRanges(ranges: Range[]): Range[] {
 
 type StreamError = { message: string; failure_type?: TraceError['failure_type'] }
 type Status = StreamStatusPayload['status']
+type ProgressStatus = 'not_started' | 'started' | 'completed' | 'skipped' | 'errored'
+
+function streamStatusToProgressStatus(status: Status | undefined): ProgressStatus {
+  switch (status) {
+    case 'start':
+      return 'started'
+    case 'complete':
+      return 'completed'
+    case 'skip':
+      return 'skipped'
+    case 'error':
+      return 'errored'
+    case 'range_complete':
+      return 'started'
+    default:
+      return 'not_started'
+  }
+}
 
 /**
  * Shared record counter that can be tapped into the data pipeline (before the
@@ -159,16 +177,29 @@ export function trackProgress(opts: {
 
     function buildGlobalProgress(): SyncOutput {
       const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
-      const progress: TraceProgress = {
-        elapsed_ms: elapsedMs(),
-        run_record_count: totalRunRecords(),
-        rows_per_second: totalRunRecords() / elapsedSec(),
-        window_rows_per_second: totalWindowRecords() / windowDuration,
-        state_checkpoint_count: stateCheckpointCount,
-      }
       return {
-        type: 'trace',
-        trace: { trace_type: 'progress' as const, progress },
+        ...msg.progress({
+          started_at: new Date(startedAt).toISOString(),
+          elapsed_ms: elapsedMs(),
+          global_state_count: stateCheckpointCount,
+          connection_status: connectionStatus,
+          derived: {
+            status: 'started',
+            records_per_second: totalRunRecords() / elapsedSec(),
+            states_per_second: stateCheckpointCount / elapsedSec(),
+          },
+          streams: Object.fromEntries(
+            allStreams().map((s) => [
+              s,
+              {
+                status: streamStatusToProgressStatus(streamStatus.get(s)),
+                state_count: 0, // TODO: track per-stream state count
+                record_count: runRecordCount(s),
+                ...(completedRanges.has(s) ? { completed_ranges: completedRanges.get(s) } : {}),
+              },
+            ])
+          ),
+        }),
         _emitted_by: 'engine',
         _ts: new Date().toISOString(),
       } as SyncOutput
@@ -215,7 +246,9 @@ export function trackProgress(opts: {
       return hadInitialState || hasAnyState ? finalState : undefined
     }
 
-    function buildEnrichedEof(reason: EofPayload['reason']): SyncOutput {
+    function buildEnrichedEof(
+      reason: 'complete' | 'state_limit' | 'time_limit' | 'error' | 'aborted'
+    ): SyncOutput {
       const windowDuration = Math.max((Date.now() - lastWindowAt) / 1000, 0.001)
       const streams = allStreams()
       const streamProgressMap: Record<string, EofStreamProgress> = {}
@@ -223,22 +256,21 @@ export function trackProgress(opts: {
         const sp = buildStreamProgress(s)
         if (sp) streamProgressMap[s] = sp
       }
-      const eof: EofPayload = {
-        reason,
-        has_more: reason !== 'complete',
-        state: buildAccumulatedState(),
-        global_progress: {
-          elapsed_ms: elapsedMs(),
-          run_record_count: totalRunRecords(),
-          rows_per_second: totalRunRecords() / elapsedSec(),
-          window_rows_per_second: totalWindowRecords() / windowDuration,
-          state_checkpoint_count: stateCheckpointCount,
-        },
-        stream_progress: Object.keys(streamProgressMap).length > 0 ? streamProgressMap : undefined,
-      }
       return {
-        type: 'eof',
-        eof,
+        ...msg.eof({
+          reason,
+          has_more: reason !== 'complete',
+          state: buildAccumulatedState(),
+          global_progress: {
+            elapsed_ms: elapsedMs(),
+            run_record_count: totalRunRecords(),
+            rows_per_second: totalRunRecords() / elapsedSec(),
+            window_rows_per_second: totalWindowRecords() / windowDuration,
+            state_checkpoint_count: stateCheckpointCount,
+          },
+          stream_progress:
+            Object.keys(streamProgressMap).length > 0 ? streamProgressMap : undefined,
+        }),
         _emitted_by: 'engine',
         _ts: new Date().toISOString(),
       } as SyncOutput

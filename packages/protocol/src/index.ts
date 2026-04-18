@@ -12,6 +12,7 @@ export {
   sourceControlMsg,
   destinationControlMsg,
   createSourceMessageFactory,
+  createEngineMessageFactory,
   // Type guards
   isRecordMessage,
   isStateMessage,

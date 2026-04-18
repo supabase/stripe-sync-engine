@@ -97,10 +97,8 @@ describe('trackProgress', () => {
       )
     )
 
-    const progressTraces = outputs.filter(
-      (m) => m.type === 'trace' && m.trace.trace_type === 'progress'
-    )
-    expect(progressTraces.length).toBeGreaterThan(0)
+    const progressMsgs = outputs.filter((m) => m.type === 'progress')
+    expect(progressMsgs.length).toBeGreaterThan(0)
 
     const eof = outputs.find((m) => m.type === 'eof')
     expect(eof).toBeDefined()

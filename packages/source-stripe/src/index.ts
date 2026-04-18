@@ -7,8 +7,10 @@ import type {
   SetupOutput,
   TeardownOutput,
 } from '@stripe/sync-protocol'
-import { sourceControlMsg, withAbortOnReturn } from '@stripe/sync-protocol'
+import { createSourceMessageFactory, withAbortOnReturn } from '@stripe/sync-protocol'
 import { z } from 'zod'
+
+const msg = createSourceMessageFactory()
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'
@@ -113,15 +115,9 @@ export function createStripeSource(
           api_version: config.api_version ?? BUNDLED_API_VERSION,
         })
         await client.getAccount()
-        yield {
-          type: 'connection_status' as const,
-          connection_status: { status: 'succeeded' as const },
-        }
+        yield msg.connection_status({ status: 'succeeded' })
       } catch (err: any) {
-        yield {
-          type: 'connection_status' as const,
-          connection_status: { status: 'failed' as const, message: err.message },
-        }
+        yield msg.connection_status({ status: 'failed', message: err.message })
       }
     },
 
@@ -214,7 +210,10 @@ export function createStripeSource(
       }
 
       if (Object.keys(updates).length > 0) {
-        yield sourceControlMsg({ ...config, ...updates })
+        yield msg.control({
+          control_type: 'source_config',
+          source_config: { ...config, ...updates },
+        })
       }
     },
 

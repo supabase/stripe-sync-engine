@@ -1,10 +1,12 @@
-import type { ConfiguredCatalog, LogMessage, Message } from '@stripe/sync-protocol'
-import { stateMsg } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, Message } from '@stripe/sync-protocol'
+import { createSourceMessageFactory } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
 import type { Config, StreamState } from './index.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeClient } from './client.js'
 import { processStripeEvent } from './process-event.js'
+
+const msg = createSourceMessageFactory<StreamState>()
 
 // MARK: - Events polling
 
@@ -38,23 +40,17 @@ export async function* pollEvents(opts: {
 
   // First run after backfill: stamp initial events_cursor in global state
   if (cursor == null) {
-    yield stateMsg({
-      state_type: 'global' as const,
-      data: { events_cursor: startTimestamp },
-    })
+    yield msg.source_state({ state_type: 'global', data: { events_cursor: startTimestamp } })
     return
   }
 
   // Warn if cursor is too old (Stripe retains events for ~30 days)
   const ageInDays = (startTimestamp - cursor) / 86400
   if (ageInDays > EVENTS_MAX_AGE_DAYS) {
-    yield {
-      type: 'log',
-      log: {
-        level: 'warn',
-        message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
-      },
-    } satisfies LogMessage
+    yield msg.log({
+      level: 'warn',
+      message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
+    })
   }
 
   // Fetch all events since cursor via pagination (API returns newest-first)
@@ -88,9 +84,6 @@ export async function* pollEvents(opts: {
 
   // Update global events cursor
   if (latestEventCreated > cursor) {
-    yield stateMsg({
-      state_type: 'global' as const,
-      data: { events_cursor: latestEventCreated },
-    })
+    yield msg.source_state({ state_type: 'global', data: { events_cursor: latestEventCreated } })
   }
 }

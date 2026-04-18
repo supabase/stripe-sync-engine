@@ -6,11 +6,13 @@ import type {
   ControlPayload,
   DestinationInput,
   EofMessage,
+  EofPayload,
   GlobalStatePayload,
   LogMessage,
   LogPayload,
   Message,
   ProgressMessage,
+  ProgressPayload,
   RecordMessage,
   RecordPayload,
   SectionState,
@@ -364,6 +366,30 @@ export function createSourceMessageFactory<
       payload: Extract<ControlPayload, { control_type: C }>
     ): ControlMessage {
       return { type: 'control', control: payload }
+    },
+  }
+}
+
+// MARK: - Engine message factory
+
+/**
+ * Type-safe message factory for the engine.
+ *
+ * Same 1:1 envelope pattern as `createSourceMessageFactory`.
+ * Covers the message types the engine constructs: eof, progress, log.
+ */
+export function createEngineMessageFactory() {
+  return {
+    eof(payload: EofPayload): EofMessage {
+      return { type: 'eof', eof: payload }
+    },
+
+    progress(payload: ProgressPayload): ProgressMessage {
+      return { type: 'progress', progress: payload }
+    },
+
+    log(payload: LogPayload): LogMessage {
+      return { type: 'log', log: payload }
     },
   }
 }
