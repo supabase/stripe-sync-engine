@@ -263,8 +263,8 @@ function tag<T extends Message>(emitter: string): (msg: T) => T {
 }
 
 /** Stamp a message as engine-emitted. */
-function emit<T extends Record<string, unknown>>(msg: T): SyncOutput {
-  return { ...msg, _emitted_by: 'engine', _ts: new Date().toISOString() } as SyncOutput
+function emit(msg: Record<string, unknown>): SyncOutput {
+  return { ...msg, _emitted_by: 'engine', _ts: new Date().toISOString() } as unknown as SyncOutput
 }
 
 /** Accumulate source state from messages. Pure. */
@@ -496,27 +496,30 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             { config: destConfig, catalog: filteredCatalog },
             destInput
           )
-          // Apply limits
-          const limited = takeLimits<SyncOutput>({
+          // Apply limits (takeLimits appends eof)
+          const limited = takeLimits({
             state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
-          })(destOutput as AsyncIterable<SyncOutput>)
+          })(destOutput)
 
           let syncState = structuredClone(normalizedState ?? emptySyncState())
           let progress = createInitialProgress(normalizedState?.sync_run?.progress)
 
           for await (const msg of limited) {
-            syncState = stateReducer(syncState, msg as Message)
-            progress = progressReducer(progress, msg as Message)
-
             if (msg.type === 'eof') {
               yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: progress, request_progress: progress }))
               return
             }
 
-            yield msg
-            if (isProgressTrigger(msg)) yield emit(engineMsg.progress(progress))
+            syncState = stateReducer(syncState, msg as Message)
+            progress = progressReducer(progress, msg as Message)
+
+            // Records are consumed by the destination — don't yield to client
+            if (msg.type !== 'record') {
+              yield msg as SyncOutput
+              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(progress))
+            }
           }
         })()
       )

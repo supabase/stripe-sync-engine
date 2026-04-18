@@ -1,4 +1,4 @@
-import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, DestinationOutput, EofMessage, Message } from '@stripe/sync-protocol'
 import type { StateStore } from './state-store.js'
 import { logger } from '../logger.js'
 
@@ -8,11 +8,11 @@ import { logger } from '../logger.js'
  * Drop messages for streams not in the catalog and apply per-stream field filtering.
  * Passes non-data messages (log, trace, catalog) through unchanged.
  */
-export function enforceCatalog(
+export function enforceCatalog<T extends Message>(
   catalog: ConfiguredCatalog
-): (msgs: AsyncIterable<Message>) => AsyncIterable<Message> {
+): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
   const streamMap = new Map(catalog.streams.map((cs) => [cs.stream.name, cs]))
-  return async function* (messages) {
+  return async function* (messages: AsyncIterable<T>) {
     for await (const msg of messages) {
       if (msg.type === 'record') {
         const cs = streamMap.get(msg.record.stream)
@@ -57,7 +57,7 @@ export function enforceCatalog(
 /**
  * Tap stage: logs diagnostics to stderr and passes ALL messages through unchanged.
  */
-export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
+export async function* log<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
   for await (const msg of messages) {
     if (msg.type === 'log') logger[msg.log.level](msg.log.message)
     else if (msg.type === 'stream_status') {
@@ -137,9 +137,9 @@ const DEADLINE_BUFFER_MS = 1000
  * When multiple limits are set, whichever fires first wins.
  * The last yielded item is always `{ type: 'eof', eof: { reason, ... } }`.
  */
-export function takeLimits<T extends Message>(
+export function takeLimits<T extends { type: string }>(
   opts: TakeLimitsOptions = {}
-): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
+): (msgs: AsyncIterable<T>) => AsyncIterable<T | EofMessage> {
   return async function* (messages) {
     const startedAt = Date.now()
     let stateCount = 0
@@ -161,16 +161,8 @@ export function takeLimits<T extends Message>(
 
     const needsRace = hardDeadline != null || opts.signal != null
 
-    function makeEof(
-      reason: 'complete' | 'state_limit' | 'time_limit' | 'aborted',
-      extra?: { cutoff?: 'soft' | 'hard' }
-    ): T {
-      const eof: Record<string, unknown> = { reason }
-      if (reason === 'time_limit' && extra?.cutoff) eof.cutoff = extra.cutoff
-      if (reason === 'time_limit' || reason === 'aborted') {
-        eof.elapsed_ms = Date.now() - startedAt
-      }
-      return { type: 'eof' as const, eof } as T
+    function makeEof(hasMore: boolean): EofMessage {
+      return { type: 'eof' as const, eof: { has_more: hasMore } } as EofMessage
     }
 
     // Fast path: no time limit and no signal — simple cooperative loop
@@ -178,11 +170,11 @@ export function takeLimits<T extends Message>(
       for await (const msg of messages) {
         yield msg
         if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof('state_limit')
+          yield makeEof(true)
           return
         }
       }
-      yield makeEof('complete')
+      yield makeEof(false)
       return
     }
 
@@ -226,7 +218,7 @@ export function takeLimits<T extends Message>(
         if (opts.signal?.aborted) {
           cleanup()
           logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof('aborted')
+          yield makeEof(true)
           await closeIterator()
           return
         }
@@ -262,7 +254,7 @@ export function takeLimits<T extends Message>(
             },
             'SYNC_TIME_LIMIT_HARD'
           )
-          yield makeEof('time_limit', { cutoff: 'hard' })
+          yield makeEof(true)
           // Fire-and-forget: don't await return() since the iterator may be blocked
           closeIteratorInBackground()
           return
@@ -270,7 +262,7 @@ export function takeLimits<T extends Message>(
 
         if (winner.kind === 'aborted') {
           logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof('aborted')
+          yield makeEof(true)
           await closeIterator()
           return
         }
@@ -278,7 +270,7 @@ export function takeLimits<T extends Message>(
         // kind === 'next'
         const { result } = winner
         if (result.done) {
-          yield makeEof('complete')
+          yield makeEof(false)
           return
         }
 
@@ -295,14 +287,14 @@ export function takeLimits<T extends Message>(
             },
             'SYNC_TIME_LIMIT_SOFT'
           )
-          yield makeEof('time_limit', { cutoff: 'soft' })
+          yield makeEof(true)
           await closeIterator()
           return
         }
 
         // Check state limit
         if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof('state_limit')
+          yield makeEof(true)
           await closeIterator()
           return
         }
