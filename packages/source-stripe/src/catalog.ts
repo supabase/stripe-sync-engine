@@ -12,6 +12,7 @@ export function catalogFromRegistry(registry: Record<string, ResourceConfig>): C
       name: cfg.tableName,
       primary_key: [['id'], ['_account_id']],
       metadata: { resource_name: name },
+      ...(cfg.supportsCreatedFilter && { newer_than_field: 'created' as const }),
     }))
 
   return { streams }
@@ -37,6 +38,7 @@ export function catalogFromOpenApi(
         name: cfg.tableName,
         primary_key: [['id'], ['_account_id']],
         metadata: { resource_name: name },
+        ...(cfg.supportsCreatedFilter && { newer_than_field: 'created' as const }),
       }
 
       if (table) {

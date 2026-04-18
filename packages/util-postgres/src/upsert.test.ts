@@ -1,59 +1,41 @@
-import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { upsert } from './upsert.js'
 
 // ---------------------------------------------------------------------------
-// Docker Postgres lifecycle
+// Postgres connection — requires DATABASE_URL or `docker compose up postgres`
 // ---------------------------------------------------------------------------
 
-let containerId: string
 let pool: pg.Pool
 
 beforeAll(async () => {
-  containerId = execSync(
-    'docker run -d --rm -p 0:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test postgres:16-alpine',
-    { encoding: 'utf8' }
-  ).trim()
-
-  const hostPort = execSync(`docker port ${containerId} 5432`, {
-    encoding: 'utf8',
-  })
-    .trim()
-    .split(':')
-    .pop()
-
-  pool = new pg.Pool({
-    connectionString: `postgresql://postgres:test@localhost:${hostPort}/test`,
-  })
-
-  // Wait for Postgres to accept connections
-  for (let i = 0; i < 30; i++) {
-    try {
-      await pool.query('SELECT 1')
-      return
-    } catch {
-      await new Promise((r) => setTimeout(r, 1000))
-    }
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required — run `docker compose up -d postgres` first')
   }
-  throw new Error('Postgres did not become ready in time')
-}, 60_000)
+  pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+  await pool.query('SELECT 1')
+})
 
 afterAll(async () => {
-  await pool?.end()
-  if (containerId) {
-    execSync(`docker rm -f ${containerId}`)
+  // Drop tables created during this run
+  const { rows } = await pool.query(
+    `SELECT tablename FROM pg_tables WHERE tablename LIKE 'test_upsert_%'`
+  )
+  for (const row of rows) {
+    await pool.query(`DROP TABLE IF EXISTS "${row.tablename}"`)
   }
+  await pool.end()
 })
 
 // ---------------------------------------------------------------------------
 // Table setup — fresh table per test
 // ---------------------------------------------------------------------------
 
+const testRunId = Math.random().toString(36).slice(2, 8)
 let tableSeq = 0
 
 function nextTable() {
-  return `test_upsert_${++tableSeq}`
+  return `test_upsert_${testRunId}_${++tableSeq}`
 }
 
 async function createTable(table: string, extra = ''): Promise<string> {
@@ -578,5 +560,69 @@ describe('newerThanColumn', () => {
     const r = await rows(table)
     expect(r).toHaveLength(1)
     expect(r[0]).toMatchObject({ id: '1', name: 'New', updated: 50 })
+  })
+})
+
+describe('newerThanColumn with GENERATED STORED column', () => {
+  let table: string
+  beforeEach(async () => {
+    table = nextTable()
+    await pool.query(`
+      CREATE TABLE "${table}" (
+        _raw_data jsonb NOT NULL,
+        id text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED,
+        created bigint GENERATED ALWAYS AS ((NULLIF(_raw_data->>'created', ''))::bigint) STORED,
+        PRIMARY KEY (id)
+      )
+    `)
+  })
+
+  it('updates when incoming row is newer', async () => {
+    await upsert(pool, [{ _raw_data: { id: '1', name: 'Alice', created: 100 } }], {
+      table,
+      primaryKeyColumns: ['id'],
+    })
+
+    await upsert(pool, [{ _raw_data: { id: '1', name: 'Alice v2', created: 200 } }], {
+      table,
+      primaryKeyColumns: ['id'],
+      newerThanColumn: 'created',
+    })
+
+    const r = await rows(table)
+    expect(r[0]).toMatchObject({ id: '1', created: '200' })
+    expect(r[0]._raw_data.name).toBe('Alice v2')
+  })
+
+  it('skips update when incoming row is older', async () => {
+    await upsert(pool, [{ _raw_data: { id: '1', name: 'Alice v2', created: 200 } }], {
+      table,
+      primaryKeyColumns: ['id'],
+    })
+
+    const result = await upsert(pool, [{ _raw_data: { id: '1', name: 'Stale', created: 100 } }], {
+      table,
+      primaryKeyColumns: ['id'],
+      newerThanColumn: 'created',
+      returning: true,
+    })
+
+    expect(result.rows).toHaveLength(0)
+
+    const r = await rows(table)
+    expect(r[0]._raw_data.name).toBe('Alice v2')
+  })
+
+  it('inserts normally when row does not exist', async () => {
+    await upsert(pool, [{ _raw_data: { id: '1', name: 'New', created: 50 } }], {
+      table,
+      primaryKeyColumns: ['id'],
+      newerThanColumn: 'created',
+    })
+
+    const r = await rows(table)
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ id: '1', created: '50' })
+    expect(r[0]._raw_data.name).toBe('New')
   })
 })

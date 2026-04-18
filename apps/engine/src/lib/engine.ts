@@ -230,14 +230,26 @@ async function discoverCatalog(
   return { catalog, filteredCatalog }
 }
 
-/** Resolve source connector, config, catalog, and state for a pipeline. */
-async function resolvePipelineSource(resolver: ConnectorResolver, engine: Engine, pipeline: PipelineConfig, state?: unknown) {
-  const connector = await resolver.resolveSource(pipeline.source.type)
-  const { config, streamStateSchema } = await getSpec(connector, configPayload(pipeline.source))
+/** Resolve both connectors, configs, catalog, and state for a pipeline. */
+async function resolvePipeline(resolver: ConnectorResolver, engine: Engine, pipeline: PipelineConfig, state?: unknown) {
+  const [srcConnector, destConnector] = await Promise.all([
+    resolver.resolveSource(pipeline.source.type),
+    resolver.resolveDestination(pipeline.destination.type),
+  ])
+  const [srcSpec, destSpec] = await Promise.all([
+    getSpec(srcConnector, configPayload(pipeline.source)),
+    getSpec(destConnector, configPayload(pipeline.destination)),
+  ])
   const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
-  const normalizedState = parseSyncState(state, streamStateSchema)
+  const normalizedState = parseSyncState(state, srcSpec.streamStateSchema)
   const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
-  return { connector, config, catalog: catalogWithRanges, filteredCatalog, state: normalizedState }
+  return {
+    source: { connector: srcConnector, config: srcSpec.config },
+    destination: { connector: destConnector, config: destSpec.config },
+    catalog: catalogWithRanges,
+    filteredCatalog,
+    state: normalizedState,
+  }
 }
 
 /**
@@ -423,9 +435,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_read(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
         (async function* () {
-          const src = await resolvePipelineSource(resolver, engine, pipeline, opts?.state)
-          const raw = src.connector.read(
-            { config: src.config, catalog: src.catalog, state: src.state?.source },
+          const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
+          const raw = p.source.connector.read(
+            { config: p.source.config, catalog: p.catalog, state: p.state?.source },
             input
           )
           const parsed = map(raw, (msg) => Message.parse(msg))
@@ -441,19 +453,15 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_write(pipeline, messages) {
       return withAbortOnReturn(() =>
         (async function* () {
-          const connector = await resolver.resolveDestination(pipeline.destination.type)
-          const rawDest = configPayload(pipeline.destination)
-          const { config: destConfig } = await getSpec(connector, rawDest)
-          const { filteredCatalog } = await discoverCatalog(engine, pipeline)
-
+          const p = await resolvePipeline(resolver, engine, pipeline)
           const destInput = pipe(
             map(messages, (msg) => Message.parse(msg)),
-            enforceCatalog(filteredCatalog),
+            enforceCatalog(p.filteredCatalog),
             log,
             filterType('record', 'source_state')
           )
-          const destOutput = connector.write(
-            { config: destConfig, catalog: filteredCatalog },
+          const destOutput = p.destination.connector.write(
+            { config: p.destination.config, catalog: p.filteredCatalog },
             destInput
           )
           for await (const msg of destOutput) {
@@ -466,24 +474,21 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_sync(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
         (async function* () {
-          const src = await resolvePipelineSource(resolver, engine, pipeline, opts?.state)
-
-          const destConnector = await resolver.resolveDestination(pipeline.destination.type)
-          const { config: destConfig } = await getSpec(destConnector, configPayload(pipeline.destination))
+          const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
           // Source → destination pipeline. The destination is the sole consumer,
           // giving natural pull-based backpressure with zero intermediate buffering.
-          const sourceOutput = src.connector.read(
-            { config: src.config, catalog: src.catalog, state: src.state?.source },
+          const sourceOutput = p.source.connector.read(
+            { config: p.source.config, catalog: p.catalog, state: p.state?.source },
             input
           )
           const destInput = pipe(
             sourceOutput,
-            enforceCatalog(src.filteredCatalog),
+            enforceCatalog(p.filteredCatalog),
             log,
           )
-          const destOutput = destConnector.write(
-            { config: destConfig, catalog: src.filteredCatalog },
+          const destOutput = p.destination.connector.write(
+            { config: p.destination.config, catalog: p.filteredCatalog },
             destInput
           )
           // Apply limits (takeLimits appends eof)
@@ -493,8 +498,8 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             signal,
           })(destOutput)
 
-          let syncState = structuredClone(src.state ?? emptySyncState())
-          let progress = createInitialProgress(src.state?.sync_run?.progress)
+          let syncState = structuredClone(p.state ?? emptySyncState())
+          let progress = createInitialProgress(p.state?.sync_run?.progress)
 
           for await (const msg of limited) {
             if (msg.type === 'eof' && 'eof' in msg) {

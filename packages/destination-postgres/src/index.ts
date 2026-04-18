@@ -69,7 +69,8 @@ export async function upsertMany(
   table: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entries: Record<string, any>[],
-  primaryKeyColumns: string[] = ['id']
+  primaryKeyColumns: string[] = ['id'],
+  newerThanField?: string
 ): Promise<void> {
   if (!entries.length) return
   await upsert(
@@ -79,6 +80,7 @@ export async function upsertMany(
       schema,
       table,
       primaryKeyColumns,
+      ...(newerThanField && { newerThanColumn: newerThanField }),
     }
   )
 }
@@ -214,6 +216,11 @@ const destination = {
         cs.stream.primary_key?.map((pk) => pk[0]) ?? ['id'],
       ])
     )
+    const streamNewerThanField = new Map(
+      catalog.streams
+        .filter((cs) => cs.stream.newer_than_field)
+        .map((cs) => [cs.stream.name, cs.stream.newer_than_field!])
+    )
 
     const flushStream = async (streamName: string) => {
       const buffer = streamBuffers.get(streamName)
@@ -223,7 +230,8 @@ const destination = {
         config.schema,
         streamName,
         buffer,
-        streamKeyColumns.get(streamName) ?? ['id']
+        streamKeyColumns.get(streamName) ?? ['id'],
+        streamNewerThanField.get(streamName)
       )
       streamBuffers.set(streamName, [])
     }
