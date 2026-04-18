@@ -64,7 +64,24 @@ export type UpsertOptions = {
    */
   newerThanColumn?: string
 
-  /** Skip no-op updates via IS DISTINCT FROM (default: true). */
+  /**
+   * Skip no-op updates via IS DISTINCT FROM (default: true).
+   *
+   * When true, the ON CONFLICT DO UPDATE adds a WHERE clause that compares
+   * every non-volatile column against the existing row. If nothing changed,
+   * the UPDATE is skipped entirely — no dead tuple, no trigger fired, no
+   * WAL entry.
+   *
+   * Why it matters:
+   * - Stripe backfills re-fetch every object in a time range. Most rows
+   *   haven't changed since the last sync — without this, every row gets
+   *   a pointless UPDATE that bloats WAL and triggers autovacuum.
+   * - CDC / logical replication subscribers see fewer no-op changes.
+   * - `updated_at` trigger columns don't get bumped on unchanged rows.
+   *
+   * Set to false only when every upsert is expected to be a real change
+   * (e.g. append-only event logs).
+   */
   skipNoopUpdates?: boolean
 
   /** Append RETURNING * (default: false). */
