@@ -62,7 +62,8 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     lines.push(`  ${emoji} ${name}${count}${deltaStr}${streamErr}`)
   }
   if (notStartedCount > 0) {
-    lines.push(`  ⚪ ${notStartedCount} remaining`)
+    const notStartedNames = streamEntries.filter(([, s]) => s.status === 'not_started').map(([n]) => n)
+    lines.push(`  ⚪ ${notStartedNames.join(', ')}`)
   }
 
   // Global error (not attributable to a single stream)

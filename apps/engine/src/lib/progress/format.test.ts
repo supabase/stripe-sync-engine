@@ -17,7 +17,7 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "🔄 Syncing — 0.0s
-        ⚪ 2 remaining"
+        ⚪ customers, invoices"
     `)
   })
 
@@ -48,7 +48,7 @@ describe('formatProgress', () => {
         🟢 invoices: 850 records
         🟡 charges: 980 records
         🟡 payment_intents: 420 records
-        ⚪ 5 remaining"
+        ⚪ subscriptions, products, prices, balance_transactions, payouts"
     `)
   })
 
