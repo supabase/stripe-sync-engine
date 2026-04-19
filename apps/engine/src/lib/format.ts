@@ -10,39 +10,33 @@ const STATUS_EMOJI: Record<string, string> = {
 
 /**
  * Format a ProgressPayload into a human-readable string for CLI output.
- * When `prev` is provided, shows deltas (e.g. "+50 records") for streams
- * that changed since the last progress emission.
+ * When `prev` is provided, shows deltas since last emission.
  *
- * Example:
- *   ◐ Syncing — 3.2s | 450 records (140.6/s) | 5 checkpoints
- *     ● customers: 200 records
- *     ◐ invoices: 250 records (+50)
- *     ○ charges
+ * Only shows active/completed/errored streams individually. Not-started
+ * streams are collapsed into a count.
  */
 export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload): string {
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
   const streamEntries = Object.entries(progress.streams)
-  const totalRows = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
-  const rps = progress.derived.records_per_second.toFixed(1)
+  const totalRecords = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
   const statusLabel =
     progress.derived.status === 'failed' ? '🔴 Sync failed' : '🔄 Syncing'
 
-  const prevTotalRows = prev
+  const prevTotalRecords = prev
     ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
     : 0
-  const rowDelta = prev ? totalRows - prevTotalRows : 0
+  const recordDelta = prev ? totalRecords - prevTotalRecords : 0
 
   const parts: string[] = []
   parts.push(`${elapsed}s`)
-  if (totalRows > 0) {
-    const deltaStr = rowDelta > 0 ? ` (+${rowDelta})` : ''
-    parts.push(`${totalRows} records${deltaStr} (${rps}/s)`)
+  if (totalRecords > 0) {
+    const deltaStr = recordDelta > 0 ? ` (+${recordDelta})` : ''
+    parts.push(`${totalRecords} records${deltaStr} (${progress.derived.records_per_second.toFixed(1)}/s)`)
   }
   if (progress.global_state_count > 0) {
-    const sps = progress.derived.states_per_second.toFixed(1)
     const cpDelta = prev ? progress.global_state_count - prev.global_state_count : 0
     const cpDeltaStr = cpDelta > 0 ? ` (+${cpDelta})` : ''
-    parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${sps}/s)`)
+    parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${progress.derived.states_per_second.toFixed(1)}/s)`)
   }
 
   const header = `${statusLabel} — ${parts.join(' | ')}`
@@ -52,8 +46,11 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     : undefined
   const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored').map(([n]) => n)
 
+  const visible = streamEntries.filter(([, s]) => s.status !== 'not_started')
+  const notStartedCount = streamEntries.length - visible.length
+
   const lines: string[] = [header]
-  for (const [name, s] of streamEntries) {
+  for (const [name, s] of visible) {
     const emoji = STATUS_EMOJI[s.status] ?? '?'
     const prevStream: StreamProgress | undefined = prev?.streams[name]
     const delta = prevStream ? s.record_count - prevStream.record_count : 0
@@ -61,6 +58,10 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     const deltaStr = delta > 0 ? ` (+${delta})` : ''
     const streamErr = s.status === 'errored' && errMsg && erroredStreams.length === 1 ? ` — ${errMsg}` : ''
     lines.push(`  ${emoji} ${name}${count}${deltaStr}${streamErr}`)
+  }
+
+  if (notStartedCount > 0) {
+    lines.push(`  ⚪ ${notStartedCount} streams pending`)
   }
 
   // Global error (not attributable to a single stream)
