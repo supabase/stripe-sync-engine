@@ -5,7 +5,8 @@ import { homedir } from 'node:os'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
 import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
-import { createConnectorResolver, createEngine } from '../lib/index.js'
+import { createRemoteEngine } from '../lib/remote-engine.js'
+import { spawnServeSubprocess } from './subprocess.js'
 import {
   type PipelineConfig,
   type SyncState,
@@ -13,7 +14,6 @@ import {
   emptySyncState,
 } from '@stripe/sync-protocol'
 import { ProgressView, formatProgress } from '../lib/progress/format.js'
-import { defaultConnectors } from '../lib/default-connectors.js'
 import {
   applyControlToPipeline,
   readPersistedStripeSourceConfig,
@@ -129,12 +129,10 @@ export function createSyncCmd() {
             : defaultFileStateStore(stripeApiKey)
       const initialState = await store.get()
 
+      // Spawn engine HTTP server as a subprocess — logs go to a file, Ink owns the terminal
+      const server = await spawnServeSubprocess(`sync-${schema}.log`)
       try {
-        const resolver = await createConnectorResolver(defaultConnectors, {
-          path: true,
-          npm: false,
-        })
-        const engine = await createEngine(resolver)
+        const engine = createRemoteEngine(server.url)
 
         // Run connector setup and apply any config updates before syncing.
         for await (const msg of engine.pipeline_setup(pipeline)) {
@@ -200,6 +198,7 @@ export function createSyncCmd() {
 
         inkInstance?.unmount()
       } finally {
+        server.kill()
         if (store.close) await store.close()
       }
     },
