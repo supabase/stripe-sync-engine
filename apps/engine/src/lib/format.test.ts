@@ -16,9 +16,9 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "◐ Syncing — 0.0s
-        ○ customers
-        ○ invoices"
+      "🔄 Syncing — 0.0s
+        ⚪ customers
+        ⚪ invoices"
     `)
   })
 
@@ -36,10 +36,10 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "◐ Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints
-        ● customers: 200 rows
-        ◐ invoices: 250 rows
-        ○ charges"
+      "🔄 Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints
+        🟢 customers: 200 rows
+        🟡 invoices: 250 rows
+        ⚪ charges"
     `)
   })
 
@@ -56,8 +56,8 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "✗ Syncing — 1.5s
-        ✗ customers
+      "🔴 Syncing — 1.5s
+        🔴 customers
         ⚠ Invalid API key"
     `)
   })
@@ -75,9 +75,9 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "◐ Syncing — 5.0s | 100 rows (50.0/s) | 2 checkpoints
-        ● customers: 100 rows
-        ⊘ invoices"
+      "🔄 Syncing — 5.0s | 100 rows (50.0/s) | 2 checkpoints
+        🟢 customers: 100 rows
+        ⏭️ invoices"
     `)
   })
 
@@ -107,10 +107,10 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "◐ Syncing — 4.0s | 450 rows (112.5/s) | 5 checkpoints
-        ● customers: 200 rows (+50)
-        ◐ invoices: 180 rows (+130)
-        ◐ charges: 70 rows (+70)"
+      "🔄 Syncing — 4.0s | 450 rows (112.5/s) | 5 checkpoints
+        🟢 customers: 200 rows (+50)
+        🟡 invoices: 180 rows (+130)
+        🟡 charges: 70 rows (+70)"
     `)
   })
 })

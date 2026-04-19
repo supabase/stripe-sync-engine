@@ -1,11 +1,11 @@
 import type { ProgressPayload, StreamProgress } from '@stripe/sync-protocol'
 
 const STATUS_EMOJI: Record<string, string> = {
-  not_started: '○',
-  started: '◐',
-  completed: '●',
-  skipped: '⊘',
-  errored: '✗',
+  not_started: '⚪',
+  started: '🟡',
+  completed: '🟢',
+  skipped: '⏭️',
+  errored: '🔴',
 }
 
 /**
@@ -24,7 +24,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const streamEntries = Object.entries(progress.streams)
   const totalRows = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
   const rps = progress.derived.records_per_second.toFixed(1)
-  const statusEmoji = progress.derived.status === 'failed' ? '✗' : '◐'
+  const statusEmoji = progress.derived.status === 'failed' ? '🔴' : '🔄'
 
   const parts: string[] = []
   parts.push(`${elapsed}s`)
