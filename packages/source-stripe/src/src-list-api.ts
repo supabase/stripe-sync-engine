@@ -204,6 +204,7 @@ async function* paginateRange(opts: {
   backfillLimit?: number
   totalEmitted: { count: number }
   lastSeenCreated: Map<RemainingRange, number>
+  rangeRecordCounts?: Map<RemainingRange, number>
 }): AsyncGenerator<Message> {
   const {
     range,
@@ -218,6 +219,7 @@ async function* paginateRange(opts: {
     backfillLimit,
     totalEmitted,
     lastSeenCreated,
+    rangeRecordCounts,
   } = opts
 
   let cursor = range.cursor
@@ -264,6 +266,21 @@ async function* paginateRange(opts: {
         nextParams.starting_after = nextCursor
       }
       prefetchedResponse = listFn(nextParams as Parameters<typeof listFn>[0])
+    }
+
+    logger.trace({
+      event: 'page_fetched',
+      stream: streamName,
+      range_gte: range.gte,
+      range_lt: range.lt,
+      range_span_s: toUnixSeconds(range.lt) - toUnixSeconds(range.gte),
+      had_cursor: cursor !== null,
+      records: response.data.length,
+      has_more: responseHasMore,
+    })
+
+    if (rangeRecordCounts && response.data.length > 0) {
+      rangeRecordCounts.set(range, (rangeRecordCounts.get(range) ?? 0) + response.data.length)
     }
 
     for (const item of response.data) {
@@ -390,6 +407,8 @@ async function* iterateStream(opts: {
   const supportsForwardPagination = resourceConfig.supportsForwardPagination !== false
   const totalEmitted = { count: 0 }
   const lastSeenCreated = new Map<RemainingRange, number>()
+  // Track per-range record counts for this round (populated by paginateRange via page_fetched)
+  const rangeRecordCounts = new Map<RemainingRange, number>()
   let roundNumber = 0
   let totalApiCalls = 0
   let totalEmptyProbes = 0
@@ -406,6 +425,14 @@ async function* iterateStream(opts: {
     const roundStart = Date.now()
     const rangesThisRound = remaining.length
     const recordsBefore = totalEmitted.count
+    // Snapshot ranges before the round (paginateRange mutates remaining)
+    const roundRanges = remaining.map((r) => ({
+      ref: r,
+      gte: r.gte,
+      lt: r.lt,
+      hadCursor: r.cursor !== null,
+    }))
+    rangeRecordCounts.clear()
 
     // Fetch one page from each range in parallel (rate limiter controls concurrency)
     const generators = remaining.map((range) =>
@@ -422,6 +449,7 @@ async function* iterateStream(opts: {
         backfillLimit,
         totalEmitted,
         lastSeenCreated,
+        rangeRecordCounts,
       })
     )
 
@@ -433,20 +461,22 @@ async function* iterateStream(opts: {
 
     totalApiCalls += rangesThisRound
     const recordsThisRound = totalEmitted.count - recordsBefore
-    const emptyThisRound = rangesThisRound - lastSeenCreated.size -
-      (rangesThisRound - remaining.length - lastSeenCreated.size)
 
     // After pages complete, subdivide based on what we learned
     if (supportsCreatedFilter && remaining.length > 0) {
-      const beforeSubdivide = remaining.length
       const rangesWithData = lastSeenCreated.size
+      // Ranges that completed (removed from remaining) with 0 records
       const rangesExhausted = rangesThisRound - remaining.length
-      const rangesEmpty = rangesExhausted - (rangesThisRound - remaining.length - rangesWithData >= 0 ? 0 : 0)
+      const emptyExhausted = roundRanges.filter(
+        (r) => !remaining.includes(r.ref) && !rangeRecordCounts.has(r.ref)
+      ).length
+      totalEmptyProbes += emptyExhausted
+
+      // Build per-segment histogram: how many records each segment returned
+      const segmentCounts = roundRanges.map((r) => rangeRecordCounts.get(r.ref) ?? 0)
+      segmentCounts.sort((a, b) => a - b)
 
       const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, subdivisionFactor)
-
-      const emptyProbes = rangesThisRound - rangesWithData - (rangesThisRound - rangesExhausted - rangesWithData)
-      totalEmptyProbes += Math.max(0, rangesExhausted - rangesWithData)
 
       logger.debug({
         event: 'subdivision_round',
@@ -457,8 +487,15 @@ async function* iterateStream(opts: {
         ranges_fetched: rangesThisRound,
         ranges_with_data: rangesWithData,
         ranges_exhausted: rangesExhausted,
-        ranges_empty: Math.max(0, rangesExhausted - rangesWithData),
+        ranges_empty: emptyExhausted,
         records_this_round: recordsThisRound,
+        records_per_segment: {
+          min: segmentCounts[0],
+          p50: segmentCounts[Math.floor(segmentCounts.length / 2)],
+          p90: segmentCounts[Math.floor(segmentCounts.length * 0.9)],
+          max: segmentCounts[segmentCounts.length - 1],
+          histogram: segmentCounts,
+        },
         new_ranges: subdivided.length,
         total_records: totalEmitted.count,
         total_api_calls: totalApiCalls,

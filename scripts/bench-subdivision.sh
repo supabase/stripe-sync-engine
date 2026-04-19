@@ -49,15 +49,19 @@ for n in "${FACTORS[@]}"; do
         console.log('  elapsed:      ' + (complete.elapsed_ms / 1000).toFixed(1) + 's');
         console.log('  effective_rps:' + complete.effective_rps.toFixed(1));
       }
-      // Show per-round detail
+      // Show per-round detail with histogram
       for (const r of rounds) {
+        const h = r.records_per_segment || {};
+        const hist = h.histogram || [];
+        const zeros = hist.filter(x => x === 0).length;
+        const full = hist.filter(x => x === 100).length;
+        const partial = hist.filter(x => x > 0 && x < 100).length;
         console.log('  round ' + String(r.round).padStart(2) + ': ' +
-          String(r.ranges_fetched).padStart(4) + ' fetched, ' +
-          String(r.ranges_with_data).padStart(3) + ' data, ' +
-          String(r.ranges_empty).padStart(3) + ' empty, ' +
-          String(r.records_this_round).padStart(5) + ' records, ' +
-          String(r.round_ms).padStart(5) + 'ms → ' +
-          String(r.new_ranges).padStart(4) + ' new');
+          String(r.ranges_fetched).padStart(4) + ' fetched  ' +
+          String(r.records_this_round).padStart(5) + ' rec  ' +
+          String(r.round_ms).padStart(5) + 'ms  ' +
+          'segments: ' + zeros + ' empty, ' + partial + ' partial, ' + full + ' full  ' +
+          'min=' + (h.min ?? '-') + ' p50=' + (h.p50 ?? '-') + ' p90=' + (h.p90 ?? '-') + ' max=' + (h.max ?? '-'));
       }
     "
   echo ""

@@ -51,7 +51,7 @@ export function toIso(unixSeconds: number): string {
 // MARK: - Subdivision
 
 /** Default number of segments to split the older remainder into. */
-export const DEFAULT_SUBDIVISION_FACTOR = 10
+export const DEFAULT_SUBDIVISION_FACTOR = 2
 
 /**
  * Pure scheduler step: given the current backfill state, subdivide ranges that
