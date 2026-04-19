@@ -3,7 +3,7 @@
  *
  * Algorithm:
  *   1. Start with one or more time ranges to search.
- *   2. Fetch one page from each range in parallel (up to a concurrency budget).
+ *   2. Fetch one page from each range in parallel (rate limiter controls concurrency).
  *   3. Observe: record the last sort-key value seen in each page.
  *   4. Subdivide: split ranges that have a cursor into a boundary (keeps cursor)
  *      and two halves of the unfetched remainder.
@@ -47,12 +47,13 @@ export function toIso(unixSeconds: number): string {
 
 /**
  * Pure scheduler step: given the current backfill state, subdivide ranges that
- * made progress (have a cursor + lastObserved) into parallel segments.
+ * made progress (have a cursor + lastObserved) by splitting in half.
  *
  * Call this AFTER fetching pages (which populate lastObserved and cursors).
+ * Concurrency is controlled by the caller's rate limiter, not here.
  */
-export function nextStep(state: SearchState, maxSegments: number): Range[] {
-  return subdivideRanges(state.remaining, maxSegments, state.lastObserved)
+export function nextStep(state: SearchState): Range[] {
+  return subdivideRanges(state.remaining, state.lastObserved)
 }
 
 /**
@@ -68,7 +69,6 @@ export function nextStep(state: SearchState, maxSegments: number): Range[] {
  */
 export function subdivideRanges(
   remaining: Range[],
-  maxSegments: number,
   lastObserved: Map<Range, number>
 ): Range[] {
   const result: Range[] = []
@@ -86,13 +86,6 @@ export function subdivideRanges(
 
     // Nothing older to split — keep paginating sequentially.
     if (olderEndUnix <= rangeStartUnix) {
-      result.push(range)
-      continue
-    }
-
-    // Need at least 3 slots: boundary + 2 halves.
-    const budget = maxSegments - result.length
-    if (budget < 3) {
       result.push(range)
       continue
     }

@@ -154,12 +154,6 @@ export function reconcileRanges(
   return result
 }
 
-export function computeMaxSegments(
-  maxRequestsPerSecond: number,
-  activeStreams: number
-): number {
-  return Math.max(1, Math.floor(maxRequestsPerSecond / Math.max(activeStreams, 1)))
-}
 
 // MARK: - Account created timestamp
 
@@ -328,7 +322,6 @@ async function* iterateStream(opts: {
   accountId: string
   rateLimiter: RateLimiter
   backfillLimit?: number
-  getMaxSegments: () => number
   signal?: AbortSignal
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
@@ -339,7 +332,6 @@ async function* iterateStream(opts: {
     accountId,
     rateLimiter,
     backfillLimit,
-    getMaxSegments,
     drainQueue,
   } = opts
 
@@ -390,14 +382,10 @@ async function* iterateStream(opts: {
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
 
-    const maxSegments = supportsCreatedFilter ? getMaxSegments() : 1
-    const canSubdivide = supportsCreatedFilter && maxSegments > 1
+    const canSubdivide = supportsCreatedFilter
 
-    // Pick batch from current remaining (up to maxSegments)
-    const batch = remaining.slice(0, maxSegments)
-
-    // Fetch one page from each range in the batch (in parallel)
-    const generators = batch.map((range) =>
+    // Fetch one page from each range in parallel (rate limiter controls concurrency)
+    const generators = remaining.map((range) =>
       paginateRange({
         range,
         remaining,
@@ -418,12 +406,12 @@ async function* iterateStream(opts: {
     if (generators.length === 1) {
       yield* generators[0]
     } else {
-      yield* mergeAsync(generators, maxSegments)
+      yield* mergeAsync(generators, generators.length)
     }
 
     // After pages complete, subdivide based on what we learned
     if (canSubdivide && remaining.length > 0) {
-      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, maxSegments)
+      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated })
       remaining.length = 0
       remaining.push(...subdivided)
       lastSeenCreated.clear()
@@ -451,7 +439,6 @@ export async function* listApiBackfill(opts: {
   rateLimiter: RateLimiter
   backfillLimit?: number
   maxConcurrentStreams: number
-  maxRequestsPerSecond: number
   drainQueue?: () => AsyncGenerator<Message>
   signal?: AbortSignal
 }): AsyncGenerator<Message> {
@@ -465,16 +452,8 @@ export async function* listApiBackfill(opts: {
     rateLimiter,
     backfillLimit,
     maxConcurrentStreams,
-    maxRequestsPerSecond,
     drainQueue,
   } = opts
-
-  // Track streams that are actively running inside the bounded merge pool so we
-  // can allocate the request budget across the streams that are actually live.
-  // If we divide by the whole catalog up front, dense streams stay stuck in
-  // sequential mode until nearly everything else has already finished.
-  let activeStreams = 0
-  const getMaxSegments = () => computeMaxSegments(maxRequestsPerSecond, activeStreams)
 
   let accountCreated: number | null = initialAccountCreated ?? null
 
@@ -513,7 +492,6 @@ export async function* listApiBackfill(opts: {
 
     streamGenerators.push(
       (async function* () {
-        activeStreams++
         try {
           yield* iterateStream({
             streamName: stream.name,
@@ -523,7 +501,6 @@ export async function* listApiBackfill(opts: {
             accountId,
             rateLimiter,
             backfillLimit: streamBackfillLimit,
-            getMaxSegments,
             signal: opts.signal,
             drainQueue,
           })
@@ -547,15 +524,11 @@ export async function* listApiBackfill(opts: {
             status: 'error',
             error: err instanceof Error ? err.message : String(err),
           })
-        } finally {
-          activeStreams = Math.max(0, activeStreams - 1)
         }
       })()
     )
   }
 
-  // Run a bounded number of streams concurrently. Per-stream subdivision uses
-  // the same global rate budget, so fewer active streams means each dense
-  // stream can fan out earlier without oversubscribing Stripe.
+  // Run all streams concurrently — rate limiter controls throughput.
   yield* mergeAsync(streamGenerators, Math.min(maxConcurrentStreams, streamGenerators.length))
 }

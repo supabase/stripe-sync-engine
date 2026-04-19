@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RemainingRange } from './index.js'
-import { computeMaxSegments, reconcileRanges } from './src-list-api.js'
+import { reconcileRanges } from './src-list-api.js'
 
 describe('reconcileRanges', () => {
   it('returns remaining unchanged when accounted === incoming', () => {
@@ -81,14 +81,3 @@ describe('reconcileRanges', () => {
   })
 })
 
-describe('computeMaxSegments', () => {
-  it('allows sequential pagination when request budget is only one page per active stream', () => {
-    expect(computeMaxSegments(80, 74)).toBe(1)
-    expect(computeMaxSegments(1, 1)).toBe(1)
-  })
-
-  it('grows the subdivision budget as active streams drain', () => {
-    expect(computeMaxSegments(80, 20)).toBe(4)
-    expect(computeMaxSegments(80, 5)).toBe(16)
-  })
-})

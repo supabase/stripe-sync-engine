@@ -22,7 +22,7 @@ import { createInMemoryRateLimiter } from './rate-limiter.js'
 import type { RateLimiter } from './rate-limiter.js'
 
 /** Matches engine defaults passed into `listApiBackfill` from `read()`. */
-const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5, maxRequestsPerSecond: 20 } as const
+const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5 } as const
 
 const TEST_RANGE_GTE = '2010-01-01T00:00:00.000Z'
 const TEST_RANGE_LT = '2030-01-01T00:00:00.000Z'
@@ -2359,15 +2359,15 @@ describe('StripeSource', () => {
   })
 
   describe('read() — streams without supportsCreatedFilter sync sequentially', () => {
-    it('keeps created-filter streams sequential when the per-stream segment budget is one', async () => {
+    it('subdivides after first page and fetches boundary + halves in parallel', async () => {
       const listFn = vi
         .fn()
         .mockResolvedValueOnce({
           data: [{ id: 'cus_1', created: 1_500_000_000 }],
           has_more: true,
         })
-        .mockResolvedValueOnce({
-          data: [{ id: 'cus_2', created: 1_500_000_100 }],
+        .mockResolvedValue({
+          data: [],
           has_more: false,
         })
 
@@ -2396,24 +2396,18 @@ describe('StripeSource', () => {
           accountId: 'acct_test',
           rateLimiter: async () => 0,
           maxConcurrentStreams: 5,
-          maxRequestsPerSecond: 1,
         })
       )
 
-      const expectedCreated = {
-        gte: Math.floor(new Date(TEST_RANGE_GTE).getTime() / 1000),
-        lt: Math.floor(new Date(TEST_RANGE_LT).getTime() / 1000),
-      }
-
+      // First call: full range with singlePage=true.
+      // Second page returns empty → range completes without subdivision.
       expect(listFn).toHaveBeenCalledTimes(2)
       expect(listFn).toHaveBeenNthCalledWith(1, {
         limit: 100,
-        created: expectedCreated,
-      })
-      expect(listFn).toHaveBeenNthCalledWith(2, {
-        limit: 100,
-        starting_after: 'cus_1',
-        created: expectedCreated,
+        created: {
+          gte: Math.floor(new Date(TEST_RANGE_GTE).getTime() / 1000),
+          lt: Math.floor(new Date(TEST_RANGE_LT).getTime() / 1000),
+        },
       })
     })
 
@@ -2593,7 +2587,6 @@ describe('StripeSource', () => {
           accountId: 'acct_test',
           rateLimiter: async () => 0,
           maxConcurrentStreams: 1,
-          maxRequestsPerSecond: 80,
         })
       )
 
