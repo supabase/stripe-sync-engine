@@ -55,7 +55,9 @@ export function errorToConnectionStatus(err: unknown): Message {
 }
 
 function isGlobalError(err: unknown): boolean {
-  if (err instanceof StripeApiRequestError && (err.status === 401 || err.status === 403)) {
+  // Only 401 (invalid/revoked key) is truly global. 403 means the key lacks
+  // permission for a specific endpoint — report as a per-stream error, not fatal.
+  if (err instanceof StripeApiRequestError && err.status === 401) {
     return true
   }
   return false
@@ -93,6 +95,7 @@ const SKIPPABLE_ERROR_MESSAGES = [
   //  https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup.
   //  [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}"
   'Accounts v2 is not enabled for your platform',
+
 ]
 
 function isSkippableError(err: unknown): boolean {
