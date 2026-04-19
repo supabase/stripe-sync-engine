@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install Stripe CLI
         run: |
           curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public | gpg --dearmor -o /usr/share/keyrings/stripe.gpg
@@ -145,7 +148,7 @@ jobs:
           DATABASE_URL: ${{ steps.create-db.outputs.db_string }}
         run: |
           set +e
-          node scripts/reconcile-sigma-vs-postgres.js
+          bun scripts/reconcile-sigma-vs-postgres.ts
           STATUS=$?
           if [ "$STATUS" -ne 0 ]; then
             echo "::warning title=Sigma reconciliation::Postgres is missing rows that exist in Sigma. See the job log for the per-table diff and the list of missing IDs with their created timestamps."

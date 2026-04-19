@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 // Reconcile Stripe object IDs (via Sigma) against Postgres destination IDs.
 // 1. Discovers tables from Postgres and fetches every ID per table
@@ -8,6 +8,7 @@
 // Zero external dependencies — uses Node 24 built-in fetch and psql for Postgres.
 
 import { spawn, spawnSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
 
 const POLL_INTERVAL_MS = 3_000
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000
@@ -29,6 +30,9 @@ function parseArgs(argv) {
       i += 1
     } else if (arg === '--db-url') {
       args.dbUrl = next
+      i += 1
+    } else if (arg === '--output') {
+      args.output = next
       i += 1
     } else if (arg === '--help' || arg === '-h') {
       args.help = true
@@ -596,6 +600,25 @@ async function main() {
   const skippedRows = rows.filter((r) => r.status === 'skipped_in_sigma')
   const diffRows = rows.filter((r) => r.status === 'diff')
 
+  // Write detailed report to file if --output specified
+  if (args.output) {
+    const report = {
+      timestamp: new Date().toISOString(),
+      summary: {
+        tables: pgTables.length,
+        compared: matchCount + diffCount,
+        matches: matchCount,
+        differences: diffCount,
+        skipped: skippedCount,
+      },
+      formatted: formatTable(rows.filter((r) => r.status !== 'skipped_in_sigma')),
+      tables: rows,
+    }
+    writeFileSync(args.output, JSON.stringify(report, null, 2) + '\n')
+    console.log(`Report: ${args.output}`)
+  }
+
+  // Console summary
   console.log('')
   console.log(
     [
@@ -607,33 +630,8 @@ async function main() {
     ].join('\n')
   )
 
-  if (skippedRows.length > 0) {
-    console.log('')
-    console.log('Skipped tables (not available in Sigma):')
-    for (const r of skippedRows) {
-      console.log(`  ${r.resource} (${r.postgresCount ?? 0} rows in postgres)`)
-    }
-  }
-
   console.log('')
   console.log(formatTable(rows.filter((r) => r.status !== 'skipped_in_sigma')))
-
-  const summary = Object.fromEntries(
-    rows.filter((r) => r.status !== 'skipped_in_sigma').map((r) => [r.resource, r.status])
-  )
-  console.log('')
-  console.log(JSON.stringify(summary, null, 2))
-
-  if (diffRows.length > 0) {
-    console.log('')
-    console.log('Missing rows (present in Sigma, absent in Postgres):')
-    for (const r of diffRows) {
-      console.log(`  ${r.resource} (${r.postgresMissing} missing):`)
-      for (const m of r.missingRows) {
-        console.log(`    ${m.id}  ${formatCreated(m.created)}`)
-      }
-    }
-  }
 
   if (diffCount > 0) process.exit(1)
 }
