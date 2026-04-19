@@ -1,12 +1,9 @@
 import type { Message } from '@stripe/sync-protocol'
 import {
-  subdivideRanges,
   nextStep,
   toUnixSeconds,
   toIso,
   mergeAsync,
-  type Range,
-  type SearchState,
 } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
@@ -197,8 +194,7 @@ async function* paginateRange(opts: {
   supportsCreatedFilter: boolean
   backfillLimit?: number
   totalEmitted: { count: number }
-  lastSeenCreated: Map<number, number>
-  rangeIndex: number
+  lastSeenCreated: Map<RemainingRange, number>
   /** When true, fetch only one page then return (allows outer loop to subdivide). */
   singlePage?: boolean
 }): AsyncGenerator<Message> {
@@ -215,7 +211,6 @@ async function* paginateRange(opts: {
     backfillLimit,
     totalEmitted,
     lastSeenCreated,
-    rangeIndex,
     singlePage,
   } = opts
 
@@ -239,7 +234,7 @@ async function* paginateRange(opts: {
     for (const item of response.data) {
       const record = item as Record<string, unknown>
       if (typeof record.created === 'number') {
-        lastSeenCreated.set(rangeIndex, record.created)
+        lastSeenCreated.set(range, record.created)
       }
       yield msg.record({
         stream: streamName,
@@ -357,7 +352,7 @@ async function* iterateStream(opts: {
   const supportsLimit = resourceConfig.supportsLimit !== false
   const supportsForwardPagination = resourceConfig.supportsForwardPagination !== false
   const totalEmitted = { count: 0 }
-  const lastSeenCreated = new Map<number, number>()
+  const lastSeenCreated = new Map<RemainingRange, number>()
 
 
   // Paginate ranges — subdivide after every page to maximize parallelism.
@@ -374,7 +369,7 @@ async function* iterateStream(opts: {
     const batch = remaining.slice(0, maxSegments)
 
     // Fetch one page from each range in the batch (in parallel)
-    const generators = batch.map((range, i) =>
+    const generators = batch.map((range) =>
       paginateRange({
         range,
         remaining,
@@ -388,7 +383,6 @@ async function* iterateStream(opts: {
         backfillLimit,
         totalEmitted,
         lastSeenCreated,
-        rangeIndex: i,
         singlePage: supportsCreatedFilter,
       })
     )
@@ -506,8 +500,8 @@ export async function* listApiBackfill(opts: {
           if (isSkippableError(err)) {
             yield msg.stream_status({
               stream: stream.name,
-              status: 'error',
-              error: err instanceof Error ? err.message : String(err),
+              status: 'skip',
+              reason: err instanceof Error ? err.message : String(err),
             })
             return
           }

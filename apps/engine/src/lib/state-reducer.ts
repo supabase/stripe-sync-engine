@@ -29,10 +29,10 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
         sync_run: { sync_run_id: event.sync_run_id, progress: createInitialProgress(event.stream_names) },
       }
     }
-    if (event.sync_run_id && state.sync_run.sync_run_id !== event.sync_run_id) {
-      return { ...state, sync_run: { sync_run_id: event.sync_run_id, progress: createInitialProgress(event.stream_names) } }
-    }
-    return state
+    // Always reset progress on initialize — each pipeline_sync call is a new run.
+    // Without this, resumed syncs (same sync_run_id or no id) keep the original
+    // started_at, making elapsed_ms grow across runs.
+    return { ...state, sync_run: { sync_run_id: event.sync_run_id, progress: createInitialProgress(event.stream_names) } }
   }
 
   // Message events require existing state

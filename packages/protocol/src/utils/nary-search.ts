@@ -27,8 +27,8 @@ export type TimeBound = { gte: string; lt: string }
 /** Scheduler state between fetch rounds. */
 export type SearchState = {
   remaining: Range[]
-  /** Maps batch index → last observed sort-key value (unix seconds) in that range's page. */
-  lastObserved: Map<number, number>
+  /** Maps the fetched range → last observed sort-key value (unix seconds) in that range's page. */
+  lastObserved: Map<Range, number>
 }
 
 // MARK: - Time helpers
@@ -57,43 +57,43 @@ export function nextStep(state: SearchState, maxSegments: number): Range[] {
  * Subdivide ranges that have a cursor (were in progress but didn't complete).
  * The paginated portion keeps its cursor; the unpaginated tail splits into N parts.
  *
- * `lastObserved` maps range index to the `created` timestamp of the last
- * record seen in that range (used to determine the split point).
+ * `lastObserved` maps each fetched range to the `created` timestamp of the
+ * last record seen in that range (used to determine the split point).
  *
- * Segment sizing: the head range covered (splitPoint - rangeGte) seconds in one
- * page, so we use that as the minimum segment size to avoid creating segments
- * smaller than one page's worth of data.
+ * Stripe cursors own every record at `splitPoint`, so the paginated head keeps
+ * that entire second and the tail starts at `splitPoint + 1`.
  */
 export function subdivideRanges(
   remaining: Range[],
   maxSegments: number,
-  lastObserved: Map<number, number>
+  lastObserved: Map<Range, number>
 ): Range[] {
   const result: Range[] = []
 
-  for (let i = 0; i < remaining.length; i++) {
-    const range = remaining[i]
-    if (range.cursor === null || !lastObserved.has(i)) {
+  for (const range of remaining) {
+    if (range.cursor === null || !lastObserved.has(range)) {
       result.push(range)
       continue
     }
 
-    const splitPoint = lastObserved.get(i)!
-    const splitPointIso = toIso(splitPoint)
+    const splitPoint = lastObserved.get(range)!
     const rangeEndUnix = toUnixSeconds(range.lt)
+    const tailStartUnix = splitPoint + 1
 
-    if (splitPoint >= rangeEndUnix) {
+    if (tailStartUnix >= rangeEndUnix) {
       result.push(range)
       continue
     }
+
+    const tailStartIso = toIso(tailStartUnix)
 
     // Keep the paginated portion with its cursor
-    result.push({ gte: range.gte, lt: splitPointIso, cursor: range.cursor })
+    result.push({ gte: range.gte, lt: tailStartIso, cursor: range.cursor })
 
     // Only subdivide if we're below the segment budget
     if (result.length >= maxSegments) {
       // Over budget — keep the tail as one range
-      result.push({ gte: splitPointIso, lt: range.lt, cursor: null })
+      result.push({ gte: tailStartIso, lt: range.lt, cursor: null })
       continue
     }
 
@@ -101,13 +101,16 @@ export function subdivideRanges(
     // Sparse segments complete in one page and free up budget for the next round.
     // Dense segments get subdivided further on subsequent rounds.
     const budget = maxSegments - result.length
-    const tailSpan = rangeEndUnix - splitPoint
+    const tailSpan = rangeEndUnix - tailStartUnix
     const n = Math.min(budget, Math.max(1, tailSpan))
     const segmentSize = Math.max(1, Math.ceil(tailSpan / n))
 
     for (let j = 0; j < n; j++) {
-      const segGte = splitPoint + j * segmentSize
-      const segLt = j === n - 1 ? rangeEndUnix : splitPoint + (j + 1) * segmentSize
+      const segGte = tailStartUnix + j * segmentSize
+      const segLt =
+        j === n - 1
+          ? rangeEndUnix
+          : Math.min(rangeEndUnix, tailStartUnix + (j + 1) * segmentSize)
       if (segGte >= rangeEndUnix) break
       result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
     }

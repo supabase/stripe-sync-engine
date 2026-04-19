@@ -805,7 +805,7 @@ describe('StripeSource', () => {
       })
     })
 
-    it('emits stream_status error for known skippable Stripe list errors', async () => {
+    it('emits stream_status skip for known skippable Stripe list errors', async () => {
       const { StripeApiRequestError } = await import('@stripe/sync-openapi')
       const listFn = vi
         .fn()
@@ -840,9 +840,8 @@ describe('StripeSource', () => {
         type: 'stream_status',
         stream_status: {
           stream: 'invoices',
-          status: 'error',
-          error: expect.stringContaining('only available in testmode'),
-          // Full message includes method, path, status, and request-id from StripeApiRequestError
+          status: 'skip',
+          reason: expect.stringContaining('only available in testmode'),
         },
       })
     })

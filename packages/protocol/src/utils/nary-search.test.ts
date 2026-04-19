@@ -14,36 +14,36 @@ describe('subdivideRanges', () => {
       { gte: iso(0), lt: iso(60), cursor: null },
       { gte: iso(60), lt: iso(120), cursor: null },
     ]
-    const map = new Map<number, number>([[0, 10]])
+    const map = new Map<Range, number>([[remaining[0], 10]])
     expect(subdivideRanges(remaining, 10, map)).toEqual(remaining)
   })
 
   it('subdivides a range with cursor and lastSeenCreated into paginated head + null-cursor tail segments', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
     // maxSegments=4: head takes 1 slot, tail gets 3 (budget = 4 - 1 = 3)
-    const out = subdivideRanges(remaining, 4, new Map([[0, 30]]))
+    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 30]]))
     expect(out).toEqual([
-      { gte: iso(0), lt: iso(30), cursor: 'cur_1' },
-      { gte: iso(30), lt: iso(60), cursor: null },
-      { gte: iso(60), lt: iso(90), cursor: null },
-      { gte: iso(90), lt: iso(120), cursor: null },
+      { gte: iso(0), lt: iso(31), cursor: 'cur_1' },
+      { gte: iso(31), lt: iso(61), cursor: null },
+      { gte: iso(61), lt: iso(91), cursor: null },
+      { gte: iso(91), lt: iso(120), cursor: null },
     ])
   })
 
   it('caps tail segment count at remaining budget', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(100), cursor: 'cur_x' }]
     // maxSegments=2: head takes 1 slot, tail budget = 1
-    const out = subdivideRanges(remaining, 2, new Map([[0, 10]]))
+    const out = subdivideRanges(remaining, 2, new Map([[remaining[0], 10]]))
     expect(out).toHaveLength(2)
-    expect(out[0]).toEqual({ gte: iso(0), lt: iso(10), cursor: 'cur_x' })
-    expect(out[1]).toEqual({ gte: iso(10), lt: iso(100), cursor: null })
+    expect(out[0]).toEqual({ gte: iso(0), lt: iso(11), cursor: 'cur_x' })
+    expect(out[1]).toEqual({ gte: iso(11), lt: iso(100), cursor: null })
   })
 
   it('does not subdivide when splitPoint is at or past range end', () => {
     const range: Range = { gte: iso(0), lt: iso(60), cursor: 'cur_z' }
     const endUnix = 60
-    expect(subdivideRanges([range], 10, new Map([[0, endUnix]]))).toEqual([range])
-    expect(subdivideRanges([range], 10, new Map([[0, endUnix + 10]]))).toEqual([range])
+    expect(subdivideRanges([range], 10, new Map([[range, endUnix]]))).toEqual([range])
+    expect(subdivideRanges([range], 10, new Map([[range, endUnix + 10]]))).toEqual([range])
   })
 
   it('handles multiple ranges: only cursor + lastSeenCreated entries subdivide', () => {
@@ -51,13 +51,13 @@ describe('subdivideRanges', () => {
     const b: Range = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
     // maxSegments=10 gives enough budget for c to subdivide
-    const out = subdivideRanges([a, b, c], 10, new Map([[2, 90]]))
+    const out = subdivideRanges([a, b, c], 10, new Map([[c, 90]]))
     expect(out[0]).toEqual(a)
     expect(out[1]).toEqual(b)
-    expect(out[2]).toEqual({ gte: iso(60), lt: iso(90), cursor: 'cur_c' })
+    expect(out[2]).toEqual({ gte: iso(60), lt: iso(91), cursor: 'cur_c' })
     const tail = out.slice(3)
     expect(tail.length).toBeGreaterThan(0)
-    expect(tail[0].gte).toBe(iso(90))
+    expect(tail[0].gte).toBe(iso(91))
     expect(tail[tail.length - 1].lt).toBe(iso(120))
   })
 
@@ -68,10 +68,35 @@ describe('subdivideRanges', () => {
 
   it('does not over-split a single-second tail even with a large maxSegments', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }]
-    const out = subdivideRanges(remaining, 100, new Map([[0, 1001]]))
+    const out = subdivideRanges(remaining, 100, new Map([[remaining[0], 1001]]))
+    expect(out).toEqual(remaining)
+  })
+
+  it('keeps the entire last observed second with the paginated head', () => {
+    const remaining: Range[] = [{ gte: iso(1000), lt: iso(1010), cursor: 'cur_same_second' }]
+    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 1000]]))
     expect(out).toEqual([
-      { gte: iso(1000), lt: iso(1001), cursor: 'cur_tail' },
-      { gte: iso(1001), lt: iso(1002), cursor: null },
+      { gte: iso(1000), lt: iso(1001), cursor: 'cur_same_second' },
+      { gte: iso(1001), lt: iso(1004), cursor: null },
+      { gte: iso(1004), lt: iso(1007), cursor: null },
+      { gte: iso(1007), lt: iso(1010), cursor: null },
+    ])
+  })
+
+  it('matches observations to the surviving range after earlier ranges drop out', () => {
+    const inProgress: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_b' }
+    const out = nextStep(
+      {
+        remaining: [inProgress],
+        lastObserved: new Map([[inProgress, 90]]),
+      },
+      4
+    )
+    expect(out).toEqual([
+      { gte: iso(60), lt: iso(91), cursor: 'cur_b' },
+      { gte: iso(91), lt: iso(101), cursor: null },
+      { gte: iso(101), lt: iso(111), cursor: null },
+      { gte: iso(111), lt: iso(120), cursor: null },
     ])
   })
 })
@@ -94,10 +119,9 @@ function simulateRound(
   density: (ts: number) => number,
   pageSize = 100
 ): Range[] {
-  const lastSeenCreated = new Map<number, number>()
+  const lastSeenCreated = new Map<Range, number>()
 
-  for (let i = 0; i < ranges.length; i++) {
-    const range = ranges[i]
+  for (const range of ranges) {
     const startUnix = range.cursor
       ? toUnixSeconds(range.gte) // cursor means we're mid-pagination, start from gte
       : toUnixSeconds(range.gte)
@@ -114,8 +138,8 @@ function simulateRound(
 
     if (count > 0) {
       // Simulate: page returned records, set cursor and lastSeenCreated
-      range.cursor = `cur_${i}_${lastTs}`
-      lastSeenCreated.set(i, lastTs)
+      range.cursor = `cur_${lastTs}`
+      lastSeenCreated.set(range, lastTs)
     }
     // If count === 0, range is empty — cursor stays null, no lastSeenCreated entry
   }
@@ -194,7 +218,7 @@ describe('n-ary search: data distribution scenarios', () => {
   it('budget exhaustion: maxSegments=2 caps output per subdivision call', () => {
     // subdivideRanges itself respects the budget — test it directly
     const ranges: Range[] = [{ gte: iso(0), lt: iso(10000), cursor: 'cur_0' }]
-    const lastObserved = new Map([[0, 100]])
+    const lastObserved = new Map([[ranges[0], 100]])
     const result = subdivideRanges(ranges, 2, lastObserved)
     // head + 1 tail segment = 2
     expect(result.length).toBeLessThanOrEqual(2)
@@ -202,7 +226,7 @@ describe('n-ary search: data distribution scenarios', () => {
 
   it('nextStep wraps subdivideRanges correctly', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const lastObserved = new Map([[0, 30]])
+    const lastObserved = new Map([[remaining[0], 30]])
     const result = nextStep({ remaining, lastObserved }, 4)
     const direct = subdivideRanges(remaining, 4, lastObserved)
     expect(result).toEqual(direct)
