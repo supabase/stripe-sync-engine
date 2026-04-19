@@ -222,9 +222,13 @@ const destination = {
         .map((cs) => [cs.stream.name, cs.stream.newer_than_field!])
     )
 
-    const flushStream = async (streamName: string) => {
+    const failedStreams = new Set<string>()
+
+    /** Flush and return error message if failed, undefined if ok. */
+    const flushStream = async (streamName: string): Promise<string | undefined> => {
+      if (failedStreams.has(streamName)) return undefined
       const buffer = streamBuffers.get(streamName)
-      if (!buffer || buffer.length === 0) return
+      if (!buffer || buffer.length === 0) return undefined
       const pk = streamKeyColumns.get(streamName) ?? ['id']
       const newerThan = streamNewerThanField.get(streamName)
       try {
@@ -233,23 +237,24 @@ const destination = {
         const detail =
           `stream=${streamName} table=${config.schema}.${streamName} ` +
           `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
-        const wrapped = new Error(`${errorMessage(err)} (${detail})`, { cause: err })
-        wrapped.stack = (err as Error).stack
-        throw wrapped
+        failedStreams.add(streamName)
+        streamBuffers.set(streamName, [])
+        return `${errorMessage(err)} (${detail})`
       }
       streamBuffers.set(streamName, [])
+      return undefined
     }
 
-    const flushAll = async () => {
-      for (const streamName of streamBuffers.keys()) {
-        await flushStream(streamName)
-      }
+    function streamError(stream: string, error: string) {
+      return { type: 'stream_status' as const, stream_status: { stream, status: 'error' as const, error } }
     }
 
     try {
       for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg.record
+
+          if (failedStreams.has(stream)) continue
 
           if (!streamBuffers.has(stream)) {
             streamBuffers.set(stream, [])
@@ -259,21 +264,34 @@ const destination = {
           buffer.push(data as Record<string, unknown>)
 
           if (buffer.length >= batchSize) {
-            await flushStream(stream)
+            const err = await flushStream(stream)
+            if (err) {
+              yield streamError(stream, err)
+              continue
+            }
           }
           yield msg
         } else if (msg.type === 'source_state') {
           if (msg.source_state.state_type !== 'global') {
-            await flushStream(msg.source_state.stream)
+            const stream = msg.source_state.stream
+            if (failedStreams.has(stream)) continue
+            const err = await flushStream(stream)
+            if (err) {
+              yield streamError(stream, err)
+              continue
+            }
           }
           yield msg
         } else {
-          // Pass through messages the destination doesn't handle
           yield msg
         }
       }
 
-      await flushAll()
+      // Final flush for all remaining buffers
+      for (const streamName of streamBuffers.keys()) {
+        const err = await flushStream(streamName)
+        if (err) yield streamError(streamName, err)
+      }
 
       yield {
         type: 'log' as const,
@@ -282,19 +300,6 @@ const destination = {
           message: `Postgres destination: wrote to schema "${config.schema}"`,
         },
       }
-    } catch (err: unknown) {
-      try {
-        await flushAll()
-      } catch {
-        // ignore flush errors during error handling
-      }
-
-      yield { type: 'log' as const, log: { level: 'error' as const, message: errorMessage(err) } }
-      yield {
-        type: 'connection_status' as const,
-        connection_status: { status: 'failed' as const, message: errorMessage(err) },
-      }
-      throw err
     } finally {
       await pool.end()
     }
