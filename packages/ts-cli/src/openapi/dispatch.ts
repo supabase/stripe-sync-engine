@@ -93,7 +93,26 @@ export async function handleResponse(
 ): Promise<void> {
   if (!response.ok) {
     const text = await response.text()
-    process.stderr.write(`Error ${response.status}: ${text}\n`)
+    let formatted = text
+    try {
+      const json = JSON.parse(text)
+      if (json.error && json.details) {
+        // Response validation error — show structured output
+        const issues = (json.details as Array<{ path: string[]; message: string }>)
+          .slice(0, 10)
+          .map((d) => `  ${d.path.join('.')}: ${d.message}`)
+          .join('\n')
+        const more = json.details.length > 10 ? `\n  ... and ${json.details.length - 10} more` : ''
+        formatted = `${json.error}\n${issues}${more}`
+      } else if (json.error) {
+        formatted = typeof json.error === 'string' ? json.error : JSON.stringify(json.error, null, 2)
+      } else {
+        formatted = JSON.stringify(json, null, 2)
+      }
+    } catch {
+      // not JSON, use raw text
+    }
+    process.stderr.write(`Error ${response.status}: ${formatted}\n`)
     process.exit(1)
   }
 
