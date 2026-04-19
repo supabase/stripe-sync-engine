@@ -416,7 +416,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
     pipeline_read(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
-        (async function* () {
+        (async function* (): AsyncGenerator<Message> {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
           const raw = p.source.connector.read(
             { config: p.source.config, catalog: p.catalog, state: p.state?.source },
@@ -427,7 +427,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
-          })(parsed)
+          })(parsed) as AsyncIterable<Message>
         })()
       )
     },
@@ -454,7 +454,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     },
 
     pipeline_sync(pipeline, opts?, input?) {
-      return withAbortOnReturn((signal) =>
+      return withAbortOnReturn<SyncOutput>((signal) =>
         (async function* () {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
