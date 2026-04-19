@@ -9,6 +9,11 @@ import { createRemoteEngine } from '../lib/remote-engine.js'
 import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
 import { ProgressView, formatProgress } from '../lib/progress/format.js'
 import { spawnServeSubprocess } from './subprocess.js'
+import {
+  applyControlToPipeline,
+  readPersistedStripeSourceConfig,
+  writePersistedStripeSourceConfig,
+} from './source-config-cache.js'
 
 export function createSyncCmd() {
   return defineCommand({
@@ -84,13 +89,17 @@ export function createSyncCmd() {
       const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
       const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
 
-      const stripeConfig: Record<string, unknown> = { api_key: stripeApiKey }
+      const persistedStripeConfig = readPersistedStripeSourceConfig(sourceConfigCachePath(stripeApiKey))
+      const stripeConfig: Record<string, unknown> = {
+        api_key: stripeApiKey,
+        ...(persistedStripeConfig ?? {}),
+      }
       if (args.stripeBaseUrl) stripeConfig.base_url = args.stripeBaseUrl
       if (args.stripeRateLimit) stripeConfig.rate_limit = parseInt(args.stripeRateLimit)
       if (backfillLimit) stripeConfig.backfill_limit = backfillLimit
       if (args.websocket) stripeConfig.websocket = true
 
-      const pipeline: PipelineConfig = {
+      let pipeline: PipelineConfig = {
         source: { type: 'stripe', stripe: stripeConfig },
         destination: {
           type: 'postgres',
@@ -115,9 +124,16 @@ export function createSyncCmd() {
       try {
         const engine = createRemoteEngine(server.url)
 
-        // Create tables before syncing (must drain — await alone no-ops on AsyncIterable)
-        for await (const _msg of engine.pipeline_setup(pipeline)) {
-          // drain setup messages (table creation, etc.)
+        // Run connector setup and apply any config updates before syncing.
+        for await (const msg of engine.pipeline_setup(pipeline)) {
+          if (msg.type !== 'control') continue
+          pipeline = applyControlToPipeline(pipeline, msg.control)
+          if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
+            writePersistedStripeSourceConfig(
+              sourceConfigCachePath(stripeApiKey),
+              msg.control.source_config
+            )
+          }
         }
 
         const syncState: SyncState | undefined = initialState
@@ -133,6 +149,15 @@ export function createSyncCmd() {
         const inkInstance = plain ? null : render(<></>, { stdout: process.stderr })
 
         for await (const msg of output) {
+          if (msg.type === 'control') {
+            pipeline = applyControlToPipeline(pipeline, msg.control)
+            if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
+              writePersistedStripeSourceConfig(
+                sourceConfigCachePath(stripeApiKey),
+                msg.control.source_config
+              )
+            }
+          } else
           if (msg.type === 'source_state') {
             if (msg.source_state.state_type === 'global') {
               await store.setGlobal(msg.source_state.data)
@@ -171,6 +196,11 @@ function defaultFileStateStore(apiKey: string): StateStore {
   const hash = createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
   const filePath = join(homedir(), '.stripe-sync', `${hash}.json`)
   return fileStateStore(filePath)
+}
+
+function sourceConfigCachePath(apiKey: string): string {
+  const hash = createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
+  return join(homedir(), '.stripe-sync', `${hash}.source-config.json`)
 }
 
 async function getPostgresStateStore(connectionString: string, schema: string) {
