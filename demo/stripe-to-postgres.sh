@@ -13,7 +13,6 @@ RUN="${TS_RUNNER:-node --import tsx}"
 POSTGRES_URL="${DATABASE_URL:-${POSTGRES_URL:?Set DATABASE_URL or POSTGRES_URL}}"
 
 if [[ "${1:-}" == "verbose" ]]; then
-  export DANGEROUSLY_VERBOSE_LOGGING=true
   export LOG_LEVEL=debug
 fi
 

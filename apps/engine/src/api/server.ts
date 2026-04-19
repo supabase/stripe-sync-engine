@@ -22,11 +22,6 @@ type BunLike = {
 export async function startApiServer({ resolver, port }: StartApiServerOptions) {
   const listenPort = port ?? Number(process.env['PORT'] || 3000)
 
-  if (process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true') {
-    logger.warn(
-      '⚠️  DANGEROUSLY_VERBOSE_LOGGING is enabled — all request headers and message payloads will be logged. Do not use in production.'
-    )
-  }
 
   const app = await createApp(resolver)
   const bun = (globalThis as typeof globalThis & { Bun?: BunLike }).Bun
