@@ -353,7 +353,7 @@ async function* paginateRange(opts: {
 
 // MARK: - Single-stream backfill
 
-async function* backfillStream(opts: {
+async function* iterateStream(opts: {
   streamName: string
   timeRange: { gte: string; lt: string }
   streamState: StreamState | undefined
@@ -361,7 +361,7 @@ async function* backfillStream(opts: {
   accountId: string
   rateLimiter: RateLimiter
   backfillLimit?: number
-  maxSegmentsPerStream: number
+  getMaxSegments: () => number
   signal?: AbortSignal
   drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
@@ -372,7 +372,7 @@ async function* backfillStream(opts: {
     accountId,
     rateLimiter,
     backfillLimit,
-    maxSegmentsPerStream,
+    getMaxSegments,
     drainQueue,
   } = opts
 
@@ -405,7 +405,7 @@ async function* backfillStream(opts: {
     remaining = [{ gte: timeRange.gte, lt: timeRange.lt, cursor: null }]
   }
 
-  yield msg.stream_status({ stream: streamName, status: 'start' })
+  yield msg.stream_status({ stream: streamName, status: 'start', time_range: timeRange })
 
   const rateLimitedListFn = withRateLimit(resourceConfig.listFn!, rateLimiter, opts.signal)
   const supportsCreatedFilter = resourceConfig.supportsCreatedFilter
@@ -417,17 +417,19 @@ async function* backfillStream(opts: {
   // Subdivide any ranges that were in-progress from a previous request
   const hasInProgress = remaining.some((r) => r.cursor !== null)
   if (hasInProgress) {
-    remaining = subdivideRanges(remaining, maxSegmentsPerStream, lastSeenCreated)
+    remaining = subdivideRanges(remaining, getMaxSegments(), lastSeenCreated)
   }
 
-  // Paginate ranges — up to maxSegmentsPerStream concurrently
+  // Paginate ranges — re-check budget each iteration
   while (remaining.length > 0) {
     if (drainQueue) yield* drainQueue()
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
 
-    // Build generators for up to maxSegmentsPerStream ranges
-    const batch = remaining.slice(0, maxSegmentsPerStream)
+    const maxSegments = getMaxSegments()
+
+    // Build generators for up to maxSegments ranges
+    const batch = remaining.slice(0, maxSegments)
     const generators = batch.map((range, i) =>
       paginateRange({
         range,
@@ -449,14 +451,14 @@ async function* backfillStream(opts: {
     if (generators.length === 1) {
       yield* generators[0]
     } else {
-      yield* mergeAsync(generators, maxSegmentsPerStream)
+      yield* mergeAsync(generators, maxSegments)
     }
 
     // After this batch, subdivide any ranges that were in-progress but didn't complete
     if (remaining.length > 0) {
       const stillInProgress = remaining.some((r) => r.cursor !== null)
       if (stillInProgress) {
-        const subdivided = subdivideRanges(remaining, maxSegmentsPerStream, lastSeenCreated)
+        const subdivided = subdivideRanges(remaining, getMaxSegments(), lastSeenCreated)
         remaining.length = 0
         remaining.push(...subdivided)
         lastSeenCreated.clear()
@@ -484,7 +486,7 @@ export async function* listApiBackfill(opts: {
   rateLimiter: RateLimiter
   backfillLimit?: number
   maxConcurrentStreams: number
-  maxSegmentsPerStream: number
+  maxRequestsPerSecond: number
   drainQueue?: () => AsyncGenerator<Message>
   signal?: AbortSignal
 }): AsyncGenerator<Message> {
@@ -497,9 +499,13 @@ export async function* listApiBackfill(opts: {
     rateLimiter,
     backfillLimit,
     maxConcurrentStreams,
-    maxSegmentsPerStream,
+    maxRequestsPerSecond,
     drainQueue,
   } = opts
+
+  // Track active streams so we can dynamically allocate segments
+  let activeStreams = Math.min(maxConcurrentStreams, catalog.streams.length)
+  const getMaxSegments = () => Math.max(1, Math.floor(maxRequestsPerSecond / activeStreams))
 
   let accountCreated: number | null = null
 
@@ -539,7 +545,7 @@ export async function* listApiBackfill(opts: {
     streamGenerators.push(
       (async function* () {
         try {
-          yield* backfillStream({
+          yield* iterateStream({
             streamName: stream.name,
             timeRange,
             streamState,
@@ -547,7 +553,7 @@ export async function* listApiBackfill(opts: {
             accountId,
             rateLimiter,
             backfillLimit: streamBackfillLimit,
-            maxSegmentsPerStream,
+            getMaxSegments,
             signal: opts.signal,
             drainQueue,
           })
@@ -579,6 +585,8 @@ export async function* listApiBackfill(opts: {
             status: 'error',
             error: err instanceof Error ? err.message : String(err),
           })
+        } finally {
+          activeStreams = Math.max(1, activeStreams - 1)
         }
       })()
     )

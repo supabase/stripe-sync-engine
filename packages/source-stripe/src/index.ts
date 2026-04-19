@@ -253,11 +253,6 @@ export function createStripeSource(
             config.max_concurrent_streams ?? 5,
             catalog.streams.length
           )
-          const effectiveStreams = Math.max(1, maxConcurrentStreams)
-          const maxSegmentsPerStream = Math.max(
-            1,
-            Math.floor(maxRequestsPerSecond / effectiveStreams)
-          )
 
           const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)
           const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
@@ -330,8 +325,8 @@ export function createStripeSource(
               client,
               accountId,
               backfillLimit: config.backfill_limit,
-              maxConcurrentStreams: effectiveStreams,
-              maxSegmentsPerStream,
+              maxConcurrentStreams,
+              maxRequestsPerSecond,
               signal,
               drainQueue: wsClient
                 ? () => inputQueue.drain(config, catalog, registry, streamNames, accountId)

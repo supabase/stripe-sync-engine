@@ -22,7 +22,7 @@ import { createInMemoryRateLimiter } from './rate-limiter.js'
 import type { RateLimiter } from './rate-limiter.js'
 
 /** Matches engine defaults passed into `listApiBackfill` from `read()`. */
-const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5, maxSegmentsPerStream: 4 } as const
+const LIST_BACKFILL_OPTS = { maxConcurrentStreams: 5, maxRequestsPerSecond: 20 } as const
 
 const TEST_RANGE_GTE = '2010-01-01T00:00:00.000Z'
 const TEST_RANGE_LT = '2030-01-01T00:00:00.000Z'
