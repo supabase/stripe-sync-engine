@@ -23,8 +23,12 @@ import sourceStripe, { type StreamState } from '@stripe/sync-source-stripe'
 import { utc } from './test-server-harness.js'
 
 const SOURCE_SCHEMA = 'stripe'
-const OBJECTS_PER_STREAM = 1200
-const RATE_LIMIT = 100000
+
+/** Tuning knobs — override via env vars. */
+const OBJECTS_PER_STREAM = parseInt(process.env.OBJECTS_PER_STREAM ?? '1200', 10)
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT ?? '100000', 10)
+const SEED_CONCURRENCY = parseInt(process.env.SEED_CONCURRENCY ?? '8', 10)
+const INSERT_BATCH = parseInt(process.env.INSERT_BATCH ?? '1000', 10)
 
 /** Optional stream filter via STREAMS=customers,invoices env var. */
 const STREAM_FILTER: Set<string> | null = process.env.STREAMS
@@ -46,8 +50,6 @@ type StreamSeed = {
   tableName: string
   objectIds: string[]
 }
-
-const INSERT_BATCH = 1000
 
 async function replaceTableObjects(
   tableName: string,
@@ -171,7 +173,6 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
         (!STREAM_FILTER || STREAM_FILTER.has(ep.tableName))
     )
 
-    const SEED_CONCURRENCY = 8
     for (let i = 0; i < seedable.length; i += SEED_CONCURRENCY) {
       const batch = seedable.slice(i, i + SEED_CONCURRENCY)
       await Promise.all(
