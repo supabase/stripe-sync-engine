@@ -125,13 +125,14 @@ describe('destination default export', () => {
     })
 
     it('fails with bad connection string', async () => {
-      const statusMsg = await collectFirst(
-        destination.check({
-          config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
-        }),
-        'connection_status'
-      )
-      expect(statusMsg.connection_status.status).toBe('failed')
+      await expect(
+        collectFirst(
+          destination.check({
+            config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
+          }),
+          'connection_status'
+        )
+      ).rejects.toThrow()
     })
   })
 
