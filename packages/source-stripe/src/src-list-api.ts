@@ -78,14 +78,21 @@ const SKIPPABLE_ERROR_MESSAGES = [
   'This endpoint is only available in testmode',
 
   // treasury_financial_accounts
+  // Variant 1 (with hint):
   // "Unrecognized request URL (GET: /v1/treasury/financial_accounts). Please see
   //  https://stripe.com/docs or we can help at https://support.stripe.com/.
   //  (Hint: Have you onboarded to Treasury? You can learn more about the steps needed at
   //  https://stripe.com/docs/treasury/access) [GET /v1/treasury/financial_accounts (400)]
   //  {request-id=req_IUY53toFOUrzG6}"
   'Have you onboarded to Treasury',
+  // Variant 2 (without hint):
+  // "Unrecognized request URL (GET: /v1/treasury/financial_accounts). Please see
+  //  https://stripe.com/docs or we can help at https://support.stripe.com/.
+  //  [GET /v1/treasury/financial_accounts (400)] {request-id=req_...}"
+  'Unrecognized request URL (GET: /v1/treasury/financial_accounts)',
 
   // v2_core_accounts
+  // Variant 1:
   // "Accounts v2 is not enabled for your platform. If you're interested in using this API with
   //  your integration, please visit
   //  https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup.
