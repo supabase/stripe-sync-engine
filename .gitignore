@@ -53,3 +53,4 @@ test-results/
 apps/visualizer/out/
 
 .sync-state*.json
+*.log

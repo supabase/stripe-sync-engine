@@ -10,6 +10,29 @@ const STATUS_ICON: Record<string, { symbol: string; color: string }> = {
   errored: { symbol: '●', color: 'red' },
 }
 
+function shortDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+}
+
+function formatRangeBar(
+  timeRange: { gte: string; lt: string },
+  completedRanges: { gte: string; lt: string }[]
+): string | null {
+  const totalMs = new Date(timeRange.lt).getTime() - new Date(timeRange.gte).getTime()
+  if (totalMs <= 0) return null
+  const completedMs = completedRanges.reduce((sum, r) => {
+    const start = Math.max(new Date(r.gte).getTime(), new Date(timeRange.gte).getTime())
+    const end = Math.min(new Date(r.lt).getTime(), new Date(timeRange.lt).getTime())
+    return sum + Math.max(0, end - start)
+  }, 0)
+  const ratio = Math.min(1, completedMs / totalMs)
+  const width = 20
+  const filled = Math.round(ratio * width)
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(width - filled)
+  return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
+}
+
 function StreamRow({ name, stream, prev, errorMsg }: {
   name: string
   stream: StreamProgress
@@ -20,6 +43,9 @@ function StreamRow({ name, stream, prev, errorMsg }: {
   const delta = prev ? stream.record_count - prev.record_count : 0
   const deltaStr = delta > 0 ? ` (+${delta})` : ''
   const showCount = stream.record_count > 0 || stream.status === 'completed'
+  const rangeBar = stream.time_range && stream.completed_ranges
+    ? formatRangeBar(stream.time_range, stream.completed_ranges)
+    : null
 
   return (
     <Box flexDirection="column">
@@ -30,6 +56,11 @@ function StreamRow({ name, stream, prev, errorMsg }: {
           <Text dimColor>: {stream.record_count} records{deltaStr}</Text>
         )}
       </Box>
+      {rangeBar && (
+        <Box marginLeft={3}>
+          <Text dimColor>{rangeBar}</Text>
+        </Box>
+      )}
       {errorMsg && (
         <Box marginLeft={3}>
           <Text color="red">{errorMsg}</Text>

@@ -260,6 +260,13 @@ export const StreamStatusPayload = z
     z.object({
       stream: z.string().describe('Stream being reported on.'),
       status: z.literal('start'),
+      time_range: z
+        .object({
+          gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+          lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+        })
+        .optional()
+        .describe('Full backfill time span for this stream.'),
     }),
     z.object({
       stream: z.string().describe('Stream being reported on.'),
@@ -301,6 +308,13 @@ export const StreamProgress = z
     state_count: z.number().int().describe('Number of state checkpoints for this stream.'),
     record_count: z.number().int().describe('Records synced for this stream in this run.'),
     error: z.string().optional().describe('Error message when status is errored.'),
+    time_range: z
+      .object({
+        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+      })
+      .optional()
+      .describe('Full backfill time span for this stream.'),
     completed_ranges: z
       .array(
         z.object({

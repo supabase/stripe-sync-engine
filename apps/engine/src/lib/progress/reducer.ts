@@ -103,7 +103,11 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
 
       let status: StreamProgress['status'] = sp.status
       let error: string | undefined = sp.error
-      if (ss.status === 'start') status = 'started'
+      let time_range = sp.time_range
+      if (ss.status === 'start') {
+        status = 'started'
+        if ('time_range' in ss && ss.time_range) time_range = ss.time_range
+      }
       else if (ss.status === 'complete') status = 'completed'
       else if (ss.status === 'skip') status = 'skipped'
       else if (ss.status === 'error') { status = 'errored'; error = ss.error }
@@ -111,7 +115,7 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       const next = {
         ...progress,
         elapsed_ms: elapsedMs,
-        streams: { ...progress.streams, [ss.stream]: { ...sp, status, error } },
+        streams: { ...progress.streams, [ss.stream]: { ...sp, status, error, time_range } },
       }
       next.derived = computeDerived(next, elapsedMs)
       return next
