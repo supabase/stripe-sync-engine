@@ -43,6 +43,7 @@ beforeAll(async () => {
     encoding: 'utf8',
   })
     .trim()
+    .split('\n')[0]!
     .split(':')
     .pop()
 
@@ -237,6 +238,78 @@ describe('destination default export', () => {
       )
       expect(rows[0].name).toBe('Alice Updated')
     })
+  })
+})
+
+describe('newer_than_field stale write prevention', () => {
+  const newerThanCatalog: ConfiguredCatalog = {
+    streams: [
+      {
+        stream: {
+          name: 'customers',
+          primary_key: [['id']],
+          json_schema: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              created: { type: 'integer' },
+            },
+          },
+          newer_than_field: 'created',
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'overwrite',
+      },
+    ],
+  }
+
+  beforeEach(async () => {
+    await drain(destination.setup!({ config: makeConfig(), catalog: newerThanCatalog }))
+  })
+
+  it('skips upsert when incoming record is older than existing', async () => {
+    const batch1 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', created: 200 }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch1)
+    )
+
+    const batch2 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1 (stale)', created: 100 }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch2)
+    )
+
+    const { rows } = await pool.query(
+      `SELECT _raw_data->>'name' AS name, created FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+    )
+    expect(rows[0].name).toBe('Alice v2')
+    expect(rows[0].created).toBe('200')
+  })
+
+  it('allows upsert when incoming record is newer than existing', async () => {
+    const batch1 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1', created: 100 }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch1)
+    )
+
+    const batch2 = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', created: 200 }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch2)
+    )
+
+    const { rows } = await pool.query(
+      `SELECT _raw_data->>'name' AS name, created FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+    )
+    expect(rows[0].name).toBe('Alice v2')
+    expect(rows[0].created).toBe('200')
   })
 })
 
