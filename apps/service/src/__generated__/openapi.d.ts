@@ -189,42 +189,6 @@ export interface components {
              */
             batch_size: number;
         };
-        /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
-        SyncState: {
-            /** @description Source connector state — cursors, backfill progress, events cursors. */
-            source: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Destination connector state — reserved for future use. */
-            destination: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
-            engine: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-        };
     };
     responses: never;
     parameters: never;
@@ -305,58 +269,61 @@ export interface operations {
                             status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                             /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
                             progress?: {
-                                /**
-                                 * @description Why the sync run ended.
-                                 * @enum {string}
-                                 */
-                                reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                                /**
-                                 * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                                 * @enum {string}
-                                 */
-                                cutoff?: "soft" | "hard";
-                                /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                                elapsed_ms?: number;
-                                /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                                state?: components["schemas"]["SyncState"];
-                                /** @description Final global aggregates. Same shape as trace/progress. */
-                                global_progress?: {
-                                    /** @description Wall-clock milliseconds since the sync run started. */
-                                    elapsed_ms: number;
-                                    /** @description Total records synced across all streams in this run. */
-                                    run_record_count: number;
-                                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                    rows_per_second: number;
-                                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                    window_rows_per_second: number;
-                                    /** @description Total source_state messages observed so far in this sync run. */
-                                    state_checkpoint_count: number;
+                                /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+                                started_at: string;
+                                /** @description Wall-clock milliseconds since the sync run started. */
+                                elapsed_ms: number;
+                                /** @description Total source_state messages observed so far. */
+                                global_state_count: number;
+                                /** @description Set when source or destination emits connection_status: failed. */
+                                connection_status?: {
+                                    /**
+                                     * @description Whether the connection check passed.
+                                     * @enum {string}
+                                     */
+                                    status: "succeeded" | "failed";
+                                    /** @description Human-readable explanation of the check result. */
+                                    message?: string;
                                 };
-                                /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                                stream_progress?: {
+                                /** @description Computed aggregates. */
+                                derived: {
+                                    /**
+                                     * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                                     * @enum {string}
+                                     */
+                                    status: "started" | "succeeded" | "failed";
+                                    /** @description Overall throughput for the entire run. */
+                                    records_per_second: number;
+                                    /** @description State checkpoints per second. */
+                                    states_per_second: number;
+                                };
+                                /** @description Per-stream progress, keyed by stream name. */
+                                streams: {
                                     [key: string]: {
                                         /**
-                                         * @description Final stream status.
+                                         * @description Current state, derived from stream_status events.
                                          * @enum {string}
                                          */
-                                        status: "start" | "running" | "complete" | "range_complete";
-                                        /** @description Cumulative records synced for this stream across all runs. */
-                                        cumulative_record_count: number;
-                                        /** @description Records synced in this run. */
-                                        run_record_count: number;
-                                        /** @description Average records/sec for this stream over the run. */
-                                        records_per_second?: number;
-                                        /** @description Average requests/sec for this stream over the run. */
-                                        requests_per_second?: number;
-                                        /** @description All accumulated errors for this stream during this run. */
-                                        errors?: {
-                                            /** @description Human-readable error description. */
-                                            message: string;
-                                            /**
-                                             * @description Error category matching TraceError.failure_type.
-                                             * @enum {string}
-                                             */
-                                            failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                        status: "not_started" | "started" | "completed" | "skipped" | "errored";
+                                        /** @description Number of state checkpoints for this stream. */
+                                        state_count: number;
+                                        /** @description Records synced for this stream in this run. */
+                                        record_count: number;
+                                        /** @description Human-readable status message (error reason, skip reason, etc). */
+                                        message?: string;
+                                        /** @description Full backfill time span for this stream. */
+                                        time_range?: {
+                                            /** @description Inclusive lower bound (ISO 8601). */
+                                            gte: string;
+                                            /** @description Exclusive upper bound (ISO 8601). */
+                                            lt: string;
+                                        };
+                                        /** @description Completed time sub-ranges for streams that support time_range. */
+                                        completed_ranges?: {
+                                            /** @description Inclusive lower bound (ISO 8601). */
+                                            gte: string;
+                                            /** @description Exclusive upper bound (ISO 8601). */
+                                            lt: string;
                                         }[];
                                     };
                                 };
@@ -433,58 +400,61 @@ export interface operations {
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
                         progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
+                            /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+                            started_at: string;
+                            /** @description Wall-clock milliseconds since the sync run started. */
+                            elapsed_ms: number;
+                            /** @description Total source_state messages observed so far. */
+                            global_state_count: number;
+                            /** @description Set when source or destination emits connection_status: failed. */
+                            connection_status?: {
+                                /**
+                                 * @description Whether the connection check passed.
+                                 * @enum {string}
+                                 */
+                                status: "succeeded" | "failed";
+                                /** @description Human-readable explanation of the check result. */
+                                message?: string;
                             };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
+                            /** @description Computed aggregates. */
+                            derived: {
+                                /**
+                                 * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                                 * @enum {string}
+                                 */
+                                status: "started" | "succeeded" | "failed";
+                                /** @description Overall throughput for the entire run. */
+                                records_per_second: number;
+                                /** @description State checkpoints per second. */
+                                states_per_second: number;
+                            };
+                            /** @description Per-stream progress, keyed by stream name. */
+                            streams: {
                                 [key: string]: {
                                     /**
-                                     * @description Final stream status.
+                                     * @description Current state, derived from stream_status events.
                                      * @enum {string}
                                      */
-                                    status: "start" | "running" | "complete" | "range_complete";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    status: "not_started" | "started" | "completed" | "skipped" | "errored";
+                                    /** @description Number of state checkpoints for this stream. */
+                                    state_count: number;
+                                    /** @description Records synced for this stream in this run. */
+                                    record_count: number;
+                                    /** @description Human-readable status message (error reason, skip reason, etc). */
+                                    message?: string;
+                                    /** @description Full backfill time span for this stream. */
+                                    time_range?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
+                                    };
+                                    /** @description Completed time sub-ranges for streams that support time_range. */
+                                    completed_ranges?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
                                     }[];
                                 };
                             };
@@ -553,58 +523,61 @@ export interface operations {
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
                         progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
+                            /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+                            started_at: string;
+                            /** @description Wall-clock milliseconds since the sync run started. */
+                            elapsed_ms: number;
+                            /** @description Total source_state messages observed so far. */
+                            global_state_count: number;
+                            /** @description Set when source or destination emits connection_status: failed. */
+                            connection_status?: {
+                                /**
+                                 * @description Whether the connection check passed.
+                                 * @enum {string}
+                                 */
+                                status: "succeeded" | "failed";
+                                /** @description Human-readable explanation of the check result. */
+                                message?: string;
                             };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
+                            /** @description Computed aggregates. */
+                            derived: {
+                                /**
+                                 * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                                 * @enum {string}
+                                 */
+                                status: "started" | "succeeded" | "failed";
+                                /** @description Overall throughput for the entire run. */
+                                records_per_second: number;
+                                /** @description State checkpoints per second. */
+                                states_per_second: number;
+                            };
+                            /** @description Per-stream progress, keyed by stream name. */
+                            streams: {
                                 [key: string]: {
                                     /**
-                                     * @description Final stream status.
+                                     * @description Current state, derived from stream_status events.
                                      * @enum {string}
                                      */
-                                    status: "start" | "running" | "complete" | "range_complete";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    status: "not_started" | "started" | "completed" | "skipped" | "errored";
+                                    /** @description Number of state checkpoints for this stream. */
+                                    state_count: number;
+                                    /** @description Records synced for this stream in this run. */
+                                    record_count: number;
+                                    /** @description Human-readable status message (error reason, skip reason, etc). */
+                                    message?: string;
+                                    /** @description Full backfill time span for this stream. */
+                                    time_range?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
+                                    };
+                                    /** @description Completed time sub-ranges for streams that support time_range. */
+                                    completed_ranges?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
                                     }[];
                                 };
                             };
@@ -734,58 +707,61 @@ export interface operations {
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
                         progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
+                            /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+                            started_at: string;
+                            /** @description Wall-clock milliseconds since the sync run started. */
+                            elapsed_ms: number;
+                            /** @description Total source_state messages observed so far. */
+                            global_state_count: number;
+                            /** @description Set when source or destination emits connection_status: failed. */
+                            connection_status?: {
+                                /**
+                                 * @description Whether the connection check passed.
+                                 * @enum {string}
+                                 */
+                                status: "succeeded" | "failed";
+                                /** @description Human-readable explanation of the check result. */
+                                message?: string;
                             };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
+                            /** @description Computed aggregates. */
+                            derived: {
+                                /**
+                                 * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                                 * @enum {string}
+                                 */
+                                status: "started" | "succeeded" | "failed";
+                                /** @description Overall throughput for the entire run. */
+                                records_per_second: number;
+                                /** @description State checkpoints per second. */
+                                states_per_second: number;
+                            };
+                            /** @description Per-stream progress, keyed by stream name. */
+                            streams: {
                                 [key: string]: {
                                     /**
-                                     * @description Final stream status.
+                                     * @description Current state, derived from stream_status events.
                                      * @enum {string}
                                      */
-                                    status: "start" | "running" | "complete" | "range_complete";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
+                                    status: "not_started" | "started" | "completed" | "skipped" | "errored";
+                                    /** @description Number of state checkpoints for this stream. */
+                                    state_count: number;
+                                    /** @description Records synced for this stream in this run. */
+                                    record_count: number;
+                                    /** @description Human-readable status message (error reason, skip reason, etc). */
+                                    message?: string;
+                                    /** @description Full backfill time span for this stream. */
+                                    time_range?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
+                                    };
+                                    /** @description Completed time sub-ranges for streams that support time_range. */
+                                    completed_ranges?: {
+                                        /** @description Inclusive lower bound (ISO 8601). */
+                                        gte: string;
+                                        /** @description Exclusive upper bound (ISO 8601). */
+                                        lt: string;
                                     }[];
                                 };
                             };
