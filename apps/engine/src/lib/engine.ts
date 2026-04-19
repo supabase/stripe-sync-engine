@@ -464,6 +464,37 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             { config: p.source.config, catalog: p.catalog, state: p.state?.source },
             input
           )
+          const streamNames = p.filteredCatalog.streams.map((s) => s.stream.name)
+          let syncState = stateReducer(p.state, { type: 'initialize', stream_names: streamNames, sync_run_id: opts?.sync_run_id })
+          let requestProgress = createInitialProgress(streamNames)
+
+          // Count records as they flow into the destination. Records are
+          // consumed by the destination (per Airbyte protocol) and never
+          // appear in destOutput, so we intercept them here for progress.
+          function countRecords<T>(iter: AsyncIterable<T>): AsyncIterable<T> {
+            return {
+              [Symbol.asyncIterator]() {
+                const inner = iter[Symbol.asyncIterator]()
+                return {
+                  async next() {
+                    const result = await inner.next()
+                    if (!result.done) {
+                      const m = result.value as { type?: string; _ts?: string }
+                      if (m.type === 'record') {
+                        const stamped = { ...m, _ts: m._ts ?? new Date().toISOString() } as Message
+                        syncState = stateReducer(syncState, stamped)
+                        requestProgress = progressReducer(requestProgress, stamped)
+                      }
+                    }
+                    return result
+                  },
+                  return: inner.return?.bind(inner),
+                  throw: inner.throw?.bind(inner),
+                } as AsyncIterator<T>
+              },
+            }
+          }
+
           const destInput = pipe(
             sourceOutput,
             enforceCatalog(p.filteredCatalog),
@@ -471,7 +502,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           )
           const destOutput = p.destination.connector.write(
             { config: p.destination.config, catalog: p.filteredCatalog },
-            destInput
+            countRecords(destInput)
           )
           // Apply limits (takeLimits appends eof)
           const limited = takeLimits({
@@ -480,26 +511,19 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             signal,
           })(destOutput)
 
-          const streamNames = p.filteredCatalog.streams.map((s) => s.stream.name)
-          let syncState = stateReducer(p.state, { type: 'initialize', stream_names: streamNames, sync_run_id: opts?.sync_run_id })
-          let requestProgress = createInitialProgress(streamNames)
-
           for await (const raw of limited) {
-            const msg = { ...raw, _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString() }
+            const msg = { ...raw, _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString() } as Message
 
-            if (msg.type === 'eof' && 'eof' in msg) {
-              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress, request_progress: requestProgress }))
+            if (msg.type === 'eof') {
+              yield emit(engineMsg.eof({ has_more: (msg as unknown as { eof: { has_more: boolean } }).eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress, request_progress: requestProgress }))
               return
             }
 
-            syncState = stateReducer(syncState, msg as Message)
-            requestProgress = progressReducer(requestProgress, msg as Message)
+            syncState = stateReducer(syncState, msg)
+            requestProgress = progressReducer(requestProgress, msg)
 
-            // Records are consumed by the destination — don't yield to client
-            if (msg.type !== 'record') {
-              yield msg as SyncOutput
-              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
-            }
+            yield msg as SyncOutput
+            if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
           }
         })()
       )
