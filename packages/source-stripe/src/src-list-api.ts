@@ -1,10 +1,12 @@
 import type { Message } from '@stripe/sync-protocol'
 import {
   nextStep,
+  DEFAULT_SUBDIVISION_FACTOR,
   toUnixSeconds,
   toIso,
   mergeAsync,
 } from '@stripe/sync-protocol'
+import pino from 'pino'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
@@ -13,6 +15,8 @@ import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 import { STRIPE_LAUNCH_TIMESTAMP } from './account-metadata.js'
+
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 // MARK: - Rate-limit wrapper
 
@@ -336,6 +340,7 @@ async function* iterateStream(opts: {
   backfillLimit?: number
   signal?: AbortSignal
   drainQueue?: () => AsyncGenerator<Message>
+  subdivisionFactor: number
 }): AsyncGenerator<Message> {
   const {
     streamName,
@@ -345,6 +350,7 @@ async function* iterateStream(opts: {
     rateLimiter,
     backfillLimit,
     drainQueue,
+    subdivisionFactor,
   } = opts
 
   let remaining: RemainingRange[]
@@ -384,7 +390,10 @@ async function* iterateStream(opts: {
   const supportsForwardPagination = resourceConfig.supportsForwardPagination !== false
   const totalEmitted = { count: 0 }
   const lastSeenCreated = new Map<RemainingRange, number>()
-
+  let roundNumber = 0
+  let totalApiCalls = 0
+  let totalEmptyProbes = 0
+  const syncStart = Date.now()
 
   // Paginate ranges — subdivide after every page to maximize parallelism.
   // Subdivision only helps when the API supports created-time filtering;
@@ -393,6 +402,10 @@ async function* iterateStream(opts: {
     if (drainQueue) yield* drainQueue()
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
+
+    const roundStart = Date.now()
+    const rangesThisRound = remaining.length
+    const recordsBefore = totalEmitted.count
 
     // Fetch one page from each range in parallel (rate limiter controls concurrency)
     const generators = remaining.map((range) =>
@@ -418,14 +431,59 @@ async function* iterateStream(opts: {
       yield* mergeAsync(generators, generators.length)
     }
 
+    totalApiCalls += rangesThisRound
+    const recordsThisRound = totalEmitted.count - recordsBefore
+    const emptyThisRound = rangesThisRound - lastSeenCreated.size -
+      (rangesThisRound - remaining.length - lastSeenCreated.size)
+
     // After pages complete, subdivide based on what we learned
     if (supportsCreatedFilter && remaining.length > 0) {
-      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated })
+      const beforeSubdivide = remaining.length
+      const rangesWithData = lastSeenCreated.size
+      const rangesExhausted = rangesThisRound - remaining.length
+      const rangesEmpty = rangesExhausted - (rangesThisRound - remaining.length - rangesWithData >= 0 ? 0 : 0)
+
+      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, subdivisionFactor)
+
+      const emptyProbes = rangesThisRound - rangesWithData - (rangesThisRound - rangesExhausted - rangesWithData)
+      totalEmptyProbes += Math.max(0, rangesExhausted - rangesWithData)
+
+      logger.debug({
+        event: 'subdivision_round',
+        stream: streamName,
+        subdivision_factor: subdivisionFactor,
+        round: roundNumber,
+        round_ms: Date.now() - roundStart,
+        ranges_fetched: rangesThisRound,
+        ranges_with_data: rangesWithData,
+        ranges_exhausted: rangesExhausted,
+        ranges_empty: Math.max(0, rangesExhausted - rangesWithData),
+        records_this_round: recordsThisRound,
+        new_ranges: subdivided.length,
+        total_records: totalEmitted.count,
+        total_api_calls: totalApiCalls,
+        total_empty_probes: totalEmptyProbes,
+        elapsed_ms: Date.now() - syncStart,
+      })
+
       remaining.length = 0
       remaining.push(...subdivided)
       lastSeenCreated.clear()
     }
+
+    roundNumber++
   }
+
+  logger.debug({
+    event: 'subdivision_complete',
+    stream: streamName,
+    total_rounds: roundNumber,
+    total_api_calls: totalApiCalls,
+    total_empty_probes: totalEmptyProbes,
+    total_records: totalEmitted.count,
+    elapsed_ms: Date.now() - syncStart,
+    effective_rps: totalApiCalls / ((Date.now() - syncStart) / 1000),
+  })
 
   yield msg.stream_status({ stream: streamName, status: 'complete' })
 }
@@ -515,6 +573,7 @@ export async function* listApiBackfill(opts: {
             backfillLimit: streamBackfillLimit,
             signal: opts.signal,
             drainQueue,
+            subdivisionFactor: Number(process.env.SUBDIVISION_FACTOR) || DEFAULT_SUBDIVISION_FACTOR,
           })
         } catch (err) {
           if (isSkippableError(err)) {

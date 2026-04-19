@@ -63,7 +63,7 @@ export const DEFAULT_SUBDIVISION_FACTOR = 10
  * @param n Number of segments to split each range's unfetched remainder into.
  *          Higher N = faster ramp-up but more wasted probes on skewed data.
  */
-export function nextStep(state: SearchState, n = DEFAULT_SUBDIVISION_FACTOR): Range[] {
+export function nextStep(state: SearchState, n: number): Range[] {
   return subdivideRanges(state.remaining, state.lastObserved, n)
 }
 
@@ -82,7 +82,7 @@ export function nextStep(state: SearchState, n = DEFAULT_SUBDIVISION_FACTOR): Ra
 export function subdivideRanges(
   remaining: Range[],
   lastObserved: Map<Range, number>,
-  n = DEFAULT_SUBDIVISION_FACTOR
+  n: number
 ): Range[] {
   const result: Range[] = []
 
@@ -172,9 +172,9 @@ export async function* streamingSubdivide<T>(opts: {
   initial: Range[]
   fetchPage: (range: Range) => Promise<PageResult<T>>
   concurrency: number
-  subdivisionFactor?: number
+  subdivisionFactor: number
 }): AsyncGenerator<SubdivisionEvent<T>> {
-  const { fetchPage, concurrency, subdivisionFactor = DEFAULT_SUBDIVISION_FACTOR } = opts
+  const { fetchPage, concurrency, subdivisionFactor } = opts
   const queue: Range[] = [...opts.initial]
   // Track ranges currently being fetched so we can report remaining state.
   const inflightRanges = new Map<number, Range>()

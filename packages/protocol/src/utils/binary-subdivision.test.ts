@@ -13,6 +13,8 @@ function iso(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString()
 }
 
+const N = DEFAULT_SUBDIVISION_FACTOR
+
 // MARK: - subdivideRanges
 
 describe('subdivideRanges', () => {
@@ -22,12 +24,12 @@ describe('subdivideRanges', () => {
       { gte: iso(60), lt: iso(120), cursor: null },
     ]
     const map = new Map<Range, number>([[remaining[0], 10]])
-    expect(subdivideRanges(remaining, map)).toEqual(remaining)
+    expect(subdivideRanges(remaining, map, N)).toEqual(remaining)
   })
 
   it('splits older remainder into N equal segments', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_1' }]
-    const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]))
+    const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]), N)
     // boundary + N segments of [0, 900)
     expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_1' })
     const segments = out.slice(1)
@@ -44,15 +46,15 @@ describe('subdivideRanges', () => {
 
   it('does not subdivide when the observed point is at or below the range start', () => {
     const range: Range = { gte: iso(0), lt: iso(60), cursor: 'cur_z' }
-    expect(subdivideRanges([range], new Map([[range, 0]]))).toEqual([range])
-    expect(subdivideRanges([range], new Map([[range, -10]]))).toEqual([range])
+    expect(subdivideRanges([range], new Map([[range, 0]]), N)).toEqual([range])
+    expect(subdivideRanges([range], new Map([[range, -10]]), N)).toEqual([range])
   })
 
   it('handles multiple ranges: only cursor + lastObserved entries subdivide', () => {
     const a: Range = { gte: iso(0), lt: iso(30), cursor: null }
     const b: Range = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
-    const out = subdivideRanges([a, b, c], new Map([[c, 90]]))
+    const out = subdivideRanges([a, b, c], new Map([[c, 90]]), N)
     // a passes through, b passes through (no lastObserved), c subdivides
     expect(out[0]).toEqual(a)
     expect(out[1]).toEqual(b)
@@ -66,12 +68,12 @@ describe('subdivideRanges', () => {
 
   it('passes through a range with cursor but no lastObserved entry', () => {
     const range: Range = { gte: iso(0), lt: iso(100), cursor: 'cur_only' }
-    expect(subdivideRanges([range], new Map())).toEqual([range])
+    expect(subdivideRanges([range], new Map(), N)).toEqual([range])
   })
 
   it('emits single segment when older remainder is 1 second', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }]
-    const out = subdivideRanges(remaining, new Map([[remaining[0], 1001]]))
+    const out = subdivideRanges(remaining, new Map([[remaining[0], 1001]]), N)
     expect(out).toEqual([
       { gte: iso(1001), lt: iso(1002), cursor: 'cur_tail' },
       { gte: iso(1000), lt: iso(1001), cursor: null },
@@ -80,7 +82,7 @@ describe('subdivideRanges', () => {
 
   it('produces boundary + N segments for a splittable range', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_dense' }]
-    const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]))
+    const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]), N)
     expect(out).toHaveLength(1 + DEFAULT_SUBDIVISION_FACTOR) // boundary + N segments
     expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_dense' })
     // Segments cover [0, 900) contiguously
@@ -91,7 +93,7 @@ describe('subdivideRanges', () => {
 
   it('keeps the entire last observed second in the cursor-backed boundary range', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1010), cursor: 'cur_same_second' }]
-    const out = subdivideRanges(remaining, new Map([[remaining[0], 1008]]))
+    const out = subdivideRanges(remaining, new Map([[remaining[0], 1008]]), N)
     expect(out[0]).toEqual({ gte: iso(1008), lt: iso(1009), cursor: 'cur_same_second' })
     // Remaining segments cover [1000, 1008) — 8 seconds, capped at min(N, 8)
     const segments = out.slice(1)
@@ -103,8 +105,8 @@ describe('subdivideRanges', () => {
   it('nextStep wraps subdivideRanges correctly', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
     const lastObserved = new Map([[remaining[0], 30]])
-    const result = nextStep({ remaining, lastObserved })
-    const direct = subdivideRanges(remaining, lastObserved)
+    const result = nextStep({ remaining, lastObserved }, N)
+    const direct = subdivideRanges(remaining, lastObserved, N)
     expect(result).toEqual(direct)
   })
 })
@@ -136,7 +138,7 @@ function simulateRound(
     }
   }
 
-  return subdivideRanges(ranges, lastObserved)
+  return subdivideRanges(ranges, lastObserved, N)
 }
 
 describe('binary subdivision: data distribution scenarios', () => {
@@ -192,6 +194,7 @@ describe('streamingSubdivide', () => {
           lastObserved: null,
         }),
         concurrency: 4,
+        subdivisionFactor: N,
       })
     )
     expect(events).toHaveLength(1)
@@ -208,6 +211,7 @@ describe('streamingSubdivide', () => {
           return { range, data: ['a', 'b'], hasMore: false, lastObserved: 50 }
         },
         concurrency: 4,
+        subdivisionFactor: N,
       })
     )
     expect(events).toHaveLength(1)
@@ -235,6 +239,7 @@ describe('streamingSubdivide', () => {
           return { range, data: [], hasMore: false, lastObserved: null }
         },
         concurrency: 4,
+        subdivisionFactor: N,
       })
     )
 
@@ -268,6 +273,7 @@ describe('streamingSubdivide', () => {
           return { range, data: ['x'], hasMore: false, lastObserved: null }
         },
         concurrency: 2,
+        subdivisionFactor: N,
       })
     )
 
@@ -289,6 +295,7 @@ describe('streamingSubdivide', () => {
           return { range, data: [pagesFetched], hasMore: false, lastObserved: null }
         },
         concurrency: 4,
+        subdivisionFactor: N,
       })
     )
 
@@ -324,6 +331,7 @@ describe('streamingSubdivide', () => {
           }
         },
         concurrency: 8,
+        subdivisionFactor: N,
       })
     )
 
@@ -347,6 +355,7 @@ describe('streamingSubdivide', () => {
           return { range, data: ['b'], hasMore: false, lastObserved: null }
         },
         concurrency: 4,
+        subdivisionFactor: N,
       })
     )
 
