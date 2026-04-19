@@ -292,10 +292,10 @@ describe('protocol schemas', () => {
       ).not.toThrow()
     })
 
-    it('rejects log message', () => {
+    it('accepts log message (DestinationInput is now the full Message union)', () => {
       expect(() =>
         DestinationInput.parse({ type: 'log', log: { level: 'info', message: 'hi' } })
-      ).toThrow()
+      ).not.toThrow()
     })
   })
 
@@ -318,7 +318,7 @@ describe('protocol schemas', () => {
       ).not.toThrow()
     })
 
-    it('rejects record message', () => {
+    it('accepts record message (DestinationOutput is now the full Message union)', () => {
       expect(() =>
         DestinationOutput.parse({
           type: 'record',
@@ -328,7 +328,7 @@ describe('protocol schemas', () => {
             emitted_at: '2024-01-01T00:00:00.000Z',
           },
         })
-      ).toThrow()
+      ).not.toThrow()
     })
   })
 
@@ -824,7 +824,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(1000)
   })
 
-  it('preserves run progress when sync_run_id matches', async () => {
+  it('resets run progress even when sync_run_id matches (each pipeline_sync is a new run)', async () => {
     const source: Source = {
       async *spec() {
         yield { type: 'spec', spec: { config: {} } }
@@ -863,8 +863,8 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     const eof = output.find((m) => m.type === 'eof')!
     expect(eof.eof.ending_state?.sync_run.sync_run_id).toBe('same-run')
-    // Progress was preserved and accumulated (elapsed_ms >= prior value)
-    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeGreaterThanOrEqual(5000)
+    // Progress is always reset on initialize — each pipeline_sync is a fresh run
+    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(5000)
   })
 
   it('returns final eof state by merging run updates into the initial sync state', async () => {
@@ -980,10 +980,9 @@ describe('engine.pipeline_sync() pipeline', () => {
     const results = await drain(engine.pipeline_sync(defaultPipeline, { state: initialState }))
 
     const eof = results.find((msg) => msg.type === 'eof')
-    expect(eof).toMatchObject({
-      type: 'eof',
-      eof: { ending_state: initialState },
-    })
+    // Source and destination state are preserved; sync_run progress is reset on each run
+    expect(eof!.eof.ending_state?.source).toEqual(initialState.source)
+    expect(eof!.eof.ending_state?.destination).toEqual(initialState.destination)
   })
 
   it('preserves initial source and destination state when only engine counts change', async () => {
