@@ -68,7 +68,11 @@ export function createSyncCmd() {
       state: {
         type: 'string',
         default: 'file',
-        description: 'State backend: file (default, ~/.stripe-sync/), postgres, none',
+        description: 'State backend: file (default), postgres, none',
+      },
+      stateDir: {
+        type: 'string',
+        description: 'Directory for file state (default: ~/.stripe-sync-engine/)',
       },
       noState: {
         type: 'boolean',
@@ -97,7 +101,7 @@ export function createSyncCmd() {
       const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
 
       const persistedStripeConfig = readPersistedStripeSourceConfig(
-        sourceConfigCachePath(stripeApiKey)
+        sourceConfigCachePath(stripeApiKey, args.stateDir)
       )
       const stripeConfig: Record<string, unknown> = {
         api_key: stripeApiKey,
@@ -126,7 +130,7 @@ export function createSyncCmd() {
           ? readonlyStateStore()
           : stateMode === 'postgres'
             ? await getPostgresStateStore(postgresUrl, schema)
-            : defaultFileStateStore(stripeApiKey)
+            : defaultFileStateStore(stripeApiKey, args.stateDir)
       const initialState = await store.get()
 
       // Spawn engine HTTP server as a subprocess — logs go to a file, Ink owns the terminal
@@ -140,7 +144,7 @@ export function createSyncCmd() {
           pipeline = applyControlToPipeline(pipeline, msg.control)
           if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
             writePersistedStripeSourceConfig(
-              sourceConfigCachePath(stripeApiKey),
+              sourceConfigCachePath(stripeApiKey, args.stateDir),
               msg.control.source_config
             )
           }
@@ -173,7 +177,7 @@ export function createSyncCmd() {
             pipeline = applyControlToPipeline(pipeline, msg.control)
             if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
               writePersistedStripeSourceConfig(
-                sourceConfigCachePath(stripeApiKey),
+                sourceConfigCachePath(stripeApiKey, args.stateDir),
                 msg.control.source_config
               )
             }
@@ -205,15 +209,21 @@ export function createSyncCmd() {
   })
 }
 
-function defaultFileStateStore(apiKey: string): StateStore {
-  const hash = createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
-  const filePath = join(homedir(), '.stripe-sync', `${hash}.json`)
+const DEFAULT_STATE_DIR = join(homedir(), '.stripe-sync-engine')
+
+function stateHash(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
+}
+
+function defaultFileStateStore(apiKey: string, stateDir?: string): StateStore {
+  const dir = stateDir ?? DEFAULT_STATE_DIR
+  const filePath = join(dir, `${stateHash(apiKey)}.json`)
   return fileStateStore(filePath)
 }
 
-function sourceConfigCachePath(apiKey: string): string {
-  const hash = createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
-  return join(homedir(), '.stripe-sync', `${hash}.source-config.json`)
+function sourceConfigCachePath(apiKey: string, stateDir?: string): string {
+  const dir = stateDir ?? DEFAULT_STATE_DIR
+  return join(dir, `${stateHash(apiKey)}.source-config.json`)
 }
 
 async function getPostgresStateStore(connectionString: string, schema: string) {

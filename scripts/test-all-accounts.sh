@@ -22,6 +22,7 @@ cd "$ROOT"
 source .envrc 2>/dev/null || true
 
 POSTGRES_URL="postgresql://postgres:postgres@localhost:55432/postgres?sslmode=disable"
+STATE_DIR="$HOME/.test-all-accounts"
 EXTRA_ARGS=()
 MODE="sync"
 RATE_LIMIT=80
@@ -65,6 +66,7 @@ run_sync() {
     --postgres-url "$POSTGRES_URL" \
     --postgres-schema "$schema" \
     --state "$STATE_MODE" \
+    --state-dir "$STATE_DIR" \
     --stripe-rate-limit "$RATE_LIMIT" \
     "${EXTRA_ARGS[@]}"
 }
