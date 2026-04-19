@@ -355,8 +355,6 @@ const RECONCILE_SKIP = new Set([
   // Top-level /v1/payment_methods only returns unattached/Treasury payment methods.
   // Sigma includes customer-attached pm_, src_, and card_ objects.
   'payment_methods',
-  // Feature-gated: returns 400 if account isn't onboarded to Treasury.
-  'treasury_financial_accounts',
 ])
 
 /** Per-table ID filters applied to Sigma results before comparison.
