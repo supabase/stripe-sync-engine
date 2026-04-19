@@ -44,7 +44,7 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Syncing 10 streams (3 completed, 2 started, 5 not_started) — 12.4s
-          3451 records             245.2/s        18 checkpoints               1.5/s
+          3451 records             245.2/s       18 checkpoints               1.5/s
        ● charges                                 980 records
        ● payment_intents                         420 records
        ● accounts                                  1 records
@@ -94,7 +94,7 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Syncing 2 streams (1 completed, 1 skipped) — 5.0s
-           100 records              50.0/s         2 checkpoints               0.4/s
+           100 records              50.0/s        2 checkpoints               0.4/s
        ● customers                               100 records
        ⏭ invoices
           Only available in testmode"
@@ -128,7 +128,7 @@ describe('formatProgress', () => {
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
       "Syncing 3 streams (1 completed, 2 started) — 4.0s
-           450 records   (+250)    112.5/s         5 checkpoints     (+3)      1.3/s
+           450 records   (+250)    112.5/s        5 checkpoints     (+3)      1.3/s
        ● invoices                                180 records   (+130)
        ● charges                                  70 records    (+70)
        ● customers                               200 records    (+50)"
