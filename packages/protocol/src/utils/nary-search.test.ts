@@ -18,47 +18,36 @@ describe('subdivideRanges', () => {
     expect(subdivideRanges(remaining, 10, map)).toEqual(remaining)
   })
 
-  it('subdivides a range with cursor and lastSeenCreated into paginated head + null-cursor tail segments', () => {
+  it('subdivides a dense older remainder into a boundary cursor range plus older null-cursor segments', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    // maxSegments=4: head takes 1 slot, tail gets 3 (budget = 4 - 1 = 3)
-    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 30]]))
+    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 90]]))
     expect(out).toEqual([
-      { gte: iso(0), lt: iso(31), cursor: 'cur_1' },
-      { gte: iso(31), lt: iso(61), cursor: null },
-      { gte: iso(61), lt: iso(91), cursor: null },
-      { gte: iso(91), lt: iso(120), cursor: null },
+      { gte: iso(90), lt: iso(91), cursor: 'cur_1' },
+      { gte: iso(0), lt: iso(30), cursor: null },
+      { gte: iso(30), lt: iso(60), cursor: null },
+      { gte: iso(60), lt: iso(90), cursor: null },
     ])
   })
 
-  it('caps tail segment count at remaining budget', () => {
+  it('falls back to sequential pagination when only one extra slot remains', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(100), cursor: 'cur_x' }]
-    // maxSegments=2: head takes 1 slot, tail budget = 1
-    const out = subdivideRanges(remaining, 2, new Map([[remaining[0], 10]]))
-    expect(out).toHaveLength(2)
-    expect(out[0]).toEqual({ gte: iso(0), lt: iso(11), cursor: 'cur_x' })
-    expect(out[1]).toEqual({ gte: iso(11), lt: iso(100), cursor: null })
+    const out = subdivideRanges(remaining, 2, new Map([[remaining[0], 90]]))
+    expect(out).toEqual(remaining)
   })
 
-  it('does not subdivide when splitPoint is at or past range end', () => {
+  it('does not subdivide when the observed point is at or below the range start', () => {
     const range: Range = { gte: iso(0), lt: iso(60), cursor: 'cur_z' }
-    const endUnix = 60
-    expect(subdivideRanges([range], 10, new Map([[range, endUnix]]))).toEqual([range])
-    expect(subdivideRanges([range], 10, new Map([[range, endUnix + 10]]))).toEqual([range])
+    expect(subdivideRanges([range], 10, new Map([[range, 0]]))).toEqual([range])
+    expect(subdivideRanges([range], 10, new Map([[range, -10]]))).toEqual([range])
   })
 
   it('handles multiple ranges: only cursor + lastSeenCreated entries subdivide', () => {
     const a: Range = { gte: iso(0), lt: iso(30), cursor: null }
     const b: Range = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
-    // maxSegments=10 gives enough budget for c to subdivide
+    // c's older remainder is only about one more page, so it stays sequential.
     const out = subdivideRanges([a, b, c], 10, new Map([[c, 90]]))
-    expect(out[0]).toEqual(a)
-    expect(out[1]).toEqual(b)
-    expect(out[2]).toEqual({ gte: iso(60), lt: iso(91), cursor: 'cur_c' })
-    const tail = out.slice(3)
-    expect(tail.length).toBeGreaterThan(0)
-    expect(tail[0].gte).toBe(iso(91))
-    expect(tail[tail.length - 1].lt).toBe(iso(120))
+    expect(out).toEqual([a, b, c])
   })
 
   it('passes through a range with cursor but no lastSeenCreated entry', () => {
@@ -72,14 +61,28 @@ describe('subdivideRanges', () => {
     expect(out).toEqual(remaining)
   })
 
-  it('keeps the entire last observed second with the paginated head', () => {
+  it('caps per-round tail fan-out even when the segment budget is much larger', () => {
+    const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_dense' }]
+    const out = subdivideRanges(remaining, 20, new Map([[remaining[0], 900]]))
+    expect(out).toHaveLength(10)
+    expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_dense' })
+    expect(out.at(-1)?.lt).toBe(iso(900))
+  })
+
+  it('keeps a one-page older remainder sequential even when plenty of budget exists', () => {
+    const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_uniform' }]
+    const out = subdivideRanges(remaining, 20, new Map([[remaining[0], 499]]))
+    expect(out).toEqual(remaining)
+  })
+
+  it('keeps the entire last observed second in the cursor-backed boundary range', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1010), cursor: 'cur_same_second' }]
-    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 1000]]))
+    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 1008]]))
     expect(out).toEqual([
-      { gte: iso(1000), lt: iso(1001), cursor: 'cur_same_second' },
-      { gte: iso(1001), lt: iso(1004), cursor: null },
-      { gte: iso(1004), lt: iso(1007), cursor: null },
-      { gte: iso(1007), lt: iso(1010), cursor: null },
+      { gte: iso(1008), lt: iso(1009), cursor: 'cur_same_second' },
+      { gte: iso(1000), lt: iso(1003), cursor: null },
+      { gte: iso(1003), lt: iso(1006), cursor: null },
+      { gte: iso(1006), lt: iso(1008), cursor: null },
     ])
   })
 
@@ -92,12 +95,7 @@ describe('subdivideRanges', () => {
       },
       4
     )
-    expect(out).toEqual([
-      { gte: iso(60), lt: iso(91), cursor: 'cur_b' },
-      { gte: iso(91), lt: iso(101), cursor: null },
-      { gte: iso(101), lt: iso(111), cursor: null },
-      { gte: iso(111), lt: iso(120), cursor: null },
-    ])
+    expect(out).toEqual([inProgress])
   })
 })
 
@@ -122,15 +120,14 @@ function simulateRound(
   const lastSeenCreated = new Map<Range, number>()
 
   for (const range of ranges) {
-    const startUnix = range.cursor
-      ? toUnixSeconds(range.gte) // cursor means we're mid-pagination, start from gte
-      : toUnixSeconds(range.gte)
+    const startUnix = toUnixSeconds(range.gte)
     const endUnix = toUnixSeconds(range.lt)
 
-    // Walk forward from start, counting records until we hit pageSize or range end
+    // Stripe list APIs return newest-first. Walk backward from the range end,
+    // counting records until we hit pageSize or the lower bound.
     let count = 0
-    let lastTs = startUnix
-    for (let ts = startUnix; ts < endUnix && count < pageSize; ts++) {
+    let lastTs = endUnix - 1
+    for (let ts = endUnix - 1; ts >= startUnix && count < pageSize; ts--) {
       const recordsAtTs = density(ts)
       count += recordsAtTs
       if (recordsAtTs > 0) lastTs = ts
@@ -166,12 +163,11 @@ describe('n-ary search: data distribution scenarios', () => {
   })
 
   it('hot spot: 90% of records in 10% of time range', () => {
-    // Range: 0-1000. Hot zone: 100-200 (10 records/s), rest: 0.1 records/s
-    const density = (ts: number) => (ts >= 100 && ts < 200 ? 10 : ts % 10 === 0 ? 1 : 0)
+    // Range: 0-1000. Hot zone near the newest edge so the first page observes it.
+    const density = (ts: number) => (ts >= 800 && ts < 900 ? 10 : ts % 10 === 0 ? 1 : 0)
     const ranges: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: null }]
 
     const round1 = simulateRound(ranges, 8, density)
-    // After first round, should have subdivided
     expect(round1.length).toBeGreaterThan(1)
   })
 

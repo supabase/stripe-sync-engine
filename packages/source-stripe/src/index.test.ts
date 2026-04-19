@@ -2556,6 +2556,59 @@ describe('StripeSource', () => {
       const completes = statusMsgs.filter((m) => m.stream_status.status === 'complete')
       expect(completes).toHaveLength(2)
     })
+
+    it('respects maxConcurrentStreams when scheduling stream backfills', async () => {
+      const firstListFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_1', created: 1_500_000_000 }],
+        has_more: false,
+      })
+      const secondListFn = vi.fn().mockResolvedValue({
+        data: [{ id: 'cus_2', created: 1_500_000_100 }],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: firstListFn as ResourceConfig['listFn'],
+        }),
+        invoices: makeConfig({
+          order: 2,
+          tableName: 'invoices',
+          supportsCreatedFilter: true,
+          listFn: secondListFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      const messages = await collect(
+        listApiBackfill({
+          catalog: {
+            streams: [{ stream: { name: 'customers' } }, { stream: { name: 'invoices' } }],
+          },
+          state: undefined,
+          registry,
+          client: {} as unknown as StripeClient,
+          accountId: 'acct_test',
+          rateLimiter: async () => 0,
+          maxConcurrentStreams: 1,
+          maxRequestsPerSecond: 80,
+        })
+      )
+
+      const statusMsgs = messages.filter(
+        (m): m is StreamStatusMessage => m.type === 'stream_status'
+      )
+      expect(statusMsgs.map((m) => `${m.stream_status.stream}:${m.stream_status.status}`)).toEqual([
+        'customers:start',
+        'customers:range_complete',
+        'customers:complete',
+        'invoices:start',
+        'invoices:range_complete',
+        'invoices:complete',
+      ])
+    })
   })
 
   describe('rate limiting', () => {

@@ -31,6 +31,13 @@ export type SearchState = {
   lastObserved: Map<Range, number>
 }
 
+/**
+ * Large fan-out creates lots of tiny ranges for dense streams, which burns
+ * requests on undersized pages. Keep each subdivision round modest and let
+ * later rounds refine only the segments that stay dense.
+ */
+const MAX_TAIL_SEGMENTS_PER_RANGE = 16
+
 // MARK: - Time helpers
 
 export function toUnixSeconds(iso: string): number {
@@ -55,13 +62,14 @@ export function nextStep(state: SearchState, maxSegments: number): Range[] {
 
 /**
  * Subdivide ranges that have a cursor (were in progress but didn't complete).
- * The paginated portion keeps its cursor; the unpaginated tail splits into N parts.
  *
- * `lastObserved` maps each fetched range to the `created` timestamp of the
- * last record seen in that range (used to determine the split point).
+ * Stripe list APIs return newest records first. After one page, the newer side
+ * of the range is already fetched; the unfetched remainder is the older side,
+ * plus the boundary second that may still have more rows after the current
+ * cursor.
  *
- * Stripe cursors own every record at `splitPoint`, so the paginated head keeps
- * that entire second and the tail starts at `splitPoint + 1`.
+ * If we decide to split, keep the boundary second as a cursor-backed range and
+ * split only the older remainder into fresh null-cursor segments.
  */
 export function subdivideRanges(
   remaining: Range[],
@@ -77,41 +85,46 @@ export function subdivideRanges(
     }
 
     const splitPoint = lastObserved.get(range)!
+    const rangeStartUnix = toUnixSeconds(range.gte)
     const rangeEndUnix = toUnixSeconds(range.lt)
-    const tailStartUnix = splitPoint + 1
+    const olderEndUnix = splitPoint
 
-    if (tailStartUnix >= rangeEndUnix) {
+    if (olderEndUnix <= rangeStartUnix) {
       result.push(range)
       continue
     }
 
-    const tailStartIso = toIso(tailStartUnix)
+    const budget = maxSegments - result.length - 1
+    const olderSpan = olderEndUnix - rangeStartUnix
+    const observedSpan = Math.max(1, rangeEndUnix - splitPoint)
+    const estimatedOlderPages = Math.max(1, Math.ceil(olderSpan / observedSpan))
+    const n = Math.min(
+      MAX_TAIL_SEGMENTS_PER_RANGE,
+      budget,
+      Math.max(1, olderSpan),
+      estimatedOlderPages
+    )
 
-    // Keep the paginated portion with its cursor
-    result.push({ gte: range.gte, lt: tailStartIso, cursor: range.cursor })
-
-    // Only subdivide if we're below the segment budget
-    if (result.length >= maxSegments) {
-      // Over budget — keep the tail as one range
-      result.push({ gte: tailStartIso, lt: range.lt, cursor: null })
+    if (n <= 1) {
+      // Likely one more page: keep sequential pagination and preserve the
+      // cursor rather than creating an extra boundary checkpoint.
+      result.push(range)
       continue
     }
 
-    // Split the unpaginated tail into as many segments as the budget allows.
-    // Sparse segments complete in one page and free up budget for the next round.
-    // Dense segments get subdivided further on subsequent rounds.
-    const budget = maxSegments - result.length
-    const tailSpan = rangeEndUnix - tailStartUnix
-    const n = Math.min(budget, Math.max(1, tailSpan))
-    const segmentSize = Math.max(1, Math.ceil(tailSpan / n))
+    const boundaryGteUnix = Math.max(rangeStartUnix, splitPoint)
+    const boundaryLtUnix = Math.min(rangeEndUnix, splitPoint + 1)
+    result.push({ gte: toIso(boundaryGteUnix), lt: toIso(boundaryLtUnix), cursor: range.cursor })
+
+    const segmentSize = Math.max(1, Math.ceil(olderSpan / n))
 
     for (let j = 0; j < n; j++) {
-      const segGte = tailStartUnix + j * segmentSize
+      const segGte = rangeStartUnix + j * segmentSize
       const segLt =
         j === n - 1
-          ? rangeEndUnix
-          : Math.min(rangeEndUnix, tailStartUnix + (j + 1) * segmentSize)
-      if (segGte >= rangeEndUnix) break
+          ? olderEndUnix
+          : Math.min(olderEndUnix, rangeStartUnix + (j + 1) * segmentSize)
+      if (segGte >= olderEndUnix) break
       result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
     }
   }

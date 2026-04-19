@@ -93,6 +93,12 @@ const SKIPPABLE_ERROR_MESSAGES = [
   //  https://dashboard.stripe.com/issuing/overview to get started.
   //  [GET /v1/issuing/authorizations (400)]"
   'Your account is not set up to use Issuing',
+
+  // identity_verification_reports, identity_verification_sessions
+  // "Your account is not set up to use Identity. Please have an account admin visit
+  //  https://dashboard.stripe.com/identity to get started.
+  //  [GET /v1/identity/verification_reports (400)]"
+  'Your account is not set up to use Identity',
 ]
 
 function isSkippableError(err: unknown): boolean {
@@ -221,6 +227,7 @@ async function* paginateRange(opts: {
 
   let cursor = range.cursor
   let hasMore = true
+  let prefetchedResponse: Promise<Awaited<ReturnType<ListFn>>> | null = null
 
   while (hasMore) {
     const params: Record<string, unknown> = {}
@@ -234,7 +241,35 @@ async function* paginateRange(opts: {
       params.starting_after = cursor
     }
 
-    const response = await listFn(params as Parameters<typeof listFn>[0])
+    const response = prefetchedResponse
+      ? await prefetchedResponse
+      : await listFn(params as Parameters<typeof listFn>[0])
+    prefetchedResponse = null
+
+    let nextCursor: string | null = null
+    const responseHasMore = supportsForwardPagination && response.has_more
+    if (response.pageCursor) {
+      nextCursor = response.pageCursor
+    } else if (response.data.length > 0) {
+      nextCursor = (response.data[response.data.length - 1] as { id: string }).id
+    }
+
+    // Hide Stripe latency behind record emission for purely sequential ranges.
+    // We intentionally skip this in singlePage mode because the outer scheduler
+    // may subdivide after this page and invalidate the next request.
+    if (!singlePage && backfillLimit == null && responseHasMore && nextCursor) {
+      const nextParams: Record<string, unknown> = {}
+      if (supportsCreatedFilter) {
+        nextParams.created = { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) }
+      }
+      if (supportsForwardPagination && supportsLimit) {
+        nextParams.limit = 100
+      }
+      if (supportsForwardPagination) {
+        nextParams.starting_after = nextCursor
+      }
+      prefetchedResponse = listFn(nextParams as Parameters<typeof listFn>[0])
+    }
 
     for (const item of response.data) {
       const record = item as Record<string, unknown>
@@ -249,12 +284,8 @@ async function* paginateRange(opts: {
       totalEmitted.count++
     }
 
-    hasMore = supportsForwardPagination && response.has_more
-    if (response.pageCursor) {
-      cursor = response.pageCursor
-    } else if (response.data.length > 0) {
-      cursor = (response.data[response.data.length - 1] as { id: string }).id
-    }
+    hasMore = responseHasMore
+    cursor = nextCursor
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) {
       hasMore = false
@@ -438,12 +469,11 @@ export async function* listApiBackfill(opts: {
     drainQueue,
   } = opts
 
-  // Track active streams so we can dynamically allocate segments per stream.
-  // All streams run concurrently (breadth-first) — small streams complete in 1-2
-  // pages, freeing the rate budget for the remaining big streams.
-  // A budget of 1 means "paginate sequentially"; subdivision only begins once
-  // the rate budget can afford more than one active range per stream.
-  let activeStreams = catalog.streams.length
+  // Track streams that are actively running inside the bounded merge pool so we
+  // can allocate the request budget across the streams that are actually live.
+  // If we divide by the whole catalog up front, dense streams stay stuck in
+  // sequential mode until nearly everything else has already finished.
+  let activeStreams = 0
   const getMaxSegments = () => computeMaxSegments(maxRequestsPerSecond, activeStreams)
 
   let accountCreated: number | null = initialAccountCreated ?? null
@@ -483,6 +513,7 @@ export async function* listApiBackfill(opts: {
 
     streamGenerators.push(
       (async function* () {
+        activeStreams++
         try {
           yield* iterateStream({
             streamName: stream.name,
@@ -517,12 +548,14 @@ export async function* listApiBackfill(opts: {
             error: err instanceof Error ? err.message : String(err),
           })
         } finally {
-          activeStreams = Math.max(1, activeStreams - 1)
+          activeStreams = Math.max(0, activeStreams - 1)
         }
       })()
     )
   }
 
-  // Run all streams concurrently — rate limiter controls actual request throughput
-  yield* mergeAsync(streamGenerators, streamGenerators.length)
+  // Run a bounded number of streams concurrently. Per-stream subdivision uses
+  // the same global rate budget, so fewer active streams means each dense
+  // stream can fan out earlier without oversubscribing Stripe.
+  yield* mergeAsync(streamGenerators, Math.min(maxConcurrentStreams, streamGenerators.length))
 }
