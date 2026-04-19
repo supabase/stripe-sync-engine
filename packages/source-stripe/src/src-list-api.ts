@@ -88,6 +88,11 @@ const SKIPPABLE_ERROR_MESSAGES = [
   //  [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}"
   'Accounts v2 is not enabled for your platform',
 
+  // issuing_authorizations, issuing_cardholders, issuing_cards, issuing_disputes, issuing_transactions
+  // "Your account is not set up to use Issuing. Please visit
+  //  https://dashboard.stripe.com/issuing/overview to get started.
+  //  [GET /v1/issuing/authorizations (400)]"
+  'Your account is not set up to use Issuing',
 ]
 
 function isSkippableError(err: unknown): boolean {
@@ -141,6 +146,13 @@ export function reconcileRanges(
   }
 
   return result
+}
+
+export function computeMaxSegments(
+  maxRequestsPerSecond: number,
+  activeStreams: number
+): number {
+  return Math.max(1, Math.floor(maxRequestsPerSecond / Math.max(activeStreams, 1)))
 }
 
 // MARK: - Account created timestamp
@@ -357,6 +369,7 @@ async function* iterateStream(opts: {
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
 
     const maxSegments = supportsCreatedFilter ? getMaxSegments() : 1
+    const canSubdivide = supportsCreatedFilter && maxSegments > 1
 
     // Pick batch from current remaining (up to maxSegments)
     const batch = remaining.slice(0, maxSegments)
@@ -376,7 +389,7 @@ async function* iterateStream(opts: {
         backfillLimit,
         totalEmitted,
         lastSeenCreated,
-        singlePage: supportsCreatedFilter,
+        singlePage: canSubdivide,
       })
     )
 
@@ -387,7 +400,7 @@ async function* iterateStream(opts: {
     }
 
     // After pages complete, subdivide based on what we learned
-    if (supportsCreatedFilter && remaining.length > 0) {
+    if (canSubdivide && remaining.length > 0) {
       const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, maxSegments)
       remaining.length = 0
       remaining.push(...subdivided)
@@ -437,9 +450,10 @@ export async function* listApiBackfill(opts: {
   // Track active streams so we can dynamically allocate segments per stream.
   // All streams run concurrently (breadth-first) — small streams complete in 1-2
   // pages, freeing the rate budget for the remaining big streams.
+  // A budget of 1 means "paginate sequentially"; subdivision only begins once
+  // the rate budget can afford more than one active range per stream.
   let activeStreams = catalog.streams.length
-  // Minimum 2: the n-ary search needs at least head + 1 tail segment to subdivide.
-  const getMaxSegments = () => Math.max(2, Math.floor(maxRequestsPerSecond / activeStreams))
+  const getMaxSegments = () => computeMaxSegments(maxRequestsPerSecond, activeStreams)
 
   let accountCreated: number | null = initialAccountCreated ?? null
 

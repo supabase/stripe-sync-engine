@@ -15,6 +15,8 @@ import {
   writePersistedStripeSourceConfig,
 } from './source-config-cache.js'
 
+const PROGRESS_RENDER_INTERVAL_MS = 200
+
 export function createSyncCmd() {
   return defineCommand({
     meta: {
@@ -144,9 +146,19 @@ export function createSyncCmd() {
         let progress: ProgressPayload | undefined
         let prevProgress: ProgressPayload | undefined
         const plain = args.plain || !process.stderr.isTTY
+        let lastRenderAt = 0
 
         // Ink for TTY, plain text for non-TTY / --plain
         const inkInstance = plain ? null : render(<></>, { stdout: process.stderr })
+
+        function renderProgress(next: ProgressPayload, previous?: ProgressPayload) {
+          if (inkInstance) {
+            inkInstance.rerender(<ProgressView progress={next} prev={previous} />)
+          } else {
+            process.stderr.write(formatProgress(next, previous) + '\n')
+          }
+          lastRenderAt = Date.now()
+        }
 
         for await (const msg of output) {
           if (msg.type === 'control') {
@@ -167,19 +179,13 @@ export function createSyncCmd() {
           } else if (msg.type === 'progress') {
             prevProgress = progress
             progress = msg.progress
-            if (inkInstance) {
-              inkInstance.rerender(<ProgressView progress={progress} prev={prevProgress} />)
-            } else {
-              process.stderr.write(formatProgress(progress, prevProgress) + '\n')
+            if (Date.now() - lastRenderAt >= PROGRESS_RENDER_INTERVAL_MS) {
+              renderProgress(progress, prevProgress)
             }
           } else if (msg.type === 'eof') {
             prevProgress = progress
             progress = msg.eof.run_progress
-            if (inkInstance) {
-              inkInstance.rerender(<ProgressView progress={progress} prev={prevProgress} />)
-            } else {
-              process.stderr.write(formatProgress(progress, prevProgress) + '\n')
-            }
+            renderProgress(progress, prevProgress)
           }
         }
 

@@ -2359,6 +2359,64 @@ describe('StripeSource', () => {
   })
 
   describe('read() — streams without supportsCreatedFilter sync sequentially', () => {
+    it('keeps created-filter streams sequential when the per-stream segment budget is one', async () => {
+      const listFn = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: [{ id: 'cus_1', created: 1_500_000_000 }],
+          has_more: true,
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 'cus_2', created: 1_500_000_100 }],
+          has_more: false,
+        })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          supportsCreatedFilter: true,
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      await collect(
+        listApiBackfill({
+          catalog: {
+            streams: [
+              {
+                stream: { name: 'customers' },
+                time_range: { gte: TEST_RANGE_GTE, lt: TEST_RANGE_LT },
+              },
+            ],
+          },
+          state: undefined,
+          registry,
+          client: {} as unknown as StripeClient,
+          accountId: 'acct_test',
+          rateLimiter: async () => 0,
+          maxConcurrentStreams: 5,
+          maxRequestsPerSecond: 1,
+        })
+      )
+
+      const expectedCreated = {
+        gte: Math.floor(new Date(TEST_RANGE_GTE).getTime() / 1000),
+        lt: Math.floor(new Date(TEST_RANGE_LT).getTime() / 1000),
+      }
+
+      expect(listFn).toHaveBeenCalledTimes(2)
+      expect(listFn).toHaveBeenNthCalledWith(1, {
+        limit: 100,
+        created: expectedCreated,
+      })
+      expect(listFn).toHaveBeenNthCalledWith(2, {
+        limit: 100,
+        starting_after: 'cus_1',
+        created: expectedCreated,
+      })
+    })
+
     it('uses sequential pagination (no created filter) for non-parallel streams', async () => {
       const listFn = vi.fn().mockResolvedValue({
         data: [{ id: 'item_1', name: 'Sequential' }],
