@@ -174,6 +174,9 @@ export function createApp(options: AppOptions) {
       } catch {
         return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
       return c.json(pipeline, 200)
     }
   )
