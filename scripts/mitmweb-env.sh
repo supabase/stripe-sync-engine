@@ -83,8 +83,15 @@ if ! _port_listening 8080; then
   done
 
   if ! _port_listening 8080; then
-    echo "ERROR: mitmweb failed to start."
+    echo "ERROR: mitmweb failed to start (proxy port 8080)."
     return 1 2>/dev/null || exit 1
+  fi
+
+  # Verify the web UI is responding
+  if command -v curl &>/dev/null; then
+    if ! curl -s --max-time 3 "$MITM_WEB" >/dev/null 2>&1; then
+      echo "WARNING: mitmweb proxy is listening but web UI ($MITM_WEB) is not responding."
+    fi
   fi
 fi
 
