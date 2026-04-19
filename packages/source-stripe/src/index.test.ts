@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StripeEvent } from './spec.js'
-import { StripeRequestError, type StripeClient } from './client.js'
+import { makeClient, StripeRequestError, type StripeClient } from './client.js'
 import type {
   ConfiguredCatalog,
   Message,
@@ -232,7 +232,72 @@ describe('StripeSource', () => {
     })
   })
 
+  describe('setup()', () => {
+    it('resolves account_id and account_created together in one account fetch', async () => {
+      const getAccount = vi.fn().mockResolvedValue({
+        id: 'acct_test_123',
+        object: 'account',
+        created: 1_700_000_000,
+      })
+      vi.mocked(makeClient).mockReturnValueOnce({
+        getAccount,
+      } as unknown as StripeClient)
+
+      const messages = await collect(
+        source.setup({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+      )
+
+      expect(getAccount).toHaveBeenCalledTimes(1)
+      expect(messages).toMatchObject([
+        {
+          type: 'control',
+          control: {
+            control_type: 'source_config',
+            source_config: expect.objectContaining({
+              api_key: config.api_key,
+              api_version: config.api_version,
+              account_id: 'acct_test_123',
+              account_created: 1_700_000_000,
+            }),
+          },
+        },
+      ])
+    })
+  })
+
   describe('read() — backfill scenarios', () => {
+    it('resolves account metadata once and reuses it for default backfill time ranges', async () => {
+      const getAccount = vi.fn().mockResolvedValue({
+        id: 'acct_test_123',
+        object: 'account',
+        created: 1_700_000_000,
+      })
+      vi.mocked(makeClient).mockReturnValueOnce({
+        getAccount,
+      } as unknown as StripeClient)
+
+      const listFn = vi.fn().mockResolvedValue({
+        data: [],
+        has_more: false,
+      })
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+      const messages = await collect(
+        source.read({ config, catalog: catalog({ name: 'customers', primary_key: [['id']] }) })
+      )
+
+      expect(getAccount).toHaveBeenCalledTimes(1)
+      expect(messages.some((m) => m.type === 'stream_status')).toBe(true)
+    })
+
     it('emits RecordMessage + SourceStateMessage in correct interleaving for multi-page stream', async () => {
       const listFn = vi
         .fn()
@@ -733,7 +798,7 @@ describe('StripeSource', () => {
       ).toBe(true)
     })
 
-    it('emits connection_status failed for Invalid API Key', async () => {
+    it('emits stream error (not global) for 401 encountered mid-stream', async () => {
       const listFn = vi.fn().mockRejectedValueOnce(
         new StripeRequestError(
           401,
@@ -768,10 +833,11 @@ describe('StripeSource', () => {
         stream_status: { stream: 'tax_ids', status: 'start' },
       })
       expect(messages[1]).toMatchObject({
-        type: 'connection_status',
-        connection_status: {
-          status: 'failed',
-          message: expect.stringContaining('Invalid API Key'),
+        type: 'stream_status',
+        stream_status: {
+          stream: 'tax_ids',
+          status: 'error',
+          error: expect.stringContaining('Invalid API Key'),
         },
       })
     })

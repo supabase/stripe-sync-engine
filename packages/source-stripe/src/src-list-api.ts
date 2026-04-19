@@ -12,6 +12,7 @@ import { msg } from './index.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
+import { STRIPE_LAUNCH_TIMESTAMP } from './account-metadata.js'
 
 // MARK: - Rate-limit wrapper
 
@@ -52,15 +53,6 @@ export function errorToConnectionStatus(err: unknown): Message {
     status: 'failed',
     message: err instanceof Error ? err.message : String(err),
   })
-}
-
-function isGlobalError(err: unknown): boolean {
-  // Only 401 (invalid/revoked key) is truly global. 403 means the key lacks
-  // permission for a specific endpoint — report as a per-stream error, not fatal.
-  if (err instanceof StripeApiRequestError && err.status === 401) {
-    return true
-  }
-  return false
 }
 
 /**
@@ -152,8 +144,6 @@ export function reconcileRanges(
 }
 
 // MARK: - Account created timestamp
-
-const STRIPE_LAUNCH_TIMESTAMP = Math.floor(new Date('2011-01-01T00:00:00Z').getTime() / 1000)
 
 async function getAccountCreatedTimestamp(client: StripeClient): Promise<number> {
   try {
@@ -421,6 +411,7 @@ export async function* listApiBackfill(opts: {
   state: Record<string, unknown> | undefined
   registry: Record<string, ResourceConfig>
   client: StripeClient
+  accountCreated?: number
   accountId: string
   rateLimiter: RateLimiter
   backfillLimit?: number
@@ -434,6 +425,7 @@ export async function* listApiBackfill(opts: {
     state,
     registry,
     client,
+    accountCreated: initialAccountCreated,
     accountId,
     rateLimiter,
     backfillLimit,
@@ -449,7 +441,7 @@ export async function* listApiBackfill(opts: {
   // Minimum 2: the n-ary search needs at least head + 1 tail segment to subdivide.
   const getMaxSegments = () => Math.max(2, Math.floor(maxRequestsPerSecond / activeStreams))
 
-  let accountCreated: number | null = null
+  let accountCreated: number | null = initialAccountCreated ?? null
 
   const streamGenerators: AsyncGenerator<Message>[] = []
 
@@ -513,14 +505,6 @@ export async function* listApiBackfill(opts: {
             stream: stream.name,
             error: err instanceof Error ? err.message : String(err),
           })
-
-          if (isGlobalError(err)) {
-            yield msg.connection_status({
-              status: 'failed',
-              message: err instanceof Error ? err.message : String(err),
-            })
-            return
-          }
 
           yield msg.stream_status({
             stream: stream.name,

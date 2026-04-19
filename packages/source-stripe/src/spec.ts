@@ -5,6 +5,12 @@ import { BUNDLED_API_VERSION, SUPPORTED_API_VERSIONS } from '@stripe/sync-openap
 export const configSchema = z.object({
   api_key: z.string().describe('Stripe API key (sk_test_... or sk_live_...)'),
   account_id: z.string().optional().describe('Stripe account ID (resolved from API if omitted)'),
+  account_created: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Stripe account creation timestamp in unix seconds (resolved from API if omitted)'),
   livemode: z.boolean().optional().describe('Whether this is a live mode sync'),
   api_version: z
     .enum(SUPPORTED_API_VERSIONS)

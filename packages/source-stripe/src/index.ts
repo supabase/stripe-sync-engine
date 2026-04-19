@@ -30,6 +30,7 @@ import type { RateLimiter } from './rate-limiter.js'
 import { createInMemoryRateLimiter } from './rate-limiter.js'
 import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
+import { resolveAccountMetadata } from './account-metadata.js'
 
 function combineSignals(
   ...signals: Array<AbortSignal | null | undefined>
@@ -91,12 +92,7 @@ export const msg = createSourceMessageFactory<
 // MARK: - Account ID resolution
 
 export async function resolveAccountId(config: Config, client: StripeClient): Promise<string> {
-  if (config.account_id) {
-    return config.account_id
-  }
-
-  const account = await client.getAccount()
-  return account.id
+  return (await resolveAccountMetadata(config, client)).accountId
 }
 
 // MARK: - Source
@@ -170,10 +166,10 @@ export function createStripeSource(
         api_version: config.api_version ?? BUNDLED_API_VERSION,
       })
 
-      // Resolve account_id if not already set
-      if (!config.account_id) {
-        const account = await client.getAccount()
-        updates.account_id = account.id
+      if (!config.account_id || config.account_created == null) {
+        const resolved = await resolveAccountMetadata(config, client)
+        if (!config.account_id) updates.account_id = resolved.accountId
+        if (config.account_created == null) updates.account_created = resolved.accountCreated
       }
 
       // Create managed webhook endpoint if webhook_url is set
@@ -265,8 +261,11 @@ export function createStripeSource(
           )
           const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
           let accountId: string
+          let accountCreated: number
           try {
-            accountId = await resolveAccountId(config, client)
+            const resolvedAccount = await resolveAccountMetadata(config, client)
+            accountId = resolvedAccount.accountId
+            accountCreated = resolvedAccount.accountCreated
           } catch (err) {
             yield errorToConnectionStatus(err)
             return
@@ -323,6 +322,7 @@ export function createStripeSource(
               registry,
               rateLimiter,
               client,
+              accountCreated,
               accountId,
               backfillLimit: config.backfill_limit,
               maxConcurrentStreams,
