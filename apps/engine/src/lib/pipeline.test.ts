@@ -269,7 +269,7 @@ describe('log()', () => {
     expect(logger.warn).toHaveBeenCalledWith('careful')
   })
 
-  it('logs top-level stream_status messages via logger.info', async () => {
+  it('logs top-level stream_status messages via logger.debug', async () => {
     const msgs: Message[] = [
       {
         type: 'stream_status',
@@ -277,7 +277,7 @@ describe('log()', () => {
       },
     ]
     await drain(log(toAsync(msgs)))
-    expect(logger.info).toHaveBeenCalledWith({ stream: 'orders', status: 'start' }, 'stream_status')
+    expect(logger.debug).toHaveBeenCalledWith({ stream: 'orders', status: 'start' }, 'stream_status')
   })
 
   it('does not log record or state messages', async () => {

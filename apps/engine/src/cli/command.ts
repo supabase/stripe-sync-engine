@@ -103,7 +103,7 @@ export async function createProgram() {
     subCommands: {
       serve: serveCmd,
       supabase: supabaseCmd,
-      sync: createSyncCmd(engine, resolver),
+      sync: createSyncCmd(),
       ...specCli.subCommands,
     },
   })

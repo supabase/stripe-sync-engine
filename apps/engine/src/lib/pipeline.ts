@@ -61,7 +61,7 @@ export async function* log<T extends Message>(messages: AsyncIterable<T>): Async
   for await (const msg of messages) {
     if (msg.type === 'log') logger[msg.log.level](msg.log.message)
     else if (msg.type === 'stream_status') {
-      logger.info(
+      logger.debug(
         { stream: msg.stream_status.stream, status: msg.stream_status.status },
         'stream_status'
       )
