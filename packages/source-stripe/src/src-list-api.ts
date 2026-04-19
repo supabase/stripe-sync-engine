@@ -200,8 +200,6 @@ async function* paginateRange(opts: {
   backfillLimit?: number
   totalEmitted: { count: number }
   lastSeenCreated: Map<RemainingRange, number>
-  /** When true, fetch only one page then return (allows outer loop to subdivide). */
-  singlePage?: boolean
 }): AsyncGenerator<Message> {
   const {
     range,
@@ -216,7 +214,6 @@ async function* paginateRange(opts: {
     backfillLimit,
     totalEmitted,
     lastSeenCreated,
-    singlePage,
   } = opts
 
   let cursor = range.cursor
@@ -248,10 +245,10 @@ async function* paginateRange(opts: {
       nextCursor = (response.data[response.data.length - 1] as { id: string }).id
     }
 
-    // Hide Stripe latency behind record emission for purely sequential ranges.
-    // We intentionally skip this in singlePage mode because the outer scheduler
-    // may subdivide after this page and invalidate the next request.
-    if (!singlePage && backfillLimit == null && responseHasMore && nextCursor) {
+    // Prefetch the next page to hide latency — but only for sequential ranges
+    // (no created filter). Subdivided ranges return after one page, so prefetch
+    // would be wasted.
+    if (!supportsCreatedFilter && backfillLimit == null && responseHasMore && nextCursor) {
       const nextParams: Record<string, unknown> = {}
       if (supportsCreatedFilter) {
         nextParams.created = { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) }
@@ -297,8 +294,9 @@ async function* paginateRange(opts: {
       },
     })
 
-    // In singlePage mode, return after one page so the outer loop can subdivide
-    if (singlePage && hasMore) return
+    // Streams with a created filter return after one page so the outer loop
+    // can subdivide the remaining time range via binary subdivision.
+    if (supportsCreatedFilter && hasMore) return
   }
 
   // Range exhausted — remove from remaining and emit range_complete
@@ -382,8 +380,6 @@ async function* iterateStream(opts: {
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
 
-    const canSubdivide = supportsCreatedFilter
-
     // Fetch one page from each range in parallel (rate limiter controls concurrency)
     const generators = remaining.map((range) =>
       paginateRange({
@@ -399,7 +395,6 @@ async function* iterateStream(opts: {
         backfillLimit,
         totalEmitted,
         lastSeenCreated,
-        singlePage: canSubdivide,
       })
     )
 
@@ -410,7 +405,7 @@ async function* iterateStream(opts: {
     }
 
     // After pages complete, subdivide based on what we learned
-    if (canSubdivide && remaining.length > 0) {
+    if (supportsCreatedFilter && remaining.length > 0) {
       const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated })
       remaining.length = 0
       remaining.push(...subdivided)
