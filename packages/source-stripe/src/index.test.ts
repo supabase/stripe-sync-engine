@@ -2409,6 +2409,22 @@ describe('StripeSource', () => {
           lt: Math.floor(new Date(TEST_RANGE_LT).getTime() / 1000),
         },
       })
+
+      const rangeCompletes = messages.filter(
+        (m): m is StreamStatusMessage =>
+          m.type === 'stream_status' && m.stream_status.status === 'range_complete'
+      )
+      expect(rangeCompletes).toContainEqual(
+        expect.objectContaining({
+          stream_status: expect.objectContaining({
+            stream: 'customers',
+            range_complete: {
+              gte: new Date((1_500_000_000 + 1) * 1000).toISOString(),
+              lt: TEST_RANGE_LT,
+            },
+          }),
+        })
+      )
     })
 
     it('uses sequential pagination (no created filter) for non-parallel streams', async () => {

@@ -296,7 +296,21 @@ async function* paginateRange(opts: {
 
     // Streams with a created filter return after one page so the outer loop
     // can subdivide the remaining time range via binary subdivision.
-    if (supportsCreatedFilter && hasMore) return
+    if (supportsCreatedFilter && hasMore) {
+      const splitPoint = lastSeenCreated.get(range)
+      if (splitPoint != null) {
+        const fetchedHeadGteUnix = Math.max(toUnixSeconds(range.gte), splitPoint + 1)
+        const fetchedHeadLtUnix = toUnixSeconds(range.lt)
+        if (fetchedHeadGteUnix < fetchedHeadLtUnix) {
+          yield msg.stream_status({
+            stream: streamName,
+            status: 'range_complete',
+            range_complete: { gte: toIso(fetchedHeadGteUnix), lt: range.lt },
+          })
+        }
+      }
+      return
+    }
   }
 
   // Range exhausted — remove from remaining and emit range_complete
