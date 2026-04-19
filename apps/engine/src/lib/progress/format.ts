@@ -25,12 +25,12 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     counts[s.status] = (counts[s.status] ?? 0) + 1
   }
   const statusParts: string[] = []
-  if (counts.completed) statusParts.push(`${counts.completed} 🟢`)
-  if (counts.started) statusParts.push(`${counts.started} 🟡`)
-  if (counts.errored) statusParts.push(`${counts.errored} 🔴`)
-  if (counts.skipped) statusParts.push(`${counts.skipped} ⏭️`)
-  if (counts.not_started) statusParts.push(`${counts.not_started} ⚪`)
-  const streamSummary = statusParts.join(' ')
+  if (counts.completed) statusParts.push(`${counts.completed} done`)
+  if (counts.started) statusParts.push(`${counts.started} active`)
+  if (counts.errored) statusParts.push(`${counts.errored} failed`)
+  if (counts.skipped) statusParts.push(`${counts.skipped} skipped`)
+  if (counts.not_started) statusParts.push(`${counts.not_started} queued`)
+  const streamSummary = statusParts.join(', ')
 
   const statusLabel =
     progress.derived.status === 'failed' ? `🔴 Sync failed [${streamSummary}]`

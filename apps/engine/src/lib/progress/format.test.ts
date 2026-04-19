@@ -16,7 +16,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing [2 ⚪] — 0.0s
+      "🔄 Syncing [2 queued] — 0.0s
         ⚪ customers, invoices"
     `)
   })
@@ -42,7 +42,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing [3 🟢 2 🟡 5 ⚪] — 12.4s | 3451 records (245.2/s) | 18 checkpoints (1.5/s)
+      "🔄 Syncing [3 done, 2 active, 5 queued] — 12.4s | 3451 records (245.2/s) | 18 checkpoints (1.5/s)
         🟢 accounts: 1 records
         🟢 customers: 1200 records
         🟢 invoices: 850 records
@@ -65,7 +65,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔴 Sync failed [1 🔴] — 1.5s
+      "🔴 Sync failed [1 failed] — 1.5s
         🔴 customers — Invalid API key"
     `)
   })
@@ -83,7 +83,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing [1 🟢 1 ⏭️] — 5.0s | 100 records (50.0/s) | 2 checkpoints (0.4/s)
+      "🔄 Syncing [1 done, 1 skipped] — 5.0s | 100 records (50.0/s) | 2 checkpoints (0.4/s)
         🟢 customers: 100 records
         ⏭️ invoices"
     `)
@@ -115,7 +115,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "🔄 Syncing [1 🟢 2 🟡] — 4.0s | 450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
+      "🔄 Syncing [1 done, 2 active] — 4.0s | 450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
         🟢 customers: 200 records (+50)
         🟡 invoices: 180 records (+130)
         🟡 charges: 70 records (+70)"
