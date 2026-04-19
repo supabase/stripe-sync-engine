@@ -103,6 +103,31 @@ export type UpsertOptions = {
 
   /** Append RETURNING * (default: false). */
   returning?: boolean
+
+  /**
+   * Append `RETURNING (xmax = 0) AS _sync_created` to distinguish inserts from
+   * updates. When combined with `softDeleteExpression`, also returns
+   * `(<expr>)::boolean AS _sync_deleted`.
+   *
+   * Used by `upsertWithStats` to compute created/updated/deleted/skipped counts.
+   */
+  returningWriteStats?: boolean
+
+  /**
+   * SQL expression that evaluates to a boolean indicating a soft-deleted record.
+   * Only used when `returningWriteStats` is true.
+   *
+   * Example: `"_raw_data->>'deleted'"` for Stripe objects where the source sets
+   * `deleted: true` in the record data on delete events.
+   */
+  softDeleteExpression?: string
+}
+
+export type UpsertResult = {
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  skipped_count: number
 }
 
 function isJsonbValue(v: unknown): boolean {
@@ -140,6 +165,8 @@ export function buildUpsertSql(
     newerThanColumn,
     skipNoopUpdates = true,
     returning = false,
+    returningWriteStats = false,
+    softDeleteExpression,
   } = options
 
   // Derive column list from the first record — all records must have the same shape.
@@ -208,7 +235,14 @@ export function buildUpsertSql(
     sql += '\nDO NOTHING'
   }
 
-  if (returning) {
+  if (returningWriteStats) {
+    const parts = returning ? ['*'] : []
+    parts.push('(xmax = 0) AS _sync_created')
+    if (softDeleteExpression) {
+      parts.push(`(${softDeleteExpression})::boolean AS _sync_deleted`)
+    }
+    sql += `\nRETURNING ${parts.join(', ')}`
+  } else if (returning) {
     sql += '\nRETURNING *'
   }
 
@@ -243,4 +277,63 @@ export async function upsert(
     if (err instanceof Error) wrapped.stack = err.stack
     throw wrapped
   }
+}
+
+/**
+ * Upsert with created/updated/deleted/skipped breakdown.
+ *
+ * Uses Postgres `xmax = 0` to distinguish inserts from updates, and an
+ * optional `softDeleteExpression` to classify soft-deleted records.
+ */
+export async function upsertWithStats(
+  client: { query(text: string, values?: unknown[]): Promise<pg.QueryResult> },
+  records: Record<string, unknown>[],
+  options: UpsertOptions
+): Promise<UpsertResult> {
+  if (records.length === 0) {
+    return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+  }
+
+  const { sql, params } = buildUpsertSql(records, {
+    ...options,
+    returningWriteStats: true,
+    returning: false,
+  })
+
+  let result: pg.QueryResult
+  try {
+    result = await client.query(sql, params)
+  } catch (err) {
+    const table = qualifiedTable(options.schema, options.table)
+    const columns = Object.keys(records[0]!)
+    const detail =
+      `table=${table} columns=[${columns.join(', ')}] ` +
+      `pk=[${options.primaryKeyColumns.join(', ')}]` +
+      (options.newerThanColumn ? ` newerThan=${options.newerThanColumn}` : '')
+    const wrapped = new Error(
+      `upsertWithStats failed: ${err instanceof Error ? err.message : String(err)} (${detail})`,
+      { cause: err }
+    )
+    if (err instanceof Error) wrapped.stack = err.stack
+    throw wrapped
+  }
+
+  let created_count = 0
+  let updated_count = 0
+  let deleted_count = 0
+
+  for (const row of result.rows) {
+    const isDeleted = options.softDeleteExpression ? Boolean(row._sync_deleted) : false
+    if (isDeleted) {
+      deleted_count++
+    } else if (row._sync_created) {
+      created_count++
+    } else {
+      updated_count++
+    }
+  }
+
+  const skipped_count = records.length - result.rows.length
+
+  return { created_count, updated_count, deleted_count, skipped_count }
 }

@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { upsert } from './upsert.js'
+import { upsert, upsertWithStats } from './upsert.js'
 
 // ---------------------------------------------------------------------------
 // Postgres connection — requires DATABASE_URL or `docker compose up postgres`
@@ -624,5 +624,166 @@ describe('newerThanColumn with GENERATED STORED column', () => {
     expect(r).toHaveLength(1)
     expect(r[0]).toMatchObject({ id: '1', created: '50' })
     expect(r[0]._raw_data.name).toBe('New')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// upsertWithStats
+// ---------------------------------------------------------------------------
+
+describe('upsertWithStats', () => {
+  let table: string
+
+  describe('basic counts', () => {
+    beforeEach(async () => {
+      table = await createTable(nextTable())
+    })
+
+    it('reports all inserts for new rows', async () => {
+      const result = await upsertWithStats(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 },
+          { id: '2', name: 'Bob', score: 200 },
+          { id: '3', name: 'Charlie', score: 300 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      expect(result).toEqual({ created_count: 3, updated_count: 0, deleted_count: 0, skipped_count: 0 })
+    })
+
+    it('reports all updates when data changed', async () => {
+      await upsert(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 },
+          { id: '2', name: 'Bob', score: 200 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      const result = await upsertWithStats(
+        pool,
+        [
+          { id: '1', name: 'Alice v2', score: 150 },
+          { id: '2', name: 'Bob v2', score: 250 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      expect(result).toEqual({ created_count: 0, updated_count: 2, deleted_count: 0, skipped_count: 0 })
+    })
+
+    it('reports all skipped when data is identical', async () => {
+      await upsert(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 },
+          { id: '2', name: 'Bob', score: 200 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      const result = await upsertWithStats(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 },
+          { id: '2', name: 'Bob', score: 200 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 2 })
+    })
+
+    it('reports mixed inserts and updates', async () => {
+      await upsert(pool, [{ id: '1', name: 'Alice', score: 100 }], {
+        table,
+        primaryKeyColumns: ['id'],
+      })
+
+      const result = await upsertWithStats(
+        pool,
+        [
+          { id: '1', name: 'Alice v2', score: 150 }, // update
+          { id: '2', name: 'Bob', score: 200 }, // insert
+          { id: '3', name: 'Charlie', score: 300 }, // insert
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      expect(result).toEqual({ created_count: 2, updated_count: 1, deleted_count: 0, skipped_count: 0 })
+    })
+
+    it('reports mixed inserts, updates, and skips', async () => {
+      await upsert(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 },
+          { id: '2', name: 'Bob', score: 200 },
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      const result = await upsertWithStats(
+        pool,
+        [
+          { id: '1', name: 'Alice', score: 100 }, // skip (identical)
+          { id: '2', name: 'Bob v2', score: 250 }, // update
+          { id: '3', name: 'Charlie', score: 300 }, // insert
+        ],
+        { table, primaryKeyColumns: ['id'] }
+      )
+
+      expect(result).toEqual({ created_count: 1, updated_count: 1, deleted_count: 0, skipped_count: 1 })
+    })
+
+    it('returns zeros for empty records array', async () => {
+      const result = await upsertWithStats(pool, [], { table, primaryKeyColumns: ['id'] })
+      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 })
+    })
+  })
+
+  describe('soft delete', () => {
+    beforeEach(async () => {
+      table = nextTable()
+      await pool.query(`
+        CREATE TABLE "${table}" (
+          _raw_data jsonb NOT NULL,
+          id text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED,
+          PRIMARY KEY (id)
+        )
+      `)
+    })
+
+    it('classifies soft-deleted inserts as deleted', async () => {
+      const result = await upsertWithStats(
+        pool,
+        [
+          { _raw_data: { id: '1', name: 'Alice' } },
+          { _raw_data: { id: '2', name: 'Bob' } },
+          { _raw_data: { id: '3', name: 'Gone', deleted: true } },
+        ],
+        { table, primaryKeyColumns: ['id'], softDeleteExpression: "_raw_data->>'deleted'" }
+      )
+
+      expect(result).toEqual({ created_count: 2, updated_count: 0, deleted_count: 1, skipped_count: 0 })
+    })
+
+    it('classifies soft-deleted updates as deleted', async () => {
+      await upsert(pool, [{ _raw_data: { id: '1', name: 'Alice' } }], {
+        table,
+        primaryKeyColumns: ['id'],
+      })
+
+      const result = await upsertWithStats(
+        pool,
+        [{ _raw_data: { id: '1', name: 'Alice', deleted: true } }],
+        { table, primaryKeyColumns: ['id'], softDeleteExpression: "_raw_data->>'deleted'" }
+      )
+
+      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 1, skipped_count: 0 })
+    })
   })
 })

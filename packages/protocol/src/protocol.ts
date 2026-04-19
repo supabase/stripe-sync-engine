@@ -62,6 +62,13 @@ export const Stream = z
       .describe(
         'Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. "updated").'
       ),
+
+    soft_delete_field: z
+      .string()
+      .optional()
+      .describe(
+        'Field in record data that signals a soft delete (e.g. "deleted"). Destination uses this to classify upserts as deletes when the field is truthy.'
+      ),
   })
   .describe('A named collection of records — analogous to a table or API resource.')
 export type Stream = z.infer<typeof Stream>
