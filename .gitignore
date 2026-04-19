@@ -28,6 +28,9 @@ private/
 # Local cred storage
 .credentials/
 
+# Local test scripts
+scripts/test-all-accounts.sh
+
 # Git worktrees
 .worktrees/
 
