@@ -1,13 +1,14 @@
 import React from 'react'
+import { createHash } from 'node:crypto'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
-import { spawn, type ChildProcess } from 'node:child_process'
-import { openSync, closeSync } from 'node:fs'
-import { createServer, type AddressInfo } from 'node:net'
-import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
+import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
 import { createRemoteEngine } from '../lib/remote-engine.js'
 import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
 import { ProgressView } from '../lib/progress/format.js'
+import { spawnServeSubprocess } from './subprocess.js'
 
 export function createSyncCmd() {
   return defineCommand({
@@ -16,32 +17,33 @@ export function createSyncCmd() {
       description: 'Sync Stripe data to Postgres',
     },
     args: {
+      // Source (Stripe)
       stripeApiKey: {
         type: 'string',
         description: 'Stripe API key (or STRIPE_API_KEY env)',
       },
+      stripeBaseUrl: {
+        type: 'string',
+        description: 'Stripe API base URL (default: https://api.stripe.com)',
+      },
+      stripeRateLimit: {
+        type: 'string',
+        description: 'Max Stripe API requests per second (default: 20 live, 10 test)',
+      },
+      // Destination (Postgres)
       postgresUrl: {
         type: 'string',
         description: 'Postgres connection string (or POSTGRES_URL env)',
       },
-      schema: {
+      postgresSchema: {
         type: 'string',
         default: 'public',
         description: 'Target Postgres schema (default: public)',
       },
+      // Sync behavior
       streams: {
         type: 'string',
         description: 'Comma-separated stream names (default: all)',
-      },
-      state: {
-        type: 'string',
-        default: 'postgres',
-        description: 'State backend: postgres | none (default: postgres)',
-      },
-      batchSize: {
-        type: 'string',
-        default: '100',
-        description: 'Records per destination flush (default: 100)',
       },
       backfillLimit: {
         type: 'string',
@@ -51,14 +53,20 @@ export function createSyncCmd() {
         type: 'string',
         description: 'Stop after N seconds',
       },
-      baseUrl: {
+      state: {
         type: 'string',
-        description: 'Stripe API base URL (default: https://api.stripe.com)',
+        default: 'file',
+        description: 'State backend: file (default, ~/.stripe-sync/), postgres, none',
       },
-      live: {
+      noState: {
         type: 'boolean',
         default: false,
-        description: 'Keep running after backfill and stream live events via WebSocket',
+        description: 'Shorthand for --state none',
+      },
+      websocket: {
+        type: 'boolean',
+        default: false,
+        description: 'Stay alive for real-time WebSocket events',
       },
     },
     async run({ args }) {
@@ -67,52 +75,40 @@ export function createSyncCmd() {
       if (!stripeApiKey) throw new Error('Missing --stripe-api-key or STRIPE_API_KEY env')
       if (!postgresUrl) throw new Error('Missing --postgres-url or POSTGRES_URL env')
 
+      const schema = args.postgresSchema
+      const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
+      const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
+
+      const stripeConfig: Record<string, unknown> = { api_key: stripeApiKey }
+      if (args.stripeBaseUrl) stripeConfig.base_url = args.stripeBaseUrl
+      if (args.stripeRateLimit) stripeConfig.rate_limit = parseInt(args.stripeRateLimit)
+      if (backfillLimit) stripeConfig.backfill_limit = backfillLimit
+      if (args.websocket) stripeConfig.websocket = true
+
       const pipeline: PipelineConfig = {
-        source: { type: 'stripe', stripe: { api_key: stripeApiKey } },
+        source: { type: 'stripe', stripe: stripeConfig },
         destination: {
           type: 'postgres',
-          postgres: {
-            url: postgresUrl,
-            schema: args.schema,
-            port: 5432,
-            batch_size: parseInt(args.batchSize),
-          },
+          postgres: { url: postgresUrl, schema, port: 5432 },
         },
         streams: args.streams
           ? args.streams.split(',').map((s) => ({ name: s.trim() }))
           : undefined,
       }
 
-      // State store: persist in destination Postgres or discard
+      // State store
+      const stateMode = args.noState ? 'none' : args.state
       const store: StateStore & { close?(): Promise<void> } =
-        args.state === 'none' ? readonlyStateStore() : await getStateStore(postgresUrl, args.schema)
+        stateMode === 'none' ? readonlyStateStore()
+        : stateMode === 'postgres' ? await getPostgresStateStore(postgresUrl, schema)
+        : defaultFileStateStore(stripeApiKey)
       const initialState = await store.get()
 
-      const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
-      const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
-
-      // Inject optional source config overrides
-      const stripeConfig = pipeline.source.stripe as Record<string, unknown>
-      if (args.baseUrl) {
-        stripeConfig.base_url = args.baseUrl
-      }
-      if (backfillLimit) {
-        stripeConfig.backfill_limit = backfillLimit
-      }
-      if (args.live) {
-        stripeConfig.websocket = true
-      }
-
       // Spawn engine HTTP server as a subprocess — logs go to a file, Ink owns the terminal
-      const port = await getAvailablePort()
-      const logFile = `sync-${args.schema}.log`
-      const logFd = openSync(logFile, 'w')
-      const child = spawnServeProcess(port, logFd)
+      const server = await spawnServeSubprocess(`sync-${schema}.log`)
 
       try {
-        const engineUrl = `http://localhost:${port}`
-        await waitForServer(engineUrl)
-        const engine = createRemoteEngine(engineUrl)
+        const engine = createRemoteEngine(server.url)
 
         // Create tables before syncing (must drain — await alone no-ops on AsyncIterable)
         for await (const _msg of engine.pipeline_setup(pipeline)) {
@@ -149,64 +145,22 @@ export function createSyncCmd() {
 
         unmount()
       } finally {
-        child.kill()
-        closeSync(logFd)
-        if ('close' in store && typeof store.close === 'function') {
-          await store.close()
-        }
+        server.kill()
+        if (store.close) await store.close()
       }
     },
   })
 }
 
-/** Spawn `sync-engine serve` as a child process with logs piped to a file descriptor. */
-function spawnServeProcess(port: number, logFd: number): ChildProcess {
-  const child = spawn(
-    process.execPath,
-    ['--use-env-proxy', '--import', 'tsx', 'apps/engine/src/bin/serve.ts'],
-    {
-      env: { ...process.env, PORT: String(port) },
-      stdio: ['ignore', logFd, logFd],
-    }
-  )
-  child.on('error', (err) => {
-    throw new Error(`Failed to spawn engine server: ${err.message}`)
-  })
-  return child
+function defaultFileStateStore(apiKey: string): StateStore {
+  const hash = createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
+  const filePath = join(homedir(), '.stripe-sync', `${hash}.json`)
+  return fileStateStore(filePath)
 }
 
-/** Find an available TCP port by briefly binding to port 0. */
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer()
-    srv.listen(0, () => {
-      const { port } = srv.address() as AddressInfo
-      srv.close((err) => (err ? reject(err) : resolve(port)))
-    })
-    srv.on('error', reject)
-  })
-}
-
-/** Poll the server's /health endpoint until it responds or timeout. */
-async function waitForServer(url: string, timeoutMs = 10_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${url}/health`)
-      if (res.ok) return
-    } catch {
-      // server not ready yet
-    }
-    await new Promise((r) => setTimeout(r, 100))
-  }
-  throw new Error(`Engine server at ${url} did not start within ${timeoutMs}ms`)
-}
-
-async function getStateStore(connectionString: string, schema: string) {
+async function getPostgresStateStore(connectionString: string, schema: string) {
   const pkg = await import('@stripe/sync-state-postgres')
   const stateConfig = { connection_string: connectionString, schema }
   await pkg.setupStateStore(stateConfig)
-  return pkg.createStateStore(stateConfig) as import('../lib/state-store.js').StateStore & {
-    close(): Promise<void>
-  }
+  return pkg.createStateStore(stateConfig) as StateStore & { close(): Promise<void> }
 }
