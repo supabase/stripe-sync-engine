@@ -464,10 +464,10 @@ for (const runtime of runtimes) {
 
       expect(eof).toBeDefined()
       expect(eof.eof.has_more).toBe(true)
-      // time limit reached — has_more signals the client should continue
-      expect(typeof eof.eof.elapsed_ms).toBe('number')
-      expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
-      expect(eof.eof.elapsed_ms).toBeLessThan(5000)
+      // time limit reached — elapsed is in run_progress
+      expect(typeof eof.eof.run_progress?.elapsed_ms).toBe('number')
+      expect(eof.eof.run_progress.elapsed_ms).toBeGreaterThan(1500)
+      expect(eof.eof.run_progress.elapsed_ms).toBeLessThan(5000)
       expect(elapsed).toBeGreaterThan(1500)
       expect(elapsed).toBeLessThan(5000)
 
@@ -506,8 +506,8 @@ for (const runtime of runtimes) {
 
         expect(eof).toBeDefined()
         expect(eof.eof.has_more).toBe(true)
-        // hard time limit — source was blocked, engine forced return
-        expect(typeof eof.eof.elapsed_ms).toBe('number')
+        // hard time limit — elapsed is in run_progress
+        expect(typeof eof.eof.run_progress?.elapsed_ms).toBe('number')
         // Hard deadline = 2s + 1s = 3s. Allow generous CI slack.
         expect(elapsed).toBeGreaterThan(2000)
         expect(elapsed).toBeLessThan(15000)
