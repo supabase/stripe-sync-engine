@@ -522,6 +522,17 @@ async function* iterateStream(opts: {
     effective_rps: totalApiCalls / ((Date.now() - syncStart) / 1000),
   })
 
+  // Emit final state with empty remaining so consumers always see the completed state,
+  // regardless of what intermediate state messages were emitted during subdivision rounds.
+  yield msg.source_state({
+    state_type: 'stream',
+    stream: streamName,
+    data: {
+      accounted_range: accountedRange,
+      remaining: [],
+    },
+  })
+
   yield msg.stream_status({ stream: streamName, status: 'complete' })
 }
 

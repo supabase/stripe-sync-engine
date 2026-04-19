@@ -9,6 +9,8 @@ afterEach(() => {
 
 describe('withPgConnectProxy', () => {
   it('returns the original config when PG_PROXY_HOST is not set', () => {
+    vi.stubEnv('PG_PROXY_HOST', '')
+
     const config = { connectionString: 'postgres://user:pass@localhost:5432/mydb' }
 
     expect(withPgConnectProxy(config)).toBe(config)

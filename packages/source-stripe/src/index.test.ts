@@ -2399,9 +2399,10 @@ describe('StripeSource', () => {
         })
       )
 
-      // First call: full range with singlePage=true.
-      // Second page returns empty → range completes without subdivision.
-      expect(listFn).toHaveBeenCalledTimes(2)
+      // First call: full range → has_more + created=1_500_000_000.
+      // Subdivision (factor=2): boundary [1_500_000_000, 1_500_000_001) + 2 older halves = 3 ranges.
+      // Second round: 3 ranges all return empty → drained.
+      expect(listFn).toHaveBeenCalledTimes(4)
       expect(listFn).toHaveBeenNthCalledWith(1, {
         limit: 100,
         created: {

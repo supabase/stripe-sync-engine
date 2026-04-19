@@ -405,7 +405,7 @@ export default createStripeSource()
 // MARK: - Re-exports
 
 export { subdivideRanges, nextStep, type SearchState } from '@stripe/sync-protocol'
-export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
+export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS, EXCLUDED_TABLES } from './resourceRegistry.js'
 export { catalogFromOpenApi } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'
 export type { ParsedResourceTable, ParsedOpenApiSpec } from './openapi/types.js'

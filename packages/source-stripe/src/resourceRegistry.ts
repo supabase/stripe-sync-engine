@@ -89,7 +89,7 @@ export type RevalidateEntityName = (typeof REVALIDATE_ENTITIES)[number]
  * Endpoints that the OAS spec marks as listable but require a parent param
  * at runtime (the spec incorrectly marks the param as optional).
  */
-const EXCLUDED_TABLES = new Set([
+export const EXCLUDED_TABLES = new Set([
   // /v1/billing/credit_balance_transactions — requires `customer` query param
   // despite the spec marking it as optional. Always returns 400 without it.
   'billing_credit_balance_transactions',
