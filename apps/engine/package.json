@@ -31,7 +31,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/__generated__ dist/__generated__",
     "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
     "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/bin/serve.ts",
     "test": "vitest run",
