@@ -340,6 +340,67 @@ function contentTypeGuardedJsonValidator(schema: AnyZod, hook?: DefaultHook): Mi
   }
 }
 
+// ── Response validation ──────────────────────────────────────────
+
+/**
+ * Extract Zod schemas from a route's declared responses, keyed by status code.
+ * Only picks up `application/json` content schemas that are Zod types.
+ */
+function extractResponseSchemas(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  responses?: any
+): Map<number, AnyZod> {
+  const schemas = new Map<number, AnyZod>()
+  if (!responses) return schemas
+
+  for (const [statusCode, responseDef] of Object.entries(responses)) {
+    const code = Number(statusCode)
+    if (isNaN(code)) continue
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (responseDef as any)?.content
+    if (!content) continue
+    const jsonContent = content['application/json']
+    if (!jsonContent?.schema) continue
+    // Only validate if the schema is a Zod type (has .parse)
+    if (jsonContent.schema instanceof Object && 'parse' in jsonContent.schema) {
+      schemas.set(code, jsonContent.schema as AnyZod)
+    }
+  }
+
+  return schemas
+}
+
+/**
+ * Middleware that validates JSON response bodies against declared Zod schemas.
+ * On validation failure, replaces the response with a 500 containing error details.
+ */
+function responseValidationMiddleware(
+  schemas: Map<number, AnyZod>
+): MiddlewareHandler {
+  return async (c, next) => {
+    await next()
+
+    const res = c.res
+    const schema = schemas.get(res.status)
+    if (!schema) return
+
+    const contentType = res.headers.get('content-type')
+    if (!contentType || !isJsonLikeContentType(contentType)) return
+
+    const body = await res.clone().json()
+    const result = schema.safeParse(body)
+    if (!result.success) {
+      c.res = new Response(
+        JSON.stringify({
+          error: 'Response validation failed',
+          details: result.error.issues,
+        }),
+        { status: 500, headers: { 'content-type': 'application/json' } }
+      )
+    }
+  }
+}
+
 // ── OpenAPIHono ──────────────────────────────────────────────────
 
 export class OpenAPIHono<
@@ -429,6 +490,13 @@ export class OpenAPIHono<
           ? contentTypeGuardedJsonValidator(jsonSchema as AnyZod, this._defaultHook)
           : strictJsonBodyValidator(jsonSchema as AnyZod, this._defaultHook)
       )
+    }
+
+    // Response validation: extract Zod schemas from declared responses and validate
+    // JSON response bodies after the handler runs. Returns 500 with error details on failure.
+    const responseSchemas = extractResponseSchemas(op.responses)
+    if (responseSchemas.size > 0) {
+      middlewares.unshift(responseValidationMiddleware(responseSchemas))
     }
 
     // Use Hono's generic `on()` to avoid indexing by Method (which doesn't include `head`

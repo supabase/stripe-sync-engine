@@ -220,8 +220,7 @@ export async function createProgram() {
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
       const temporal = await createTemporalClient(address, taskQueue)
       const r = await resolverPromise
-      const dataDir = process.env.DATA_DIR
-      if (!dataDir) throw new Error('DATA_DIR environment variable is required')
+      const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
       realApp = createApp({ temporal, resolver: r, pipelineStore })
     }
