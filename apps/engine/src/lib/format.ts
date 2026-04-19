@@ -39,9 +39,10 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     parts.push(`${totalRows} rows${deltaStr} (${rps}/s)`)
   }
   if (progress.global_state_count > 0) {
+    const sps = progress.derived.states_per_second.toFixed(1)
     const cpDelta = prev ? progress.global_state_count - prev.global_state_count : 0
     const cpDeltaStr = cpDelta > 0 ? ` (+${cpDelta})` : ''
-    parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr}`)
+    parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${sps}/s)`)
   }
 
   const header = `${statusLabel} — ${parts.join(' | ')}`
