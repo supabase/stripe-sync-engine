@@ -177,3 +177,45 @@ export function map<T, U>(
     },
   }
 }
+
+/**
+ * Merge multiple async generators into one, pulling from up to `concurrency`
+ * generators at a time. As generators complete, new ones are pulled in from
+ * the array (bounded concurrency pool).
+ */
+export async function* mergeAsync<T>(
+  generators: AsyncGenerator<T>[],
+  concurrency: number
+): AsyncGenerator<T> {
+  type IndexedResult = { index: number; result: IteratorResult<T, undefined> }
+  const active = new Map<number, Promise<IndexedResult>>()
+  let nextIndex = 0
+
+  function pull(gen: AsyncGenerator<T>, index: number) {
+    active.set(
+      index,
+      gen.next().then((result) => ({ index, result: result as IteratorResult<T, undefined> }))
+    )
+  }
+
+  const limit = Math.min(concurrency, generators.length)
+  for (let i = 0; i < limit; i++) {
+    pull(generators[i], i)
+    nextIndex = i + 1
+  }
+
+  while (active.size > 0) {
+    const { index, result } = await Promise.race(active.values())
+    active.delete(index)
+
+    if (result.done) {
+      if (nextIndex < generators.length) {
+        pull(generators[nextIndex], nextIndex)
+        nextIndex++
+      }
+    } else {
+      yield result.value
+      pull(generators[index], index)
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { merge, map, withAbortOnReturn } from './async-iterable-utils.js'
+import { merge, map, withAbortOnReturn } from './async-iterable.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = []

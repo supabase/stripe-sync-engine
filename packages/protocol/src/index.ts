@@ -19,4 +19,13 @@ export {
   drain,
 } from './helpers.js'
 export { parseNdjsonChunks, writeLine } from './ndjson.js'
-export { merge, map, withAbortOnReturn } from './async-iterable-utils.js'
+export { merge, map, withAbortOnReturn, mergeAsync } from './utils/async-iterable.js'
+export {
+  subdivideRanges,
+  nextStep,
+  toUnixSeconds,
+  toIso,
+  type Range,
+  type TimeBound,
+  type SearchState,
+} from './utils/nary-search.js'
