@@ -1,0 +1,78 @@
+@startuml
+title Parallel Pagination via Binary Subdivision
+
+skinparam defaultFontName "Menlo"
+skinparam defaultFontSize 13
+skinparam backgroundColor #fafafa
+
+skinparam sequence {
+    ArrowThickness 2
+    ParticipantPadding 30
+    BoxPadding 10
+    LifeLineBorderColor #94a3b8
+    LifeLineBackgroundColor #fafafa
+
+    ParticipantBackgroundColor #f1f5f9
+    ParticipantBorderColor #475569
+    ParticipantFontSize 15
+    ParticipantFontStyle bold
+
+    DividerBackgroundColor #f8fafc
+    DividerBorderColor #cbd5e1
+    DividerFontSize 12
+    DividerFontStyle italic
+}
+
+participant "Engine" as E
+participant "Stripe API" as API
+
+== Round 0 — Fetch first page ==
+
+E -[#475569]> API : fetch [Jan 1 .. Apr 1)\ncursor: null
+API -[#2563eb]> E : 100 records (newest first)\noldest = Mar 15 (split_point)\ncursor: cur_abc
+
+note right of E #FEFFDD
+  split_point = Mar 15
+  remainder = [Jan 1 .. Mar 15)
+  midpoint  = Feb 7
+end note
+
+== Round 1 — Split remainder in half, fetch ==
+
+E -[#2563eb]> API : fetch [Jan 1 .. Feb 7)\ncursor: null
+E -[#2563eb]> API : fetch [Feb 7 .. Mar 15)\ncursor: null
+E -[#7c3aed]> API : fetch [Mar 15 .. Mar 16)\ncursor: cur_abc (boundary)
+
+note right of E #dcfce7
+  [Jan 1 .. Feb 7)   → no cursor → **done**
+  [Feb 7 .. Mar 15)  → cursor    → **split again**
+  [Mar 15 .. Mar 16) → no cursor → **done**
+end note
+
+== Round 2 — Split dense half again ==
+
+note right of E #FEFFDD
+  split_point = Feb 20
+  remainder = [Feb 7 .. Feb 20)
+  midpoint  = Feb 13
+end note
+
+E -[#2563eb]> API : fetch [Feb 7 .. Feb 13)\ncursor: null
+E -[#2563eb]> API : fetch [Feb 13 .. Feb 20)\ncursor: null
+E -[#7c3aed]> API : fetch [Feb 20 .. Feb 21)\ncursor: cur_def (boundary)
+
+note right of E #dcfce7
+  All three → no cursor → **done**
+end note
+
+== Rule ==
+
+note over E, API #f8fafc
+  **Per range, per round:**
+  1. Fetch one page
+  2. No cursor returned → **drop** (range drained)
+  3. Cursor returned, split_point > gte → **split remainder in half** + keep boundary
+  4. Cursor returned, split_point = gte (1-second range) → **keep paginating sequentially**
+end note
+
+@enduml

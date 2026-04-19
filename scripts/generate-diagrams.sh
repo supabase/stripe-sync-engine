@@ -16,7 +16,6 @@ fi
 find "$REPO_ROOT/docs" -name '*.puml' | while read -r puml; do
   echo "Generating: $puml"
   java -jar "$PLANTUML_JAR" -tsvg "$puml"
-  java -jar "$PLANTUML_JAR" -tpng "$puml"
 done
 
 echo "Done."
