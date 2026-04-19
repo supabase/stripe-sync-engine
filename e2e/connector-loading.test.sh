@@ -83,9 +83,11 @@ pnpm init > /dev/null 2>&1
 echo "# local tarballs only — no scoped registry" > .npmrc
 unset STRIPE_NPM_REGISTRY 2>/dev/null || true
 
-# Unset proxy env vars — the CLI's assertUseEnvProxy throws if a proxy is
-# configured without --use-env-proxy, but this test doesn't need network access.
+# The CLI's assertUseEnvProxy throws if a proxy is configured without
+# --use-env-proxy. Either unset the proxy vars or satisfy the assertion.
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy 2>/dev/null || true
+# If unset doesn't stick (CI-injected envs), satisfy the assertion instead:
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--use-env-proxy"
 
 # Override all workspace packages to use the local tarballs.
 cat > package.json <<EOF
@@ -155,12 +157,12 @@ check_not_found() {
 # Step 3: --help
 # ---------------------------------------------------------------------------
 echo "--- Step 3: sync-engine --help ---"
-if npx sync-engine --help > /dev/null 2>&1; then
-  echo "  PASS: --help exits 0"
-else
+help_output=$(npx sync-engine --help 2>&1) || {
   echo "  FAIL: --help exited with $?"
+  echo "  Output: $help_output"
   exit 1
-fi
+}
+echo "  PASS: --help exits 0"
 echo ""
 
 # ---------------------------------------------------------------------------
