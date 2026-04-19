@@ -6,6 +6,7 @@
 ## Goal
 
 Track every Stripe API request with structured metadata: method, path, params, status, duration_ms, request_id. Enable:
+
 - Live RPS display in the CLI
 - Rate limiter wait time visibility
 - Multi-tenant correlation in the service (by sync_id / account_id)
@@ -17,7 +18,7 @@ Track every Stripe API request with structured metadata: method, path, params, s
 Use `node:async_hooks` `AsyncLocalStorage` to bind a per-sync context (sync_id, account_id) at the top of `pipeline_sync`. All downstream code — including `buildListFn` in `packages/openapi` — can call `getLogger()` without signature changes.
 
 - Works with Bun (stable since 1.0)
-- Works across async generators: context is captured when the generator function is *called*, not when `.next()` is invoked
+- Works across async generators: context is captured when the generator function is _called_, not when `.next()` is invoked
 - Works with `Promise.race` / concurrent patterns in subdivision — promises created inside context retain it
 - Watch out: WebSocket `onEvent` callbacks must be registered inside the `als.run()` scope
 
@@ -55,7 +56,7 @@ Emit as `LogMessage` with structured `data` field (requires extending `LogPayloa
 export const LogPayload = z.object({
   level: z.enum(['debug', 'info', 'warn', 'error']),
   message: z.string(),
-  data: z.record(z.unknown()).optional(),  // NEW
+  data: z.record(z.unknown()).optional(), // NEW
 })
 ```
 
@@ -64,6 +65,7 @@ This works across subprocess boundaries (NDJSON) and in-process equally. The CLI
 ### Package placement for logger/context
 
 Options:
+
 - **New `packages/logger`** — both `source-stripe` and `apps/service` depend on it. Clean separation.
 - **`packages/protocol`** — avoids a new package but adds pino dep to protocol.
 
@@ -72,6 +74,7 @@ Recommendation: new `packages/logger` with pino + AsyncLocalStorage helpers.
 ### CLI consumption
 
 The CLI render loop handles `msg.type === 'log'` where `msg.log.data?.message === 'api_request'`:
+
 - Compute rolling-window RPS from the stream of entries
 - Optionally render tail of recent requests
 - Show cumulative rate_limit_wait_ms
@@ -86,12 +89,12 @@ Stripe returns a server-side `request-id` response header (already captured via 
 
 ## Scope of changes
 
-| Package | Change |
-|---------|--------|
-| `packages/protocol` | Add `data` field to `LogPayload` |
-| `packages/logger` (new) | AsyncLocalStorage context + pino child logger helpers |
-| `packages/openapi` | Instrument `buildListFn` to emit request logs |
+| Package                  | Change                                                                                        |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| `packages/protocol`      | Add `data` field to `LogPayload`                                                              |
+| `packages/logger` (new)  | AsyncLocalStorage context + pino child logger helpers                                         |
+| `packages/openapi`       | Instrument `buildListFn` to emit request logs                                                 |
 | `packages/source-stripe` | Create instrumented fetch in `read()`, bind ALS context, log from `withRateLimit` (wait time) |
-| `apps/engine` | Progress reducer: compute RPS from log stream |
-| `apps/engine` (CLI) | Render RPS + request tail from log messages |
-| `apps/service` | Bind sync context at request boundary |
+| `apps/engine`            | Progress reducer: compute RPS from log stream                                                 |
+| `apps/engine` (CLI)      | Render RPS + request tail from log messages                                                   |
+| `apps/service`           | Bind sync context at request boundary                                                         |

@@ -148,8 +148,6 @@ export interface Engine {
   ): AsyncIterable<SyncOutput>
 }
 
-
-
 /**
  * Build a {@link ConfiguredCatalog} from the streams discovered by the source.
  *
@@ -221,7 +219,6 @@ async function getSpec(
   return { config, streamStateSchema }
 }
 
-
 /** Discover and build catalog for a pipeline. */
 async function discoverCatalog(
   engine: Engine,
@@ -234,7 +231,12 @@ async function discoverCatalog(
 }
 
 /** Resolve both connectors, configs, catalog, and state for a pipeline. */
-async function resolvePipeline(resolver: ConnectorResolver, engine: Engine, pipeline: PipelineConfig, state?: unknown) {
+async function resolvePipeline(
+  resolver: ConnectorResolver,
+  engine: Engine,
+  pipeline: PipelineConfig,
+  state?: unknown
+) {
   const [srcConnector, destConnector] = await Promise.all([
     resolver.resolveSource(pipeline.source.type),
     resolver.resolveDestination(pipeline.destination.type),
@@ -264,7 +266,10 @@ async function resolvePipeline(resolver: ConnectorResolver, engine: Engine, pipe
  * Mutates `catalog.streams` in place.
  */
 /** Pure: returns a new catalog with time_range.lt set to timeCeiling on eligible streams. */
-export function withTimeRanges(catalog: ConfiguredCatalog, timeCeiling?: string): ConfiguredCatalog {
+export function withTimeRanges(
+  catalog: ConfiguredCatalog,
+  timeCeiling?: string
+): ConfiguredCatalog {
   if (!timeCeiling) return catalog
   return {
     ...catalog,
@@ -465,14 +470,14 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             input
           )
           const streamNames = p.filteredCatalog.streams.map((s) => s.stream.name)
-          let syncState = stateReducer(p.state, { type: 'initialize', stream_names: streamNames, sync_run_id: opts?.sync_run_id })
+          let syncState = stateReducer(p.state, {
+            type: 'initialize',
+            stream_names: streamNames,
+            sync_run_id: opts?.sync_run_id,
+          })
           let requestProgress = createInitialProgress(streamNames)
 
-          const destInput = pipe(
-            sourceOutput,
-            enforceCatalog(p.filteredCatalog),
-            log,
-          )
+          const destInput = pipe(sourceOutput, enforceCatalog(p.filteredCatalog), log)
           const destOutput = p.destination.connector.write(
             { config: p.destination.config, catalog: p.filteredCatalog },
             destInput
@@ -488,11 +493,21 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             // takeLimits appends a minimal eof signal ({ type: 'eof', eof: { has_more } })
             if (raw.type === 'eof') {
               const hasMore = (raw as { eof: { has_more: boolean } }).eof.has_more
-              yield emit(engineMsg.eof({ has_more: hasMore, ending_state: syncState, run_progress: syncState.sync_run.progress, request_progress: requestProgress }))
+              yield emit(
+                engineMsg.eof({
+                  has_more: hasMore,
+                  ending_state: syncState,
+                  run_progress: syncState.sync_run.progress,
+                  request_progress: requestProgress,
+                })
+              )
               return
             }
 
-            const msg = { ...raw, _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString() } as Message
+            const msg = {
+              ...raw,
+              _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString(),
+            } as Message
             syncState = stateReducer(syncState, msg)
             requestProgress = progressReducer(requestProgress, msg)
 

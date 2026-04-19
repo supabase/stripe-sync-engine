@@ -24,8 +24,7 @@ export function writePersistedStripeSourceConfig(
   sourceConfig: Record<string, unknown>
 ): void {
   const persisted = {
-    account_id:
-      typeof sourceConfig.account_id === 'string' ? sourceConfig.account_id : undefined,
+    account_id: typeof sourceConfig.account_id === 'string' ? sourceConfig.account_id : undefined,
     account_created:
       typeof sourceConfig.account_created === 'number' ? sourceConfig.account_created : undefined,
   } satisfies PersistedStripeSourceConfig

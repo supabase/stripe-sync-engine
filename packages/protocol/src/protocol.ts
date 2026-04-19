@@ -314,7 +314,10 @@ export const StreamProgress = z
       .describe('Current state, derived from stream_status events.'),
     state_count: z.number().int().describe('Number of state checkpoints for this stream.'),
     record_count: z.number().int().describe('Records synced for this stream in this run.'),
-    message: z.string().optional().describe('Human-readable status message (error reason, skip reason, etc).'),
+    message: z
+      .string()
+      .optional()
+      .describe('Human-readable status message (error reason, skip reason, etc).'),
     time_range: z
       .object({
         gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
@@ -379,9 +382,7 @@ export const SyncRunState = z
       .describe(
         'Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation.'
       ),
-    progress: ProgressPayload.describe(
-      'Accumulated progress from prior requests in this run.'
-    ),
+    progress: ProgressPayload.describe('Accumulated progress from prior requests in this run.'),
   })
   .describe('Engine-managed run state — run identity, frozen bounds, accumulated progress.')
 export type SyncRunState = z.infer<typeof SyncRunState>

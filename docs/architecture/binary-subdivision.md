@@ -20,10 +20,10 @@ requests — unavoidable.
 The question isn't total requests. It's **rounds** — how many sequential batches
 of parallel requests?
 
-| Strategy              | Total requests | Rounds       |
-| --------------------- | -------------- | ------------ |
-| Sequential pagination | `min_pages`    | `min_pages`  |
-| Perfect partitioning  | `min_pages`    | **1**        |
+| Strategy              | Total requests   | Rounds       |
+| --------------------- | ---------------- | ------------ |
+| Sequential pagination | `min_pages`      | `min_pages`  |
+| Perfect partitioning  | `min_pages`      | **1**        |
 | This algorithm        | ≤ 2× `min_pages` | **O(log M)** |
 
 Perfect partitioning requires knowing the time boundaries `[t_i, t_i+1)` where
@@ -210,24 +210,24 @@ hundred at most), so the `log₂ M` term dominates.
 
 ### Edge cases
 
-| Scenario                    | Distribution      | Rounds       | Total requests |
-| --------------------------- | ----------------- | ------------ | -------------- |
-| Empty range                 | —                 | 1            | 1              |
-| Single page                 | any               | 1            | 1              |
-| Two pages, one second       | all at `t`        | 2            | 2              |
-| Uniform, M=16               | even              | 5            | ~16            |
-| Uniform, M=10,000           | even              | 15           | ~10,000        |
-| 99% in 1hr of 1yr           | skewed            | ~15          | ~10,000        |
-| 100% in one second          | degenerate        | M            | M + 1          |
+| Scenario              | Distribution | Rounds | Total requests |
+| --------------------- | ------------ | ------ | -------------- |
+| Empty range           | —            | 1      | 1              |
+| Single page           | any          | 1      | 1              |
+| Two pages, one second | all at `t`   | 2      | 2              |
+| Uniform, M=16         | even         | 5      | ~16            |
+| Uniform, M=10,000     | even         | 15     | ~10,000        |
+| 99% in 1hr of 1yr     | skewed       | ~15    | ~10,000        |
+| 100% in one second    | degenerate   | M      | M + 1          |
 
 ### Summary
 
-| Distribution            | Rounds              | Total requests |
-| ----------------------- | ------------------- | -------------- |
-| **Uniform**             | `ceil(log₂ M) + 1`  | ~M             |
-| **Clustered**           | `ceil(log₂ M) + 1`  | ≤ 2M           |
-| **Single second**       | M                    | M + 1          |
-| **Typical Stripe data** | **10–15**            | ~M             |
+| Distribution            | Rounds             | Total requests |
+| ----------------------- | ------------------ | -------------- |
+| **Uniform**             | `ceil(log₂ M) + 1` | ~M             |
+| **Clustered**           | `ceil(log₂ M) + 1` | ≤ 2M           |
+| **Single second**       | M                  | M + 1          |
+| **Typical Stripe data** | **10–15**          | ~M             |
 
 ### Why N=10?
 
@@ -259,12 +259,12 @@ N=10 was chosen empirically:
 
 All functions are **pure** — data in, data out, no I/O:
 
-| Function             | Input                            | Output    |
-| -------------------- | -------------------------------- | --------- |
-| `nextStep()`         | `SearchState`, `maxSegments`     | `Range[]` |
-| `subdivideRanges()`  | `Range[]`, max, `lastObserved`   | `Range[]` |
-| `toUnixSeconds()`    | ISO string                       | number    |
-| `toIso()`            | unix seconds                     | ISO string|
+| Function            | Input                          | Output     |
+| ------------------- | ------------------------------ | ---------- |
+| `nextStep()`        | `SearchState`, `maxSegments`   | `Range[]`  |
+| `subdivideRanges()` | `Range[]`, max, `lastObserved` | `Range[]`  |
+| `toUnixSeconds()`   | ISO string                     | number     |
+| `toIso()`           | unix seconds                   | ISO string |
 
 The caller (engine) handles all I/O: fetching pages, recording `lastObserved`,
 and feeding results back into the next `nextStep()` call.

@@ -1,4 +1,9 @@
-import type { ConfiguredCatalog, DestinationOutput, EofMessage, Message } from '@stripe/sync-protocol'
+import type {
+  ConfiguredCatalog,
+  DestinationOutput,
+  EofMessage,
+  Message,
+} from '@stripe/sync-protocol'
 import type { StateStore } from './state-store.js'
 import { logger } from '../logger.js'
 

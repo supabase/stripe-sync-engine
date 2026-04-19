@@ -246,7 +246,10 @@ const destination = {
     }
 
     function streamError(stream: string, error: string) {
-      return { type: 'stream_status' as const, stream_status: { stream, status: 'error' as const, error } }
+      return {
+        type: 'stream_status' as const,
+        stream_status: { stream, status: 'error' as const, error },
+      }
     }
 
     try {

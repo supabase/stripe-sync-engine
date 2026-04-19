@@ -83,7 +83,12 @@ describe('formatProgress', () => {
       derived: { status: 'started', records_per_second: 50, states_per_second: 0.4 },
       streams: {
         customers: { status: 'completed', state_count: 2, record_count: 100 },
-        invoices: { status: 'skipped', state_count: 0, record_count: 0, message: 'Only available in testmode' },
+        invoices: {
+          status: 'skipped',
+          state_count: 0,
+          record_count: 0,
+          message: 'Only available in testmode',
+        },
       },
     }
 

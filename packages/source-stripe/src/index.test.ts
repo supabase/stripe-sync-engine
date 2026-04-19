@@ -878,7 +878,13 @@ describe('StripeSource', () => {
         .mockRejectedValueOnce(
           new StripeApiRequestError(
             400,
-            { error: { type: 'invalid_request_error', message: 'This endpoint is only available in testmode. Try using your test keys instead.' } },
+            {
+              error: {
+                type: 'invalid_request_error',
+                message:
+                  'This endpoint is only available in testmode. Try using your test keys instead.',
+              },
+            },
             'GET',
             '/v1/test_helpers/test_clocks'
           )

@@ -190,7 +190,10 @@ export async function* streamingSubdivide<T>(opts: {
     const range = queue.shift()!
     const id = nextId++
     inflightRanges.set(id, range)
-    inflight.set(id, fetchPage(range).then((result) => ({ id, result })))
+    inflight.set(
+      id,
+      fetchPage(range).then((result) => ({ id, result }))
+    )
     return true
   }
 

@@ -14,9 +14,7 @@ export interface ServeSubprocess {
  * Spawn `sync-engine serve` as a child process on a random available port.
  * stdout and stderr are piped to `logFile`. Returns when the server is ready.
  */
-export async function spawnServeSubprocess(
-  logFile = 'sync-engine.log'
-): Promise<ServeSubprocess> {
+export async function spawnServeSubprocess(logFile = 'sync-engine.log'): Promise<ServeSubprocess> {
   const port = await getAvailablePort()
   const logFd = openSync(logFile, 'w')
   const child = spawn(

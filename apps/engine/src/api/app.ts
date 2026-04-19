@@ -60,7 +60,6 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-
 // ── App factory ────────────────────────────────────────────────
 
 export async function createApp(resolver: ConnectorResolver) {
@@ -204,7 +203,8 @@ export async function createApp(resolver: ConnectorResolver) {
     .pipe(SyncState.catch(emptySyncState()))
     .optional()
     .meta({
-      description: 'JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.',
+      description:
+        'JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.',
       param: { content: { 'application/json': {} } },
     })
 

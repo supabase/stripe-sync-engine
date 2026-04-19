@@ -84,10 +84,7 @@ function buildApiCmd() {
 
   // Remap verbose spec tags to CLI-friendly group names
   const tagRenames: Record<string, string> = { 'Stateless Sync API': 'pipeline' }
-  for (const methods of Object.values(spec.paths ?? {}) as Record<
-    string,
-    { tags?: string[] }
-  >[]) {
+  for (const methods of Object.values(spec.paths ?? {}) as Record<string, { tags?: string[] }>[]) {
     for (const op of Object.values(methods)) {
       if (op.tags) op.tags = op.tags.map((t: string) => tagRenames[t] ?? t)
     }

@@ -113,11 +113,7 @@ describe('subdivideRanges', () => {
 
 // MARK: - Distribution simulation
 
-function simulateRound(
-  ranges: Range[],
-  density: (ts: number) => number,
-  pageSize = 100
-): Range[] {
+function simulateRound(ranges: Range[], density: (ts: number) => number, pageSize = 100): Range[] {
   const lastObserved = new Map<Range, number>()
 
   for (const range of ranges) {

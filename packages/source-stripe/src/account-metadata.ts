@@ -1,9 +1,7 @@
 import type { StripeClient } from './client.js'
 import type { Config } from './spec.js'
 
-export const STRIPE_LAUNCH_TIMESTAMP = Math.floor(
-  new Date('2011-01-01T00:00:00Z').getTime() / 1000
-)
+export const STRIPE_LAUNCH_TIMESTAMP = Math.floor(new Date('2011-01-01T00:00:00Z').getTime() / 1000)
 
 export async function resolveAccountMetadata(
   config: Config,

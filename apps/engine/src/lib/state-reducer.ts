@@ -26,26 +26,41 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
       return {
         source: { streams: {}, global: {} },
         destination: {},
-        sync_run: { sync_run_id: event.sync_run_id, progress: createInitialProgress(event.stream_names) },
+        sync_run: {
+          sync_run_id: event.sync_run_id,
+          progress: createInitialProgress(event.stream_names),
+        },
       }
     }
     // Always reset progress on initialize — each pipeline_sync call is a new run.
     // Without this, resumed syncs (same sync_run_id or no id) keep the original
     // started_at, making elapsed_ms grow across runs.
-    return { ...state, sync_run: { sync_run_id: event.sync_run_id, progress: createInitialProgress(event.stream_names) } }
+    return {
+      ...state,
+      sync_run: {
+        sync_run_id: event.sync_run_id,
+        progress: createInitialProgress(event.stream_names),
+      },
+    }
   }
 
   // Message events require existing state
   if (!state) throw new Error('stateReducer received a message before initialize')
 
   // Progress accumulates on every message
-  state = { ...state, sync_run: { ...state.sync_run, progress: progressReducer(state.sync_run.progress, event) } }
+  state = {
+    ...state,
+    sync_run: { ...state.sync_run, progress: progressReducer(state.sync_run.progress, event) },
+  }
 
   if (event.type !== 'source_state') return state
   if (event.source_state.state_type === 'stream') {
     return {
       ...state,
-      source: { ...state.source, streams: { ...state.source.streams, [event.source_state.stream]: event.source_state.data } },
+      source: {
+        ...state.source,
+        streams: { ...state.source.streams, [event.source_state.stream]: event.source_state.data },
+      },
     }
   }
   if (event.source_state.state_type === 'global') {
@@ -59,5 +74,7 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
 
 /** Messages that should trigger a progress emission to the client. */
 export function isProgressTrigger(msg: { type: string }): boolean {
-  return msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status'
+  return (
+    msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status'
+  )
 }

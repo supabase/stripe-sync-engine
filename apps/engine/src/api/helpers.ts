@@ -128,7 +128,10 @@ export function createConnectionAbort(c: any, onDisconnect?: () => void): AbortC
   return ac
 }
 
-export async function* verboseInput(label: string, iter: AsyncIterable<unknown>): AsyncIterable<unknown> {
+export async function* verboseInput(
+  label: string,
+  iter: AsyncIterable<unknown>
+): AsyncIterable<unknown> {
   for await (const msg of iter) {
     if (dangerouslyVerbose) logger.debug({ msg }, `${label} input`)
     yield msg

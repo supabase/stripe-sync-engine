@@ -165,7 +165,6 @@ export function reconcileRanges(
   return result
 }
 
-
 // MARK: - Account created timestamp
 
 async function getAccountCreatedTimestamp(client: StripeClient): Promise<number> {
@@ -588,8 +587,7 @@ export async function* listApiBackfill(opts: {
     if (!resourceConfig) {
       streamRuns.push({
         primedComplete: false,
-        generator:
-        (async function* () {
+        generator: (async function* () {
           yield msg.stream_status({
             stream: stream.name,
             status: 'error',

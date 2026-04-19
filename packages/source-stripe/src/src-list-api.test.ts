@@ -8,7 +8,11 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: 'cus_abc' },
       { gte: '2022', lt: '2024', cursor: null },
     ]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2018', lt: '2024' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2024' },
+      { gte: '2018', lt: '2024' }
+    )
     expect(result).toEqual(remaining)
   })
 
@@ -17,7 +21,11 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: 'cus_abc' },
       { gte: '2022', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2020', lt: '2026' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2026' },
+      { gte: '2020', lt: '2026' }
+    )
     expect(result).toEqual([{ gte: '2022', lt: '2026', cursor: null }])
   })
 
@@ -26,19 +34,31 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: null },
       { gte: '2024', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2018', lt: '2022' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2026' },
+      { gte: '2018', lt: '2022' }
+    )
     expect(result).toEqual([{ gte: '2018', lt: '2020', cursor: null }])
   })
 
   it('trims a range that overlaps the new gte and resets its cursor', () => {
     const remaining: RemainingRange[] = [{ gte: '2018', lt: '2022', cursor: 'cus_xyz' }]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2020', lt: '2024' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2024' },
+      { gte: '2020', lt: '2024' }
+    )
     expect(result).toEqual([{ gte: '2020', lt: '2022', cursor: null }])
   })
 
   it('trims a range that overlaps the new lt but preserves its cursor', () => {
     const remaining: RemainingRange[] = [{ gte: '2022', lt: '2026', cursor: 'cus_abc' }]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2018', lt: '2024' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2026' },
+      { gte: '2018', lt: '2024' }
+    )
     expect(result).toEqual([{ gte: '2022', lt: '2024', cursor: 'cus_abc' }])
   })
 
@@ -49,7 +69,11 @@ describe('reconcileRanges', () => {
 
   it('adds uncovered territory when gte is decreased', () => {
     const remaining: RemainingRange[] = [{ gte: '2022', lt: '2024', cursor: 'cus_xyz' }]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2016', lt: '2024' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2024' },
+      { gte: '2016', lt: '2024' }
+    )
     expect(result).toEqual([
       { gte: '2022', lt: '2024', cursor: 'cus_xyz' },
       { gte: '2016', lt: '2018', cursor: null },
@@ -58,7 +82,11 @@ describe('reconcileRanges', () => {
 
   it('handles both gte decreased and lt extended simultaneously', () => {
     const remaining: RemainingRange[] = [{ gte: '2020', lt: '2022', cursor: null }]
-    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2016', lt: '2026' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2018', lt: '2024' },
+      { gte: '2016', lt: '2026' }
+    )
     expect(result).toEqual([
       { gte: '2020', lt: '2022', cursor: null },
       { gte: '2016', lt: '2018', cursor: null },
@@ -76,8 +104,11 @@ describe('reconcileRanges', () => {
       { gte: '2016', lt: '2018', cursor: null },
       { gte: '2024', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(remaining, { gte: '2016', lt: '2026' }, { gte: '2018', lt: '2024' })
+    const result = reconcileRanges(
+      remaining,
+      { gte: '2016', lt: '2026' },
+      { gte: '2018', lt: '2024' }
+    )
     expect(result).toEqual([])
   })
 })
-

@@ -6,7 +6,6 @@ import { createPipelineSyncActivity } from './pipeline-sync.js'
 import { createPipelineTeardownActivity } from './pipeline-teardown.js'
 import type { PipelineStore } from '../../lib/stores.js'
 
-
 export function createActivities(opts: { engineUrl: string; pipelineStore: PipelineStore }) {
   const context = createActivitiesContext(opts)
 

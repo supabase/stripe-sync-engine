@@ -47,10 +47,7 @@ export async function startApiServer({ resolver, port }: StartApiServerOptions) 
       serverOptions: ENGINE_SERVER_OPTIONS,
     },
     (info) => {
-      logger.info(
-        { port: info.port },
-        `Sync Engine API listening on http://localhost:${info.port}`
-      )
+      logger.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
     }
   )
 }

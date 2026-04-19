@@ -37,7 +37,11 @@ function formatRangeBar(
   return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
 }
 
-function StreamRow({ name, stream, prev }: {
+function StreamRow({
+  name,
+  stream,
+  prev,
+}: {
   key?: string
   name: string
   stream: StreamProgress
@@ -48,17 +52,22 @@ function StreamRow({ name, stream, prev }: {
   const deltaStr = delta > 0 ? ` (+${delta})`.padStart(9) : ''.padStart(9)
   const showCount = stream.record_count > 0 || stream.status === 'completed'
   const countStr = String(stream.record_count).padStart(8)
-  const rangeBar = stream.time_range && stream.completed_ranges
-    ? formatRangeBar(stream.time_range, stream.completed_ranges)
-    : null
+  const rangeBar =
+    stream.time_range && stream.completed_ranges
+      ? formatRangeBar(stream.time_range, stream.completed_ranges)
+      : null
 
   return (
     <Box flexDirection="column">
       <Box>
         <Text color={icon.color}>{icon.symbol} </Text>
-        <Box minWidth={35}><Text>{name}</Text></Box>
+        <Box minWidth={35}>
+          <Text>{name}</Text>
+        </Box>
         {showCount && (
-          <Text dimColor>{countStr} records{deltaStr}</Text>
+          <Text dimColor>
+            {countStr} records{deltaStr}
+          </Text>
         )}
       </Box>
       {rangeBar && (
@@ -95,14 +104,18 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   const streamSummary = statusParts.join(', ')
 
   const statusLabel =
-    progress.derived.status === 'failed' ? 'Sync failed'
-    : progress.derived.status === 'succeeded' ? 'Sync complete'
-    : 'Syncing'
+    progress.derived.status === 'failed'
+      ? 'Sync failed'
+      : progress.derived.status === 'succeeded'
+        ? 'Sync complete'
+        : 'Syncing'
 
   const statusColor =
-    progress.derived.status === 'failed' ? 'red'
-    : progress.derived.status === 'succeeded' ? 'green'
-    : 'yellow'
+    progress.derived.status === 'failed'
+      ? 'red'
+      : progress.derived.status === 'succeeded'
+        ? 'green'
+        : 'yellow'
 
   // Record delta (total across all streams)
   const prevTotalRecords = prev
@@ -116,9 +129,10 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   const cpDeltaStr = cpDeltaNum > 0 ? ` (+${cpDeltaNum})` : ''
 
   // Global error (not attributable to a single stream)
-  const errMsg = progress.connection_status?.status === 'failed'
-    ? (progress.connection_status.message ?? 'Connection failed')
-    : undefined
+  const errMsg =
+    progress.connection_status?.status === 'failed'
+      ? (progress.connection_status.message ?? 'Connection failed')
+      : undefined
   const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored')
   const globalErr = errMsg && erroredStreams.length !== 1 ? errMsg : undefined
 
@@ -134,21 +148,37 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={statusColor} bold>{statusLabel}</Text>
-        <Text dimColor> {total} streams ({streamSummary}) — {elapsed}s</Text>
+        <Text color={statusColor} bold>
+          {statusLabel}
+        </Text>
+        <Text dimColor>
+          {' '}
+          {total} streams ({streamSummary}) — {elapsed}s
+        </Text>
         {globalErr && <Text color="red"> — {truncate(globalErr, 100)}</Text>}
       </Box>
       <Box>
-        <Text dimColor>{recs} records{recDelta} {recRate}</Text>
+        <Text dimColor>
+          {recs} records{recDelta} {recRate}
+        </Text>
         {progress.global_state_count > 0 && (
-          <Text dimColor>  {cps} checkpoints{cpDelta} {cpRate}</Text>
+          <Text dimColor>
+            {' '}
+            {cps} checkpoints{cpDelta} {cpRate}
+          </Text>
         )}
       </Box>
     </Box>
   )
 }
 
-export function ProgressView({ progress, prev }: { progress: ProgressPayload; prev?: ProgressPayload }) {
+export function ProgressView({
+  progress,
+  prev,
+}: {
+  progress: ProgressPayload
+  prev?: ProgressPayload
+}) {
   const entries = Object.entries(progress.streams)
   const completed = entries.filter(([, s]) => s.status === 'completed')
   const errored = entries.filter(([, s]) => s.status === 'errored')
@@ -158,21 +188,17 @@ export function ProgressView({ progress, prev }: { progress: ProgressPayload; pr
   const visible = [...errored, ...started, ...completed, ...skipped]
 
   // Global connection error (not attributable to a specific stream)
-  const globalErr = progress.connection_status?.status === 'failed'
-    ? (progress.connection_status.message ?? 'Connection failed')
-    : undefined
+  const globalErr =
+    progress.connection_status?.status === 'failed'
+      ? (progress.connection_status.message ?? 'Connection failed')
+      : undefined
 
   return (
     <Box flexDirection="column">
       <Header progress={progress} prev={prev} />
       <Box flexDirection="column" marginLeft={1}>
         {visible.map(([name, stream]) => (
-          <StreamRow
-            key={name}
-            name={name}
-            stream={stream}
-            prev={prev?.streams[name]}
-          />
+          <StreamRow key={name} name={name} stream={stream} prev={prev?.streams[name]} />
         ))}
         {notStarted.length > 0 && (
           <Box>

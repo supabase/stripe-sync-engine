@@ -5,7 +5,11 @@ import { stateReducer, isProgressTrigger } from './state-reducer.js'
 const TS = '2024-01-01T00:00:01.000Z'
 
 function init(streamNames: string[], syncRunId?: string, prior?: SyncState): SyncState {
-  return stateReducer(prior, { type: 'initialize', stream_names: streamNames, sync_run_id: syncRunId })
+  return stateReducer(prior, {
+    type: 'initialize',
+    stream_names: streamNames,
+    sync_run_id: syncRunId,
+  })
 }
 
 function msg<T extends Message>(m: T): T & { _ts: string } {
@@ -72,7 +76,8 @@ describe('stateReducer initialize event', () => {
 describe('stateReducer message events', () => {
   it('accumulates stream source_state', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'source_state',
       source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_123' } },
     }
@@ -82,7 +87,8 @@ describe('stateReducer message events', () => {
 
   it('accumulates global source_state', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'source_state',
       source_state: { state_type: 'global', data: { events_cursor: 'evt_abc' } },
     }
@@ -92,7 +98,8 @@ describe('stateReducer message events', () => {
 
   it('updates progress on record messages', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'record',
       record: { stream: 'customers', data: { id: 'cus_1' }, emitted_at: '2024-01-01T00:00:00Z' },
     }
@@ -102,7 +109,8 @@ describe('stateReducer message events', () => {
 
   it('updates progress on source_state messages', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'source_state',
       source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'x' } },
     }
@@ -112,17 +120,22 @@ describe('stateReducer message events', () => {
 
   it('stores connection_status failure in progress', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'connection_status',
       connection_status: { status: 'failed', message: 'auth error' },
     }
     const next = stateReducer(state, msg)
-    expect(next.sync_run.progress.connection_status).toEqual({ status: 'failed', message: 'auth error' })
+    expect(next.sync_run.progress.connection_status).toEqual({
+      status: 'failed',
+      message: 'auth error',
+    })
   })
 
   it('does not mutate input state', () => {
     const state = init(['customers'])
-    const msg: Message = { _ts: TS,
+    const msg: Message = {
+      _ts: TS,
       type: 'source_state',
       source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'x' } },
     }

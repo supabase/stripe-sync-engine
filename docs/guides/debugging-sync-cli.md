@@ -27,10 +27,10 @@ This relies on `injectWorkspacePackages` NOT being set in `pnpm-workspace.yaml`.
 
 ## dist/ is only needed for vitest
 
-| Consumer | Resolves via | Points to |
-|---|---|---|
-| Subprocess (sync CLI) | `"bun"` condition | `./src/index.ts` (live source, transpiled by tsx) |
-| Vitest | `"import"` condition | `./dist/index.js` (compiled output) |
+| Consumer              | Resolves via         | Points to                                         |
+| --------------------- | -------------------- | ------------------------------------------------- |
+| Subprocess (sync CLI) | `"bun"` condition    | `./src/index.ts` (live source, transpiled by tsx) |
+| Vitest                | `"import"` condition | `./dist/index.js` (compiled output)               |
 
 - The sync CLI does not need dist/ at all
 - Vitest does need dist/ — if tests fail with "Cannot find module", rebuild the relevant package

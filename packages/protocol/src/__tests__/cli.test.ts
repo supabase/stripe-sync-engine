@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createConnectorCli } from '../cli.js'
-import type { Source, Destination, ConnectorSpecification, ConnectionStatusPayload } from '../protocol.js'
+import type {
+  Source,
+  Destination,
+  ConnectorSpecification,
+  ConnectionStatusPayload,
+} from '../protocol.js'
 
 const mockSpec: ConnectorSpecification = {
   config: { type: 'object', properties: { api_key: { type: 'string' } } },

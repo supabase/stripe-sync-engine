@@ -32,7 +32,11 @@ const INSERT_BATCH = parseInt(process.env.INSERT_BATCH ?? '1000', 10)
 
 /** Optional stream filter via STREAMS=customers,invoices env var. */
 const STREAM_FILTER: Set<string> | null = process.env.STREAMS
-  ? new Set(process.env.STREAMS.split(',').map((s) => s.trim()).filter(Boolean))
+  ? new Set(
+      process.env.STREAMS.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
   : null
 
 const RANGE_START = utc('2025-01-01')

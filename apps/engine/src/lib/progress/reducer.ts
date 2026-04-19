@@ -32,7 +32,10 @@ function deriveStatus(progress: ProgressPayload): 'started' | 'succeeded' | 'fai
 
   if (progress.connection_status?.status === 'failed') return 'failed'
   if (streams.some((s) => s.status === 'errored')) return 'failed'
-  if (streams.length > 0 && streams.every((s) => s.status === 'completed' || s.status === 'skipped')) {
+  if (
+    streams.length > 0 &&
+    streams.every((s) => s.status === 'completed' || s.status === 'skipped')
+  ) {
     return 'succeeded'
   }
   return 'started'
@@ -54,11 +57,16 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
   if (!msg._ts) throw new Error(`progressReducer: message type '${msg.type}' missing _ts`)
   // Anchor started_at to the first data message's timestamp so elapsed_ms
   // reflects actual sync time, not pipeline setup (connector resolution, etc.).
-  const isDataMessage = msg.type === 'record' || msg.type === 'source_state'
-    || msg.type === 'stream_status' || msg.type === 'connection_status'
-  const isFirstMessage = isDataMessage && progress.elapsed_ms === 0
-    && progress.global_state_count === 0
-    && Object.values(progress.streams).every((s) => s.record_count === 0)
+  const isDataMessage =
+    msg.type === 'record' ||
+    msg.type === 'source_state' ||
+    msg.type === 'stream_status' ||
+    msg.type === 'connection_status'
+  const isFirstMessage =
+    isDataMessage &&
+    progress.elapsed_ms === 0 &&
+    progress.global_state_count === 0 &&
+    Object.values(progress.streams).every((s) => s.record_count === 0)
   if (isFirstMessage) {
     progress = { ...progress, started_at: msg._ts }
   }
@@ -78,7 +86,11 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
     }
 
     case 'source_state': {
-      const next = { ...progress, elapsed_ms: elapsedMs, global_state_count: progress.global_state_count + 1 }
+      const next = {
+        ...progress,
+        elapsed_ms: elapsedMs,
+        global_state_count: progress.global_state_count + 1,
+      }
       if (msg.source_state.state_type === 'stream') {
         const stream = msg.source_state.stream
         if (!progress.streams[stream]) {
@@ -117,10 +129,14 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       if (ss.status === 'start') {
         status = 'started'
         if ('time_range' in ss && ss.time_range) time_range = ss.time_range
+      } else if (ss.status === 'complete') status = 'completed'
+      else if (ss.status === 'skip') {
+        status = 'skipped'
+        message = ss.reason
+      } else if (ss.status === 'error') {
+        status = 'errored'
+        message = ss.error
       }
-      else if (ss.status === 'complete') status = 'completed'
-      else if (ss.status === 'skip') { status = 'skipped'; message = ss.reason }
-      else if (ss.status === 'error') { status = 'errored'; message = ss.error }
 
       const next = {
         ...progress,

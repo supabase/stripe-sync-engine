@@ -6,7 +6,12 @@ import { render } from 'ink'
 import { defineCommand } from 'citty'
 import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
 import { createConnectorResolver, createEngine } from '../lib/index.js'
-import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
+import {
+  type PipelineConfig,
+  type SyncState,
+  type ProgressPayload,
+  emptySyncState,
+} from '@stripe/sync-protocol'
 import { ProgressView, formatProgress } from '../lib/progress/format.js'
 import { defaultConnectors } from '../lib/default-connectors.js'
 import {
@@ -91,7 +96,9 @@ export function createSyncCmd() {
       const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
       const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
 
-      const persistedStripeConfig = readPersistedStripeSourceConfig(sourceConfigCachePath(stripeApiKey))
+      const persistedStripeConfig = readPersistedStripeSourceConfig(
+        sourceConfigCachePath(stripeApiKey)
+      )
       const stripeConfig: Record<string, unknown> = {
         api_key: stripeApiKey,
         ...(persistedStripeConfig ?? {}),
@@ -115,9 +122,11 @@ export function createSyncCmd() {
       // State store
       const stateMode = args.noState ? 'none' : args.state
       const store: StateStore & { close?(): Promise<void> } =
-        stateMode === 'none' ? readonlyStateStore()
-        : stateMode === 'postgres' ? await getPostgresStateStore(postgresUrl, schema)
-        : defaultFileStateStore(stripeApiKey)
+        stateMode === 'none'
+          ? readonlyStateStore()
+          : stateMode === 'postgres'
+            ? await getPostgresStateStore(postgresUrl, schema)
+            : defaultFileStateStore(stripeApiKey)
       const initialState = await store.get()
 
       try {
@@ -170,8 +179,7 @@ export function createSyncCmd() {
                 msg.control.source_config
               )
             }
-          } else
-          if (msg.type === 'source_state') {
+          } else if (msg.type === 'source_state') {
             if (msg.source_state.state_type === 'global') {
               await store.setGlobal(msg.source_state.data)
             } else {

@@ -44,5 +44,4 @@ describe('destinationControlMsg', () => {
     // Round-trips through the Zod schema
     expect(ControlMessage.parse(msg)).toEqual(msg)
   })
-
 })

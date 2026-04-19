@@ -650,7 +650,12 @@ describe('upsertWithStats', () => {
         { table, primaryKeyColumns: ['id'] }
       )
 
-      expect(result).toEqual({ created_count: 3, updated_count: 0, deleted_count: 0, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 3,
+        updated_count: 0,
+        deleted_count: 0,
+        skipped_count: 0,
+      })
     })
 
     it('reports all updates when data changed', async () => {
@@ -672,7 +677,12 @@ describe('upsertWithStats', () => {
         { table, primaryKeyColumns: ['id'] }
       )
 
-      expect(result).toEqual({ created_count: 0, updated_count: 2, deleted_count: 0, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 0,
+        updated_count: 2,
+        deleted_count: 0,
+        skipped_count: 0,
+      })
     })
 
     it('reports all skipped when data is identical', async () => {
@@ -694,7 +704,12 @@ describe('upsertWithStats', () => {
         { table, primaryKeyColumns: ['id'] }
       )
 
-      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 2 })
+      expect(result).toEqual({
+        created_count: 0,
+        updated_count: 0,
+        deleted_count: 0,
+        skipped_count: 2,
+      })
     })
 
     it('reports mixed inserts and updates', async () => {
@@ -713,7 +728,12 @@ describe('upsertWithStats', () => {
         { table, primaryKeyColumns: ['id'] }
       )
 
-      expect(result).toEqual({ created_count: 2, updated_count: 1, deleted_count: 0, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 2,
+        updated_count: 1,
+        deleted_count: 0,
+        skipped_count: 0,
+      })
     })
 
     it('reports mixed inserts, updates, and skips', async () => {
@@ -736,12 +756,22 @@ describe('upsertWithStats', () => {
         { table, primaryKeyColumns: ['id'] }
       )
 
-      expect(result).toEqual({ created_count: 1, updated_count: 1, deleted_count: 0, skipped_count: 1 })
+      expect(result).toEqual({
+        created_count: 1,
+        updated_count: 1,
+        deleted_count: 0,
+        skipped_count: 1,
+      })
     })
 
     it('returns zeros for empty records array', async () => {
       const result = await upsertWithStats(pool, [], { table, primaryKeyColumns: ['id'] })
-      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 0,
+        updated_count: 0,
+        deleted_count: 0,
+        skipped_count: 0,
+      })
     })
   })
 
@@ -765,10 +795,16 @@ describe('upsertWithStats', () => {
           { _raw_data: { id: '2', name: 'Bob' } },
           { _raw_data: { id: '3', name: 'Gone', deleted: true } },
         ],
-        { table, primaryKeyColumns: ['id'] }, "_raw_data->>'deleted'"
+        { table, primaryKeyColumns: ['id'] },
+        "_raw_data->>'deleted'"
       )
 
-      expect(result).toEqual({ created_count: 2, updated_count: 0, deleted_count: 1, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 2,
+        updated_count: 0,
+        deleted_count: 1,
+        skipped_count: 0,
+      })
     })
 
     it('classifies soft-deleted updates as deleted', async () => {
@@ -780,10 +816,16 @@ describe('upsertWithStats', () => {
       const result = await upsertWithStats(
         pool,
         [{ _raw_data: { id: '1', name: 'Alice', deleted: true } }],
-        { table, primaryKeyColumns: ['id'] }, "_raw_data->>'deleted'"
+        { table, primaryKeyColumns: ['id'] },
+        "_raw_data->>'deleted'"
       )
 
-      expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 1, skipped_count: 0 })
+      expect(result).toEqual({
+        created_count: 0,
+        updated_count: 0,
+        deleted_count: 1,
+        skipped_count: 0,
+      })
     })
   })
 })
