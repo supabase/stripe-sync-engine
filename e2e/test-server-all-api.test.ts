@@ -26,6 +26,11 @@ const SOURCE_SCHEMA = 'stripe'
 const OBJECTS_PER_STREAM = 1200
 const RATE_LIMIT = 100000
 
+/** Optional stream filter via STREAMS=customers,invoices env var. */
+const STREAM_FILTER: Set<string> | null = process.env.STREAMS
+  ? new Set(process.env.STREAMS.split(',').map((s) => s.trim()).filter(Boolean))
+  : null
+
 const RANGE_START = utc('2025-01-01')
 const RANGE_END = utc('2026-01-01')
 
@@ -161,7 +166,9 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
 
   try {
     const seedable = sortedEndpoints.filter(
-      (ep) => findSchemaNameByResourceId(endpointSet.spec, ep.resourceId) != null
+      (ep) =>
+        findSchemaNameByResourceId(endpointSet.spec, ep.resourceId) != null &&
+        (!STREAM_FILTER || STREAM_FILTER.has(ep.tableName))
     )
 
     const SEED_CONCURRENCY = 8
