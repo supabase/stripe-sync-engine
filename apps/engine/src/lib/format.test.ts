@@ -22,24 +22,38 @@ describe('formatProgress', () => {
     `)
   })
 
-  it('formats active sync with rows and throughput', () => {
+  it('formats active sync with many streams', () => {
     const progress: ProgressPayload = {
       started_at: '2026-01-01T00:00:00Z',
-      elapsed_ms: 3200,
-      global_state_count: 5,
-      derived: { status: 'started', records_per_second: 140.6, states_per_second: 1.5 },
+      elapsed_ms: 12400,
+      global_state_count: 18,
+      derived: { status: 'started', records_per_second: 245.2, states_per_second: 1.5 },
       streams: {
-        customers: { status: 'completed', state_count: 3, record_count: 200 },
-        invoices: { status: 'started', state_count: 2, record_count: 250 },
-        charges: { status: 'not_started', state_count: 0, record_count: 0 },
+        accounts: { status: 'completed', state_count: 1, record_count: 1 },
+        customers: { status: 'completed', state_count: 4, record_count: 1200 },
+        invoices: { status: 'completed', state_count: 3, record_count: 850 },
+        charges: { status: 'started', state_count: 5, record_count: 980 },
+        payment_intents: { status: 'started', state_count: 3, record_count: 420 },
+        subscriptions: { status: 'not_started', state_count: 0, record_count: 0 },
+        products: { status: 'not_started', state_count: 0, record_count: 0 },
+        prices: { status: 'not_started', state_count: 0, record_count: 0 },
+        balance_transactions: { status: 'not_started', state_count: 0, record_count: 0 },
+        payouts: { status: 'not_started', state_count: 0, record_count: 0 },
       },
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints
-        🟢 customers: 200 rows
-        🟡 invoices: 250 rows
-        ⚪ charges"
+      "🔄 Syncing — 12.4s | 3451 rows (245.2/s) | 18 checkpoints
+        🟢 accounts: 1 rows
+        🟢 customers: 1200 rows
+        🟢 invoices: 850 rows
+        🟡 charges: 980 rows
+        🟡 payment_intents: 420 rows
+        ⚪ subscriptions
+        ⚪ products
+        ⚪ prices
+        ⚪ balance_transactions
+        ⚪ payouts"
     `)
   })
 
@@ -56,9 +70,8 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔴 Sync failed — 1.5s
-        🔴 customers
-        ⚠ Invalid API key"
+      "🔴 Sync failed — 1.5s — Invalid API key
+        🔴 customers"
     `)
   })
 
@@ -107,7 +120,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 4.0s | 450 rows (112.5/s) | 5 checkpoints
+      "🔄 Syncing — 4.0s | 450 rows (+250) (112.5/s) | 5 checkpoints
         🟢 customers: 200 rows (+50)
         🟡 invoices: 180 rows (+130)
         🟡 charges: 70 rows (+70)"

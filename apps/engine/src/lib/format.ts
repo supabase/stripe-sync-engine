@@ -27,9 +27,17 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const statusLabel =
     progress.derived.status === 'failed' ? '🔴 Sync failed' : '🔄 Syncing'
 
+  const prevTotalRows = prev
+    ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
+    : 0
+  const rowDelta = prev ? totalRows - prevTotalRows : 0
+
   const parts: string[] = []
   parts.push(`${elapsed}s`)
-  if (totalRows > 0) parts.push(`${totalRows} rows (${rps}/s)`)
+  if (totalRows > 0) {
+    const deltaStr = rowDelta > 0 ? ` (+${rowDelta})` : ''
+    parts.push(`${totalRows} rows${deltaStr} (${rps}/s)`)
+  }
   if (progress.global_state_count > 0) parts.push(`${progress.global_state_count} checkpoints`)
 
   const header = `${statusLabel} — ${parts.join(' | ')}`
@@ -45,7 +53,8 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   }
 
   if (progress.connection_status?.status === 'failed') {
-    lines.push(`  ⚠ ${progress.connection_status.message ?? 'Connection failed'}`)
+    const errMsg = progress.connection_status.message ?? 'Connection failed'
+    lines[0] = `${lines[0]} — ${errMsg}`
   }
 
   return lines.join('\n')
