@@ -25,6 +25,7 @@ const engineMsg = createEngineMessageFactory()
 
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
+import { createInitialState, stateReducer, isProgressTrigger } from './state-reducer.js'
 import { applySelection } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 
@@ -286,27 +287,6 @@ function emit(msg: Record<string, unknown>): SyncOutput {
 }
 
 /** Accumulate source state from messages. Pure. */
-function stateReducer(state: SyncState, msg: Message): SyncState {
-  if (msg.type !== 'source_state') return state
-  if (msg.source_state.state_type === 'stream') {
-    return {
-      ...state,
-      source: { ...state.source, streams: { ...state.source.streams, [msg.source_state.stream]: msg.source_state.data } },
-    }
-  }
-  if (msg.source_state.state_type === 'global') {
-    return {
-      ...state,
-      source: { ...state.source, global: msg.source_state.data as Record<string, unknown> },
-    }
-  }
-  return state
-}
-
-/** Messages that should trigger a progress emission. */
-function isProgressTrigger(msg: { type: string }): boolean {
-  return msg.type === 'stream_status' || msg.type === 'source_state' || msg.type === 'connection_status'
-}
 
 // MARK: - Factory
 
@@ -498,22 +478,23 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             signal,
           })(destOutput)
 
-          let syncState = structuredClone(p.state ?? emptySyncState())
-          let progress = createInitialProgress(p.state?.sync_run?.progress)
+          const streamNames = p.filteredCatalog.streams.map((s) => s.name)
+          let syncState = createInitialState(p.state, streamNames)
+          let requestProgress = createInitialProgress(streamNames)
 
           for await (const msg of limited) {
             if (msg.type === 'eof' && 'eof' in msg) {
-              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: progress, request_progress: progress }))
+              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress!, request_progress: requestProgress }))
               return
             }
 
             syncState = stateReducer(syncState, msg as Message)
-            progress = progressReducer(progress, msg as Message)
+            requestProgress = progressReducer(requestProgress, msg as Message)
 
             // Records are consumed by the destination — don't yield to client
             if (msg.type !== 'record') {
               yield msg as SyncOutput
-              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(progress))
+              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress!))
             }
           }
         })()

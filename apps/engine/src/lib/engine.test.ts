@@ -706,6 +706,81 @@ describe('engine.pipeline_sync() pipeline', () => {
     })
   })
 
+  it('injects time_ceiling from state progress into catalog time_range.lt', async () => {
+    let receivedCatalog: unknown
+    const catalogCapturingSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read(params) {
+        receivedCatalog = params.catalog
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { remaining: [] } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(catalogCapturingSource, destinationTest))
+    await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: {
+          source: { streams: {}, global: {} },
+          destination: {},
+          sync_run: { time_ceiling: '2026-01-15T00:00:00.000Z' },
+        },
+      })
+    )
+
+    const streams = (receivedCatalog as { streams: Array<{ time_range?: { gte?: string; lt?: string } }> }).streams
+    expect(streams[0].time_range?.lt).toBe('2026-01-15T00:00:00.000Z')
+  })
+
+  it('does not inject time_range when no time_ceiling in state', async () => {
+    let receivedCatalog: unknown
+    const catalogCapturingSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read(params) {
+        receivedCatalog = params.catalog
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { remaining: [] } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(catalogCapturingSource, destinationTest))
+    await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: { source: { streams: {}, global: {} }, destination: {}, sync_run: {} },
+      })
+    )
+
+    // No time_range injected when time_ceiling is absent
+    const streams = (receivedCatalog as { streams: Array<{ time_range?: unknown }> }).streams
+    expect(streams[0].time_range).toBeUndefined()
+  })
+
   it('returns final eof state by merging run updates into the initial sync state', async () => {
     const source: Source = {
       async *spec() {
