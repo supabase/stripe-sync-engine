@@ -24,14 +24,15 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const streamEntries = Object.entries(progress.streams)
   const totalRows = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
   const rps = progress.derived.records_per_second.toFixed(1)
-  const statusEmoji = progress.derived.status === 'failed' ? '🔴' : '🔄'
+  const statusLabel =
+    progress.derived.status === 'failed' ? '🔴 Sync failed' : '🔄 Syncing'
 
   const parts: string[] = []
   parts.push(`${elapsed}s`)
   if (totalRows > 0) parts.push(`${totalRows} rows (${rps}/s)`)
   if (progress.global_state_count > 0) parts.push(`${progress.global_state_count} checkpoints`)
 
-  const header = `${statusEmoji} Syncing — ${parts.join(' | ')}`
+  const header = `${statusLabel} — ${parts.join(' | ')}`
 
   const lines: string[] = [header]
   for (const [name, s] of streamEntries) {

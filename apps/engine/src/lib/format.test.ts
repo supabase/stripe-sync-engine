@@ -56,7 +56,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔴 Syncing — 1.5s
+      "🔴 Sync failed — 1.5s
         🔴 customers
         ⚠ Invalid API key"
     `)
