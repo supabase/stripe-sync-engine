@@ -2552,13 +2552,26 @@ describe('StripeSource', () => {
     })
 
     it('respects maxConcurrentStreams when scheduling stream backfills', async () => {
-      const firstListFn = vi.fn().mockResolvedValue({
-        data: [{ id: 'cus_1', created: 1_500_000_000 }],
-        has_more: false,
+      let releaseFirstPage!: () => void
+      const firstPageStarted = new Promise<void>((resolve) => {
+        releaseFirstPage = resolve
       })
-      const secondListFn = vi.fn().mockResolvedValue({
-        data: [{ id: 'cus_2', created: 1_500_000_100 }],
-        has_more: false,
+      const callOrder: string[] = []
+      const firstListFn = vi.fn(async () => {
+        callOrder.push('customers')
+        await firstPageStarted
+        return {
+          data: [{ id: 'cus_1', created: 1_500_000_000 }],
+          has_more: false,
+        }
+      })
+      const secondListFn = vi.fn(async () => {
+        callOrder.push('invoices')
+        await firstPageStarted
+        return {
+          data: [{ id: 'cus_2', created: 1_500_000_100 }],
+          has_more: false,
+        }
       })
 
       const registry: Record<string, ResourceConfig> = {
@@ -2576,7 +2589,7 @@ describe('StripeSource', () => {
         }),
       }
 
-      const messages = await collect(
+      const messagesPromise = collect(
         listApiBackfill({
           catalog: {
             streams: [{ stream: { name: 'customers' } }, { stream: { name: 'invoices' } }],
@@ -2590,17 +2603,28 @@ describe('StripeSource', () => {
         })
       )
 
+      await vi.waitFor(() => {
+        expect(firstListFn).toHaveBeenCalledTimes(1)
+        expect(secondListFn).toHaveBeenCalledTimes(1)
+      })
+      expect(callOrder).toEqual(['customers', 'invoices'])
+      releaseFirstPage()
+
+      const messages = await messagesPromise
+
       const statusMsgs = messages.filter(
         (m): m is StreamStatusMessage => m.type === 'stream_status'
       )
-      expect(statusMsgs.map((m) => `${m.stream_status.stream}:${m.stream_status.status}`)).toEqual([
-        'customers:start',
-        'customers:range_complete',
-        'customers:complete',
-        'invoices:start',
-        'invoices:range_complete',
-        'invoices:complete',
-      ])
+      expect(statusMsgs.map((m) => `${m.stream_status.stream}:${m.stream_status.status}`)).toEqual(
+        expect.arrayContaining([
+          'customers:start',
+          'customers:range_complete',
+          'customers:complete',
+          'invoices:start',
+          'invoices:range_complete',
+          'invoices:complete',
+        ])
+      )
     })
   })
 
