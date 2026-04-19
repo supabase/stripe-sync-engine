@@ -24,28 +24,28 @@ function getStream(progress: ProgressPayload, stream: string): StreamProgress {
 }
 
 function deriveStatus(progress: ProgressPayload): 'started' | 'succeeded' | 'failed' {
-  if (progress.connection_status?.status === 'failed') return 'failed'
   const streams = Object.values(progress.streams)
+  const hasActive = streams.some((s) => s.status === 'started' || s.status === 'not_started')
+
+  // Can't be terminal if streams are still active
+  if (hasActive) return 'started'
+
+  if (progress.connection_status?.status === 'failed') return 'failed'
   if (streams.some((s) => s.status === 'errored')) return 'failed'
-  if (
-    streams.length > 0 &&
-    streams.every(
-      (s) => s.status === 'completed' || s.status === 'skipped' || s.status === 'errored'
-    )
-  ) {
+  if (streams.length > 0 && streams.every((s) => s.status === 'completed' || s.status === 'skipped')) {
     return 'succeeded'
   }
   return 'started'
 }
 
 function computeDerived(progress: ProgressPayload, elapsedMs: number): ProgressPayload['derived'] {
-  const elapsedSec = Math.max(elapsedMs / 1000, 0.001)
+  const elapsedSec = elapsedMs / 1000
   let totalRecords = 0
   for (const sp of Object.values(progress.streams)) totalRecords += sp.record_count
   return {
     status: deriveStatus(progress),
-    records_per_second: totalRecords / elapsedSec,
-    states_per_second: progress.global_state_count / elapsedSec,
+    records_per_second: elapsedSec > 0 ? totalRecords / elapsedSec : 0,
+    states_per_second: elapsedSec > 0 ? progress.global_state_count / elapsedSec : 0,
   }
 }
 

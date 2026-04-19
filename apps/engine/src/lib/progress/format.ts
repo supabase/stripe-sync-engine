@@ -19,9 +19,10 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
   const streamEntries = Object.entries(progress.streams)
   const totalRecords = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
-  const hasActiveStreams = streamEntries.some(([, s]) => s.status === 'started')
   const statusLabel =
-    progress.derived.status === 'failed' && !hasActiveStreams ? '🔴 Sync failed' : '🔄 Syncing'
+    progress.derived.status === 'failed' ? '🔴 Sync failed'
+    : progress.derived.status === 'succeeded' ? '✅ Sync complete'
+    : '🔄 Syncing'
 
   const prevTotalRecords = prev
     ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
@@ -47,8 +48,11 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     : undefined
   const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored').map(([n]) => n)
 
+  const visible = streamEntries.filter(([, s]) => s.status !== 'not_started')
+  const notStartedCount = streamEntries.length - visible.length
+
   const lines: string[] = [header]
-  for (const [name, s] of streamEntries) {
+  for (const [name, s] of visible) {
     const emoji = STATUS_EMOJI[s.status] ?? '?'
     const prevStream: StreamProgress | undefined = prev?.streams[name]
     const delta = prevStream ? s.record_count - prevStream.record_count : 0
@@ -56,6 +60,9 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     const deltaStr = delta > 0 ? ` (+${delta})` : ''
     const streamErr = s.status === 'errored' && errMsg && erroredStreams.length === 1 ? ` — ${errMsg}` : ''
     lines.push(`  ${emoji} ${name}${count}${deltaStr}${streamErr}`)
+  }
+  if (notStartedCount > 0) {
+    lines.push(`  ⚪ ${notStartedCount} remaining`)
   }
 
   // Global error (not attributable to a single stream)
