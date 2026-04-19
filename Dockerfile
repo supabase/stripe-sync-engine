@@ -33,7 +33,7 @@ RUN pnpm install --frozen-lockfile
 
 # ---- Build layer ----
 COPY . ./
-RUN pnpm --filter @stripe/sync-engine deploy --prod /deploy
+RUN pnpm --filter @stripe/sync-engine deploy --legacy --prod /deploy
 
 FROM node:24-alpine AS engine
 WORKDIR /app
@@ -71,7 +71,7 @@ RUN pnpm install --frozen-lockfile
 
 # ---- Build layer ----
 COPY . ./
-RUN pnpm --filter @stripe/sync-service deploy --prod /deploy
+RUN pnpm --filter @stripe/sync-service deploy --legacy --prod /deploy
 
 FROM node:24 AS service
 WORKDIR /app

@@ -3,7 +3,5 @@ packages:
   - apps/*
   - e2e
 
-injectWorkspacePackages: true
-
 ignoredBuiltDependencies:
   - esbuild
