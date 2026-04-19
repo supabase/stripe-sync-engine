@@ -55,7 +55,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${progress.derived.states_per_second.toFixed(1)}/s)`)
   }
 
-  const header = `${statusLabel} — ${parts.join(' | ')} — ${streamSummary}`
+  const header = `${statusLabel} (${streamSummary}) — ${parts.join(' | ')}`
 
   const errMsg = progress.connection_status?.status === 'failed'
     ? (progress.connection_status.message ?? 'Connection failed')
