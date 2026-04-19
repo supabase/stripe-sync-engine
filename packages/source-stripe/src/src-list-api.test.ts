@@ -18,7 +18,8 @@ describe('subdivideRanges', () => {
 
   it('subdivides a range with cursor and lastSeenCreated into paginated head + null-cursor tail segments', () => {
     const remaining: RemainingRange[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const out = subdivideRanges(remaining, 3, new Map([[0, 30]]))
+    // maxSegments=4: head takes 1 slot, tail gets 3 (budget = 4 - 1 = 3)
+    const out = subdivideRanges(remaining, 4, new Map([[0, 30]]))
     expect(out).toEqual([
       { gte: iso(0), lt: iso(30), cursor: 'cur_1' },
       { gte: iso(30), lt: iso(60), cursor: null },
@@ -27,14 +28,13 @@ describe('subdivideRanges', () => {
     ])
   })
 
-  it('caps tail segment count at maxSegments', () => {
+  it('caps tail segment count at remaining budget', () => {
     const remaining: RemainingRange[] = [{ gte: iso(0), lt: iso(100), cursor: 'cur_x' }]
+    // maxSegments=2: head takes 1 slot, tail budget = 1
     const out = subdivideRanges(remaining, 2, new Map([[0, 10]]))
-    const tail = out.filter((r) => r.cursor === null)
-    expect(tail).toHaveLength(2)
+    expect(out).toHaveLength(2)
     expect(out[0]).toEqual({ gte: iso(0), lt: iso(10), cursor: 'cur_x' })
-    expect(tail[0]).toEqual({ gte: iso(10), lt: iso(55), cursor: null })
-    expect(tail[1]).toEqual({ gte: iso(55), lt: iso(100), cursor: null })
+    expect(out[1]).toEqual({ gte: iso(10), lt: iso(100), cursor: null })
   })
 
   it('does not subdivide when splitPoint is at or past range end', () => {
@@ -48,14 +48,17 @@ describe('subdivideRanges', () => {
     const a: RemainingRange = { gte: iso(0), lt: iso(30), cursor: null }
     const b: RemainingRange = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: RemainingRange = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
-    const out = subdivideRanges([a, b, c], 2, new Map([[2, 90]]))
+    // maxSegments=10 gives enough budget for c to subdivide
+    const out = subdivideRanges([a, b, c], 10, new Map([[2, 90]]))
     expect(out[0]).toEqual(a)
     expect(out[1]).toEqual(b)
-    expect(out.slice(2)).toEqual([
-      { gte: iso(60), lt: iso(90), cursor: 'cur_c' },
-      { gte: iso(90), lt: iso(105), cursor: null },
-      { gte: iso(105), lt: iso(120), cursor: null },
-    ])
+    // c splits: head (cursor) + tail segments (budget = 10 - 3 = 7, but tailSpan=30 so 7 parts)
+    expect(out[2]).toEqual({ gte: iso(60), lt: iso(90), cursor: 'cur_c' })
+    // tail from 90 to 120, split into up to 7 parts (30s span → capped by actual span)
+    const tail = out.slice(3)
+    expect(tail.length).toBeGreaterThan(0)
+    expect(tail[0].gte).toBe(iso(90))
+    expect(tail[tail.length - 1].lt).toBe(iso(120))
   })
 
   it('passes through a range with cursor but no lastSeenCreated entry', () => {

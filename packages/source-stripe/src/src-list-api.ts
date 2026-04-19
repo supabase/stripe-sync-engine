@@ -108,7 +108,24 @@ function toIso(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString()
 }
 
-// MARK: - N-ary search: subdivision
+// MARK: - N-ary search: scheduling
+
+export type BackfillState = {
+  remaining: RemainingRange[]
+  /** Maps batch index → last `created` timestamp seen in that range's most recent page. */
+  lastSeenCreated: Map<number, number>
+}
+
+/**
+ * Pure scheduler: given the current backfill state, subdivide ranges that made
+ * progress (have a cursor + lastSeenCreated) into parallel segments.
+ *
+ * Unit-testable with no mocks — just data in, data out.
+ * Call this AFTER fetching pages (which populate lastSeenCreated and cursors).
+ */
+export function nextBackfillStep(state: BackfillState, maxSegments: number): RemainingRange[] {
+  return subdivideRanges(state.remaining, maxSegments, state.lastSeenCreated)
+}
 
 /**
  * Subdivide ranges that have a cursor (were in progress but didn't complete).
@@ -143,9 +160,17 @@ export function subdivideRanges(
     // Keep the paginated portion with its cursor
     result.push({ gte: range.gte, lt: splitPointIso, cursor: range.cursor })
 
-    // Split the unpaginated tail into N parts
+    // Only subdivide if we're below the segment budget
+    if (result.length >= maxSegments) {
+      // Over budget — keep the tail as one range
+      result.push({ gte: splitPointIso, lt: range.lt, cursor: null })
+      continue
+    }
+
+    // Split the unpaginated tail into at most (budget) parts
+    const budget = maxSegments - result.length
     const tailSpan = rangeEndUnix - splitPoint
-    const n = Math.max(1, Math.min(maxSegments, Math.ceil(tailSpan / 1)))
+    const n = Math.min(budget, Math.max(1, Math.ceil(tailSpan / 1)))
     const segmentSize = Math.max(1, Math.ceil(tailSpan / n))
 
     for (let j = 0; j < n; j++) {
@@ -287,6 +312,8 @@ async function* paginateRange(opts: {
   totalEmitted: { count: number }
   lastSeenCreated: Map<number, number>
   rangeIndex: number
+  /** When true, fetch only one page then return (allows outer loop to subdivide). */
+  singlePage?: boolean
 }): AsyncGenerator<Message> {
   const {
     range,
@@ -302,6 +329,7 @@ async function* paginateRange(opts: {
     totalEmitted,
     lastSeenCreated,
     rangeIndex,
+    singlePage,
   } = opts
 
   let cursor = range.cursor
@@ -356,6 +384,9 @@ async function* paginateRange(opts: {
         remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range),
       },
     })
+
+    // In singlePage mode, return after one page so the outer loop can subdivide
+    if (singlePage && hasMore) return
   }
 
   // Range exhausted — remove from remaining and emit range_complete
@@ -441,13 +472,8 @@ async function* iterateStream(opts: {
   const totalEmitted = { count: 0 }
   const lastSeenCreated = new Map<number, number>()
 
-  // Subdivide any ranges that were in-progress from a previous request
-  const hasInProgress = remaining.some((r) => r.cursor !== null)
-  if (hasInProgress) {
-    remaining = subdivideRanges(remaining, getMaxSegments(), lastSeenCreated)
-  }
 
-  // Paginate ranges — re-check budget each iteration
+  // Paginate ranges — subdivide after every page to maximize parallelism
   while (remaining.length > 0) {
     if (drainQueue) yield* drainQueue()
 
@@ -455,8 +481,10 @@ async function* iterateStream(opts: {
 
     const maxSegments = getMaxSegments()
 
-    // Build generators for up to maxSegments ranges
+    // Pick batch from current remaining (up to maxSegments)
     const batch = remaining.slice(0, maxSegments)
+
+    // Fetch one page from each range in the batch (in parallel)
     const generators = batch.map((range, i) =>
       paginateRange({
         range,
@@ -472,6 +500,7 @@ async function* iterateStream(opts: {
         totalEmitted,
         lastSeenCreated,
         rangeIndex: i,
+        singlePage: true,
       })
     )
 
@@ -481,15 +510,12 @@ async function* iterateStream(opts: {
       yield* mergeAsync(generators, maxSegments)
     }
 
-    // After this batch, subdivide any ranges that were in-progress but didn't complete
+    // After pages complete, subdivide based on what we learned
     if (remaining.length > 0) {
-      const stillInProgress = remaining.some((r) => r.cursor !== null)
-      if (stillInProgress) {
-        const subdivided = subdivideRanges(remaining, getMaxSegments(), lastSeenCreated)
-        remaining.length = 0
-        remaining.push(...subdivided)
-        lastSeenCreated.clear()
-      }
+      const subdivided = nextBackfillStep({ remaining, lastSeenCreated }, maxSegments)
+      remaining.length = 0
+      remaining.push(...subdivided)
+      lastSeenCreated.clear()
     }
   }
 
