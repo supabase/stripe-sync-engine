@@ -19,11 +19,23 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
   const streamEntries = Object.entries(progress.streams)
   const totalRecords = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
-  const streamCount = streamEntries.length
+  // Count streams by status
+  const counts: Record<string, number> = {}
+  for (const [, s] of streamEntries) {
+    counts[s.status] = (counts[s.status] ?? 0) + 1
+  }
+  const statusParts: string[] = []
+  if (counts.completed) statusParts.push(`${counts.completed} 🟢`)
+  if (counts.started) statusParts.push(`${counts.started} 🟡`)
+  if (counts.errored) statusParts.push(`${counts.errored} 🔴`)
+  if (counts.skipped) statusParts.push(`${counts.skipped} ⏭️`)
+  if (counts.not_started) statusParts.push(`${counts.not_started} ⚪`)
+  const streamSummary = statusParts.join(' ')
+
   const statusLabel =
-    progress.derived.status === 'failed' ? '🔴 Sync failed'
-    : progress.derived.status === 'succeeded' ? `✅ Sync complete (${streamCount} streams)`
-    : `🔄 Syncing ${streamCount} streams`
+    progress.derived.status === 'failed' ? `🔴 Sync failed [${streamSummary}]`
+    : progress.derived.status === 'succeeded' ? `✅ Sync complete [${streamSummary}]`
+    : `🔄 Syncing [${streamSummary}]`
 
   const prevTotalRecords = prev
     ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
@@ -64,7 +76,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   }
   if (notStartedCount > 0) {
     const notStartedNames = streamEntries.filter(([, s]) => s.status === 'not_started').map(([n]) => n)
-    lines.push(`  ⚪ ${notStartedCount} not started: ${notStartedNames.join(', ')}`)
+    lines.push(`  ⚪ ${notStartedNames.join(', ')}`)
   }
 
   // Global error (not attributable to a single stream)
