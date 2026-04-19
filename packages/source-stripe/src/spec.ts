@@ -75,6 +75,13 @@ const remainingRangeSpec = z.object({
 })
 
 export const streamStateSpec = z.object({
+  accounted_range: z
+    .object({
+      gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+      lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+    })
+    .optional()
+    .describe('Previously synced time range. Used to compute delta on next run.'),
   remaining: z
     .array(remainingRangeSpec)
     .describe('Ranges still to paginate. Empty array = stream complete for this time_range.'),

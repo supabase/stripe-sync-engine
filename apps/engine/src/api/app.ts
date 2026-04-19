@@ -51,7 +51,6 @@ import {
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import {
-  dangerouslyVerbose,
   syncRequestContext,
   logApiStream,
   createConnectionAbort,
@@ -84,55 +83,10 @@ export async function createApp(resolver: ConnectorResolver) {
   app.use('*', async (c, next) => {
     const requestId = crypto.randomUUID()
     const start = Date.now()
-    if (dangerouslyVerbose) {
-      const headers: Record<string, unknown> = {}
-      c.req.raw.headers.forEach((value, key) => {
-        try {
-          headers[key] = JSON.parse(value)
-        } catch {
-          headers[key] = value
-        }
-      })
-      logger.debug(
-        { requestId, method: c.req.method, path: c.req.path, headers },
-        'request headers'
-      )
-    }
     logger.info({ requestId, method: c.req.method, path: c.req.path }, 'request start')
-    if (dangerouslyVerbose) {
-      const curlParts = [`curl -X ${c.req.method} '${c.req.url}'`]
-      c.req.raw.headers.forEach((value, key) => {
-        curlParts.push(`  -H '${key}: ${value}'`)
-      })
-      if (hasBody(c)) {
-        const cl = c.req.header('Content-Length')
-        if (cl && Number(cl) < 100_000) {
-          try {
-            const body = await c.req.raw.clone().text()
-            curlParts.push(`  -d '${body.replace(/'/g, "'\\''")}'`)
-          } catch {
-            /* skip */
-          }
-        } else {
-          curlParts.push('  --data-binary @-')
-        }
-      }
-      logger.debug(curlParts.join(' \\\n'))
-    }
     await next()
     let error: string | undefined
-    let responseBody: unknown | undefined
-    if (dangerouslyVerbose) {
-      try {
-        responseBody = await c.res.clone().json()
-      } catch {
-        try {
-          responseBody = await c.res.clone().text()
-        } catch {
-          // skip unreadable bodies
-        }
-      }
-    } else if (c.res.status >= 400) {
+    if (c.res.status >= 400) {
       try {
         const body = (await c.res.clone().json()) as { error: unknown }
         error = typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
@@ -152,9 +106,6 @@ export async function createApp(resolver: ConnectorResolver) {
       },
       'request end'
     )
-    if (responseBody !== undefined) {
-      logger.debug({ requestId, responseBody }, 'response body')
-    }
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */
@@ -518,7 +469,6 @@ export async function createApp(resolver: ConnectorResolver) {
         if (SourceInputMessage) {
           input = (async function* () {
             for (const msg of bodyMessages) {
-              if (dangerouslyVerbose) logger.debug({ msg }, 'pipeline_read input')
               const parsed = SourceInputMessage.parse(msg)
               yield (parsed as { source_input: unknown }).source_input
             }
@@ -526,7 +476,6 @@ export async function createApp(resolver: ConnectorResolver) {
         } else {
           input = (async function* () {
             for (const msg of bodyMessages) {
-              if (dangerouslyVerbose) logger.debug({ msg }, 'pipeline_read input')
               yield msg
             }
           })()
@@ -599,7 +548,6 @@ export async function createApp(resolver: ConnectorResolver) {
       const json = c.req.valid('json')
       messages = (async function* () {
         for (const msg of json.body) {
-          if (dangerouslyVerbose) logger.debug({ msg }, 'pipeline_write input')
           yield msg
         }
       })() as AsyncIterable<Message>
@@ -678,7 +626,6 @@ export async function createApp(resolver: ConnectorResolver) {
       if (bodyMessages?.length) {
         input = (async function* () {
           for (const msg of bodyMessages) {
-            if (dangerouslyVerbose) logger.debug({ msg }, 'pipeline_sync input')
             yield msg
           }
         })()

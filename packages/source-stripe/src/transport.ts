@@ -173,47 +173,23 @@ export function getHttpsProxyAgentForTarget(
   return proxyUrl ? getHttpsProxyAgent(proxyUrl) : undefined
 }
 
-const DANGEROUSLY_VERBOSE_LOGGING = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
-
-/** Wraps fetch with curl-style trace logging when DANGEROUSLY_VERBOSE_LOGGING=true. */
+/** Wraps fetch with structured request logging at debug level. */
 export function tracedFetch(input: URL | string, init: RequestInit = {}): Promise<Response> {
-  if (!DANGEROUSLY_VERBOSE_LOGGING || !logger.isLevelEnabled('trace')) {
-    return fetch(input, init)
-  }
-
   const method = (init.method ?? 'GET').toUpperCase()
   const url = String(input)
-  const reqId = crypto.randomUUID().slice(0, 8)
   const start = Date.now()
 
-  const headerPairs: [string, string][] = []
-  if (init.headers) {
-    new Headers(init.headers as HeadersInit).forEach((v, k) => {
-      headerPairs.push([k, v])
-    })
-  }
-
-  const curlParts = [`curl -X ${method}`]
-  for (const [k, v] of headerPairs) {
-    curlParts.push(`-H '${k}: ${v}'`)
-  }
-  if (init.body != null) {
-    curlParts.push(`-d '${String(init.body).replaceAll("'", "'\\''")}'`)
-  }
-  curlParts.push(`'${url}'`)
-  const curl = curlParts.join(' \\\n  ')
-
-  logger.trace(`[http ${reqId}] → ${method} ${url}\n${curl}`)
-
   return fetch(input, init).then((res) => {
-    const resClone = res.clone()
-    logger.trace(`[http ${reqId}] ← ${res.status} ${method} ${url} (${Date.now() - start}ms)`)
-    resClone
-      .text()
-      .then((body) => {
-        logger.trace(`[http ${reqId}] ← body: ${body.slice(0, 4096)}`)
-      })
-      .catch(() => {})
+    const duration_ms = Date.now() - start
+    const request_id = res.headers.get('request-id') ?? undefined
+    logger.debug({
+      event: 'stripe_request',
+      method,
+      url,
+      status: res.status,
+      duration_ms,
+      request_id,
+    })
     return res
   })
 }

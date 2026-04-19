@@ -79,6 +79,10 @@ export function createSyncCmd() {
         default: false,
         description: 'Shorthand for --state none',
       },
+      syncEngineUrl: {
+        type: 'string',
+        description: 'URL of a running sync-engine server (skips spawning a subprocess)',
+      },
       websocket: {
         type: 'boolean',
         default: false,
@@ -133,10 +137,11 @@ export function createSyncCmd() {
             : defaultFileStateStore(stripeApiKey, args.stateDir)
       const initialState = await store.get()
 
-      // Spawn engine HTTP server as a subprocess — logs go to a file, Ink owns the terminal
-      const server = await spawnServeSubprocess(`sync-${schema}.log`)
+      // Use an existing server if --sync-engine-url is provided, otherwise spawn one
+      const server = args.syncEngineUrl ? null : await spawnServeSubprocess(`sync-${schema}.log`)
+      const engineUrl = args.syncEngineUrl ?? server!.url
       try {
-        const engine = createRemoteEngine(server.url)
+        const engine = createRemoteEngine(engineUrl)
 
         // Run connector setup and apply any config updates before syncing.
         for await (const msg of engine.pipeline_setup(pipeline)) {
@@ -202,7 +207,7 @@ export function createSyncCmd() {
 
         inkInstance?.unmount()
       } finally {
-        server.kill()
+        server?.kill()
         if (store.close) await store.close()
       }
     },

@@ -1,7 +1,6 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
 import { logger } from '../logger.js'
 
-export const dangerouslyVerbose = process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true'
 
 export function syncRequestContext(pipeline: {
   source: { type: string }
@@ -64,7 +63,6 @@ export async function* logApiStream<T>(
   try {
     for await (const item of iter) {
       itemCount++
-      if (dangerouslyVerbose) logger.debug({ ...context, item }, `${label} output`)
       const msg = item as { type?: string; connection_status?: { status?: string }; eof?: unknown }
       if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
         hasError = true
@@ -129,11 +127,8 @@ export function createConnectionAbort(c: any, onDisconnect?: () => void): AbortC
 }
 
 export async function* verboseInput(
-  label: string,
+  _label: string,
   iter: AsyncIterable<unknown>
 ): AsyncIterable<unknown> {
-  for await (const msg of iter) {
-    if (dangerouslyVerbose) logger.debug({ msg }, `${label} input`)
-    yield msg
-  }
+  yield* iter
 }
