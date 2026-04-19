@@ -61,7 +61,7 @@ describe('Engine OpenAPI spec', () => {
     const props = syncState.properties as Record<string, unknown>
     expect(props).toHaveProperty('source')
     expect(props).toHaveProperty('destination')
-    expect(props).toHaveProperty('engine')
+    expect(props).toHaveProperty('sync_run')
   })
 
   it('header params use application/json content key, never [object Object]', async () => {

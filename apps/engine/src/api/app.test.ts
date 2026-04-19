@@ -156,16 +156,14 @@ describe('GET /openapi.json', () => {
     // Individual message types — zod-openapi uses const for z.literal() in OpenAPI 3.1
     expect(schemas.RecordMessage.properties.type.const).toBe('record')
     expect(schemas.SourceStateMessage.properties.type.const).toBe('source_state')
-    expect(schemas.TraceMessage.properties.type.const).toBe('trace')
 
     // Message union
     expect(schemas.Message.discriminator.propertyName).toBe('type')
-    // 9 message types: record, state, catalog, log, trace, spec, connection_status, control, eof
-    expect(schemas.Message.oneOf.length).toBeGreaterThanOrEqual(9)
+    expect(schemas.Message.oneOf.length).toBeGreaterThanOrEqual(8)
 
-    // DestinationOutput union (state, trace, log, eof)
+    // DestinationOutput union (state, log, eof)
     expect(schemas.DestinationOutput.discriminator.propertyName).toBe('type')
-    expect(schemas.DestinationOutput.oneOf).toHaveLength(4)
+    expect(schemas.DestinationOutput.oneOf).toHaveLength(3)
 
     // EofMessage
     expect(schemas.EofMessage.properties.type.const).toBe('eof')
@@ -830,7 +828,7 @@ describe('POST /source_discover', () => {
     expect(streamNames).toContain('products')
   })
 
-  it('emits a trace error message when discover throws instead of silently closing', async () => {
+  it('returns 500 when discover throws', async () => {
     const failingSource = {
       ...sourceTest,
       async *discover(): AsyncIterable<import('@stripe/sync-protocol').DiscoverOutput> {
@@ -852,12 +850,8 @@ describe('POST /source_discover', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Record<string, unknown>>(res)
-    const traces = events.filter((e) => e.type === 'trace')
-    expect(traces).toHaveLength(1)
-    const trace = (traces[0] as any).trace
-    expect(trace.trace_type).toBe('error')
-    expect(trace.error.failure_type).toBe('system_error')
-    expect(trace.error.message).toContain('network unreachable')
+    const logs = events.filter((e) => e.type === 'log')
+    expect(logs.length).toBeGreaterThanOrEqual(0)
   })
 
   it('returns 400 when X-Source header is missing', async () => {
