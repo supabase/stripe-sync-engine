@@ -10,13 +10,13 @@ const STATUS_EMOJI: Record<string, string> = {
 
 /**
  * Format a ProgressPayload into a human-readable string for CLI output.
- * When `prev` is provided, shows deltas (e.g. "+50 rows") for streams
+ * When `prev` is provided, shows deltas (e.g. "+50 records") for streams
  * that changed since the last progress emission.
  *
  * Example:
- *   ◐ Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints
- *     ● customers: 200 rows
- *     ◐ invoices: 250 rows (+50)
+ *   ◐ Syncing — 3.2s | 450 records (140.6/s) | 5 checkpoints
+ *     ● customers: 200 records
+ *     ◐ invoices: 250 records (+50)
  *     ○ charges
  */
 export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload): string {
@@ -36,7 +36,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   parts.push(`${elapsed}s`)
   if (totalRows > 0) {
     const deltaStr = rowDelta > 0 ? ` (+${rowDelta})` : ''
-    parts.push(`${totalRows} rows${deltaStr} (${rps}/s)`)
+    parts.push(`${totalRows} records${deltaStr} (${rps}/s)`)
   }
   if (progress.global_state_count > 0) {
     const sps = progress.derived.states_per_second.toFixed(1)
@@ -57,7 +57,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     const emoji = STATUS_EMOJI[s.status] ?? '?'
     const prevStream: StreamProgress | undefined = prev?.streams[name]
     const delta = prevStream ? s.record_count - prevStream.record_count : 0
-    const count = s.record_count > 0 ? `: ${s.record_count} rows` : ''
+    const count = s.record_count > 0 ? `: ${s.record_count} records` : ''
     const deltaStr = delta > 0 ? ` (+${delta})` : ''
     const streamErr = s.status === 'errored' && errMsg && erroredStreams.length === 1 ? ` — ${errMsg}` : ''
     lines.push(`  ${emoji} ${name}${count}${deltaStr}${streamErr}`)

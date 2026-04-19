@@ -43,12 +43,12 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 12.4s | 3451 rows (245.2/s) | 18 checkpoints (1.5/s)
-        🟢 accounts: 1 rows
-        🟢 customers: 1200 rows
-        🟢 invoices: 850 rows
-        🟡 charges: 980 rows
-        🟡 payment_intents: 420 rows
+      "🔄 Syncing — 12.4s | 3451 records (245.2/s) | 18 checkpoints (1.5/s)
+        🟢 accounts: 1 records
+        🟢 customers: 1200 records
+        🟢 invoices: 850 records
+        🟡 charges: 980 records
+        🟡 payment_intents: 420 records
         ⚪ subscriptions
         ⚪ products
         ⚪ prices
@@ -88,8 +88,8 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 5.0s | 100 rows (50.0/s) | 2 checkpoints (0.4/s)
-        🟢 customers: 100 rows
+      "🔄 Syncing — 5.0s | 100 records (50.0/s) | 2 checkpoints (0.4/s)
+        🟢 customers: 100 records
         ⏭️ invoices"
     `)
   })
@@ -120,10 +120,10 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 4.0s | 450 rows (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
-        🟢 customers: 200 rows (+50)
-        🟡 invoices: 180 rows (+130)
-        🟡 charges: 70 rows (+70)"
+      "🔄 Syncing — 4.0s | 450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
+        🟢 customers: 200 records (+50)
+        🟡 invoices: 180 records (+130)
+        🟡 charges: 70 records (+70)"
     `)
   })
 })
