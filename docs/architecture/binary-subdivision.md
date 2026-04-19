@@ -229,19 +229,21 @@ hundred at most), so the `log₂ M` term dominates.
 | **Single second**       | M                    | M + 1          |
 | **Typical Stripe data** | **10–15**            | ~M             |
 
-### Why binary and not N-ary?
+### Why N=10?
 
-The algorithm was originally N-ary (split into N pieces, with N up to 16).
-Binary is better for this use case:
+The algorithm splits each range's unfetched remainder into N equal segments.
+N=10 was chosen empirically:
 
-1. **Waste is bounded at 2x.** Each split wastes at most 1 request (the empty
-   half). N=16 wastes up to 15 per split on skewed data.
-2. **Rounds are still logarithmic.** `log₂` vs `log₁₆` is a ~4x constant
-   factor. For typical M=1,000–100,000, that's 11–17 rounds vs 3–5.
-3. **Rate limits matter.** Stripe APIs are rate-limited. Burning empty requests
-   on skewed streams exhausts quota. Binary is the most conservative strategy.
-4. **No tuning.** N=2 is fixed. No fan-out parameter, no density heuristic,
-   no budget allocation across ranges.
+1. **Fast ramp-up.** With N=10, round 0 produces 11 ranges, round 1 ~111.
+   This saturates an 80 rps rate limit in 2 rounds (~4s). Binary (N=2) takes
+   7 rounds (~14s) to reach the same parallelism — a critical difference when
+   API calls take 1-2s each through a proxy.
+2. **Bounded waste.** Each split wastes at most N-1=9 probes on empty segments.
+   With 80 rps budget, 9 wasted calls cost ~0.1s — negligible vs the 2s saved
+   per round of ramp-up.
+3. **Still logarithmic.** `log₁₀(M)` rounds: M=230 → 3 rounds, M=10,000 → 4.
+   The constant factor difference vs `log₂` doesn't matter when each round
+   costs 2s of wall time.
 
 ---
 

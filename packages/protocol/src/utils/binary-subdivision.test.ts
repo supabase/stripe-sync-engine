@@ -6,6 +6,7 @@ import {
   streamingSubdivide,
   toIso,
   toUnixSeconds,
+  DEFAULT_SUBDIVISION_FACTOR,
 } from './binary-subdivision.js'
 
 function iso(unixSeconds: number): string {
@@ -24,14 +25,21 @@ describe('subdivideRanges', () => {
     expect(subdivideRanges(remaining, map)).toEqual(remaining)
   })
 
-  it('splits older remainder in half (binary subdivision)', () => {
-    const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const out = subdivideRanges(remaining, new Map([[remaining[0], 90]]))
-    expect(out).toEqual([
-      { gte: iso(90), lt: iso(91), cursor: 'cur_1' }, // boundary
-      { gte: iso(0), lt: iso(45), cursor: null }, // left half
-      { gte: iso(45), lt: iso(90), cursor: null }, // right half
-    ])
+  it('splits older remainder into N equal segments', () => {
+    const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_1' }]
+    const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]))
+    // boundary + N segments of [0, 900)
+    expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_1' })
+    const segments = out.slice(1)
+    expect(segments).toHaveLength(DEFAULT_SUBDIVISION_FACTOR)
+    // All segments are contiguous and cover [0, 900)
+    expect(toUnixSeconds(segments[0].gte)).toBe(0)
+    expect(toUnixSeconds(segments[segments.length - 1].lt)).toBe(900)
+    for (let i = 1; i < segments.length; i++) {
+      expect(segments[i].gte).toBe(segments[i - 1].lt)
+    }
+    // All cursors are null
+    for (const s of segments) expect(s.cursor).toBeNull()
   })
 
   it('does not subdivide when the observed point is at or below the range start', () => {
@@ -45,13 +53,15 @@ describe('subdivideRanges', () => {
     const b: Range = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
     const out = subdivideRanges([a, b, c], new Map([[c, 90]]))
-    expect(out).toEqual([
-      a,
-      b,
-      { gte: iso(90), lt: iso(91), cursor: 'cur_c' },
-      { gte: iso(60), lt: iso(75), cursor: null },
-      { gte: iso(75), lt: iso(90), cursor: null },
-    ])
+    // a passes through, b passes through (no lastObserved), c subdivides
+    expect(out[0]).toEqual(a)
+    expect(out[1]).toEqual(b)
+    expect(out[2]).toEqual({ gte: iso(90), lt: iso(91), cursor: 'cur_c' })
+    // Remaining segments cover [60, 90) with N segments (capped to span)
+    const segments = out.slice(3)
+    expect(segments.length).toBeGreaterThanOrEqual(1)
+    expect(toUnixSeconds(segments[0].gte)).toBe(60)
+    expect(toUnixSeconds(segments[segments.length - 1].lt)).toBe(90)
   })
 
   it('passes through a range with cursor but no lastObserved entry', () => {
@@ -68,23 +78,26 @@ describe('subdivideRanges', () => {
     ])
   })
 
-  it('always produces exactly 3 ranges for a splittable range (boundary + 2 halves)', () => {
+  it('produces boundary + N segments for a splittable range', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_dense' }]
     const out = subdivideRanges(remaining, new Map([[remaining[0], 900]]))
-    expect(out).toHaveLength(3)
+    expect(out).toHaveLength(1 + DEFAULT_SUBDIVISION_FACTOR) // boundary + N segments
     expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_dense' })
-    expect(out[1]).toEqual({ gte: iso(0), lt: iso(450), cursor: null })
-    expect(out[2]).toEqual({ gte: iso(450), lt: iso(900), cursor: null })
+    // Segments cover [0, 900) contiguously
+    for (let i = 2; i < out.length; i++) {
+      expect(out[i].gte).toBe(out[i - 1].lt)
+    }
   })
 
   it('keeps the entire last observed second in the cursor-backed boundary range', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1010), cursor: 'cur_same_second' }]
     const out = subdivideRanges(remaining, new Map([[remaining[0], 1008]]))
-    expect(out).toEqual([
-      { gte: iso(1008), lt: iso(1009), cursor: 'cur_same_second' },
-      { gte: iso(1000), lt: iso(1004), cursor: null },
-      { gte: iso(1004), lt: iso(1008), cursor: null },
-    ])
+    expect(out[0]).toEqual({ gte: iso(1008), lt: iso(1009), cursor: 'cur_same_second' })
+    // Remaining segments cover [1000, 1008) — 8 seconds, capped at min(N, 8)
+    const segments = out.slice(1)
+    expect(segments.length).toBe(Math.min(DEFAULT_SUBDIVISION_FACTOR, 8))
+    expect(toUnixSeconds(segments[0].gte)).toBe(1000)
+    expect(toUnixSeconds(segments[segments.length - 1].lt)).toBe(1008)
   })
 
   it('nextStep wraps subdivideRanges correctly', () => {
@@ -127,13 +140,14 @@ function simulateRound(
 }
 
 describe('binary subdivision: data distribution scenarios', () => {
-  it('uniform density: splits into boundary + 2 halves', () => {
+  it('uniform density: splits into boundary + N segments', () => {
     const ranges: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: null }]
     const round1 = simulateRound(ranges, () => 1)
-    expect(round1.length).toBe(3)
-    expect(round1[0].cursor).not.toBeNull()
-    expect(round1[1].cursor).toBeNull()
-    expect(round1[2].cursor).toBeNull()
+    expect(round1.length).toBe(1 + DEFAULT_SUBDIVISION_FACTOR) // boundary + N segments
+    expect(round1[0].cursor).not.toBeNull() // boundary keeps cursor
+    for (let i = 1; i < round1.length; i++) {
+      expect(round1[i].cursor).toBeNull() // segments start fresh
+    }
   })
 
   it('empty range: completes in one pass with no subdivision', () => {

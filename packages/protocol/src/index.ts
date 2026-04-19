@@ -24,6 +24,7 @@ export {
   subdivideRanges,
   nextStep,
   streamingSubdivide,
+  DEFAULT_SUBDIVISION_FACTOR,
   toUnixSeconds,
   toIso,
   type Range,

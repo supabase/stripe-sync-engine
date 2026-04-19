@@ -1,13 +1,17 @@
 /**
- * Binary subdivision scheduler — a pure, self-replicating parallel time-range search.
+ * N-ary subdivision scheduler — a pure, self-replicating parallel time-range search.
  *
  * Algorithm:
  *   1. Start with one or more time ranges to search.
  *   2. Fetch one page from each range in parallel (rate limiter controls concurrency).
  *   3. Observe: record the last sort-key value seen in each page.
  *   4. Subdivide: split ranges that have a cursor into a boundary (keeps cursor)
- *      and two halves of the unfetched remainder.
+ *      and N equal segments of the unfetched remainder.
  *   5. Repeat until no ranges remain.
+ *
+ * N=10 reaches full parallelism in 2 rounds instead of 7 (binary). The tradeoff
+ * is up to N-1 wasted probes per split on skewed data, but with high rate limits
+ * and 1-2s API latency the faster ramp-up dominates.
  *
  * See docs/architecture/binary-subdivision.md for complexity analysis.
  *
@@ -46,15 +50,21 @@ export function toIso(unixSeconds: number): string {
 
 // MARK: - Subdivision
 
+/** Default number of segments to split the older remainder into. */
+export const DEFAULT_SUBDIVISION_FACTOR = 10
+
 /**
  * Pure scheduler step: given the current backfill state, subdivide ranges that
- * made progress (have a cursor + lastObserved) by splitting in half.
+ * made progress (have a cursor + lastObserved) into N segments.
  *
  * Call this AFTER fetching pages (which populate lastObserved and cursors).
  * Concurrency is controlled by the caller's rate limiter, not here.
+ *
+ * @param n Number of segments to split each range's unfetched remainder into.
+ *          Higher N = faster ramp-up but more wasted probes on skewed data.
  */
-export function nextStep(state: SearchState): Range[] {
-  return subdivideRanges(state.remaining, state.lastObserved)
+export function nextStep(state: SearchState, n = DEFAULT_SUBDIVISION_FACTOR): Range[] {
+  return subdivideRanges(state.remaining, state.lastObserved, n)
 }
 
 /**
@@ -65,12 +75,14 @@ export function nextStep(state: SearchState): Range[] {
  * plus the boundary second that may still have more rows after the current
  * cursor.
  *
- * Binary subdivision: split the older remainder in half. Simple, bounded waste
- * (at most 1 empty segment per split), converges in O(log₂ M) rounds.
+ * N-ary subdivision: split the older remainder into `n` equal segments.
+ * Reaches full parallelism in O(log_n M) rounds. Wastes at most n-1 empty
+ * probes per split on skewed data.
  */
 export function subdivideRanges(
   remaining: Range[],
-  lastObserved: Map<Range, number>
+  lastObserved: Map<Range, number>,
+  n = DEFAULT_SUBDIVISION_FACTOR
 ): Range[] {
   const result: Range[] = []
 
@@ -96,15 +108,20 @@ export function subdivideRanges(
     const boundaryLtUnix = Math.min(rangeEndUnix, splitPoint + 1)
     result.push({ gte: toIso(boundaryGteUnix), lt: toIso(boundaryLtUnix), cursor: range.cursor })
 
-    // Split the older remainder [rangeStart, splitPoint) in half.
-    const midpoint = rangeStartUnix + Math.floor((olderEndUnix - rangeStartUnix) / 2)
-
-    if (midpoint <= rangeStartUnix || midpoint >= olderEndUnix) {
-      // Remainder is 1 second — can't split further, single segment.
+    // Split the older remainder [rangeStart, splitPoint) into n equal segments.
+    const span = olderEndUnix - rangeStartUnix
+    if (span <= 1) {
+      // Can't split a 1-second range further.
       result.push({ gte: toIso(rangeStartUnix), lt: toIso(olderEndUnix), cursor: null })
     } else {
-      result.push({ gte: toIso(rangeStartUnix), lt: toIso(midpoint), cursor: null })
-      result.push({ gte: toIso(midpoint), lt: toIso(olderEndUnix), cursor: null })
+      const segments = Math.min(n, span) // don't create more segments than seconds
+      for (let i = 0; i < segments; i++) {
+        const segGte = rangeStartUnix + Math.floor((span * i) / segments)
+        const segLt = rangeStartUnix + Math.floor((span * (i + 1)) / segments)
+        if (segLt > segGte) {
+          result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
+        }
+      }
     }
   }
 
@@ -155,8 +172,9 @@ export async function* streamingSubdivide<T>(opts: {
   initial: Range[]
   fetchPage: (range: Range) => Promise<PageResult<T>>
   concurrency: number
+  subdivisionFactor?: number
 }): AsyncGenerator<SubdivisionEvent<T>> {
-  const { fetchPage, concurrency } = opts
+  const { fetchPage, concurrency, subdivisionFactor = DEFAULT_SUBDIVISION_FACTOR } = opts
   const queue: Range[] = [...opts.initial]
   // Track ranges currently being fetched so we can report remaining state.
   const inflightRanges = new Map<number, Range>()
@@ -198,7 +216,7 @@ export async function* streamingSubdivide<T>(opts: {
       // Range completed with data — no more pages
     } else if (lastObserved != null) {
       // Range has more data — subdivide and enqueue children
-      const children = subdivideRanges([range], new Map([[range, lastObserved]]))
+      const children = subdivideRanges([range], new Map([[range, lastObserved]]), subdivisionFactor)
       for (const child of children) queue.push(child)
     } else {
       // Has more but no lastObserved — re-enqueue to continue paginating
