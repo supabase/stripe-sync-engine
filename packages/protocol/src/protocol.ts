@@ -60,7 +60,7 @@ export const Stream = z
       .string()
       .optional()
       .describe(
-        'Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. "created").'
+        'Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. "updated").'
       ),
   })
   .describe('A named collection of records — analogous to a table or API resource.')

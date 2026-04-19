@@ -12,7 +12,7 @@ import defaultSpec from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
-import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
+import { catalogFromOpenApi } from './catalog.js'
 import {
   BUNDLED_API_VERSION,
   resolveOpenApiSpec,
@@ -154,16 +154,11 @@ export function createStripeSource(
         resolved.apiVersion,
         config.base_url
       )
-      let catalog: CatalogPayload
-      try {
-        const parser = new SpecParser()
-        const parsed = parser.parse(resolved.spec, {
-          resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
-        })
-        catalog = catalogFromOpenApi(parsed.tables, registry)
-      } catch {
-        catalog = catalogFromRegistry(registry)
-      }
+      const parser = new SpecParser()
+      const parsed = parser.parse(resolved.spec, {
+        resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
+      })
+      const catalog = catalogFromOpenApi(parsed.tables, registry)
       discoverCache.set(apiVersion, catalog)
       yield { type: 'catalog' as const, catalog }
     },
@@ -417,7 +412,7 @@ export default createStripeSource()
 
 export { subdivideRanges } from './src-list-api.js'
 export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
-export { catalogFromRegistry } from './catalog.js'
+export { catalogFromOpenApi } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'
 export type { ParsedResourceTable, ParsedOpenApiSpec } from './openapi/types.js'
 export type { RateLimiter } from './rate-limiter.js'

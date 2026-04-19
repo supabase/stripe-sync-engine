@@ -253,10 +253,10 @@ describe('newer_than_field stale write prevention', () => {
             properties: {
               id: { type: 'string' },
               name: { type: 'string' },
-              created: { type: 'integer' },
+              updated: { type: 'integer' },
             },
           },
-          newer_than_field: 'created',
+          newer_than_field: 'updated',
         },
         sync_mode: 'full_refresh',
         destination_sync_mode: 'overwrite',
@@ -270,46 +270,46 @@ describe('newer_than_field stale write prevention', () => {
 
   it('skips upsert when incoming record is older than existing', async () => {
     const batch1 = toAsyncIter([
-      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', created: 200 }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
     ])
     await collectOutputs(
       destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch1)
     )
 
     const batch2 = toAsyncIter([
-      makeRecord('customers', { id: 'cus_1', name: 'Alice v1 (stale)', created: 100 }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 }),
     ])
     await collectOutputs(
       destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch2)
     )
 
     const { rows } = await pool.query(
-      `SELECT _raw_data->>'name' AS name, created FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+      `SELECT _raw_data->>'name' AS name, updated FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
     )
     expect(rows[0].name).toBe('Alice v2')
-    expect(rows[0].created).toBe('200')
+    expect(rows[0].updated).toBe('200')
   })
 
   it('allows upsert when incoming record is newer than existing', async () => {
     const batch1 = toAsyncIter([
-      makeRecord('customers', { id: 'cus_1', name: 'Alice v1', created: 100 }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 }),
     ])
     await collectOutputs(
       destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch1)
     )
 
     const batch2 = toAsyncIter([
-      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', created: 200 }),
+      makeRecord('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
     ])
     await collectOutputs(
       destination.write({ config: makeConfig(), catalog: newerThanCatalog }, batch2)
     )
 
     const { rows } = await pool.query(
-      `SELECT _raw_data->>'name' AS name, created FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+      `SELECT _raw_data->>'name' AS name, updated FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
     )
     expect(rows[0].name).toBe('Alice v2')
-    expect(rows[0].created).toBe('200')
+    expect(rows[0].updated).toBe('200')
   })
 })
 

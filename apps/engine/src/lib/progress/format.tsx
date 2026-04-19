@@ -22,13 +22,19 @@ function StreamRow({ name, stream, prev, errorMsg }: {
   const showCount = stream.record_count > 0 || stream.status === 'completed'
 
   return (
-    <Box>
-      <Text color={icon.color}>{icon.symbol} </Text>
-      <Text>{name}</Text>
-      {showCount && (
-        <Text dimColor>: {stream.record_count} records{deltaStr}</Text>
+    <Box flexDirection="column">
+      <Box>
+        <Text color={icon.color}>{icon.symbol} </Text>
+        <Text>{name}</Text>
+        {showCount && (
+          <Text dimColor>: {stream.record_count} records{deltaStr}</Text>
+        )}
+      </Box>
+      {errorMsg && (
+        <Box marginLeft={3}>
+          <Text color="red">{errorMsg}</Text>
+        </Box>
       )}
-      {errorMsg && <Text color="red"> — {errorMsg}</Text>}
     </Box>
   )
 }

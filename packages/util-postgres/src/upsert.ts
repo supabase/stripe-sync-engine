@@ -227,5 +227,20 @@ export async function upsert(
   options: UpsertOptions
 ): Promise<pg.QueryResult> {
   const { sql, params } = buildUpsertSql(records, options)
-  return client.query(sql, params)
+  try {
+    return await client.query(sql, params)
+  } catch (err) {
+    const table = qualifiedTable(options.schema, options.table)
+    const columns = Object.keys(records[0]!)
+    const detail =
+      `table=${table} columns=[${columns.join(', ')}] ` +
+      `pk=[${options.primaryKeyColumns.join(', ')}]` +
+      (options.newerThanColumn ? ` newerThan=${options.newerThanColumn}` : '')
+    const wrapped = new Error(
+      `upsert failed: ${err instanceof Error ? err.message : String(err)} (${detail})`,
+      { cause: err }
+    )
+    if (err instanceof Error) wrapped.stack = err.stack
+    throw wrapped
+  }
 }

@@ -3,21 +3,6 @@ import type { ResourceConfig } from './types.js'
 import type { ParsedResourceTable } from '@stripe/sync-openapi'
 import { parsedTableToJsonSchema } from '@stripe/sync-openapi'
 
-/** Derive a CatalogPayload from the existing resource registry (no json_schema). */
-export function catalogFromRegistry(registry: Record<string, ResourceConfig>): CatalogPayload {
-  const streams: Stream[] = Object.entries(registry)
-    .filter(([, cfg]) => cfg.sync !== false)
-    .sort(([, a], [, b]) => a.order - b.order)
-    .map(([name, cfg]) => ({
-      name: cfg.tableName,
-      primary_key: [['id'], ['_account_id']],
-      metadata: { resource_name: name },
-      ...(cfg.supportsCreatedFilter && { newer_than_field: 'created' as const }),
-    }))
-
-  return { streams }
-}
-
 /**
  * Derive a CatalogPayload by merging OpenAPI-parsed tables with registry metadata.
  * Each stream gets json_schema from the parsed OpenAPI spec, with `_account_id`
@@ -38,7 +23,6 @@ export function catalogFromOpenApi(
         name: cfg.tableName,
         primary_key: [['id'], ['_account_id']],
         metadata: { resource_name: name },
-        ...(cfg.supportsCreatedFilter && { newer_than_field: 'created' as const }),
       }
 
       if (table) {
@@ -54,6 +38,11 @@ export function catalogFromOpenApi(
         jsonSchema.required = required
 
         stream.json_schema = jsonSchema
+
+        // Only set newer_than_field if the column will actually be projected
+        if (cfg.supportsCreatedFilter && 'updated' in properties) {
+          stream.newer_than_field = 'updated'
+        }
       }
 
       return stream
