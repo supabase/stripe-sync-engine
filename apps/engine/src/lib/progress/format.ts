@@ -25,17 +25,18 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     counts[s.status] = (counts[s.status] ?? 0) + 1
   }
   const statusParts: string[] = []
-  if (counts.completed) statusParts.push(`${counts.completed} done`)
-  if (counts.started) statusParts.push(`${counts.started} active`)
-  if (counts.errored) statusParts.push(`${counts.errored} failed`)
+  if (counts.completed) statusParts.push(`${counts.completed} completed`)
+  if (counts.started) statusParts.push(`${counts.started} started`)
+  if (counts.errored) statusParts.push(`${counts.errored} errored`)
   if (counts.skipped) statusParts.push(`${counts.skipped} skipped`)
-  if (counts.not_started) statusParts.push(`${counts.not_started} queued`)
+  if (counts.not_started) statusParts.push(`${counts.not_started} not_started`)
   const streamSummary = statusParts.join(', ')
 
+  const total = streamEntries.length
   const statusLabel =
-    progress.derived.status === 'failed' ? `🔴 Sync failed [${streamSummary}]`
-    : progress.derived.status === 'succeeded' ? `✅ Sync complete [${streamSummary}]`
-    : `🔄 Syncing [${streamSummary}]`
+    progress.derived.status === 'failed' ? `🔴 Sync failed (${total} streams)`
+    : progress.derived.status === 'succeeded' ? `✅ Sync complete (${total} streams)`
+    : `🔄 Syncing ${total} streams`
 
   const prevTotalRecords = prev
     ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
@@ -54,7 +55,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${progress.derived.states_per_second.toFixed(1)}/s)`)
   }
 
-  const header = `${statusLabel} — ${parts.join(' | ')}`
+  const header = `${statusLabel} — ${parts.join(' | ')} — ${streamSummary}`
 
   const errMsg = progress.connection_status?.status === 'failed'
     ? (progress.connection_status.message ?? 'Connection failed')
