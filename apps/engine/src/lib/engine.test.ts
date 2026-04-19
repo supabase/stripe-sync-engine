@@ -781,6 +781,92 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(streams[0].time_range).toBeUndefined()
   })
 
+  it('resets run progress when sync_run_id changes', async () => {
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { remaining: [] } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const output = await drain(
+      engine.pipeline_sync(
+        defaultPipeline,
+        {
+          state: {
+            source: { streams: { customers: { remaining: [{ gte: '2025-01-01', lt: '2025-06-01', cursor: 'cus_99' }] } }, global: {} },
+            destination: {},
+            sync_run: { sync_run_id: 'old-run', progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 5000, global_state_count: 3, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
+          },
+          sync_run_id: 'new-run',
+        }
+      )
+    )
+
+    const eof = output.find((m) => m.type === 'eof')!
+    expect(eof.eof.ending_state?.sync_run.sync_run_id).toBe('new-run')
+    // Progress was reset — elapsed_ms should be near-zero (fresh run)
+    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(1000)
+  })
+
+  it('preserves run progress when sync_run_id matches', async () => {
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'source_state' as const,
+          source_state: { stream: 'customers', data: { remaining: [] } },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const output = await drain(
+      engine.pipeline_sync(
+        defaultPipeline,
+        {
+          state: {
+            source: { streams: {}, global: {} },
+            destination: {},
+            sync_run: { sync_run_id: 'same-run', progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 5000, global_state_count: 3, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
+          },
+          sync_run_id: 'same-run',
+        }
+      )
+    )
+
+    const eof = output.find((m) => m.type === 'eof')!
+    expect(eof.eof.ending_state?.sync_run.sync_run_id).toBe('same-run')
+    // Progress was preserved and accumulated (elapsed_ms >= prior value)
+    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeGreaterThanOrEqual(5000)
+  })
+
   it('returns final eof state by merging run updates into the initial sync state', async () => {
     const source: Source = {
       async *spec() {
