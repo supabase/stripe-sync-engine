@@ -7,6 +7,7 @@
 import { writeFileSync } from 'node:fs'
 import { createApp, createConnectorResolver } from '../apps/engine/src/index.js'
 import { createApp as createServiceApp } from '../apps/service/src/api/app.js'
+import { memoryPipelineStore } from '../apps/service/src/lib/stores-memory.js'
 import sourceStripe from '../packages/source-stripe/src/index.js'
 import destinationPostgres from '../packages/destination-postgres/src/index.js'
 import destinationGoogleSheets from '../packages/destination-google-sheets/src/index.js'
@@ -32,7 +33,7 @@ const engineSpec = await engineRes.json()
 writeFileSync(engineOut, JSON.stringify(engineSpec, null, 2) + '\n')
 
 // Service spec
-const mockClient = {
+const noopWorkflowClient = {
   start: async () => {},
   getHandle: () => ({
     signal: async () => {},
@@ -42,8 +43,9 @@ const mockClient = {
   list: async function* () {},
 }
 const serviceApp = createServiceApp({
-  temporal: { client: mockClient as any, taskQueue: 'gen' },
+  temporal: { client: noopWorkflowClient as any, taskQueue: 'gen' },
   resolver,
+  pipelineStore: memoryPipelineStore(),
 })
 const serviceRes = await serviceApp.request('/openapi.json')
 const serviceSpec = await serviceRes.json()

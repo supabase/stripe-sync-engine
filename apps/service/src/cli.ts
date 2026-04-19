@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
@@ -184,33 +185,11 @@ const webhookCmd = defineCommand({
   },
 })
 
-export async function createProgram() {
-  // Mock client/store used only for OpenAPI spec generation (builds CLI structure)
-  const mockClient = {
-    start: async () => {},
-    getHandle: () => ({
-      signal: async () => {},
-      query: async () => ({}),
-      terminate: async () => {},
-    }),
-    list: async function* () {},
-  } as any
-  const mockStore = {
-    get: async () => ({}),
-    set: async () => {},
-    update: async () => ({}),
-    delete: async () => {},
-    list: async () => [],
-  } as any
-
-  const resolver = await resolverPromise
-  const mockApp = createApp({
-    temporal: { client: mockClient, taskQueue: 'cli' },
-    resolver,
-    pipelineStore: mockStore,
-  })
-  const res = await mockApp.request('/openapi.json')
-  const spec = await res.json()
+export function createProgram() {
+  // CLI shape is derived from the checked-in OpenAPI artifact, not by booting a fake app.
+  const spec = JSON.parse(
+    readFileSync(new URL('./__generated__/openapi.json', import.meta.url), 'utf-8')
+  )
 
   // Lazy real app — connects to Temporal on first CLI command execution
   let realApp: ReturnType<typeof createApp> | null = null
