@@ -1,13 +1,15 @@
 /**
- * N-ary search scheduler — a pure, self-replicating parallel time-range search.
+ * Binary subdivision scheduler — a pure, self-replicating parallel time-range search.
  *
  * Algorithm:
  *   1. Start with one or more time ranges to search.
  *   2. Fetch one page from each range in parallel (up to a concurrency budget).
  *   3. Observe: record the last sort-key value seen in each page.
- *   4. Subdivide: split ranges that have a cursor into a paginated head (keeps cursor)
- *      and an unpaginated tail (split into N parts based on observed density).
+ *   4. Subdivide: split ranges that have a cursor into a boundary (keeps cursor)
+ *      and two halves of the unfetched remainder.
  *   5. Repeat until no ranges remain.
+ *
+ * See docs/architecture/binary-subdivision.md for complexity analysis.
  *
  * All functions here are pure — data in, data out, no I/O, no side effects.
  */
@@ -30,13 +32,6 @@ export type SearchState = {
   /** Maps the fetched range → last observed sort-key value (unix seconds) in that range's page. */
   lastObserved: Map<Range, number>
 }
-
-/**
- * Large fan-out creates lots of tiny ranges for dense streams, which burns
- * requests on undersized pages. Keep each subdivision round modest and let
- * later rounds refine only the segments that stay dense.
- */
-const MAX_TAIL_SEGMENTS_PER_RANGE = 16
 
 // MARK: - Time helpers
 
@@ -68,8 +63,8 @@ export function nextStep(state: SearchState, maxSegments: number): Range[] {
  * plus the boundary second that may still have more rows after the current
  * cursor.
  *
- * If we decide to split, keep the boundary second as a cursor-backed range and
- * split only the older remainder into fresh null-cursor segments.
+ * Binary subdivision: split the older remainder in half. Simple, bounded waste
+ * (at most 1 empty segment per split), converges in O(log₂ M) rounds.
  */
 export function subdivideRanges(
   remaining: Range[],
@@ -89,43 +84,33 @@ export function subdivideRanges(
     const rangeEndUnix = toUnixSeconds(range.lt)
     const olderEndUnix = splitPoint
 
+    // Nothing older to split — keep paginating sequentially.
     if (olderEndUnix <= rangeStartUnix) {
       result.push(range)
       continue
     }
 
-    const budget = maxSegments - result.length - 1
-    const olderSpan = olderEndUnix - rangeStartUnix
-    const observedSpan = Math.max(1, rangeEndUnix - splitPoint)
-    const estimatedOlderPages = Math.max(1, Math.ceil(olderSpan / observedSpan))
-    const n = Math.min(
-      MAX_TAIL_SEGMENTS_PER_RANGE,
-      budget,
-      Math.max(1, olderSpan),
-      estimatedOlderPages
-    )
-
-    if (n <= 1) {
-      // Likely one more page: keep sequential pagination and preserve the
-      // cursor rather than creating an extra boundary checkpoint.
+    // Need at least 3 slots: boundary + 2 halves.
+    const budget = maxSegments - result.length
+    if (budget < 3) {
       result.push(range)
       continue
     }
 
+    // Boundary range: keeps the cursor to drain remaining records at this second.
     const boundaryGteUnix = Math.max(rangeStartUnix, splitPoint)
     const boundaryLtUnix = Math.min(rangeEndUnix, splitPoint + 1)
     result.push({ gte: toIso(boundaryGteUnix), lt: toIso(boundaryLtUnix), cursor: range.cursor })
 
-    const segmentSize = Math.max(1, Math.ceil(olderSpan / n))
+    // Split the older remainder [rangeStart, splitPoint) in half.
+    const midpoint = rangeStartUnix + Math.floor((olderEndUnix - rangeStartUnix) / 2)
 
-    for (let j = 0; j < n; j++) {
-      const segGte = rangeStartUnix + j * segmentSize
-      const segLt =
-        j === n - 1
-          ? olderEndUnix
-          : Math.min(olderEndUnix, rangeStartUnix + (j + 1) * segmentSize)
-      if (segGte >= olderEndUnix) break
-      result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
+    if (midpoint <= rangeStartUnix || midpoint >= olderEndUnix) {
+      // Remainder is 1 second — can't split further, single segment.
+      result.push({ gte: toIso(rangeStartUnix), lt: toIso(olderEndUnix), cursor: null })
+    } else {
+      result.push({ gte: toIso(rangeStartUnix), lt: toIso(midpoint), cursor: null })
+      result.push({ gte: toIso(midpoint), lt: toIso(olderEndUnix), cursor: null })
     }
   }
 

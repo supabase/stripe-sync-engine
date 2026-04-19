@@ -6,7 +6,7 @@ function iso(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString()
 }
 
-// MARK: - subdivideRanges (moved from src-list-api.test.ts)
+// MARK: - subdivideRanges
 
 describe('subdivideRanges', () => {
   it('passes through ranges without cursors unchanged', () => {
@@ -18,18 +18,17 @@ describe('subdivideRanges', () => {
     expect(subdivideRanges(remaining, 10, map)).toEqual(remaining)
   })
 
-  it('subdivides a dense older remainder into a boundary cursor range plus older null-cursor segments', () => {
+  it('splits older remainder in half (binary subdivision)', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 90]]))
+    const out = subdivideRanges(remaining, 10, new Map([[remaining[0], 90]]))
     expect(out).toEqual([
-      { gte: iso(90), lt: iso(91), cursor: 'cur_1' },
-      { gte: iso(0), lt: iso(30), cursor: null },
-      { gte: iso(30), lt: iso(60), cursor: null },
-      { gte: iso(60), lt: iso(90), cursor: null },
+      { gte: iso(90), lt: iso(91), cursor: 'cur_1' }, // boundary
+      { gte: iso(0), lt: iso(45), cursor: null }, // left half
+      { gte: iso(45), lt: iso(90), cursor: null }, // right half
     ])
   })
 
-  it('falls back to sequential pagination when only one extra slot remains', () => {
+  it('falls back to sequential pagination when budget < 3', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(100), cursor: 'cur_x' }]
     const out = subdivideRanges(remaining, 2, new Map([[remaining[0], 90]]))
     expect(out).toEqual(remaining)
@@ -41,71 +40,70 @@ describe('subdivideRanges', () => {
     expect(subdivideRanges([range], 10, new Map([[range, -10]]))).toEqual([range])
   })
 
-  it('handles multiple ranges: only cursor + lastSeenCreated entries subdivide', () => {
+  it('handles multiple ranges: only cursor + lastObserved entries subdivide', () => {
     const a: Range = { gte: iso(0), lt: iso(30), cursor: null }
     const b: Range = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
     const c: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
-    // c's older remainder is only about one more page, so it stays sequential.
     const out = subdivideRanges([a, b, c], 10, new Map([[c, 90]]))
-    expect(out).toEqual([a, b, c])
+    // a passes through (no cursor), b passes through (no lastObserved),
+    // c splits into boundary + 2 halves
+    expect(out).toEqual([
+      a,
+      b,
+      { gte: iso(90), lt: iso(91), cursor: 'cur_c' }, // boundary
+      { gte: iso(60), lt: iso(75), cursor: null }, // left half
+      { gte: iso(75), lt: iso(90), cursor: null }, // right half
+    ])
   })
 
-  it('passes through a range with cursor but no lastSeenCreated entry', () => {
+  it('passes through a range with cursor but no lastObserved entry', () => {
     const range: Range = { gte: iso(0), lt: iso(100), cursor: 'cur_only' }
     expect(subdivideRanges([range], 50, new Map())).toEqual([range])
   })
 
-  it('does not over-split a single-second tail even with a large maxSegments', () => {
+  it('emits single segment when older remainder is 1 second', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }]
-    const out = subdivideRanges(remaining, 100, new Map([[remaining[0], 1001]]))
-    expect(out).toEqual(remaining)
+    const out = subdivideRanges(remaining, 10, new Map([[remaining[0], 1001]]))
+    expect(out).toEqual([
+      { gte: iso(1001), lt: iso(1002), cursor: 'cur_tail' }, // boundary
+      { gte: iso(1000), lt: iso(1001), cursor: null }, // single segment (can't halve 1s)
+    ])
   })
 
-  it('caps per-round tail fan-out even when the segment budget is much larger', () => {
+  it('always produces exactly 3 ranges for a splittable range (boundary + 2 halves)', () => {
     const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_dense' }]
     const out = subdivideRanges(remaining, 20, new Map([[remaining[0], 900]]))
-    expect(out).toHaveLength(10)
+    expect(out).toHaveLength(3)
     expect(out[0]).toEqual({ gte: iso(900), lt: iso(901), cursor: 'cur_dense' })
-    expect(out.at(-1)?.lt).toBe(iso(900))
-  })
-
-  it('keeps a one-page older remainder sequential even when plenty of budget exists', () => {
-    const remaining: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: 'cur_uniform' }]
-    const out = subdivideRanges(remaining, 20, new Map([[remaining[0], 499]]))
-    expect(out).toEqual(remaining)
+    // Left half: [0, 450), Right half: [450, 900)
+    expect(out[1]).toEqual({ gte: iso(0), lt: iso(450), cursor: null })
+    expect(out[2]).toEqual({ gte: iso(450), lt: iso(900), cursor: null })
   })
 
   it('keeps the entire last observed second in the cursor-backed boundary range', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1010), cursor: 'cur_same_second' }]
-    const out = subdivideRanges(remaining, 4, new Map([[remaining[0], 1008]]))
+    const out = subdivideRanges(remaining, 10, new Map([[remaining[0], 1008]]))
     expect(out).toEqual([
       { gte: iso(1008), lt: iso(1009), cursor: 'cur_same_second' },
-      { gte: iso(1000), lt: iso(1003), cursor: null },
-      { gte: iso(1003), lt: iso(1006), cursor: null },
-      { gte: iso(1006), lt: iso(1008), cursor: null },
+      { gte: iso(1000), lt: iso(1004), cursor: null },
+      { gte: iso(1004), lt: iso(1008), cursor: null },
     ])
   })
 
-  it('matches observations to the surviving range after earlier ranges drop out', () => {
-    const inProgress: Range = { gte: iso(60), lt: iso(120), cursor: 'cur_b' }
-    const out = nextStep(
-      {
-        remaining: [inProgress],
-        lastObserved: new Map([[inProgress, 90]]),
-      },
-      4
-    )
-    expect(out).toEqual([inProgress])
+  it('nextStep wraps subdivideRanges correctly', () => {
+    const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
+    const lastObserved = new Map([[remaining[0], 30]])
+    const result = nextStep({ remaining, lastObserved }, 10)
+    const direct = subdivideRanges(remaining, 10, lastObserved)
+    expect(result).toEqual(direct)
   })
 })
-
-// MARK: - reconcileRanges (moved from src-list-api.test.ts)
 
 // MARK: - Distribution tests: simulate fetch→observe→subdivide rounds
 
 /**
- * Simulate one round of the n-ary search:
- *   1. For each range with data, set cursor and lastSeenCreated as if a page was fetched
+ * Simulate one round of binary subdivision:
+ *   1. For each range with data, set cursor and lastObserved as if a page was fetched
  *   2. Call subdivideRanges
  *
  * `density` maps unix timestamp → records in that second (simplified model).
@@ -117,7 +115,7 @@ function simulateRound(
   density: (ts: number) => number,
   pageSize = 100
 ): Range[] {
-  const lastSeenCreated = new Map<Range, number>()
+  const lastObserved = new Map<Range, number>()
 
   for (const range of ranges) {
     const startUnix = toUnixSeconds(range.gte)
@@ -134,98 +132,73 @@ function simulateRound(
     }
 
     if (count > 0) {
-      // Simulate: page returned records, set cursor and lastSeenCreated
       range.cursor = `cur_${lastTs}`
-      lastSeenCreated.set(range, lastTs)
+      lastObserved.set(range, lastTs)
     }
-    // If count === 0, range is empty — cursor stays null, no lastSeenCreated entry
   }
 
-  return subdivideRanges(ranges, maxSegments, lastSeenCreated)
+  return subdivideRanges(ranges, maxSegments, lastObserved)
 }
 
-describe('n-ary search: data distribution scenarios', () => {
-  it('uniform density: produces roughly equal-sized segments', () => {
-    // 1 record per second, 1000 seconds, page size 100
+describe('binary search: data distribution scenarios', () => {
+  it('uniform density: splits into boundary + 2 halves', () => {
     const ranges: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: null }]
     const density = () => 1
 
-    // Round 1: fetch first page (0-99), set cursor
-    const round1 = simulateRound(ranges, 8, density)
-
-    // Should have head + tail segments
-    expect(round1.length).toBeGreaterThan(1)
-    // Head should have a cursor
-    expect(round1[0].cursor).not.toBeNull()
-    // All tail segments should have no cursor
-    const tails = round1.filter((r) => r.cursor === null)
-    expect(tails.length).toBeGreaterThan(0)
+    const round1 = simulateRound(ranges, 10, density)
+    // boundary + left half + right half
+    expect(round1.length).toBe(3)
+    expect(round1[0].cursor).not.toBeNull() // boundary
+    expect(round1[1].cursor).toBeNull() // left half
+    expect(round1[2].cursor).toBeNull() // right half
   })
 
   it('hot spot: 90% of records in 10% of time range', () => {
-    // Range: 0-1000. Hot zone near the newest edge so the first page observes it.
     const density = (ts: number) => (ts >= 800 && ts < 900 ? 10 : ts % 10 === 0 ? 1 : 0)
     const ranges: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: null }]
 
-    const round1 = simulateRound(ranges, 8, density)
-    expect(round1.length).toBeGreaterThan(1)
+    const round1 = simulateRound(ranges, 10, density)
+    expect(round1.length).toBe(3)
   })
 
   it('empty range: completes in one pass with no subdivision', () => {
-    const density = () => 0 // no records anywhere
+    const density = () => 0
     const ranges: Range[] = [{ gte: iso(0), lt: iso(1000), cursor: null }]
 
-    const round1 = simulateRound(ranges, 8, density)
-    // No data means no cursors, no lastSeenCreated → ranges pass through unchanged
+    const round1 = simulateRound(ranges, 10, density)
     expect(round1).toEqual(ranges)
   })
 
   it('single page: range with < pageSize records needs no subdivision', () => {
-    // 50 records total (1 per second for 50 seconds)
     const density = (ts: number) => (ts < 50 ? 1 : 0)
     const ranges: Range[] = [{ gte: iso(0), lt: iso(100), cursor: null }]
 
-    const round1 = simulateRound(ranges, 8, density, 100)
-    // First page gets all 50 records. cursor is set, lastSeenCreated = 49
-    // Head [0, 49) + tail segments [49, 100)
-    // But since the page consumed all records, in reality has_more would be false
-    // and the range would be removed. Here we just verify subdivision is reasonable.
+    const round1 = simulateRound(ranges, 10, density, 100)
     expect(round1.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('multi-round convergence: repeated subdivision refines the search', () => {
-    // Uniform 1 record/sec over 10000 seconds, page size 100, 4 segments max
+  it('multi-round convergence: binary subdivision refines the search', () => {
     const density = () => 1
     let ranges: Range[] = [{ gte: iso(0), lt: iso(10000), cursor: null }]
 
-    // Simulate 3 rounds
-    for (let round = 0; round < 3; round++) {
-      ranges = simulateRound([...ranges.map((r) => ({ ...r }))], 4, density)
+    // Simulate 5 rounds — binary creates fewer ranges per round than n-ary
+    for (let round = 0; round < 5; round++) {
+      ranges = simulateRound([...ranges.map((r) => ({ ...r }))], 100, density)
     }
 
-    // After 3 rounds, should have multiple ranges being worked on
+    // After 5 rounds of binary, should have 2^5 = 32 leaf ranges
     expect(ranges.length).toBeGreaterThanOrEqual(2)
-    // All ranges should cover valid, non-empty intervals
     for (const r of ranges) {
       expect(toUnixSeconds(r.lt)).toBeGreaterThanOrEqual(toUnixSeconds(r.gte))
     }
   })
 
-  it('budget exhaustion: maxSegments=2 caps output per subdivision call', () => {
-    // subdivideRanges itself respects the budget — test it directly
+  it('budget exhaustion: maxSegments=2 caps output', () => {
     const ranges: Range[] = [{ gte: iso(0), lt: iso(10000), cursor: 'cur_0' }]
     const lastObserved = new Map([[ranges[0], 100]])
     const result = subdivideRanges(ranges, 2, lastObserved)
-    // head + 1 tail segment = 2
-    expect(result.length).toBeLessThanOrEqual(2)
-  })
-
-  it('nextStep wraps subdivideRanges correctly', () => {
-    const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const lastObserved = new Map([[remaining[0], 30]])
-    const result = nextStep({ remaining, lastObserved }, 4)
-    const direct = subdivideRanges(remaining, 4, lastObserved)
-    expect(result).toEqual(direct)
+    // budget < 3, so range passes through unchanged
+    expect(result).toEqual(ranges)
   })
 })
 

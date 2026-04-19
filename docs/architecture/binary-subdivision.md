@@ -247,9 +247,9 @@ Binary is better for this use case:
 
 ## Diagram
 
-([source](binary-search.puml))
+([source](binary-subdivision.puml))
 
-![Parallel Pagination via Binary Subdivision](binary-search.svg)
+![Parallel Pagination via Binary Subdivision](binary-subdivision.svg)
 
 ---
 
