@@ -155,7 +155,7 @@ describe('createRemoteEngine', () => {
       expect(messages).toHaveLength(3)
       expect(messages[0]!.type).toBe('record')
       expect(messages[1]!.type).toBe('source_state')
-      expect(messages[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      expect(messages[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
 
     it('returns eof:complete when called without input', async () => {
@@ -163,7 +163,7 @@ describe('createRemoteEngine', () => {
       // sourceTest yields nothing when $stdin is absent — only eof
       const messages = await collect(engine.pipeline_read(pipeline))
       expect(messages).toHaveLength(1)
-      expect(messages[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      expect(messages[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
   })
 
@@ -185,9 +185,9 @@ describe('createRemoteEngine', () => {
         },
       ]
       const output = await collect(engine.pipeline_write(pipeline, asIterable(messages)))
-      expect(output).toHaveLength(1)
-      expect(output[0]!.type).toBe('source_state')
-      expect((output[0] as SourceStateMessage).source_state.stream).toBe('customers')
+      const stateMessages = output.filter((m) => m.type === 'source_state')
+      expect(stateMessages).toHaveLength(1)
+      expect((stateMessages[0] as SourceStateMessage).source_state.stream).toBe('customers')
     })
   })
 
@@ -213,7 +213,7 @@ describe('createRemoteEngine', () => {
       const stateAndEof = output.filter((m) => m.type === 'source_state' || m.type === 'eof')
       expect(stateAndEof).toHaveLength(2)
       expect(stateAndEof[0]!.type).toBe('source_state')
-      expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
 
     it('returns eof:complete without input (no source data)', async () => {
@@ -221,7 +221,7 @@ describe('createRemoteEngine', () => {
       const output = await collect(engine.pipeline_sync(pipeline))
       const eofMsgs = output.filter((m) => m.type === 'eof')
       expect(eofMsgs).toHaveLength(1)
-      expect(eofMsgs[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+      expect(eofMsgs[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
   })
 

@@ -404,7 +404,7 @@ describe('POST /read', () => {
     expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   describe('SourceInputMessage validation (source with input schema)', () => {
@@ -613,7 +613,7 @@ describe('POST /sync', () => {
     const stateAndEof = events.filter((e) => e.type === 'source_state' || e.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]!.type).toBe('source_state')
-    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 })
 
@@ -697,7 +697,7 @@ describe('state_limit and time_limit', () => {
     expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
   it('POST /pipeline_sync?state_limit=1 stops after 1 state message and emits eof', async () => {
@@ -738,7 +738,7 @@ describe('state_limit and time_limit', () => {
     const eofEvents = events.filter((e) => e.type === 'eof')
     expect(stateEvents).toHaveLength(1)
     expect(eofEvents).toHaveLength(1)
-    expect(eofEvents[0]).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(eofEvents[0]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
   it('POST /read without limits returns all messages plus eof:complete', async () => {
@@ -774,7 +774,7 @@ describe('state_limit and time_limit', () => {
     const events = await readNdjson<Message>(res)
     // 4 original messages + eof
     expect(events).toHaveLength(5)
-    expect(events[4]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(events[4]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 })
 
@@ -952,7 +952,7 @@ describe('JSON body mode', () => {
     expect(events).toHaveLength(3)
     expect(events[0]!.type).toBe('record')
     expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('POST /pipeline_read accepts pipeline in JSON body without input', async () => {
