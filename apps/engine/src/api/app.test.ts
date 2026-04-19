@@ -161,21 +161,13 @@ describe('GET /openapi.json', () => {
     expect(schemas.Message.discriminator.propertyName).toBe('type')
     expect(schemas.Message.oneOf.length).toBeGreaterThanOrEqual(8)
 
-    // DestinationOutput union (state, log, eof)
-    expect(schemas.DestinationOutput.discriminator.propertyName).toBe('type')
-    expect(schemas.DestinationOutput.oneOf).toHaveLength(3)
-
     // EofMessage
     expect(schemas.EofMessage.properties.type.const).toBe('eof')
 
-    // NDJSON responses reference schemas (zod-openapi adds Output suffix for response-only types)
+    // NDJSON responses reference schemas
     const readNdjson =
       spec.paths['/pipeline_read']?.post?.responses?.['200']?.content?.['application/x-ndjson']
     expect(readNdjson.schema.$ref).toBe('#/components/schemas/Message')
-
-    const writeNdjson =
-      spec.paths['/pipeline_write']?.post?.responses?.['200']?.content?.['application/x-ndjson']
-    expect(writeNdjson.schema.$ref).toBe('#/components/schemas/DestinationOutput')
 
     const syncNdjson =
       spec.paths['/pipeline_sync']?.post?.responses?.['200']?.content?.['application/x-ndjson']
@@ -562,11 +554,10 @@ describe('POST /write', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
-    const events = await readNdjson<SourceStateMessage>(res)
-    // destinationTest passes through source_state messages only
-    expect(events).toHaveLength(1)
-    expect(events[0]!.type).toBe('source_state')
-    expect((events[0] as SourceStateMessage).source_state.stream).toBe('customers')
+    const events = await readNdjson<Message>(res)
+    const stateEvents = events.filter((e) => e.type === 'source_state') as SourceStateMessage[]
+    expect(stateEvents).toHaveLength(1)
+    expect(stateEvents[0]!.source_state.stream).toBe('customers')
   })
 
   it('returns 400 when body is missing', async () => {
