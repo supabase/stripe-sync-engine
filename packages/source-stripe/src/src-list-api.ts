@@ -44,7 +44,18 @@ function waitForRateLimit(ms: number, signal?: AbortSignal): Promise<void> {
 function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortSignal): ListFn {
   return async (params) => {
     const wait = await rateLimiter()
-    if (wait > 0) await waitForRateLimit(wait * 1000, signal)
+    if (wait > 0) {
+      const wait_ms = Math.round(wait * 1000)
+      logger.debug({
+        event: 'rate_limit_wait',
+        wait_ms,
+      })
+      await waitForRateLimit(wait_ms, signal)
+      logger.debug({
+        event: 'rate_limit_resumed',
+        waited_ms: wait_ms,
+      })
+    }
     return listFn(params)
   }
 }
@@ -228,6 +239,7 @@ async function* paginateRange(opts: {
     rangeRecordCounts,
   } = opts
 
+  const hadCursorOnEntry = range.cursor !== null
   let cursor = range.cursor
   let hasMore = true
   let prefetchedResponse: Promise<Awaited<ReturnType<ListFn>>> | null = null
@@ -321,9 +333,11 @@ async function* paginateRange(opts: {
       },
     })
 
-    // Streams with a created filter return after one page so the outer loop
-    // can subdivide the remaining time range via binary subdivision.
-    if (supportsCreatedFilter && hasMore) {
+    // Only subdivide on the FIRST page of a fresh range (entered without a cursor).
+    // Ranges that already have a cursor (boundary ranges from prior subdivision)
+    // paginate sequentially — subdividing them further creates exponentially many
+    // empty probes on sparse data.
+    if (supportsCreatedFilter && hasMore && !hadCursorOnEntry) {
       const splitPoint = lastSeenCreated.get(range)
       if (splitPoint != null) {
         const fetchedHeadGteUnix = Math.max(toUnixSeconds(range.gte), splitPoint + 1)
@@ -379,6 +393,14 @@ async function* iterateStream(opts: {
   let remaining: RemainingRange[]
   const accountedRange = { gte: timeRange.gte, lt: timeRange.lt }
 
+  logger.debug({
+    event: 'stream_state_check',
+    stream: streamName,
+    has_state: !!opts.streamState,
+    is_legacy: opts.streamState ? isLegacyState(opts.streamState) : null,
+    state_keys: opts.streamState ? Object.keys(opts.streamState as Record<string, unknown>) : null,
+  })
+
   if (opts.streamState && !isLegacyState(opts.streamState)) {
     const existingAccounted = opts.streamState.accounted_range
     if (
@@ -391,6 +413,17 @@ async function* iterateStream(opts: {
         existingAccounted,
         timeRange
       )
+      logger.debug({
+        event: 'state_reconcile',
+        stream: streamName,
+        old_gte: existingAccounted.gte,
+        old_lt: existingAccounted.lt,
+        new_gte: timeRange.gte,
+        new_lt: timeRange.lt,
+        old_remaining: opts.streamState.remaining.length,
+        new_remaining: remaining.length,
+        new_ranges: remaining.map((r) => ({ gte: r.gte, lt: r.lt, cursor: !!r.cursor })),
+      })
     } else {
       remaining = opts.streamState.remaining.map((r) => ({ ...r }))
     }
