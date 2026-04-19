@@ -38,8 +38,8 @@
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
     "@hono/node-server": "^1",
@@ -57,10 +57,12 @@
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
     "hono": "^4",
+    "ink": "^7.0.1",
     "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
     "pino": "^10",
     "pino-pretty": "^13",
+    "react": "^19.2.4",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },

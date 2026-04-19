@@ -14,7 +14,10 @@
     "test": "vitest --passWithNoTests"
   },
   "files": [
-    "dist"
+    "src",
+    "dist",
+    "*.ts",
+    "oas"
   ],
   "dependencies": {
     "zod": "^4.3.6"

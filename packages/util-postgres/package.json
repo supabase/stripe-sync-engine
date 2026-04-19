@@ -23,7 +23,7 @@
     "vitest": "^3.2.1"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ]
 }

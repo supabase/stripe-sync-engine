@@ -18,8 +18,8 @@
     "test": "vitest"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
