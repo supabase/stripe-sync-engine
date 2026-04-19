@@ -285,15 +285,6 @@ async function* paginateRange(opts: {
     status: 'range_complete',
     range_complete: { gte: range.gte, lt: range.lt },
   })
-
-  yield msg.source_state({
-    state_type: 'stream',
-    stream: streamName,
-    data: {
-      accounted_range: accountedRange,
-      remaining: [...remaining],
-    },
-  })
 }
 
 // MARK: - Single-stream backfill
