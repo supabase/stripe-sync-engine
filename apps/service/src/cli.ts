@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
+import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { serve } from '@hono/node-server'
 import { createConnectorResolver } from '@stripe/sync-engine'
@@ -8,9 +9,12 @@ import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import { createApp } from './api/app.js'
+import { wrapPipelineConnectorShorthand } from './lib/cli-connector-shorthand.js'
 import { filePipelineStore } from './lib/stores-fs.js'
+import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
 import { homedir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { logger } from './logger.js'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
@@ -19,6 +23,48 @@ const resolverPromise = createConnectorResolver({
   sources: { stripe: sourceStripe },
   destinations: { postgres: destinationPostgres, google_sheets: destinationGoogleSheets },
 })
+
+export function resolveGeneratedSpecUrl(
+  moduleUrl: string,
+  fileExists: (url: URL) => boolean = (url) => existsSync(fileURLToPath(url))
+): URL {
+  const candidates = [
+    new URL('./__generated__/openapi.json', moduleUrl),
+    new URL('../src/__generated__/openapi.json', moduleUrl),
+  ]
+
+  const specUrl = candidates.find(fileExists)
+  if (!specUrl) {
+    throw new Error(`Could not find generated OpenAPI spec for ${moduleUrl}`)
+  }
+
+  return specUrl
+}
+
+async function buildCliSpec() {
+  if (import.meta.url.endsWith('.ts')) {
+    const noopWorkflowClient = {
+      start: async () => {},
+      getHandle: () => ({
+        signal: async () => {},
+        query: async () => ({}),
+        terminate: async () => {},
+      }),
+      list: async function* () {},
+    } as unknown as WorkflowClient
+
+    const resolver = await resolverPromise
+    const app = createApp({
+      temporal: { client: noopWorkflowClient, taskQueue: 'cli' },
+      resolver,
+      pipelineStore: memoryPipelineStore(),
+    })
+    const response = await app.request('/openapi.json')
+    return response.json()
+  }
+
+  return JSON.parse(readFileSync(resolveGeneratedSpecUrl(import.meta.url), 'utf-8'))
+}
 
 async function createTemporalClient(
   address: string,
@@ -185,11 +231,9 @@ const webhookCmd = defineCommand({
   },
 })
 
-export function createProgram() {
-  // CLI shape is derived from the checked-in OpenAPI artifact, not by booting a fake app.
-  const spec = JSON.parse(
-    readFileSync(new URL('./__generated__/openapi.json', import.meta.url), 'utf-8')
-  )
+export async function createProgram() {
+  const spec = await buildCliSpec()
+  const resolver = await resolverPromise
 
   // Lazy real app — connects to Temporal on first CLI command execution
   let realApp: ReturnType<typeof createApp> | null = null
@@ -198,10 +242,9 @@ export function createProgram() {
       const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233'
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
       const temporal = await createTemporalClient(address, taskQueue)
-      const r = await resolverPromise
       const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
-      realApp = createApp({ temporal, resolver: r, pipelineStore })
+      realApp = createApp({ temporal, resolver, pipelineStore })
     }
     return realApp
   }
@@ -222,6 +265,23 @@ export function createProgram() {
       version: '0.1.0',
     },
   })
+
+  const subCommands = specCli.subCommands as Record<string, CommandDef> | undefined
+  const pipelineGroup = subCommands?.['pipelines'] as CommandDef | undefined
+  if (pipelineGroup?.subCommands) {
+    const pipelineSubCommands = pipelineGroup.subCommands as Record<string, CommandDef>
+    const sourceNames = [...resolver.sources()].map(([name]) => name)
+    const destinationNames = [...resolver.destinations()].map(([name]) => name)
+    for (const commandName of ['create', 'update']) {
+      const command = pipelineSubCommands[commandName]
+      if (command) {
+        pipelineSubCommands[commandName] = wrapPipelineConnectorShorthand(command, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
+      }
+    }
+  }
 
   return defineCommand({
     ...specCli,
