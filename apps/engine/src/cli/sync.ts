@@ -3,7 +3,7 @@ import type { Engine } from '../lib/engine.js'
 import type { ConnectorResolver } from '../lib/index.js'
 import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
 import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
-import { formatProgress } from '../lib/format.js'
+import { formatProgress } from '../lib/progress/format.js'
 
 export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
   return defineCommand({

@@ -695,7 +695,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(stateCapturingSource, destinationTest))
     await drain(
       engine.pipeline_sync(defaultPipeline, {
-        state: { source: { streams: { customers: { cursor: 'cus_1' } }, global: {} }, destination: {}, sync_run: {} },
+        state: { source: { streams: { customers: { cursor: 'cus_1' } }, global: {} }, destination: {}, sync_run: { progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } } },
       })
     )
 
@@ -736,7 +736,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         state: {
           source: { streams: {}, global: {} },
           destination: {},
-          sync_run: { time_ceiling: '2026-01-15T00:00:00.000Z' },
+          sync_run: { time_ceiling: '2026-01-15T00:00:00.000Z', progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
         },
       })
     )
@@ -772,7 +772,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     const engine = await createEngine(makeResolver(catalogCapturingSource, destinationTest))
     await drain(
       engine.pipeline_sync(defaultPipeline, {
-        state: { source: { streams: {}, global: {} }, destination: {}, sync_run: {} },
+        state: { source: { streams: {}, global: {} }, destination: {}, sync_run: { progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } } },
       })
     )
 
@@ -921,7 +921,7 @@ describe('engine.pipeline_sync() pipeline', () => {
             customers: { watermark: 10 },
             schema_version: 1,
           },
-          sync_run: {},
+          sync_run: { progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
         },
       })
     )
@@ -973,7 +973,7 @@ describe('engine.pipeline_sync() pipeline', () => {
         customers: { watermark: 99 },
         schema_version: 2,
       },
-      sync_run: {},
+      sync_run: { progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
     }
 
     const engine = await createEngine(makeResolver(idleSource, destinationTest))
@@ -1024,7 +1024,7 @@ describe('engine.pipeline_sync() pipeline', () => {
             customers: { watermark: 99 },
             schema_version: 2,
           },
-          sync_run: {},
+          sync_run: { progress: { started_at: '2025-01-01T00:00:00Z', elapsed_ms: 0, global_state_count: 0, derived: { status: 'started', records_per_second: 0, states_per_second: 0 }, streams: {} } },
         },
       })
     )

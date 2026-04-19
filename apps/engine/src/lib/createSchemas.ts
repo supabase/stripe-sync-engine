@@ -106,7 +106,7 @@ export function createConnectorSchemas(resolver: ConnectorResolver) {
             type: z.literal('source_input'),
             source_input: configUnion(inputSchemas),
           })
-          .meta({ id: 'SourceInputMessage' })
+          .meta({ id: 'TypedSourceInputMessage' })
       : undefined
 
   const PipelineConfig = z
