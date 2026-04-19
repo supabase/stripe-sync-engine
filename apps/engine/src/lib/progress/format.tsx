@@ -41,8 +41,9 @@ function StreamRow({ name, stream, prev }: {
 }) {
   const icon = STATUS_ICON[stream.status] ?? { symbol: '?', color: 'white' }
   const delta = prev ? stream.record_count - prev.record_count : 0
-  const deltaStr = delta > 0 ? ` (+${delta})` : ''
+  const deltaStr = delta > 0 ? ` (+${delta})`.padStart(9) : ''.padStart(9)
   const showCount = stream.record_count > 0 || stream.status === 'completed'
+  const countStr = String(stream.record_count).padStart(8)
   const rangeBar = stream.time_range && stream.completed_ranges
     ? formatRangeBar(stream.time_range, stream.completed_ranges)
     : null
@@ -51,9 +52,9 @@ function StreamRow({ name, stream, prev }: {
     <Box flexDirection="column">
       <Box>
         <Text color={icon.color}>{icon.symbol} </Text>
-        <Text>{name}</Text>
+        <Box minWidth={35}><Text>{name}</Text></Box>
         {showCount && (
-          <Text dimColor>: {stream.record_count} records{deltaStr}</Text>
+          <Text dimColor>{countStr} records{deltaStr}</Text>
         )}
       </Box>
       {rangeBar && (
@@ -107,8 +108,8 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   const recordDeltaStr = recordDelta > 0 ? ` (+${recordDelta})` : ''
 
   // Checkpoint delta
-  const cpDelta = prev ? progress.global_state_count - prev.global_state_count : 0
-  const cpDeltaStr = cpDelta > 0 ? ` (+${cpDelta})` : ''
+  const cpDeltaNum = prev ? progress.global_state_count - prev.global_state_count : 0
+  const cpDeltaStr = cpDeltaNum > 0 ? ` (+${cpDeltaNum})` : ''
 
   // Global error (not attributable to a single stream)
   const errMsg = progress.connection_status?.status === 'failed'
@@ -117,12 +118,14 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored')
   const globalErr = errMsg && erroredStreams.length !== 1 ? errMsg : undefined
 
-  // Build stats parts
-  const statsParts: string[] = []
-  statsParts.push(`${totalRecords} records${recordDeltaStr} (${progress.derived.records_per_second.toFixed(1)}/s)`)
-  if (progress.global_state_count > 0) {
-    statsParts.push(`${progress.global_state_count} checkpoints${cpDeltaStr} (${progress.derived.states_per_second.toFixed(1)}/s)`)
-  }
+  // Build stats — right-align numbers so the line doesn't jump during fast sync.
+  const recs = String(totalRecords).padStart(8)
+  const recDelta = recordDeltaStr.padStart(9) // " (+99999)" or "         "
+  const recRate = `${progress.derived.records_per_second.toFixed(1)}/s`.padStart(10)
+
+  const cps = String(progress.global_state_count).padStart(8)
+  const cpDelta = cpDeltaStr.padStart(9)
+  const cpRate = `${progress.derived.states_per_second.toFixed(1)}/s`.padStart(10)
 
   return (
     <Box flexDirection="column">
@@ -132,7 +135,10 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
         {globalErr && <Text color="red"> — {globalErr}</Text>}
       </Box>
       <Box>
-        <Text dimColor>{statsParts.join(' | ')}</Text>
+        <Text dimColor>{recs} records{recDelta} {recRate}</Text>
+        {progress.global_state_count > 0 && (
+          <Text dimColor>  {cps} checkpoints{cpDelta} {cpRate}</Text>
+        )}
       </Box>
     </Box>
   )

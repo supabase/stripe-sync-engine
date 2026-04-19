@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
 import { createRemoteEngine } from '../lib/remote-engine.js'
 import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
-import { ProgressView } from '../lib/progress/format.js'
+import { ProgressView, formatProgress } from '../lib/progress/format.js'
 import { spawnServeSubprocess } from './subprocess.js'
 
 export function createSyncCmd() {
@@ -68,6 +68,11 @@ export function createSyncCmd() {
         default: false,
         description: 'Stay alive for real-time WebSocket events',
       },
+      plain: {
+        type: 'boolean',
+        default: false,
+        description: 'Plain text output (no Ink/ANSI, for non-TTY or piping)',
+      },
     },
     async run({ args }) {
       const stripeApiKey = args.stripeApiKey || process.env.STRIPE_API_KEY
@@ -120,10 +125,12 @@ export function createSyncCmd() {
           : undefined
         const output = engine.pipeline_sync(pipeline, { state: syncState, time_limit: timeLimit })
 
-        // Render progress with Ink (live updating, renders to stderr)
         let progress: ProgressPayload | undefined
         let prevProgress: ProgressPayload | undefined
-        const { rerender, unmount } = render(<></>, { stdout: process.stderr })
+        const plain = args.plain || !process.stderr.isTTY
+
+        // Ink for TTY, plain text for non-TTY / --plain
+        const inkInstance = plain ? null : render(<></>, { stdout: process.stderr })
 
         for await (const msg of output) {
           if (msg.type === 'source_state') {
@@ -135,15 +142,23 @@ export function createSyncCmd() {
           } else if (msg.type === 'progress') {
             prevProgress = progress
             progress = msg.progress
-            rerender(<ProgressView progress={progress} prev={prevProgress} />)
+            if (inkInstance) {
+              inkInstance.rerender(<ProgressView progress={progress} prev={prevProgress} />)
+            } else {
+              process.stderr.write(formatProgress(progress, prevProgress) + '\n')
+            }
           } else if (msg.type === 'eof') {
             prevProgress = progress
             progress = msg.eof.run_progress
-            rerender(<ProgressView progress={progress} prev={prevProgress} />)
+            if (inkInstance) {
+              inkInstance.rerender(<ProgressView progress={progress} prev={prevProgress} />)
+            } else {
+              process.stderr.write(formatProgress(progress, prevProgress) + '\n')
+            }
           }
         }
 
-        unmount()
+        inkInstance?.unmount()
       } finally {
         server.kill()
         if (store.close) await store.close()
