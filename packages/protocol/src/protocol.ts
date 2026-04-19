@@ -300,6 +300,7 @@ export const StreamProgress = z
       .describe('Current state, derived from stream_status events.'),
     state_count: z.number().int().describe('Number of state checkpoints for this stream.'),
     record_count: z.number().int().describe('Records synced for this stream in this run.'),
+    error: z.string().optional().describe('Error message when status is errored.'),
     completed_ranges: z
       .array(
         z.object({
