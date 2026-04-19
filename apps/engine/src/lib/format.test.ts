@@ -15,11 +15,11 @@ describe('formatProgress', () => {
       },
     }
 
-    const output = formatProgress(progress)
-    expect(output).toContain('🔄 Syncing')
-    expect(output).toContain('0.0s')
-    expect(output).toContain('⏳ customers')
-    expect(output).toContain('⏳ invoices')
+    expect(formatProgress(progress)).toMatchInlineSnapshot(`
+      "🔄 Syncing — 0.0s
+        ⏳ customers
+        ⏳ invoices"
+    `)
   })
 
   it('formats active sync with rows and throughput', () => {
@@ -35,11 +35,12 @@ describe('formatProgress', () => {
       },
     }
 
-    const output = formatProgress(progress)
-    expect(output).toContain('🔄 Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints')
-    expect(output).toContain('✅ customers: 200 rows')
-    expect(output).toContain('🔄 invoices: 250 rows')
-    expect(output).toContain('⏳ charges')
+    expect(formatProgress(progress)).toMatchInlineSnapshot(`
+      "🔄 Syncing — 3.2s | 450 rows (140.6/s) | 5 checkpoints
+        ✅ customers: 200 rows
+        🔄 invoices: 250 rows
+        ⏳ charges"
+    `)
   })
 
   it('formats failed sync with connection error', () => {
@@ -54,10 +55,11 @@ describe('formatProgress', () => {
       connection_status: { status: 'failed', message: 'Invalid API key' },
     }
 
-    const output = formatProgress(progress)
-    expect(output).toContain('❌ Syncing')
-    expect(output).toContain('❌ customers')
-    expect(output).toContain('⚠️  Invalid API key')
+    expect(formatProgress(progress)).toMatchInlineSnapshot(`
+      "❌ Syncing — 1.5s
+        ❌ customers
+        ⚠️  Invalid API key"
+    `)
   })
 
   it('formats sync with skipped streams', () => {
@@ -72,8 +74,10 @@ describe('formatProgress', () => {
       },
     }
 
-    const output = formatProgress(progress)
-    expect(output).toContain('✅ customers: 100 rows')
-    expect(output).toContain('⏭️ invoices')
+    expect(formatProgress(progress)).toMatchInlineSnapshot(`
+      "🔄 Syncing — 5.0s | 100 rows (50.0/s) | 2 checkpoints
+        ✅ customers: 100 rows
+        ⏭️ invoices"
+    `)
   })
 })
