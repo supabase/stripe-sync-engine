@@ -33,11 +33,11 @@ function formatRangeBar(
   return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
 }
 
-function StreamRow({ name, stream, prev, errorMsg }: {
+function StreamRow({ name, stream, prev }: {
+  key?: string
   name: string
   stream: StreamProgress
   prev?: StreamProgress
-  errorMsg?: string
 }) {
   const icon = STATUS_ICON[stream.status] ?? { symbol: '?', color: 'white' }
   const delta = prev ? stream.record_count - prev.record_count : 0
@@ -61,9 +61,9 @@ function StreamRow({ name, stream, prev, errorMsg }: {
           <Text dimColor>{rangeBar}</Text>
         </Box>
       )}
-      {errorMsg && (
+      {stream.message && (
         <Box marginLeft={3}>
-          <Text color="red">{errorMsg}</Text>
+          <Text color={stream.status === 'errored' ? 'red' : 'gray'}>{stream.message}</Text>
         </Box>
       )}
     </Box>
@@ -147,12 +147,10 @@ export function ProgressView({ progress, prev }: { progress: ProgressPayload; pr
   const notStarted = entries.filter(([, s]) => s.status === 'not_started')
   const visible = [...errored, ...started, ...completed, ...skipped]
 
-  const errMsg = progress.connection_status?.status === 'failed'
+  // Global connection error (not attributable to a specific stream)
+  const globalErr = progress.connection_status?.status === 'failed'
     ? (progress.connection_status.message ?? 'Connection failed')
     : undefined
-  const erroredStreams = entries.filter(([, s]) => s.status === 'errored').map(([n]) => n)
-  // Show error inline on stream row only if it's attributable to a single stream
-  const inlineErr = errMsg && erroredStreams.length === 1 ? errMsg : undefined
 
   return (
     <Box flexDirection="column">
@@ -164,7 +162,6 @@ export function ProgressView({ progress, prev }: { progress: ProgressPayload; pr
             name={name}
             stream={stream}
             prev={prev?.streams[name]}
-            errorMsg={stream.status === 'errored' ? (stream.error ?? inlineErr) : undefined}
           />
         ))}
         {notStarted.length > 0 && (
@@ -174,9 +171,9 @@ export function ProgressView({ progress, prev }: { progress: ProgressPayload; pr
           </Box>
         )}
       </Box>
-      {errMsg && erroredStreams.length !== 1 && (
+      {globalErr && (
         <Box marginTop={1}>
-          <Text color="red">{errMsg}</Text>
+          <Text color="red">{globalErr}</Text>
         </Box>
       )}
     </Box>
