@@ -8,7 +8,8 @@
 // Zero external dependencies — uses Node 24 built-in fetch and psql for Postgres.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 
 const POLL_INTERVAL_MS = 3_000
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000
@@ -55,6 +56,7 @@ function usage() {
     'Options:',
     '  --stripe-api-key    Required. Falls back to STRIPE_API_KEY env var.',
     '  --db-url            Optional. Falls back to DATABASE_URL or POSTGRES_URL.',
+    '  --output            Optional. Report path (default: tmp/reconcile-<timestamp>.json).',
   ].join('\n')
 }
 
@@ -600,8 +602,11 @@ async function main() {
   const skippedRows = rows.filter((r) => r.status === 'skipped_in_sigma')
   const diffRows = rows.filter((r) => r.status === 'diff')
 
-  // Write detailed report to file if --output specified
-  if (args.output) {
+  // Write detailed report to file (defaults to tmp/reconcile-<timestamp>.json)
+  const outputPath =
+    args.output ?? `tmp/reconcile-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+  {
+    mkdirSync(dirname(outputPath), { recursive: true })
     const report = {
       timestamp: new Date().toISOString(),
       summary: {
@@ -614,8 +619,8 @@ async function main() {
       formatted: formatTable(rows.filter((r) => r.status !== 'skipped_in_sigma')),
       tables: rows,
     }
-    writeFileSync(args.output, JSON.stringify(report, null, 2) + '\n')
-    console.log(`Report: ${args.output}`)
+    writeFileSync(outputPath, JSON.stringify(report, null, 2) + '\n')
+    console.log(`Report: ${outputPath}`)
   }
 
   // Console summary
