@@ -29,7 +29,7 @@ export async function pipelineBackfill(
     const { eof } = await pipelineSync(pipelineId, {
       state: syncState,
       state_limit: 100,
-      time_limit: 10,
+      time_limit: 30,
     })
     operationCount++
 
