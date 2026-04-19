@@ -83,6 +83,10 @@ pnpm init > /dev/null 2>&1
 echo "# local tarballs only — no scoped registry" > .npmrc
 unset STRIPE_NPM_REGISTRY 2>/dev/null || true
 
+# Unset proxy env vars — the CLI's assertUseEnvProxy throws if a proxy is
+# configured without --use-env-proxy, but this test doesn't need network access.
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy 2>/dev/null || true
+
 # Override all workspace packages to use the local tarballs.
 cat > package.json <<EOF
 {
