@@ -23,9 +23,12 @@ export { merge, map, withAbortOnReturn, mergeAsync } from './utils/async-iterabl
 export {
   subdivideRanges,
   nextStep,
+  streamingSubdivide,
   toUnixSeconds,
   toIso,
   type Range,
   type TimeBound,
   type SearchState,
-} from './utils/nary-search.js'
+  type PageResult,
+  type SubdivisionEvent,
+} from './utils/binary-subdivision.js'
