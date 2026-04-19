@@ -49,11 +49,10 @@ function computeDerived(progress: ProgressPayload, elapsedMs: number): ProgressP
   }
 }
 
-/** Pure reducer: (ProgressPayload, Message) → ProgressPayload */
+/** Pure reducer: (ProgressPayload, Message) → ProgressPayload. Requires msg._ts. */
 export function progressReducer(progress: ProgressPayload, msg: Message): ProgressPayload {
-  const elapsedMs = msg._ts
-    ? new Date(msg._ts).getTime() - new Date(progress.started_at).getTime()
-    : progress.elapsed_ms
+  if (!msg._ts) throw new Error(`progressReducer: message type '${msg.type}' missing _ts`)
+  const elapsedMs = new Date(msg._ts).getTime() - new Date(progress.started_at).getTime()
 
   switch (msg.type) {
     case 'record': {

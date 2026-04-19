@@ -484,7 +484,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           let syncState = stateReducer(p.state, { type: 'initialize', stream_names: streamNames, sync_run_id: opts?.sync_run_id })
           let requestProgress = createInitialProgress(streamNames)
 
-          for await (const msg of limited) {
+          for await (const raw of limited) {
+            const msg = { ...raw, _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString() }
+
             if (msg.type === 'eof' && 'eof' in msg) {
               yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress, request_progress: requestProgress }))
               return
