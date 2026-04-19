@@ -92,6 +92,8 @@ export interface components {
             api_key: string;
             /** @description Stripe account ID (resolved from API if omitted) */
             account_id?: string;
+            /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
+            account_created?: number;
             /** @description Whether this is a live mode sync */
             livemode?: boolean;
             /** @enum {string} */

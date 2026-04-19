@@ -52,6 +52,13 @@ function computeDerived(progress: ProgressPayload, elapsedMs: number): ProgressP
 /** Pure reducer: (ProgressPayload, Message) → ProgressPayload. Requires msg._ts. */
 export function progressReducer(progress: ProgressPayload, msg: Message): ProgressPayload {
   if (!msg._ts) throw new Error(`progressReducer: message type '${msg.type}' missing _ts`)
+  // Anchor started_at to the first message's timestamp so elapsed_ms reflects
+  // actual sync time, not pipeline setup (connector resolution, account fetch, etc.).
+  const isFirstMessage = progress.elapsed_ms === 0 && progress.global_state_count === 0
+    && Object.values(progress.streams).every((s) => s.record_count === 0)
+  if (isFirstMessage) {
+    progress = { ...progress, started_at: msg._ts }
+  }
   const elapsedMs = new Date(msg._ts).getTime() - new Date(progress.started_at).getTime()
 
   switch (msg.type) {
