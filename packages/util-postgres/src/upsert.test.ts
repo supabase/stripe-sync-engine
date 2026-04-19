@@ -765,7 +765,7 @@ describe('upsertWithStats', () => {
           { _raw_data: { id: '2', name: 'Bob' } },
           { _raw_data: { id: '3', name: 'Gone', deleted: true } },
         ],
-        { table, primaryKeyColumns: ['id'], softDeleteExpression: "_raw_data->>'deleted'" }
+        { table, primaryKeyColumns: ['id'] }, "_raw_data->>'deleted'"
       )
 
       expect(result).toEqual({ created_count: 2, updated_count: 0, deleted_count: 1, skipped_count: 0 })
@@ -780,7 +780,7 @@ describe('upsertWithStats', () => {
       const result = await upsertWithStats(
         pool,
         [{ _raw_data: { id: '1', name: 'Alice', deleted: true } }],
-        { table, primaryKeyColumns: ['id'], softDeleteExpression: "_raw_data->>'deleted'" }
+        { table, primaryKeyColumns: ['id'] }, "_raw_data->>'deleted'"
       )
 
       expect(result).toEqual({ created_count: 0, updated_count: 0, deleted_count: 1, skipped_count: 0 })
