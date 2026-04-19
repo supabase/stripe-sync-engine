@@ -16,8 +16,8 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 0.0s
-        ⚪ customers, invoices"
+      "🔄 Syncing 2 streams — 0.0s
+        ⚪ 2 not started: customers, invoices"
     `)
   })
 
@@ -42,13 +42,13 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 12.4s | 3451 records (245.2/s) | 18 checkpoints (1.5/s)
+      "🔄 Syncing 10 streams — 12.4s | 3451 records (245.2/s) | 18 checkpoints (1.5/s)
         🟢 accounts: 1 records
         🟢 customers: 1200 records
         🟢 invoices: 850 records
         🟡 charges: 980 records
         🟡 payment_intents: 420 records
-        ⚪ subscriptions, products, prices, balance_transactions, payouts"
+        ⚪ 5 not started: subscriptions, products, prices, balance_transactions, payouts"
     `)
   })
 
@@ -83,7 +83,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 5.0s | 100 records (50.0/s) | 2 checkpoints (0.4/s)
+      "🔄 Syncing 2 streams — 5.0s | 100 records (50.0/s) | 2 checkpoints (0.4/s)
         🟢 customers: 100 records
         ⏭️ invoices"
     `)
@@ -115,7 +115,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 4.0s | 450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
+      "🔄 Syncing 3 streams — 4.0s | 450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
         🟢 customers: 200 records (+50)
         🟡 invoices: 180 records (+130)
         🟡 charges: 70 records (+70)"

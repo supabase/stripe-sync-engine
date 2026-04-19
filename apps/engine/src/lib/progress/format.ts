@@ -19,10 +19,11 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
   const streamEntries = Object.entries(progress.streams)
   const totalRecords = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
+  const streamCount = streamEntries.length
   const statusLabel =
     progress.derived.status === 'failed' ? '🔴 Sync failed'
-    : progress.derived.status === 'succeeded' ? '✅ Sync complete'
-    : '🔄 Syncing'
+    : progress.derived.status === 'succeeded' ? `✅ Sync complete (${streamCount} streams)`
+    : `🔄 Syncing ${streamCount} streams`
 
   const prevTotalRecords = prev
     ? Object.values(prev.streams).reduce((sum, s) => sum + s.record_count, 0)
@@ -63,7 +64,7 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
   }
   if (notStartedCount > 0) {
     const notStartedNames = streamEntries.filter(([, s]) => s.status === 'not_started').map(([n]) => n)
-    lines.push(`  ⚪ ${notStartedNames.join(', ')}`)
+    lines.push(`  ⚪ ${notStartedCount} not started: ${notStartedNames.join(', ')}`)
   }
 
   // Global error (not attributable to a single stream)
