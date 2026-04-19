@@ -38,9 +38,18 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     const deltaStr = rowDelta > 0 ? ` (+${rowDelta})` : ''
     parts.push(`${totalRows} rows${deltaStr} (${rps}/s)`)
   }
-  if (progress.global_state_count > 0) parts.push(`${progress.global_state_count} checkpoints`)
+  if (progress.global_state_count > 0) {
+    const cpDelta = prev ? progress.global_state_count - prev.global_state_count : 0
+    const cpDeltaStr = cpDelta > 0 ? ` (+${cpDelta})` : ''
+    parts.push(`${progress.global_state_count} checkpoints${cpDeltaStr}`)
+  }
 
   const header = `${statusLabel} — ${parts.join(' | ')}`
+
+  const errMsg = progress.connection_status?.status === 'failed'
+    ? (progress.connection_status.message ?? 'Connection failed')
+    : undefined
+  const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored').map(([n]) => n)
 
   const lines: string[] = [header]
   for (const [name, s] of streamEntries) {
@@ -49,11 +58,12 @@ export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload
     const delta = prevStream ? s.record_count - prevStream.record_count : 0
     const count = s.record_count > 0 ? `: ${s.record_count} rows` : ''
     const deltaStr = delta > 0 ? ` (+${delta})` : ''
-    lines.push(`  ${emoji} ${name}${count}${deltaStr}`)
+    const streamErr = s.status === 'errored' && errMsg && erroredStreams.length === 1 ? ` — ${errMsg}` : ''
+    lines.push(`  ${emoji} ${name}${count}${deltaStr}${streamErr}`)
   }
 
-  if (progress.connection_status?.status === 'failed') {
-    const errMsg = progress.connection_status.message ?? 'Connection failed'
+  // Global error (not attributable to a single stream)
+  if (errMsg && erroredStreams.length !== 1) {
     lines[0] = `${lines[0]} — ${errMsg}`
   }
 

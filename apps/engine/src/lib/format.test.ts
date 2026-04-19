@@ -70,8 +70,8 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "🔴 Sync failed — 1.5s — Invalid API key
-        🔴 customers"
+      "🔴 Sync failed — 1.5s
+        🔴 customers — Invalid API key"
     `)
   })
 
@@ -120,7 +120,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "🔄 Syncing — 4.0s | 450 rows (+250) (112.5/s) | 5 checkpoints
+      "🔄 Syncing — 4.0s | 450 rows (+250) (112.5/s) | 5 checkpoints (+3)
         🟢 customers: 200 rows (+50)
         🟡 invoices: 180 rows (+130)
         🟡 charges: 70 rows (+70)"
