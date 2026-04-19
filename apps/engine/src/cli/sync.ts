@@ -2,7 +2,8 @@ import { defineCommand } from 'citty'
 import type { Engine } from '../lib/engine.js'
 import type { ConnectorResolver } from '../lib/index.js'
 import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
-import { type PipelineConfig, type SyncState, emptySyncState } from '@stripe/sync-protocol'
+import { type PipelineConfig, type SyncState, type ProgressPayload, emptySyncState } from '@stripe/sync-protocol'
+import { formatProgress } from '../lib/format.js'
 
 export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
   return defineCommand({
@@ -108,7 +109,8 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
         : undefined
       const output = engine.pipeline_sync(pipeline, { state: syncState, time_limit: timeLimit })
 
-      // Persist state checkpoints and stream NDJSON to stdout
+      // Persist state checkpoints and log progress to stderr
+      let prevProgress: ProgressPayload | undefined
       for await (const msg of output) {
         if (msg.type === 'source_state') {
           if (msg.source_state.state_type === 'global') {
@@ -116,8 +118,12 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
           } else {
             await store.set(msg.source_state.stream, msg.source_state.data)
           }
+        } else if (msg.type === 'progress') {
+          console.error(formatProgress(msg.progress, prevProgress))
+          prevProgress = msg.progress
+        } else if (msg.type === 'eof') {
+          console.error(formatProgress(msg.eof.run_progress, prevProgress))
         }
-        process.stdout.write(JSON.stringify(msg) + '\n')
       }
 
       if ('close' in store && typeof store.close === 'function') {
