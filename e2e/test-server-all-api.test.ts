@@ -171,10 +171,13 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
   )
 
   try {
+    // v2_core_events uses ISO timestamps for created filter and opaque page tokens;
+    // the test-server's V2 pagination + subdivision interaction is not yet verified.
+    const TEST_EXCLUDED = new Set([...EXCLUDED_TABLES, 'v2_core_events'])
     const seedable = sortedEndpoints.filter(
       (ep) =>
         findSchemaNameByResourceId(endpointSet.spec, ep.resourceId) != null &&
-        !EXCLUDED_TABLES.has(ep.tableName) &&
+        !TEST_EXCLUDED.has(ep.tableName) &&
         (!STREAM_FILTER || STREAM_FILTER.has(ep.tableName))
     )
 
