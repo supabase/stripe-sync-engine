@@ -309,9 +309,17 @@ describe('progressReducer — derived.status', () => {
 })
 
 describe('progressReducer — elapsed_ms and rates', () => {
-  it('computes elapsed_ms from _ts and started_at', () => {
+  it('computes elapsed_ms from _ts, anchored to first message', () => {
     let p = createInitialProgress()
-    p = { ...p, started_at: '2024-01-01T00:00:00.000Z' }
+    // First message anchors started_at
+    p = progressReducer(p, at({
+      type: 'record',
+      record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+      _ts: '2024-01-01T00:00:00.000Z',
+    }))
+    expect(p.elapsed_ms).toBe(0)
+    expect(p.started_at).toBe('2024-01-01T00:00:00.000Z')
+    // Second message measures elapsed from the anchor
     p = progressReducer(p, at({
       type: 'record',
       record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
@@ -322,11 +330,11 @@ describe('progressReducer — elapsed_ms and rates', () => {
 
   it('computes records_per_second from record_count and elapsed', () => {
     let p = createInitialProgress()
-    p = { ...p, started_at: '2024-01-01T00:00:00.000Z' }
+    // First message anchors started_at at T+0
     p = progressReducer(p, at({
       type: 'record',
       record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
-      _ts: '2024-01-01T00:00:02.000Z',
+      _ts: '2024-01-01T00:00:00.000Z',
     }))
     p = progressReducer(p, at({
       type: 'record',
@@ -349,11 +357,11 @@ describe('progressReducer — elapsed_ms and rates', () => {
 
   it('computes states_per_second from global_state_count and elapsed', () => {
     let p = createInitialProgress()
-    p = { ...p, started_at: '2024-01-01T00:00:00.000Z' }
+    // First message anchors started_at at T+0
     p = progressReducer(p, at({
       type: 'source_state',
       source_state: { state_type: 'stream', stream: 'customers', data: {} },
-      _ts: '2024-01-01T00:00:04.000Z',
+      _ts: '2024-01-01T00:00:00.000Z',
     }))
     p = progressReducer(p, at({
       type: 'source_state',
