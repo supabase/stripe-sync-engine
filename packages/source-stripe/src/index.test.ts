@@ -2380,7 +2380,7 @@ describe('StripeSource', () => {
         }),
       }
 
-      await collect(
+      const messages = await collect(
         listApiBackfill({
           catalog: {
             streams: [
