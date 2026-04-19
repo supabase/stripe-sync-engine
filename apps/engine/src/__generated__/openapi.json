@@ -445,7 +445,7 @@
                     "destination": {},
                     "sync_run": {
                       "progress": {
-                        "started_at": "2026-04-19T07:12:32.078Z",
+                        "started_at": "1970-01-01T00:00:00.000Z",
                         "elapsed_ms": 0,
                         "global_state_count": 0,
                         "derived": {
@@ -667,7 +667,7 @@
                     "destination": {},
                     "sync_run": {
                       "progress": {
-                        "started_at": "2026-04-19T07:12:32.078Z",
+                        "started_at": "1970-01-01T00:00:00.000Z",
                         "elapsed_ms": 0,
                         "global_state_count": 0,
                         "derived": {

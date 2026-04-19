@@ -44,7 +44,7 @@ export function emptySyncState(): SyncState {
     destination: {},
     sync_run: {
       progress: {
-        started_at: new Date().toISOString(),
+        started_at: '1970-01-01T00:00:00.000Z',
         elapsed_ms: 0,
         global_state_count: 0,
         derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
