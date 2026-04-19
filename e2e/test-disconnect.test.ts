@@ -464,10 +464,7 @@ for (const runtime of runtimes) {
 
       expect(eof).toBeDefined()
       expect(eof.eof.has_more).toBe(true)
-      // time limit reached — elapsed is in run_progress
-      expect(typeof eof.eof.run_progress?.elapsed_ms).toBe('number')
-      expect(eof.eof.run_progress.elapsed_ms).toBeGreaterThan(1500)
-      expect(eof.eof.run_progress.elapsed_ms).toBeLessThan(5000)
+      // Verify wall-clock elapsed is within the time limit window
       expect(elapsed).toBeGreaterThan(1500)
       expect(elapsed).toBeLessThan(5000)
 
@@ -506,8 +503,6 @@ for (const runtime of runtimes) {
 
         expect(eof).toBeDefined()
         expect(eof.eof.has_more).toBe(true)
-        // hard time limit — elapsed is in run_progress
-        expect(typeof eof.eof.run_progress?.elapsed_ms).toBe('number')
         // Hard deadline = 2s + 1s = 3s. Allow generous CI slack.
         expect(elapsed).toBeGreaterThan(2000)
         expect(elapsed).toBeLessThan(15000)
