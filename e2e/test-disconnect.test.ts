@@ -463,8 +463,8 @@ for (const runtime of runtimes) {
       const eof = lines.find((l: any) => l.type === 'eof') as any
 
       expect(eof).toBeDefined()
-      expect(eof.eof.reason).toBe('time_limit')
-      expect(eof.eof.cutoff).toBe('soft')
+      expect(eof.eof.has_more).toBe(true)
+      // time limit reached — has_more signals the client should continue
       expect(typeof eof.eof.elapsed_ms).toBe('number')
       expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
       expect(eof.eof.elapsed_ms).toBeLessThan(5000)
@@ -505,8 +505,8 @@ for (const runtime of runtimes) {
         const eof = lines.find((l: any) => l.type === 'eof') as any
 
         expect(eof).toBeDefined()
-        expect(eof.eof.reason).toBe('time_limit')
-        expect(eof.eof.cutoff).toBe('hard')
+        expect(eof.eof.has_more).toBe(true)
+        // hard time limit — source was blocked, engine forced return
         expect(typeof eof.eof.elapsed_ms).toBe('number')
         // Hard deadline = 2s + 1s = 3s. Allow generous CI slack.
         expect(elapsed).toBeGreaterThan(2000)
