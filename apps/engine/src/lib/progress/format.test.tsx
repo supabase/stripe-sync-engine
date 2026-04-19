@@ -17,7 +17,7 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Syncing 2 streams (2 not_started) — 0.0s
-      0 records (0.0/s)
+             0 records               0.0/s
        ○ customers, invoices"
     `)
   })
@@ -44,12 +44,12 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Syncing 10 streams (3 completed, 2 started, 5 not_started) — 12.4s
-      3451 records (245.2/s) | 18 checkpoints (1.5/s)
-       ● charges: 980 records
-       ● payment_intents: 420 records
-       ● accounts: 1 records
-       ● customers: 1200 records
-       ● invoices: 850 records
+          3451 records             245.2/s        18 checkpoints               1.5/s
+       ● charges                                 980 records
+       ● payment_intents                         420 records
+       ● accounts                                  1 records
+       ● customers                              1200 records
+       ● invoices                                850 records
        ○ subscriptions, products, prices, balance_transactions, payouts"
     `)
   })
@@ -68,9 +68,10 @@ describe('formatProgress', () => {
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Sync failed 1 streams (1 errored) — 1.5s
-      0 records (0.0/s)
+             0 records               0.0/s
        ● customers
-          Invalid API key"
+
+      Invalid API key"
     `)
   })
 
@@ -82,15 +83,16 @@ describe('formatProgress', () => {
       derived: { status: 'started', records_per_second: 50, states_per_second: 0.4 },
       streams: {
         customers: { status: 'completed', state_count: 2, record_count: 100 },
-        invoices: { status: 'skipped', state_count: 0, record_count: 0 },
+        invoices: { status: 'skipped', state_count: 0, record_count: 0, message: 'Only available in testmode' },
       },
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
       "Syncing 2 streams (1 completed, 1 skipped) — 5.0s
-      100 records (50.0/s) | 2 checkpoints (0.4/s)
-       ● customers: 100 records
-       ⏭ invoices"
+           100 records              50.0/s         2 checkpoints               0.4/s
+       ● customers                               100 records
+       ⏭ invoices
+          Only available in testmode"
     `)
   })
 
@@ -121,10 +123,10 @@ describe('formatProgress', () => {
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
       "Syncing 3 streams (1 completed, 2 started) — 4.0s
-      450 records (+250) (112.5/s) | 5 checkpoints (+3) (1.3/s)
-       ● invoices: 180 records (+130)
-       ● charges: 70 records (+70)
-       ● customers: 200 records (+50)"
+           450 records   (+250)    112.5/s         5 checkpoints     (+3)      1.3/s
+       ● invoices                                180 records   (+130)
+       ● charges                                  70 records    (+70)
+       ● customers                               200 records    (+50)"
     `)
   })
 })

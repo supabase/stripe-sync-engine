@@ -10,6 +10,10 @@ const STATUS_ICON: Record<string, { symbol: string; color: string }> = {
   errored: { symbol: '●', color: 'red' },
 }
 
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max - 1) + '…'
+}
+
 function shortDate(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
@@ -62,9 +66,9 @@ function StreamRow({ name, stream, prev }: {
           <Text dimColor>{rangeBar}</Text>
         </Box>
       )}
-      {stream.message && (
+      {stream.status === 'skipped' && stream.message && (
         <Box marginLeft={3}>
-          <Text color={stream.status === 'errored' ? 'red' : 'gray'}>{stream.message}</Text>
+          <Text dimColor>{truncate(stream.message, 100)}</Text>
         </Box>
       )}
     </Box>
@@ -132,7 +136,7 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
       <Box>
         <Text color={statusColor} bold>{statusLabel}</Text>
         <Text dimColor> {total} streams ({streamSummary}) — {elapsed}s</Text>
-        {globalErr && <Text color="red"> — {globalErr}</Text>}
+        {globalErr && <Text color="red"> — {truncate(globalErr, 100)}</Text>}
       </Box>
       <Box>
         <Text dimColor>{recs} records{recDelta} {recRate}</Text>
@@ -179,7 +183,7 @@ export function ProgressView({ progress, prev }: { progress: ProgressPayload; pr
       </Box>
       {globalErr && (
         <Box marginTop={1}>
-          <Text color="red">{globalErr}</Text>
+          <Text color="red">{truncate(globalErr, 120)}</Text>
         </Box>
       )}
     </Box>
