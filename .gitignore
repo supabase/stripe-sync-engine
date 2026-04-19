@@ -54,3 +54,8 @@ apps/visualizer/out/
 
 .sync-state*.json
 *.log
+
+# Reconcile / verification output
+tmp/
+prev-run.txt
+verify-*.json

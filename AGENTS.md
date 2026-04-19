@@ -79,8 +79,14 @@ See [docs/architecture/principles.md](docs/architecture/principles.md) for the c
 - Generated OpenAPI specs live in each package's `src/__generated__/openapi.json`. Run `./scripts/generate-openapi.sh` and commit the output before pushing when schemas change. Never edit generated files by hand.
 - Non-trivial PRs should be accompanied by a plan artifact in `docs/plans/YYYY-MM-DD-<slug>.md`. Save it before or alongside the first implementation commit.
 
+## Debugging
+
+- **[Debugging the sync CLI](docs/guides/debugging-sync-cli.md)** — subprocess log location, pnpm store staleness, dist vs bun condition.
+
 ## Key Gotchas
 
+- **No build step for local dev** — the sync CLI uses `--conditions bun --import tsx` so it reads `.ts` source directly. Edits to workspace packages propagate immediately. `pnpm build` is only needed for vitest (which resolves `dist/`) and Docker.
+- **Do NOT add `injectWorkspacePackages: true`** to `pnpm-workspace.yaml` — it copies files into the pnpm store as hardlinks, which break silently when editors save (write-temp-then-rename). Without it, pnpm uses symlinks and edits always propagate. Docker builds use `pnpm deploy --legacy` instead.
 - `tsx` fails on `apps/supabase` — `?raw` imports pull in Deno-only code. Other packages work fine with `npx tsx`.
 - `packages/sync-engine/src/supabase` is Deno, not Node. Don't run those files with Node/tsx.
 - E2E tests need Stripe keys with **write** permissions (they create real objects).
