@@ -55,18 +55,45 @@ function isGlobalError(err: unknown): boolean {
   return false
 }
 
-const SKIPPABLE_ERROR_PATTERNS = [
-  'only available in testmode',
-  'not in live mode',
-  'not enabled for',
-  'Must provide customer',
-  'Must provide ',
-  'not set up to use',
+/**
+ * Each pattern catches exactly one known permanent error for one stream.
+ * Prefer false negatives (failing to skip) over false positives (accidentally
+ * skipping a real error). When a new permanent error is discovered, add a new
+ * entry with a comment naming the exact stream and the full raw error message.
+ */
+const SKIPPABLE_ERROR_MESSAGES = [
+  // forwarding_requests
+  // "Your account is not authorized to send Forwarding requests in livemode. To enable access,
+  //  please contact us via https://support.stripe.com/contact. [GET /v1/forwarding/requests (400)]
+  //  {request-id=req_BJBACn1FDAJcUM}"
+  'Your account is not authorized to send Forwarding requests in livemode',
+
+  // test_helpers_test_clocks
+  // "This endpoint is only available in testmode. Try using your test keys instead.
+  //  [GET /v1/test_helpers/test_clocks (400)] {request-id=req_OYx1Lh47ntlkvq}"
+  'This endpoint is only available in testmode',
+
+  // treasury_financial_accounts
+  // "Unrecognized request URL (GET: /v1/treasury/financial_accounts). Please see
+  //  https://stripe.com/docs or we can help at https://support.stripe.com/.
+  //  (Hint: Have you onboarded to Treasury? You can learn more about the steps needed at
+  //  https://stripe.com/docs/treasury/access) [GET /v1/treasury/financial_accounts (400)]
+  //  {request-id=req_IUY53toFOUrzG6}"
+  'Have you onboarded to Treasury',
+
+  // v2_core_accounts
+  // "Accounts v2 is not enabled for your platform. If you're interested in using this API with
+  //  your integration, please visit
+  //  https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup.
+  //  [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}"
+  'Accounts v2 is not enabled for your platform',
 ]
 
 function isSkippableError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err)
-  return SKIPPABLE_ERROR_PATTERNS.some((p) => msg.includes(p))
+  if (!(err instanceof StripeApiRequestError)) return false
+  const body = err.body as { error?: { message?: string } } | undefined
+  const message = (body?.error?.message ?? '').toLowerCase()
+  return SKIPPABLE_ERROR_MESSAGES.some((p) => message.includes(p.toLowerCase()))
 }
 
 // MARK: - Log message helpers (use msg.log directly where possible)

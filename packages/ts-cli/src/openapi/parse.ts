@@ -4,6 +4,8 @@ export interface ParsedOperation {
   method: string
   path: string
   operationId?: string
+  summary?: string
+  description?: string
   tags: string[]
   pathParams: OpenAPIParameter[]
   queryParams: OpenAPIParameter[]
@@ -45,6 +47,8 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
         method,
         path,
         operationId: operation.operationId,
+        summary: operation.summary,
+        description: operation.description,
         tags: operation.tags ?? [],
         pathParams,
         queryParams,

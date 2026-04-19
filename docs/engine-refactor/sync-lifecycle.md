@@ -425,7 +425,7 @@ through but does not act on them. Errors are not stored in source state.
 
 The engine emits `log` messages for anomalies and failures only.
 
-### warn
+### debug
 
 | Message                          | When                                                          |
 | -------------------------------- | ------------------------------------------------------------- |

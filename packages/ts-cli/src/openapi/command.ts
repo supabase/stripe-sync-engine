@@ -27,6 +27,8 @@ export interface CreateCliFromSpecOptions {
   meta?: { name?: string; description?: string; version?: string }
   /** Extra args to declare on the root command (e.g. --data-dir for help text) */
   rootArgs?: Record<string, ArgDef>
+  /** Descriptions for tag groups (used with groupByTag). Keyed by tag name (after any renaming). */
+  tagDescriptions?: Record<string, string>
 }
 
 /** Returns a citty CommandDef with subcommands for each API operation. */
@@ -41,7 +43,15 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
     ndjsonBodyStream,
     meta,
     rootArgs,
+    tagDescriptions = {},
   } = opts
+
+  // Build tag description lookup: explicit tagDescriptions override spec-level tags
+  const specTagDescs: Record<string, string> = {}
+  for (const t of spec.tags ?? []) {
+    if (t.description) specTagDescs[t.name] = t.description
+  }
+  const tagDescs = { ...specTagDescs, ...tagDescriptions }
 
   const operations = parseSpec(spec).filter(
     (op) => !op.operationId || !exclude.includes(op.operationId)
@@ -70,8 +80,9 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
         const name = getOpName(op, nameOperation)
         groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
       }
-      subCommands[toCliFlag(tag)] = defineCommand({
-        meta: { name: toCliFlag(tag) },
+      const cliTag = toCliFlag(tag)
+      subCommands[cliTag] = defineCommand({
+        meta: { name: cliTag, description: tagDescs[tag] ?? tagDescs[cliTag] },
         subCommands: groupSubCommands,
       })
     }
@@ -206,7 +217,7 @@ export function buildCommand(
   }
 
   return defineCommand({
-    meta: { name },
+    meta: { name, description: operation.summary },
     args,
     async run({ args: cmdArgs }) {
       // Extract positionals in path-param order, options from flat args object
