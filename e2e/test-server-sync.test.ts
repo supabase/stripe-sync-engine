@@ -174,7 +174,7 @@ describe('test-server sync via Docker engine', () => {
     const state = cloneSourceState(opts.state)
 
     for await (const msg of engine.pipeline_read(pipeline, {
-      state: opts.state,
+      state: wrapSyncState(opts.state),
       state_limit: opts.state_limit,
       time_limit: opts.time_limit,
     })) {
@@ -185,6 +185,23 @@ describe('test-server sync via Docker engine', () => {
     }
 
     return { messages, state }
+  }
+
+  function wrapSyncState(source?: SourceState) {
+    if (!source) return undefined
+    return {
+      source,
+      destination: {},
+      sync_run: {
+        progress: {
+          started_at: new Date().toISOString(),
+          elapsed_ms: 0,
+          global_state_count: 0,
+          derived: { status: 'started' as const, records_per_second: 0, states_per_second: 0 },
+          streams: {},
+        },
+      },
+    }
   }
 
   async function runSync(opts: {
@@ -205,7 +222,7 @@ describe('test-server sync via Docker engine', () => {
     }
 
     for await (const msg of engine.pipeline_sync(pipeline, {
-      state: opts.state,
+      state: wrapSyncState(opts.state),
       state_limit: opts.state_limit,
       time_limit: opts.time_limit,
     })) {
