@@ -1,80 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RemainingRange } from './index.js'
-import { reconcileRanges, subdivideRanges } from './src-list-api.js'
-
-function iso(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toISOString()
-}
-
-describe('subdivideRanges', () => {
-  it('passes through ranges without cursors unchanged', () => {
-    const remaining: RemainingRange[] = [
-      { gte: iso(0), lt: iso(60), cursor: null },
-      { gte: iso(60), lt: iso(120), cursor: null },
-    ]
-    const map = new Map<number, number>([[0, 10]])
-    expect(subdivideRanges(remaining, 10, map)).toEqual(remaining)
-  })
-
-  it('subdivides a range with cursor and lastSeenCreated into paginated head + null-cursor tail segments', () => {
-    const remaining: RemainingRange[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    // maxSegments=4: head takes 1 slot, tail gets 3 (budget = 4 - 1 = 3)
-    const out = subdivideRanges(remaining, 4, new Map([[0, 30]]))
-    expect(out).toEqual([
-      { gte: iso(0), lt: iso(30), cursor: 'cur_1' },
-      { gte: iso(30), lt: iso(60), cursor: null },
-      { gte: iso(60), lt: iso(90), cursor: null },
-      { gte: iso(90), lt: iso(120), cursor: null },
-    ])
-  })
-
-  it('caps tail segment count at remaining budget', () => {
-    const remaining: RemainingRange[] = [{ gte: iso(0), lt: iso(100), cursor: 'cur_x' }]
-    // maxSegments=2: head takes 1 slot, tail budget = 1
-    const out = subdivideRanges(remaining, 2, new Map([[0, 10]]))
-    expect(out).toHaveLength(2)
-    expect(out[0]).toEqual({ gte: iso(0), lt: iso(10), cursor: 'cur_x' })
-    expect(out[1]).toEqual({ gte: iso(10), lt: iso(100), cursor: null })
-  })
-
-  it('does not subdivide when splitPoint is at or past range end', () => {
-    const range: RemainingRange = { gte: iso(0), lt: iso(60), cursor: 'cur_z' }
-    const endUnix = 60
-    expect(subdivideRanges([range], 10, new Map([[0, endUnix]]))).toEqual([range])
-    expect(subdivideRanges([range], 10, new Map([[0, endUnix + 10]]))).toEqual([range])
-  })
-
-  it('handles multiple ranges: only cursor + lastSeenCreated entries subdivide', () => {
-    const a: RemainingRange = { gte: iso(0), lt: iso(30), cursor: null }
-    const b: RemainingRange = { gte: iso(30), lt: iso(60), cursor: 'cur_b' }
-    const c: RemainingRange = { gte: iso(60), lt: iso(120), cursor: 'cur_c' }
-    // maxSegments=10 gives enough budget for c to subdivide
-    const out = subdivideRanges([a, b, c], 10, new Map([[2, 90]]))
-    expect(out[0]).toEqual(a)
-    expect(out[1]).toEqual(b)
-    // c splits: head (cursor) + tail segments (budget = 10 - 3 = 7, but tailSpan=30 so 7 parts)
-    expect(out[2]).toEqual({ gte: iso(60), lt: iso(90), cursor: 'cur_c' })
-    // tail from 90 to 120, split into up to 7 parts (30s span → capped by actual span)
-    const tail = out.slice(3)
-    expect(tail.length).toBeGreaterThan(0)
-    expect(tail[0].gte).toBe(iso(90))
-    expect(tail[tail.length - 1].lt).toBe(iso(120))
-  })
-
-  it('passes through a range with cursor but no lastSeenCreated entry', () => {
-    const range: RemainingRange = { gte: iso(0), lt: iso(100), cursor: 'cur_only' }
-    expect(subdivideRanges([range], 50, new Map())).toEqual([range])
-  })
-
-  it('does not over-split a single-second tail even with a large maxSegments', () => {
-    const remaining: RemainingRange[] = [{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }]
-    const out = subdivideRanges(remaining, 100, new Map([[0, 1001]]))
-    expect(out).toEqual([
-      { gte: iso(1000), lt: iso(1001), cursor: 'cur_tail' },
-      { gte: iso(1001), lt: iso(1002), cursor: null },
-    ])
-  })
-})
+import { reconcileRanges } from './src-list-api.js'
 
 describe('reconcileRanges', () => {
   it('returns remaining unchanged when accounted === incoming', () => {
@@ -82,11 +8,7 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: 'cus_abc' },
       { gte: '2022', lt: '2024', cursor: null },
     ]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2024' },
-      { gte: '2018', lt: '2024' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2018', lt: '2024' })
     expect(result).toEqual(remaining)
   })
 
@@ -95,11 +17,7 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: 'cus_abc' },
       { gte: '2022', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2026' },
-      { gte: '2020', lt: '2026' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2020', lt: '2026' })
     expect(result).toEqual([{ gte: '2022', lt: '2026', cursor: null }])
   })
 
@@ -108,50 +26,30 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2020', cursor: null },
       { gte: '2024', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2026' },
-      { gte: '2018', lt: '2022' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2018', lt: '2022' })
     expect(result).toEqual([{ gte: '2018', lt: '2020', cursor: null }])
   })
 
   it('trims a range that overlaps the new gte and resets its cursor', () => {
     const remaining: RemainingRange[] = [{ gte: '2018', lt: '2022', cursor: 'cus_xyz' }]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2024' },
-      { gte: '2020', lt: '2024' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2020', lt: '2024' })
     expect(result).toEqual([{ gte: '2020', lt: '2022', cursor: null }])
   })
 
   it('trims a range that overlaps the new lt but preserves its cursor', () => {
     const remaining: RemainingRange[] = [{ gte: '2022', lt: '2026', cursor: 'cus_abc' }]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2026' },
-      { gte: '2018', lt: '2024' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2026' }, { gte: '2018', lt: '2024' })
     expect(result).toEqual([{ gte: '2022', lt: '2024', cursor: 'cus_abc' }])
   })
 
-  it('adds uncovered territory when lt is extended (new run, new time_ceiling)', () => {
-    const result = reconcileRanges(
-      [], // previous run completed
-      { gte: '2018', lt: '2024' },
-      { gte: '2018', lt: '2026' }
-    )
+  it('adds uncovered territory when lt is extended', () => {
+    const result = reconcileRanges([], { gte: '2018', lt: '2024' }, { gte: '2018', lt: '2026' })
     expect(result).toEqual([{ gte: '2024', lt: '2026', cursor: null }])
   })
 
-  it('adds uncovered territory when gte is decreased (user widened backwards)', () => {
+  it('adds uncovered territory when gte is decreased', () => {
     const remaining: RemainingRange[] = [{ gte: '2022', lt: '2024', cursor: 'cus_xyz' }]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2024' },
-      { gte: '2016', lt: '2024' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2016', lt: '2024' })
     expect(result).toEqual([
       { gte: '2022', lt: '2024', cursor: 'cus_xyz' },
       { gte: '2016', lt: '2018', cursor: null },
@@ -160,11 +58,7 @@ describe('reconcileRanges', () => {
 
   it('handles both gte decreased and lt extended simultaneously', () => {
     const remaining: RemainingRange[] = [{ gte: '2020', lt: '2022', cursor: null }]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2018', lt: '2024' },
-      { gte: '2016', lt: '2026' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2018', lt: '2024' }, { gte: '2016', lt: '2026' })
     expect(result).toEqual([
       { gte: '2020', lt: '2022', cursor: null },
       { gte: '2016', lt: '2018', cursor: null },
@@ -182,11 +76,7 @@ describe('reconcileRanges', () => {
       { gte: '2016', lt: '2018', cursor: null },
       { gte: '2024', lt: '2026', cursor: null },
     ]
-    const result = reconcileRanges(
-      remaining,
-      { gte: '2016', lt: '2026' },
-      { gte: '2018', lt: '2024' }
-    )
+    const result = reconcileRanges(remaining, { gte: '2016', lt: '2026' }, { gte: '2018', lt: '2024' })
     expect(result).toEqual([])
   })
 })

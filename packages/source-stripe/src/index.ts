@@ -405,8 +405,7 @@ export default createStripeSource()
 
 // MARK: - Re-exports
 
-export { subdivideRanges, nextBackfillStep } from './src-list-api.js'
-export type { BackfillState } from './src-list-api.js'
+export { subdivideRanges, nextStep, type SearchState } from '@stripe/sync-protocol'
 export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
 export { catalogFromOpenApi } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'

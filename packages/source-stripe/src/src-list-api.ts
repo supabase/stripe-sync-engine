@@ -1,4 +1,13 @@
 import type { Message } from '@stripe/sync-protocol'
+import {
+  subdivideRanges,
+  nextStep,
+  toUnixSeconds,
+  toIso,
+  mergeAsync,
+  type Range,
+  type SearchState,
+} from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
@@ -98,91 +107,7 @@ function isSkippableError(err: unknown): boolean {
 
 // MARK: - Log message helpers (use msg.log directly where possible)
 
-// MARK: - Time helpers
-
-function toUnixSeconds(iso: string): number {
-  return Math.floor(new Date(iso).getTime() / 1000)
-}
-
-function toIso(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toISOString()
-}
-
-// MARK: - N-ary search: scheduling
-
-export type BackfillState = {
-  remaining: RemainingRange[]
-  /** Maps batch index → last `created` timestamp seen in that range's most recent page. */
-  lastSeenCreated: Map<number, number>
-}
-
-/**
- * Pure scheduler: given the current backfill state, subdivide ranges that made
- * progress (have a cursor + lastSeenCreated) into parallel segments.
- *
- * Unit-testable with no mocks — just data in, data out.
- * Call this AFTER fetching pages (which populate lastSeenCreated and cursors).
- */
-export function nextBackfillStep(state: BackfillState, maxSegments: number): RemainingRange[] {
-  return subdivideRanges(state.remaining, maxSegments, state.lastSeenCreated)
-}
-
-/**
- * Subdivide ranges that have a cursor (were in progress but didn't complete).
- * The paginated portion keeps its cursor; the unpaginated tail splits into N parts.
- *
- * `lastSeenCreated` maps range index to the `created` timestamp of the last
- * record seen in that range (used to determine the split point).
- */
-export function subdivideRanges(
-  remaining: RemainingRange[],
-  maxSegments: number,
-  lastSeenCreated: Map<number, number>
-): RemainingRange[] {
-  const result: RemainingRange[] = []
-
-  for (let i = 0; i < remaining.length; i++) {
-    const range = remaining[i]
-    if (range.cursor === null || !lastSeenCreated.has(i)) {
-      result.push(range)
-      continue
-    }
-
-    const splitPoint = lastSeenCreated.get(i)!
-    const splitPointIso = toIso(splitPoint)
-    const rangeEndUnix = toUnixSeconds(range.lt)
-
-    if (splitPoint >= rangeEndUnix) {
-      result.push(range)
-      continue
-    }
-
-    // Keep the paginated portion with its cursor
-    result.push({ gte: range.gte, lt: splitPointIso, cursor: range.cursor })
-
-    // Only subdivide if we're below the segment budget
-    if (result.length >= maxSegments) {
-      // Over budget — keep the tail as one range
-      result.push({ gte: splitPointIso, lt: range.lt, cursor: null })
-      continue
-    }
-
-    // Split the unpaginated tail into at most (budget) parts
-    const budget = maxSegments - result.length
-    const tailSpan = rangeEndUnix - splitPoint
-    const n = Math.min(budget, Math.max(1, Math.ceil(tailSpan / 1)))
-    const segmentSize = Math.max(1, Math.ceil(tailSpan / n))
-
-    for (let j = 0; j < n; j++) {
-      const segGte = splitPoint + j * segmentSize
-      const segLt = j === n - 1 ? rangeEndUnix : splitPoint + (j + 1) * segmentSize
-      if (segGte >= rangeEndUnix) break
-      result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
-    }
-  }
-
-  return result
-}
+// N-ary search functions and time helpers are imported from @stripe/sync-protocol.
 
 // MARK: - Time range reconciliation
 
@@ -239,45 +164,7 @@ async function getAccountCreatedTimestamp(client: StripeClient): Promise<number>
   }
 }
 
-// MARK: - mergeAsync
-
-type IndexedResult<T> = { index: number; result: IteratorResult<T, undefined> }
-
-async function* mergeAsync<T>(
-  generators: AsyncGenerator<T>[],
-  concurrency: number
-): AsyncGenerator<T> {
-  const active = new Map<number, Promise<IndexedResult<T>>>()
-  let nextIndex = 0
-
-  function pull(gen: AsyncGenerator<T>, index: number) {
-    active.set(
-      index,
-      gen.next().then((result) => ({ index, result: result as IteratorResult<T, undefined> }))
-    )
-  }
-
-  const limit = Math.min(concurrency, generators.length)
-  for (let i = 0; i < limit; i++) {
-    pull(generators[i], i)
-    nextIndex = i + 1
-  }
-
-  while (active.size > 0) {
-    const { index, result } = await Promise.race(active.values())
-    active.delete(index)
-
-    if (result.done) {
-      if (nextIndex < generators.length) {
-        pull(generators[nextIndex], nextIndex)
-        nextIndex++
-      }
-    } else {
-      yield result.value
-      pull(generators[index], index)
-    }
-  }
-}
+// mergeAsync is imported from @stripe/sync-protocol above
 
 // MARK: - Resource config lookup
 
@@ -473,13 +360,15 @@ async function* iterateStream(opts: {
   const lastSeenCreated = new Map<number, number>()
 
 
-  // Paginate ranges — subdivide after every page to maximize parallelism
+  // Paginate ranges — subdivide after every page to maximize parallelism.
+  // Subdivision only helps when the API supports created-time filtering;
+  // without it every range produces the same request, so paginate sequentially.
   while (remaining.length > 0) {
     if (drainQueue) yield* drainQueue()
 
     if (backfillLimit && totalEmitted.count >= backfillLimit) break
 
-    const maxSegments = getMaxSegments()
+    const maxSegments = supportsCreatedFilter ? getMaxSegments() : 1
 
     // Pick batch from current remaining (up to maxSegments)
     const batch = remaining.slice(0, maxSegments)
@@ -500,7 +389,7 @@ async function* iterateStream(opts: {
         totalEmitted,
         lastSeenCreated,
         rangeIndex: i,
-        singlePage: true,
+        singlePage: supportsCreatedFilter,
       })
     )
 
@@ -511,8 +400,8 @@ async function* iterateStream(opts: {
     }
 
     // After pages complete, subdivide based on what we learned
-    if (remaining.length > 0) {
-      const subdivided = nextBackfillStep({ remaining, lastSeenCreated }, maxSegments)
+    if (supportsCreatedFilter && remaining.length > 0) {
+      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, maxSegments)
       remaining.length = 0
       remaining.push(...subdivided)
       lastSeenCreated.clear()
@@ -556,9 +445,12 @@ export async function* listApiBackfill(opts: {
     drainQueue,
   } = opts
 
-  // Track active streams so we can dynamically allocate segments
-  let activeStreams = Math.min(maxConcurrentStreams, catalog.streams.length)
-  const getMaxSegments = () => Math.max(1, Math.floor(maxRequestsPerSecond / activeStreams))
+  // Track active streams so we can dynamically allocate segments per stream.
+  // All streams run concurrently (breadth-first) — small streams complete in 1-2
+  // pages, freeing the rate budget for the remaining big streams.
+  let activeStreams = catalog.streams.length
+  // Minimum 2: the n-ary search needs at least head + 1 tail segment to subdivide.
+  const getMaxSegments = () => Math.max(2, Math.floor(maxRequestsPerSecond / activeStreams))
 
   let accountCreated: number | null = null
 
@@ -645,6 +537,6 @@ export async function* listApiBackfill(opts: {
     )
   }
 
-  // Run streams in parallel, bounded by maxConcurrentStreams
-  yield* mergeAsync(streamGenerators, maxConcurrentStreams)
+  // Run all streams concurrently — rate limiter controls actual request throughput
+  yield* mergeAsync(streamGenerators, streamGenerators.length)
 }
