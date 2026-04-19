@@ -394,6 +394,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
             if (appendCount + updateCount >= batchSize) {
               await flushStream(stream)
             }
+            yield msg
           } else if (msg.type === 'source_state') {
             // Flush the stream's pending rows, then re-emit the state checkpoint
             if (msg.source_state.state_type === 'global') {

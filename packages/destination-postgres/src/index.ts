@@ -225,14 +225,18 @@ const destination = {
     const flushStream = async (streamName: string) => {
       const buffer = streamBuffers.get(streamName)
       if (!buffer || buffer.length === 0) return
-      await upsertMany(
-        pool,
-        config.schema,
-        streamName,
-        buffer,
-        streamKeyColumns.get(streamName) ?? ['id'],
-        streamNewerThanField.get(streamName)
-      )
+      const pk = streamKeyColumns.get(streamName) ?? ['id']
+      const newerThan = streamNewerThanField.get(streamName)
+      try {
+        await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
+      } catch (err) {
+        const detail =
+          `stream=${streamName} table=${config.schema}.${streamName} ` +
+          `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
+        const wrapped = new Error(`${errorMessage(err)} (${detail})`, { cause: err })
+        wrapped.stack = (err as Error).stack
+        throw wrapped
+      }
       streamBuffers.set(streamName, [])
     }
 
@@ -257,6 +261,7 @@ const destination = {
           if (buffer.length >= batchSize) {
             await flushStream(stream)
           }
+          yield msg
         } else if (msg.type === 'source_state') {
           if (msg.source_state.state_type !== 'global') {
             await flushStream(msg.source_state.stream)
