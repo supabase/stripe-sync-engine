@@ -70,6 +70,7 @@
     "@hyperjump/json-schema": "^1.17.5",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
+    "@types/react": "^19.2.14",
     "openapi-typescript": "^7.13.0",
     "vitest": "^3.2.4"
   },
