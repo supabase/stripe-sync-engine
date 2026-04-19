@@ -239,7 +239,6 @@ async function* paginateRange(opts: {
     rangeRecordCounts,
   } = opts
 
-  const hadCursorOnEntry = range.cursor !== null
   let cursor = range.cursor
   let hasMore = true
   let prefetchedResponse: Promise<Awaited<ReturnType<ListFn>>> | null = null
@@ -333,11 +332,10 @@ async function* paginateRange(opts: {
       },
     })
 
-    // Only subdivide on the FIRST page of a fresh range (entered without a cursor).
-    // Ranges that already have a cursor (boundary ranges from prior subdivision)
-    // paginate sequentially — subdividing them further creates exponentially many
-    // empty probes on sparse data.
-    if (supportsCreatedFilter && hasMore && !hadCursorOnEntry) {
+    // Only return early for subdivision when there's a single range remaining.
+    // Once ranges have been subdivided, paginate each range sequentially to avoid
+    // exponential empty-probe blowup on sparse data.
+    if (supportsCreatedFilter && hasMore && remaining.length <= 1) {
       const splitPoint = lastSeenCreated.get(range)
       if (splitPoint != null) {
         const fetchedHeadGteUnix = Math.max(toUnixSeconds(range.gte), splitPoint + 1)
