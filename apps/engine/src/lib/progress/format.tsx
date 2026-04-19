@@ -66,7 +66,7 @@ function StreamRow({ name, stream, prev }: {
           <Text dimColor>{rangeBar}</Text>
         </Box>
       )}
-      {stream.status === 'skipped' && stream.message && (
+      {(stream.status === 'skipped' || stream.status === 'errored') && stream.message && (
         <Box marginLeft={3}>
           <Text dimColor>{truncate(stream.message, 100)}</Text>
         </Box>
