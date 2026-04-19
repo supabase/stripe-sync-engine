@@ -873,22 +873,20 @@ describe('StripeSource', () => {
 
     it('emits stream_status skip for known skippable Stripe list errors', async () => {
       const { StripeApiRequestError } = await import('@stripe/sync-openapi')
-      const listFn = vi
-        .fn()
-        .mockRejectedValueOnce(
-          new StripeApiRequestError(
-            400,
-            {
-              error: {
-                type: 'invalid_request_error',
-                message:
-                  'This endpoint is only available in testmode. Try using your test keys instead.',
-              },
+      const listFn = vi.fn().mockRejectedValueOnce(
+        new StripeApiRequestError(
+          400,
+          {
+            error: {
+              type: 'invalid_request_error',
+              message:
+                'This endpoint is only available in testmode. Try using your test keys instead.',
             },
-            'GET',
-            '/v1/test_helpers/test_clocks'
-          )
+          },
+          'GET',
+          '/v1/test_helpers/test_clocks'
         )
+      )
 
       const registry: Record<string, ResourceConfig> = {
         invoices: makeConfig({
