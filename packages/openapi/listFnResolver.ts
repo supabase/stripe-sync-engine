@@ -237,6 +237,7 @@ export class StripeApiRequestError extends Error {
 /** Headers worth surfacing in error messages for debugging. */
 const DEBUG_HEADERS = [
   'request-id',
+  'retry-after',
   'stripe-should-retry',
   'stripe-action-id',
   'stripe-server-environment',

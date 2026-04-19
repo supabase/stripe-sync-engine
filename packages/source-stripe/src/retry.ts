@@ -55,6 +55,20 @@ function getNestedErrorCode(err: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Extract Retry-After delay in milliseconds from a StripeApiRequestError.
+ * Stripe sends Retry-After as seconds (integer).
+ */
+function getRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const headers = (err as { responseHeaders?: Record<string, string> }).responseHeaders
+  const value = headers?.['retry-after']
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined
+  return seconds * 1000
+}
+
 export function isRetryableHttpError(err: unknown): boolean {
   const status = getHttpErrorStatus(err)
   if (status === 429 || (status !== undefined && status >= 500)) {
@@ -127,14 +141,17 @@ export async function withHttpRetry<T>(
       }
 
       const status = getHttpErrorStatus(err)
+      const retryAfterMs = getRetryAfterMs(err)
+      const actualDelay = retryAfterMs ?? delayMs
       const errName = err instanceof Error ? err.name : 'UnknownError'
       const errMsg = err instanceof Error ? err.message : String(err)
       const labelPart = opts.label ? ` ${opts.label}` : ''
+      const retrySource = retryAfterMs ? ' (retry-after)' : ''
       console.error(
-        `[source-stripe] retry${labelPart} attempt=${attempt + 1}/${maxRetries} delay=${delayMs}ms status=${status ?? 'n/a'} error=${errName}: ${errMsg}`
+        `[source-stripe] retry${labelPart} attempt=${attempt + 1}/${maxRetries} delay=${actualDelay}ms${retrySource} status=${status ?? 'n/a'} error=${errName}: ${errMsg}`
       )
 
-      await sleep(delayMs, opts.signal)
+      await sleep(actualDelay, opts.signal)
       delayMs = Math.min(delayMs * 2, maxDelayMs)
     }
   }
