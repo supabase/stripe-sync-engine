@@ -185,13 +185,22 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Tables whose list endpoint filters to `active = true` by default.
+ *  Sigma retains inactive/archived objects that the list API doesn't surface,
+ *  so we filter to active-only when querying Sigma for these tables. */
+const SIGMA_TABLES_ACTIVE_ONLY = new Set(['prices', 'tax_rates'])
+
 /**
  * Build a Sigma query that returns (id[, created]) rows for the given table.
  * Tables in `tablesWithDeletedCol` get a WHERE clause that excludes deleted
  * rows so results match what Stripe's `list` endpoints return.
+ * Tables in SIGMA_TABLES_ACTIVE_ONLY get an additional `active = true` filter.
  */
-function buildSigmaIdsSql(table, { withCreated, hasDeletedCol }) {
-  const where = hasDeletedCol ? ' WHERE NOT COALESCE(deleted, false)' : ''
+function buildSigmaIdsSql(table, { withCreated, hasDeletedCol, activeOnly }) {
+  const conditions = []
+  if (hasDeletedCol) conditions.push('NOT COALESCE(deleted, false)')
+  if (activeOnly) conditions.push('active = true')
+  const where = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : ''
   const cols = withCreated ? 'id, created' : 'id'
   return `SELECT ${cols} FROM "${table}"${where}`
 }
@@ -275,14 +284,19 @@ function isMissingColumnError(err) {
  * progressively stripping columns/filters when Sigma reports they don't
  * exist on that particular table.
  */
-async function fetchSigmaIds(apiKey, table, hasDeletedCol) {
+async function fetchSigmaIds(apiKey, table, hasDeletedCol, activeOnly = false) {
   const variants = [
-    { withCreated: true, hasDeletedCol },
-    { withCreated: false, hasDeletedCol },
+    { withCreated: true, hasDeletedCol, activeOnly },
+    { withCreated: false, hasDeletedCol, activeOnly },
   ]
   if (hasDeletedCol) {
-    variants.push({ withCreated: true, hasDeletedCol: false })
-    variants.push({ withCreated: false, hasDeletedCol: false })
+    variants.push({ withCreated: true, hasDeletedCol: false, activeOnly })
+    variants.push({ withCreated: false, hasDeletedCol: false, activeOnly })
+  }
+  if (activeOnly) {
+    // Also try without the active filter in case the column doesn't exist
+    variants.push({ withCreated: true, hasDeletedCol: false, activeOnly: false })
+    variants.push({ withCreated: false, hasDeletedCol: false, activeOnly: false })
   }
   let lastErr
   for (const variant of variants) {
@@ -313,6 +327,7 @@ const SIGMA_TABLES_WITH_DELETED = new Set([
   'customers',
   'discounts',
   'invoice_line_items',
+  'issuing_personalization_designs',
   'plans',
   'products',
   'skus',
@@ -325,8 +340,35 @@ const SIGMA_TABLES_WITH_DELETED = new Set([
 /** Known Postgres → Sigma name aliases. Add entries as you discover more. */
 const SIGMA_ALIAS = {
   invoiceitems: 'invoice_line_items',
-  tax_ids: 'customer_tax_ids',
+  // NOTE: do NOT alias tax_ids → customer_tax_ids. The sync engine uses
+  // /v1/tax_ids which returns account-level tax IDs, while Sigma's
+  // customer_tax_ids table contains customer-scoped tax IDs (different dataset).
   billing_alerts: 'billing_meter_alerts',
+}
+
+/** Tables to skip from reconciliation entirely. These cannot be meaningfully
+ *  compared because the sync engine either excludes them or the top-level API
+ *  endpoint doesn't return the same scope of data as Sigma. */
+const RECONCILE_SKIP = new Set([
+  // Requires `customer` query param; explicitly excluded from sync engine.
+  'billing_credit_balance_transactions',
+  // Top-level /v1/payment_methods only returns unattached/Treasury payment methods.
+  // Sigma includes customer-attached pm_, src_, and card_ objects.
+  'payment_methods',
+  // Feature-gated: returns 400 if account isn't onboarded to Treasury.
+  'treasury_financial_accounts',
+])
+
+/** Per-table ID filters applied to Sigma results before comparison.
+ *  Sigma tables sometimes include object types that the sync engine fetches
+ *  via a different endpoint or that aren't available with the current API key mode. */
+const SIGMA_ID_FILTERS: Record<string, (id: string) => boolean> = {
+  // Sigma's "transfers" table includes payouts (po_ prefix). The sync engine
+  // fetches payouts via /v1/payouts, not /v1/transfers.
+  transfers: (id) => !id.startsWith('po_'),
+  // Sigma includes test-mode billing meters (mtr_test_ prefix) which a
+  // live-mode API key does not return from /v1/billing/meters.
+  billing_meters: (id) => !id.startsWith('mtr_test_'),
 }
 
 /**
@@ -360,7 +402,8 @@ async function runSigmaForResources(apiKey, resources) {
       const data = await fetchSigmaIds(
         apiKey,
         sigmaTable,
-        SIGMA_TABLES_WITH_DELETED.has(sigmaTable)
+        SIGMA_TABLES_WITH_DELETED.has(sigmaTable),
+        SIGMA_TABLES_ACTIVE_ONLY.has(pgTable)
       )
       dataByTable.set(pgTable, data)
     } catch (err) {
@@ -591,11 +634,45 @@ async function main() {
   }
   process.stderr.write('\n')
 
-  // Step 3: fetch IDs from Sigma for tables that exist there
-  const { dataByTable: sigmaDataByTable, skipped } = await runSigmaForResources(apiKey, pgTables)
+  // Filter out tables that can't be meaningfully reconciled
+  const excludedTables = pgTables.filter((t) => RECONCILE_SKIP.has(t))
+  const pgTablesToCompare = pgTables.filter((t) => !RECONCILE_SKIP.has(t))
+  if (excludedTables.length > 0) {
+    console.error(`  excluded from comparison: ${excludedTables.join(', ')}`)
+  }
+
+  // Step 3: fetch IDs from Sigma for comparable tables
+  const { dataByTable: sigmaDataByTable, skipped } = await runSigmaForResources(
+    apiKey,
+    pgTablesToCompare
+  )
+
+  // Apply per-table ID filters to remove object types that the sync engine
+  // fetches via a different endpoint or can't access with the current key mode.
+  for (const [table, filterFn] of Object.entries(SIGMA_ID_FILTERS)) {
+    const data = sigmaDataByTable.get(table)
+    if (!data) continue
+    const filteredIds = new Set()
+    const filteredCreatedById = new Map()
+    for (const id of data.ids) {
+      if (filterFn(id)) {
+        filteredIds.add(id)
+        const created = data.createdById.get(id)
+        if (created) filteredCreatedById.set(id, created)
+      }
+    }
+    const removed = data.ids.size - filteredIds.size
+    if (removed > 0) {
+      console.error(`  filtered ${removed} IDs from ${table} (Sigma scope mismatch)`)
+    }
+    sigmaDataByTable.set(table, { ids: filteredIds, createdById: filteredCreatedById })
+  }
 
   // Step 4: compare + print
-  const rows = buildComparisonRows(sigmaDataByTable, postgresIdsByTable, skipped)
+  const rows = buildComparisonRows(sigmaDataByTable, postgresIdsByTable, [
+    ...skipped,
+    ...excludedTables,
+  ])
   const matchCount = rows.filter((r) => r.status === 'match').length
   const diffCount = rows.filter((r) => r.status === 'diff').length
   const skippedCount = rows.filter((r) => r.status === 'skipped_in_sigma').length
