@@ -2,15 +2,13 @@ import type { Message, ProgressPayload, StreamProgress } from '@stripe/sync-prot
 import type { Range } from './ranges.js'
 import { mergeRanges } from './ranges.js'
 
-export function createInitialProgress(prior?: ProgressPayload): ProgressPayload {
+export function createInitialProgress(streamNames?: string[]): ProgressPayload {
   const streams: Record<string, StreamProgress> = {}
-
-  if (prior?.streams) {
-    for (const [stream, sp] of Object.entries(prior.streams)) {
-      streams[stream] = { ...sp }
+  if (streamNames) {
+    for (const name of streamNames) {
+      streams[name] = { status: 'not_started', state_count: 0, record_count: 0 }
     }
   }
-
   return {
     started_at: new Date().toISOString(),
     elapsed_ms: 0,

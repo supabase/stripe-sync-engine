@@ -96,18 +96,18 @@ note right of E #FEFFDD : stream "invoices" stops,\nother streams continue
 
 == EOF — time limit hit (source iterator NOT done) ==
 
-E -[#16a34a]> C : eof {reason: "time_limit", has_more: true, state: {...}}
+E -[#16a34a]> C : eof {has_more: true, ending_state, run_progress, request_progress}
 
 note over C, D #f0fdf4
   has_more: true — source iterator was not exhausted.
-  Client passes eof.state back as starting state.
+  Client passes eof.ending_state back as starting_state.
   Engine re-injects time_range (lt = time_ceiling from sync_run_id).
   Source resumes from its opaque cursor in remaining[].
 end note
 
 == EOF — source iterator finished ==
 
-E -[#16a34a]> C : eof {reason: "complete", has_more: false, state: {...}}
+E -[#16a34a]> C : eof {has_more: false, ending_state, run_progress, request_progress}
 
 note over C, D #f0fdf4
   has_more: false — source iterator exhausted naturally.

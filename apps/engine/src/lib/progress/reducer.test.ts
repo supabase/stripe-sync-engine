@@ -15,30 +15,6 @@ describe('createInitialProgress', () => {
     expect(p.started_at).toMatch(/^\d{4}-/)
   })
 
-  it('restores streams from prior progress', () => {
-    const prior: ProgressPayload = {
-      started_at: '2024-01-01T00:00:00.000Z',
-      elapsed_ms: 5000,
-      global_state_count: 3,
-      derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
-      streams: {
-        customers: {
-          status: 'started',
-          state_count: 2,
-          record_count: 500,
-          completed_ranges: [{ gte: '2024-01', lt: '2024-06' }],
-        },
-        invoices: { status: 'completed', state_count: 1, record_count: 100 },
-      },
-    }
-    const p = createInitialProgress(prior)
-    expect(p.streams['customers']).toMatchObject({
-      status: 'started',
-      record_count: 500,
-      completed_ranges: [{ gte: '2024-01', lt: '2024-06' }],
-    })
-    expect(p.streams['invoices']).toMatchObject({ status: 'completed', record_count: 100 })
-  })
 })
 
 describe('progressReducer — records', () => {

@@ -50,10 +50,10 @@ Carries everything currently passed via JSON body or headers:
 
 ```ts
 type StartPayload = {
-  pipeline: PipelineConfig       // was: JSON body `pipeline` or X-Pipeline header
-  state?: SyncState              // was: JSON body `state` or X-State header
-  state_limit?: number           // was: query param ?state_limit
-  time_limit?: number            // was: query param ?time_limit
+  pipeline: PipelineConfig // was: JSON body `pipeline` or X-Pipeline header
+  state?: SyncState // was: JSON body `state` or X-State header
+  state_limit?: number // was: query param ?state_limit
+  time_limit?: number // was: query param ?time_limit
 }
 ```
 
@@ -67,24 +67,24 @@ Replaces the current `eof` message:
 ```ts
 type EndPayload = {
   reason: 'complete' | 'state_limit' | 'time_limit' | 'error' | 'aborted'
-  has_more: boolean              // new: signals whether to continue
-  ending_state: SyncState        // renamed from eof.state
-  request_progress: TraceProgress  // renamed from eof.global_progress
+  has_more: boolean // new: signals whether to continue
+  ending_state: SyncState // renamed from eof.state
+  request_progress: TraceProgress // renamed from eof.global_progress
   stream_progress?: Record<string, EofStreamProgress>
 }
 ```
 
 #### Mapping from current `eof`
 
-| Current `EofPayload` field | New `EndPayload` field | Notes |
-|---|---|---|
-| `reason` | `reason` | Same enum |
-| `state` | `ending_state` | Renamed for clarity |
-| `global_progress` | `request_progress` | Same `TraceProgress` shape |
-| `stream_progress` | `stream_progress` | Unchanged |
-| `cutoff` | _(dropped)_ | Folded into `reason` semantics |
-| `elapsed_ms` | _(moved)_ | Available in `request_progress.elapsed_ms` |
-| — | `has_more` | **New.** Derived from stream terminal status |
+| Current `EofPayload` field | New `EndPayload` field | Notes                                        |
+| -------------------------- | ---------------------- | -------------------------------------------- |
+| `reason`                   | `reason`               | Same enum                                    |
+| `state`                    | `ending_state`         | Renamed for clarity                          |
+| `global_progress`          | `request_progress`     | Same `TraceProgress` shape                   |
+| `stream_progress`          | `stream_progress`      | Unchanged                                    |
+| `cutoff`                   | _(dropped)_            | Folded into `reason` semantics               |
+| `elapsed_ms`               | _(moved)_              | Available in `request_progress.elapsed_ms`   |
+| —                          | `has_more`             | **New.** Derived from stream terminal status |
 
 ---
 
@@ -94,7 +94,18 @@ NDJSON. One message per line. The `start` message is the first line of the
 request body; `end` is the last line of the response.
 
 ```json
-{"type":"start","start":{"pipeline":{"source":{"type":"stripe","api_key":"sk_test_...","api_version":"2024-04-10"},"destination":{"type":"postgres","connection_string":"..."},"streams":[{"name":"customers","sync_mode":"incremental"}]},"state":null,"time_limit":30}}
+{
+  "type": "start",
+  "start": {
+    "pipeline": {
+      "source": { "type": "stripe", "api_key": "sk_test_...", "api_version": "2024-04-10" },
+      "destination": { "type": "postgres", "connection_string": "..." },
+      "streams": [{ "name": "customers", "sync_mode": "incremental" }]
+    },
+    "state": null,
+    "time_limit": 30
+  }
+}
 ```
 
 Response stream:
@@ -115,10 +126,11 @@ do {
   const response = await fetch('/pipeline_sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-ndjson' },
-    body: JSON.stringify({
-      type: 'start',
-      start: { pipeline, state, time_limit: 30 },
-    }) + '\n',
+    body:
+      JSON.stringify({
+        type: 'start',
+        start: { pipeline, state, time_limit: 30 },
+      }) + '\n',
   })
 
   let end: EndPayload

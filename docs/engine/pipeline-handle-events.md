@@ -26,6 +26,7 @@ POST /pipeline_sync  (NDJSON body)       → push/event handling
 ```
 
 This overloading makes `/pipeline_sync` harder to reason about:
+
 - Callers must know the body-presence convention.
 - The source connector must handle both "read from API" and "process input
   events" through the same `read()` method.
@@ -80,8 +81,8 @@ Response: NDJSON stream of destination output (same as `/pipeline_sync`).
 ```ts
 type HandleEventsBody = {
   pipeline: PipelineConfig
-  events: unknown[]              // raw event payloads (connector-specific)
-  state?: SyncState              // optional: resume state for idempotency
+  events: unknown[] // raw event payloads (connector-specific)
+  state?: SyncState // optional: resume state for idempotency
 }
 ```
 
@@ -125,13 +126,13 @@ know about body-presence conventions.
 
 ## Behavioral Differences from Backfill
 
-| Concern | `/pipeline_sync` (backfill) | `/pipeline_handle_events` |
-|---|---|---|
-| Source reads from | Upstream API | Provided events |
-| Input body | None (ignored) | Required |
-| time_limit | Applies (may cut mid-page) | Not applicable (processes full batch) |
-| state_limit | Applies | Optional (events are typically small batches) |
-| Typical caller | Scheduler / cron | Webhook receiver / event bus |
+| Concern           | `/pipeline_sync` (backfill) | `/pipeline_handle_events`                     |
+| ----------------- | --------------------------- | --------------------------------------------- |
+| Source reads from | Upstream API                | Provided events                               |
+| Input body        | None (ignored)              | Required                                      |
+| time_limit        | Applies (may cut mid-page)  | Not applicable (processes full batch)         |
+| state_limit       | Applies                     | Optional (events are typically small batches) |
+| Typical caller    | Scheduler / cron            | Webhook receiver / event bus                  |
 
 ---
 

@@ -53,18 +53,18 @@ emits explicit lifecycle signals.
 CLIENT  ←—start/end—→  ENGINE  ←—iterator—→  SOURCE
 ```
 
-| Concern             | Client                                | Engine                                                    | Source                                                 |
-| ------------------- | ------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------ |
-| What to sync        | Provides catalog                      | Passes catalog through, may inject `time_range`           | Syncs what it's given                                  |
-| When to sync        | Decides                               | —                                                         | —                                                      |
-| Run identity        | Generates `sync_run_id`               | Tracks run continuity                                     | Unaware                                                |
-| Time range bounds   | —                                     | Freezes `time_ceiling`, injects `time_range` when supported | Respects `time_range` if present                       |
-| Internal pagination | —                                     | —                                                         | Manages `starting_after` / equivalent                  |
-| Stream lifecycle    | Consumes                              | Tracks progress                                           | Emits `start`, optional `range_complete`, `complete`, `skip` |
-| Progress reporting  | Consumes                              | Emits run-level snapshots                                 | Emits records, checkpoints, stream_status              |
-| Error reporting     | Decides retry policy above the engine | Passes through logs                                       | Logs errors, exhausts if unrecoverable                 |
-| State               | Opaque round-trip                     | Manages engine section                                    | Manages source section                                 |
-| `has_more`          | Reads, acts                           | Derives from stream progress                              | —                                                      |
+| Concern             | Client                                | Engine                                                      | Source                                                       |
+| ------------------- | ------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| What to sync        | Provides catalog                      | Passes catalog through, may inject `time_range`             | Syncs what it's given                                        |
+| When to sync        | Decides                               | —                                                           | —                                                            |
+| Run identity        | Generates `sync_run_id`               | Tracks run continuity                                       | Unaware                                                      |
+| Time range bounds   | —                                     | Freezes `time_ceiling`, injects `time_range` when supported | Respects `time_range` if present                             |
+| Internal pagination | —                                     | —                                                           | Manages `starting_after` / equivalent                        |
+| Stream lifecycle    | Consumes                              | Tracks progress                                             | Emits `start`, optional `range_complete`, `complete`, `skip` |
+| Progress reporting  | Consumes                              | Emits run-level snapshots                                   | Emits records, checkpoints, stream_status                    |
+| Error reporting     | Decides retry policy above the engine | Passes through logs                                         | Logs errors, exhausts if unrecoverable                       |
+| State               | Opaque round-trip                     | Manages engine section                                      | Manages source section                                       |
+| `has_more`          | Reads, acts                           | Derives from stream progress                                | —                                                            |
 
 ---
 
@@ -139,15 +139,30 @@ The engine streams these message types to the client (via destination re-emit):
 
 // Log
 { type: 'log', log: { level: 'info' | 'warn' | 'error', message: string, stream?: string } }
-```
 
-For the future `start`/`end` request–response protocol, see
-[sync-lifecycle-start-end-message.md](./sync-lifecycle-start-end-message.md).
+// EOF — always the last message on the response stream
+{
+  type: 'eof',
+  eof: {
+    has_more: boolean,           // true = source cut off; false = source exhausted
+    ending_state: SyncState,    // round-trip this as starting_state on next request
+    run_progress: ProgressPayload,     // accumulated across entire run
+    request_progress: ProgressPayload, // this request only
+  }
+}
+```
 
 The engine emits the first `progress` immediately after discover + catalog
 construction, before the source has sent any data. This gives the client
 immediate visibility into the configured streams and their initial statuses
 (all `not_started`, or reflecting prior run state on continuation).
+
+`eof` is always the last message. It carries:
+
+- `has_more` — whether the client should call again
+- `ending_state` — full state to round-trip on the next request
+- `run_progress` — cumulative progress across all requests in this run
+- `request_progress` — what happened in this specific request only
 
 ---
 
@@ -164,13 +179,13 @@ type StreamStatus =
   | { stream: string; status: 'skip'; reason: string }
 ```
 
-| Status           | Meaning                              | Engine action                   |
-| ---------------- | ------------------------------------ | ------------------------------- |
-| `start`          | Stream is active                     | Mark stream active for progress |
-| `range_complete` | A time range finished                | Update progress only            |
-| `complete`       | Stream is done for this run          | Mark stream done                |
-| `error`          | Stream failed                        | Mark stream done, record error  |
-| `skip`           | Stream will not be processed         | No work, record reason          |
+| Status           | Meaning                      | Engine action                   |
+| ---------------- | ---------------------------- | ------------------------------- |
+| `start`          | Stream is active             | Mark stream active for progress |
+| `range_complete` | A time range finished        | Update progress only            |
+| `complete`       | Stream is done for this run  | Mark stream done                |
+| `error`          | Stream failed                | Mark stream done, record error  |
+| `skip`           | Stream will not be processed | No work, record reason          |
 
 `range_complete` is optional and only meaningful for streams that support
 engine-assigned `time_range`. It is not used to derive `has_more`.
@@ -271,7 +286,7 @@ type DestinationState = Record<string, unknown>
 type SyncRunState = {
   sync_run_id?: string // omit for continuous sync
   time_ceiling?: string // frozen upper bound; set only when sync_run_id is present
-  progress: ProgressPayload
+  progress: ProgressPayload // accumulated across all requests in this run
 }
 ```
 
@@ -323,12 +338,12 @@ invocation — the sync never "finishes" and continuously chases new data.
 
 ### Summary
 
-|                   | With `sync_run_id`                        | Without `sync_run_id`     |
-| ----------------- | ----------------------------------------- | ------------------------- |
-| Upper bound       | Frozen at first `time_ceiling`              | None                      |
-| Terminates?       | Yes — source exhausts within frozen bound | Not guaranteed            |
-| Progress tracking | Accumulated in `SyncRunState`              | Accumulated in `SyncRunState` |
-| Use case          | Finite backfill                           | Testing only                 |
+|                   | With `sync_run_id`                        | Without `sync_run_id`         |
+| ----------------- | ----------------------------------------- | ----------------------------- |
+| Upper bound       | Frozen at first `time_ceiling`            | None                          |
+| Terminates?       | Yes — source exhausts within frozen bound | Not guaranteed                |
+| Progress tracking | Accumulated in `SyncRunState`             | Accumulated in `SyncRunState` |
+| Use case          | Finite backfill                           | Testing only                  |
 
 ---
 
@@ -377,11 +392,11 @@ not participate in this decision.
 
 ## Error Handling
 
-| Scenario | What the source does |
-|----------|---------------------|
-| Global error (invalid API key) | Emits `connection_status: failed` with reason, then exhausts |
+| Scenario                            | What the source does                                           |
+| ----------------------------------- | -------------------------------------------------------------- |
+| Global error (invalid API key)      | Emits `connection_status: failed` with reason, then exhausts   |
 | Stream error (resource unavailable) | Emits `stream_status: error` for that stream, continues others |
-| Transient (rate limited, retried) | Logs warn, retries internally |
+| Transient (rate limited, retried)   | Logs warn, retries internally                                  |
 
 ### Global errors
 
@@ -414,15 +429,15 @@ The engine emits `log` messages for anomalies and failures only.
 
 | Message                          | When                                                          |
 | -------------------------------- | ------------------------------------------------------------- |
-| `state before start: {stream}` | Source emitted `source_state` before `stream_status: start` |
+| `state before start: {stream}`   | Source emitted `source_state` before `stream_status: start`   |
 | `state after complete: {stream}` | Source emitted `source_state` after `stream_status: complete` |
-| `duplicate start: {stream}`    | Source emitted `stream_status: start` twice                 |
+| `duplicate start: {stream}`      | Source emitted `stream_status: start` twice                   |
 | `unknown stream: {stream}`       | Source emitted a message for a stream not in the catalog      |
 
 ### error
 
-| Message                             | When                                 |
-| ----------------------------------- | ------------------------------------ |
-| `source crashed: {message}`         | Source iterator threw                |
+| Message                     | When                  |
+| --------------------------- | --------------------- |
+| `source crashed: {message}` | Source iterator threw |
 
 ---

@@ -39,9 +39,7 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
   if (!state) throw new Error('stateReducer received a message before initialize')
 
   // Progress accumulates on every message
-  if (state.sync_run.progress) {
-    state = { ...state, sync_run: { ...state.sync_run, progress: progressReducer(state.sync_run.progress, event) } }
-  }
+  state = { ...state, sync_run: { ...state.sync_run, progress: progressReducer(state.sync_run.progress, event) } }
 
   if (event.type !== 'source_state') return state
   if (event.source_state.state_type === 'stream') {

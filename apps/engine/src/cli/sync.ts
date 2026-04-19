@@ -46,6 +46,10 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
         type: 'string',
         description: 'Stop after N seconds',
       },
+      baseUrl: {
+        type: 'string',
+        description: 'Stripe API base URL (default: https://api.stripe.com)',
+      },
       live: {
         type: 'boolean',
         default: false,
@@ -84,6 +88,9 @@ export function createSyncCmd(engine: Engine, _resolver: ConnectorResolver) {
 
       // Inject optional source config overrides
       const stripeConfig = pipeline.source.stripe as Record<string, unknown>
+      if (args.baseUrl) {
+        stripeConfig.base_url = args.baseUrl
+      }
       if (backfillLimit) {
         stripeConfig.backfill_limit = backfillLimit
       }

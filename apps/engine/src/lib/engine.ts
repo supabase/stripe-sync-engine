@@ -486,7 +486,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           for await (const msg of limited) {
             if (msg.type === 'eof' && 'eof' in msg) {
-              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress!, request_progress: requestProgress }))
+              yield emit(engineMsg.eof({ has_more: msg.eof.has_more, ending_state: syncState, run_progress: syncState.sync_run.progress, request_progress: requestProgress }))
               return
             }
 
@@ -496,7 +496,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             // Records are consumed by the destination — don't yield to client
             if (msg.type !== 'record') {
               yield msg as SyncOutput
-              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress!))
+              if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
             }
           }
         })()

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { connectorSchemaName, connectorUnionId } from '@stripe/sync-engine'
-import { EofPayload } from '@stripe/sync-protocol'
+import { ProgressPayload } from '@stripe/sync-protocol'
 
 // MARK: - Pipeline status enums
 
@@ -116,7 +116,7 @@ export function createSchemas(resolver: ConnectorResolver) {
     status: PipelineStatus.default('setup').describe(
       'Workflow-controlled execution state. Updated by the Temporal workflow.'
     ),
-    progress: EofPayload.optional().describe(
+    progress: ProgressPayload.optional().describe(
       'Latest read-only sync progress snapshot from the engine. ' +
         'Updated when a bounded sync run completes and safe for dashboards to poll.'
     ),

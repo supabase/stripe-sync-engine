@@ -357,7 +357,7 @@ export const SyncRunState = z
       .describe(
         'Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation.'
       ),
-    progress: ProgressPayload.optional().describe(
+    progress: ProgressPayload.describe(
       'Accumulated progress from prior requests in this run.'
     ),
   })

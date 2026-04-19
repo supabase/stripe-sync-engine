@@ -42,7 +42,15 @@ export function emptySyncState(): SyncState {
   return {
     source: emptySourceState(),
     destination: {},
-    sync_run: {},
+    sync_run: {
+      progress: {
+        started_at: new Date().toISOString(),
+        elapsed_ms: 0,
+        global_state_count: 0,
+        derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+        streams: {},
+      },
+    },
   }
 }
 

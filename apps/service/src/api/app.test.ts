@@ -10,7 +10,7 @@ import {
   type ConnectorResolver,
 } from '@stripe/sync-engine'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
-import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
+import type { SyncActivities } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 import { memoryPipelineStore } from '../lib/stores-memory.js'
 import type { PipelineStore } from '../lib/stores.js'
@@ -84,14 +84,34 @@ describe('GET /health', () => {
 // ---------------------------------------------------------------------------
 
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
-const emptyState = { streams: {}, global: {} }
-const noErrors: RunResult = { errors: [], state: emptyState }
+const successEof = {
+  has_more: false,
+  ending_state: {
+    source: { streams: {}, global: {} },
+    destination: { streams: {}, global: {} },
+    engine: { streams: {}, global: {} },
+  },
+  run_progress: {
+    started_at: new Date().toISOString(),
+    elapsed_ms: 100,
+    global_state_count: 1,
+    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    streams: {},
+  },
+  request_progress: {
+    started_at: new Date().toISOString(),
+    elapsed_ms: 100,
+    global_state_count: 1,
+    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    streams: {},
+  },
+}
 
 function stubActivities(): SyncActivities {
   return {
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => ({}),
-    pipelineSync: async () => noErrors,
+    pipelineSync: async () => ({ eof: successEof }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
   }

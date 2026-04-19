@@ -526,7 +526,7 @@ describe('takeLimits()', () => {
     })
     expect(result[2]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'state_limit' },
+      eof: { has_more: true },
     })
   })
 
@@ -549,7 +549,7 @@ describe('takeLimits()', () => {
     expect(result).toHaveLength(3)
     expect(result[2]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'complete' },
+      eof: { has_more: false },
     })
   })
 
@@ -562,7 +562,7 @@ describe('takeLimits()', () => {
     ]
     const result = await drain(takeLimits()(toAsync(msgs)))
     expect(result).toHaveLength(2)
-    expect(result[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(result[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('counts state messages across multiple streams', async () => {
@@ -612,7 +612,7 @@ describe('takeLimits()', () => {
     })
     expect(result[4]).toMatchObject({
       type: 'eof',
-      eof: { reason: 'state_limit' },
+      eof: { has_more: true },
     })
   })
 
@@ -642,11 +642,11 @@ describe('takeLimits()', () => {
     }
 
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
-    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { reason: 'time_limit' } })
+    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { has_more: true } })
     expect(result.length).toBeLessThanOrEqual(3)
   })
 
-  it('soft cutoff: emits eof with cutoff=soft between messages when deadline-1s crossed', async () => {
+  it('soft cutoff: emits eof with time_limit reason between messages when deadline-1s crossed', async () => {
     async function* fastMessages(): AsyncIterable<Message> {
       let i = 0
       while (true) {
@@ -666,9 +666,7 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits({ time_limit: 3 })(fastMessages()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'soft' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
-    expect(eof.eof.elapsed_ms).toBeLessThan(4000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
     // Soft deadline fires at ~2s (deadline - 1s buffer)
     expect(elapsed).toBeGreaterThan(1500)
     expect(elapsed).toBeLessThan(4000)
@@ -700,9 +698,7 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits({ time_limit: 2 })(blockingSource()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'hard' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(2000)
-    expect(eof.eof.elapsed_ms).toBeLessThan(5000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
     // Hard deadline fires at ~3s (deadline + 1s), NOT at 10s
     expect(elapsed).toBeGreaterThan(2000)
     expect(elapsed).toBeLessThan(5000)
@@ -731,9 +727,7 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits({ signal: ac.signal })(infiniteSource()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(300)
-    expect(eof.eof.elapsed_ms).toBeLessThan(2000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
     expect(elapsed).toBeGreaterThan(300)
     expect(elapsed).toBeLessThan(2000)
   })
@@ -753,10 +747,10 @@ describe('takeLimits()', () => {
     ]
     const result = await drain(takeLimits({ signal: ac.signal })(toAsync(msgs)))
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
+    expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
-  it('elapsed_ms is included in time_limit eof', async () => {
+  it('time_limit eof sets has_more: true', async () => {
     async function* slowMessages(): AsyncIterable<Message> {
       yield {
         type: 'record',
@@ -787,23 +781,7 @@ describe('takeLimits()', () => {
     }
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
     const eof = result.at(-1) as any
-    expect(eof.eof.reason).toBe('time_limit')
-    expect(typeof eof.eof.elapsed_ms).toBe('number')
-    expect(eof.eof.elapsed_ms).toBeGreaterThanOrEqual(0)
-  })
-
-  it('elapsed_ms is NOT included in complete or state_limit eof', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-    ]
-    const completeResult = await drain(takeLimits()(toAsync(msgs)))
-    expect((completeResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
-
-    const limitResult = await drain(takeLimits({ state_limit: 1 })(toAsync(msgs)))
-    expect((limitResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
+    expect(eof.eof.has_more).toBe(true)
   })
 
   it('time limit and state limit: whichever fires first wins', async () => {
@@ -823,13 +801,13 @@ describe('takeLimits()', () => {
     ]
     // State limit of 1 fires before any time limit
     const result = await drain(takeLimits({ state_limit: 1, time_limit: 60 })(toAsync(msgs)))
-    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
   it('emits eof for empty stream', async () => {
     const result = await drain(takeLimits()(toAsync([])))
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 })
 
