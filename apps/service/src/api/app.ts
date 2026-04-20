@@ -550,13 +550,18 @@ export function createApp(options: AppOptions) {
 
       const stripeConfig = configPayload(pipeline.source) as {
         api_key: string
-        api_version: string
+        api_version?: string
         base_url?: string
       }
+      if (!stripeConfig.api_key) {
+        return c.json({ error: 'Pipeline source config missing api_key' }, 400)
+      }
       const { makeClient } = await import('@stripe/sync-source-stripe/client')
+      // api_version may be absent in older pipeline configs — fall back to latest known version
+      const apiVersion = stripeConfig.api_version ?? '2026-03-25.dahlia'
       const client = makeClient({
         api_key: stripeConfig.api_key,
-        api_version: stripeConfig.api_version,
+        api_version: apiVersion,
         base_url: stripeConfig.base_url,
       })
 

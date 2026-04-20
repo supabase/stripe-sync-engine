@@ -399,6 +399,10 @@ export async function createProgram() {
           type: 'string',
           description: 'Max events to fetch',
         },
+        'engine-url': {
+          type: 'string',
+          description: 'Sync engine URL (overrides ENGINE_URL env var)',
+        },
         plain: {
           type: 'boolean',
           default: false,
@@ -406,6 +410,9 @@ export async function createProgram() {
         },
       },
       async run({ args }) {
+        if (args['engine-url']) {
+          engineUrl = args['engine-url']
+        }
         const pipelineId = args.id as string
         const params = new URLSearchParams()
         if (args['created-after']) {
