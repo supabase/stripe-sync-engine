@@ -64,7 +64,8 @@ export async function* logApiStream<T>(
       type: 'log',
       log: {
         level: entry.level,
-        message: entry.logger_name ? `[${entry.logger_name}] ${entry.message}` : entry.message,
+        message: entry.message,
+        ...(entry.data ? { data: entry.data } : {}),
       },
     }
   }

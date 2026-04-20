@@ -412,13 +412,27 @@ describe('engine request id header', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     )
     const events = await readNdjson<Message>(res)
-    expect(
-      events.some(
-        (event) =>
-          event.type === 'log' &&
-          event.log.message.includes('[bridge-source] connector logger message')
-      )
-    ).toBe(true)
+    const bridgeLog = events.find(
+      (event) => event.type === 'log' && event.log.message === 'connector logger message'
+    )
+    expect(bridgeLog).toMatchObject({
+      type: 'log',
+      log: {
+        level: 'info',
+        message: 'connector logger message',
+        data: {
+          name: 'bridge-source',
+          stream: 'customers',
+        },
+      },
+    })
+    expect((bridgeLog as Extract<Message, { type: 'log' }> | undefined)?.log.data).toEqual(
+      expect.objectContaining({
+        engine_request_id: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        ),
+      })
+    )
   })
 })
 

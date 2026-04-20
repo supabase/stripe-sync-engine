@@ -220,9 +220,10 @@ describe('protocol schemas', () => {
     it('LogMessage', () => {
       const msg = LogMessage.parse({
         type: 'log',
-        log: { level: 'info', message: 'hello' },
+        log: { level: 'info', message: 'hello', data: { stream: 'customers' } },
       })
       expect(msg.log.level).toBe('info')
+      expect(msg.log.data).toEqual({ stream: 'customers' })
     })
 
     it('rejects missing type', () => {

@@ -65,8 +65,13 @@ export function enforceCatalog<T extends Message>(
  */
 export async function* log<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
   for await (const msg of messages) {
-    if (msg.type === 'log') withoutLogCapture(() => logger[msg.log.level](msg.log.message))
-    else if (msg.type === 'stream_status') {
+    if (msg.type === 'log') {
+      withoutLogCapture(() =>
+        msg.log.data
+          ? logger[msg.log.level](msg.log.data, msg.log.message)
+          : logger[msg.log.level](msg.log.message)
+      )
+    } else if (msg.type === 'stream_status') {
       logger.debug(
         { stream: msg.stream_status.stream, status: msg.stream_status.status },
         'stream_status'

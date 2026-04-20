@@ -264,9 +264,11 @@ describe('log()', () => {
   })
 
   it('logs log messages via logger at the correct level', async () => {
-    const msgs: Message[] = [{ type: 'log', log: { level: 'warn', message: 'careful' } }]
+    const msgs: Message[] = [
+      { type: 'log', log: { level: 'warn', message: 'careful', data: { stream: 'customers' } } },
+    ]
     await drain(log(toAsync(msgs)))
-    expect(logger.warn).toHaveBeenCalledWith('careful')
+    expect(logger.warn).toHaveBeenCalledWith({ stream: 'customers' }, 'careful')
   })
 
   it('logs top-level stream_status messages via logger.debug', async () => {

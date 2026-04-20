@@ -8,9 +8,9 @@ export type { DestinationStream, Logger, LoggerOptions } from 'pino'
 export type RoutedLogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export type RoutedLogEntry = {
-  logger_name?: string
   level: RoutedLogLevel
   message: string
+  data?: Record<string, unknown>
 }
 
 export type LoggerContext = {
@@ -138,17 +138,48 @@ function stringifyValue(value: unknown): string {
   }
 }
 
+function serializeError(value: Error): Record<string, unknown> {
+  return {
+    name: value.name,
+    message: value.message,
+    stack: value.stack,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function extractCapturedData(
+  loggerName: string | undefined,
+  args: unknown[]
+): Record<string, unknown> | undefined {
+  const data: Record<string, unknown> = {}
+
+  if (loggerName) data.name = loggerName
+
+  const engineRequestId = getEngineRequestId()
+  if (engineRequestId) data.engine_request_id = engineRequestId
+
+  const first = args[0]
+  if (first instanceof Error) {
+    data.err = serializeError(first)
+  } else if (isRecord(first)) {
+    Object.assign(data, first)
+  }
+
+  return Object.keys(data).length > 0 ? data : undefined
+}
+
 function formatCapturedMessage(args: unknown[]): string {
   if (args.length === 0) return ''
   if (typeof args[0] === 'string') return format(...(args as [string, ...unknown[]]))
 
   const [first, second, ...rest] = args
-  if (typeof second === 'string') {
-    const rendered = format(second, ...rest)
-    const details = stringifyValue(first)
-    return details === '{}' ? rendered : `${rendered} ${details}`
-  }
+  if (typeof second === 'string') return format(second, ...rest)
 
+  if (first instanceof Error) return first.message
+  if (isRecord(first)) return ''
   if (args.length === 1) return stringifyValue(first)
   return args.map(stringifyValue).join(' ')
 }
@@ -157,11 +188,10 @@ function maybeRouteLog(loggerName: string | undefined, level: number, args: unkn
   const context = storage.getStore()
   if (!context?.onLog || context.suppressLogCapture) return
   const message = formatCapturedMessage(args)
-  if (!message) return
   context.onLog({
-    logger_name: loggerName,
     level: mapLevel(level),
     message,
+    data: extractCapturedData(loggerName, args),
   })
 }
 

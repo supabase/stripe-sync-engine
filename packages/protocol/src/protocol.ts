@@ -224,6 +224,10 @@ export const LogPayload = z
   .object({
     level: z.enum(['debug', 'info', 'warn', 'error']).describe('Log severity level.'),
     message: z.string().describe('Human-readable log message.'),
+    data: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Structured log fields emitted alongside the message.'),
   })
   .describe('Structured log output from a connector.')
 export type LogPayload = z.infer<typeof LogPayload>
