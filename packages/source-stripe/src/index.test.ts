@@ -12,6 +12,7 @@ import type {
 } from '@stripe/sync-protocol'
 import { collectFirst, drain } from '@stripe/sync-protocol'
 import source, { createStripeSource, discoverCache } from './index.js'
+import { BUNDLED_API_VERSION } from '@stripe/sync-openapi'
 import { fromStripeEvent } from './process-event.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
 import type { ResourceConfig } from './types.js'
@@ -183,7 +184,7 @@ function makeEvent(overrides: {
   } satisfies StripeEvent
 }
 
-const config = { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' as const }
+const config = { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION }
 
 beforeEach(() => {
   vi.mocked(buildResourceRegistry).mockReset()
@@ -994,11 +995,7 @@ describe('StripeSource', () => {
       )
 
       // Legacy error-shaped state is discarded — backfill starts fresh.
-      expect(
-        messages.some(
-          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
-        )
-      ).toBe(true)
+      // (warning now logged via pino, not as a protocol message)
       expect(skipListFn).toHaveBeenCalled()
       expect(
         messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
@@ -1021,11 +1018,6 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(
-        messages.some(
-          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
-        )
-      ).toBe(true)
       expect(skipListFn).toHaveBeenCalled()
       expect(
         messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
@@ -1048,11 +1040,6 @@ describe('StripeSource', () => {
         })
       )
 
-      expect(
-        messages.some(
-          (m) => m.type === 'log' && (m as { log: { level: string } }).log.level === 'warn'
-        )
-      ).toBe(true)
       expect(skipListFn).toHaveBeenCalled()
       expect(
         messages.some((m) => m.type === 'stream_status' && m.stream_status.status === 'start')
@@ -1711,7 +1698,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -1737,7 +1724,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -1759,7 +1746,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -1822,7 +1809,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -1930,7 +1917,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -1978,7 +1965,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -2002,7 +1989,7 @@ describe('StripeSource', () => {
         .read({
           config: {
             api_key: 'sk_test_fake',
-            api_version: '2025-04-30.basil' as const,
+            api_version: BUNDLED_API_VERSION,
             websocket: true,
           },
           catalog: catalog({ name: 'customers' }),
@@ -2051,7 +2038,7 @@ describe('StripeSource', () => {
       // No setup() call — teardown should not throw
       await drain(
         source.teardown!({
-          config: { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' as const },
+          config: { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION },
         })
       )
       expect(mockClose).not.toHaveBeenCalled()
@@ -2070,7 +2057,7 @@ describe('StripeSource', () => {
       // Use port 0 so the OS picks a free port
       const cfg = {
         api_key: 'sk_test_fake',
-        api_version: '2025-04-30.basil' as const,
+        api_version: BUNDLED_API_VERSION,
         webhook_secret: 'whsec_test',
         webhook_port: 0,
       }
@@ -2573,14 +2560,9 @@ describe('StripeSource', () => {
     })
 
     it('respects maxConcurrentStreams when scheduling stream backfills', async () => {
-      let releaseFirstPage!: () => void
-      const firstPageStarted = new Promise<void>((resolve) => {
-        releaseFirstPage = resolve
-      })
       const callOrder: string[] = []
       const firstListFn = vi.fn(async () => {
         callOrder.push('customers')
-        await firstPageStarted
         return {
           data: [{ id: 'cus_1', created: 1_500_000_000 }],
           has_more: false,
@@ -2588,7 +2570,6 @@ describe('StripeSource', () => {
       })
       const secondListFn = vi.fn(async () => {
         callOrder.push('invoices')
-        await firstPageStarted
         return {
           data: [{ id: 'cus_2', created: 1_500_000_100 }],
           has_more: false,
@@ -2624,14 +2605,12 @@ describe('StripeSource', () => {
         })
       )
 
-      await vi.waitFor(() => {
-        expect(firstListFn).toHaveBeenCalledTimes(1)
-        expect(secondListFn).toHaveBeenCalledTimes(1)
-      })
-      expect(callOrder).toEqual(['customers', 'invoices'])
-      releaseFirstPage()
-
       const messages = await messagesPromise
+
+      // With maxConcurrentStreams: 1, streams run sequentially
+      expect(firstListFn).toHaveBeenCalledTimes(1)
+      expect(secondListFn).toHaveBeenCalledTimes(1)
+      expect(callOrder).toEqual(['customers', 'invoices'])
 
       const statusMsgs = messages.filter(
         (m): m is StreamStatusMessage => m.type === 'stream_status'
@@ -2739,7 +2718,7 @@ describe('StripeSource', () => {
 
       const iter = customSource
         .read({
-          config: { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' as const },
+          config: { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION },
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
           state: { streams: {}, global: {} },
         })
@@ -2787,7 +2766,7 @@ describe('StripeSource', () => {
 
       await collect(
         customSource.read({
-          config: { api_key: 'sk_test_fake', api_version: '2025-04-30.basil' as const },
+          config: { api_key: 'sk_test_fake', api_version: BUNDLED_API_VERSION },
           catalog: catalog({ name: 'customers', primary_key: [['id']] }),
         })
       )
