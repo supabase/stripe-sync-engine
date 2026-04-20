@@ -1,14 +1,12 @@
-import { readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
-import { parseJsonOrFile } from '@stripe/sync-ts-cli'
-import { createConnectorResolver } from '../lib/index.js'
+import type { ConnectorResolver } from '../lib/index.js'
 import { startApiServer } from '../api/server.js'
+import { createApp } from '../api/app.js'
 import { supabaseCmd } from './supabase.js'
 import { createSyncCmd } from './sync.js'
-import { defaultConnectors } from '../lib/default-connectors.js'
-import { spawnServeSubprocess, type ServeSubprocess } from './subprocess.js'
+import { createResolverFromFlags } from './resolver-flags.js'
 
 /** Connector discovery flags shared by all commands (serve + one-shot). */
 const connectorArgs = {
@@ -28,31 +26,7 @@ const connectorArgs = {
   },
 }
 
-/**
- * Pre-parse connector discovery flags from process.argv so the resolver
- * is configured before the one-shot CLI commands (check, read, etc.) run.
- */
-function parseConnectorFlags(): {
-  connectorsFromPath: boolean
-  connectorsFromNpm: boolean
-  connectorsFromCommandMap?: string
-} {
-  const argv = process.argv
-  const noPath = argv.includes('--no-connectors-from-path')
-  const npm = argv.includes('--connectors-from-npm')
-  let commandMap: string | undefined
-  const cmdMapIdx = argv.indexOf('--connectors-from-command-map')
-  if (cmdMapIdx !== -1 && cmdMapIdx + 1 < argv.length) {
-    commandMap = argv[cmdMapIdx + 1]
-  }
-  return {
-    connectorsFromPath: !noPath,
-    connectorsFromNpm: npm,
-    connectorsFromCommandMap: commandMap,
-  }
-}
-
-function createServeCmd() {
+function createServeCmd(resolverPromise: Promise<ConnectorResolver>) {
   return defineCommand({
     meta: { name: 'serve', description: 'Start the HTTP API server' },
     args: {
@@ -60,14 +34,7 @@ function createServeCmd() {
       ...connectorArgs,
     },
     async run({ args }) {
-      const flags = parseConnectorFlags()
-      const resolver = await createConnectorResolver(defaultConnectors, {
-        path: flags.connectorsFromPath,
-        npm: flags.connectorsFromNpm,
-        commandMap: parseJsonOrFile(flags.connectorsFromCommandMap) as
-          | Record<string, string>
-          | undefined,
-      })
+      const resolver = await resolverPromise
       await startApiServer({
         resolver,
         port: args.port ? parseInt(args.port) : undefined,
@@ -76,11 +43,10 @@ function createServeCmd() {
   })
 }
 
-function buildApiCmd() {
-  // Read static OpenAPI spec
-  const spec = JSON.parse(
-    readFileSync(new URL('../__generated__/openapi.json', import.meta.url), 'utf-8')
-  )
+async function buildApiCmd(appPromise: ReturnType<typeof createApp>) {
+  const app = await appPromise
+  const openapiResponse = await Promise.resolve(app.request('/openapi.json'))
+  const spec = await openapiResponse.json()
 
   // Remap verbose spec tags to CLI-friendly group names
   const tagRenames: Record<string, string> = { 'Stateless Sync API': 'pipeline' }
@@ -90,25 +56,9 @@ function buildApiCmd() {
     }
   }
 
-  // Lazy subprocess: spawned on first request, killed on exit
-  let server: ServeSubprocess | undefined
-
-  async function ensureServer(): Promise<string> {
-    if (server) return server.url
-    server = await spawnServeSubprocess()
-    process.on('exit', () => server?.kill())
-    return server.url
-  }
-
-  const handler = async (req: Request) => {
-    const base = await ensureServer()
-    const url = new URL(req.url)
-    return fetch(new Request(`${base}${url.pathname}${url.search}`, req))
-  }
-
   return createCliFromSpec({
     spec,
-    handler,
+    handler: (req) => Promise.resolve(app.fetch(req)),
     exclude: ['health'],
     groupByTag: true,
     tagDescriptions: {
@@ -119,13 +69,16 @@ function buildApiCmd() {
       process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
     meta: {
       name: 'api',
-      description: 'Raw API operations (spawns a local engine server)',
+      description: 'Raw API operations (runs against a local in-process engine by default)',
       version: '0.1.0',
     },
   })
 }
 
-export function createProgram() {
+export async function createProgram() {
+  const resolverPromise = createResolverFromFlags()
+  const appPromise = resolverPromise.then((resolver) => createApp(resolver))
+
   return defineCommand({
     meta: {
       name: 'sync-engine',
@@ -133,10 +86,10 @@ export function createProgram() {
       version: '0.1.0',
     },
     subCommands: {
-      serve: createServeCmd(),
-      sync: createSyncCmd(),
+      serve: createServeCmd(resolverPromise),
+      sync: createSyncCmd(resolverPromise),
       supabase: supabaseCmd,
-      api: buildApiCmd(),
+      api: await buildApiCmd(appPromise),
     },
   })
 }

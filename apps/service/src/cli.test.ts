@@ -42,6 +42,11 @@ vi.mock('@temporalio/client', () => ({
 
 let tempDataDir: string
 let serviceSpec: unknown
+let syncRequests: Array<{
+  id: string
+  query: Record<string, string>
+  body: Record<string, unknown>
+}> = []
 
 beforeAll(async () => {
   const { createApp: createRealApp } =
@@ -61,6 +66,7 @@ beforeAll(async () => {
 function buildMockApp() {
   const pipelines = new Map<string, any>()
   let nextId = 1
+  const syncCounts = new Map<string, number>()
 
   const handleRequest = async (req: Request) => {
     const url = new URL(req.url, 'http://localhost')
@@ -156,6 +162,57 @@ function buildMockApp() {
       })
     }
 
+    if (req.method === 'POST' && url.pathname.match(/^\/pipelines\/[^/]+\/sync$/)) {
+      const id = url.pathname.split('/')[2]!
+      const pipeline = pipelines.get(id)
+      if (!pipeline) {
+        return new Response(JSON.stringify({ error: `Pipeline ${id} not found` }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const body =
+        req.headers.get('content-type')?.includes('application/json') ? await req.json() : {}
+      syncRequests.push({
+        id,
+        query: Object.fromEntries(url.searchParams.entries()),
+        body: body as Record<string, unknown>,
+      })
+
+      const count = (syncCounts.get(id) ?? 0) + 1
+      syncCounts.set(id, count)
+
+      const runProgress = {
+        started_at: new Date().toISOString(),
+        elapsed_ms: count * 100,
+        global_state_count: count,
+        derived: { status: 'succeeded', records_per_second: 10, states_per_second: 1 },
+        streams: {},
+      }
+      const endingState = {
+        source: { streams: { customers: { cursor: `cus_${count}` } }, global: {} },
+        destination: {},
+        sync_run: { progress: runProgress },
+      }
+
+      return new Response(
+        [
+          JSON.stringify({ type: 'progress', progress: runProgress }),
+          JSON.stringify({
+            type: 'eof',
+            eof: {
+              has_more: count === 1,
+              ending_state: endingState,
+              run_progress: runProgress,
+              request_progress: runProgress,
+            },
+          }),
+        ].join('\n') + '\n',
+        { headers: { 'content-type': 'application/x-ndjson' } }
+      )
+    }
+
     return new Response('not found', { status: 404 })
   }
 
@@ -167,6 +224,7 @@ function buildMockApp() {
 
 beforeEach(() => {
   tempDataDir = mkdtempSync(join(tmpdir(), 'sync-service-cli-'))
+  syncRequests = []
   process.env.DATA_DIR = tempDataDir
   delete process.env.TEMPORAL_ADDRESS
   delete process.env.TEMPORAL_TASK_QUEUE
@@ -365,6 +423,163 @@ describe('generated pipeline CLI', () => {
     })
 
     writeSpy.mockRestore()
+  })
+
+  it('sync loops until complete and passes streams + sync_run_id + no_state overrides', async () => {
+    const mockApp = buildMockApp()
+    createAppMock.mockImplementation(() => mockApp)
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    const pipelineId = 'pipe_shop_prod_pg_docker'
+    await mockApp.fetch(
+      new Request('http://localhost/pipelines', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: pipelineId,
+          source: {
+            type: 'stripe',
+            stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+          },
+          destination: {
+            type: 'postgres',
+            postgres: { url: 'postgres://localhost/db', schema: 'public' },
+          },
+        }),
+      })
+    )
+
+    await runCommand(program, {
+      rawArgs: [
+        'pipelines',
+        'sync',
+        pipelineId,
+        '--streams',
+        'customers,prices',
+        '--sync-run-id',
+        'run_demo',
+        '--no-state',
+      ],
+    })
+
+    expect(syncRequests).toHaveLength(2)
+    expect(syncRequests[0]).toMatchObject({
+      id: pipelineId,
+      query: { sync_run_id: 'run_demo', no_state: 'true' },
+      body: { streams: [{ name: 'customers' }, { name: 'prices' }] },
+    })
+    expect(syncRequests[1]?.query).toMatchObject({
+      sync_run_id: 'run_demo',
+      no_state: 'true',
+    })
+    expect(syncRequests[1]?.body).toMatchObject({
+      streams: [{ name: 'customers' }, { name: 'prices' }],
+      sync_state: {
+        source: { streams: { customers: { cursor: 'cus_1' } }, global: {} },
+      },
+    })
+
+    stderrSpy.mockRestore()
+  })
+
+  it('sync leaves a final progress summary visible in interactive mode', async () => {
+    const renderMock = vi.fn(() => ({
+      rerender: vi.fn(),
+      unmount: vi.fn(),
+      waitUntilExit: vi.fn(async () => undefined),
+      waitUntilRenderFlush: vi.fn(async () => undefined),
+      cleanup: vi.fn(),
+      clear: vi.fn(),
+    }))
+    vi.doMock('ink', () => ({ render: renderMock }))
+
+    const originalIsTTY = process.stderr.isTTY
+    Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true })
+
+    try {
+      const mockApp = buildMockApp()
+      createAppMock.mockImplementation(() => mockApp)
+      vi.resetModules()
+      const { createProgram } = await import('./cli.js')
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+      const program = await createProgram()
+
+      const pipelineId = 'pipe_shop_prod_pg_docker'
+      await mockApp.fetch(
+        new Request('http://localhost/pipelines', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: pipelineId,
+            source: {
+              type: 'stripe',
+              stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+            },
+            destination: {
+              type: 'postgres',
+              postgres: { url: 'postgres://localhost/db', schema: 'public' },
+            },
+          }),
+        })
+      )
+
+      await runCommand(program, {
+        rawArgs: ['pipelines', 'sync', pipelineId],
+      })
+
+      const stderr = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+      expect(stderr).toContain('Sync')
+      expect(stderr).toContain('checkpoints')
+
+      stderrSpy.mockRestore()
+    } finally {
+      Object.defineProperty(process.stderr, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      })
+      vi.doUnmock('ink')
+    }
+  })
+
+  it('sync exits non-zero and prints the error when the stream returns an error log', async () => {
+    const mockApp = buildMockApp()
+    createAppMock.mockImplementation(() => ({
+      ...mockApp,
+      fetch: (req: Request) => {
+        const url = new URL(req.url, 'http://localhost')
+        if (req.method === 'POST' && url.pathname.match(/^\/pipelines\/[^/]+\/sync$/)) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                type: 'log',
+                log: { level: 'error', message: 'connect ECONNREFUSED 127.0.0.1:4010' },
+              }) + '\n',
+              { headers: { 'content-type': 'application/x-ndjson' } }
+            )
+          )
+        }
+        return mockApp.fetch(req)
+      },
+    }))
+
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await expect(
+      runCommand(program, {
+        rawArgs: ['pipelines', 'sync', 'pipe_shop_prod_pg_docker', '--plain'],
+      })
+    ).rejects.toThrow(/process\.exit unexpectedly called with "1"/)
+
+    const stderr = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(stderr).toContain('ECONNREFUSED')
+
+    stderrSpy.mockRestore()
   })
 
   it('accepts connector shorthand flags for google_sheets destination', async () => {

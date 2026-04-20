@@ -2,6 +2,8 @@ import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest'
 import type { WorkflowClient } from '@temporalio/client'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import { z } from 'zod'
 import {
@@ -446,6 +448,241 @@ describe('pipeline CRUD', () => {
     expect(pipeline.id).toMatch(/^pipe_/)
     expect(pipeline.source.type).toBe('test')
     expect(pipeline.destination.type).toBe('test')
+  })
+
+  it('sync applies stream overrides and persists sync_state + last_progress', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const initialSyncState = {
+      source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    }
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      streams: [{ name: 'original' }],
+      desired_status: 'active',
+      status: 'ready',
+      sync_state: initialSyncState,
+    } as Pipeline)
+
+    let seenPipeline: Record<string, unknown> | undefined
+    let seenState: Record<string, unknown> | undefined
+    let seenQuery: URLSearchParams | undefined
+
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      if (req.method !== 'POST' || url.pathname !== '/pipeline_sync') {
+        res.writeHead(404)
+        res.end('not found')
+        return
+      }
+
+      seenPipeline = JSON.parse(String(req.headers['x-pipeline']))
+      seenState = req.headers['x-state']
+        ? JSON.parse(String(req.headers['x-state']))
+        : undefined
+      seenQuery = url.searchParams
+
+      const runProgress = {
+        ...successEof.run_progress,
+        global_state_count: 2,
+      }
+      const endingState = {
+        source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+        destination: {},
+        sync_run: { sync_run_id: 'run_demo', progress: runProgress },
+      }
+
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end(
+        [
+          JSON.stringify({ type: 'progress', progress: runProgress }),
+          JSON.stringify({
+            type: 'eof',
+            eof: {
+              has_more: false,
+              ending_state: endingState,
+              run_progress: runProgress,
+              request_progress: runProgress,
+            },
+          }),
+        ].join('\n') + '\n'
+      )
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const engineUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?sync_run_id=run_demo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ streams: [{ name: 'customers' }] }),
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+
+    expect(seenPipeline).toMatchObject({
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      streams: [{ name: 'customers' }],
+    })
+    expect(seenState).toEqual(initialSyncState)
+    expect(seenQuery?.get('sync_run_id')).toBe('run_demo')
+
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.last_progress).toMatchObject({ global_state_count: 2 })
+    expect(updated.sync_state).toEqual({
+      source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+      destination: {},
+      sync_run: {
+        sync_run_id: 'run_demo',
+        progress: { ...successEof.run_progress, global_state_count: 2 },
+      },
+    })
+
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve()))
+    )
+  })
+
+  it('sync with no_state does not read or persist sync_state', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const initialSyncState = {
+      source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    }
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      desired_status: 'active',
+      status: 'ready',
+      sync_state: initialSyncState,
+    } as Pipeline)
+
+    let seenState: Record<string, unknown> | undefined
+
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      if (req.method !== 'POST' || url.pathname !== '/pipeline_sync') {
+        res.writeHead(404)
+        res.end('not found')
+        return
+      }
+
+      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
+
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end(
+        JSON.stringify({
+          type: 'eof',
+          eof: {
+            has_more: false,
+            ending_state: {
+              source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+              destination: {},
+              sync_run: { progress: successEof.run_progress },
+            },
+            run_progress: successEof.run_progress,
+            request_progress: successEof.run_progress,
+          },
+        }) + '\n'
+      )
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const engineUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?no_state=true', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ streams: [{ name: 'customers' }] }),
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+
+    expect(seenState).toBeUndefined()
+
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.last_progress).toEqual(successEof.run_progress)
+    expect(updated.sync_state).toEqual(initialSyncState)
+
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve()))
+    )
+  })
+
+  it('sync runs in-process when engineUrl is not configured', async () => {
+    const pipelineStore = memoryPipelineStore()
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      desired_status: 'active',
+      status: 'ready',
+    } as Pipeline)
+
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('"type":"eof"')
+
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.last_progress).toBeDefined()
+    expect(updated.sync_state).toBeDefined()
+  })
+
+  it('sync emits an error log message when the engine request fails', async () => {
+    const pipelineStore = memoryPipelineStore()
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: {
+        type: 'stripe',
+        stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+      },
+      destination: {
+        type: 'postgres',
+        postgres: { url: 'postgres://localhost/db', schema: 'public' },
+      },
+      desired_status: 'active',
+      status: 'ready',
+    } as Pipeline)
+
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl: 'http://127.0.0.1:1',
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('"type":"log"')
+    expect(body).toContain('"level":"error"')
   })
 
   it('update returns updated pipeline with status', async () => {

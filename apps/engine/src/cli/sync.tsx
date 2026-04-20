@@ -5,8 +5,7 @@ import { homedir } from 'node:os'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
 import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
-import { createRemoteEngine } from '../lib/remote-engine.js'
-import { spawnServeSubprocess } from './subprocess.js'
+import { createEngine, createRemoteEngine, type ConnectorResolver } from '../lib/index.js'
 import {
   type PipelineConfig,
   type SyncState,
@@ -22,7 +21,7 @@ import {
 
 const PROGRESS_RENDER_INTERVAL_MS = 200
 
-export function createSyncCmd() {
+export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
   return defineCommand({
     meta: {
       name: 'sync',
@@ -137,11 +136,10 @@ export function createSyncCmd() {
             : defaultFileStateStore(stripeApiKey, args.stateDir)
       const initialState = await store.get()
 
-      // Use an existing server if --sync-engine-url is provided, otherwise spawn one
-      const server = args.syncEngineUrl ? null : await spawnServeSubprocess(`sync-${schema}.log`)
-      const engineUrl = args.syncEngineUrl ?? server!.url
       try {
-        const engine = createRemoteEngine(engineUrl)
+        const engine = args.syncEngineUrl
+          ? createRemoteEngine(args.syncEngineUrl)
+          : await createEngine(await resolverPromise)
 
         // Run connector setup and apply any config updates before syncing.
         for await (const msg of engine.pipeline_setup(pipeline)) {
@@ -207,7 +205,6 @@ export function createSyncCmd() {
 
         inkInstance?.unmount()
       } finally {
-        server?.kill()
         if (store.close) await store.close()
       }
     },

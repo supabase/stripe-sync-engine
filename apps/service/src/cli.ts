@@ -12,6 +12,7 @@ import { wrapPipelineConnectorShorthand } from './lib/cli-connector-shorthand.js
 import { filePipelineStore } from './lib/stores-fs.js'
 import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
+import type { StreamConfig } from './lib/createSchemas.js'
 import { homedir } from 'node:os'
 import { logger } from './logger.js'
 
@@ -30,6 +31,26 @@ async function buildCliSpec() {
   })
   const response = await app.request('/openapi.json')
   return response.json()
+}
+
+function parseStreamsArg(raw: string | undefined): StreamConfig[] | undefined {
+  if (!raw) return undefined
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      throw new Error('Expected JSON array')
+    }
+    return parsed.map((item) =>
+      typeof item === 'string' ? ({ name: item } satisfies StreamConfig) : (item as StreamConfig)
+    )
+  } catch {
+    return raw
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => ({ name }))
+  }
 }
 
 async function createTemporalClient(
@@ -86,8 +107,7 @@ const serveCmd = defineCommand({
     },
     'engine-url': {
       type: 'string',
-      default: 'http://localhost:4010',
-      description: 'Sync engine URL for ad-hoc sync execution (default: http://localhost:4010)',
+      description: 'Optional sync engine URL for ad-hoc sync execution. If omitted, runs in-process.',
     },
   },
   async run({ args }) {
@@ -110,7 +130,7 @@ const serveCmd = defineCommand({
     const pipelineStore = filePipelineStore(args['data-dir'])
     logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
 
-    const engineUrl = args['engine-url'] || 'http://localhost:4010'
+    const engineUrl = args['engine-url'] || undefined
     const app = createApp({ temporal, resolver, pipelineStore, engineUrl })
 
     serve({ fetch: app.fetch, port }, () => {
@@ -238,7 +258,7 @@ export async function createProgram() {
       const temporal = await maybeCreateTemporalClient(address, taskQueue)
       const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
-      const engineUrl = process.env.ENGINE_URL || 'http://localhost:4010'
+      const engineUrl = process.env.ENGINE_URL
       realApp = createApp({ temporal, resolver, pipelineStore, engineUrl })
     }
     return realApp
@@ -309,7 +329,19 @@ export async function createProgram() {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
         stateLimit: { type: 'string', description: 'Max state messages before stopping' },
         timeLimit: { type: 'string', description: 'Stop after N seconds' },
-        syncRunId: { type: 'string', description: 'Sync run identifier (resumes or starts fresh)' },
+        syncRunId: {
+          type: 'string',
+          description: 'Sync run identifier (resumes or starts fresh)',
+        },
+        streams: {
+          type: 'string',
+          description: 'Stream override as comma-separated names or JSON array',
+        },
+        state: {
+          type: 'boolean',
+          default: true,
+          description: 'Resume from and persist sync state (--no-state disables this)',
+        },
         plain: {
           type: 'boolean',
           default: false,
@@ -324,6 +356,8 @@ export async function createProgram() {
           stateLimit: args.stateLimit ? parseInt(args.stateLimit) : undefined,
           timeLimit: args.timeLimit ? parseInt(args.timeLimit) : undefined,
           syncRunId: args.syncRunId,
+          streams: parseStreamsArg(args.streams),
+          useState: args.state !== false,
           plain: args.plain || !process.stderr.isTTY,
         })
       },
