@@ -490,7 +490,7 @@ describe('pipeline CRUD', () => {
       const endingState = {
         source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
         destination: {},
-        sync_run: { sync_run_id: 'run_demo', progress: runProgress },
+        sync_run: { run_id: 'run_demo', progress: runProgress },
       }
 
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
@@ -518,7 +518,7 @@ describe('pipeline CRUD', () => {
       engineUrl,
     })
 
-    const res = await syncApp.request('/pipelines/pipe_sync/sync?sync_run_id=run_demo', {
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?run_id=run_demo', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ streams: [{ name: 'customers' }] }),
@@ -532,14 +532,14 @@ describe('pipeline CRUD', () => {
       streams: [{ name: 'customers' }],
     })
     expect(seenState).toEqual(initialSyncState)
-    expect(seenQuery?.get('sync_run_id')).toBe('run_demo')
+    expect(seenQuery?.get('run_id')).toBe('run_demo')
 
     const updated = await pipelineStore.get('pipe_sync')
     expect(updated.sync_state).toEqual({
       source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
       destination: {},
       sync_run: {
-        sync_run_id: 'run_demo',
+        run_id: 'run_demo',
         progress: { ...successEof.run_progress, global_state_count: 2 },
       },
     })

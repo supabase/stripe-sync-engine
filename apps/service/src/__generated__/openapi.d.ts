@@ -241,11 +241,11 @@ export interface components {
             destination: {
                 [key: string]: unknown;
             };
-            /** @description Engine-managed run state — sync_run_id, time_ceiling, accumulated progress. */
+            /** @description Engine-managed run state — run_id, time_ceiling, accumulated progress. */
             sync_run: {
                 /** @description Identifies a finite backfill run. Omit for continuous sync. */
-                sync_run_id?: string;
-                /** @description Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation. */
+                run_id?: string;
+                /** @description Frozen upper bound (ISO 8601). Set on first invocation when run_id is present; reused on continuation. */
                 time_ceiling?: string;
                 /** @description Accumulated progress from prior requests in this run. */
                 progress: components["schemas"]["ProgressPayload"];
@@ -638,7 +638,7 @@ export interface operations {
                 /** @description Stop after N seconds */
                 time_limit?: number;
                 /** @description Sync run identifier (resumes or starts fresh) */
-                sync_run_id?: string;
+                run_id?: string;
                 /** @description Ignore persisted sync state and start fresh (ending state is still saved) */
                 reset_state?: boolean;
             };

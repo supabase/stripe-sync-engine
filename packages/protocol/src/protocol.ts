@@ -378,7 +378,7 @@ export type ProgressPayload = z.infer<typeof ProgressPayload>
 
 export const SyncRunState = z
   .object({
-    sync_run_id: z
+    run_id: z
       .string()
       .optional()
       .describe('Identifies a finite backfill run. Omit for continuous sync.'),
@@ -386,7 +386,7 @@ export const SyncRunState = z
       .string()
       .optional()
       .describe(
-        'Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation.'
+        'Frozen upper bound (ISO 8601). Set on first invocation when run_id is present; reused on continuation.'
       ),
     progress: ProgressPayload.describe('Accumulated progress from prior requests in this run.'),
   })
@@ -400,7 +400,7 @@ export const SyncState = z
     ),
     destination: z.record(z.string(), z.unknown()).describe('Destination connector state.'),
     sync_run: SyncRunState.describe(
-      'Engine-managed run state — sync_run_id, time_ceiling, accumulated progress.'
+      'Engine-managed run state — run_id, time_ceiling, accumulated progress.'
     ),
   })
   .describe(

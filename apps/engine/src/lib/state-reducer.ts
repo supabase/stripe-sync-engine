@@ -6,7 +6,7 @@ import { createInitialProgress, progressReducer } from './progress/index.js'
 export type InitializeEvent = {
   type: 'initialize'
   stream_names: string[]
-  sync_run_id?: string
+  run_id?: string
 }
 
 export type StateEvent = Message | InitializeEvent
@@ -17,7 +17,7 @@ export type StateEvent = Message | InitializeEvent
  * Pure reducer: (state | undefined, event) → state.
  *
  * Handles two event classes:
- * - `initialize` — creates fresh state or resets sync_run if sync_run_id changed.
+ * - `initialize` — creates fresh state or resets sync_run if run_id changed.
  * - `Message` — accumulates source cursors and run progress.
  */
 export function stateReducer(state: SyncState | undefined, event: StateEvent): SyncState {
@@ -27,18 +27,18 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
         source: { streams: {}, global: {} },
         destination: {},
         sync_run: {
-          sync_run_id: event.sync_run_id,
+          run_id: event.run_id,
           progress: createInitialProgress(event.stream_names),
         },
       }
     }
     // Always reset progress on initialize — each pipeline_sync call is a new run.
-    // Without this, resumed syncs (same sync_run_id or no id) keep the original
+    // Without this, resumed syncs (same run_id or no id) keep the original
     // started_at, making elapsed_ms grow across runs.
     return {
       ...state,
       sync_run: {
-        sync_run_id: event.sync_run_id,
+        run_id: event.run_id,
         progress: createInitialProgress(event.stream_names),
       },
     }

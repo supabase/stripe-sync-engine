@@ -389,7 +389,7 @@ export function createApp(options: AppOptions) {
       .optional()
       .meta({ description: 'Max state messages before stopping' }),
     time_limit: z.coerce.number().optional().meta({ description: 'Stop after N seconds' }),
-    sync_run_id: z
+    run_id: z
       .string()
       .optional()
       .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
@@ -435,7 +435,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit, sync_run_id, reset_state } = c.req.valid('query')
+      const { state_limit, time_limit, run_id, reset_state } = c.req.valid('query')
       const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
         {}) as z.infer<typeof SyncBodySchema>
 
@@ -461,7 +461,7 @@ export function createApp(options: AppOptions) {
         state: reset_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
         state_limit,
         time_limit,
-        sync_run_id,
+        run_id,
       })
 
       // Wrap the output to intercept eof and persist sync_state + progress

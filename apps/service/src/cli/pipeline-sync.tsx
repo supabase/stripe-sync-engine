@@ -59,7 +59,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         const params = new URLSearchParams()
         if (stateLimit) params.set('state_limit', String(stateLimit))
         if (timeLimit) params.set('time_limit', String(timeLimit))
-        if (syncRunId) params.set('sync_run_id', syncRunId)
+        if (syncRunId) params.set('run_id', syncRunId)
         if (resetState && isFirstIteration) params.set('reset_state', 'true')
         const qs = params.toString() ? `?${params}` : ''
 

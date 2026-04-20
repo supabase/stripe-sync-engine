@@ -62,9 +62,8 @@ function StreamRow({
 }) {
   const icon = STATUS_ICON[stream.status] ?? { symbol: '?', color: 'white' }
   const delta = prev ? stream.record_count - prev.record_count : 0
-  const deltaStr = delta > 0 ? ` (+${delta})`.padStart(9) : ''.padStart(9)
+  const deltaStr = delta > 0 ? ` (+${delta})` : ''
   const showCount = stream.record_count > 0 || stream.status === 'completed'
-  const countStr = String(stream.record_count).padStart(8)
   const rangeBar =
     stream.total_range && stream.completed_ranges
       ? formatRangeBar(stream.total_range, stream.completed_ranges)
@@ -79,7 +78,7 @@ function StreamRow({
         </Box>
         {showCount && (
           <Text dimColor>
-            {countStr} records{deltaStr}
+            {String(stream.record_count).padStart(8)} records{deltaStr ? deltaStr.padStart(9) : ''}
           </Text>
         )}
       </Box>
@@ -155,9 +154,9 @@ export function ProgressHeader({
   const erroredStreams = streamEntries.filter(([, s]) => s.status === 'errored')
   const globalErr = errMsg && erroredStreams.length !== 1 ? errMsg : undefined
 
-  // Build stats — right-align numbers so the line doesn't jump during fast sync.
+  // Right-align numbers so the line doesn't jump during fast sync.
   const recs = String(totalRecords).padStart(8)
-  const recDelta = recordDeltaStr.padStart(9) // " (+99999)" or "         "
+  const recDelta = recordDeltaStr.padStart(9)
   const recRate = `${progress.derived.records_per_second.toFixed(1)}/s`.padStart(10)
 
   const cps = String(progress.global_state_count).padStart(8)

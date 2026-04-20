@@ -185,7 +185,7 @@ export async function createApp(resolver: ConnectorResolver) {
       description: 'Stop streaming after N seconds.',
       example: '10',
     }),
-    sync_run_id: z.string().optional().meta({
+    run_id: z.string().optional().meta({
       description: 'Optional sync run identifier used to track bounded sync progress.',
       example: 'run_demo',
     }),
@@ -527,7 +527,7 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(pipelineSyncRoute, async (c) => {
-    const { state_limit, time_limit, sync_run_id } = c.req.valid('query')
+    const { state_limit, time_limit, run_id } = c.req.valid('query')
 
     const pipeline = requireHeaderValue(
       c.req.valid('header')['x-pipeline'],
@@ -552,7 +552,7 @@ export async function createApp(resolver: ConnectorResolver) {
 
     const output = engine.pipeline_sync(
       pipeline,
-      { state, state_limit, time_limit, sync_run_id },
+      { state, state_limit, time_limit, run_id },
       input
     )
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {

@@ -818,7 +818,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(streams[0].time_range).toBeUndefined()
   })
 
-  it('resets run progress when sync_run_id changes', async () => {
+  it('resets run progress when run_id changes', async () => {
     const source: Source = {
       async *spec() {
         yield { type: 'spec', spec: { config: {} } }
@@ -852,7 +852,7 @@ describe('engine.pipeline_sync() pipeline', () => {
           },
           destination: {},
           sync_run: {
-            sync_run_id: 'old-run',
+            run_id: 'old-run',
             progress: {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
@@ -862,17 +862,17 @@ describe('engine.pipeline_sync() pipeline', () => {
             },
           },
         },
-        sync_run_id: 'new-run',
+        run_id: 'new-run',
       })
     )
 
     const eof = output.find((m) => m.type === 'eof')!
-    expect(eof.eof.ending_state?.sync_run.sync_run_id).toBe('new-run')
+    expect(eof.eof.ending_state?.sync_run.run_id).toBe('new-run')
     // Progress was reset — elapsed_ms should be near-zero (fresh run)
     expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(1000)
   })
 
-  it('resets run progress even when sync_run_id matches (each pipeline_sync is a new run)', async () => {
+  it('resets run progress even when run_id matches (each pipeline_sync is a new run)', async () => {
     const source: Source = {
       async *spec() {
         yield { type: 'spec', spec: { config: {} } }
@@ -901,7 +901,7 @@ describe('engine.pipeline_sync() pipeline', () => {
           source: { streams: {}, global: {} },
           destination: {},
           sync_run: {
-            sync_run_id: 'same-run',
+            run_id: 'same-run',
             progress: {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
@@ -911,12 +911,12 @@ describe('engine.pipeline_sync() pipeline', () => {
             },
           },
         },
-        sync_run_id: 'same-run',
+        run_id: 'same-run',
       })
     )
 
     const eof = output.find((m) => m.type === 'eof')!
-    expect(eof.eof.ending_state?.sync_run.sync_run_id).toBe('same-run')
+    expect(eof.eof.ending_state?.sync_run.run_id).toBe('same-run')
     // Progress is always reset on initialize — each pipeline_sync is a fresh run
     expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(5000)
   })

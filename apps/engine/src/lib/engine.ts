@@ -38,8 +38,8 @@ export const SourceReadOptions = z.object({
   state_limit: z.number().int().positive().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */
   time_limit: z.number().positive().optional(),
-  /** Identifies the current sync run. If it differs from state.sync_run.sync_run_id, run progress is reset. */
-  sync_run_id: z.string().optional(),
+  /** Identifies the current sync run. If it differs from state.sync_run.run_id, run progress is reset. */
+  run_id: z.string().optional(),
 })
 export interface SourceReadOptions {
   state?:
@@ -48,7 +48,7 @@ export interface SourceReadOptions {
     | Record<string, unknown>
   state_limit?: number
   time_limit?: number
-  sync_run_id?: string
+  run_id?: string
 }
 
 /** Metadata for a single connector type, including its configuration JSON Schema. */
@@ -528,7 +528,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           let syncState = stateReducer(p.state, {
             type: 'initialize',
             stream_names: streamNames,
-            sync_run_id: opts?.sync_run_id,
+            run_id: opts?.run_id,
           })
           let requestProgress = createInitialProgress(streamNames)
 

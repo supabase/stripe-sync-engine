@@ -95,7 +95,7 @@ export async function pipelineWorkflow(
       const events = await waitForLiveEvents()
       if (!events) return
 
-      await pipelineSync(pipelineId, { input: events, sync_run_id: workflowInfo().runId })
+      await pipelineSync(pipelineId, { input: events, run_id: workflowInfo().runId })
       operationCount++
     }
   }

@@ -337,7 +337,7 @@
           },
           {
             "in": "query",
-            "name": "sync_run_id",
+            "name": "run_id",
             "schema": {
               "description": "Optional sync run identifier used to track bounded sync progress.",
               "example": "run_demo",
@@ -531,7 +531,7 @@
           },
           {
             "in": "query",
-            "name": "sync_run_id",
+            "name": "run_id",
             "schema": {
               "description": "Optional sync run identifier used to track bounded sync progress.",
               "example": "run_demo",
@@ -1677,12 +1677,12 @@
           "sync_run": {
             "type": "object",
             "properties": {
-              "sync_run_id": {
+              "run_id": {
                 "description": "Identifies a finite backfill run. Omit for continuous sync.",
                 "type": "string"
               },
               "time_ceiling": {
-                "description": "Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation.",
+                "description": "Frozen upper bound (ISO 8601). Set on first invocation when run_id is present; reused on continuation.",
                 "type": "string"
               },
               "progress": {
@@ -1693,7 +1693,7 @@
             "required": [
               "progress"
             ],
-            "description": "Engine-managed run state — sync_run_id, time_ceiling, accumulated progress."
+            "description": "Engine-managed run state — run_id, time_ceiling, accumulated progress."
           }
         },
         "required": [

@@ -8,7 +8,7 @@ function init(streamNames: string[], syncRunId?: string, prior?: SyncState): Syn
   return stateReducer(prior, {
     type: 'initialize',
     stream_names: streamNames,
-    sync_run_id: syncRunId,
+    run_id: syncRunId,
   })
 }
 
@@ -25,17 +25,17 @@ describe('stateReducer initialize event', () => {
     expect(state.sync_run.progress.streams['invoices'].status).toBe('not_started')
   })
 
-  it('stamps sync_run_id on fresh state', () => {
+  it('stamps run_id on fresh state', () => {
     const state = init(['customers'], 'run-1')
-    expect(state.sync_run.sync_run_id).toBe('run-1')
+    expect(state.sync_run.run_id).toBe('run-1')
   })
 
-  it('resets progress when sync_run_id changes', () => {
+  it('resets progress when run_id changes', () => {
     const prior: SyncState = {
       source: { streams: { customers: { cursor: 'cus_99' } }, global: {} },
       destination: {},
       sync_run: {
-        sync_run_id: 'old-run',
+        run_id: 'old-run',
         progress: {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,
@@ -46,18 +46,18 @@ describe('stateReducer initialize event', () => {
       },
     }
     const state = init(['customers'], 'new-run', prior)
-    expect(state.sync_run.sync_run_id).toBe('new-run')
+    expect(state.sync_run.run_id).toBe('new-run')
     expect(state.sync_run.progress.elapsed_ms).toBe(0)
     // Source state is preserved
     expect(state.source.streams['customers']).toEqual({ cursor: 'cus_99' })
   })
 
-  it('resets progress even when sync_run_id matches (each pipeline_sync is a new run)', () => {
+  it('resets progress even when run_id matches (each pipeline_sync is a new run)', () => {
     const prior: SyncState = {
       source: { streams: {}, global: {} },
       destination: {},
       sync_run: {
-        sync_run_id: 'same-run',
+        run_id: 'same-run',
         progress: {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,

@@ -21,7 +21,7 @@ export async function backfillStep(
     state: opts.syncState,
     state_limit: opts.stateLimit ?? 100,
     time_limit: opts.timeLimit ?? 30,
-    sync_run_id: opts.syncRunId,
+    run_id: opts.syncRunId,
   })
   const syncState = eof.ending_state ?? opts.syncState
   return { eof, syncState }

@@ -19,7 +19,7 @@ const BACKFILL_CONTINUE_AS_NEW_THRESHOLD = 200
  * Calls pipelineSync in a loop until has_more=false, then returns the final eof.
  * The parent workflow inspects eof.run_progress.derived.status to decide next steps.
  *
- * Uses workflowInfo().runId as the sync_run_id so the engine tracks progress
+ * Uses workflowInfo().runId as the run_id so the engine tracks progress
  * across continueAsNew boundaries within the same Temporal run.
  */
 export async function pipelineBackfill(

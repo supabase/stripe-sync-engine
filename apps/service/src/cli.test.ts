@@ -428,7 +428,7 @@ describe('generated pipeline CLI', () => {
     writeSpy.mockRestore()
   })
 
-  it('sync loops until complete and passes streams + sync_run_id + reset_state overrides', async () => {
+  it('sync loops until complete and passes streams + run_id + reset_state overrides', async () => {
     const mockApp = buildMockApp()
     createAppMock.mockImplementation(() => mockApp)
     vi.resetModules()
@@ -471,12 +471,12 @@ describe('generated pipeline CLI', () => {
     expect(syncRequests).toHaveLength(2)
     expect(syncRequests[0]).toMatchObject({
       id: pipelineId,
-      query: { sync_run_id: 'run_demo', reset_state: 'true' },
+      query: { run_id: 'run_demo', reset_state: 'true' },
       body: { streams: [{ name: 'customers' }, { name: 'prices' }] },
     })
     // Second iteration should NOT have reset_state (only first does)
     expect(syncRequests[1]?.query).toMatchObject({
-      sync_run_id: 'run_demo',
+      run_id: 'run_demo',
     })
     expect(syncRequests[1]?.query).not.toHaveProperty('reset_state')
     // Server persists state, so CLI doesn't need to pass sync_state in body
