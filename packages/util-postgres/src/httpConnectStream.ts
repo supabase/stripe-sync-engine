@@ -155,9 +155,34 @@ export function createPgHttpConnectStreamFactory(options: PgProxyOptions) {
   return (config: PgTargetConfig) => new HttpConnectStream(config, options)
 }
 
+function getTargetHost(config: Record<string, unknown>): string | undefined {
+  if (typeof config.host === 'string') return config.host
+  if (typeof config.connectionString === 'string') {
+    try {
+      return new URL(config.connectionString).hostname
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+function shouldBypassPgProxy(targetHost: string | undefined, env: PgProxyEnv): boolean {
+  if (!targetHost) return false
+  const noProxy = env.PG_NO_PROXY?.trim()
+  if (!noProxy) return false
+  const entries = noProxy.split(',').map((s) => s.trim().toLowerCase())
+  return entries.includes(targetHost.toLowerCase())
+}
+
 export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv = process.env): T {
   const proxyHost = env.PG_PROXY_HOST?.trim()
   if (!proxyHost) {
+    return config
+  }
+
+  const targetHost = getTargetHost(config as Record<string, unknown>)
+  if (shouldBypassPgProxy(targetHost, env)) {
     return config
   }
 
