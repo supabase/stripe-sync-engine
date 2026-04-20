@@ -129,7 +129,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       source: { type: 'test', test: { streams: { customers: {} } } },
       destination: {
         type: 'postgres',
-        postgres: { connection_string: connectionString, schema: SCHEMA },
+        postgres: { url: connectionString, schema: SCHEMA },
       },
     }
 
@@ -180,7 +180,7 @@ describe('sync lifecycle — run, checkpoint, resume', () => {
       source: { type: 'test', test: { streams: { customers: {} } } },
       destination: {
         type: 'postgres',
-        postgres: { connection_string: connectionString, schema: SCHEMA },
+        postgres: { url: connectionString, schema: SCHEMA },
       },
     }
 

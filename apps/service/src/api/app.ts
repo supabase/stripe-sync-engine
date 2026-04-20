@@ -29,7 +29,10 @@ function ListResponse<T extends z.ZodType>(itemSchema: T) {
   })
 }
 
-function configPayload(envelope: { type: string; [key: string]: unknown }): Record<string, unknown> {
+function configPayload(envelope: {
+  type: string
+  [key: string]: unknown
+}): Record<string, unknown> {
   return (envelope[envelope.type] as Record<string, unknown>) ?? {}
 }
 
@@ -57,7 +60,9 @@ async function checkPipelineConnectors(
 
   await Promise.all([
     drain(sourceConnector.check({ config: sourceConfig })).catch((err) => {
-      throw new Error(`Source check failed (${pipeline.source.type}): ${String(err instanceof Error ? err.message : err)}`)
+      throw new Error(
+        `Source check failed (${pipeline.source.type}): ${String(err instanceof Error ? err.message : err)}`
+      )
     }),
     drain(destinationConnector.check({ config: destinationConfig })).catch((err) => {
       throw new Error(

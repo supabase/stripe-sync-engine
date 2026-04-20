@@ -144,7 +144,7 @@ function makePipelineHeader(targetBytes: number, mockStripeUrl: string): string 
     destination: {
       type: 'postgres',
       postgres: {
-        connection_string: 'postgres://user:pass@127.0.0.1:1/testdb',
+        url: 'postgres://user:pass@127.0.0.1:1/testdb',
         schema: 'header_size_test',
       },
     },

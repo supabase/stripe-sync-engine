@@ -52,11 +52,11 @@ describe('cli connector shorthand', () => {
   it('supports nested shorthand keys and JSON values', () => {
     const result = applyConnectorShorthand(
       {
-        'postgres.connection-string': 'postgres://localhost/db',
+        'postgres.url': 'postgres://localhost/db',
         'postgres.schema': 'public',
         'postgres.aws.region': 'us-west-2',
         'postgres.aws.role-arn': 'arn:aws:iam::123:role/demo',
-        'postgres.port': '6543',
+        'postgres.aws.port': '6543',
         'postgres.ssl-ca-pem': '{"pem":"value"}',
       },
       'destination',
@@ -66,10 +66,10 @@ describe('cli connector shorthand', () => {
     expect(JSON.parse(String(result.destination))).toEqual({
       type: 'postgres',
       postgres: {
-        connection_string: 'postgres://localhost/db',
+        url: 'postgres://localhost/db',
         schema: 'public',
-        port: 6543,
         aws: {
+          port: 6543,
           region: 'us-west-2',
           role_arn: 'arn:aws:iam::123:role/demo',
         },
@@ -82,7 +82,7 @@ describe('cli connector shorthand', () => {
     const result = applyConnectorShorthand(
       {
         destination: '{"type":"postgres","postgres":{"schema":"public"}}',
-        'postgres.connection-string': 'postgres://localhost/db',
+        'postgres.url': 'postgres://localhost/db',
       },
       'destination',
       ['postgres', 'google_sheets']
@@ -92,7 +92,7 @@ describe('cli connector shorthand', () => {
       type: 'postgres',
       postgres: {
         schema: 'public',
-        connection_string: 'postgres://localhost/db',
+        url: 'postgres://localhost/db',
       },
     })
   })
@@ -125,7 +125,10 @@ describe('cli connector shorthand', () => {
 
   it('rejects connector names that appear in both source and destination sets', () => {
     expect(() =>
-      assertNoAmbiguousConnectorNames(['stripe', 'shared_connector'], ['postgres', 'shared-connector'])
+      assertNoAmbiguousConnectorNames(
+        ['stripe', 'shared_connector'],
+        ['postgres', 'shared-connector']
+      )
     ).toThrow('Connector names cannot exist in both source and destination sets')
   })
 

@@ -1,7 +1,6 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
 import { logger } from '../logger.js'
 
-
 export function syncRequestContext(pipeline: {
   source: { type: string }
   destination: { type: string }

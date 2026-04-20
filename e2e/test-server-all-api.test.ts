@@ -216,7 +216,7 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: destDocker.connectionString,
+          url: destDocker.connectionString,
           schema: destSchema,
           batch_size: 100,
         },

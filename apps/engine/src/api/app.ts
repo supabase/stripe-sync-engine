@@ -50,12 +50,7 @@ import {
   withPgConnectProxy,
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
-import {
-  syncRequestContext,
-  logApiStream,
-  createConnectionAbort,
-  verboseInput,
-} from './helpers.js'
+import { syncRequestContext, logApiStream, createConnectionAbort, verboseInput } from './helpers.js'
 
 // ── Helpers ─────────────────────────────────────────────────────
 

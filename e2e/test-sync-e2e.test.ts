@@ -40,7 +40,7 @@ describe('test-server sync via Docker service: 10k customers', () => {
           destination: {
             type: 'postgres',
             postgres: {
-              connection_string: harness.destPgContainerUrl(),
+              url: harness.destPgContainerUrl(),
               schema: destSchema,
             },
           },

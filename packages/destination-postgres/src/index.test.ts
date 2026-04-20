@@ -23,7 +23,7 @@ let connectionString: string
 const SCHEMA = 'test_dest'
 
 function makeConfig(): Config {
-  return { connection_string: connectionString, schema: SCHEMA, port: 5432, batch_size: 100 }
+  return { url: connectionString, schema: SCHEMA, batch_size: 100 }
 }
 
 beforeAll(async () => {
@@ -128,7 +128,7 @@ describe('destination default export', () => {
       await expect(
         collectFirst(
           destination.check({
-            config: { ...makeConfig(), connection_string: 'postgresql://localhost:1/nope' },
+            config: { ...makeConfig(), url: 'postgresql://localhost:1/nope' },
           }),
           'connection_status'
         )

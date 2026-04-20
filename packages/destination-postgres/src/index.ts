@@ -23,37 +23,34 @@ export { configSchema, type Config } from './spec.js'
 
 export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   if (config.aws) {
-    if (!config.host || !config.database || !config.user) {
-      throw new Error('host, database, and user are required when using AWS IAM auth')
-    }
     const { buildRdsIamPasswordFn } = await import('./aws.js')
     const passwordFn = await buildRdsIamPasswordFn({
-      host: config.host,
-      port: config.port,
-      user: config.user,
+      host: config.aws.host,
+      port: config.aws.port,
+      user: config.aws.user,
       region: config.aws.region,
       roleArn: config.aws.role_arn,
       externalId: config.aws.external_id,
     })
     return withPgConnectProxy({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
+      host: config.aws.host,
+      port: config.aws.port,
+      database: config.aws.database,
+      user: config.aws.user,
       password: passwordFn,
       ssl: true,
     })
   }
 
-  const connStr = config.connection_string ?? config.url
-  if (connStr) {
+  const connectionString = config.url ?? config.connection_string
+  if (connectionString) {
     return withPgConnectProxy({
-      connectionString: stripSslParams(connStr),
-      ssl: sslConfigFromConnectionString(connStr, { sslCaPem: config.ssl_ca_pem }),
+      connectionString: stripSslParams(connectionString),
+      ssl: sslConfigFromConnectionString(connectionString, { sslCaPem: config.ssl_ca_pem }),
     })
   }
 
-  throw new Error('Either connection_string (or url) or aws config is required')
+  throw new Error('Either url/connection_string or aws config is required')
 }
 
 // MARK: - upsertMany

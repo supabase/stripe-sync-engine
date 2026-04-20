@@ -1148,32 +1148,16 @@
         "properties": {
           "url": {
             "type": "string",
-            "description": "Postgres connection string (alias for connection_string)"
+            "description": "Postgres connection string"
           },
           "connection_string": {
             "type": "string",
-            "description": "Postgres connection string"
-          },
-          "host": {
-            "type": "string",
-            "description": "Postgres host (required for AWS IAM)"
-          },
-          "port": {
-            "default": 5432,
-            "type": "number",
-            "description": "Postgres port"
-          },
-          "database": {
-            "type": "string",
-            "description": "Database name (required for AWS IAM)"
-          },
-          "user": {
-            "type": "string",
-            "description": "Database user (required for AWS IAM)"
+            "description": "Deprecated alias for url; prefer url"
           },
           "schema": {
+            "default": "public",
             "type": "string",
-            "description": "Target schema name (e.g. \"stripe_sync\")"
+            "description": "Target schema name (e.g. \"stripe\")"
           },
           "batch_size": {
             "default": 100,
@@ -1183,6 +1167,23 @@
           "aws": {
             "type": "object",
             "properties": {
+              "host": {
+                "type": "string",
+                "description": "Postgres host for RDS IAM auth"
+              },
+              "port": {
+                "default": 5432,
+                "type": "number",
+                "description": "Postgres port for RDS IAM auth"
+              },
+              "database": {
+                "type": "string",
+                "description": "Database name for RDS IAM auth"
+              },
+              "user": {
+                "type": "string",
+                "description": "Database user for RDS IAM auth"
+              },
               "region": {
                 "type": "string",
                 "description": "AWS region for RDS instance"
@@ -1197,6 +1198,9 @@
               }
             },
             "required": [
+              "host",
+              "database",
+              "user",
               "region"
             ],
             "additionalProperties": false,
@@ -1207,9 +1211,6 @@
             "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)"
           }
         },
-        "required": [
-          "schema"
-        ],
         "additionalProperties": false
       },
       "DestinationGoogleSheetsConfig": {

@@ -70,7 +70,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
       },
       destination: {
         type: 'postgres',
-        postgres: { connection_string: POSTGRES_URL, schema: SCHEMA },
+        postgres: { url: POSTGRES_URL, schema: SCHEMA },
       },
       streams: STREAMS.map((name) => ({ name })),
     }

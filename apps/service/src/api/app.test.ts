@@ -182,7 +182,7 @@ function createPostgresCheckDestination(
         spec: {
           config: z.toJSONSchema(
             z.object({
-              connection_string: z.string(),
+              url: z.string(),
               schema: z.string().default('public'),
             })
           ),
@@ -325,23 +325,21 @@ describe('pipeline CRUD', () => {
   })
 
   it('runs stripe and postgres checks before creating a pipeline', async () => {
-    const stripeCheck = vi.fn(
-      () =>
-        (async function* (): AsyncIterable<CheckOutput> {
-          yield {
-            type: 'connection_status',
-            connection_status: { status: 'succeeded' as const },
-          }
-        })()
+    const stripeCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
     )
-    const postgresCheck = vi.fn(
-      () =>
-        (async function* (): AsyncIterable<CheckOutput> {
-          yield {
-            type: 'connection_status',
-            connection_status: { status: 'succeeded' as const },
-          }
-        })()
+    const postgresCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
     )
     const checkedResolver = await createConnectorResolver({
       sources: { stripe: createStripeCheckSource(stripeCheck) },
@@ -365,7 +363,7 @@ describe('pipeline CRUD', () => {
         },
         destination: {
           type: 'postgres',
-          postgres: { connection_string: 'postgres://localhost/db' },
+          postgres: { url: 'postgres://localhost/db' },
         },
       }),
     })
@@ -375,30 +373,28 @@ describe('pipeline CRUD', () => {
       config: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
     })
     expect(postgresCheck).toHaveBeenCalledWith({
-      config: { connection_string: 'postgres://localhost/db', schema: 'public' },
+      config: { url: 'postgres://localhost/db', schema: 'public' },
     })
     expect(temporalClient.start).toHaveBeenCalledOnce()
     expect(await pipelineStore.list()).toHaveLength(1)
   })
 
   it('returns 400 and does not create a pipeline when stripe check fails', async () => {
-    const stripeCheck = vi.fn(
-      () =>
-        (async function* (): AsyncIterable<CheckOutput> {
-          yield {
-            type: 'connection_status',
-            connection_status: { status: 'failed' as const, message: 'invalid api key' },
-          }
-        })()
+    const stripeCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'failed' as const, message: 'invalid api key' },
+        }
+      })()
     )
-    const postgresCheck = vi.fn(
-      () =>
-        (async function* (): AsyncIterable<CheckOutput> {
-          yield {
-            type: 'connection_status',
-            connection_status: { status: 'succeeded' as const },
-          }
-        })()
+    const postgresCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
     )
     const checkedResolver = await createConnectorResolver({
       sources: { stripe: createStripeCheckSource(stripeCheck) },
@@ -422,7 +418,7 @@ describe('pipeline CRUD', () => {
         },
         destination: {
           type: 'postgres',
-          postgres: { connection_string: 'postgres://localhost/db' },
+          postgres: { url: 'postgres://localhost/db' },
         },
       }),
     })

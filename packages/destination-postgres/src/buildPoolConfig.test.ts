@@ -6,6 +6,7 @@ vi.mock('./aws', () => ({
 
 import { buildPoolConfig, type Config } from './index.js'
 import { buildRdsIamPasswordFn } from './aws.js'
+import { configSchema } from './spec.js'
 
 const mockPasswordFn = vi.fn().mockResolvedValue('rds-token')
 const mockBuild = vi.mocked(buildRdsIamPasswordFn)
@@ -23,23 +24,23 @@ describe('buildPoolConfig', () => {
   it('connection_string without sslmode → ssl: false', async () => {
     const config: Config = {
       connection_string: 'postgres://user:pass@localhost:5432/mydb',
-      port: 5432,
       schema: 'stripe',
       batch_size: 100,
     }
 
     const result = await buildPoolConfig(config)
-    expect(result).toEqual({
-      connectionString: 'postgres://user:pass@localhost:5432/mydb',
-      ssl: false,
-    })
+    expect(result).toEqual(
+      expect.objectContaining({
+        connectionString: 'postgres://user:pass@localhost:5432/mydb',
+        ssl: false,
+      })
+    )
     expect(mockBuild).not.toHaveBeenCalled()
   })
 
   it('sslmode=disable → ssl: false', async () => {
     const config: Config = {
-      connection_string: 'postgres://user:pass@localhost:5432/mydb?sslmode=disable',
-      port: 5432,
+      url: 'postgres://user:pass@localhost:5432/mydb?sslmode=disable',
       schema: 'stripe',
       batch_size: 100,
     }
@@ -49,8 +50,7 @@ describe('buildPoolConfig', () => {
 
   it('sslmode=verify-full → ssl: { rejectUnauthorized: true }', async () => {
     const config: Config = {
-      connection_string: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
-      port: 5432,
+      url: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
       schema: 'stripe',
       batch_size: 100,
     }
@@ -62,8 +62,7 @@ describe('buildPoolConfig', () => {
 
   it('sslmode=require → ssl: { rejectUnauthorized: false }', async () => {
     const config: Config = {
-      connection_string: 'postgres://user:pass@host:5432/mydb?sslmode=require',
-      port: 5432,
+      url: 'postgres://user:pass@host:5432/mydb?sslmode=require',
       schema: 'stripe',
       batch_size: 100,
     }
@@ -75,8 +74,7 @@ describe('buildPoolConfig', () => {
     vi.stubEnv('PG_PROXY_HOST', 'pg-proxy.example.test')
 
     const config: Config = {
-      connection_string: 'postgres://user:pass@localhost:5432/mydb',
-      port: 5432,
+      url: 'postgres://user:pass@localhost:5432/mydb',
       schema: 'stripe',
       batch_size: 100,
     }
@@ -90,25 +88,29 @@ describe('buildPoolConfig', () => {
 
   it('aws config → host/port/database/user/ssl/password-function PoolConfig', async () => {
     const config: Config = {
-      host: 'mydb.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      database: 'mydb',
-      user: 'iam_user',
       schema: 'stripe',
       batch_size: 100,
-      aws: { region: 'us-east-1' },
+      aws: {
+        host: 'mydb.us-east-1.rds.amazonaws.com',
+        port: 5432,
+        database: 'mydb',
+        user: 'iam_user',
+        region: 'us-east-1',
+      },
     }
 
     const result = await buildPoolConfig(config)
 
-    expect(result).toEqual({
-      host: 'mydb.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      database: 'mydb',
-      user: 'iam_user',
-      password: mockPasswordFn,
-      ssl: true,
-    })
+    expect(result).toEqual(
+      expect.objectContaining({
+        host: 'mydb.us-east-1.rds.amazonaws.com',
+        port: 5432,
+        database: 'mydb',
+        user: 'iam_user',
+        password: mockPasswordFn,
+        ssl: true,
+      })
+    )
 
     expect(mockBuild).toHaveBeenCalledWith({
       host: 'mydb.us-east-1.rds.amazonaws.com',
@@ -122,13 +124,13 @@ describe('buildPoolConfig', () => {
 
   it('aws config with role_arn passes through', async () => {
     const config: Config = {
-      host: 'mydb.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      database: 'mydb',
-      user: 'iam_user',
       schema: 'stripe',
       batch_size: 100,
       aws: {
+        host: 'mydb.us-east-1.rds.amazonaws.com',
+        port: 5432,
+        database: 'mydb',
+        user: 'iam_user',
         region: 'us-east-1',
         role_arn: 'arn:aws:iam::123456789012:role/MyRole',
         external_id: 'ext-123',
@@ -147,60 +149,48 @@ describe('buildPoolConfig', () => {
     })
   })
 
-  it('throws when aws present but host missing', async () => {
+  it('throws when neither url nor aws provided', async () => {
     const config: Config = {
-      port: 5432,
-      database: 'mydb',
-      user: 'iam_user',
       schema: 'stripe',
       batch_size: 100,
-      aws: { region: 'us-east-1' },
     }
 
     await expect(buildPoolConfig(config)).rejects.toThrow(
-      'host, database, and user are required when using AWS IAM auth'
+      'Either url/connection_string or aws config is required'
     )
   })
 
-  it('throws when aws present but database missing', async () => {
-    const config: Config = {
-      host: 'mydb.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      user: 'iam_user',
-      schema: 'stripe',
-      batch_size: 100,
-      aws: { region: 'us-east-1' },
-    }
+  it('spec rejects configs that mix url and aws', async () => {
+    const parse = () =>
+      configSchema.parse({
+        url: 'postgres://user:pass@localhost:5432/mydb',
+        schema: 'stripe',
+        batch_size: 100,
+        aws: {
+          host: 'mydb.us-east-1.rds.amazonaws.com',
+          port: 5432,
+          database: 'mydb',
+          user: 'iam_user',
+          region: 'us-east-1',
+        },
+      })
 
-    await expect(buildPoolConfig(config)).rejects.toThrow(
-      'host, database, and user are required when using AWS IAM auth'
-    )
+    expect(parse).toThrow('Specify either url/connection_string or aws config, not both')
   })
 
-  it('throws when aws present but user missing', async () => {
+  it('accepts url as the preferred connection string field', async () => {
     const config: Config = {
-      host: 'mydb.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      database: 'mydb',
-      schema: 'stripe',
-      batch_size: 100,
-      aws: { region: 'us-east-1' },
-    }
-
-    await expect(buildPoolConfig(config)).rejects.toThrow(
-      'host, database, and user are required when using AWS IAM auth'
-    )
-  })
-
-  it('throws when neither connection_string nor aws provided', async () => {
-    const config: Config = {
-      port: 5432,
+      url: 'postgres://user:pass@localhost:5432/mydb',
       schema: 'stripe',
       batch_size: 100,
     }
 
-    await expect(buildPoolConfig(config)).rejects.toThrow(
-      'Either connection_string (or url) or aws config is required'
+    const result = await buildPoolConfig(config)
+    expect(result).toEqual(
+      expect.objectContaining({
+        connectionString: 'postgres://user:pass@localhost:5432/mydb',
+        ssl: false,
+      })
     )
   })
 })

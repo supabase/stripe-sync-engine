@@ -22,7 +22,6 @@ type BunLike = {
 export async function startApiServer({ resolver, port }: StartApiServerOptions) {
   const listenPort = port ?? Number(process.env['PORT'] || 3000)
 
-
   const app = await createApp(resolver)
   const bun = (globalThis as typeof globalThis & { Bun?: BunLike }).Bun
 

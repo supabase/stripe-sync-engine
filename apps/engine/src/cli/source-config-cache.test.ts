@@ -33,7 +33,7 @@ describe('source-config-cache', () => {
   it('applies source_config controls as full source replacements', () => {
     const pipeline = {
       source: { type: 'stripe', stripe: { api_key: 'sk_test' } },
-      destination: { type: 'postgres', postgres: { connection_string: 'postgres://test' } },
+      destination: { type: 'postgres', postgres: { url: 'postgres://test' } },
     }
 
     const updated = applyControlToPipeline(pipeline, {
@@ -54,7 +54,7 @@ describe('source-config-cache', () => {
           account_created: 1_700_000_000,
         },
       },
-      destination: { type: 'postgres', postgres: { connection_string: 'postgres://test' } },
+      destination: { type: 'postgres', postgres: { url: 'postgres://test' } },
     })
   })
 })

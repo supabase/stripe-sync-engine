@@ -152,7 +152,7 @@ describe('test-server sync via Docker engine', () => {
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: harness.destPgContainerUrl(),
+          url: harness.destPgContainerUrl(),
           schema: opts.destSchema,
           batch_size: 100,
         },

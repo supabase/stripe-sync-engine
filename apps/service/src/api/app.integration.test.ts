@@ -179,7 +179,7 @@ describe('pipeline integration', () => {
         },
         destination: {
           type: 'postgres',
-          postgres: { connection_string: POSTGRES_URL, schema: SCHEMA },
+          postgres: { url: POSTGRES_URL, schema: SCHEMA },
         },
         streams: [{ name: 'products' }],
       },

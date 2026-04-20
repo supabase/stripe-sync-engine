@@ -138,7 +138,7 @@ describeWithEnv(
           destination: {
             type: 'postgres',
             postgres: {
-              connection_string: POSTGRES_CONTAINER_URL,
+              url: POSTGRES_CONTAINER_URL,
               schema,
             },
           },

@@ -4,7 +4,10 @@ import type { CommandDef } from 'citty'
 export type ConnectorBodyKey = 'source' | 'destination'
 
 export function normalizeCliKey(value: string): string {
-  return value.replace(/-/g, '_').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
+  return value
+    .replace(/-/g, '_')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
 }
 
 export function parseCliValue(value: unknown): unknown {

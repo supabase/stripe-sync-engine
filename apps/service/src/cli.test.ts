@@ -82,7 +82,9 @@ function buildMockApp() {
         stripe.api_version !== '2025-04-30.basil'
       ) {
         return new Response(
-          JSON.stringify({ error: [{ path: ['source', 'stripe', 'api_version'], message: 'Invalid option' }] }),
+          JSON.stringify({
+            error: [{ path: ['source', 'stripe', 'api_version'], message: 'Invalid option' }],
+          }),
           { status: 400, headers: { 'content-type': 'application/json' } }
         )
       }
@@ -204,7 +206,7 @@ describe('generated pipeline CLI', () => {
         '--source',
         '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
         '--destination',
-        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+        '{"type":"postgres","postgres":{"url":"postgres://localhost/db","schema":"public"}}',
       ],
     })
 
@@ -247,7 +249,7 @@ describe('generated pipeline CLI', () => {
         '--source',
         '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
         '--destination',
-        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+        '{"type":"postgres","postgres":{"url":"postgres://localhost/db","schema":"public"}}',
       ],
     })
 
@@ -274,7 +276,7 @@ describe('generated pipeline CLI', () => {
         '--source',
         '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
         '--destination',
-        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+        '{"type":"postgres","postgres":{"url":"postgres://localhost/db","schema":"public"}}',
       ],
     })
 
@@ -310,7 +312,7 @@ describe('generated pipeline CLI', () => {
         'sk_test_123',
         '--stripe.api-version',
         '2025-03-31.basil',
-        '--postgres.connection-string',
+        '--postgres.url',
         'postgres://localhost/db',
         '--postgres.schema',
         'public',
@@ -325,6 +327,38 @@ describe('generated pipeline CLI', () => {
       stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
     })
     expect(created.destination.type).toBe('postgres')
+    expect(created.destination.postgres).toMatchObject({
+      url: 'postgres://localhost/db',
+      schema: 'public',
+    })
+
+    writeSpy.mockRestore()
+  })
+
+  it('still accepts deprecated postgres.connection-string shorthand', async () => {
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await runCommand(program, {
+      rawArgs: [
+        'pipelines',
+        'create',
+        '--stripe.api-key',
+        'sk_test_123',
+        '--stripe.api-version',
+        '2025-03-31.basil',
+        '--postgres.connection-string',
+        'postgres://localhost/db',
+        '--postgres.schema',
+        'public',
+      ],
+    })
+
+    const output = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    const created = JSON.parse(output)
+
     expect(created.destination.postgres).toMatchObject({
       connection_string: 'postgres://localhost/db',
       schema: 'public',
@@ -382,7 +416,7 @@ describe('generated pipeline CLI', () => {
           'sk_test_123',
           '--stripe.api-version',
           'not-a-real-version',
-          '--postgres.connection-string',
+          '--postgres.url',
           'postgres://localhost/db',
           '--postgres.schema',
           'public',
@@ -413,7 +447,7 @@ describe('generated pipeline CLI', () => {
         '--source',
         '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
         '--destination',
-        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+        '{"type":"postgres","postgres":{"url":"postgres://localhost/db","schema":"public"}}',
       ],
     })
 

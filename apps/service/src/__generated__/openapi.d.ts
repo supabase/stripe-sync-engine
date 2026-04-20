@@ -135,21 +135,10 @@ export interface components {
             google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
         };
         DestinationPostgresConfig: {
-            /** @description Postgres connection string (alias for connection_string) */
-            url?: string;
             /** @description Postgres connection string */
+            url?: string;
+            /** @description Deprecated alias for url; prefer url */
             connection_string?: string;
-            /** @description Postgres host (required for AWS IAM) */
-            host?: string;
-            /**
-             * @description Postgres port
-             * @default 5432
-             */
-            port: number;
-            /** @description Database name (required for AWS IAM) */
-            database?: string;
-            /** @description Database user (required for AWS IAM) */
-            user?: string;
             /**
              * @description Target schema name (e.g. "stripe")
              * @default public
@@ -162,6 +151,17 @@ export interface components {
             batch_size: number;
             /** @description AWS RDS IAM authentication config */
             aws?: {
+                /** @description Postgres host for RDS IAM auth */
+                host: string;
+                /**
+                 * @description Postgres port for RDS IAM auth
+                 * @default 5432
+                 */
+                port: number;
+                /** @description Database name for RDS IAM auth */
+                database: string;
+                /** @description Database user for RDS IAM auth */
+                user: string;
                 /** @description AWS region for RDS instance */
                 region: string;
                 /** @description IAM role ARN to assume (cross-account) */

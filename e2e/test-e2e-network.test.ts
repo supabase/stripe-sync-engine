@@ -66,7 +66,7 @@ async function createCustomersPipeline(
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: harness.destPgContainerUrl(),
+          url: harness.destPgContainerUrl(),
           schema,
         },
       },

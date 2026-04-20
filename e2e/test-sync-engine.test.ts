@@ -151,7 +151,7 @@ describe('Stripe failure handling via Docker engine', () => {
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: harness.destDocker.connectionString,
+          url: harness.destDocker.connectionString,
           schema: opts.destSchema,
           batch_size: 100,
         },
