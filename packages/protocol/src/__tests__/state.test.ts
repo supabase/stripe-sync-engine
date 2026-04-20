@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import type { SourceStateMessage } from '../protocol.js'
 import { SourceState, StatePayload, StreamStatePayload, GlobalStatePayload } from '../protocol.js'
-import { stateMsg, stateData } from '../helpers.js'
+import { stateData } from '../helpers.js'
 
 describe('SourceState', () => {
   it('parses a full SourceState', () => {
@@ -82,38 +83,20 @@ describe('StatePayload backward compat', () => {
   })
 })
 
-describe('stateMsg helper', () => {
-  it('creates stream source_state message (old format — no state_type)', () => {
-    const msg = stateMsg({ stream: 'orders', data: { cursor: 1 } })
-    expect(msg.type).toBe('source_state')
-    expect(msg.source_state.state_type).toBe('stream')
-    if (msg.source_state.state_type === 'stream') {
-      expect(msg.source_state.stream).toBe('orders')
-    }
-  })
-
-  it('creates global source_state message', () => {
-    const msg = stateMsg({
-      state_type: 'global',
-      data: { events_cursor: 'evt_1' },
-    })
-    expect(msg.type).toBe('source_state')
-    expect(msg.source_state.state_type).toBe('global')
-    expect(msg.source_state.data).toEqual({ events_cursor: 'evt_1' })
-  })
-})
-
 describe('stateData helper', () => {
   it('returns data for stream state', () => {
-    const msg = stateMsg({ stream: 'orders', data: { cursor: 5 } })
+    const msg: SourceStateMessage = {
+      type: 'source_state',
+      source_state: { state_type: 'stream', stream: 'orders', data: { cursor: 5 } },
+    }
     expect(stateData(msg)).toEqual({ cursor: 5 })
   })
 
   it('returns data for global state', () => {
-    const msg = stateMsg({
-      state_type: 'global',
-      data: { events_cursor: 'evt_1' },
-    })
+    const msg: SourceStateMessage = {
+      type: 'source_state',
+      source_state: { state_type: 'global', data: { events_cursor: 'evt_1' } },
+    }
     expect(stateData(msg)).toEqual({ events_cursor: 'evt_1' })
   })
 })
