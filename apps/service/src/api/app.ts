@@ -376,6 +376,7 @@ export function createApp(options: AppOptions) {
       .optional()
       .meta({ description: 'Max state messages before stopping' }),
     time_limit: z.coerce.number().optional().meta({ description: 'Stop after N seconds' }),
+    sync_run_id: z.string().optional().meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
   })
 
   app.openapi(
@@ -386,7 +387,8 @@ export function createApp(options: AppOptions) {
       tags: ['Pipelines'],
       summary: 'Run sync for a pipeline',
       description:
-        'Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.',
+        'Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. ' +
+        'Persists the ending sync_state on the pipeline so the next run resumes where this one left off.',
       requestParams: { path: PipelineIdParam, query: SyncQueryParams },
       responses: {
         200: {
@@ -405,7 +407,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit } = c.req.valid('query')
+      const { state_limit, time_limit, sync_run_id } = c.req.valid('query')
 
       let pipeline: Pipeline
       try {
@@ -423,9 +425,24 @@ export function createApp(options: AppOptions) {
 
       const engine = createRemoteEngine(options.engineUrl)
       const { id: _, sync_state, ...config } = pipeline
-      const output = engine.pipeline_sync(config, { state: sync_state, state_limit, time_limit })
+      const output = engine.pipeline_sync(config, { state: sync_state, state_limit, time_limit, sync_run_id })
 
-      return ndjsonResponse(output)
+      // Wrap the output to intercept eof and persist sync_state + progress
+      const wrapped = (async function* () {
+        for await (const msg of output) {
+          yield msg
+          if (msg.type === 'eof' && msg.eof?.ending_state) {
+            await pipelineStore.update(id, {
+              sync_state: msg.eof.ending_state,
+              progress: msg.eof.run_progress,
+            })
+          } else if (msg.type === 'progress' && msg.progress) {
+            await pipelineStore.update(id, { progress: msg.progress })
+          }
+        }
+      })()
+
+      return ndjsonResponse(wrapped)
     }
   )
 

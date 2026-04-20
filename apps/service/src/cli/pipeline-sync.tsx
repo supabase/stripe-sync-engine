@@ -10,15 +10,17 @@ export interface PipelineSyncOptions {
   pipelineId: string
   stateLimit?: number
   timeLimit?: number
+  syncRunId?: string
   plain: boolean
 }
 
 export async function renderPipelineSync(opts: PipelineSyncOptions) {
-  const { handler, pipelineId, stateLimit, timeLimit, plain } = opts
+  const { handler, pipelineId, stateLimit, timeLimit, syncRunId, plain } = opts
 
   const params = new URLSearchParams()
   if (stateLimit) params.set('state_limit', String(stateLimit))
   if (timeLimit) params.set('time_limit', String(timeLimit))
+  if (syncRunId) params.set('sync_run_id', syncRunId)
   const qs = params.toString() ? `?${params}` : ''
 
   const res = await handler(
@@ -71,7 +73,11 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
 
       for (const line of lines) {
         if (!line.trim()) continue
-        const msg = JSON.parse(line) as { type: string; progress?: ProgressPayload; eof?: { run_progress?: ProgressPayload } }
+        const msg = JSON.parse(line) as {
+          type: string
+          progress?: ProgressPayload
+          eof?: { run_progress?: ProgressPayload }
+        }
 
         if (msg.type === 'progress' && msg.progress) {
           prevProgress = progress

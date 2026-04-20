@@ -309,6 +309,7 @@ export async function createProgram() {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
         stateLimit: { type: 'string', description: 'Max state messages before stopping' },
         timeLimit: { type: 'string', description: 'Stop after N seconds' },
+        syncRunId: { type: 'string', description: 'Sync run identifier (resumes or starts fresh)' },
         plain: {
           type: 'boolean',
           default: false,
@@ -322,10 +323,11 @@ export async function createProgram() {
           pipelineId: args.id as string,
           stateLimit: args.stateLimit ? parseInt(args.stateLimit) : undefined,
           timeLimit: args.timeLimit ? parseInt(args.timeLimit) : undefined,
+          syncRunId: args.syncRunId,
           plain: args.plain || !process.stderr.isTTY,
         })
       },
-    })
+    }) as CommandDef
   }
 
   return defineCommand({
