@@ -4,8 +4,6 @@ const createEngine = vi.fn()
 const createRemoteEngine = vi.fn()
 const readonlyStateStore = vi.fn()
 const fileStateStore = vi.fn()
-const readPersistedStripeSourceConfig = vi.fn(() => undefined)
-const writePersistedStripeSourceConfig = vi.fn()
 const render = vi.fn(() => ({
   rerender: vi.fn(),
   unmount: vi.fn(),
@@ -23,8 +21,6 @@ vi.mock('../lib/state-store.js', () => ({
 
 vi.mock('../cli/source-config-cache.js', () => ({
   applyControlToPipeline: vi.fn((pipeline) => pipeline),
-  readPersistedStripeSourceConfig,
-  writePersistedStripeSourceConfig,
 }))
 
 vi.mock('../lib/progress/format.js', () => ({

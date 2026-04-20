@@ -13,11 +13,7 @@ import {
   emptySyncState,
 } from '@stripe/sync-protocol'
 import { ProgressView, formatProgress } from '../lib/progress/format.js'
-import {
-  applyControlToPipeline,
-  readPersistedStripeSourceConfig,
-  writePersistedStripeSourceConfig,
-} from './source-config-cache.js'
+import { applyControlToPipeline } from './source-config-cache.js'
 
 const PROGRESS_RENDER_INTERVAL_MS = 200
 
@@ -103,12 +99,8 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
       const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
 
-      const persistedStripeConfig = readPersistedStripeSourceConfig(
-        sourceConfigCachePath(stripeApiKey, args.stateDir)
-      )
       const stripeConfig: Record<string, unknown> = {
         api_key: stripeApiKey,
-        ...(persistedStripeConfig ?? {}),
       }
       if (args.stripeBaseUrl) stripeConfig.base_url = args.stripeBaseUrl
       if (args.stripeRateLimit) stripeConfig.rate_limit = parseInt(args.stripeRateLimit)
@@ -145,12 +137,6 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
         for await (const msg of engine.pipeline_setup(pipeline)) {
           if (msg.type !== 'control') continue
           pipeline = applyControlToPipeline(pipeline, msg.control)
-          if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
-            writePersistedStripeSourceConfig(
-              sourceConfigCachePath(stripeApiKey, args.stateDir),
-              msg.control.source_config
-            )
-          }
         }
 
         const syncState: SyncState | undefined = initialState
@@ -178,12 +164,6 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
         for await (const msg of output) {
           if (msg.type === 'control') {
             pipeline = applyControlToPipeline(pipeline, msg.control)
-            if (msg.control.control_type === 'source_config' && pipeline.source.type === 'stripe') {
-              writePersistedStripeSourceConfig(
-                sourceConfigCachePath(stripeApiKey, args.stateDir),
-                msg.control.source_config
-              )
-            }
           } else if (msg.type === 'source_state') {
             if (msg.source_state.state_type === 'global') {
               await store.setGlobal(msg.source_state.data)
@@ -223,10 +203,6 @@ function defaultFileStateStore(apiKey: string, stateDir?: string): StateStore {
   return fileStateStore(filePath)
 }
 
-function sourceConfigCachePath(apiKey: string, stateDir?: string): string {
-  const dir = stateDir ?? DEFAULT_STATE_DIR
-  return join(dir, `${stateHash(apiKey)}.source-config.json`)
-}
 
 async function getPostgresStateStore(connectionString: string, schema: string) {
   const pkg = await import('@stripe/sync-state-postgres')
