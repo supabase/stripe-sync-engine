@@ -618,7 +618,7 @@ export type DestinationInput = Message
  * destination-originated messages (logs, connection_status) and pass-through
  * messages from the source that the destination doesn't handle.
  */
-export const DestinationOutput = Message
+export const DestinationOutput = Message.meta({ id: 'DestinationOutput' })
 export type DestinationOutput = Message
 
 /** Output of pipeline_sync streamed to the client. */

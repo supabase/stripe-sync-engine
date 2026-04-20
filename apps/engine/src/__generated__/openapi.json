@@ -2258,6 +2258,9 @@
           }
         }
       },
+      "DestinationOutput": {
+        "$ref": "#/components/schemas/Message"
+      },
       "SyncOutput": {
         "oneOf": [
           {
