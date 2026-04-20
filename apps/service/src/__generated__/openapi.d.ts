@@ -69,9 +69,29 @@ export interface paths {
         put?: never;
         /**
          * Run sync for a pipeline
-         * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.
+         * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.
          */
         post: operations["pipelines.sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/sync_workflow_test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync using the workflow backfill loop (no Temporal)
+         * @description Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.
+         */
+        post: operations["pipelines.sync_workflow_test"];
         delete?: never;
         options?: never;
         head?: never;
@@ -949,6 +969,10 @@ export interface operations {
                 state_limit?: number;
                 /** @description Stop after N seconds */
                 time_limit?: number;
+                /** @description Sync run identifier (resumes or starts fresh) */
+                sync_run_id?: string;
+                /** @description Ignore and do not persist the pipeline sync_state checkpoint */
+                no_state?: boolean;
             };
             header?: never;
             path: {
@@ -957,7 +981,27 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    source?: components["schemas"]["SourceConfig"];
+                    destination?: components["schemas"]["DestinationConfig"];
+                    streams?: {
+                        /** @description Stream (table) name to sync. */
+                        name: string;
+                        /**
+                         * @description How the source reads this stream. Defaults to full_refresh.
+                         * @enum {string}
+                         */
+                        sync_mode?: "incremental" | "full_refresh";
+                        /** @description Cap backfill to this many records, then mark the stream complete. */
+                        backfill_limit?: number;
+                    }[];
+                    /** @description Explicit sync checkpoint override for resumed ad-hoc runs */
+                    sync_state?: components["schemas"]["SyncState"];
+                };
+            };
+        };
         responses: {
             /** @description Streaming NDJSON sync output */
             200: {
@@ -981,8 +1025,43 @@ export interface operations {
                     };
                 };
             };
-            /** @description Engine not configured */
-            503: {
+        };
+    };
+    "pipelines.sync_workflow_test": {
+        parameters: {
+            query?: {
+                /** @description Max state messages per iteration */
+                state_limit?: number;
+                /** @description Time limit per iteration (seconds) */
+                time_limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backfill result with final eof and sync state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        eof: {
+                            [key: string]: unknown;
+                        };
+                        sync_state?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

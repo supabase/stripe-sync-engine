@@ -417,6 +417,16 @@
             "description": "Stop streaming after N seconds."
           },
           {
+            "in": "query",
+            "name": "sync_run_id",
+            "schema": {
+              "description": "Optional sync run identifier used to track bounded sync progress.",
+              "example": "run_demo",
+              "type": "string"
+            },
+            "description": "Optional sync run identifier used to track bounded sync progress."
+          },
+          {
             "in": "header",
             "name": "x-pipeline",
             "required": false,
@@ -637,6 +647,16 @@
               "exclusiveMinimum": 0
             },
             "description": "Stop streaming after N seconds."
+          },
+          {
+            "in": "query",
+            "name": "sync_run_id",
+            "schema": {
+              "description": "Optional sync run identifier used to track bounded sync progress.",
+              "example": "run_demo",
+              "type": "string"
+            },
+            "description": "Optional sync run identifier used to track bounded sync progress."
           },
           {
             "in": "header",

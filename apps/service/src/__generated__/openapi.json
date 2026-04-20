@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -1461,7 +1461,7 @@
           "Pipelines"
         ],
         "summary": "Run sync for a pipeline",
-        "description": "Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.",
+        "description": "Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.",
         "parameters": [
           {
             "in": "path",
@@ -1494,8 +1494,77 @@
               "type": "number"
             },
             "description": "Stop after N seconds"
+          },
+          {
+            "in": "query",
+            "name": "sync_run_id",
+            "schema": {
+              "description": "Sync run identifier (resumes or starts fresh)",
+              "type": "string"
+            },
+            "description": "Sync run identifier (resumes or starts fresh)"
+          },
+          {
+            "in": "query",
+            "name": "no_state",
+            "schema": {
+              "description": "Ignore and do not persist the pipeline sync_state checkpoint",
+              "type": "boolean"
+            },
+            "description": "Ignore and do not persist the pipeline sync_state checkpoint"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "sync_state": {
+                    "description": "Explicit sync checkpoint override for resumed ad-hoc runs",
+                    "$ref": "#/components/schemas/SyncState"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Streaming NDJSON sync output",
@@ -1525,9 +1594,81 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/sync_workflow_test": {
+      "post": {
+        "operationId": "pipelines.sync_workflow_test",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Run sync using the workflow backfill loop (no Temporal)",
+        "description": "Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
           },
-          "503": {
-            "description": "Engine not configured",
+          {
+            "in": "query",
+            "name": "state_limit",
+            "schema": {
+              "description": "Max state messages per iteration",
+              "type": "number"
+            },
+            "description": "Max state messages per iteration"
+          },
+          {
+            "in": "query",
+            "name": "time_limit",
+            "schema": {
+              "description": "Time limit per iteration (seconds)",
+              "type": "number"
+            },
+            "description": "Time limit per iteration (seconds)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backfill result with final eof and sync state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eof": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": {}
+                    },
+                    "sync_state": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "eof"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1956,8 +2097,7 @@
                     },
                     "required": [
                       "status"
-                    ],
-                    "additionalProperties": false
+                    ]
                   },
                   "derived": {
                     "type": "object",
@@ -1985,7 +2125,6 @@
                       "records_per_second",
                       "states_per_second"
                     ],
-                    "additionalProperties": false,
                     "description": "Computed aggregates."
                   },
                   "streams": {
@@ -2039,8 +2178,7 @@
                           "required": [
                             "gte",
                             "lt"
-                          ],
-                          "additionalProperties": false
+                          ]
                         },
                         "completed_ranges": {
                           "description": "Completed time sub-ranges for streams that support time_range.",
@@ -2060,8 +2198,7 @@
                             "required": [
                               "gte",
                               "lt"
-                            ],
-                            "additionalProperties": false
+                            ]
                           }
                         }
                       },
@@ -2070,7 +2207,6 @@
                         "state_count",
                         "record_count"
                       ],
-                      "additionalProperties": false,
                       "description": "Per-stream progress snapshot."
                     },
                     "description": "Per-stream progress, keyed by stream name."
@@ -2083,14 +2219,12 @@
                   "derived",
                   "streams"
                 ],
-                "additionalProperties": false,
                 "description": "Accumulated progress from prior requests in this run."
               }
             },
             "required": [
               "progress"
             ],
-            "additionalProperties": false,
             "description": "Engine-managed run state — sync_run_id, time_ceiling, accumulated progress."
           }
         },
@@ -2099,7 +2233,6 @@
           "destination",
           "sync_run"
         ],
-        "additionalProperties": false,
         "description": "Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing."
       },
       "SourceState": {
@@ -2126,7 +2259,6 @@
           "streams",
           "global"
         ],
-        "additionalProperties": false,
         "description": "Source connector state — cursors, backfill progress, events cursors."
       }
     }
