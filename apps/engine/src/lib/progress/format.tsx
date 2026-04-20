@@ -84,7 +84,13 @@ function StreamRow({
   )
 }
 
-export function ProgressHeader({ progress, prev }: { progress: ProgressPayload; prev?: ProgressPayload }) {
+export function ProgressHeader({
+  progress,
+  prev,
+}: {
+  progress: ProgressPayload
+  prev?: ProgressPayload
+}) {
   const streamEntries = Object.entries(progress.streams)
   const total = streamEntries.length
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)

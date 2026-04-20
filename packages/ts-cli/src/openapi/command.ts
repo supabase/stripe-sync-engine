@@ -81,7 +81,14 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
       const groupSubCommands: Record<string, CommandDef> = {}
       for (const op of ops) {
         const name = getOpName(op, nameOperation)
-        groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
+        groupSubCommands[name] = buildCommand(
+          op,
+          handler,
+          baseUrl,
+          nameOperation,
+          ndjsonBodyStream,
+          responseFormatter
+        )
       }
       const cliTag = toCliFlag(tag)
       subCommands[cliTag] = defineCommand({
@@ -92,12 +99,26 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
 
     for (const op of ungrouped) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
+      subCommands[name] = buildCommand(
+        op,
+        handler,
+        baseUrl,
+        nameOperation,
+        ndjsonBodyStream,
+        responseFormatter
+      )
     }
   } else {
     for (const op of operations) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
+      subCommands[name] = buildCommand(
+        op,
+        handler,
+        baseUrl,
+        nameOperation,
+        ndjsonBodyStream,
+        responseFormatter
+      )
     }
   }
 

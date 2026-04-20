@@ -1401,7 +1401,7 @@
                           "description": "Human-readable status message (error reason, skip reason, etc).",
                           "type": "string"
                         },
-                        "time_range": {
+                        "total_range": {
                           "description": "Full backfill time span for this stream.",
                           "type": "object",
                           "properties": {
@@ -1420,7 +1420,7 @@
                           ]
                         },
                         "completed_ranges": {
-                          "description": "Completed time sub-ranges for streams that support time_range.",
+                          "description": "Completed time sub-ranges within the total_range.",
                           "type": "array",
                           "items": {
                             "type": "object",
@@ -2204,7 +2204,7 @@
                       "description": "Human-readable status message (error reason, skip reason, etc).",
                       "type": "string"
                     },
-                    "time_range": {
+                    "total_range": {
                       "description": "Full backfill time span for this stream.",
                       "type": "object",
                       "properties": {
@@ -2223,7 +2223,7 @@
                       ]
                     },
                     "completed_ranges": {
-                      "description": "Completed time sub-ranges for streams that support time_range.",
+                      "description": "Completed time sub-ranges within the total_range.",
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -2400,7 +2400,7 @@
                           "description": "Human-readable status message (error reason, skip reason, etc).",
                           "type": "string"
                         },
-                        "time_range": {
+                        "total_range": {
                           "description": "Full backfill time span for this stream.",
                           "type": "object",
                           "properties": {
@@ -2419,7 +2419,7 @@
                           ]
                         },
                         "completed_ranges": {
-                          "description": "Completed time sub-ranges for streams that support time_range.",
+                          "description": "Completed time sub-ranges within the total_range.",
                           "type": "array",
                           "items": {
                             "type": "object",
@@ -2562,7 +2562,7 @@
                           "description": "Human-readable status message (error reason, skip reason, etc).",
                           "type": "string"
                         },
-                        "time_range": {
+                        "total_range": {
                           "description": "Full backfill time span for this stream.",
                           "type": "object",
                           "properties": {
@@ -2581,7 +2581,7 @@
                           ]
                         },
                         "completed_ranges": {
-                          "description": "Completed time sub-ranges for streams that support time_range.",
+                          "description": "Completed time sub-ranges within the total_range.",
                           "type": "array",
                           "items": {
                             "type": "object",

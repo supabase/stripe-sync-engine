@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable no-console */
 
 /**
  * PGlite Database Hydration Hook

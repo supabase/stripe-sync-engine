@@ -29,15 +29,19 @@ function StreamRow({ name, stream }: { name: string; stream: StreamProgress }) {
       <Box minWidth={35}>
         <Text>{name}</Text>
       </Box>
-      {showCount && (
-        <Text dimColor>{String(stream.record_count).padStart(8)} records</Text>
-      )}
+      {showCount && <Text dimColor>{String(stream.record_count).padStart(8)} records</Text>}
       {stream.message && <Text dimColor> {stream.message.slice(0, 80)}</Text>}
     </Box>
   )
 }
 
-function SyncProgressView({ progress, prev }: { progress: ProgressPayload; prev?: ProgressPayload }) {
+function SyncProgressView({
+  progress,
+  prev,
+}: {
+  progress: ProgressPayload
+  prev?: ProgressPayload
+}) {
   const entries = Object.entries(progress.streams)
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
   const totalRecords = entries.reduce((sum, [, s]) => sum + s.record_count, 0)
@@ -54,13 +58,17 @@ function SyncProgressView({ progress, prev }: { progress: ProgressPayload; prev?
   if (counts.not_started) parts.push(`${counts.not_started} not_started`)
 
   const statusLabel =
-    progress.derived.status === 'failed' ? 'Sync failed'
-    : progress.derived.status === 'succeeded' ? 'Sync complete'
-    : 'Syncing'
+    progress.derived.status === 'failed'
+      ? 'Sync failed'
+      : progress.derived.status === 'succeeded'
+        ? 'Sync complete'
+        : 'Syncing'
   const statusColor =
-    progress.derived.status === 'failed' ? 'red'
-    : progress.derived.status === 'succeeded' ? 'green'
-    : 'yellow'
+    progress.derived.status === 'failed'
+      ? 'red'
+      : progress.derived.status === 'succeeded'
+        ? 'green'
+        : 'yellow'
 
   const visible = entries.filter(([, s]) => s.status !== 'not_started')
   const notStarted = entries.filter(([, s]) => s.status === 'not_started')
@@ -68,8 +76,14 @@ function SyncProgressView({ progress, prev }: { progress: ProgressPayload; prev?
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={statusColor} bold>{statusLabel}</Text>
-        <Text dimColor> {entries.length} streams ({parts.join(', ')}) — {totalRecords.toLocaleString()} records, {progress.derived.records_per_second.toFixed(1)}/s — {elapsed}s</Text>
+        <Text color={statusColor} bold>
+          {statusLabel}
+        </Text>
+        <Text dimColor>
+          {' '}
+          {entries.length} streams ({parts.join(', ')}) — {totalRecords.toLocaleString()} records,{' '}
+          {progress.derived.records_per_second.toFixed(1)}/s — {elapsed}s
+        </Text>
       </Box>
       <Box flexDirection="column" marginLeft={1}>
         {visible.map(([name, stream]) => (
