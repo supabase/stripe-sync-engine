@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Range, PageResult } from './binary-subdivision.js'
 import {
   subdivideRanges,
-  nextStep,
   streamingSubdivide,
   toIso,
   toUnixSeconds,
@@ -102,13 +101,6 @@ describe('subdivideRanges', () => {
     expect(toUnixSeconds(segments[segments.length - 1].lt)).toBe(1008)
   })
 
-  it('nextStep wraps subdivideRanges correctly', () => {
-    const remaining: Range[] = [{ gte: iso(0), lt: iso(120), cursor: 'cur_1' }]
-    const lastObserved = new Map([[remaining[0], 30]])
-    const result = nextStep({ remaining, lastObserved }, N)
-    const direct = subdivideRanges(remaining, lastObserved, N)
-    expect(result).toEqual(direct)
-  })
 })
 
 // MARK: - Distribution simulation

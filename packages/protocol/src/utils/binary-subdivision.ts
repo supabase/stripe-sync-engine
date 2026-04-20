@@ -31,13 +31,6 @@ export type Range = {
 /** A bounded time interval. */
 export type TimeBound = { gte: string; lt: string }
 
-/** Scheduler state between fetch rounds. */
-export type SearchState = {
-  remaining: Range[]
-  /** Maps the fetched range → last observed sort-key value (unix seconds) in that range's page. */
-  lastObserved: Map<Range, number>
-}
-
 // MARK: - Time helpers
 
 export function toUnixSeconds(iso: string): number {
@@ -53,19 +46,6 @@ export function toIso(unixSeconds: number): string {
 /** Default number of segments to split the older remainder into. */
 export const DEFAULT_SUBDIVISION_FACTOR = 2
 
-/**
- * Pure scheduler step: given the current backfill state, subdivide ranges that
- * made progress (have a cursor + lastObserved) into N segments.
- *
- * Call this AFTER fetching pages (which populate lastObserved and cursors).
- * Concurrency is controlled by the caller's rate limiter, not here.
- *
- * @param n Number of segments to split each range's unfetched remainder into.
- *          Higher N = faster ramp-up but more wasted probes on skewed data.
- */
-export function nextStep(state: SearchState, n: number): Range[] {
-  return subdivideRanges(state.remaining, state.lastObserved, n)
-}
 
 /**
  * Subdivide ranges that have a cursor (were in progress but didn't complete).

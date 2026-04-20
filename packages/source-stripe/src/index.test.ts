@@ -2391,8 +2391,8 @@ describe('StripeSource', () => {
       )
 
       // First call: full range → has_more + created=1_500_000_000.
-      // Subdivision (factor=2): boundary [1_500_000_000, 1_500_000_001) + 2 older halves = 3 ranges.
-      // Second round: 3 ranges all return empty → drained.
+      // streamingSubdivide splits into: boundary [1_500_000_000, 1_500_000_001) + 2 older halves.
+      // All 3 child ranges return empty → exhausted → range_complete for each.
       expect(listFn).toHaveBeenCalledTimes(4)
       expect(listFn).toHaveBeenNthCalledWith(1, {
         limit: 100,
@@ -2406,6 +2406,7 @@ describe('StripeSource', () => {
         (m): m is StreamStatusMessage =>
           m.type === 'stream_status' && m.stream_status.status === 'range_complete'
       )
+      // Head range (already-fetched portion) should complete
       expect(rangeCompletes).toContainEqual(
         expect.objectContaining({
           stream_status: expect.objectContaining({
@@ -2417,6 +2418,20 @@ describe('StripeSource', () => {
           }),
         })
       )
+      // Boundary range around the split point should complete
+      expect(rangeCompletes).toContainEqual(
+        expect.objectContaining({
+          stream_status: expect.objectContaining({
+            stream: 'customers',
+            range_complete: {
+              gte: new Date(1_500_000_000 * 1000).toISOString(),
+              lt: new Date(1_500_000_001 * 1000).toISOString(),
+            },
+          }),
+        })
+      )
+      // Head + boundary + 2 older halves = 4 range_complete events
+      expect(rangeCompletes).toHaveLength(4)
     })
 
     it('uses sequential pagination (no created filter) for non-parallel streams', async () => {

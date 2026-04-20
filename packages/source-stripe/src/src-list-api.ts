@@ -483,11 +483,28 @@ async function* iterateStream(opts: {
       })
 
       if (event.exhausted) {
+        // Range fully drained — mark the whole range complete
         yield msg.stream_status({
           stream: streamName,
           status: 'range_complete',
           range_complete: { gte: event.range.gte, lt: event.range.lt },
         })
+      } else if (event.hasMore && event.data.length > 0) {
+        // Range was subdivided — the fetched head (from oldest record to range.lt)
+        // is already accounted for. Emit range_complete so the progress bar fills.
+        const oldest = event.data.findLast(
+          (r) => typeof r.created === 'number'
+        ) as { created: number } | undefined
+        if (oldest) {
+          const headGte = toIso(oldest.created + 1)
+          if (headGte < event.range.lt) {
+            yield msg.stream_status({
+              stream: streamName,
+              status: 'range_complete',
+              range_complete: { gte: headGte, lt: event.range.lt },
+            })
+          }
+        }
       }
 
       if (backfillLimit && totalEmitted.count >= backfillLimit) break
