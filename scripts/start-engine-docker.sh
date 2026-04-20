@@ -8,10 +8,6 @@ set -euo pipefail
 #   ./scripts/start-engine-docker.sh          # build + run on port 4242
 #   PORT=8080 ./scripts/start-engine-docker.sh  # custom port
 #   ./scripts/start-engine-docker.sh --no-build # skip docker build, just run
-#
-# To use with test-all-accounts.sh:
-#   ./scripts/start-engine-docker.sh &
-#   ./scripts/test-all-accounts.sh --engine-url http://localhost:4242
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

@@ -39,6 +39,6 @@ This relies on `injectWorkspacePackages` NOT being set in `pnpm-workspace.yaml`.
 ## Debugging strategy
 
 1. Add `console.error('[MARKER] ...')` to the code you want to trace
-2. Run the sync: `./scripts/test-all-accounts.sh prod_goldilocks_sk --quick`
+2. Run the sync command you want to debug
 3. Inspect `sync-public.log` (or `sync-{schema}.log`) in the repo root
 4. Clean up debug code when done
