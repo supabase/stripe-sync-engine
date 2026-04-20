@@ -448,18 +448,18 @@ jobs:
 
       - name: Docker smoke test
         run: |
-          docker run -d --name smoke -p 8787:8787 ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker run -d --name smoke -p 3000:3000 ghcr.io/${{ github.repository }}:${{ github.sha }}
+          trap 'docker rm -f smoke 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8787/health; then
-              echo " health check passed"
-              docker rm -f smoke
+            body=$(curl -sf http://localhost:3000/health 2>/dev/null || true)
+            if echo "$body" | grep -q '"ok":true'; then
+              echo "health check passed: $body"
               exit 0
             fi
             sleep 1
           done
           echo "health check timed out"
           docker logs smoke
-          docker rm -f smoke
           exit 1
 
   # ---------------------------------------------------------------------------
