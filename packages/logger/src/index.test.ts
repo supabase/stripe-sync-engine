@@ -20,7 +20,7 @@ function devNull(): Writable {
 describe('@stripe/sync-logger', () => {
   it('captures structured fields into routed log data', () => {
     const entries: RoutedLogEntry[] = []
-    const logger = createLogger({
+    const log = createLogger({
       name: 'logger-test',
       destination: devNull(),
     })
@@ -33,7 +33,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
       () => {
-        logger.info({ stream: 'customers', attempt: 2 }, 'connector logger message')
+        log.info({ stream: 'customers', attempt: 2 }, 'connector logger message')
       }
     )
 
@@ -53,7 +53,7 @@ describe('@stripe/sync-logger', () => {
 
   it('serializes errors into routed log data', () => {
     const entries: RoutedLogEntry[] = []
-    const logger = createLogger({
+    const log = createLogger({
       name: 'logger-test',
       destination: devNull(),
     })
@@ -65,7 +65,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
       () => {
-        logger.error(new Error('boom'))
+        log.error(new Error('boom'))
       }
     )
 
@@ -85,7 +85,7 @@ describe('@stripe/sync-logger', () => {
 
   it('suppresses routing inside withoutLogCapture', () => {
     const entries: RoutedLogEntry[] = []
-    const logger = createLogger({
+    const log = createLogger({
       name: 'logger-test',
       destination: devNull(),
     })
@@ -98,7 +98,7 @@ describe('@stripe/sync-logger', () => {
       },
       () => {
         withoutLogCapture(() => {
-          logger.info('hidden')
+          log.info('hidden')
         })
       }
     )
@@ -108,7 +108,7 @@ describe('@stripe/sync-logger', () => {
 
   it('bindLogContext preserves context while iterating async streams', async () => {
     const entries: RoutedLogEntry[] = []
-    const logger = createLogger({
+    const log = createLogger({
       name: 'logger-test',
       destination: devNull(),
     })
@@ -116,7 +116,7 @@ describe('@stripe/sync-logger', () => {
     const iter = bindLogContext(
       (async function* () {
         await Promise.resolve()
-        logger.info({ stream: 'customers' }, 'from stream')
+        log.info({ stream: 'customers' }, 'from stream')
         yield getEngineRequestId()
       })(),
       {
