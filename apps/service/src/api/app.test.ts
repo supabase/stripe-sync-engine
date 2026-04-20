@@ -243,6 +243,87 @@ describe('pipeline CRUD', () => {
     expect(await pipelineStore.list()).toHaveLength(1)
   })
 
+  it('create accepts a caller-provided pipeline id', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'friendly-sync-1',
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const pipeline = await res.json()
+    expect(pipeline.id).toBe('friendly-sync-1')
+    expect((await pipelineStore.get('friendly-sync-1')).id).toBe('friendly-sync-1')
+  })
+
+  it('create rejects duplicate caller-provided pipeline ids', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const body = JSON.stringify({
+      id: 'friendly-sync-1',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+    })
+
+    const first = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+    expect(first.status).toBe(201)
+
+    const second = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      error: 'Pipeline friendly-sync-1 already exists',
+    })
+  })
+
+  it('create validates caller-provided pipeline id format', async () => {
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore: memoryPipelineStore(),
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'Not Friendly',
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const payload = await res.json()
+    expect(payload.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['id'],
+        }),
+      ])
+    )
+  })
+
   it('runs stripe and postgres checks before creating a pipeline', async () => {
     const stripeCheck = vi.fn(
       () =>

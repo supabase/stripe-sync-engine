@@ -2,8 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runCommand } from 'citty'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import serviceSpec from './__generated__/openapi.json' with { type: 'json' }
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createConnectorResolver } from '@stripe/sync-engine'
+import sourceStripe from '@stripe/sync-source-stripe'
+import destinationPostgres from '@stripe/sync-destination-postgres'
+import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
+import { memoryPipelineStore } from './lib/stores-memory.js'
 
 const runMock = vi.fn(async () => {})
 const createWorkerMock = vi.fn(async () => ({ run: runMock }))
@@ -37,6 +41,22 @@ vi.mock('@temporalio/client', () => ({
 }))
 
 let tempDataDir: string
+let serviceSpec: unknown
+
+beforeAll(async () => {
+  const { createApp: createRealApp } =
+    await vi.importActual<typeof import('./api/app.js')>('./api/app.js')
+  const resolver = await createConnectorResolver({
+    sources: { stripe: sourceStripe },
+    destinations: { postgres: destinationPostgres, google_sheets: destinationGoogleSheets },
+  })
+  const app = createRealApp({
+    resolver,
+    pipelineStore: memoryPipelineStore(),
+  })
+  const response = await app.request('/openapi.json')
+  serviceSpec = await response.json()
+})
 
 function buildMockApp() {
   const pipelines = new Map<string, any>()
@@ -119,6 +139,21 @@ function buildMockApp() {
       })
     }
 
+    if (req.method === 'DELETE' && url.pathname.startsWith('/pipelines/')) {
+      const id = url.pathname.split('/').pop()!
+      const pipeline = pipelines.get(id)
+      if (!pipeline) {
+        return new Response(JSON.stringify({ error: `Pipeline ${id} not found` }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      pipelines.delete(id)
+      return new Response(JSON.stringify({ id, deleted: true }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
     return new Response('not found', { status: 404 })
   }
 
@@ -193,6 +228,70 @@ describe('generated pipeline CLI', () => {
     expect(created.destination.type).toBe('postgres')
     expect(fetched.id).toBe(created.id)
     expect(fetched.source.type).toBe('stripe')
+
+    writeSpy.mockRestore()
+  })
+
+  it('passes a friendly pipeline id through create via --id', async () => {
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await runCommand(program, {
+      rawArgs: [
+        'pipelines',
+        'create',
+        '--id',
+        'pipe_shop_docker_pg',
+        '--source',
+        '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
+        '--destination',
+        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+      ],
+    })
+
+    const output = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    const created = JSON.parse(output)
+
+    expect(created.id).toBe('pipe_shop_docker_pg')
+
+    writeSpy.mockRestore()
+  })
+
+  it('accepts a friendly pipeline id as a positional for get, check, and delete', async () => {
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await runCommand(program, {
+      rawArgs: [
+        'pipelines',
+        'create',
+        '--id',
+        'pipe_shop_docker_pg',
+        '--source',
+        '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
+        '--destination',
+        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+      ],
+    })
+
+    writeSpy.mockClear()
+    await runCommand(program, { rawArgs: ['pipelines', 'get', 'pipe_shop_docker_pg'] })
+    const getOutput = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(JSON.parse(getOutput)).toMatchObject({ id: 'pipe_shop_docker_pg' })
+
+    writeSpy.mockClear()
+    await runCommand(program, { rawArgs: ['pipelines', 'check', 'pipe_shop_docker_pg'] })
+    const checkOutput = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(JSON.parse(checkOutput)).toMatchObject({ id: 'pipe_shop_docker_pg' })
+
+    writeSpy.mockClear()
+    await runCommand(program, { rawArgs: ['pipelines', 'delete', 'pipe_shop_docker_pg'] })
+    const deleteOutput = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(JSON.parse(deleteOutput)).toEqual({ id: 'pipe_shop_docker_pg', deleted: true })
 
     writeSpy.mockRestore()
   })
@@ -365,29 +464,5 @@ describe('worker CLI', () => {
       })
     )
     expect(runMock).toHaveBeenCalledOnce()
-  })
-})
-
-describe('resolveGeneratedSpecUrl', () => {
-  it('uses the colocated generated spec when present', async () => {
-    vi.resetModules()
-    const { resolveGeneratedSpecUrl } = await import('./cli.js')
-
-    const resolved = resolveGeneratedSpecUrl('file:///repo/apps/service/src/cli.ts', (url) =>
-      url.pathname.endsWith('/src/__generated__/openapi.json')
-    )
-
-    expect(resolved.pathname).toBe('/repo/apps/service/src/__generated__/openapi.json')
-  })
-
-  it('falls back to src/__generated__ for compiled dist CLI', async () => {
-    vi.resetModules()
-    const { resolveGeneratedSpecUrl } = await import('./cli.js')
-
-    const resolved = resolveGeneratedSpecUrl('file:///repo/apps/service/dist/cli.js', (url) =>
-      url.pathname.endsWith('/src/__generated__/openapi.json')
-    )
-
-    expect(resolved.pathname).toBe('/repo/apps/service/src/__generated__/openapi.json')
   })
 })

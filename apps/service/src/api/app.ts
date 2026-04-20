@@ -6,7 +6,7 @@ import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
 import { collectFirst, drain, type Message } from '@stripe/sync-protocol'
-import { createSchemas } from '../lib/createSchemas.js'
+import { createSchemas, PipelineId } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
 import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
@@ -96,7 +96,7 @@ export function createApp(options: AppOptions) {
   // ── Path param schemas ──────────────────────────────────────────
 
   const PipelineIdParam = z.object({
-    id: z.string().meta({ example: 'pipe_abc123' }),
+    id: PipelineId.meta({ example: 'pipe_abc123' }),
   })
 
   // ── Health ──────────────────────────────────────────────────────
@@ -166,6 +166,10 @@ export function createApp(options: AppOptions) {
           content: { 'application/json': { schema: ErrorSchema } },
           description: 'Invalid input',
         },
+        409: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline id already exists',
+        },
       },
     }),
     async (c) => {
@@ -175,7 +179,13 @@ export function createApp(options: AppOptions) {
       } catch (err) {
         return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
       }
-      const id = genId('pipe')
+      const id = body.id ?? genId('pipe')
+      try {
+        await pipelineStore.get(id)
+        return c.json({ error: `Pipeline ${id} already exists` }, 409)
+      } catch {
+        // expected when the id is new
+      }
       const pipeline: Pipeline = {
         id,
         ...(body as Record<string, unknown>),

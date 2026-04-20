@@ -63,6 +63,9 @@
                         "properties": {
                           "id": {
                             "type": "string",
+                            "minLength": 3,
+                            "maxLength": 64,
+                            "pattern": "^[a-z][a-z0-9_-]*$",
                             "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                           },
                           "source": {
@@ -331,6 +334,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
                   "source": {
                     "$ref": "#/components/schemas/SourceConfig"
                   },
@@ -386,6 +396,9 @@
                   "properties": {
                     "id": {
                       "type": "string",
+                      "minLength": 3,
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9_-]*$",
                       "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
@@ -645,6 +658,23 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Pipeline id already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       }
@@ -662,9 +692,14 @@
             "name": "id",
             "schema": {
               "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
-            "required": true
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
           }
         ],
         "responses": {
@@ -677,6 +712,9 @@
                   "properties": {
                     "id": {
                       "type": "string",
+                      "minLength": 3,
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9_-]*$",
                       "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
@@ -951,9 +989,14 @@
             "name": "id",
             "schema": {
               "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
-            "required": true
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
           }
         ],
         "requestBody": {
@@ -962,6 +1005,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
                   "source": {
                     "$ref": "#/components/schemas/SourceConfig"
                   },
@@ -1022,6 +1072,9 @@
                   "properties": {
                     "id": {
                       "type": "string",
+                      "minLength": 3,
+                      "maxLength": 64,
+                      "pattern": "^[a-z][a-z0-9_-]*$",
                       "description": "Unique pipeline identifier (e.g. pipe_abc123)."
                     },
                     "source": {
@@ -1330,9 +1383,14 @@
             "name": "id",
             "schema": {
               "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
-            "required": true
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
           }
         ],
         "responses": {
@@ -1646,8 +1704,9 @@
             "description": "Database user (required for AWS IAM)"
           },
           "schema": {
+            "default": "public",
             "type": "string",
-            "description": "Target schema name (e.g. \"stripe_sync\")"
+            "description": "Target schema name (e.g. \"stripe\")"
           },
           "batch_size": {
             "default": 100,
@@ -1681,9 +1740,6 @@
             "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)"
           }
         },
-        "required": [
-          "schema"
-        ],
         "additionalProperties": false
       },
       "DestinationGoogleSheetsConfig": {

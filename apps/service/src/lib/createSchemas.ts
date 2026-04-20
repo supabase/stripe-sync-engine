@@ -15,6 +15,16 @@ export const PipelineStatus = z
   .describe('Workflow-controlled execution state.')
 export type PipelineStatus = z.infer<typeof PipelineStatus>
 
+export const PipelineId = z
+  .string()
+  .min(3)
+  .max(64)
+  .regex(
+    /^[a-z][a-z0-9_-]*$/,
+    'Pipeline id must start with a lowercase letter and contain only lowercase letters, numbers, underscores, or hyphens.'
+  )
+  .describe('Unique pipeline identifier (e.g. pipe_abc123).')
+
 /**
  * Derive user-facing status from the two independent fields.
  *
@@ -103,7 +113,7 @@ export function createSchemas(resolver: ConnectorResolver) {
 
   // Composed schemas
   const Pipeline = z.object({
-    id: z.string().describe('Unique pipeline identifier (e.g. pipe_abc123).'),
+    id: PipelineId,
     source: SourceConfig,
     destination: DestinationConfig,
     streams: z
@@ -123,6 +133,9 @@ export function createSchemas(resolver: ConnectorResolver) {
   })
 
   const CreatePipeline = z.object({
+    id: PipelineId.optional().describe(
+      'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
+    ),
     source: SourceConfig,
     destination: DestinationConfig,
     streams: z

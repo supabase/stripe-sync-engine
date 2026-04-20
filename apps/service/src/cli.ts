@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import type { CommandDef } from 'citty'
@@ -14,7 +13,6 @@ import { filePipelineStore } from './lib/stores-fs.js'
 import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
 import { homedir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { logger } from './logger.js'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
@@ -24,35 +22,14 @@ const resolverPromise = createConnectorResolver({
   destinations: { postgres: destinationPostgres, google_sheets: destinationGoogleSheets },
 })
 
-export function resolveGeneratedSpecUrl(
-  moduleUrl: string,
-  fileExists: (url: URL) => boolean = (url) => existsSync(fileURLToPath(url))
-): URL {
-  const candidates = [
-    new URL('./__generated__/openapi.json', moduleUrl),
-    new URL('../src/__generated__/openapi.json', moduleUrl),
-  ]
-
-  const specUrl = candidates.find(fileExists)
-  if (!specUrl) {
-    throw new Error(`Could not find generated OpenAPI spec for ${moduleUrl}`)
-  }
-
-  return specUrl
-}
-
 async function buildCliSpec() {
-  if (import.meta.url.endsWith('.ts')) {
-    const resolver = await resolverPromise
-    const app = createApp({
-      resolver,
-      pipelineStore: memoryPipelineStore(),
-    })
-    const response = await app.request('/openapi.json')
-    return response.json()
-  }
-
-  return JSON.parse(readFileSync(resolveGeneratedSpecUrl(import.meta.url), 'utf-8'))
+  const resolver = await resolverPromise
+  const app = createApp({
+    resolver,
+    pipelineStore: memoryPipelineStore(),
+  })
+  const response = await app.request('/openapi.json')
+  return response.json()
 }
 
 async function createTemporalClient(
@@ -289,6 +266,17 @@ export async function createProgram() {
           destinations: destinationNames,
         })
       }
+    }
+
+    const getCommand = pipelineSubCommands['get']
+    if (getCommand && !pipelineSubCommands['check']) {
+      pipelineSubCommands['check'] = defineCommand({
+        ...getCommand,
+        meta: {
+          name: 'check',
+          description: 'Retrieve pipeline',
+        },
+      })
     }
   }
 

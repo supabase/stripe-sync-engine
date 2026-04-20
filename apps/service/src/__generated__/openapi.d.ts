@@ -150,7 +150,10 @@ export interface components {
             database?: string;
             /** @description Database user (required for AWS IAM) */
             user?: string;
-            /** @description Target schema name (e.g. "stripe_sync") */
+            /**
+             * @description Target schema name (e.g. "stripe")
+             * @default public
+             */
             schema: string;
             /**
              * @description Records to buffer before flushing
@@ -347,6 +350,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+                    id?: string;
                     source: components["schemas"]["SourceConfig"];
                     destination: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
@@ -475,6 +480,17 @@ export interface operations {
                     };
                 };
             };
+            /** @description Pipeline id already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
         };
     };
     "pipelines.get": {
@@ -482,6 +498,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -605,6 +622,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -642,6 +660,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -649,6 +668,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+                    id?: string;
                     source?: components["schemas"]["SourceConfig"];
                     destination?: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
