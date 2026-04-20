@@ -3,7 +3,15 @@ import type { ConnectorResolver } from '@stripe/sync-engine'
 import { createEngine, createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
 import { createRoute, OpenAPIHono } from '@stripe/sync-hono-zod-openapi'
-import { collectFirst, drain, emptySyncState, SyncState } from '@stripe/sync-protocol'
+import {
+  collectFirst,
+  createEngineMessageFactory,
+  drain,
+  emptySyncState,
+  SyncState,
+} from '@stripe/sync-protocol'
+
+const engineMsg = createEngineMessageFactory()
 import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import type { WorkflowClient } from '@temporalio/client'
@@ -467,7 +475,13 @@ export function createApp(options: AppOptions) {
         }
       })()
 
-      return ndjsonResponse(wrapped)
+      return ndjsonResponse(wrapped, {
+        onError: (err) =>
+          engineMsg.log({
+            level: 'error' as const,
+            message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
+          }),
+      })
     }
   )
 
