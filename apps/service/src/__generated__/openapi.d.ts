@@ -262,6 +262,11 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+         * @enum {string}
+         */
+        RunStatus: "started" | "succeeded" | "failed";
         /** @description Per-stream progress snapshot. */
         StreamProgress: {
             /**
@@ -310,11 +315,7 @@ export interface components {
             };
             /** @description Computed aggregates. */
             derived: {
-                /**
-                 * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
-                 * @enum {string}
-                 */
-                status: "started" | "succeeded" | "failed";
+                status: components["schemas"]["RunStatus"];
                 /** @description Overall throughput for the entire run. */
                 records_per_second: number;
                 /** @description State checkpoints per second. */

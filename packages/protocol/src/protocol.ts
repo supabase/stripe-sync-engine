@@ -343,6 +343,14 @@ export const StreamProgress = z
   .meta({ id: 'StreamProgress' })
 export type StreamProgress = z.infer<typeof StreamProgress>
 
+export const RunStatus = z
+  .enum(['started', 'succeeded', 'failed'])
+  .describe(
+    'succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.'
+  )
+  .meta({ id: 'RunStatus' })
+export type RunStatus = z.infer<typeof RunStatus>
+
 export const ProgressPayload = z
   .object({
     started_at: z
@@ -355,11 +363,7 @@ export const ProgressPayload = z
     ),
     derived: z
       .object({
-        status: z
-          .enum(['started', 'succeeded', 'failed'])
-          .describe(
-            'succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.'
-          ),
+        status: RunStatus,
         records_per_second: z.number().describe('Overall throughput for the entire run.'),
         states_per_second: z.number().describe('State checkpoints per second.'),
       })
@@ -409,30 +413,6 @@ export const SyncState = z
   )
   .meta({ id: 'SyncState' })
 export type SyncState = z.infer<typeof SyncState>
-
-// MARK: - EOF payload
-
-export const EofStreamProgress = z
-  .object({
-    status: z
-      .enum(['not_started', 'started', 'completed', 'errored', 'skipped'])
-      .describe('Final stream status, derived from stream_status events.'),
-    cumulative_record_count: z
-      .number()
-      .int()
-      .describe('Cumulative records synced for this stream across all runs.'),
-    run_record_count: z.number().int().describe('Records synced in this request.'),
-    records_per_second: z
-      .number()
-      .optional()
-      .describe('Average records/sec for this stream over the request.'),
-    errors: z
-      .array(z.object({ message: z.string().describe('Human-readable error description.') }))
-      .optional()
-      .describe('All accumulated errors for this stream during this request.'),
-  })
-  .describe('Per-stream end-of-request summary.')
-export type EofStreamProgress = z.infer<typeof EofStreamProgress>
 
 export const EofPayload = z
   .object({

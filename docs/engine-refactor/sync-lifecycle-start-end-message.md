@@ -70,7 +70,6 @@ type EndPayload = {
   has_more: boolean // new: signals whether to continue
   ending_state: SyncState // renamed from eof.state
   request_progress: TraceProgress // renamed from eof.global_progress
-  stream_progress?: Record<string, EofStreamProgress>
 }
 ```
 

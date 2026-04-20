@@ -1107,6 +1107,15 @@
         ],
         "description": "Source connector state — cursors, backfill progress, events cursors."
       },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "started",
+          "succeeded",
+          "failed"
+        ],
+        "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
+      },
       "StreamProgress": {
         "type": "object",
         "properties": {
@@ -1228,13 +1237,7 @@
             "type": "object",
             "properties": {
               "status": {
-                "type": "string",
-                "enum": [
-                  "started",
-                  "succeeded",
-                  "failed"
-                ],
-                "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
+                "$ref": "#/components/schemas/RunStatus"
               },
               "records_per_second": {
                 "type": "number",
