@@ -430,15 +430,22 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       }
 
       if (Object.keys(rowAssignments).length > 0) {
-        log.debug(
-          formatGoogleSheetsMetaLog({
-            type: 'row_assignments',
-            assignments: rowAssignments,
-          })
-        )
+        const metaMsg = formatGoogleSheetsMetaLog({
+          type: 'row_assignments',
+          assignments: rowAssignments,
+        })
+        log.debug(metaMsg)
+        yield { type: 'log' as const, log: { level: 'debug' as const, message: metaMsg } }
       }
 
       log.info(`Sheets destination: wrote to spreadsheet ${spreadsheetId}`)
+      yield {
+        type: 'log' as const,
+        log: {
+          level: 'info' as const,
+          message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
+        },
+      }
     },
   } satisfies Destination<Config>
 
