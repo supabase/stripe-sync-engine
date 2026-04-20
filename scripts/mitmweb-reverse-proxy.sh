@@ -76,6 +76,7 @@ mitmweb \
   --listen-port 9090 \
   --web-port 9091 \
   --no-web-open-browser \
+  --set stream_large_bodies=1b \
   >>"$MITM_LOG_FILE" 2>&1 &
 
 for _ in $(seq 1 10); do

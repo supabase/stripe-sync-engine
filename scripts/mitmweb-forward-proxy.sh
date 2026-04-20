@@ -104,6 +104,7 @@ if ! _port_listening 8080; then
     --no-web-open-browser
     --ssl-insecure
     --set connection_strategy=lazy
+    --set stream_large_bodies=1b
   )
 
   if [ -n "$UPSTREAM" ]; then
