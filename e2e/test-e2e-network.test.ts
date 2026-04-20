@@ -132,7 +132,7 @@ async function waitForCompletionWithoutFalseReady(opts: {
         `pipeline ${opts.pipelineId} reached ready with only ${rows}/${opts.expectedCount} rows`
       )
     }
-    if (rows === opts.expectedCount) {
+    if (rows === opts.expectedCount && pipeline?.status === 'ready') {
       return
     }
 
