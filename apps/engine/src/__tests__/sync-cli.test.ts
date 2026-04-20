@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const createEngine = vi.fn()
 const createRemoteEngine = vi.fn()
 const readonlyStateStore = vi.fn()
-const fileStateStore = vi.fn()
 const render = vi.fn(() => ({
   rerender: vi.fn(),
   unmount: vi.fn(),
@@ -16,7 +15,6 @@ vi.mock('../lib/index.js', () => ({
 
 vi.mock('../lib/state-store.js', () => ({
   readonlyStateStore,
-  fileStateStore,
 }))
 
 vi.mock('../cli/source-config-cache.js', () => ({
@@ -38,11 +36,6 @@ describe('sync cli', () => {
     vi.clearAllMocks()
 
     readonlyStateStore.mockReturnValue({
-      get: vi.fn(async () => undefined),
-      set: vi.fn(),
-      setGlobal: vi.fn(),
-    })
-    fileStateStore.mockReturnValue({
       get: vi.fn(async () => undefined),
       set: vi.fn(),
       setGlobal: vi.fn(),

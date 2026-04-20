@@ -1,10 +1,7 @@
 import React from 'react'
-import { createHash } from 'node:crypto'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
-import { readonlyStateStore, fileStateStore, type StateStore } from '../lib/state-store.js'
+import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
 import { createEngine, createRemoteEngine, type ConnectorResolver } from '../lib/index.js'
 import {
   type PipelineConfig,
@@ -62,12 +59,8 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       },
       state: {
         type: 'string',
-        default: 'file',
-        description: 'State backend: file (default), postgres, none',
-      },
-      stateDir: {
-        type: 'string',
-        description: 'Directory for file state (default: ~/.stripe-sync-engine/)',
+        default: 'postgres',
+        description: 'State backend: postgres (default), none',
       },
       noState: {
         type: 'boolean',
@@ -123,9 +116,7 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       const store: StateStore & { close?(): Promise<void> } =
         stateMode === 'none'
           ? readonlyStateStore()
-          : stateMode === 'postgres'
-            ? await getPostgresStateStore(postgresUrl, schema)
-            : defaultFileStateStore(stripeApiKey, args.stateDir)
+          : await getPostgresStateStore(postgresUrl, schema)
       const initialState = await store.get()
 
       try {
@@ -189,18 +180,6 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       }
     },
   })
-}
-
-const DEFAULT_STATE_DIR = join(homedir(), '.stripe-sync-engine')
-
-function stateHash(apiKey: string): string {
-  return createHash('sha256').update(apiKey).digest('hex').slice(0, 12)
-}
-
-function defaultFileStateStore(apiKey: string, stateDir?: string): StateStore {
-  const dir = stateDir ?? DEFAULT_STATE_DIR
-  const filePath = join(dir, `${stateHash(apiKey)}.json`)
-  return fileStateStore(filePath)
 }
 
 
