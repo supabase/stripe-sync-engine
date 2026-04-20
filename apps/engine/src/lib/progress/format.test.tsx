@@ -16,7 +16,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "Syncing 2 streams (2 not_started) — 0.0s
+      "Syncing 2 streams (2 not_started) — 0.0s — started Jan 1, 12:00 AM GMT
              0 records               0.0/s
        ○ customers, invoices"
     `)
@@ -43,7 +43,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "Syncing 10 streams (3 completed, 2 started, 5 not_started) — 12.4s
+      "Syncing 10 streams (3 completed, 2 started, 5 not_started) — 12.4s — started Jan 1, 12:00 AM GMT
           3451 records             245.2/s       18 checkpoints               1.5/s
        ● charges                                 980 records
        ● payment_intents                         420 records
@@ -67,7 +67,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "Sync failed 1 streams (1 errored) — 1.5s
+      "Sync failed 1 streams (1 errored) — 1.5s — started Jan 1, 12:00 AM GMT
              0 records               0.0/s
        ● customers
 
@@ -93,7 +93,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(progress)).toMatchInlineSnapshot(`
-      "Syncing 2 streams (1 completed, 1 skipped) — 5.0s
+      "Syncing 2 streams (1 completed, 1 skipped) — 5.0s — started Jan 1, 12:00 AM GMT
            100 records              50.0/s        2 checkpoints               0.4/s
        ● customers                               100 records
        ⏭ invoices
@@ -127,7 +127,7 @@ describe('formatProgress', () => {
     }
 
     expect(formatProgress(current, prev)).toMatchInlineSnapshot(`
-      "Syncing 3 streams (1 completed, 2 started) — 4.0s
+      "Syncing 3 streams (1 completed, 2 started) — 4.0s — started Jan 1, 12:00 AM GMT
            450 records   (+250)    112.5/s        5 checkpoints     (+3)      1.3/s
        ● invoices                                180 records   (+130)
        ● charges                                  70 records    (+70)

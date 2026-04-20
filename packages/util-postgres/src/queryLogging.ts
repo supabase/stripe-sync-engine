@@ -1,7 +1,10 @@
 import type pg from 'pg'
 import pino from 'pino'
 
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+const logger = pino(
+  { level: process.env.LOG_LEVEL ?? 'info' },
+  pino.destination({ dest: 1, sync: false })
+)
 
 /**
  * Wrap a pg.Pool so every query is logged with structured fields at trace level.

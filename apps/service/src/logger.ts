@@ -13,7 +13,7 @@ const baseOpts: pino.LoggerOptions = {
   },
 }
 
-export const logger = pino(baseOpts)
+export const logger = pino(baseOpts, pino.destination({ dest: 1, sync: false }))
 
 /**
  * Create a file-based logger for a sync run.
