@@ -6,7 +6,14 @@ import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { createEngine, createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
-import { collectFirst, drain, emptySyncState, type Message, SyncState } from '@stripe/sync-protocol'
+import {
+  collectFirst,
+  drain,
+  emptySyncState,
+  logMessage,
+  type Message,
+  SyncState,
+} from '@stripe/sync-protocol'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { createSchemas, PipelineId } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
@@ -468,13 +475,11 @@ export function createApp(options: AppOptions) {
       })()
 
       return ndjsonResponse(wrapped, {
-        onError: (err) => ({
-          type: 'log' as const,
-          log: {
+        onError: (err) =>
+          logMessage({
             level: 'error' as const,
             message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
-          },
-        }),
+          }),
       })
     }
   )

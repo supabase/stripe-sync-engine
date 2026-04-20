@@ -1735,6 +1735,14 @@
               "message": {
                 "type": "string",
                 "description": "Human-readable log message."
+              },
+              "data": {
+                "description": "Structured log fields emitted alongside the message.",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
               }
             },
             "required": [

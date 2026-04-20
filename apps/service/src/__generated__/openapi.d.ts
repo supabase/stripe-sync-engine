@@ -122,6 +122,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreatePipeline: {
+            /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+            id?: string;
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            /** @description Selected streams to sync. All streams synced if omitted. */
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+        };
         SourceConfig: {
             /** @constant */
             type: "stripe";
@@ -234,6 +252,29 @@ export interface components {
              */
             batch_size: number;
         };
+        UpdatePipeline: {
+            /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+            id?: string;
+            source?: components["schemas"]["SourceConfig"];
+            destination?: components["schemas"]["DestinationConfig"];
+            /** @description Selected streams to sync. All streams synced if omitted. */
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+            /**
+             * @description Set to "paused" to pause, "active" to resume, "deleted" to tear down.
+             * @enum {string}
+             */
+            desired_status?: "active" | "paused" | "deleted";
+        };
         /** @description Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing. */
         SyncState: {
             source: components["schemas"]["SourceState"];
@@ -321,6 +362,38 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        Pipeline: {
+            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+            id: string;
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            /** @description Selected streams to sync. All streams synced if omitted. */
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+            /**
+             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+             * @default active
+             * @enum {string}
+             */
+            desired_status: "active" | "paused" | "deleted";
+            /**
+             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+             * @default setup
+             * @enum {string}
+             */
+            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+            /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+            sync_state?: components["schemas"]["SyncState"];
+        };
     };
     responses: never;
     parameters: never;
@@ -370,38 +443,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: {
-                            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                            id: string;
-                            source: components["schemas"]["SourceConfig"];
-                            destination: components["schemas"]["DestinationConfig"];
-                            /** @description Selected streams to sync. All streams synced if omitted. */
-                            streams?: {
-                                /** @description Stream (table) name to sync. */
-                                name: string;
-                                /**
-                                 * @description How the source reads this stream. Defaults to full_refresh.
-                                 * @enum {string}
-                                 */
-                                sync_mode?: "incremental" | "full_refresh";
-                                /** @description Cap backfill to this many records, then mark the stream complete. */
-                                backfill_limit?: number;
-                            }[];
-                            /**
-                             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                             * @default active
-                             * @enum {string}
-                             */
-                            desired_status: "active" | "paused" | "deleted";
-                            /**
-                             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                             * @default setup
-                             * @enum {string}
-                             */
-                            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                            /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
-                            sync_state?: components["schemas"]["SyncState"];
-                        }[];
+                        data: components["schemas"]["Pipeline"][];
                         has_more: boolean;
                     };
                 };
@@ -417,24 +459,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
-                    id?: string;
-                    source: components["schemas"]["SourceConfig"];
-                    destination: components["schemas"]["DestinationConfig"];
-                    /** @description Selected streams to sync. All streams synced if omitted. */
-                    streams?: {
-                        /** @description Stream (table) name to sync. */
-                        name: string;
-                        /**
-                         * @description How the source reads this stream. Defaults to full_refresh.
-                         * @enum {string}
-                         */
-                        sync_mode?: "incremental" | "full_refresh";
-                        /** @description Cap backfill to this many records, then mark the stream complete. */
-                        backfill_limit?: number;
-                    }[];
-                };
+                "application/json": components["schemas"]["CreatePipeline"];
             };
         };
         responses: {
@@ -444,38 +469,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
-                        sync_state?: components["schemas"]["SyncState"];
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Invalid input */
@@ -520,38 +514,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
-                        sync_state?: components["schemas"]["SyncState"];
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Not found */
@@ -617,29 +580,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
-                    id?: string;
-                    source?: components["schemas"]["SourceConfig"];
-                    destination?: components["schemas"]["DestinationConfig"];
-                    /** @description Selected streams to sync. All streams synced if omitted. */
-                    streams?: {
-                        /** @description Stream (table) name to sync. */
-                        name: string;
-                        /**
-                         * @description How the source reads this stream. Defaults to full_refresh.
-                         * @enum {string}
-                         */
-                        sync_mode?: "incremental" | "full_refresh";
-                        /** @description Cap backfill to this many records, then mark the stream complete. */
-                        backfill_limit?: number;
-                    }[];
-                    /**
-                     * @description Set to "paused" to pause, "active" to resume, "deleted" to tear down.
-                     * @enum {string}
-                     */
-                    desired_status?: "active" | "paused" | "deleted";
-                };
+                "application/json": components["schemas"]["UpdatePipeline"];
             };
         };
         responses: {
@@ -649,38 +590,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
-                        sync_state?: components["schemas"]["SyncState"];
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Bad request */

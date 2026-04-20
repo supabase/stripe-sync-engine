@@ -5,6 +5,7 @@ export {
   // Envelope constructors
   stateMsg,
   destinationControlMsg,
+  logMessage,
   createSourceMessageFactory,
   createEngineMessageFactory,
   // State constructors

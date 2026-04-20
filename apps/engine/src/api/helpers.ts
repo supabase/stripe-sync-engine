@@ -1,5 +1,5 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
-import { mergeAsync } from '@stripe/sync-protocol'
+import { logMessage, mergeAsync } from '@stripe/sync-protocol'
 import { bindLogContext, createAsyncQueue, type RoutedLogEntry } from '@stripe/sync-logger'
 import { log } from '../logger.js'
 
@@ -22,7 +22,7 @@ export function errorMessages(err: unknown): [LogMessage, ConnectionStatusMessag
       ? err.message || (err as NodeJS.ErrnoException).code || err.constructor.name
       : String(err)
   return [
-    { type: 'log', log: { level: 'error', message } },
+    logMessage({ level: 'error', message }),
     { type: 'connection_status', connection_status: { status: 'failed', message } },
   ]
 }
@@ -60,14 +60,11 @@ export async function* logApiStream<T>(
   startedAt = Date.now()
 ): AsyncIterable<T | LogMessage | ConnectionStatusMessage> {
   function toProtocolLog(entry: RoutedLogEntry): LogMessage {
-    return {
-      type: 'log',
-      log: {
-        level: entry.level,
-        message: entry.message,
-        ...(entry.data ? { data: entry.data } : {}),
-      },
-    }
+    return logMessage({
+      level: entry.level,
+      message: entry.message,
+      ...(entry.data ? { data: entry.data } : {}),
+    })
   }
 
   const logQueue = createAsyncQueue<LogMessage>()

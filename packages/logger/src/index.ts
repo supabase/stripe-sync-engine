@@ -65,9 +65,7 @@ export function bindLogContext<T>(
         },
         throw(error?: unknown) {
           if (!iterator.throw) return Promise.reject(error)
-          return storage.run(context, () => iterator.throw!(error)) as Promise<
-            IteratorResult<T>
-          >
+          return storage.run(context, () => iterator.throw!(error)) as Promise<IteratorResult<T>>
         },
       } satisfies AsyncIterator<T>
     },

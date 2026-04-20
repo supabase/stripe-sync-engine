@@ -6,6 +6,8 @@ import type {
   EofMessage,
   EofPayload,
   GlobalStatePayload,
+  LogMessage,
+  LogPayload,
   Message,
   ProgressMessage,
   ProgressPayload,
@@ -147,6 +149,11 @@ export function destinationControlMsg<T extends Record<string, unknown>>(
     type: 'control',
     control: { control_type: 'destination_config', destination_config },
   }
+}
+
+/** Shorthand to create a log envelope message. */
+export function logMessage(payload: LogPayload): LogMessage {
+  return { type: 'log', log: payload }
 }
 
 /** Shorthand to create a stream source_state envelope message. */

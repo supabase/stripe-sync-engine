@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { defineCommand, runMain } from 'citty'
 import type { CommandDef } from 'citty'
 import type { Source, Destination, DestinationInput } from './protocol.js'
+import { logMessage } from './helpers.js'
 import { parseNdjsonChunks, writeLine } from './ndjson.js'
 
 // MARK: - Config parsing
@@ -247,12 +248,11 @@ export async function runConnectorCli(
     await runMain(program)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
-    const logMsg = { type: 'log' as const, log: { level: 'error' as const, message } }
     const connStatus = {
       type: 'connection_status' as const,
       connection_status: { status: 'failed' as const, message },
     }
-    process.stderr.write(JSON.stringify(logMsg) + '\n')
+    process.stderr.write(JSON.stringify(logMessage({ level: 'error' as const, message })) + '\n')
     process.stderr.write(JSON.stringify(connStatus) + '\n')
     process.exitCode = 1
   }

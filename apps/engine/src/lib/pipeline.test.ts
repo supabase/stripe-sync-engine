@@ -279,10 +279,7 @@ describe('log()', () => {
       },
     ]
     await drain(log(toAsync(msgs)))
-    expect(log.debug).toHaveBeenCalledWith(
-      { stream: 'orders', status: 'start' },
-      'stream_status'
-    )
+    expect(log.debug).toHaveBeenCalledWith({ stream: 'orders', status: 'start' }, 'stream_status')
   })
 
   it('does not log record or state messages', async () => {

@@ -112,43 +112,49 @@ export function createSchemas(resolver: ConnectorResolver) {
       : z.object({ type: z.string() }).catchall(z.unknown())
 
   // Composed schemas
-  const Pipeline = z.object({
-    id: PipelineId,
-    source: SourceConfig,
-    destination: DestinationConfig,
-    streams: z
-      .array(StreamConfig)
-      .optional()
-      .describe('Selected streams to sync. All streams synced if omitted.'),
-    desired_status: DesiredStatus.default('active').describe(
-      'User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.'
-    ),
-    status: PipelineStatus.default('setup').describe(
-      'Workflow-controlled execution state. Updated by the Temporal workflow.'
-    ),
-    sync_state: SyncState.optional().describe(
-      'Latest full sync checkpoint emitted by the engine. ' +
-        'Includes source, destination, and sync-run state for the next request.'
-    ),
-  })
+  const Pipeline = z
+    .object({
+      id: PipelineId,
+      source: SourceConfig,
+      destination: DestinationConfig,
+      streams: z
+        .array(StreamConfig)
+        .optional()
+        .describe('Selected streams to sync. All streams synced if omitted.'),
+      desired_status: DesiredStatus.default('active').describe(
+        'User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.'
+      ),
+      status: PipelineStatus.default('setup').describe(
+        'Workflow-controlled execution state. Updated by the Temporal workflow.'
+      ),
+      sync_state: SyncState.optional().describe(
+        'Latest full sync checkpoint emitted by the engine. ' +
+          'Includes source, destination, and sync-run state for the next request.'
+      ),
+    })
+    .meta({ id: 'Pipeline' })
 
-  const CreatePipeline = z.object({
-    id: PipelineId.optional().describe(
-      'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
-    ),
-    source: SourceConfig,
-    destination: DestinationConfig,
-    streams: z
-      .array(StreamConfig)
-      .optional()
-      .describe('Selected streams to sync. All streams synced if omitted.'),
-  })
+  const CreatePipeline = z
+    .object({
+      id: PipelineId.optional().describe(
+        'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
+      ),
+      source: SourceConfig,
+      destination: DestinationConfig,
+      streams: z
+        .array(StreamConfig)
+        .optional()
+        .describe('Selected streams to sync. All streams synced if omitted.'),
+    })
+    .meta({ id: 'CreatePipeline' })
 
   const UpdatePipeline = CreatePipeline.extend({
     desired_status: DesiredStatus.optional().describe(
       'Set to "paused" to pause, "active" to resume, "deleted" to tear down.'
     ),
-  }).partial()
+  })
+    .partial()
+    .meta({ id: 'UpdatePipeline' })
 
   return {
     SourceConfig,
