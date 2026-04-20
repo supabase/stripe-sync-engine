@@ -4,14 +4,16 @@ import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
 import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
-import { createRemoteEngine } from '@stripe/sync-engine'
+import { createEngine, createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
-import { collectFirst, drain, type Message } from '@stripe/sync-protocol'
+import { collectFirst, drain, emptySyncState, type Message, SyncState } from '@stripe/sync-protocol'
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { createSchemas, PipelineId } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
 import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
+import { runBackfillToCompletion } from '../temporal/lib/backfill-loop.js'
+import { createActivities } from '../temporal/activities/index.js'
 
 // MARK: - Helpers
 
@@ -87,7 +89,11 @@ export function createApp(options: AppOptions) {
   const temporal = options.temporal?.client
   const taskQueue = options.temporal?.taskQueue
   const { pipelineStore, resolver } = options
+  const localEnginePromise = options.engineUrl ? null : createEngine(resolver)
   const {
+    SourceConfig,
+    DestinationConfig,
+    StreamConfig,
     Pipeline: PipelineSchema,
     CreatePipeline: CreatePipelineSchema,
     UpdatePipeline: UpdatePipelineSchema,
@@ -380,6 +386,18 @@ export function createApp(options: AppOptions) {
       .string()
       .optional()
       .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
+    no_state: z.coerce
+      .boolean()
+      .optional()
+      .meta({ description: 'Ignore and do not persist the pipeline sync_state checkpoint' }),
+  })
+  const SyncBodySchema = z.object({
+    source: SourceConfig.optional(),
+    destination: DestinationConfig.optional(),
+    streams: z.array(StreamConfig).optional(),
+    sync_state: SyncState.optional().describe(
+      'Explicit sync checkpoint override for resumed ad-hoc runs'
+    ),
   })
 
   app.openapi(
@@ -393,6 +411,10 @@ export function createApp(options: AppOptions) {
         'Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. ' +
         'Persists the ending sync_state on the pipeline so the next run resumes where this one left off.',
       requestParams: { path: PipelineIdParam, query: SyncQueryParams },
+      requestBody: {
+        required: false,
+        content: { 'application/json': { schema: SyncBodySchema } },
+      },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
@@ -402,15 +424,14 @@ export function createApp(options: AppOptions) {
           content: { 'application/json': { schema: ErrorSchema } },
           description: 'Pipeline not found',
         },
-        503: {
-          content: { 'application/json': { schema: ErrorSchema } },
-          description: 'Engine not configured',
-        },
       },
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit, sync_run_id } = c.req.valid('query')
+      const { state_limit, time_limit, sync_run_id, no_state } = c.req.valid('query')
+      const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ?? {}) as z.infer<
+        typeof SyncBodySchema
+      >
 
       let pipeline: Pipeline
       try {
@@ -422,14 +443,16 @@ export function createApp(options: AppOptions) {
         return c.json({ error: `Pipeline ${id} not found` }, 404)
       }
 
-      if (!options.engineUrl) {
-        return c.json({ error: 'Engine URL not configured — pass --engine-url to serve' }, 503)
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const config = {
+        source: body.source ?? pipeline.source,
+        destination: body.destination ?? pipeline.destination,
+        ...(body.streams !== undefined ? { streams: body.streams } : { streams: pipeline.streams }),
       }
-
-      const engine = createRemoteEngine(options.engineUrl)
-      const { id: _, sync_state, ...config } = pipeline
       const output = engine.pipeline_sync(config, {
-        state: sync_state,
+        state: no_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
         state_limit,
         time_limit,
         sync_run_id,
@@ -440,17 +463,103 @@ export function createApp(options: AppOptions) {
         for await (const msg of output) {
           yield msg
           if (msg.type === 'eof' && msg.eof?.ending_state) {
-            await pipelineStore.update(id, {
-              sync_state: msg.eof.ending_state,
-              last_progress: msg.eof.run_progress,
-            })
+            await pipelineStore.update(
+              id,
+              no_state
+                ? { last_progress: msg.eof.run_progress }
+                : {
+                    sync_state: msg.eof.ending_state,
+                    last_progress: msg.eof.run_progress,
+                  }
+            )
           } else if (msg.type === 'progress' && msg.progress) {
             await pipelineStore.update(id, { last_progress: msg.progress })
           }
         }
       })()
 
-      return ndjsonResponse(wrapped)
+      return ndjsonResponse(wrapped, {
+        onError: (err) => ({
+          type: 'log' as const,
+          log: {
+            level: 'error' as const,
+            message:
+              err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
+          },
+        }),
+      })
+    }
+  )
+
+  // MARK: - Workflow test (exercises the same code path as Temporal without Temporal)
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.sync_workflow_test',
+      method: 'post',
+      path: '/pipelines/{id}/sync_workflow_test',
+      tags: ['Pipelines'],
+      summary: 'Run sync using the workflow backfill loop (no Temporal)',
+      description:
+        'Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. ' +
+        'Useful for testing the full workflow logic end-to-end.',
+      requestParams: {
+        path: PipelineIdParam,
+        query: z.object({
+          state_limit: z.coerce.number().optional().meta({ description: 'Max state messages per iteration' }),
+          time_limit: z.coerce.number().optional().meta({ description: 'Time limit per iteration (seconds)' }),
+        }),
+      },
+      responses: {
+        200: {
+          content: {
+            'application/json': {
+              schema: z.object({
+                eof: z.object({}).passthrough(),
+                sync_state: z.object({}).passthrough().optional(),
+              }),
+            },
+          },
+          description: 'Backfill result with final eof and sync state',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { state_limit, time_limit } = c.req.valid('query')
+
+      let pipeline: Pipeline
+      try {
+        pipeline = await pipelineStore.get(id)
+      } catch {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+
+      const activities = createActivities({
+        engineUrl: options.engineUrl ?? 'http://localhost:4010',
+        pipelineStore,
+      })
+
+      const syncRunId = crypto.randomUUID()
+      const result = await runBackfillToCompletion(
+        { pipelineSync: activities.pipelineSync },
+        id,
+        {
+          syncState: pipeline.sync_state ?? emptySyncState(),
+          syncRunId,
+          stateLimit: state_limit ?? 100,
+          timeLimit: time_limit ?? 30,
+        }
+      )
+
+      return c.json({ eof: result.eof, sync_state: result.syncState }, 200)
     }
   )
 
