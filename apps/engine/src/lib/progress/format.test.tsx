@@ -101,6 +101,76 @@ describe('formatProgress', () => {
     `)
   })
 
+  it('range bar only fills columns that are 100% covered', () => {
+    const progress: ProgressPayload = {
+      started_at: '2026-01-01T00:00:00Z',
+      elapsed_ms: 5000,
+      global_state_count: 3,
+      derived: { status: 'started', records_per_second: 100, states_per_second: 0.6 },
+      streams: {
+        customers: {
+          status: 'started',
+          state_count: 3,
+          record_count: 500,
+          total_range: { gte: '2020-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+          completed_ranges: [
+            // First 2 years complete (40% of 5-year span)
+            { gte: '2020-01-01T00:00:00Z', lt: '2022-01-01T00:00:00Z' },
+            // Last year complete (20% of 5-year span)
+            { gte: '2024-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+          ],
+        },
+      },
+    }
+
+    const output = formatProgress(progress)
+    // Extract the bar portion between [ and ]
+    const barMatch = output.match(/\[.*?([\u2588\u2591]+).*?\]/)
+    expect(barMatch).not.toBeNull()
+    const bar = barMatch![1]
+    expect(bar).toHaveLength(60)
+
+    // First 40% (24 chars) should be filled
+    const filledPrefix = bar.slice(0, 24)
+    expect(filledPrefix).toMatch(/^\u2588+$/)
+
+    // Middle section (40%-80%, 24 chars) should be empty
+    const emptyMiddle = bar.slice(24, 48)
+    expect(emptyMiddle).toMatch(/^\u2591+$/)
+
+    // Last 20% (12 chars) should be filled
+    const filledSuffix = bar.slice(48, 60)
+    expect(filledSuffix).toMatch(/^\u2588+$/)
+  })
+
+  it('range bar column stays empty when only partially covered', () => {
+    const progress: ProgressPayload = {
+      started_at: '2026-01-01T00:00:00Z',
+      elapsed_ms: 1000,
+      global_state_count: 1,
+      derived: { status: 'started', records_per_second: 50, states_per_second: 1 },
+      streams: {
+        customers: {
+          status: 'started',
+          state_count: 1,
+          record_count: 50,
+          total_range: { gte: '2020-01-01T00:00:00Z', lt: '2025-01-01T00:00:00Z' },
+          completed_ranges: [
+            // A tiny 1-second range in the middle — should NOT light up its column
+            { gte: '2022-06-15T12:00:00Z', lt: '2022-06-15T12:00:01Z' },
+          ],
+        },
+      },
+    }
+
+    const output = formatProgress(progress)
+    const barMatch = output.match(/\[.*?([\u2588\u2591]+).*?\]/)
+    expect(barMatch).not.toBeNull()
+    const bar = barMatch![1]
+    // A 1-second range in a ~1-month column should NOT fill it
+    expect(bar).toMatch(/^\u2591+$/)
+  })
+
   it('shows deltas when previous progress is provided', () => {
     const prev: ProgressPayload = {
       started_at: '2026-01-01T00:00:00Z',

@@ -27,7 +27,7 @@ function formatRangeBar(
   const totalEnd = new Date(timeRange.lt).getTime()
   const totalMs = totalEnd - totalStart
   if (totalMs <= 0) return null
-  const width = 40
+  const width = 60
   // Build per-column fractional coverage, then threshold to decide fill.
   // Each column tracks what fraction of its time span is completed.
   const colCoverage = new Float64Array(width)
@@ -45,7 +45,7 @@ function formatRangeBar(
       if (overlap > 0) colCoverage[i] += overlap / colSpanMs
     }
   }
-  const cols = Array.from(colCoverage, (c) => c >= 0.5)
+  const cols = Array.from(colCoverage, (c) => c >= 1.0 - 1e-9)
   const bar = cols.map((c) => (c ? '\u2588' : '\u2591')).join('')
   return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
 }
