@@ -605,7 +605,7 @@ export function createApp(options: AppOptions) {
       }
       const output = engine.pipeline_sync(
         config,
-        { state: pipeline.sync_state },
+        {},
         eventInput
       )
 
