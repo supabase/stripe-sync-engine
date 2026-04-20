@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -128,7 +128,7 @@
                               "error"
                             ]
                           },
-                          "progress": {
+                          "last_progress": {
                             "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
                             "type": "object",
                             "properties": {
@@ -295,6 +295,10 @@
                               "streams"
                             ],
                             "additionalProperties": false
+                          },
+                          "sync_state": {
+                            "description": "Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request.",
+                            "$ref": "#/components/schemas/SyncState"
                           }
                         },
                         "required": [
@@ -461,7 +465,7 @@
                         "error"
                       ]
                     },
-                    "progress": {
+                    "last_progress": {
                       "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
                       "type": "object",
                       "properties": {
@@ -628,6 +632,10 @@
                         "streams"
                       ],
                       "additionalProperties": false
+                    },
+                    "sync_state": {
+                      "description": "Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request.",
+                      "$ref": "#/components/schemas/SyncState"
                     }
                   },
                   "required": [
@@ -777,7 +785,7 @@
                         "error"
                       ]
                     },
-                    "progress": {
+                    "last_progress": {
                       "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
                       "type": "object",
                       "properties": {
@@ -944,6 +952,10 @@
                         "streams"
                       ],
                       "additionalProperties": false
+                    },
+                    "sync_state": {
+                      "description": "Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request.",
+                      "$ref": "#/components/schemas/SyncState"
                     }
                   },
                   "required": [
@@ -1137,7 +1149,7 @@
                         "error"
                       ]
                     },
-                    "progress": {
+                    "last_progress": {
                       "description": "Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll.",
                       "type": "object",
                       "properties": {
@@ -1304,6 +1316,10 @@
                         "streams"
                       ],
                       "additionalProperties": false
+                    },
+                    "sync_state": {
+                      "description": "Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request.",
+                      "$ref": "#/components/schemas/SyncState"
                     }
                   },
                   "required": [
@@ -1420,6 +1436,98 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/sync": {
+      "post": {
+        "operationId": "pipelines.sync",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Run sync for a pipeline",
+        "description": "Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "state_limit",
+            "schema": {
+              "description": "Max state messages before stopping",
+              "type": "number"
+            },
+            "description": "Max state messages before stopping"
+          },
+          {
+            "in": "query",
+            "name": "time_limit",
+            "schema": {
+              "description": "Stop after N seconds",
+              "type": "number"
+            },
+            "description": "Stop after N seconds"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Streaming NDJSON sync output",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Engine not configured",
             "content": {
               "application/json": {
                 "schema": {
@@ -1784,6 +1892,242 @@
           "refresh_token"
         ],
         "additionalProperties": false
+      },
+      "SyncState": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "destination": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Destination connector state."
+          },
+          "sync_run": {
+            "type": "object",
+            "properties": {
+              "sync_run_id": {
+                "description": "Identifies a finite backfill run. Omit for continuous sync.",
+                "type": "string"
+              },
+              "time_ceiling": {
+                "description": "Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation.",
+                "type": "string"
+              },
+              "progress": {
+                "type": "object",
+                "properties": {
+                  "started_at": {
+                    "type": "string",
+                    "description": "When this sync started (ISO 8601); generally equals time_ceiling."
+                  },
+                  "elapsed_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Wall-clock milliseconds since the sync run started."
+                  },
+                  "global_state_count": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Total source_state messages observed so far."
+                  },
+                  "connection_status": {
+                    "description": "Set when source or destination emits connection_status: failed.",
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "succeeded",
+                          "failed"
+                        ],
+                        "description": "Whether the connection check passed."
+                      },
+                      "message": {
+                        "description": "Human-readable explanation of the check result.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "derived": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "started",
+                          "succeeded",
+                          "failed"
+                        ],
+                        "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
+                      },
+                      "records_per_second": {
+                        "type": "number",
+                        "description": "Overall throughput for the entire run."
+                      },
+                      "states_per_second": {
+                        "type": "number",
+                        "description": "State checkpoints per second."
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "records_per_second",
+                      "states_per_second"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Computed aggregates."
+                  },
+                  "streams": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "not_started",
+                            "started",
+                            "completed",
+                            "skipped",
+                            "errored"
+                          ],
+                          "description": "Current state, derived from stream_status events."
+                        },
+                        "state_count": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Number of state checkpoints for this stream."
+                        },
+                        "record_count": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Records synced for this stream in this run."
+                        },
+                        "message": {
+                          "description": "Human-readable status message (error reason, skip reason, etc).",
+                          "type": "string"
+                        },
+                        "time_range": {
+                          "description": "Full backfill time span for this stream.",
+                          "type": "object",
+                          "properties": {
+                            "gte": {
+                              "type": "string",
+                              "description": "Inclusive lower bound (ISO 8601)."
+                            },
+                            "lt": {
+                              "type": "string",
+                              "description": "Exclusive upper bound (ISO 8601)."
+                            }
+                          },
+                          "required": [
+                            "gte",
+                            "lt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "completed_ranges": {
+                          "description": "Completed time sub-ranges for streams that support time_range.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "gte": {
+                                "type": "string",
+                                "description": "Inclusive lower bound (ISO 8601)."
+                              },
+                              "lt": {
+                                "type": "string",
+                                "description": "Exclusive upper bound (ISO 8601)."
+                              }
+                            },
+                            "required": [
+                              "gte",
+                              "lt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "state_count",
+                        "record_count"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Per-stream progress snapshot."
+                    },
+                    "description": "Per-stream progress, keyed by stream name."
+                  }
+                },
+                "required": [
+                  "started_at",
+                  "elapsed_ms",
+                  "global_state_count",
+                  "derived",
+                  "streams"
+                ],
+                "additionalProperties": false,
+                "description": "Accumulated progress from prior requests in this run."
+              }
+            },
+            "required": [
+              "progress"
+            ],
+            "additionalProperties": false,
+            "description": "Engine-managed run state — sync_run_id, time_ceiling, accumulated progress."
+          }
+        },
+        "required": [
+          "source",
+          "destination",
+          "sync_run"
+        ],
+        "additionalProperties": false,
+        "description": "Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing."
+      },
+      "SourceState": {
+        "type": "object",
+        "properties": {
+          "streams": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Per-stream checkpoint data, keyed by stream name."
+          },
+          "global": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Source-wide state shared across all streams."
+          }
+        },
+        "required": [
+          "streams",
+          "global"
+        ],
+        "additionalProperties": false,
+        "description": "Source connector state — cursors, backfill progress, events cursors."
       }
     }
   }

@@ -374,9 +374,7 @@ function extractResponseSchemas(
  * Middleware that validates JSON response bodies against declared Zod schemas.
  * On validation failure, replaces the response with a 500 containing error details.
  */
-function responseValidationMiddleware(
-  schemas: Map<number, AnyZod>
-): MiddlewareHandler {
+function responseValidationMiddleware(schemas: Map<number, AnyZod>): MiddlewareHandler {
   return async (c, next) => {
     await next()
 

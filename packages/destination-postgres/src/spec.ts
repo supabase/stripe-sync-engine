@@ -4,10 +4,7 @@ import type { ConnectorSpecification } from '@stripe/sync-protocol'
 export const configSchema = z
   .object({
     url: z.string().optional().describe('Postgres connection string'),
-    connection_string: z
-      .string()
-      .optional()
-      .describe('Deprecated alias for url; prefer url'),
+    connection_string: z.string().optional().describe('Deprecated alias for url; prefer url'),
     schema: z.string().describe('Target schema name (e.g. "stripe")').default('public'),
     batch_size: z.number().default(100).describe('Records to buffer before flushing'),
     aws: z

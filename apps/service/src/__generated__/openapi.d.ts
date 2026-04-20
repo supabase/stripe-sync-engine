@@ -58,6 +58,26 @@ export interface paths {
         patch: operations["pipelines.update"];
         trace?: never;
     };
+    "/pipelines/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync for a pipeline
+         * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.
+         */
+        post: operations["pipelines.sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/{pipeline_id}": {
         parameters: {
             query?: never;
@@ -194,6 +214,93 @@ export interface components {
              */
             batch_size: number;
         };
+        /** @description Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing. */
+        SyncState: {
+            source: components["schemas"]["SourceState"];
+            /** @description Destination connector state. */
+            destination: {
+                [key: string]: unknown;
+            };
+            /** @description Engine-managed run state — sync_run_id, time_ceiling, accumulated progress. */
+            sync_run: {
+                /** @description Identifies a finite backfill run. Omit for continuous sync. */
+                sync_run_id?: string;
+                /** @description Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation. */
+                time_ceiling?: string;
+                /** @description Accumulated progress from prior requests in this run. */
+                progress: {
+                    /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+                    started_at: string;
+                    /** @description Wall-clock milliseconds since the sync run started. */
+                    elapsed_ms: number;
+                    /** @description Total source_state messages observed so far. */
+                    global_state_count: number;
+                    /** @description Set when source or destination emits connection_status: failed. */
+                    connection_status?: {
+                        /**
+                         * @description Whether the connection check passed.
+                         * @enum {string}
+                         */
+                        status: "succeeded" | "failed";
+                        /** @description Human-readable explanation of the check result. */
+                        message?: string;
+                    };
+                    /** @description Computed aggregates. */
+                    derived: {
+                        /**
+                         * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                         * @enum {string}
+                         */
+                        status: "started" | "succeeded" | "failed";
+                        /** @description Overall throughput for the entire run. */
+                        records_per_second: number;
+                        /** @description State checkpoints per second. */
+                        states_per_second: number;
+                    };
+                    /** @description Per-stream progress, keyed by stream name. */
+                    streams: {
+                        [key: string]: {
+                            /**
+                             * @description Current state, derived from stream_status events.
+                             * @enum {string}
+                             */
+                            status: "not_started" | "started" | "completed" | "skipped" | "errored";
+                            /** @description Number of state checkpoints for this stream. */
+                            state_count: number;
+                            /** @description Records synced for this stream in this run. */
+                            record_count: number;
+                            /** @description Human-readable status message (error reason, skip reason, etc). */
+                            message?: string;
+                            /** @description Full backfill time span for this stream. */
+                            time_range?: {
+                                /** @description Inclusive lower bound (ISO 8601). */
+                                gte: string;
+                                /** @description Exclusive upper bound (ISO 8601). */
+                                lt: string;
+                            };
+                            /** @description Completed time sub-ranges for streams that support time_range. */
+                            completed_ranges?: {
+                                /** @description Inclusive lower bound (ISO 8601). */
+                                gte: string;
+                                /** @description Exclusive upper bound (ISO 8601). */
+                                lt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        /** @description Source connector state — cursors, backfill progress, events cursors. */
+        SourceState: {
+            /** @description Per-stream checkpoint data, keyed by stream name. */
+            streams: {
+                [key: string]: unknown;
+            };
+            /** @description Source-wide state shared across all streams. */
+            global: {
+                [key: string]: unknown;
+            };
+        };
     };
     responses: never;
     parameters: never;
@@ -273,7 +380,7 @@ export interface operations {
                              */
                             status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                             /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                            progress?: {
+                            last_progress?: {
                                 /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
                                 started_at: string;
                                 /** @description Wall-clock milliseconds since the sync run started. */
@@ -333,6 +440,8 @@ export interface operations {
                                     };
                                 };
                             };
+                            /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+                            sync_state?: components["schemas"]["SyncState"];
                         }[];
                         has_more: boolean;
                     };
@@ -406,7 +515,7 @@ export interface operations {
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
+                        last_progress?: {
                             /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
                             started_at: string;
                             /** @description Wall-clock milliseconds since the sync run started. */
@@ -466,6 +575,8 @@ export interface operations {
                                 };
                             };
                         };
+                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+                        sync_state?: components["schemas"]["SyncState"];
                     };
                 };
             };
@@ -541,7 +652,7 @@ export interface operations {
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
+                        last_progress?: {
                             /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
                             started_at: string;
                             /** @description Wall-clock milliseconds since the sync run started. */
@@ -601,6 +712,8 @@ export interface operations {
                                 };
                             };
                         };
+                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+                        sync_state?: components["schemas"]["SyncState"];
                     };
                 };
             };
@@ -729,7 +842,7 @@ export interface operations {
                          */
                         status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
                         /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
+                        last_progress?: {
                             /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
                             started_at: string;
                             /** @description Wall-clock milliseconds since the sync run started. */
@@ -789,6 +902,8 @@ export interface operations {
                                 };
                             };
                         };
+                        /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+                        sync_state?: components["schemas"]["SyncState"];
                     };
                 };
             };
@@ -816,6 +931,58 @@ export interface operations {
             };
             /** @description Invalid status transition */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.sync": {
+        parameters: {
+            query?: {
+                /** @description Max state messages before stopping */
+                state_limit?: number;
+                /** @description Stop after N seconds */
+                time_limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON sync output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+            /** @description Engine not configured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

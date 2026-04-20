@@ -34,7 +34,10 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
         destination: { type, [type]: destConfig },
       })
     }
-    await context.pipelineStore.update(pipelineId, { progress: eof.run_progress })
+    await context.pipelineStore.update(pipelineId, {
+      last_progress: eof.run_progress,
+      sync_state: eof.ending_state,
+    })
 
     return { eof }
   }
