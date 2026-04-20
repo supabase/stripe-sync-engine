@@ -1,3 +1,4 @@
+import pino from 'pino'
 import type {
   CatalogPayload,
   Source,
@@ -101,6 +102,8 @@ export type StripeSourceDeps = {
   rateLimiter?: RateLimiter
 }
 
+const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+
 export function createStripeSource(
   deps?: StripeSourceDeps
 ): Source<Config, StreamState, WebhookInput | StripeEvent> {
@@ -187,9 +190,9 @@ export function createStripeSource(
           (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
         )
         if (managed && managed.status === 'enabled') {
-          // Endpoint already exists — ensure we have the secret to verify webhooks
+          // Endpoint already exists — warn if we don't have the secret to verify webhooks
           if (!config.webhook_secret) {
-            throw new Error(
+            logger.error(
               'Existing managed webhook endpoint found for this URL but webhook_secret ' +
                 'is not configured. The secret is only available at endpoint creation time — ' +
                 'provide it in the pipeline config.'
