@@ -43,7 +43,7 @@ const ndjsonRef = {
   SourceInputMessage: { $ref: '#/components/schemas/SourceInputMessage' },
 }
 import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
-import { logger } from '../logger.js'
+import { log } from '../logger.js'
 import {
   sslConfigFromConnectionString,
   stripSslParams,
@@ -77,7 +77,7 @@ export async function createApp(resolver: ConnectorResolver) {
       if (engineRequestId) c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
       return c.json({ error: err.message }, err.status)
     }
-    logger.error({ err }, 'Unhandled error')
+    log.error({ err }, 'Unhandled error')
     if (engineRequestId) c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
     return c.json({ error: 'Internal server error' }, 500)
   })
@@ -86,7 +86,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const engineRequestId = crypto.randomUUID()
     await runWithEngineRequestContext({ engineRequestId }, async () => {
       const start = Date.now()
-      logger.info({ method: c.req.method, path: c.req.path }, 'request start')
+      log.info({ method: c.req.method, path: c.req.path }, 'request start')
       await next()
       c.res.headers.set(ENGINE_REQUEST_ID_HEADER, engineRequestId)
       let error: string | undefined
@@ -99,7 +99,7 @@ export async function createApp(resolver: ConnectorResolver) {
         }
       }
       const level = c.res.status >= 200 && c.res.status < 300 ? 'info' : 'warn'
-      logger[level](
+      log[level](
         {
           method: c.req.method,
           path: c.req.path,
@@ -508,10 +508,10 @@ export async function createApp(resolver: ConnectorResolver) {
     const inputPresent = !!input
     const context = { path: '/pipeline_read', inputPresent, ...syncRequestContext(pipeline) }
     const startedAt = Date.now()
-    logger.info(context, 'Engine API /pipeline_read started')
+    log.info(context, 'Engine API /pipeline_read started')
 
     const onDisconnect = () =>
-      logger.warn(
+      log.warn(
         { elapsed_ms: Date.now() - startedAt, event: 'SYNC_CLIENT_DISCONNECT' },
         'SYNC_CLIENT_DISCONNECT'
       )
@@ -567,17 +567,17 @@ export async function createApp(resolver: ConnectorResolver) {
         ) as AsyncIterable<Message>
       } else {
         const context = { path: '/pipeline_write', ...syncRequestContext(pipeline) }
-        logger.error(context, 'Engine API /write missing request body')
+        log.error(context, 'Engine API /write missing request body')
         return c.json({ error: 'Request body required for /write' }, 400)
       }
     }
 
     const context = { path: '/pipeline_write', ...syncRequestContext(pipeline) }
     const startedAt = Date.now()
-    logger.info(context, 'Engine API /write started')
+    log.info(context, 'Engine API /write started')
 
     const onDisconnect = () =>
-      logger.warn(
+      log.warn(
         { elapsed_ms: Date.now() - startedAt, event: 'SYNC_CLIENT_DISCONNECT' },
         'SYNC_CLIENT_DISCONNECT'
       )
@@ -646,7 +646,7 @@ export async function createApp(resolver: ConnectorResolver) {
     const startedAt = Date.now()
 
     const onDisconnect = () =>
-      logger.warn(
+      log.warn(
         { elapsed_ms: Date.now() - startedAt, event: 'SYNC_CLIENT_DISCONNECT' },
         'SYNC_CLIENT_DISCONNECT'
       )

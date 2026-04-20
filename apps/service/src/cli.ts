@@ -15,7 +15,7 @@ import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
 import type { StreamConfig } from './lib/createSchemas.js'
 import { homedir } from 'node:os'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
 
@@ -117,7 +117,7 @@ const serveCmd = defineCommand({
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
     const temporal = await maybeCreateTemporalClient(args['temporal-address'], taskQueue)
     if (temporal) {
-      logger.info(
+      log.info(
         {
           temporalAddress: args['temporal-address'],
           taskQueue,
@@ -125,19 +125,19 @@ const serveCmd = defineCommand({
         'Temporal mode enabled'
       )
     } else {
-      logger.info('Temporal mode disabled')
+      log.info('Temporal mode disabled')
     }
 
     const resolver = await resolverPromise
     const pipelineStore = filePipelineStore(args['data-dir'])
-    logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
+    log.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
 
     const engineUrl = args['engine-url'] || undefined
     const app = createApp({ temporal, resolver, pipelineStore, engineUrl })
 
     serve({ fetch: app.fetch, port }, () => {
-      logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
-      logger.info({ url: `http://localhost:${port}/docs` }, 'API docs available')
+      log.info({ port }, `Sync Service listening on http://localhost:${port}`)
+      log.info({ url: `http://localhost:${port}/docs` }, 'API docs available')
     })
   },
 })
@@ -197,7 +197,7 @@ const workerCmd = defineCommand({
       workflowsPath,
     })
 
-    logger.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
+    log.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
 
     await worker.run()
   },
@@ -237,7 +237,7 @@ const webhookCmd = defineCommand({
     const app = createApp({ temporal, resolver, pipelineStore })
 
     serve({ fetch: app.fetch, port }, () => {
-      logger.info(
+      log.info(
         { port, temporalAddress: args['temporal-address'], taskQueue },
         `Webhook server listening on http://localhost:${port}`
       )

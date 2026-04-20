@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, log, persistState, pipe, takeLimits } from './pipeline.js'
+import { enforceCatalog, filterType, tapLog, persistState, pipe, takeLimits } from './pipeline.js'
 import type { StateStore } from './state-store.js'
 
-vi.mock('../logger.js', () => ({
-  logger: {
+vi.mock('../log.js', () => ({
+  log: {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../logger.js', () => ({
   },
 }))
 
-import { logger } from '../logger.js'
+import { log } from '../log.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -165,8 +165,8 @@ describe('enforceCatalog()', () => {
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(logger.error).toHaveBeenCalledOnce()
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(log.error).toHaveBeenCalledOnce()
+    expect(log.error).toHaveBeenCalledWith(
       { stream: 'unknown_stream' },
       'Unknown stream not in catalog'
     )
@@ -181,7 +181,7 @@ describe('enforceCatalog()', () => {
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(log.error).toHaveBeenCalledWith(
       { stream: 'nonexistent' },
       'Unknown stream not in catalog'
     )
@@ -268,10 +268,10 @@ describe('log()', () => {
       { type: 'log', log: { level: 'warn', message: 'careful', data: { stream: 'customers' } } },
     ]
     await drain(log(toAsync(msgs)))
-    expect(logger.warn).toHaveBeenCalledWith({ stream: 'customers' }, 'careful')
+    expect(log.warn).toHaveBeenCalledWith({ stream: 'customers' }, 'careful')
   })
 
-  it('logs top-level stream_status messages via logger.debug', async () => {
+  it('logs top-level stream_status messages via log.debug', async () => {
     const msgs: Message[] = [
       {
         type: 'stream_status',
@@ -279,7 +279,7 @@ describe('log()', () => {
       },
     ]
     await drain(log(toAsync(msgs)))
-    expect(logger.debug).toHaveBeenCalledWith(
+    expect(log.debug).toHaveBeenCalledWith(
       { stream: 'orders', status: 'start' },
       'stream_status'
     )
@@ -301,9 +301,9 @@ describe('log()', () => {
       },
     ]
     await drain(log(toAsync(msgs)))
-    expect(logger.info).not.toHaveBeenCalled()
-    expect(logger.error).not.toHaveBeenCalled()
-    expect(logger.warn).not.toHaveBeenCalled()
+    expect(log.info).not.toHaveBeenCalled()
+    expect(log.error).not.toHaveBeenCalled()
+    expect(log.warn).not.toHaveBeenCalled()
   })
 })
 

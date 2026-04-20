@@ -22,8 +22,8 @@ import {
 
 const engineMsg = createEngineMessageFactory()
 
-import { logger } from '../logger.js'
-import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
+import { log } from '../logger.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
 import { stateReducer, isProgressTrigger } from './state-reducer.js'
 import { applySelection } from './destination-filter.js'
@@ -417,20 +417,20 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         },
       })
 
-      logger.debug({ runSource, runDest }, 'pipeline_setup: resolving connectors')
+      log.debug({ runSource, runDest }, 'pipeline_setup: resolving connectors')
       const [srcConnector, destConnector] = await Promise.all([
         runSource ? resolver.resolveSource(pipeline.source.type) : null,
         runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      logger.debug('pipeline_setup: resolving specs')
+      log.debug('pipeline_setup: resolving specs')
       const [srcSpec, destSpec] = await Promise.all([
         srcConnector ? getSpec(srcConnector, configPayload(pipeline.source)) : null,
         destConnector ? getSpec(destConnector, configPayload(pipeline.destination)) : null,
       ])
 
-      logger.debug('pipeline_setup: discovering catalog')
+      log.debug('pipeline_setup: discovering catalog')
       const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
-      logger.debug(
+      log.debug(
         { streams: catalog.streams.length },
         'pipeline_setup: catalog discovered, running setup hooks'
       )
@@ -455,7 +455,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             tag(destTag)
           )
       )
-      logger.debug('pipeline_setup: setup hooks complete')
+      log.debug('pipeline_setup: setup hooks complete')
     },
 
     async *pipeline_teardown(pipeline, opts?) {
@@ -509,7 +509,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const destInput = pipe(
             map(messages, (msg) => Message.parse(msg)),
             enforceCatalog(p.filteredCatalog),
-            log,
+            tapLog,
             filterType('record', 'source_state')
           )
           const destOutput = p.destination.connector.write(
@@ -542,7 +542,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           })
           let requestProgress = createInitialProgress(streamNames)
 
-          const destInput = pipe(sourceOutput, enforceCatalog(p.filteredCatalog), log)
+          const destInput = pipe(sourceOutput, enforceCatalog(p.filteredCatalog), tapLog)
           const destOutput = p.destination.connector.write(
             { config: p.destination.config, catalog: p.filteredCatalog },
             destInput

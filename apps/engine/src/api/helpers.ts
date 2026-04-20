@@ -1,7 +1,7 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
 import { mergeAsync } from '@stripe/sync-protocol'
 import { bindLogContext, createAsyncQueue, type RoutedLogEntry } from '@stripe/sync-logger'
-import { logger } from '../logger.js'
+import { log } from '../logger.js'
 
 export function syncRequestContext(pipeline: {
   source: { type: string }
@@ -87,15 +87,15 @@ export async function* logApiStream<T>(
           if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
             hasError = true
           if (msg?.type === 'eof')
-            logger.info({ ...context, eof: msg.eof }, formatEof(msg.eof as EofPayload))
+            log.info({ ...context, eof: msg.eof }, formatEof(msg.eof as EofPayload))
           yield item
         }
-        logger.debug(
+        log.debug(
           { ...context, itemCount, durationMs: Date.now() - startedAt },
           `${label} completed`
         )
       } catch (error) {
-        logger.error(
+        log.error(
           { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
           `${label} failed`
         )

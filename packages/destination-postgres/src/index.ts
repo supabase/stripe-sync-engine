@@ -11,7 +11,7 @@ import {
 } from '@stripe/sync-util-postgres'
 import { buildCreateTableDDL } from './schemaProjection.js'
 import defaultSpec from './spec.js'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 import type { Config } from './spec.js'
 
 function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
@@ -110,7 +110,7 @@ function createPool(config: PoolConfig): pg.Pool {
   const pool = new pg.Pool(config)
   // Destination connectors should surface pool failures without crashing the host process.
   pool.on('error', (err) => {
-    logger.error({ err }, 'Postgres destination pool error')
+    log.error({ err }, 'Postgres destination pool error')
   })
   return pool
 }
@@ -121,7 +121,7 @@ const destination = {
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
     try {
       await pool.query('SELECT 1')
       yield {
@@ -142,13 +142,13 @@ const destination = {
   },
 
   async *setup({ config, catalog }) {
-    logger.debug({ schema: config.schema }, 'dest setup: connecting to pool')
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
+    log.debug({ schema: config.schema }, 'dest setup: connecting to pool')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
     try {
       yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
-      logger.debug('dest setup: creating schema')
+      log.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
-      logger.debug('dest setup: creating trigger function')
+      log.debug('dest setup: creating trigger function')
       await pool.query(sql`
         CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
             LANGUAGE plpgsql
@@ -162,7 +162,7 @@ const destination = {
         END;
         $$;
       `)
-      logger.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
+      log.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
       await Promise.all(
         catalog.streams.map(async (cs) => {
           await pool.query(
@@ -173,7 +173,7 @@ const destination = {
           )
         })
       )
-      logger.debug('dest setup: complete')
+      log.debug('dest setup: complete')
     } finally {
       await pool.end()
     }
@@ -186,7 +186,7 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
@@ -195,7 +195,7 @@ const destination = {
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()

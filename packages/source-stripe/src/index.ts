@@ -31,7 +31,7 @@ import { createInMemoryRateLimiter } from './rate-limiter.js'
 import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
 import { resolveAccountMetadata } from './account-metadata.js'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 function combineSignals(
   ...signals: Array<AbortSignal | null | undefined>
@@ -168,7 +168,7 @@ export function createStripeSource(
       })
 
       if (!config.account_id || config.account_created == null) {
-        logger.debug('source setup: resolving account metadata')
+        log.debug('source setup: resolving account metadata')
         try {
           const resolved = await resolveAccountMetadata(config, client)
           if (!config.account_id) updates.account_id = resolved.accountId
@@ -176,19 +176,19 @@ export function createStripeSource(
         } catch (err) {
           // Non-fatal: fall back to defaults. account_id may be derived from the API key later,
           // and account_created defaults to Stripe's launch date (2011-01-01).
-          logger.warn(
+          log.warn(
             {
               err,
             },
             'Failed to resolve account metadata during setup'
           )
         }
-        logger.debug('source setup: account metadata resolved')
+        log.debug('source setup: account metadata resolved')
       }
 
       // Create managed webhook endpoint if webhook_url is set
       if (config.webhook_url) {
-        logger.debug('source setup: listing webhook endpoints')
+        log.debug('source setup: listing webhook endpoints')
         const existing = await client.listWebhookEndpoints({ limit: 100 })
         const managed = existing.data.find(
           (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
@@ -196,7 +196,7 @@ export function createStripeSource(
         if (managed && managed.status === 'enabled') {
           // Endpoint already exists — warn if we don't have the secret to verify webhooks
           if (!config.webhook_secret) {
-            logger.error(
+            log.error(
               'Existing managed webhook endpoint found for this URL but webhook_secret ' +
                 'is not configured. The secret is only available at endpoint creation time — ' +
                 'provide it in the pipeline config.'
@@ -223,10 +223,10 @@ export function createStripeSource(
             updates.webhook_secret = created.secret
           }
         }
-        logger.debug('source setup: webhook endpoints handled')
+        log.debug('source setup: webhook endpoints handled')
       }
 
-      logger.debug({ hasUpdates: Object.keys(updates).length > 0 }, 'source setup: complete')
+      log.debug({ hasUpdates: Object.keys(updates).length > 0 }, 'source setup: complete')
       if (Object.keys(updates).length > 0) {
         yield msg.control({
           control_type: 'source_config',

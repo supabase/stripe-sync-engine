@@ -1,4 +1,4 @@
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 /**
  * A rate limiter returns the number of seconds the caller should wait
@@ -20,7 +20,7 @@ export function createInMemoryRateLimiter(maxRps: number): RateLimiter {
   let tokens = maxRps
   let lastRefill = Date.now()
 
-  logger.debug({ event: 'rate_limiter_init', max_rps: maxRps })
+  log.debug({ event: 'rate_limiter_init', max_rps: maxRps })
 
   return async (cost = 1) => {
     const elapsed = (Date.now() - lastRefill) / 1000
@@ -29,7 +29,7 @@ export function createInMemoryRateLimiter(maxRps: number): RateLimiter {
     tokens -= cost
     if (tokens >= 0) return 0
     const wait = -tokens / maxRps
-    logger.debug({
+    log.debug({
       event: 'rate_limiter_throttle',
       tokens_remaining: tokens,
       wait_s: Math.round(wait * 1000) / 1000,

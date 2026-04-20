@@ -1,5 +1,5 @@
 export * from '@stripe/sync-protocol'
-export { enforceCatalog, log, filterType, persistState, collect, pipe } from './pipeline.js'
+export { enforceCatalog, tapLog, filterType, persistState, collect, pipe } from './pipeline.js'
 export { createEngine, buildCatalog } from './engine.js'
 export { SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
 export type { Engine } from './engine.js'

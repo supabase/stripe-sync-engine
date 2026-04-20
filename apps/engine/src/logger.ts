@@ -10,7 +10,7 @@ const transport = process.env.LOG_PRETTY
 
 const destination = transport ? undefined : pino.destination({ dest: 1, sync: false })
 
-export const logger = createLogger({
+export const log = createLogger({
   name: 'engine',
   level: process.env.LOG_LEVEL ?? 'info',
   transport,

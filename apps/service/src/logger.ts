@@ -14,7 +14,7 @@ const baseOpts: pino.LoggerOptions = {
   },
 }
 
-export const logger = createLogger({
+export const log = createLogger({
   ...baseOpts,
   name: 'service',
   destination: pino.destination({ dest: 1, sync: false }),

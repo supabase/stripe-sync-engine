@@ -6,7 +6,7 @@ import type {
 } from '@stripe/sync-protocol'
 import type { StateStore } from './state-store.js'
 import { withoutLogCapture } from '@stripe/sync-logger'
-import { logger } from '../logger.js'
+import { log } from '../logger.js'
 
 // MARK: - enforceCatalog
 
@@ -23,7 +23,7 @@ export function enforceCatalog<T extends Message>(
       if (msg.type === 'record') {
         const cs = streamMap.get(msg.record.stream)
         if (!cs) {
-          logger.error({ stream: msg.record.stream }, 'Unknown stream not in catalog')
+          log.error({ stream: msg.record.stream }, 'Unknown stream not in catalog')
           continue
         }
         const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
@@ -46,7 +46,7 @@ export function enforceCatalog<T extends Message>(
         } else {
           const cs = streamMap.get(msg.source_state.stream)
           if (!cs) {
-            logger.error({ stream: msg.source_state.stream }, 'Unknown stream not in catalog')
+            log.error({ stream: msg.source_state.stream }, 'Unknown stream not in catalog')
             continue
           }
           yield msg
@@ -63,22 +63,22 @@ export function enforceCatalog<T extends Message>(
 /**
  * Tap stage: logs diagnostics to stderr and passes ALL messages through unchanged.
  */
-export async function* log<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
+export async function* tapLog<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
   for await (const msg of messages) {
     if (msg.type === 'log') {
       withoutLogCapture(() =>
         msg.log.data
-          ? logger[msg.log.level](msg.log.data, msg.log.message)
-          : logger[msg.log.level](msg.log.message)
+          ? log[msg.log.level](msg.log.data, msg.log.message)
+          : log[msg.log.level](msg.log.message)
       )
     } else if (msg.type === 'stream_status') {
-      logger.debug(
+      log.debug(
         { stream: msg.stream_status.stream, status: msg.stream_status.status },
         'stream_status'
       )
     } else if (msg.type === 'connection_status') {
       if (msg.connection_status.status === 'failed') {
-        logger.error({ message: msg.connection_status.message }, 'connection_status: failed')
+        log.error({ message: msg.connection_status.message }, 'connection_status: failed')
       }
     }
     yield msg
@@ -228,7 +228,7 @@ export function takeLimits<T extends { type: string }>(
         // Check if already aborted before starting the race
         if (opts.signal?.aborted) {
           cleanup()
-          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
+          log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof(true)
           await closeIterator()
           return
@@ -257,7 +257,7 @@ export function takeLimits<T extends { type: string }>(
         cleanup()
 
         if (winner.kind === 'hard_deadline') {
-          logger.warn(
+          log.warn(
             {
               elapsed_ms: Date.now() - startedAt,
               time_limit: opts.time_limit,
@@ -272,7 +272,7 @@ export function takeLimits<T extends { type: string }>(
         }
 
         if (winner.kind === 'aborted') {
-          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
+          log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
           yield makeEof(true)
           await closeIterator()
           return
@@ -290,7 +290,7 @@ export function takeLimits<T extends { type: string }>(
 
         // Check soft deadline between messages
         if (softDeadline != null && Date.now() >= softDeadline) {
-          logger.warn(
+          log.warn(
             {
               elapsed_ms: Date.now() - startedAt,
               time_limit: opts.time_limit,

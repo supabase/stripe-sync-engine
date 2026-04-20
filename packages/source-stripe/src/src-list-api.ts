@@ -10,7 +10,7 @@ import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
 import { msg } from './index.js'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
@@ -44,12 +44,12 @@ function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortS
     const wait = await rateLimiter()
     if (wait > 0) {
       const wait_ms = Math.round(wait * 1000)
-      logger.debug({
+      log.debug({
         event: 'rate_limit_wait',
         wait_ms,
       })
       await waitForRateLimit(wait_ms, signal)
-      logger.debug({
+      log.debug({
         event: 'rate_limit_resumed',
         waited_ms: wait_ms,
       })
@@ -283,7 +283,7 @@ async function* paginateRange(opts: {
       prefetchedResponse = listFn(nextParams as Parameters<typeof listFn>[0])
     }
 
-    logger.trace({
+    log.trace({
       event: 'page_fetched',
       stream: streamName,
       range_gte: range.gte,
@@ -389,7 +389,7 @@ async function* iterateStream(opts: {
   let remaining: RemainingRange[]
   const accountedRange = { gte: timeRange.gte, lt: timeRange.lt }
 
-  logger.debug({
+  log.debug({
     event: 'stream_state_check',
     stream: streamName,
     has_state: !!opts.streamState,
@@ -409,7 +409,7 @@ async function* iterateStream(opts: {
         existingAccounted,
         timeRange
       )
-      logger.debug({
+      log.debug({
         event: 'state_reconcile',
         stream: streamName,
         old_gte: existingAccounted.gte,
@@ -513,7 +513,7 @@ async function* iterateStream(opts: {
 
       const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, subdivisionFactor)
 
-      logger.debug({
+      log.debug({
         event: 'subdivision_round',
         stream: streamName,
         subdivision_factor: subdivisionFactor,
@@ -546,7 +546,7 @@ async function* iterateStream(opts: {
     roundNumber++
   }
 
-  logger.debug({
+  log.debug({
     event: 'subdivision_complete',
     stream: streamName,
     total_rounds: roundNumber,
@@ -666,7 +666,7 @@ export async function* listApiBackfill(opts: {
             })
             return
           }
-          logger.error(
+          log.error(
             {
               stream: stream.name,
               err,

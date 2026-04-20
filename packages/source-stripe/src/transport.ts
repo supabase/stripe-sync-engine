@@ -1,5 +1,5 @@
 import { HttpsProxyAgent } from 'https-proxy-agent'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 export type TransportEnv = Record<string, string | undefined>
 type ProxyTarget = URL | string
@@ -180,7 +180,7 @@ export function tracedFetch(input: URL | string, init: RequestInit = {}): Promis
   return fetch(input, init).then((res) => {
     const duration_ms = Date.now() - start
     const request_id = res.headers.get('request-id') ?? undefined
-    logger.debug({
+    log.debug({
       event: 'stripe_request',
       method,
       url,

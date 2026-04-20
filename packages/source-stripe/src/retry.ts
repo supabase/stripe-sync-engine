@@ -1,4 +1,4 @@
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_MAX_MS = 32000
@@ -149,7 +149,7 @@ export async function withHttpRetry<T>(
       const errMsg = err instanceof Error ? err.message : String(err)
       const labelPart = opts.label ? ` ${opts.label}` : ''
       const retrySource = retryAfterMs ? ' (retry-after)' : ''
-      logger.warn(
+      log.warn(
         {
           attempt: attempt + 1,
           max_retries: maxRetries,
