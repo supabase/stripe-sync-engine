@@ -95,20 +95,22 @@ export function makeClient(
   async function requestWithRetry(
     method: string,
     path: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
+    opts?: { maxRetries?: number }
   ): Promise<unknown> {
     if (method === 'GET') {
       return withHttpRetry(() => request(method, path, params), {
         label: `${method} ${path}`,
         signal: pipelineSignal,
+        maxRetries: opts?.maxRetries,
       })
     }
     return request(method, path, params)
   }
 
   return {
-    async getAccount(): Promise<StripeAccount> {
-      const json = await requestWithRetry('GET', '/v1/account')
+    async getAccount(opts?: { maxRetries?: number }): Promise<StripeAccount> {
+      const json = await requestWithRetry('GET', '/v1/account', undefined, opts)
       return StripeAccountSchema.parse(json)
     },
 

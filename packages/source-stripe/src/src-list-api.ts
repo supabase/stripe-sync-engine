@@ -178,7 +178,7 @@ export function reconcileRanges(
 
 async function getAccountCreatedTimestamp(client: StripeClient): Promise<number> {
   try {
-    const account = await client.getAccount()
+    const account = await client.getAccount({ maxRetries: 0 })
     return account.created ?? STRIPE_LAUNCH_TIMESTAMP
   } catch {
     return STRIPE_LAUNCH_TIMESTAMP

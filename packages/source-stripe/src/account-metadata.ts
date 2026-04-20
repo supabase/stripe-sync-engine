@@ -18,7 +18,7 @@ export async function resolveAccountMetadata(
   let accountCreated = config.account_created
 
   if (needsAccountId || needsAccountCreated) {
-    const account = await client.getAccount()
+    const account = await client.getAccount({ maxRetries: 0 })
     accountId ??= account.id
     accountCreated ??= account.created ?? STRIPE_LAUNCH_TIMESTAMP
   }
