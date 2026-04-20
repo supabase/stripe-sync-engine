@@ -227,6 +227,7 @@ beforeEach(() => {
   tempDataDir = mkdtempSync(join(tmpdir(), 'sync-service-cli-'))
   syncRequests = []
   process.env.DATA_DIR = tempDataDir
+  process.env.LOG_LEVEL = 'silent'
   delete process.env.TEMPORAL_ADDRESS
   delete process.env.TEMPORAL_TASK_QUEUE
   vi.clearAllMocks()
@@ -236,6 +237,7 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(tempDataDir, { recursive: true, force: true })
   delete process.env.DATA_DIR
+  delete process.env.LOG_LEVEL
   delete process.env.TEMPORAL_ADDRESS
   delete process.env.TEMPORAL_TASK_QUEUE
 })
