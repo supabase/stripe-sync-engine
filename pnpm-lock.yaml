@@ -167,9 +167,6 @@ importers:
       '@stripe/sync-hono-zod-openapi':
         specifier: workspace:*
         version: link:../../packages/hono-zod-openapi
-      '@stripe/sync-integration-supabase':
-        specifier: workspace:*
-        version: link:../supabase
       '@stripe/sync-logger':
         specifier: workspace:*
         version: link:../../packages/logger

@@ -40,9 +40,6 @@ vi.mock('../cli/sync.js', () => ({
   createSyncCmd,
 }))
 
-vi.mock('../cli/supabase.js', () => ({
-  supabaseCmd: { meta: { name: 'supabase' } },
-}))
 
 vi.mock('../lib/default-connectors.js', () => ({
   defaultConnectors,

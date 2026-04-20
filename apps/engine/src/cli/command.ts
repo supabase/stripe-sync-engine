@@ -4,7 +4,6 @@ import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import type { ConnectorResolver } from '../lib/index.js'
 import { startApiServer } from '../api/server.js'
 import { createApp } from '../api/app.js'
-import { supabaseCmd } from './supabase.js'
 import { createSyncCmd } from './sync.js'
 import { createResolverFromFlags } from './resolver-flags.js'
 
@@ -88,7 +87,6 @@ export async function createProgram() {
     subCommands: {
       serve: createServeCmd(resolverPromise),
       sync: createSyncCmd(resolverPromise),
-      supabase: supabaseCmd,
       api: await buildApiCmd(appPromise),
     },
   })
