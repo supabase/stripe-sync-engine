@@ -371,7 +371,10 @@ export function createApp(options: AppOptions) {
   // MARK: - Pipeline sync (ad-hoc)
 
   const SyncQueryParams = z.object({
-    state_limit: z.coerce.number().optional().meta({ description: 'Max state messages before stopping' }),
+    state_limit: z.coerce
+      .number()
+      .optional()
+      .meta({ description: 'Max state messages before stopping' }),
     time_limit: z.coerce.number().optional().meta({ description: 'Stop after N seconds' }),
   })
 
@@ -419,8 +422,8 @@ export function createApp(options: AppOptions) {
       }
 
       const engine = createRemoteEngine(options.engineUrl)
-      const { id: _, ...config } = pipeline
-      const output = engine.pipeline_sync(config, { state_limit, time_limit })
+      const { id: _, sync_state, ...config } = pipeline
+      const output = engine.pipeline_sync(config, { state: sync_state, state_limit, time_limit })
 
       return ndjsonResponse(output)
     }
