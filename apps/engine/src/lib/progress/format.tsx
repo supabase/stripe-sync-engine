@@ -27,7 +27,7 @@ function formatRangeBar(
   const totalEnd = new Date(timeRange.lt).getTime()
   const totalMs = totalEnd - totalStart
   if (totalMs <= 0) return null
-  const width = 60
+  const width = 40
   // Build per-column fractional coverage, then threshold to decide fill.
   // Each column tracks what fraction of its time span is completed.
   const colCoverage = new Float64Array(width)

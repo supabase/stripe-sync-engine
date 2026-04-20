@@ -128,18 +128,18 @@ describe('formatProgress', () => {
     const barMatch = output.match(/\[.*?([\u2588\u2591]+).*?\]/)
     expect(barMatch).not.toBeNull()
     const bar = barMatch![1]
-    expect(bar).toHaveLength(60)
+    expect(bar).toHaveLength(40)
 
-    // First 40% (24 chars) should be filled
-    const filledPrefix = bar.slice(0, 24)
+    // First 40% (16 chars) should be filled
+    const filledPrefix = bar.slice(0, 16)
     expect(filledPrefix).toMatch(/^\u2588+$/)
 
-    // Middle section (40%-80%, 24 chars) should be empty
-    const emptyMiddle = bar.slice(24, 48)
+    // Middle section (40%-80%, 16 chars) should be empty
+    const emptyMiddle = bar.slice(16, 32)
     expect(emptyMiddle).toMatch(/^\u2591+$/)
 
-    // Last 20% (12 chars) should be filled
-    const filledSuffix = bar.slice(48, 60)
+    // Last 20% (8 chars) should be filled
+    const filledSuffix = bar.slice(32, 40)
     expect(filledSuffix).toMatch(/^\u2588+$/)
   })
 
