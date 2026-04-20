@@ -4,8 +4,10 @@ import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
 import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
+import { createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
 import { collectFirst, drain, type Message } from '@stripe/sync-protocol'
+import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
 import { createSchemas, PipelineId } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
@@ -78,6 +80,7 @@ export interface AppOptions {
   temporal?: { client: WorkflowClient; taskQueue: string }
   resolver: ConnectorResolver
   pipelineStore: PipelineStore
+  engineUrl?: string
 }
 
 export function createApp(options: AppOptions) {
@@ -362,6 +365,64 @@ export function createApp(options: AppOptions) {
       }
 
       return c.json({ id, deleted: true as const }, 200)
+    }
+  )
+
+  // MARK: - Pipeline sync (ad-hoc)
+
+  const SyncQueryParams = z.object({
+    state_limit: z.coerce.number().optional().meta({ description: 'Max state messages before stopping' }),
+    time_limit: z.coerce.number().optional().meta({ description: 'Stop after N seconds' }),
+  })
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.sync',
+      method: 'post',
+      path: '/pipelines/{id}/sync',
+      tags: ['Pipelines'],
+      summary: 'Run sync for a pipeline',
+      description:
+        'Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client.',
+      requestParams: { path: PipelineIdParam, query: SyncQueryParams },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
+          description: 'Streaming NDJSON sync output',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+        503: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Engine not configured',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { state_limit, time_limit } = c.req.valid('query')
+
+      let pipeline: Pipeline
+      try {
+        pipeline = await pipelineStore.get(id)
+      } catch {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+
+      if (!options.engineUrl) {
+        return c.json({ error: 'Engine URL not configured — pass --engine-url to serve' }, 503)
+      }
+
+      const engine = createRemoteEngine(options.engineUrl)
+      const { id: _, ...config } = pipeline
+      const output = engine.pipeline_sync(config, { state_limit, time_limit })
+
+      return ndjsonResponse(output)
     }
   )
 

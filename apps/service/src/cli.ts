@@ -84,6 +84,11 @@ const serveCmd = defineCommand({
       default: defaultDataDir,
       description: `Directory to persist pipeline configs as JSON files (default: ${defaultDataDir}).`,
     },
+    'engine-url': {
+      type: 'string',
+      default: 'http://localhost:4010',
+      description: 'Sync engine URL for ad-hoc sync execution (default: http://localhost:4010)',
+    },
   },
   async run({ args }) {
     const port = Number(args.port)
@@ -105,7 +110,8 @@ const serveCmd = defineCommand({
     const pipelineStore = filePipelineStore(args['data-dir'])
     logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
 
-    const app = createApp({ temporal, resolver, pipelineStore })
+    const engineUrl = args['engine-url'] || 'http://localhost:4010'
+    const app = createApp({ temporal, resolver, pipelineStore, engineUrl })
 
     serve({ fetch: app.fetch, port }, () => {
       logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
@@ -221,7 +227,9 @@ export async function createProgram() {
   const spec = await buildCliSpec()
   const resolver = await resolverPromise
 
-  // Lazy real app — connects to Temporal on first CLI command execution
+  const serviceUrl = process.env.SERVICE_URL
+
+  // Lazy real app — boots in-process when no SERVICE_URL is provided
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
@@ -230,17 +238,32 @@ export async function createProgram() {
       const temporal = await maybeCreateTemporalClient(address, taskQueue)
       const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
-      realApp = createApp({ temporal, resolver, pipelineStore })
+      const engineUrl = process.env.ENGINE_URL || 'http://localhost:4010'
+      realApp = createApp({ temporal, resolver, pipelineStore, engineUrl })
     }
     return realApp
   }
 
+  const handler = serviceUrl
+    ? async (req: Request) => {
+        // Forward to a running service server
+        const url = new URL(req.url)
+        const target = new URL(url.pathname + url.search, serviceUrl)
+        return fetch(target, {
+          method: req.method,
+          headers: req.headers,
+          body: req.body,
+          duplex: 'half',
+        } as RequestInit)
+      }
+    : async (req: Request) => {
+        const app = await getApp()
+        return app.fetch(req)
+      }
+
   const specCli = createCliFromSpec({
     spec,
-    handler: async (req) => {
-      const app = await getApp()
-      return app.fetch(req)
-    },
+    handler,
     groupByTag: true,
     exclude: ['health'],
     ndjsonBodyStream: () =>
@@ -278,6 +301,31 @@ export async function createProgram() {
         },
       })
     }
+
+    // Override the auto-generated sync command with an Ink-based progress display
+    pipelineSubCommands['sync'] = defineCommand({
+      meta: { name: 'sync', description: 'Run sync for a pipeline' },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        stateLimit: { type: 'string', description: 'Max state messages before stopping' },
+        timeLimit: { type: 'string', description: 'Stop after N seconds' },
+        plain: {
+          type: 'boolean',
+          default: false,
+          description: 'Plain text output (no Ink/ANSI)',
+        },
+      },
+      async run({ args }) {
+        const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
+        await renderPipelineSync({
+          handler,
+          pipelineId: args.id as string,
+          stateLimit: args.stateLimit ? parseInt(args.stateLimit) : undefined,
+          timeLimit: args.timeLimit ? parseInt(args.timeLimit) : undefined,
+          plain: args.plain || !process.stderr.isTTY,
+        })
+      },
+    })
   }
 
   return defineCommand({

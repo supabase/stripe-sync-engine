@@ -28,6 +28,11 @@
       "bun": "./src/api/openapi-utils.ts",
       "types": "./dist/api/openapi-utils.d.ts",
       "import": "./dist/api/openapi-utils.js"
+    },
+    "./progress": {
+      "bun": "./src/lib/progress/index.ts",
+      "types": "./dist/lib/progress/index.d.ts",
+      "import": "./dist/lib/progress/index.js"
     }
   },
   "scripts": {

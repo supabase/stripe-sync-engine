@@ -41,12 +41,15 @@
     "@temporalio/client": "^1",
     "@temporalio/worker": "^1",
     "@temporalio/workflow": "^1",
+    "@types/react": "^19.2.14",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "hono": "^4",
+    "ink": "^7.0.1",
     "openapi-fetch": "^0.13",
     "pino": "^10",
     "pino-pretty": "^13",
+    "react": "^19.2.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
