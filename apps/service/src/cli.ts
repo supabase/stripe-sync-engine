@@ -60,9 +60,20 @@ async function createTemporalClient(
   taskQueue: string
 ): Promise<{ client: WorkflowClient; taskQueue: string }> {
   const { Client, Connection } = await import('@temporalio/client')
-  const connection = await Connection.connect({ address })
-  const client = new Client({ connection })
-  return { client: client.workflow, taskQueue }
+  // Retry connection — Temporal may not accept connections immediately after
+  // its health check passes (Docker Compose depends_on race).
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const connection = await Connection.connect({ address })
+      const client = new Client({ connection })
+      return { client: client.workflow, taskQueue }
+    } catch (err) {
+      lastErr = err
+      if (attempt < 9) await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+  throw lastErr
 }
 
 async function maybeCreateTemporalClient(
