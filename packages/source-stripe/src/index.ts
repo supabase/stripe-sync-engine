@@ -167,9 +167,17 @@ export function createStripeSource(
       })
 
       if (!config.account_id || config.account_created == null) {
-        const resolved = await resolveAccountMetadata(config, client)
-        if (!config.account_id) updates.account_id = resolved.accountId
-        if (config.account_created == null) updates.account_created = resolved.accountCreated
+        try {
+          const resolved = await resolveAccountMetadata(config, client)
+          if (!config.account_id) updates.account_id = resolved.accountId
+          if (config.account_created == null) updates.account_created = resolved.accountCreated
+        } catch (err) {
+          // Non-fatal: fall back to defaults. account_id may be derived from the API key later,
+          // and account_created defaults to Stripe's launch date (2011-01-01).
+          console.error(
+            `[setup] Failed to resolve account metadata: ${err instanceof Error ? err.message : String(err)}`
+          )
+        }
       }
 
       // Create managed webhook endpoint if webhook_url is set
