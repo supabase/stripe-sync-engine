@@ -207,14 +207,37 @@ export function buildCommand(
     }
   }
 
-  // NDJSON body: single --body flag.
-  // When ndjsonBodyStream is provided, --body is optional for NDJSON operations.
+  // Body handling depends on content type:
+  // - NDJSON routes: single --body flag (streaming)
+  // - JSON routes: per-property --flags for flat body schemas, --body for complex ones
   if (operation.bodySchema) {
-    const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
-    args['body'] = {
-      type: 'string',
-      required: operation.bodyRequired === true && !bodyOptional,
-      description: 'Request body as JSON string',
+    if (operation.ndjsonRequest) {
+      const bodyOptional = ndjsonBodyStream !== undefined
+      args['body'] = {
+        type: 'string',
+        required: operation.bodyRequired === true && !bodyOptional,
+        description: 'Request body as JSON string',
+      }
+    } else {
+      // JSON route — create per-property flags from the body schema
+      const props = operation.bodySchema.properties
+      if (props && typeof props === 'object') {
+        const requiredFields = new Set(operation.bodySchema.required ?? [])
+        for (const [propName, propSchema] of Object.entries(props)) {
+          const key = toOptName(propName)
+          args[key] = {
+            type: 'string',
+            required: requiredFields.has(propName),
+            description: (propSchema as { description?: string }).description ?? '',
+          }
+        }
+      } else {
+        args['body'] = {
+          type: 'string',
+          required: operation.bodyRequired === true,
+          description: 'Request body as JSON string',
+        }
+      }
     }
   }
 

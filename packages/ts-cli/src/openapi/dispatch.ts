@@ -49,12 +49,41 @@ export function buildRequest(
     }
   }
 
-  // Build body — only NDJSON via --body flag
+  // Build body
   let body: string | undefined
 
-  if (operation.bodySchema && opts['body'] !== undefined) {
-    body = opts['body']
-    headers.set('Content-Type', 'application/x-ndjson')
+  if (operation.bodySchema) {
+    if (operation.ndjsonRequest) {
+      // NDJSON route: pass --body raw
+      if (opts['body'] !== undefined) {
+        body = opts['body']
+        headers.set('Content-Type', 'application/x-ndjson')
+      }
+    } else {
+      // JSON route: collect per-property flags into a JSON object
+      const props = operation.bodySchema.properties
+      if (props && typeof props === 'object') {
+        const bodyObj: Record<string, unknown> = {}
+        for (const propName of Object.keys(props)) {
+          const flagName = toOptName(propName)
+          const value = opts[flagName]
+          if (value !== undefined) {
+            try {
+              bodyObj[propName] = JSON.parse(value)
+            } catch {
+              bodyObj[propName] = value
+            }
+          }
+        }
+        if (Object.keys(bodyObj).length > 0) {
+          body = JSON.stringify(bodyObj)
+          headers.set('Content-Type', 'application/json')
+        }
+      } else if (opts['body'] !== undefined) {
+        body = opts['body']
+        headers.set('Content-Type', 'application/json')
+      }
+    }
   }
 
   return new Request(url.toString(), {

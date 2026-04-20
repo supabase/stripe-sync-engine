@@ -742,7 +742,7 @@ export async function createApp(resolver: ConnectorResolver) {
     )
     try {
       const result = await pool.query(sql.trim())
-      return c.json({ rows: result.rows, rowCount: result.rowCount })
+      return c.json({ rows: result.rows ?? [], rowCount: result.rowCount ?? 0 })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Query failed'
       return c.json({ error: message }, 400)

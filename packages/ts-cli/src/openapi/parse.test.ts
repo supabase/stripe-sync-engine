@@ -103,7 +103,7 @@ describe('parseSpec', () => {
     expect(write.ndjsonRequest).toBe(true)
   })
 
-  it('ignores JSON-only request body (no bodySchema)', () => {
+  it('extracts body schema for JSON-only request body', () => {
     const spec: OpenAPISpec = {
       paths: {
         '/create': {
@@ -125,7 +125,7 @@ describe('parseSpec', () => {
 
     const ops = parseSpec(spec)
     const op = ops.find((o) => o.operationId === 'createThing')!
-    expect(op.bodySchema).toBeUndefined()
+    expect(op.bodySchema).toEqual({ type: 'object', properties: { name: { type: 'string' } } })
     expect(op.ndjsonRequest).toBe(false)
   })
 

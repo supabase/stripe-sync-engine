@@ -34,9 +34,12 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
       const queryParams = params.filter((p: OpenAPIParameter) => p.in === 'query')
       const headerParams = params.filter((p: OpenAPIParameter) => p.in === 'header')
 
+      // Prefer NDJSON when available (streaming endpoints); fall back to JSON
+      // for pure-JSON routes (e.g. service /pipelines CRUD).
       const content = operation.requestBody?.content ?? {}
       const ndjsonContent = content['application/x-ndjson']
-      const bodySchema = ndjsonContent?.schema
+      const jsonContent = content['application/json']
+      const bodySchema = ndjsonContent?.schema ?? jsonContent?.schema
       const ndjsonRequest = !!ndjsonContent
 
       operations.push({
