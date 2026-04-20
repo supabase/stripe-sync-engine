@@ -34,13 +34,9 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
       const queryParams = params.filter((p: OpenAPIParameter) => p.in === 'query')
       const headerParams = params.filter((p: OpenAPIParameter) => p.in === 'header')
 
-      // Prefer NDJSON when both content types are available so the generated CLI
-      // preserves streaming stdin behavior instead of flattening the JSON-body
-      // alternative into required --flags.
       const content = operation.requestBody?.content ?? {}
-      const jsonContent = content['application/json']
       const ndjsonContent = content['application/x-ndjson']
-      const bodySchema = ndjsonContent?.schema ?? jsonContent?.schema
+      const bodySchema = ndjsonContent?.schema
       const ndjsonRequest = !!ndjsonContent
 
       operations.push({

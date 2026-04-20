@@ -20,26 +20,6 @@ const basicSpec: OpenAPISpec = {
           },
         },
       },
-      post: {
-        operationId: 'createSync',
-        tags: ['syncs'],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  source: { type: 'object' },
-                },
-                required: ['name'],
-              },
-            },
-          },
-        },
-        responses: { '201': { description: 'Created' } },
-      },
     },
     '/syncs/{id}': {
       get: {
@@ -83,7 +63,7 @@ const basicSpec: OpenAPISpec = {
 describe('parseSpec', () => {
   it('extracts all operations', () => {
     const ops = parseSpec(basicSpec)
-    expect(ops).toHaveLength(5)
+    expect(ops).toHaveLength(4)
   })
 
   it('separates path/query/header params', () => {
@@ -96,32 +76,15 @@ describe('parseSpec', () => {
     expect(runSync.queryParams).toHaveLength(0)
   })
 
-  it('extracts body schema for POST', () => {
-    const ops = parseSpec(basicSpec)
-    const createSync = ops.find((o) => o.operationId === 'createSync')!
-    expect(createSync.bodySchema).toBeDefined()
-    expect(createSync.bodySchema!.properties).toHaveProperty('name')
-    expect(createSync.bodyRequired).toBe(true)
-  })
-
-  it('prefers NDJSON request bodies when both NDJSON and JSON are available', () => {
+  it('extracts body schema for NDJSON POST', () => {
     const spec: OpenAPISpec = {
       paths: {
-        '/sync': {
+        '/write': {
           post: {
-            operationId: 'pipelineSync',
+            operationId: 'write',
             requestBody: {
-              required: false,
+              required: true,
               content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      pipeline: { type: 'object' },
-                    },
-                    required: ['pipeline'],
-                  },
-                },
                 'application/x-ndjson': {
                   schema: { type: 'string' },
                 },
@@ -134,9 +97,36 @@ describe('parseSpec', () => {
     }
 
     const ops = parseSpec(spec)
-    const sync = ops.find((o) => o.operationId === 'pipelineSync')!
-    expect(sync.ndjsonRequest).toBe(true)
-    expect(sync.bodySchema).toEqual({ type: 'string' })
+    const write = ops.find((o) => o.operationId === 'write')!
+    expect(write.bodySchema).toEqual({ type: 'string' })
+    expect(write.bodyRequired).toBe(true)
+    expect(write.ndjsonRequest).toBe(true)
+  })
+
+  it('ignores JSON-only request body (no bodySchema)', () => {
+    const spec: OpenAPISpec = {
+      paths: {
+        '/create': {
+          post: {
+            operationId: 'createThing',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { type: 'object', properties: { name: { type: 'string' } } },
+                },
+              },
+            },
+            responses: { '201': { description: 'Created' } },
+          },
+        },
+      },
+    }
+
+    const ops = parseSpec(spec)
+    const op = ops.find((o) => o.operationId === 'createThing')!
+    expect(op.bodySchema).toBeUndefined()
+    expect(op.ndjsonRequest).toBe(false)
   })
 
   it('detects NDJSON response', () => {

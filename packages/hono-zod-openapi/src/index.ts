@@ -15,7 +15,6 @@
 
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { HTTPException } from 'hono/http-exception'
 import { createDocument, createSchema } from 'zod-openapi'
 import type { Hook } from '@hono/zod-validator'
 import type {
@@ -172,11 +171,6 @@ function getParamContentType(schema: AnyZod): string | undefined {
   return undefined
 }
 
-function isApplicationJsonContentType(contentType?: string): boolean {
-  const mediaType = normalizeMediaType(contentType)
-  return mediaType === 'application/json'
-}
-
 function normalizeMediaType(contentType?: string): string | undefined {
   return contentType?.split(';', 1)[0]?.trim().toLowerCase()
 }
@@ -268,75 +262,6 @@ function processJsonContentHeaders(op: ZodOpenApiOperationObject): {
       parameters: [...((op.parameters as unknown[]) ?? []), ...jsonParams],
     },
     pipeOutputSchemas,
-  }
-}
-
-function hasJsonContentHeaders(schema: AnyZod | undefined): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const shape = (schema as any)?._zod?.def?.shape as Record<string, AnyZod> | undefined
-  if (!shape) return false
-  return Object.values(shape).some((fieldSchema) => getParamContentType(fieldSchema) !== undefined)
-}
-
-// ── Content-type-aware JSON body validator ───────────────────────
-//
-// Hono's built-in JSON validator is good for pure-JSON routes, but mixed-content
-// endpoints need stricter media-type routing and case-insensitive matching. We
-// validate JSON bodies here so multi-content routes can opt into exact
-// `application/json` handling without affecting NDJSON or header-only requests.
-
-async function parseJsonBody(c: Context): Promise<unknown> {
-  try {
-    return await c.req.json()
-  } catch {
-    throw new HTTPException(400, { message: 'Malformed JSON in request body' })
-  }
-}
-
-async function validateJsonBody(
-  c: Context,
-  schema: AnyZod,
-  value: unknown,
-  hook: DefaultHook | undefined,
-  next: () => Promise<void>
-): Promise<Response | void> {
-  const result = await schema.safeParseAsync(value)
-  if (hook) {
-    const hookResult = await hook({ data: value, ...result, target: 'json' }, c)
-    if (hookResult) {
-      if (hookResult instanceof Response) return hookResult
-      if (typeof hookResult === 'object' && hookResult !== null && 'response' in hookResult) {
-        return (hookResult as { response: Response }).response
-      }
-    }
-  }
-
-  if (!result.success) return c.json(result, 400)
-  ;(
-    c.req as typeof c.req & {
-      addValidatedData: (target: 'json', data: z.output<AnyZod>) => void
-    }
-  ).addValidatedData('json', result.data)
-  await next()
-}
-
-function strictJsonBodyValidator(schema: AnyZod, hook?: DefaultHook): MiddlewareHandler {
-  return async (c, next) => {
-    const contentType = c.req.header('content-type')
-    const value = isJsonLikeContentType(contentType) ? await parseJsonBody(c) : {}
-    return validateJsonBody(c, schema, value, hook, next)
-  }
-}
-
-function contentTypeGuardedJsonValidator(schema: AnyZod, hook?: DefaultHook): MiddlewareHandler {
-  return async (c, next) => {
-    if (!isApplicationJsonContentType(c.req.header('content-type'))) {
-      await next()
-      return
-    }
-
-    const value = await parseJsonBody(c)
-    return validateJsonBody(c, schema, value, hook, next)
   }
 }
 
@@ -472,22 +397,15 @@ export class OpenAPIHono<
       )
     }
 
-    // Only auto-validate application/json bodies — NDJSON and other streaming
-    // content types are not parsed as a single JSON value.
-    // Crucially, skip JSON body parsing entirely when the request's Content-Type
-    // is not application/json, so NDJSON/header-only requests aren't affected.
+    // Auto-validate application/json request bodies when it's the only content type.
+    // Mixed-content routes (e.g. NDJSON + headers) skip body validation — the handler
+    // reads the stream directly.
     const requestBodyContent = op.requestBody?.content ?? {}
     const jsonSchema = requestBodyContent['application/json']?.schema
-    const hasNonJsonRequestBody = Object.keys(requestBodyContent).some(
-      (contentType) => contentType !== 'application/json'
-    )
-    const hasJsonHeaderAlternatives = hasJsonContentHeaders(op.requestParams?.header as AnyZod)
-    if (jsonSchema instanceof Object && 'parse' in (jsonSchema as object)) {
-      middlewares.push(
-        hasNonJsonRequestBody || hasJsonHeaderAlternatives
-          ? contentTypeGuardedJsonValidator(jsonSchema as AnyZod, this._defaultHook)
-          : strictJsonBodyValidator(jsonSchema as AnyZod, this._defaultHook)
-      )
+    const hasOnlyJson =
+      Object.keys(requestBodyContent).length === 1 && 'application/json' in requestBodyContent
+    if (hasOnlyJson && jsonSchema instanceof Object && 'parse' in (jsonSchema as object)) {
+      middlewares.push(zValidator('json', jsonSchema as AnyZod, this._defaultHook as never))
     }
 
     // Response validation: extract Zod schemas from declared responses and validate
@@ -582,8 +500,6 @@ export class OpenAPIHono<
 export function createRoute<R extends RouteConfig>(config: R): R {
   return config
 }
-
-export { isApplicationJsonContentType }
 
 // ── Re-exports ───────────────────────────────────────────────────
 

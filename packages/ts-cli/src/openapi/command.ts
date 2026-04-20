@@ -151,14 +151,6 @@ function getOpName(
     : defaultOperationName(op.method, op.path, rawOp)
 }
 
-function hasAlternativeJsonHeader(operation: ParsedOperation, propName: string): boolean {
-  const normalizedProp = toCliFlag(propName)
-  return operation.headerParams.some((param) => {
-    if (!param.content?.['application/json']) return false
-    return toCliFlag(param.name).replace(/^x-/, '') === normalizedProp
-  })
-}
-
 /** Build a single citty CommandDef from a ParsedOperation. */
 export function buildCommand(
   operation: ParsedOperation,
@@ -215,29 +207,14 @@ export function buildCommand(
     }
   }
 
-  // Body: per-property flags for flat objects, --body for complex/NDJSON
+  // NDJSON body: single --body flag.
+  // When ndjsonBodyStream is provided, --body is optional for NDJSON operations.
   if (operation.bodySchema) {
-    const props = operation.bodySchema.properties
-    if (props && !operation.ndjsonRequest) {
-      const requiredFields = operation.bodySchema.required ?? []
-      for (const [propName, propSchema] of Object.entries(props)) {
-        const key = toOptName(propName)
-        args[key] = {
-          type: 'string',
-          required:
-            requiredFields.includes(propName) && !hasAlternativeJsonHeader(operation, propName),
-          description: propSchema.description ?? '',
-        }
-      }
-    } else {
-      // Complex or NDJSON body: single --body flag.
-      // When ndjsonBodyStream is provided, --body is optional for NDJSON operations.
-      const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
-      args['body'] = {
-        type: 'string',
-        required: operation.bodyRequired === true && !bodyOptional,
-        description: 'Request body as JSON string',
-      }
+    const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
+    args['body'] = {
+      type: 'string',
+      required: operation.bodyRequired === true && !bodyOptional,
+      description: 'Request body as JSON string',
     }
   }
 

@@ -49,31 +49,12 @@ export function buildRequest(
     }
   }
 
-  // Build body
+  // Build body — only NDJSON via --body flag
   let body: string | undefined
-  const contentType = operation.ndjsonRequest ? 'application/x-ndjson' : 'application/json'
 
-  if (operation.bodySchema) {
-    // If body schema has top-level properties, collect --flag values
-    const props = operation.bodySchema.properties
-    if (props && !operation.ndjsonRequest) {
-      const bodyObj: Record<string, unknown> = {}
-      for (const propName of Object.keys(props)) {
-        const flagName = toOptName(propName)
-        const value = opts[flagName]
-        if (value !== undefined) {
-          bodyObj[propName] = tryJsonParse(value)
-        }
-      }
-      if (Object.keys(bodyObj).length > 0) {
-        body = JSON.stringify(bodyObj)
-        headers.set('Content-Type', 'application/json')
-      }
-    } else if (opts['body'] !== undefined) {
-      // Complex/NDJSON body: pass raw via --body
-      body = opts['body']
-      headers.set('Content-Type', contentType)
-    }
+  if (operation.bodySchema && opts['body'] !== undefined) {
+    body = opts['body']
+    headers.set('Content-Type', 'application/x-ndjson')
   }
 
   return new Request(url.toString(), {
@@ -153,12 +134,4 @@ export function toOptName(name: string): string {
 
 function hasBody(method: string): boolean {
   return ['post', 'put', 'patch'].includes(method.toLowerCase())
-}
-
-function tryJsonParse(value: string): unknown {
-  try {
-    return JSON.parse(value)
-  } catch {
-    return value
-  }
 }

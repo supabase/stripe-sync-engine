@@ -4,1256 +4,1346 @@
  */
 
 export interface paths {
-    "/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Health check */
-        get: operations["health"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Check connector connection
-         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.
-         */
-        post: operations["pipeline_check"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_setup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set up destination schema
-         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.
-         */
-        post: operations["pipeline_setup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_teardown": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Tear down destination schema
-         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.
-         */
-        post: operations["pipeline_teardown"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/source_discover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Discover available streams
-         * @description Streams NDJSON messages (catalog, logs, traces) for the configured source.
-         */
-        post: operations["source_discover"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Read records from source
-         * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input. Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
-         */
-        post: operations["pipeline_read"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_write": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Write records to destination
-         * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input. Alternatively, send Content-Type: application/json with {pipeline, body: [...messages]}.
-         */
-        post: operations["pipeline_write"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipeline_sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run sync pipeline (read → write)
-         * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events). Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
-         */
-        post: operations["pipeline_sync"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/meta/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List available source connectors */
-        get: operations["meta_sources_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/meta/sources/{type}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get source connector spec */
-        get: operations["meta_sources_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/meta/destinations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List available destination connectors */
-        get: operations["meta_destinations_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/meta/destinations/{type}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get destination connector spec */
-        get: operations["meta_destinations_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
+  '/health': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Health check */
+    get: operations['health']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_check': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Check connector connection
+     * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.
+     */
+    post: operations['pipeline_check']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_setup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Set up destination schema
+     * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.
+     */
+    post: operations['pipeline_setup']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_teardown': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Tear down destination schema
+     * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.
+     */
+    post: operations['pipeline_teardown']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/source_discover': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Discover available streams
+     * @description Streams NDJSON messages (catalog, logs, traces) for the configured source.
+     */
+    post: operations['source_discover']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Read records from source
+     * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input. Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
+     */
+    post: operations['pipeline_read']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_write': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Write records to destination
+     * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input. Alternatively, send Content-Type: application/json with {pipeline, body: [...messages]}.
+     */
+    post: operations['pipeline_write']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipeline_sync': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run sync pipeline (read → write)
+     * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events). Alternatively, send Content-Type: application/json with {pipeline, state?, body?} to pass config in the body.
+     */
+    post: operations['pipeline_sync']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/meta/sources': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List available source connectors */
+    get: operations['meta_sources_list']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/meta/sources/{type}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get source connector spec */
+    get: operations['meta_sources_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/meta/destinations': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List available destination connectors */
+    get: operations['meta_destinations_list']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/meta/destinations/{type}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get destination connector spec */
+    get: operations['meta_destinations_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
-export type webhooks = Record<string, never>;
+export type webhooks = Record<string, never>
 export interface components {
-    schemas: {
-        SourceConfig: {
+  schemas: {
+    SourceConfig: {
+      /** @constant */
+      type: 'stripe'
+      stripe: components['schemas']['SourceStripeConfig']
+    }
+    SourceStripeConfig: {
+      /** @description Stripe API key (sk_test_... or sk_live_...) */
+      api_key: string
+      /** @description Stripe account ID (resolved from API if omitted) */
+      account_id?: string
+      /** @description Whether this is a live mode sync */
+      livemode?: boolean
+      /** @enum {string} */
+      api_version?:
+        | '2026-03-25.dahlia'
+        | '2026-02-25.clover'
+        | '2026-01-28.clover'
+        | '2025-12-15.clover'
+        | '2025-11-17.clover'
+        | '2025-10-29.clover'
+        | '2025-09-30.clover'
+        | '2025-08-27.basil'
+        | '2025-07-30.basil'
+        | '2025-06-30.basil'
+        | '2025-05-28.basil'
+        | '2025-04-30.basil'
+        | '2025-03-31.basil'
+        | '2025-02-24.acacia'
+        | '2025-01-27.acacia'
+        | '2024-12-18.acacia'
+        | '2024-11-20.acacia'
+        | '2024-10-28.acacia'
+        | '2024-09-30.acacia'
+        | '2024-06-20'
+        | '2024-04-10'
+        | '2024-04-03'
+        | '2023-10-16'
+        | '2023-08-16'
+        | '2022-11-15'
+        | '2022-08-01'
+        | '2020-08-27'
+        | '2020-03-02'
+        | '2019-12-03'
+        | '2019-11-05'
+        | '2019-10-17'
+        | '2019-10-08'
+        | '2019-09-09'
+        | '2019-08-14'
+        | '2019-05-16'
+        | '2019-03-14'
+        | '2019-02-19'
+        | '2019-02-11'
+        | '2018-11-08'
+        | '2018-10-31'
+        | '2018-09-24'
+        | '2018-09-06'
+        | '2018-08-23'
+        | '2018-07-27'
+        | '2018-05-21'
+        | '2018-02-28'
+        | '2018-02-06'
+        | '2018-02-05'
+        | '2018-01-23'
+        | '2017-12-14'
+        | '2017-08-15'
+      /**
+       * Format: uri
+       * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+       */
+      base_url?: string
+      /**
+       * Format: uri
+       * @description URL for managed webhook endpoint registration
+       */
+      webhook_url?: string
+      /** @description Webhook signing secret (whsec_...) for signature verification */
+      webhook_secret?: string
+      /** @description Enable WebSocket streaming for live events */
+      websocket?: boolean
+      /** @description Enable events API polling for incremental sync after backfill */
+      poll_events?: boolean
+      /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+      webhook_port?: number
+      /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+      revalidate_objects?: string[]
+      /** @description Max objects to backfill per stream (useful for testing) */
+      backfill_limit?: number
+      /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
+      max_concurrent_streams?: number
+      /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
+      rate_limit?: number
+    }
+    DestinationConfig:
+      | {
+          /** @constant */
+          type: 'postgres'
+          postgres: components['schemas']['DestinationPostgresConfig']
+        }
+      | {
+          /** @constant */
+          type: 'google_sheets'
+          google_sheets: components['schemas']['DestinationGoogleSheetsConfig']
+        }
+    DestinationPostgresConfig: {
+      /** @description Postgres connection string (alias for connection_string) */
+      url?: string
+      /** @description Postgres connection string */
+      connection_string?: string
+      /** @description Postgres host (required for AWS IAM) */
+      host?: string
+      /**
+       * @description Postgres port
+       * @default 5432
+       */
+      port: number
+      /** @description Database name (required for AWS IAM) */
+      database?: string
+      /** @description Database user (required for AWS IAM) */
+      user?: string
+      /** @description Target schema name (e.g. "stripe_sync") */
+      schema: string
+      /**
+       * @description Records to buffer before flushing
+       * @default 100
+       */
+      batch_size: number
+      /** @description AWS RDS IAM authentication config */
+      aws?: {
+        /** @description AWS region for RDS instance */
+        region: string
+        /** @description IAM role ARN to assume (cross-account) */
+        role_arn?: string
+        /** @description External ID for STS AssumeRole */
+        external_id?: string
+      }
+      /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+      ssl_ca_pem?: string
+    }
+    DestinationGoogleSheetsConfig: {
+      /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+      client_id?: string
+      /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+      client_secret?: string
+      /** @description OAuth2 access token */
+      access_token: string
+      /** @description OAuth2 refresh token */
+      refresh_token: string
+      /** @description Target spreadsheet ID (created if omitted) */
+      spreadsheet_id?: string
+      /**
+       * @description Title when creating a new spreadsheet
+       * @default Stripe Sync
+       */
+      spreadsheet_title: string
+      /**
+       * @description Rows per Sheets API append call
+       * @default 50
+       */
+      batch_size: number
+    }
+    RecordMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'record'
+      /** @description One record for one stream. */
+      record: {
+        /** @description Stream (table) name this record belongs to. */
+        stream: string
+        /** @description The record payload as a key-value map. */
+        data: {
+          [key: string]: unknown
+        }
+        /**
+         * Format: date-time
+         * @description ISO 8601 timestamp when the record was emitted by the source.
+         */
+        emitted_at: string
+      }
+    }
+    SourceStateMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'source_state'
+      source_state:
+        | {
+            /**
+             * @default stream
+             * @constant
+             */
+            state_type: 'stream'
+            /** @description Stream being checkpointed. */
+            stream: string
+            /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
+            data: unknown
+          }
+        | {
             /** @constant */
-            type: "stripe";
-            stripe: components["schemas"]["SourceStripeConfig"];
-        };
-        SourceStripeConfig: {
-            /** @description Stripe API key (sk_test_... or sk_live_...) */
-            api_key: string;
-            /** @description Stripe account ID (resolved from API if omitted) */
-            account_id?: string;
-            /** @description Whether this is a live mode sync */
-            livemode?: boolean;
-            /** @enum {string} */
-            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
-            /**
-             * Format: uri
-             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-             */
-            base_url?: string;
-            /**
-             * Format: uri
-             * @description URL for managed webhook endpoint registration
-             */
-            webhook_url?: string;
-            /** @description Webhook signing secret (whsec_...) for signature verification */
-            webhook_secret?: string;
-            /** @description Enable WebSocket streaming for live events */
-            websocket?: boolean;
-            /** @description Enable events API polling for incremental sync after backfill */
-            poll_events?: boolean;
-            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-            webhook_port?: number;
-            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-            revalidate_objects?: string[];
-            /** @description Max objects to backfill per stream (useful for testing) */
-            backfill_limit?: number;
-            /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
-            max_concurrent_streams?: number;
-            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
-            rate_limit?: number;
-        };
-        DestinationConfig: {
+            state_type: 'global'
+            /** @description Sync-wide state shared across all streams (e.g. a global events cursor). */
+            data: unknown
+          }
+    }
+    CatalogMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'catalog'
+      /** @description Catalog of available streams. */
+      catalog: {
+        /** @description All streams available from this source. */
+        streams: {
+          /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
+          name: string
+          /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
+          primary_key: string[][]
+          /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
+          json_schema?: {
+            [key: string]: unknown
+          }
+          /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
+          metadata?: {
+            [key: string]: unknown
+          }
+        }[]
+      }
+    }
+    LogMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'log'
+      /** @description Structured log output from a connector. */
+      log: {
+        /**
+         * @description Log severity level.
+         * @enum {string}
+         */
+        level: 'debug' | 'info' | 'warn' | 'error'
+        /** @description Human-readable log message. */
+        message: string
+      }
+    }
+    TraceMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'trace'
+      /** @description Diagnostic/status payload with subtypes for error, stream status, estimates, and progress. */
+      trace:
+        | {
             /** @constant */
-            type: "postgres";
-            postgres: components["schemas"]["DestinationPostgresConfig"];
-        } | {
+            trace_type: 'error'
+            /** @description Structured error from a connector. */
+            error: {
+              /**
+               * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
+               * @enum {string}
+               */
+              failure_type: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
+              /** @description Human-readable error description. */
+              message: string
+              /** @description Stream that triggered the error, if applicable. */
+              stream?: string
+              /** @description Full stack trace for debugging. */
+              stack_trace?: string
+            }
+          }
+        | {
             /** @constant */
-            type: "google_sheets";
-            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
-        };
-        DestinationPostgresConfig: {
-            /** @description Postgres connection string (alias for connection_string) */
-            url?: string;
-            /** @description Postgres connection string */
-            connection_string?: string;
-            /** @description Postgres host (required for AWS IAM) */
-            host?: string;
-            /**
-             * @description Postgres port
-             * @default 5432
-             */
-            port: number;
-            /** @description Database name (required for AWS IAM) */
-            database?: string;
-            /** @description Database user (required for AWS IAM) */
-            user?: string;
-            /** @description Target schema name (e.g. "stripe_sync") */
-            schema: string;
-            /**
-             * @description Records to buffer before flushing
-             * @default 100
-             */
-            batch_size: number;
-            /** @description AWS RDS IAM authentication config */
-            aws?: {
-                /** @description AWS region for RDS instance */
-                region: string;
-                /** @description IAM role ARN to assume (cross-account) */
-                role_arn?: string;
-                /** @description External ID for STS AssumeRole */
-                external_id?: string;
-            };
-            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-            ssl_ca_pem?: string;
-        };
-        DestinationGoogleSheetsConfig: {
-            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-            client_id?: string;
-            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-            client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
-            /** @description OAuth2 refresh token */
-            refresh_token: string;
-            /** @description Target spreadsheet ID (created if omitted) */
-            spreadsheet_id?: string;
-            /**
-             * @description Title when creating a new spreadsheet
-             * @default Stripe Sync
-             */
-            spreadsheet_title: string;
-            /**
-             * @description Rows per Sheets API append call
-             * @default 50
-             */
-            batch_size: number;
-        };
-        RecordMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "record";
-            /** @description One record for one stream. */
-            record: {
-                /** @description Stream (table) name this record belongs to. */
-                stream: string;
-                /** @description The record payload as a key-value map. */
-                data: {
-                    [key: string]: unknown;
-                };
-                /**
-                 * Format: date-time
-                 * @description ISO 8601 timestamp when the record was emitted by the source.
-                 */
-                emitted_at: string;
-            };
-        };
-        SourceStateMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "source_state";
-            source_state: {
-                /**
-                 * @default stream
-                 * @constant
-                 */
-                state_type: "stream";
-                /** @description Stream being checkpointed. */
-                stream: string;
-                /** @description Opaque checkpoint data — only the source understands its contents. The orchestrator persists it keyed by stream and passes it back on resume. */
-                data: unknown;
-            } | {
-                /** @constant */
-                state_type: "global";
-                /** @description Sync-wide state shared across all streams (e.g. a global events cursor). */
-                data: unknown;
-            };
-        };
-        CatalogMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "catalog";
-            /** @description Catalog of available streams. */
-            catalog: {
-                /** @description All streams available from this source. */
-                streams: {
-                    /** @description Collection name (e.g. "customers", "invoices", "pg_public.users"). */
-                    name: string;
-                    /** @description Paths to fields that uniquely identify a record within this stream. Supports composite keys and nested paths. e.g. [["id"]] or [["account_id"], ["created"]] */
-                    primary_key: string[][];
-                    /** @description JSON Schema describing the record shape. Discovered at runtime or provided by config. */
-                    json_schema?: {
-                        [key: string]: unknown;
-                    };
-                    /** @description Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }. */
-                    metadata?: {
-                        [key: string]: unknown;
-                    };
-                }[];
-            };
-        };
-        LogMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "log";
-            /** @description Structured log output from a connector. */
-            log: {
-                /**
-                 * @description Log severity level.
-                 * @enum {string}
-                 */
-                level: "debug" | "info" | "warn" | "error";
-                /** @description Human-readable log message. */
-                message: string;
-            };
-        };
-        TraceMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "trace";
-            /** @description Diagnostic/status payload with subtypes for error, stream status, estimates, and progress. */
-            trace: {
-                /** @constant */
-                trace_type: "error";
-                /** @description Structured error from a connector. */
-                error: {
-                    /**
-                     * @description Error category — lets the orchestrator decide whether to retry, alert, or abort.
-                     * @enum {string}
-                     */
-                    failure_type: "config_error" | "system_error" | "transient_error" | "auth_error";
-                    /** @description Human-readable error description. */
-                    message: string;
-                    /** @description Stream that triggered the error, if applicable. */
-                    stream?: string;
-                    /** @description Full stack trace for debugging. */
-                    stack_trace?: string;
-                };
-            } | {
-                /** @constant */
-                trace_type: "stream_status";
-                /** @description Per-stream status update. Sources emit the minimal form (stream + status). The engine emits enriched versions with record counts and throughput rates. */
-                stream_status: {
-                    /** @description Stream being reported on. */
-                    stream: string;
-                    /**
-                     * @description Current phase of the stream within this sync run.
-                     * @enum {string}
-                     */
-                    status: "start" | "running" | "complete" | "range_complete";
-                    /** @description Present when status is range_complete. The sub-range that finished. */
-                    range_complete?: {
-                        /** @description Inclusive lower bound (ISO 8601). */
-                        gte: string;
-                        /** @description Exclusive upper bound (ISO 8601). */
-                        lt: string;
-                    };
-                    /** @description Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source. */
-                    cumulative_record_count?: number;
-                    /** @description Records synced for this stream in the current sync run. Set by the engine. */
-                    run_record_count?: number;
-                    /** @description Records synced since the last stream_status emission for this stream. Set by the engine. Used for instantaneous per-stream throughput. */
-                    window_record_count?: number;
-                    /** @description Average records per second for this stream over the entire run: run_record_count / elapsed seconds. Set by the engine. */
-                    records_per_second?: number;
-                    /** @description Average API requests per second for this stream over the entire run. Set by the engine from source-reported request counts. */
-                    requests_per_second?: number;
-                };
-            } | {
-                /** @constant */
-                trace_type: "estimate";
-                /** @description Sync progress estimate for a stream. */
-                estimate: {
-                    /** @description Stream being estimated. */
-                    stream: string;
-                    /** @description Estimated total row count for this stream. */
-                    row_count?: number;
-                    /** @description Estimated total byte count for this stream. */
-                    byte_count?: number;
-                };
-            } | {
-                /** @constant */
-                trace_type: "progress";
-                /** @description Periodic global sync progress emitted by the engine. Aggregate stats only — per-stream detail is in stream_status messages. Each emission is a full replacement. */
-                progress: {
-                    /** @description Wall-clock milliseconds since the sync run started. */
-                    elapsed_ms: number;
-                    /** @description Total records synced across all streams in this run. */
-                    run_record_count: number;
-                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                    rows_per_second: number;
-                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                    window_rows_per_second: number;
-                    /** @description Total source_state messages observed so far in this sync run. */
-                    state_checkpoint_count: number;
-                };
-            };
-        };
-        SpecMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "spec";
-            /** @description JSON Schema describing the configuration a connector requires. */
-            spec: {
-                /** @description JSON Schema for the connector's configuration object. */
-                config: {
-                    [key: string]: unknown;
-                };
-                /** @description JSON Schema for per-stream state (cursor/checkpoint shape). See also SourceState.global for sync-wide cursors. */
-                source_state_stream?: {
-                    [key: string]: unknown;
-                };
-                /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
-                source_input?: {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        ConnectionStatusMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "connection_status";
-            /** @description Result of a connection check. */
-            connection_status: {
-                /**
-                 * @description Whether the connection check passed.
-                 * @enum {string}
-                 */
-                status: "succeeded" | "failed";
-                /** @description Human-readable explanation of the check result. */
-                message?: string;
-            };
-        };
-        ControlMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "control";
-            /** @description Control signal from a connector to the orchestrator. */
-            control: {
-                /** @constant */
-                control_type: "source_config";
-                source_config: components["schemas"]["SourceStripeConfig"];
-            } | {
-                /** @constant */
-                control_type: "destination_config";
-                destination_config: components["schemas"]["DestinationPostgresConfig"] | components["schemas"]["DestinationGoogleSheetsConfig"];
-            };
-        };
-        EofMessage: {
-            /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
-            _emitted_by?: string;
-            /**
-             * Format: date-time
-             * @description ISO 8601 timestamp when the engine observed this message.
-             */
-            _ts?: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "eof";
-            /** @description Terminal message with two nested sections: global_progress (same shape as trace/progress) and stream_progress (final per-stream detail including accumulated errors). */
-            eof: {
-                /**
-                 * @description Why the sync run ended.
-                 * @enum {string}
-                 */
-                reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                /**
-                 * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                 * @enum {string}
-                 */
-                cutoff?: "soft" | "hard";
-                /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                elapsed_ms?: number;
-                /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                state?: components["schemas"]["SyncState"];
-                /** @description Final global aggregates. Same shape as trace/progress. */
-                global_progress?: {
-                    /** @description Wall-clock milliseconds since the sync run started. */
-                    elapsed_ms: number;
-                    /** @description Total records synced across all streams in this run. */
-                    run_record_count: number;
-                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                    rows_per_second: number;
-                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                    window_rows_per_second: number;
-                    /** @description Total source_state messages observed so far in this sync run. */
-                    state_checkpoint_count: number;
-                };
-                /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                stream_progress?: {
-                    [key: string]: {
-                        /**
-                         * @description Final stream status.
-                         * @enum {string}
-                         */
-                        status: "start" | "running" | "complete" | "range_complete";
-                        /** @description Cumulative records synced for this stream across all runs. */
-                        cumulative_record_count: number;
-                        /** @description Records synced in this run. */
-                        run_record_count: number;
-                        /** @description Average records/sec for this stream over the run. */
-                        records_per_second?: number;
-                        /** @description Average requests/sec for this stream over the run. */
-                        requests_per_second?: number;
-                        /** @description All accumulated errors for this stream during this run. */
-                        errors?: {
-                            /** @description Human-readable error description. */
-                            message: string;
-                            /**
-                             * @description Error category matching TraceError.failure_type.
-                             * @enum {string}
-                             */
-                            failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
-                        }[];
-                    };
-                };
-            };
-        };
-        SourceStripeInput: {
-            /** @description Unique identifier for the object. */
-            id: string;
+            trace_type: 'stream_status'
+            /** @description Per-stream status update. Sources emit the minimal form (stream + status). The engine emits enriched versions with record counts and throughput rates. */
+            stream_status: {
+              /** @description Stream being reported on. */
+              stream: string
+              /**
+               * @description Current phase of the stream within this sync run.
+               * @enum {string}
+               */
+              status: 'start' | 'running' | 'complete' | 'range_complete'
+              /** @description Present when status is range_complete. The sub-range that finished. */
+              range_complete?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string
+              }
+              /** @description Cumulative records synced for this stream across all sync runs. Monotonically increasing; initialized from engine state on resume. Set by the engine, not the source. */
+              cumulative_record_count?: number
+              /** @description Records synced for this stream in the current sync run. Set by the engine. */
+              run_record_count?: number
+              /** @description Records synced since the last stream_status emission for this stream. Set by the engine. Used for instantaneous per-stream throughput. */
+              window_record_count?: number
+              /** @description Average records per second for this stream over the entire run: run_record_count / elapsed seconds. Set by the engine. */
+              records_per_second?: number
+              /** @description Average API requests per second for this stream over the entire run. Set by the engine from source-reported request counts. */
+              requests_per_second?: number
+            }
+          }
+        | {
             /** @constant */
-            object: "event";
-            /** @description The connected account that originates the event. */
-            account?: string;
-            api_version: string | null;
-            /** @description Time at which the object was created. Measured in seconds since the Unix epoch. */
-            created: number;
-            data: {
-                object: {
-                    [key: string]: unknown;
-                };
-                previous_attributes?: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode. */
-            livemode: boolean;
-            /** @description Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify. */
-            pending_webhooks: number;
-            request: {
-                id: string | null;
-                idempotency_key: string | null;
-            } | null;
-            /** @description Description of the event (for example, `invoice.created` or `charge.refunded`). */
-            type: string;
-        };
-        PipelineConfig: {
-            source: components["schemas"]["SourceConfig"];
-            destination: components["schemas"]["DestinationConfig"];
-            streams?: {
-                /** @description Stream (table) name to sync. */
-                name: string;
-                /**
-                 * @description How the source reads this stream. Defaults to full_refresh.
-                 * @enum {string}
-                 */
-                sync_mode?: "incremental" | "full_refresh";
-                /** @description If set, only these fields are synced. */
-                fields?: string[];
-                /** @description Cap backfill to this many records, then mark the stream complete. */
-                backfill_limit?: number;
-            }[];
-        };
-        /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
-        SyncState: {
-            /** @description Source connector state — cursors, backfill progress, events cursors. */
-            source: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Destination connector state — reserved for future use. */
-            destination: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
-            engine: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        Message: components["schemas"]["RecordMessage"] | components["schemas"]["SourceStateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["EofMessage"];
-        DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        DestinationOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"];
-        SyncOutput: components["schemas"]["SourceStateMessage"] | components["schemas"]["TraceMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["ControlMessage"];
-        CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        TeardownOutput: components["schemas"]["LogMessage"] | components["schemas"]["TraceMessage"];
-        SourceInputMessage: {
+            trace_type: 'estimate'
+            /** @description Sync progress estimate for a stream. */
+            estimate: {
+              /** @description Stream being estimated. */
+              stream: string
+              /** @description Estimated total row count for this stream. */
+              row_count?: number
+              /** @description Estimated total byte count for this stream. */
+              byte_count?: number
+            }
+          }
+        | {
             /** @constant */
-            type: "source_input";
-            source_input: components["schemas"]["SourceStripeInput"];
-        };
-    };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+            trace_type: 'progress'
+            /** @description Periodic global sync progress emitted by the engine. Aggregate stats only — per-stream detail is in stream_status messages. Each emission is a full replacement. */
+            progress: {
+              /** @description Wall-clock milliseconds since the sync run started. */
+              elapsed_ms: number
+              /** @description Total records synced across all streams in this run. */
+              run_record_count: number
+              /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+              rows_per_second: number
+              /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+              window_rows_per_second: number
+              /** @description Total source_state messages observed so far in this sync run. */
+              state_checkpoint_count: number
+            }
+          }
+    }
+    SpecMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'spec'
+      /** @description JSON Schema describing the configuration a connector requires. */
+      spec: {
+        /** @description JSON Schema for the connector's configuration object. */
+        config: {
+          [key: string]: unknown
+        }
+        /** @description JSON Schema for per-stream state (cursor/checkpoint shape). See also SourceState.global for sync-wide cursors. */
+        source_state_stream?: {
+          [key: string]: unknown
+        }
+        /** @description JSON Schema for the read() input parameter (e.g. a webhook event). */
+        source_input?: {
+          [key: string]: unknown
+        }
+      }
+    }
+    ConnectionStatusMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'connection_status'
+      /** @description Result of a connection check. */
+      connection_status: {
+        /**
+         * @description Whether the connection check passed.
+         * @enum {string}
+         */
+        status: 'succeeded' | 'failed'
+        /** @description Human-readable explanation of the check result. */
+        message?: string
+      }
+    }
+    ControlMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'control'
+      /** @description Control signal from a connector to the orchestrator. */
+      control:
+        | {
+            /** @constant */
+            control_type: 'source_config'
+            source_config: components['schemas']['SourceStripeConfig']
+          }
+        | {
+            /** @constant */
+            control_type: 'destination_config'
+            destination_config:
+              | components['schemas']['DestinationPostgresConfig']
+              | components['schemas']['DestinationGoogleSheetsConfig']
+          }
+    }
+    EofMessage: {
+      /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
+      _emitted_by?: string
+      /**
+       * Format: date-time
+       * @description ISO 8601 timestamp when the engine observed this message.
+       */
+      _ts?: string
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: 'eof'
+      /** @description Terminal message with two nested sections: global_progress (same shape as trace/progress) and stream_progress (final per-stream detail including accumulated errors). */
+      eof: {
+        /**
+         * @description Why the sync run ended.
+         * @enum {string}
+         */
+        reason: 'complete' | 'state_limit' | 'time_limit' | 'error' | 'aborted'
+        /**
+         * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
+         * @enum {string}
+         */
+        cutoff?: 'soft' | 'hard'
+        /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
+        elapsed_ms?: number
+        /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
+        state?: components['schemas']['SyncState']
+        /** @description Final global aggregates. Same shape as trace/progress. */
+        global_progress?: {
+          /** @description Wall-clock milliseconds since the sync run started. */
+          elapsed_ms: number
+          /** @description Total records synced across all streams in this run. */
+          run_record_count: number
+          /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
+          rows_per_second: number
+          /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
+          window_rows_per_second: number
+          /** @description Total source_state messages observed so far in this sync run. */
+          state_checkpoint_count: number
+        }
+        /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
+        stream_progress?: {
+          [key: string]: {
+            /**
+             * @description Final stream status.
+             * @enum {string}
+             */
+            status: 'start' | 'running' | 'complete' | 'range_complete'
+            /** @description Cumulative records synced for this stream across all runs. */
+            cumulative_record_count: number
+            /** @description Records synced in this run. */
+            run_record_count: number
+            /** @description Average records/sec for this stream over the run. */
+            records_per_second?: number
+            /** @description Average requests/sec for this stream over the run. */
+            requests_per_second?: number
+            /** @description All accumulated errors for this stream during this run. */
+            errors?: {
+              /** @description Human-readable error description. */
+              message: string
+              /**
+               * @description Error category matching TraceError.failure_type.
+               * @enum {string}
+               */
+              failure_type?: 'config_error' | 'system_error' | 'transient_error' | 'auth_error'
+            }[]
+          }
+        }
+      }
+    }
+    SourceStripeInput: {
+      /** @description Unique identifier for the object. */
+      id: string
+      /** @constant */
+      object: 'event'
+      /** @description The connected account that originates the event. */
+      account?: string
+      api_version: string | null
+      /** @description Time at which the object was created. Measured in seconds since the Unix epoch. */
+      created: number
+      data: {
+        object: {
+          [key: string]: unknown
+        }
+        previous_attributes?: {
+          [key: string]: unknown
+        }
+      }
+      /** @description Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode. */
+      livemode: boolean
+      /** @description Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify. */
+      pending_webhooks: number
+      request: {
+        id: string | null
+        idempotency_key: string | null
+      } | null
+      /** @description Description of the event (for example, `invoice.created` or `charge.refunded`). */
+      type: string
+    }
+    PipelineConfig: {
+      source: components['schemas']['SourceConfig']
+      destination: components['schemas']['DestinationConfig']
+      streams?: {
+        /** @description Stream (table) name to sync. */
+        name: string
+        /**
+         * @description How the source reads this stream. Defaults to full_refresh.
+         * @enum {string}
+         */
+        sync_mode?: 'incremental' | 'full_refresh'
+        /** @description If set, only these fields are synced. */
+        fields?: string[]
+        /** @description Cap backfill to this many records, then mark the stream complete. */
+        backfill_limit?: number
+      }[]
+    }
+    /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
+    SyncState: {
+      /** @description Source connector state — cursors, backfill progress, events cursors. */
+      source: {
+        /** @description Per-stream checkpoint data, keyed by stream name. */
+        streams: {
+          [key: string]: unknown
+        }
+        /** @description Section-wide state shared across all streams. */
+        global: {
+          [key: string]: unknown
+        }
+      }
+      /** @description Destination connector state — reserved for future use. */
+      destination: {
+        /** @description Per-stream checkpoint data, keyed by stream name. */
+        streams: {
+          [key: string]: unknown
+        }
+        /** @description Section-wide state shared across all streams. */
+        global: {
+          [key: string]: unknown
+        }
+      }
+      /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
+      engine: {
+        /** @description Per-stream checkpoint data, keyed by stream name. */
+        streams: {
+          [key: string]: unknown
+        }
+        /** @description Section-wide state shared across all streams. */
+        global: {
+          [key: string]: unknown
+        }
+      }
+    }
+    Message:
+      | components['schemas']['RecordMessage']
+      | components['schemas']['SourceStateMessage']
+      | components['schemas']['CatalogMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['TraceMessage']
+      | components['schemas']['SpecMessage']
+      | components['schemas']['ConnectionStatusMessage']
+      | components['schemas']['ControlMessage']
+      | components['schemas']['EofMessage']
+    DiscoverOutput:
+      | components['schemas']['CatalogMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['TraceMessage']
+    DestinationOutput:
+      | components['schemas']['SourceStateMessage']
+      | components['schemas']['TraceMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['EofMessage']
+    SyncOutput:
+      | components['schemas']['SourceStateMessage']
+      | components['schemas']['TraceMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['EofMessage']
+      | components['schemas']['ControlMessage']
+    CheckOutput:
+      | components['schemas']['ConnectionStatusMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['TraceMessage']
+    SetupOutput:
+      | components['schemas']['ControlMessage']
+      | components['schemas']['LogMessage']
+      | components['schemas']['TraceMessage']
+    TeardownOutput: components['schemas']['LogMessage'] | components['schemas']['TraceMessage']
+    SourceInputMessage: {
+      /** @constant */
+      type: 'source_input'
+      source_input: components['schemas']['SourceStripeInput']
+    }
+  }
+  responses: never
+  parameters: never
+  requestBodies: never
+  headers: never
+  pathItems: never
 }
-export type $defs = Record<string, never>;
+export type $defs = Record<string, never>
 export interface operations {
-    health: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Server is healthy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        ok: true;
-                        hostname: string;
-                        commit?: string;
-                        commit_url?: string;
-                        build_date?: string;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_check: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of check messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["CheckOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_setup: {
-        parameters: {
-            query?: {
-                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
-                only?: "source" | "destination";
-            };
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of setup messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["SetupOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_teardown: {
-        parameters: {
-            query?: {
-                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
-                only?: "source" | "destination";
-            };
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of teardown messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["TeardownOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    source_discover: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description JSON-encoded source config ({ type, ...config }) */
-                "x-source"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    source: {
-                        type: string;
-                    } & {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of discover messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["DiscoverOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_read: {
-        parameters: {
-            query?: {
-                /** @description Stop streaming after N state messages. */
-                state_limit?: number;
-                /** @description Stop streaming after N seconds. */
-                time_limit?: number;
-            };
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-                /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
-                "x-state"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                    state?: components["schemas"]["SyncState"];
-                    body?: unknown[];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of sync messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["Message"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_write: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/x-ndjson": components["schemas"]["Message"];
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                    body: unknown[];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of write result messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["DestinationOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    pipeline_sync: {
-        parameters: {
-            query?: {
-                /** @description Stop streaming after N state messages. */
-                state_limit?: number;
-                /** @description Stop streaming after N seconds. */
-                time_limit?: number;
-            };
-            header?: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
-                /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
-                "x-state"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
-                "application/json": {
-                    pipeline: components["schemas"]["PipelineConfig"];
-                    state?: components["schemas"]["SyncState"];
-                    body?: unknown[];
-                };
-            };
-        };
-        responses: {
-            /** @description NDJSON stream of sync messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": components["schemas"]["SyncOutput"];
-                };
-            };
-            /** @description Invalid params */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    meta_sources_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Available source connectors with their JSON Schema configs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: {
-                            config_schema: {
-                                [key: string]: unknown;
-                            };
-                            type: string;
-                        }[];
-                    };
-                };
-            };
-        };
-    };
-    meta_sources_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Source connector spec */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        config_schema: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Source connector not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    meta_destinations_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Available destination connectors with their JSON Schema configs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: {
-                            config_schema: {
-                                [key: string]: unknown;
-                            };
-                            type: string;
-                        }[];
-                    };
-                };
-            };
-        };
-    };
-    meta_destinations_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Destination connector spec */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        config_schema: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Destination connector not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
+  health: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Server is healthy */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            /** @constant */
+            ok: true
+            hostname: string
+            commit?: string
+            commit_url?: string
+            build_date?: string
+          }
+        }
+      }
+    }
+  }
+  pipeline_check: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of check messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['CheckOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  pipeline_setup: {
+    parameters: {
+      query?: {
+        /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
+        only?: 'source' | 'destination'
+      }
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of setup messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['SetupOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  pipeline_teardown: {
+    parameters: {
+      query?: {
+        /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
+        only?: 'source' | 'destination'
+      }
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of teardown messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['TeardownOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  source_discover: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description JSON-encoded source config ({ type, ...config }) */
+        'x-source'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          source: {
+            type: string
+          } & {
+            [key: string]: unknown
+          }
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of discover messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['DiscoverOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  pipeline_read: {
+    parameters: {
+      query?: {
+        /** @description Stop streaming after N state messages. */
+        state_limit?: number
+        /** @description Stop streaming after N seconds. */
+        time_limit?: number
+      }
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+        /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
+        'x-state'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/x-ndjson': components['schemas']['SourceInputMessage']
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+          state?: components['schemas']['SyncState']
+          body?: unknown[]
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of sync messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['Message']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  pipeline_write: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/x-ndjson': components['schemas']['Message']
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+          body: unknown[]
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of write result messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['DestinationOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  pipeline_sync: {
+    parameters: {
+      query?: {
+        /** @description Stop streaming after N state messages. */
+        state_limit?: number
+        /** @description Stop streaming after N seconds. */
+        time_limit?: number
+      }
+      header?: {
+        /** @description JSON-encoded PipelineConfig */
+        'x-pipeline'?: string
+        /** @description JSON-encoded SyncState ({ source, destination, engine }) or legacy SourceState/flat formats */
+        'x-state'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/x-ndjson': components['schemas']['SourceInputMessage']
+        'application/json': {
+          pipeline: components['schemas']['PipelineConfig']
+          state?: components['schemas']['SyncState']
+          body?: unknown[]
+        }
+      }
+    }
+    responses: {
+      /** @description NDJSON stream of sync messages */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': components['schemas']['SyncOutput']
+        }
+      }
+      /** @description Invalid params */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  meta_sources_list: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Available source connectors with their JSON Schema configs */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            items: {
+              config_schema: {
+                [key: string]: unknown
+              }
+              type: string
+            }[]
+          }
+        }
+      }
+    }
+  }
+  meta_sources_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        type: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Source connector spec */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            config_schema: {
+              [key: string]: unknown
+            }
+          }
+        }
+      }
+      /** @description Source connector not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  meta_destinations_list: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Available destination connectors with their JSON Schema configs */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            items: {
+              config_schema: {
+                [key: string]: unknown
+              }
+              type: string
+            }[]
+          }
+        }
+      }
+    }
+  }
+  meta_destinations_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        type: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Destination connector spec */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            config_schema: {
+              [key: string]: unknown
+            }
+          }
+        }
+      }
+      /** @description Destination connector not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
 }
