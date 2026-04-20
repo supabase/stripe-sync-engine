@@ -1,22 +1,19 @@
-import pino from 'pino'
-import { createLogger } from '@stripe/sync-logger'
+import { createLogger, type Logger } from '@stripe/sync-logger'
 
-const transport = process.env.LOG_PRETTY
+const pretty = process.env.PINO_PRETTY === 'true' || process.env.LOG_PRETTY === 'true'
+
+const transport = pretty
   ? {
       target: import.meta.resolve('pino-pretty'),
       options: { destination: 1 },
     }
   : undefined
 
-const destination = transport ? undefined : pino.destination({ dest: 1, sync: false })
-
-export const log = createLogger({
+export const log: Logger = createLogger({
   name: 'engine',
-  level: process.env.LOG_LEVEL ?? 'info',
   transport,
   redact: {
     paths: ['*.api_key', '*.connection_string', '*.password', '*.url'],
     censor: '[redacted]',
   },
-  destination,
 })

@@ -40,7 +40,24 @@ export default [
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'pino',
+              message: 'Import from @stripe/sync-logger instead of pino directly.',
+            },
+          ],
+        },
+      ],
       'prettier/prettier': 'warn',
+    },
+  },
+  {
+    files: ['packages/logger/**'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
   {

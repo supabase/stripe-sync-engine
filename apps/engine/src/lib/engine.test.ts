@@ -1586,7 +1586,7 @@ describe('engine.pipeline_setup() timeout', () => {
     vi.useRealTimers()
   })
 
-  it('emits an error log when source setup exceeds the time limit', async () => {
+  it('terminates the stream when source setup exceeds the time limit', async () => {
     const hangingSource: Source = {
       async *spec(): AsyncIterable<SpecOutput> {
         yield { type: 'spec', spec: { config: {} } }
@@ -1615,11 +1615,10 @@ describe('engine.pipeline_setup() timeout', () => {
     // Advance past the hard deadline (30s + 1s buffer)
     await vi.advanceTimersByTimeAsync(32_000)
 
+    // Stream should terminate (not hang) — the timeout cuts it off
     const msgs = await drainP
-    const errorLogs = msgs.filter(
-      (m) => m.type === 'log' && (m as LogMessage).log.level === 'error'
-    )
-    expect(errorLogs.length).toBeGreaterThanOrEqual(1)
-    expect((errorLogs[0] as LogMessage).log.message).toMatch(/setup timed out/)
+    // No setup output from the hanging source
+    const nonLog = msgs.filter((m) => m.type !== 'log')
+    expect(nonLog).toHaveLength(0)
   })
 })

@@ -1,5 +1,5 @@
 import pg from 'pg'
-import pino from 'pino'
+import { createLogger } from '@stripe/sync-logger'
 import {
   sql,
   sslConfigFromConnectionString,
@@ -9,13 +9,9 @@ import {
 } from '@stripe/sync-util-postgres'
 import type { SourceState } from '@stripe/sync-protocol'
 
-const logger = pino(
-  {
-    level: process.env.LOG_LEVEL ?? 'info',
-    name: 'state-store',
-  },
-  pino.destination({ dest: 1, sync: false })
-)
+const logger = createLogger({
+  name: 'state-store',
+})
 
 /** Reserved stream name for global state in the _sync_state table. */
 const GLOBAL_KEY = '_global'

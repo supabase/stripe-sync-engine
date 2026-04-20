@@ -3,7 +3,7 @@ import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync
 import { enforceCatalog, filterType, tapLog, persistState, pipe, takeLimits } from './pipeline.js'
 import type { StateStore } from './state-store.js'
 
-vi.mock('../log.js', () => ({
+vi.mock('../logger.js', () => ({
   log: {
     info: vi.fn(),
     error: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../log.js', () => ({
   },
 }))
 
-import { log } from '../log.js'
+import { log } from '../logger.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -229,7 +229,7 @@ describe('enforceCatalog()', () => {
 // log()
 // ---------------------------------------------------------------------------
 
-describe('log()', () => {
+describe('tapLog()', () => {
   it('passes all message types through unchanged', async () => {
     const msgs: Message[] = [
       {
@@ -254,7 +254,7 @@ describe('log()', () => {
         stream_status: { stream: 'customers', status: 'complete' },
       },
     ]
-    const result = await drain(log(toAsync(msgs)))
+    const result = await drain(tapLog(toAsync(msgs)))
     expect(result).toHaveLength(5)
     expect(result[0]).toMatchObject({ type: 'record' })
     expect(result[1]).toMatchObject({ type: 'source_state' })
@@ -267,7 +267,7 @@ describe('log()', () => {
     const msgs: Message[] = [
       { type: 'log', log: { level: 'warn', message: 'careful', data: { stream: 'customers' } } },
     ]
-    await drain(log(toAsync(msgs)))
+    await drain(tapLog(toAsync(msgs)))
     expect(log.warn).toHaveBeenCalledWith({ stream: 'customers' }, 'careful')
   })
 
@@ -278,7 +278,7 @@ describe('log()', () => {
         stream_status: { stream: 'orders', status: 'start' },
       },
     ]
-    await drain(log(toAsync(msgs)))
+    await drain(tapLog(toAsync(msgs)))
     expect(log.debug).toHaveBeenCalledWith({ stream: 'orders', status: 'start' }, 'stream_status')
   })
 
@@ -297,7 +297,7 @@ describe('log()', () => {
         source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
       },
     ]
-    await drain(log(toAsync(msgs)))
+    await drain(tapLog(toAsync(msgs)))
     expect(log.info).not.toHaveBeenCalled()
     expect(log.error).not.toHaveBeenCalled()
     expect(log.warn).not.toHaveBeenCalled()

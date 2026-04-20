@@ -1,7 +1,7 @@
 import { Client } from 'pg'
 import crypto from 'node:crypto'
 import type { ConnectionOptions } from 'node:tls'
-import pino from 'pino'
+import { createLogger } from '@stripe/sync-logger'
 import {
   sql,
   sslConfigFromConnectionString,
@@ -9,13 +9,9 @@ import {
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 
-const pgLogger = pino(
-  {
-    level: process.env.LOG_LEVEL ?? 'info',
-    name: 'migrate',
-  },
-  pino.destination({ dest: 1, sync: false })
-)
+const pgLogger = createLogger({
+  name: 'migrate',
+})
 import { renderMigrationTemplate } from './migrationTemplate.js'
 import type { Migration } from './migrations/index.js'
 import { migrations as allMigrations } from './migrations/index.js'

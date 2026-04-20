@@ -1,13 +1,11 @@
-import pino from 'pino'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { createLogger } from '@stripe/sync-logger'
+import { createLogger, destination, type Logger, type LoggerOptions } from '@stripe/sync-logger'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
 
-const baseOpts: pino.LoggerOptions = {
-  level: process.env.LOG_LEVEL ?? 'info',
+const baseOpts: LoggerOptions = {
   redact: {
     paths: ['*.api_key', '*.connection_string', '*.password', '*.url'],
     censor: '[redacted]',
@@ -17,7 +15,6 @@ const baseOpts: pino.LoggerOptions = {
 export const log = createLogger({
   ...baseOpts,
   name: 'service',
-  destination: pino.destination({ dest: 1, sync: false }),
 })
 
 /**
@@ -25,14 +22,14 @@ export const log = createLogger({
  * Writes to DATA_DIR/pipelines/$pipelineId/sync_run/$runId.log
  * Uses sync mode so the file is ready immediately (CLI use case).
  */
-export function createSyncRunLogger(pipelineId: string, runId: string): pino.Logger {
+export function createSyncRunLogger(pipelineId: string, runId: string): Logger {
   const dir = join(defaultDataDir, 'pipelines', pipelineId, 'sync_run')
   mkdirSync(dir, { recursive: true })
   const logPath = join(dir, `${runId}.log`)
   return createLogger({
     ...baseOpts,
     name: 'service',
-    destination: pino.destination({ dest: logPath, sync: true }),
+    destination: destination({ dest: logPath, sync: true }),
   })
 }
 

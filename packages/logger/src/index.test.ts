@@ -1,5 +1,5 @@
 import { Writable } from 'node:stream'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   bindLogContext,
   createLogger,
@@ -16,6 +16,11 @@ function devNull(): Writable {
     },
   })
 }
+
+afterEach(() => {
+  delete process.env.PINO_PRETTY
+  vi.restoreAllMocks()
+})
 
 describe('@stripe/sync-logger', () => {
   it('captures structured fields into routed log data', () => {
@@ -142,5 +147,49 @@ describe('@stripe/sync-logger', () => {
         },
       },
     ])
+  })
+
+  it('writes protocol log envelopes to stdout by default', () => {
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk))
+      return true
+    })
+
+    const log = createLogger({ name: 'logger-test' })
+    log.info({ stream: 'customers' }, 'protocol stdout')
+
+    expect(writes).toHaveLength(1)
+    expect(JSON.parse(writes[0]!)).toEqual({
+      type: 'log',
+      log: {
+        level: 'info',
+        message: 'protocol stdout',
+        data: {
+          name: 'logger-test',
+          stream: 'customers',
+        },
+      },
+    })
+  })
+
+  it('falls back to normal pino output when PINO_PRETTY=true', () => {
+    process.env.PINO_PRETTY = 'true'
+
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk))
+      return true
+    })
+
+    const log = createLogger({ name: 'logger-test' })
+    log.info('pretty disabled protocol mode')
+
+    expect(writes).toHaveLength(1)
+    expect(JSON.parse(writes[0]!)).toMatchObject({
+      level: 30,
+      name: 'logger-test',
+      msg: 'pretty disabled protocol mode',
+    })
   })
 })

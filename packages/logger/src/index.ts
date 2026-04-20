@@ -4,6 +4,7 @@ import pino from 'pino'
 import type { DestinationStream, Logger, LoggerOptions } from 'pino'
 
 export type { DestinationStream, Logger, LoggerOptions } from 'pino'
+export const destination = pino.destination
 
 export type RoutedLogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -195,6 +196,27 @@ function maybeRouteLog(loggerName: string | undefined, level: number, args: unkn
   })
 }
 
+function isProtocolStdoutMode(options: {
+  destination?: DestinationStream
+  transport?: LoggerOptions['transport']
+}): boolean {
+  return !options.destination && !options.transport && process.env.PINO_PRETTY !== 'true'
+}
+
+function writeProtocolStdout(loggerName: string | undefined, level: number, args: unknown[]) {
+  const data = extractCapturedData(loggerName, args)
+  const payload = {
+    type: 'log',
+    log: {
+      level: mapLevel(level),
+      message: formatCapturedMessage(args),
+      ...(data ? { data } : {}),
+    },
+  }
+
+  process.stdout.write(JSON.stringify(payload) + '\n')
+}
+
 export function createLogger(
   options: LoggerOptions & {
     destination?: DestinationStream
@@ -203,14 +225,20 @@ export function createLogger(
   const { destination, hooks: userHooks, mixin: userMixin, ...pinoOptions } = options
 
   const loggerName = pinoOptions.name
+  const protocolStdoutMode = isProtocolStdoutMode({ destination, transport: pinoOptions.transport })
 
   return pino(
     {
+      level: process.env.LOG_LEVEL ?? 'info',
       ...pinoOptions,
       hooks: {
         ...userHooks,
         logMethod(inputArgs, method, level) {
           maybeRouteLog(loggerName, level, inputArgs)
+          if (protocolStdoutMode) {
+            writeProtocolStdout(loggerName, level, inputArgs)
+            return
+          }
           if (userHooks?.logMethod) {
             return userHooks.logMethod.call(this, inputArgs, method, level)
           }

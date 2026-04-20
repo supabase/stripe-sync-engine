@@ -111,8 +111,9 @@ describe('createRemoteEngine', () => {
     it('streams without error (empty for test connectors)', async () => {
       const engine = createRemoteEngine(engineUrl)
       const msgs = await collect(engine.pipeline_setup(pipeline))
-      // sourceTest and destinationTest have no setup(), so stream is empty
-      expect(msgs).toHaveLength(0)
+      // sourceTest and destinationTest have no setup(), so only the initial log is emitted
+      const nonLog = msgs.filter((m) => m.type !== 'log')
+      expect(nonLog).toHaveLength(0)
     })
   })
 
@@ -152,18 +153,20 @@ describe('createRemoteEngine', () => {
         },
       ]
       const messages = await collect(engine.pipeline_read(pipeline, undefined, asIterable(input)))
-      expect(messages).toHaveLength(3)
-      expect(messages[0]!.type).toBe('record')
-      expect(messages[1]!.type).toBe('source_state')
-      expect(messages[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+      const nonLog = messages.filter((m) => m.type !== 'log')
+      expect(nonLog).toHaveLength(3)
+      expect(nonLog[0]!.type).toBe('record')
+      expect(nonLog[1]!.type).toBe('source_state')
+      expect(nonLog[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
 
     it('returns eof:complete when called without input', async () => {
       const engine = createRemoteEngine(engineUrl)
       // sourceTest yields nothing when $stdin is absent — only eof
       const messages = await collect(engine.pipeline_read(pipeline))
-      expect(messages).toHaveLength(1)
-      expect(messages[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+      const nonLog = messages.filter((m) => m.type !== 'log')
+      expect(nonLog).toHaveLength(1)
+      expect(nonLog[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
   })
 
