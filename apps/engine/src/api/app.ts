@@ -550,11 +550,7 @@ export async function createApp(resolver: ConnectorResolver) {
       )
     const ac = createConnectionAbort(c, onDisconnect)
 
-    const output = engine.pipeline_sync(
-      pipeline,
-      { state, state_limit, time_limit, run_id },
-      input
-    )
+    const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit, run_id }, input)
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {
       signal: ac.signal,
     })

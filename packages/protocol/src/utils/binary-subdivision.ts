@@ -46,7 +46,6 @@ export function toIso(unixSeconds: number): string {
 /** Default number of segments to split the older remainder into. */
 export const DEFAULT_SUBDIVISION_FACTOR = 2
 
-
 /**
  * Subdivide ranges that have a cursor (were in progress but didn't complete).
  *

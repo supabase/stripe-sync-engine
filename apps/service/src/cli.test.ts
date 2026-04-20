@@ -203,6 +203,7 @@ function buildMockApp() {
           JSON.stringify({
             type: 'eof',
             eof: {
+              status: runProgress.derived.status,
               has_more: count === 1,
               ending_state: endingState,
               run_progress: runProgress,

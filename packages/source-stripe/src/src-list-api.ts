@@ -492,9 +492,9 @@ async function* iterateStream(opts: {
       } else if (event.hasMore && event.data.length > 0) {
         // Range was subdivided — the fetched head (from oldest record to range.lt)
         // is already accounted for. Emit range_complete so the progress bar fills.
-        const oldest = event.data.findLast(
-          (r) => typeof r.created === 'number'
-        ) as { created: number } | undefined
+        const oldest = event.data.findLast((r) => typeof r.created === 'number') as
+          | { created: number }
+          | undefined
         if (oldest) {
           const headGte = toIso(oldest.created + 1)
           if (headGte < event.range.lt) {

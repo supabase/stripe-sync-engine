@@ -396,7 +396,9 @@ export function createApp(options: AppOptions) {
     reset_state: z.coerce
       .boolean()
       .optional()
-      .meta({ description: 'Ignore persisted sync state and start fresh (ending state is still saved)' }),
+      .meta({
+        description: 'Ignore persisted sync state and start fresh (ending state is still saved)',
+      }),
   })
   const SyncBodySchema = z.object({
     source: SourceConfig.optional(),

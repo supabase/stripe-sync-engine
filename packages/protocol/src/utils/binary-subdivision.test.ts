@@ -100,7 +100,6 @@ describe('subdivideRanges', () => {
     expect(toUnixSeconds(segments[0].gte)).toBe(1000)
     expect(toUnixSeconds(segments[segments.length - 1].lt)).toBe(1008)
   })
-
 })
 
 // MARK: - Distribution simulation
