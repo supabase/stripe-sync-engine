@@ -604,23 +604,22 @@ export async function* listApiBackfill(opts: {
 
   let accountCreated: number | null = initialAccountCreated ?? null
 
-  const streamRuns: Array<{ generator: AsyncGenerator<Message>; primedComplete: boolean }> = []
+  const streamRuns: AsyncGenerator<Message>[] = []
 
   for (const configuredStream of catalog.streams) {
     const stream = configuredStream.stream
     const streamBackfillLimit = configuredStream.backfill_limit ?? backfillLimit
     const resourceConfig = findConfigByTableName(registry, stream.name)
     if (!resourceConfig) {
-      streamRuns.push({
-        primedComplete: false,
-        generator: (async function* () {
+      streamRuns.push(
+        (async function* () {
           yield msg.stream_status({
             stream: stream.name,
             status: 'error',
             error: `Unknown stream: ${stream.name}`,
           })
-        })(),
-      })
+        })()
+      )
       continue
     }
 
@@ -638,9 +637,8 @@ export async function* listApiBackfill(opts: {
 
     const streamState = state?.[stream.name] as StreamState | undefined
 
-    streamRuns.push({
-      primedComplete: false,
-      generator: (async function* () {
+    streamRuns.push(
+      (async function* () {
         try {
           yield* iterateStream({
             streamName: stream.name,
@@ -677,44 +675,9 @@ export async function* listApiBackfill(opts: {
             error: err instanceof Error ? err.message : String(err),
           })
         }
-      })(),
-    })
+      })()
+    )
   }
 
-  // Breadth-first opening pass: prime every stream through its first page/checkpoint.
-  // This restores the old "one request to all streams" behavior before we fall back
-  // to the bounded scheduler for the remaining work.
-  const primingGenerators = streamRuns.map((run) =>
-    (async function* () {
-      while (true) {
-        const { value, done } = await run.generator.next()
-        if (done) {
-          run.primedComplete = true
-          return
-        }
-
-        yield value
-
-        if (
-          value.type === 'source_state' ||
-          (value.type === 'stream_status' &&
-            (value.stream_status.status === 'complete' ||
-              value.stream_status.status === 'skip' ||
-              value.stream_status.status === 'error'))
-        ) {
-          if (value.type === 'stream_status' && value.stream_status.status !== 'range_complete') {
-            run.primedComplete = true
-          }
-          return
-        }
-      }
-    })()
-  )
-
-  yield* mergeAsync(primingGenerators, primingGenerators.length)
-
-  const remainingGenerators = streamRuns
-    .filter((run) => !run.primedComplete)
-    .map((run) => run.generator)
-  yield* mergeAsync(remainingGenerators, Math.min(maxConcurrentStreams, remainingGenerators.length))
+  yield* mergeAsync(streamRuns, Math.min(maxConcurrentStreams, streamRuns.length))
 }

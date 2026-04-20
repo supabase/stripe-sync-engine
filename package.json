@@ -47,7 +47,7 @@
       "@types/react-dom": "19.2.3",
       "esbuild": "^0.28.0",
       "react": "19.2.5",
-      "react-dom": "19.2.0"
+      "react-dom": "19.2.5"
     }
   },
   "engines": {

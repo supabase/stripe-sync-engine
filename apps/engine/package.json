@@ -66,7 +66,7 @@
     "ink": "^7.0.1",
     "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
-    "react": "^19.2.5",
+    "react": "19.2.5",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -74,7 +74,7 @@
     "@hyperjump/json-schema": "^1.17.5",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
-    "@types/react": "^19.2.14",
+    "@types/react": "19.2.14",
     "openapi-typescript": "^7.13.0",
     "vitest": "^3.2.4"
   },

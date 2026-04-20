@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text, renderToString as inkRenderToString } from 'ink'
+import { formatProgress } from '@stripe/sync-engine/progress'
 import type { ProgressPayload } from '@stripe/sync-protocol'
 import type { Pipeline } from '../lib/createSchemas.js'
 
@@ -164,17 +165,15 @@ function PipelineDetailView({ pipeline }: { pipeline: Pipeline }) {
           </Box>
         </Box>
       )}
-
-      {pipeline.sync_state?.sync_run?.progress && (
-        <Box flexDirection="column">
-          <Text bold>Progress:</Text>
-          <Box marginLeft={2}>
-            <ProgressHeaderLine progress={pipeline.sync_state.sync_run.progress} />
-          </Box>
-        </Box>
-      )}
     </Box>
   )
+}
+
+function renderPipelineDetail(pipeline: Pipeline): string {
+  const base = render(<PipelineDetailView pipeline={pipeline} />)
+  const progress = pipeline.sync_state?.sync_run?.progress
+  if (!progress) return base
+  return `${base}\nProgress:\n${formatProgress(progress)}`
 }
 
 // MARK: - Response Formatter
@@ -199,14 +198,12 @@ export function createPrettyFormatter(): (
 
     if (opId === 'pipelines.create') {
       const pipeline = data as Pipeline
-      const output = render(
-        <Box flexDirection="column">
-          <Text>
-            <Text color="green">Created</Text> <Text bold>{pipeline.id}</Text>
-          </Text>
-          <PipelineDetailView pipeline={pipeline} />
-        </Box>
+      const header = render(
+        <Text>
+          <Text color="green">Created</Text> <Text bold>{pipeline.id}</Text>
+        </Text>
       )
+      const output = `${header}\n${renderPipelineDetail(pipeline)}`
       process.stdout.write(output + '\n')
       return
     }
@@ -220,7 +217,7 @@ export function createPrettyFormatter(): (
 
     if (opId === 'pipelines.get') {
       const pipeline = data as Pipeline
-      const output = render(<PipelineDetailView pipeline={pipeline} />)
+      const output = renderPipelineDetail(pipeline)
       process.stdout.write(output + '\n')
       return
     }

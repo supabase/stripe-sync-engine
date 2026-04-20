@@ -218,7 +218,13 @@ function applyRedactionPath(
     return
   }
 
-  applyRedactionPath((value as Record<string, unknown>)[segment], segments, censor, remove, index + 1)
+  applyRedactionPath(
+    (value as Record<string, unknown>)[segment],
+    segments,
+    censor,
+    remove,
+    index + 1
+  )
 }
 
 function redactData(
@@ -233,7 +239,12 @@ function redactData(
 
   const cloned = cloneForRedaction(data)
   for (const path of config.paths ?? []) {
-    applyRedactionPath(cloned, path.split('.'), config.censor ?? DEFAULT_REDACT_CENSOR, config.remove ?? false)
+    applyRedactionPath(
+      cloned,
+      path.split('.'),
+      config.censor ?? DEFAULT_REDACT_CENSOR,
+      config.remove ?? false
+    )
     if (path.startsWith('*.')) {
       applyRedactionPath(
         cloned,
@@ -318,14 +329,13 @@ function writeProtocolStdout(
   redact?: LoggerOptions['redact']
 ) {
   const data = extractCapturedData(loggerName, args, redact)
-  writeProtocolLogPayload(process.stdout, createProtocolLogPayload(level, formatCapturedMessage(args), data))
+  writeProtocolLogPayload(
+    process.stdout,
+    createProtocolLogPayload(level, formatCapturedMessage(args), data)
+  )
 }
 
-function createProtocolLogPayload(
-  level: number,
-  message: string,
-  data?: Record<string, unknown>
-) {
+function createProtocolLogPayload(level: number, message: string, data?: Record<string, unknown>) {
   return {
     type: 'log',
     log: {
@@ -400,7 +410,9 @@ export function createLogger(
             writeProtocolStdout(loggerName, level, inputArgs, redact)
             return
           }
-          if (shouldSuppressDefaultStdoutOutput({ destination, transport: pinoOptions.transport })) {
+          if (
+            shouldSuppressDefaultStdoutOutput({ destination, transport: pinoOptions.transport })
+          ) {
             return
           }
           if (userHooks?.logMethod) {
