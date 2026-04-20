@@ -19,15 +19,15 @@ import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import {
   applyBatch,
-  buildRowMap,
-  createIntroSheet,
+  buildRowMapFromRows,
   deleteSpreadsheet,
   ensureSheet,
   ensureSpreadsheet,
   findSheetId,
-  protectSheets,
+  PASTE_COL_DELIMITER,
   readHeaderRow,
   readSheet,
+  rowsToTsv,
   type StreamBatchOps,
 } from './writer.js'
 
@@ -111,6 +111,45 @@ function extendHeaders(
   return { headers, changed }
 }
 
+// Toggle the live `COUNTUNIQUE`/`COUNTA` stats columns on the Overview tab.
+// Formulas cause Google Sheets to recalculate on every write — costly when
+// data tabs are large. Flip back to `true` if flush latency spikes again.
+const DEBUG_SKIP_OVERVIEW_FORMULAS = false
+
+/**
+ * Overview tab content shown after setup. Kept in sync with
+ * `createIntroSheet` in writer.ts — this is inlined here so setup can bundle
+ * it into the same `spreadsheets.batchUpdate` that creates the data tabs.
+ */
+function buildOverviewRows(streamNames: string[]): string[][] {
+  const now = new Date().toISOString()
+  return [
+    ['Stripe Sync Engine'],
+    [''],
+    ['This spreadsheet is managed by Stripe Sync Engine.'],
+    ['Data is synced automatically from your Stripe account.'],
+    [''],
+    [
+      'Synced streams:',
+      '',
+      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : 'Unique rows',
+      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : 'Duplicate rows',
+    ],
+    ...streamNames.map((name) => [
+      `  • ${name}`,
+      '',
+      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : `=COUNTUNIQUE('${name}'!A2:A)`,
+      DEBUG_SKIP_OVERVIEW_FORMULAS
+        ? ''
+        : `=COUNTA('${name}'!A2:A)-COUNTUNIQUE('${name}'!A2:A)`,
+    ]),
+    [''],
+    [`Last setup: ${now}`],
+    [''],
+    ['⚠️  Do not edit data in the synced tabs. Changes will be overwritten on the next sync.'],
+  ]
+}
+
 // MARK: - Destination
 
 /**
@@ -128,23 +167,95 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
     async *setup({ config, catalog }) {
       if (config.spreadsheet_id) return
       const sheets = sheetsClient ?? makeSheetsClient(config)
-      const spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
-      // Create the Overview intro tab first (handles "Sheet1" rename if needed)
+      // Single-call setup: create the spreadsheet with `fields` that also
+      // return the default Sheet1's `sheetId` in the same response, then
+      // issue ONE `spreadsheets.batchUpdate` that renames Sheet1 → Overview,
+      // writes the Overview content, and for every stream adds a data tab,
+      // writes its header row, and adds warning-only protection. This avoids
+      // the ~3 API-calls-per-stream loop that used to trigger Sheets'
+      // 60-writes-per-minute quota (HTTP 429) for large catalogs.
+      const createRes = await sheets.spreadsheets.create({
+        requestBody: { properties: { title: config.spreadsheet_title } },
+        fields: 'spreadsheetId,sheets(properties(sheetId))',
+      })
+      const spreadsheetId = createRes.data.spreadsheetId
+      if (!spreadsheetId) throw new Error('spreadsheet create returned no id')
+      const sheet1Id = createRes.data.sheets?.[0]?.properties?.sheetId
+      if (sheet1Id == null) throw new Error('spreadsheet create returned no sheet1 id')
+
+      const requests: sheets_v4.Schema$Request[] = []
+
+      // Overview tab: rename Sheet1 → "Overview" and paste the intro content.
       const streamNames = catalog.streams.map((s) => s.stream.name)
-      await createIntroSheet(sheets, spreadsheetId, streamNames)
-
-      // Create a data tab for each stream with headers derived from its JSON schema
-      const sheetIds: number[] = []
-      for (const { stream } of catalog.streams) {
-        const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
-        const headers = properties ? Object.keys(properties) : []
-        const sheetId = await ensureSheet(sheets, spreadsheetId, stream.name, headers)
-        sheetIds.push(sheetId)
+      const overviewRows = buildOverviewRows(streamNames)
+      requests.push({
+        updateSheetProperties: {
+          properties: { sheetId: sheet1Id, title: 'Overview' },
+          fields: 'title',
+        },
+      })
+      if (overviewRows.length > 0) {
+        requests.push({
+          pasteData: {
+            coordinate: { sheetId: sheet1Id, rowIndex: 0, columnIndex: 0 },
+            // PASTE_NORMAL so any `=COUNTUNIQUE(...)` formulas evaluate.
+            // With `DEBUG_SKIP_OVERVIEW_FORMULAS` on in buildOverviewRows,
+            // every cell is plain text and PASTE_NORMAL is a no-op for them.
+            data: rowsToTsv(overviewRows),
+            delimiter: PASTE_COL_DELIMITER,
+            type: 'PASTE_NORMAL',
+          },
+        })
       }
 
-      // Protect all data tabs with a warning so users know edits may be overwritten
-      await protectSheets(sheets, spreadsheetId, sheetIds)
+      // Per-stream: pre-assign sheetIds so `pasteData` and `addProtectedRange`
+      // in this same batch can target the sheets about to be created by
+      // `addSheet`. Google accepts user-provided sheetIds as long as they
+      // are unique within the spreadsheet. `spreadsheets.batchUpdate`
+      // processes requests sequentially, so by the time pasteData runs for
+      // sheetId X, the corresponding addSheet has already executed.
+      const sheetIds: number[] = []
+      let nextSheetId = 1_000_000
+      for (const { stream } of catalog.streams) {
+        const propsSchema = stream.json_schema?.['properties'] as
+          | Record<string, unknown>
+          | undefined
+        const headers = propsSchema ? Object.keys(propsSchema) : []
+        const sheetId = nextSheetId++
+        sheetIds.push(sheetId)
+
+        requests.push({
+          addSheet: { properties: { sheetId, title: stream.name } },
+        })
+
+        if (headers.length > 0) {
+          requests.push({
+            pasteData: {
+              coordinate: { sheetId, rowIndex: 0, columnIndex: 0 },
+              data: rowsToTsv([headers]),
+              delimiter: PASTE_COL_DELIMITER,
+              type: 'PASTE_VALUES',
+            },
+          })
+        }
+
+        requests.push({
+          addProtectedRange: {
+            protectedRange: {
+              range: { sheetId },
+              description:
+                'Managed by Stripe Sync Engine — edits may be overwritten on next sync',
+              warningOnly: true,
+            },
+          },
+        })
+      }
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      })
 
       yield msg.control({ control_type: 'destination_config', destination_config: { ...config, spreadsheet_id: spreadsheetId } })
     },
@@ -259,90 +370,111 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         )
 
         const opsByStream = new Map<string, StreamBatchOps>()
+        const streamNames = [
+          ...new Set([...appendBuffers.keys(), ...updateBuffers.keys()]),
+        ]
 
-        for (const streamName of new Set([...appendBuffers.keys(), ...updateBuffers.keys()])) {
-          const bufferedAppends = appendBuffers.get(streamName) ?? []
-          const bufferedUpdates = (updateBuffers.get(streamName) ?? []).slice()
-          if (bufferedAppends.length === 0 && bufferedUpdates.length === 0) continue
+        // Parallel prep: for each stream, issue its `readSheet` and build the
+        // dedup map concurrently. Google Sheets reads have a much higher
+        // per-user quota than writes (300/min vs 60/min) and no cross-sheet
+        // lock, so firing N read HTTP calls in parallel is safe and cuts the
+        // total prep time from sum-of-reads to max-of-reads.
+        type PerStreamResult = {
+          streamName: string
+          ops: StreamBatchOps
+          sortedAppends: Array<{ row: string[]; rowKey?: string }>
+        } | null
 
-          const sheetId = sheetIds.get(streamName)
-          if (sheetId === undefined) continue
+        const perStreamResults = await Promise.all(
+          streamNames.map(async (streamName): Promise<PerStreamResult> => {
+            const bufferedAppends = appendBuffers.get(streamName) ?? []
+            const bufferedUpdates = (updateBuffers.get(streamName) ?? []).slice()
+            if (bufferedAppends.length === 0 && bufferedUpdates.length === 0) return null
 
-          const headers = streamHeaders.get(streamName) ?? []
-          const primaryKey = primaryKeys.get(streamName)
-          let appends = bufferedAppends.slice()
-          let existingRowCount = 0
+            const sheetId = sheetIds.get(streamName)
+            if (sheetId === undefined) return null
 
-          // Refresh from the sheet to (a) dedup against rows written by prior
-          // write() calls or Temporal retries and (b) compute the starting row
-          // number for new appends (needed because `appendCells` replies don't
-          // carry ranges).
-          if (
-            primaryKey &&
-            primaryKey.length > 0 &&
-            headers.length > 0 &&
-            appends.some((e) => e.rowKey)
-          ) {
-            const readStart = Date.now()
-            let converted = 0
-            try {
-              const allRows = await readSheet(sheets, spreadsheetId, streamName)
-              existingRowCount = allRows.length
-              const freshMap = await buildRowMap(
-                sheets,
-                spreadsheetId,
-                streamName,
-                headers,
-                primaryKey
-              )
+            const headers = streamHeaders.get(streamName) ?? []
+            const primaryKey = primaryKeys.get(streamName)
+            let appends = bufferedAppends.slice()
+            let existingRowCount = 0
 
-              const remaining: typeof appends = []
-              for (const entry of appends) {
-                const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
-                if (existing !== undefined) {
-                  bufferedUpdates.push({ rowNumber: existing, values: entry.row })
-                  converted++
-                } else {
-                  remaining.push(entry)
+            // Refresh from the sheet to (a) dedup against rows written by prior
+            // write() calls or Temporal retries and (b) compute the starting
+            // row number for new appends. Single `readSheet` feeds both
+            // `existingRowCount` and the local rowMap (pure, no second HTTP).
+            if (
+              primaryKey &&
+              primaryKey.length > 0 &&
+              headers.length > 0 &&
+              appends.some((e) => e.rowKey)
+            ) {
+              const readStart = Date.now()
+              let converted = 0
+              try {
+                const allRows = await readSheet(sheets, spreadsheetId, streamName)
+                existingRowCount = allRows.length
+                const freshMap = buildRowMapFromRows(allRows, headers, primaryKey)
+
+                const remaining: typeof appends = []
+                for (const entry of appends) {
+                  const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
+                  if (existing !== undefined) {
+                    bufferedUpdates.push({ rowNumber: existing, values: entry.row })
+                    converted++
+                  } else {
+                    remaining.push(entry)
+                  }
                 }
+                appends = remaining
+                console.error(
+                  `[google-sheets] readSheet+buildRowMap(${streamName}): ${existingRowCount} rows, ${freshMap.size} keys, converted ${converted} appends→updates in ${Date.now() - readStart}ms`
+                )
+              } catch (err) {
+                console.error(
+                  `[google-sheets] readSheet+buildRowMap(${streamName}) failed in ${Date.now() - readStart}ms: ${err instanceof Error ? err.message : String(err)}`
+                )
+                // Sheet read failed — proceed with append (best effort)
               }
-              appends = remaining
-              console.error(
-                `[google-sheets] readSheet+buildRowMap(${streamName}): ${existingRowCount} rows, ${freshMap.size} keys, converted ${converted} appends→updates in ${Date.now() - readStart}ms`
-              )
-            } catch (err) {
-              console.error(
-                `[google-sheets] readSheet+buildRowMap(${streamName}) failed in ${Date.now() - readStart}ms: ${err instanceof Error ? err.message : String(err)}`
-              )
-              // Sheet read failed — proceed with append (best effort)
             }
-          }
 
-          // Sort appends by rowKey so rows land in a deterministic order on
-          // the sheet regardless of the order the source emitted them (and
-          // regardless of interleaving from concurrent stream generators in
-          // the source). Keyless appends are grouped to the front in their
-          // insertion order — JavaScript's Array.prototype.sort is stable
-          // since ES2019. This is sorted here (before building opsByStream
-          // AND before stashing into appendBuffers) so that the row_assignments
-          // computation still maps each append's rowKey to its final rowNumber.
-          appends.sort((a, b) => {
-            const ak = a.rowKey ?? ''
-            const bk = b.rowKey ?? ''
-            if (ak === bk) return 0
-            return ak < bk ? -1 : 1
+            // Sort appends by rowKey so rows land in a deterministic order on
+            // the sheet regardless of the order the source emitted them (and
+            // regardless of interleaving from concurrent stream generators in
+            // the source). Keyless appends are grouped to the front in their
+            // insertion order — JavaScript's Array.prototype.sort is stable
+            // since ES2019. This is sorted here (before building opsByStream
+            // AND before stashing into appendBuffers) so that the row_assignments
+            // computation still maps each append's rowKey to its final rowNumber.
+            appends.sort((a, b) => {
+              const ak = a.rowKey ?? ''
+              const bk = b.rowKey ?? ''
+              if (ak === bk) return 0
+              return ak < bk ? -1 : 1
+            })
+
+            return {
+              streamName,
+              ops: {
+                sheetId,
+                updates: bufferedUpdates,
+                appends: appends.map((entry) => entry.row),
+                existingRowCount,
+              },
+              sortedAppends: appends,
+            }
           })
+        )
 
-          opsByStream.set(streamName, {
-            sheetId,
-            updates: bufferedUpdates,
-            appends: appends.map((entry) => entry.row),
-            existingRowCount,
-          })
-
+        // Serial assembly of the final maps — order is preserved from
+        // streamNames, so downstream row_assignments tracking behaves the
+        // same as the previous sequential implementation.
+        for (const result of perStreamResults) {
+          if (result === null) continue
+          opsByStream.set(result.streamName, result.ops)
           // Stash the (deduped, sorted) append entries so we can emit
           // row_assignments after applyBatch returns the start row per stream.
-          appendBuffers.set(streamName, appends)
+          appendBuffers.set(result.streamName, result.sortedAppends)
         }
 
         if (opsByStream.size === 0) {

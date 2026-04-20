@@ -14,24 +14,57 @@ const MAX_RETRIES = 5
 
 async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
   let delay = BACKOFF_BASE_MS
+  const overallStart = Date.now()
+  if (label) {
+    console.error(`[google-sheets] withRetry(${label}) start`)
+  }
   for (let attempt = 0; ; attempt++) {
+    const attemptStart = Date.now()
     try {
-      return await fn()
+      const result = await fn()
+      if (label) {
+        const attemptMs = Date.now() - attemptStart
+        const totalMs = Date.now() - overallStart
+        if (attempt === 0) {
+          console.error(`[google-sheets] withRetry(${label}) OK first-try in ${attemptMs}ms`)
+        } else {
+          console.error(
+            `[google-sheets] withRetry(${label}) OK after ${attempt + 1} attempts (last=${attemptMs}ms, total=${totalMs}ms)`
+          )
+        }
+      }
+      return result
     } catch (err: unknown) {
-      const status =
-        err instanceof Error && 'code' in err ? (err as { code: number }).code : undefined
+      const attemptMs = Date.now() - attemptStart
+      const rawCode =
+        err instanceof Error && 'code' in err
+          ? (err as { code?: number | string }).code
+          : undefined
+      const status = typeof rawCode === 'number' ? rawCode : undefined
       const isRateLimit = status === 429
       const isServerError = status !== undefined && status >= 500
+      const retriable = isRateLimit || isServerError
+      const errMsg = err instanceof Error ? err.message : String(err)
 
-      if ((isRateLimit || isServerError) && attempt < MAX_RETRIES) {
+      if (retriable && attempt < MAX_RETRIES) {
         if (label) {
           console.error(
-            `[google-sheets] withRetry(${label}) retry attempt=${attempt + 1}/${MAX_RETRIES} status=${status} backing off ${delay}ms`
+            `[google-sheets] withRetry(${label}) retry attempt=${attempt + 1}/${MAX_RETRIES} status=${status} attempt_ms=${attemptMs} backing_off_ms=${delay} err=${errMsg}`
           )
         }
         await new Promise((r) => setTimeout(r, delay))
         delay = Math.min(delay * 2, BACKOFF_MAX_MS)
         continue
+      }
+
+      if (label) {
+        const totalMs = Date.now() - overallStart
+        const reason = retriable
+          ? `exhausted ${MAX_RETRIES} retries`
+          : `non-retriable (status=${rawCode ?? 'none'})`
+        console.error(
+          `[google-sheets] withRetry(${label}) FAIL ${reason} after ${attempt + 1} attempts (last=${attemptMs}ms, total=${totalMs}ms) err=${errMsg}`
+        )
       }
       throw err
     }
@@ -227,15 +260,6 @@ export async function createIntroSheet(
     }
   }
 
-  // DEBUG: the per-stream `COUNTUNIQUE('{name}'!A2:A)` /
-  // `COUNTA(...) - COUNTUNIQUE(...)` formulas cause Google Sheets to
-  // recalculate across every data tab's full column A on every write,
-  // which is suspected of dominating flush latency. Set to `false` to
-  // restore the stats. Takes effect only on NEWLY-CREATED spreadsheets —
-  // existing sheets keep whatever formulas they have until the tab is
-  // reset manually.
-  const DEBUG_SKIP_OVERVIEW_FORMULAS = true
-
   const now = new Date().toISOString()
   const rows: string[][] = [
     ['Stripe Sync Engine'],
@@ -243,19 +267,12 @@ export async function createIntroSheet(
     ['This spreadsheet is managed by Stripe Sync Engine.'],
     ['Data is synced automatically from your Stripe account.'],
     [''],
-    [
-      'Synced streams:',
-      '',
-      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : 'Unique rows',
-      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : 'Duplicate rows',
-    ],
+    ['Synced streams:', '', 'Unique rows', 'Duplicate rows'],
     ...streamNames.map((name) => [
       `  • ${name}`,
       '',
-      DEBUG_SKIP_OVERVIEW_FORMULAS ? '' : `=COUNTUNIQUE('${name}'!A2:A)`,
-      DEBUG_SKIP_OVERVIEW_FORMULAS
-        ? ''
-        : `=COUNTA('${name}'!A2:A)-COUNTUNIQUE('${name}'!A2:A)`,
+      `=COUNTUNIQUE('${name}'!A2:A)`,
+      `=COUNTA('${name}'!A2:A)-COUNTUNIQUE('${name}'!A2:A)`,
     ]),
     [''],
     [`Last setup: ${now}`],
@@ -371,25 +388,24 @@ export async function deleteSpreadsheet(
 }
 
 /**
- * Build a map from serialized primary key → 1-based row number by reading
- * existing sheet data and extracting only the primary key columns.
+ * Pure builder: serialized primary key → 1-based row number, derived from
+ * already-fetched sheet rows. Use this after a single `readSheet` call when
+ * you also want the row data for other purposes — avoids the double-read
+ * that `buildRowMap` would otherwise incur.
  *
  * `headers` must already be known (from `readHeaderRow` or first-record discovery).
  */
-export async function buildRowMap(
-  sheets: sheets_v4.Sheets,
-  spreadsheetId: string,
-  sheetName: string,
+export function buildRowMapFromRows(
+  allRows: unknown[][],
   headers: string[],
   primaryKey: string[][]
-): Promise<Map<string, number>> {
+): Map<string, number> {
   const pkFields = primaryKey.map((path) => path[0])
   const pkIndices = pkFields.map((field) => headers.indexOf(field))
   if (pkIndices.some((i) => i === -1)) return new Map()
 
-  const allRows = await readSheet(sheets, spreadsheetId, sheetName)
-  // Skip header row (index 0), data starts at index 1
   const map = new Map<string, number>()
+  // Skip header row (index 0), data starts at index 1
   for (let i = 1; i < allRows.length; i++) {
     const row = allRows[i] as string[]
     const data: Record<string, unknown> = {}
@@ -401,6 +417,22 @@ export async function buildRowMap(
     map.set(rowKey, i + 1) // 1-based: row 1 = headers, so data row at index i → row i+1
   }
   return map
+}
+
+/**
+ * Read the sheet and build a map from serialized primary key → 1-based row
+ * number. Thin wrapper over `readSheet` + `buildRowMapFromRows`. Prefer
+ * `buildRowMapFromRows` directly if you already have the rows in hand.
+ */
+export async function buildRowMap(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  sheetName: string,
+  headers: string[],
+  primaryKey: string[][]
+): Promise<Map<string, number>> {
+  const allRows = await readSheet(sheets, spreadsheetId, sheetName)
+  return buildRowMapFromRows(allRows, headers, primaryKey)
 }
 
 /** Read all values from a sheet tab. Used for verification in tests. */
@@ -431,14 +463,14 @@ export interface StreamBatchOps {
 // separated by `\n` which is NOT configurable on `pasteData` — so we must
 // sanitize any `\n`, `\r`, or `PASTE_COL_DELIMITER` that appears inside cell
 // values to keep the paste parser from misaligning columns.
-const PASTE_COL_DELIMITER = '\x1f'
+export const PASTE_COL_DELIMITER = '\x1f'
 const PASTE_SANITIZE_RE = /[\n\r\x1f]/g
 
 function sanitizeForPaste(value: string): string {
   return value.replace(PASTE_SANITIZE_RE, ' ')
 }
 
-function rowsToTsv(rows: string[][]): string {
+export function rowsToTsv(rows: string[][]): string {
   let out = ''
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r]
@@ -463,22 +495,21 @@ function describeError(err: unknown): string {
 }
 
 /**
- * Flush buffered updates and appends across ALL streams in a single
- * `spreadsheets.batchUpdate` HTTP request. The request body is an ordered
- * list:
+ * Flush buffered updates and appends across ALL streams. The call flow is:
  *
- *   1. `appendDimension` requests — only for dimensions that don't already
- *      fit the upcoming writes.
- *   2. `pasteData` requests with `type: 'PASTE_VALUES'` and a `\x1f`-delimited
- *      string payload — one per contiguous update group and one per append
- *      group. `pasteData` is the fastest server-side write primitive: the
- *      payload is a single raw TSV string (no JSON array brackets or
- *      `CellData` wrapping) and the paste path skips per-cell formula
- *      evaluation. Google processes requests in order, so grids are always
- *      large enough by the time the paste runs.
- *
- * Structural reads (`gridProperties` + column-A row counts for non-PK
- * streams) run in parallel as Phase 1 before the write.
+ *   Phase 1 (parallel structural reads) — `gridProperties` for every sheet,
+ *     plus column-A row counts for any non-PK stream with appends.
+ *   Phase 3a (grid expansion, conditional) — ONE `spreadsheets.batchUpdate`
+ *     with only `appendDimension` requests, fired ONLY when some sheet's
+ *     grid doesn't already fit. Skipped entirely when grids are roomy.
+ *   Phase 3b (parallel data writes) — `pasteData` requests (one per update
+ *     group + one per append stream) are split into up to
+ *     `PARALLEL_BATCH_COUNT` chunks and fired concurrently via
+ *     `Promise.all`. Each chunk is its own `spreadsheets.batchUpdate` HTTP
+ *     call. Wall-clock approaches the slowest single chunk rather than the
+ *     sum of all serialized work. `pasteData` with `PASTE_VALUES` sends raw
+ *     `\x1f`-delimited TSV strings — the cheapest wire payload available,
+ *     and server-side it skips formula evaluation and cell-level parsing.
  *
  * Returns the 1-based `appendStartRow` per stream so the caller can emit
  * row_key → row_number assignments.
@@ -562,14 +593,22 @@ export async function applyBatch(
     `[google-sheets] phase1 (reads) done: ${probes.length} parallel calls in ${Date.now() - phase1Start}ms (wall clock, max of all probes)`
   )
 
-  // ── Phase 2 (build one combined `requests[]` array) ─────────────
-  // Everything — grid expansion AND data — is packed into one
-  // `spreadsheets.batchUpdate` call. Data writes use `pasteData` with a raw
-  // `\x1f`-delimited string per range, which has a much smaller wire payload
-  // than `updateCells` (no `CellData` wrapping) and a much faster server-side
-  // paste path than any values.* API.
+  // ── Phase 2 (build payloads) ────────────────────────────────────
+  // Two output containers:
+  //   `expansionRequests` — structural `appendDimension` requests that MUST
+  //     complete before the data writes (the grid has to fit first).
+  //   `dataRequests` — pasteData requests for updates + appends. These can
+  //     be split into multiple parallel `spreadsheets.batchUpdate` HTTP calls
+  //     since pasteData operations target distinct, non-overlapping ranges.
+  // Cap on parallel HTTP fan-out for the data write. Also used in Phase 2
+  // to row-slice each stream's appends so a single-stream flush can still
+  // fan out across multiple parallel `batchUpdate` calls instead of
+  // bottlenecking on one giant pasteData.
+  const PARALLEL_BATCH_COUNT = 4
+
   const appendStartRows = new Map<string, { appendStartRow: number }>()
-  const requests: sheets_v4.Schema$Request[] = []
+  const expansionRequests: sheets_v4.Schema$Request[] = []
+  const dataRequests: sheets_v4.Schema$Request[] = []
   const EXPAND_ROW_BUFFER = 1000
 
   // 2a) appendDimension requests — only for sheets whose grid doesn't already fit
@@ -587,7 +626,7 @@ export async function applyBatch(
     if (!current) continue // metadata missing — best-effort; fall through and hope grid fits
 
     if (neededRows > current.rowCount) {
-      requests.push({
+      expansionRequests.push({
         appendDimension: {
           sheetId: ops.sheetId,
           dimension: 'ROWS',
@@ -596,7 +635,7 @@ export async function applyBatch(
       })
     }
     if (neededCols > current.columnCount) {
-      requests.push({
+      expansionRequests.push({
         appendDimension: {
           sheetId: ops.sheetId,
           dimension: 'COLUMNS',
@@ -605,23 +644,24 @@ export async function applyBatch(
       })
     }
   }
-  const expansionCount = requests.length
+  const expansionCount = expansionRequests.length
   console.error(
     `[google-sheets] phase2a (expansions): ${expansionCount} appendDimension requests in ${Date.now() - phase2aStart}ms`
   )
 
-  // 2b) pasteData requests for contiguous update groups (one per group)
+  // 2b) pasteData requests for contiguous update groups (one per group).
   //
   // DEBUG: updates are temporarily disabled to isolate the append path while
-  // investigating flush performance. Buffered updates are counted (for logging
-  // parity) but NOT pushed into `requests[]`. Flip `DEBUG_SKIP_UPDATES` to
-  // `false` to re-enable. Remove this guard when done debugging.
+  // investigating flush performance. Buffered updates are still counted (for
+  // logging parity) but NOT pushed into `dataRequests[]`. Flip
+  // `DEBUG_SKIP_UPDATES` to `false` to re-enable, or remove the guard when
+  // done debugging.
   const DEBUG_SKIP_UPDATES = true
   const phase2bStart = Date.now()
+  let updateGroupCount = 0
   let updateRowCount = 0
   let updateCellCount = 0
   let updateBytesEstimate = 0
-  let updateGroupCount = 0
   let skippedUpdateGroups = 0
   for (const [, ops] of opsByStream) {
     if (ops.updates.length === 0) continue
@@ -644,7 +684,7 @@ export async function applyBatch(
       if (DEBUG_SKIP_UPDATES) {
         skippedUpdateGroups++
       } else {
-        requests.push({
+        dataRequests.push({
           pasteData: {
             coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
             data: rowsToTsv(groupRows),
@@ -668,8 +708,12 @@ export async function applyBatch(
     )
   }
 
-  // 2c) pasteData request for appends (one per stream, targeting
-  //     rowIndex = existingRowCount)
+  // 2c) pasteData requests for appends. To enable 4-way parallel dispatch
+  //     in Phase 3b even on single-stream flushes, slice each stream's
+  //     append block into up to `PARALLEL_BATCH_COUNT` row-ranges (disjoint,
+  //     contiguous). Each slice targets its own `coordinate.rowIndex`, so
+  //     Google writes them to non-overlapping rows and they can run fully
+  //     in parallel with no data loss.
   const phase2cStart = Date.now()
   let appendGroupCount = 0
   let appendRowCount = 0
@@ -682,50 +726,112 @@ export async function applyBatch(
       appendCellCount += row.length
       for (const v of row) appendBytesEstimate += v.length
     }
-    requests.push({
-      pasteData: {
-        coordinate: { sheetId: ops.sheetId, rowIndex: startRow - 1, columnIndex: 0 },
-        data: rowsToTsv(ops.appends),
-        delimiter: PASTE_COL_DELIMITER,
-        type: 'PASTE_VALUES',
-      },
-    })
+    const sliceSize = Math.max(1, Math.ceil(ops.appends.length / PARALLEL_BATCH_COUNT))
+    for (let offset = 0; offset < ops.appends.length; offset += sliceSize) {
+      const slice = ops.appends.slice(offset, offset + sliceSize)
+      dataRequests.push({
+        pasteData: {
+          coordinate: {
+            sheetId: ops.sheetId,
+            rowIndex: startRow - 1 + offset,
+            columnIndex: 0,
+          },
+          data: rowsToTsv(slice),
+          delimiter: PASTE_COL_DELIMITER,
+          type: 'PASTE_VALUES',
+        },
+      })
+      appendGroupCount++
+    }
     appendStartRows.set(streamName, { appendStartRow: startRow })
     appendRowCount += ops.appends.length
-    appendGroupCount++
   }
   console.error(
     `[google-sheets] phase2c (appends): ${appendGroupCount} pasteData groups, ${appendRowCount} rows, ${appendCellCount} cells, ~${Math.round(appendBytesEstimate / 1024)}KB values in ${Date.now() - phase2cStart}ms`
   )
 
-  if (requests.length === 0) return appendStartRows
+  if (expansionRequests.length === 0 && dataRequests.length === 0) return appendStartRows
 
   const totalCells = updateCellCount + appendCellCount
   const totalBytesEstimate = updateBytesEstimate + appendBytesEstimate
+
+  // ── Phase 3a (grid expansion — only when needed, runs first) ────
+  if (expansionRequests.length > 0) {
+    const expandStart = Date.now()
+    try {
+      const res = await withRetry(
+        () =>
+          sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: { requests: expansionRequests },
+          }),
+        'gridExpansion'
+      )
+      console.error(
+        `[google-sheets] gridExpansion OK: status=${res.status} requests=${expansionRequests.length} elapsed=${Date.now() - expandStart}ms`
+      )
+    } catch (err) {
+      console.error(
+        `[google-sheets] gridExpansion FAILED after ${Date.now() - expandStart}ms (${expansionRequests.length} requests): ${describeError(err)}`
+      )
+      throw err
+    }
+  }
+
+  // ── Phase 3b (parallel data writes) ─────────────────────────────
+  // Split the pasteData requests across up to PARALLEL_BATCH_COUNT HTTP
+  // calls, fired concurrently via Promise.all. Google Sheets happily
+  // accepts several concurrent batchUpdate calls against the same
+  // spreadsheet — each one targets distinct rows, no ordering required
+  // between them. Total wall-clock drops toward the slowest individual
+  // call instead of the sum of all serialized work.
+  if (dataRequests.length === 0) return appendStartRows
+
+  const chunkSize = Math.ceil(dataRequests.length / PARALLEL_BATCH_COUNT)
+  const chunks: sheets_v4.Schema$Request[][] = []
+  for (let i = 0; i < dataRequests.length; i += chunkSize) {
+    chunks.push(dataRequests.slice(i, i + chunkSize))
+  }
+
   console.error(
-    `[google-sheets] batchUpdate dispatching: streams=${opsByStream.size} requests=${requests.length} (expansions=${expansionCount}, updateRows=${updateRowCount}, appendRows=${appendRowCount}) cells=${totalCells} values~${Math.round(totalBytesEstimate / 1024)}KB`
+    `[google-sheets] batchUpdate dispatching: streams=${opsByStream.size} total_requests=${dataRequests.length} split_across=${chunks.length} parallel_calls (expansions_done=${expansionCount}, updateRows=${updateRowCount}, appendRows=${appendRowCount}) cells=${totalCells} values~${Math.round(totalBytesEstimate / 1024)}KB`
   )
 
-  // ── Phase 3 (single HTTP call — expansion + data together) ──────
   const httpStart = Date.now()
   try {
-    const res = await withRetry(
-      () =>
-        sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: { requests },
-        }),
-      'batchUpdate'
+    await Promise.all(
+      chunks.map(async (chunk, idx) => {
+        const chunkStart = Date.now()
+        const chunkLabel = `batchUpdate[${idx + 1}/${chunks.length}]`
+        try {
+          const res = await withRetry(
+            () =>
+              sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: { requests: chunk },
+              }),
+            chunkLabel
+          )
+          const replyCount = res.data.replies?.length ?? 0
+          console.error(
+            `[google-sheets] ${chunkLabel} OK: status=${res.status} requests=${chunk.length} replies=${replyCount} elapsed=${Date.now() - chunkStart}ms`
+          )
+        } catch (err) {
+          console.error(
+            `[google-sheets] ${chunkLabel} FAILED after ${Date.now() - chunkStart}ms (${chunk.length} requests): ${describeError(err)}`
+          )
+          throw err
+        }
+      })
     )
     const httpElapsed = Date.now() - httpStart
-    const replyCount = res.data.replies?.length ?? 0
     console.error(
-      `[google-sheets] batchUpdate OK: status=${res.status} requests=${requests.length} replies=${replyCount} http=${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms`
+      `[google-sheets] batchUpdate OK (all parallel): chunks=${chunks.length} total_requests=${dataRequests.length} wall_clock=${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms`
     )
   } catch (err) {
     const httpElapsed = Date.now() - httpStart
     console.error(
-      `[google-sheets] batchUpdate FAILED http=${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms (streams=${opsByStream.size} requests=${requests.length} expansions=${expansionCount} updateRows=${updateRowCount} appendRows=${appendRowCount} cells=${totalCells}): ${describeError(err)}`
+      `[google-sheets] batchUpdate FAILED (parallel) after ${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms (chunks=${chunks.length} total_requests=${dataRequests.length} expansions=${expansionCount} updateRows=${updateRowCount} appendRows=${appendRowCount} cells=${totalCells}): ${describeError(err)}`
     )
     throw err
   }
