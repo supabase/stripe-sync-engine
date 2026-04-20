@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, tapLog, persistState, pipe, takeLimits } from './pipeline.js'
-import type { StateStore } from './state-store.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
 
 vi.mock('../logger.js', () => ({
   log: {
@@ -369,123 +368,6 @@ describe('filterType()', () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// persistState()
-// ---------------------------------------------------------------------------
-
-describe('persistState()', () => {
-  it('calls store.set for stream state messages', async () => {
-    const calls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        calls.push({ stream, data })
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toEqual([{ stream: 'customers', data: { cursor: 'abc' } }])
-  })
-
-  it('yields all messages through unchanged', async () => {
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async () => {},
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
-      },
-      { type: 'log', log: { level: 'info', message: 'done' } },
-    ]
-    const result = await drain(persistState(store)(toAsync(msgs)))
-    expect(result).toHaveLength(2)
-    expect(result[0]).toMatchObject({ type: 'source_state' })
-    expect(result[1]).toMatchObject({ type: 'log' })
-  })
-
-  it('does not call store.set for non-state messages', async () => {
-    const calls: Array<unknown> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (...args) => {
-        calls.push(args)
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      { type: 'log', log: { level: 'info', message: 'hello' } },
-      {
-        type: 'connection_status',
-        connection_status: { status: 'failed', message: 'oops' },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toHaveLength(0)
-  })
-
-  it('calls store.setGlobal for global state messages', async () => {
-    const globalCalls: unknown[] = []
-    const setCalls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        setCalls.push({ stream, data })
-      },
-      setGlobal: async (data) => {
-        globalCalls.push(data)
-      },
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'global', data: { events_cursor: 'evt_123' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(globalCalls).toEqual([{ events_cursor: 'evt_123' }])
-    expect(setCalls).toHaveLength(0)
-  })
-
-  it('persists multiple state messages in order', async () => {
-    const calls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        calls.push({ stream, data })
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'invoices', data: { cursor: '2' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '3' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toEqual([
-      { stream: 'customers', data: { cursor: '1' } },
-      { stream: 'invoices', data: { cursor: '2' } },
-      { stream: 'customers', data: { cursor: '3' } },
-    ])
-  })
-})
 
 // ---------------------------------------------------------------------------
 // takeLimits()

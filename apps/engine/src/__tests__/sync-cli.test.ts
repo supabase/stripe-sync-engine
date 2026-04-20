@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createEngine = vi.fn()
 const createRemoteEngine = vi.fn()
-const readonlyStateStore = vi.fn()
 const render = vi.fn(() => ({
   rerender: vi.fn(),
   unmount: vi.fn(),
@@ -11,10 +10,6 @@ const render = vi.fn(() => ({
 vi.mock('../lib/index.js', () => ({
   createEngine,
   createRemoteEngine,
-}))
-
-vi.mock('../lib/state-store.js', () => ({
-  readonlyStateStore,
 }))
 
 vi.mock('../cli/source-config-cache.js', () => ({
@@ -34,12 +29,6 @@ describe('sync cli', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-
-    readonlyStateStore.mockReturnValue({
-      get: vi.fn(async () => undefined),
-      set: vi.fn(),
-      setGlobal: vi.fn(),
-    })
 
     const localEngine = {
       pipeline_setup: async function* () {},

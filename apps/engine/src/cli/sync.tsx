@@ -1,7 +1,6 @@
 import React from 'react'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
-import { readonlyStateStore, type StateStore } from '../lib/state-store.js'
 import { createEngine, createRemoteEngine, type ConnectorResolver } from '../lib/index.js'
 import {
   type PipelineConfig,
@@ -113,10 +112,13 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
 
       // State store
       const stateMode = args.noState ? 'none' : args.state
-      const store: StateStore & { close?(): Promise<void> } =
-        stateMode === 'none'
-          ? readonlyStateStore()
-          : await getPostgresStateStore(postgresUrl, schema)
+      const noopStore = {
+        get: async () => undefined,
+        set: async () => {},
+        setGlobal: async () => {},
+      }
+      const store: typeof noopStore & { close?(): Promise<void> } =
+        stateMode === 'none' ? noopStore : await getPostgresStateStore(postgresUrl, schema)
       const initialState = await store.get()
 
       try {
@@ -187,5 +189,10 @@ async function getPostgresStateStore(connectionString: string, schema: string) {
   const pkg = await import('@stripe/sync-state-postgres')
   const stateConfig = { connection_string: connectionString, schema }
   await pkg.setupStateStore(stateConfig)
-  return pkg.createStateStore(stateConfig) as StateStore & { close(): Promise<void> }
+  return pkg.createStateStore(stateConfig) as {
+    get(): Promise<Record<string, unknown> | undefined>
+    set(stream: string, data: unknown): Promise<void>
+    setGlobal(data: unknown): Promise<void>
+    close(): Promise<void>
+  }
 }

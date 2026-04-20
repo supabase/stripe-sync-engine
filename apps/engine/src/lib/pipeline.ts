@@ -4,7 +4,6 @@ import type {
   EofMessage,
   Message,
 } from '@stripe/sync-protocol'
-import type { StateStore } from './state-store.js'
 import { withoutLogCapture } from '@stripe/sync-logger'
 import { log } from '../logger.js'
 
@@ -101,28 +100,6 @@ export function filterType<T extends Message['type']>(
   }
 }
 
-// MARK: - persistState
-
-/**
- * Tap on DestinationOutput: persists state messages via the provided store,
- * then passes all messages through unchanged.
- */
-export function persistState(
-  store: StateStore
-): (msgs: AsyncIterable<DestinationOutput>) => AsyncIterable<DestinationOutput> {
-  return async function* (messages) {
-    for await (const msg of messages) {
-      if (msg.type === 'source_state') {
-        if (msg.source_state.state_type === 'global') {
-          await store.setGlobal(msg.source_state.data)
-        } else {
-          await store.set(msg.source_state.stream, msg.source_state.data)
-        }
-      }
-      yield msg
-    }
-  }
-}
 
 // MARK: - takeLimits
 
