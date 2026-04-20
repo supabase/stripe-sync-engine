@@ -549,7 +549,7 @@ describe('pipeline CRUD', () => {
     )
   })
 
-  it('sync with no_state does not read or persist sync_state', async () => {
+  it('sync with reset_state does not read or persist sync_state', async () => {
     const pipelineStore = memoryPipelineStore()
     const initialSyncState = {
       source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
@@ -603,7 +603,7 @@ describe('pipeline CRUD', () => {
       engineUrl,
     })
 
-    const res = await syncApp.request('/pipelines/pipe_sync/sync?no_state=true', {
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?reset_state=true', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ streams: [{ name: 'customers' }] }),
@@ -611,10 +611,16 @@ describe('pipeline CRUD', () => {
     expect(res.status).toBe(200)
     await res.text()
 
+    // reset_state means don't read stored state — engine sees no state
     expect(seenState).toBeUndefined()
 
+    // But ending state IS still persisted back
     const updated = await pipelineStore.get('pipe_sync')
-    expect(updated.sync_state).toEqual(initialSyncState)
+    expect(updated.sync_state).toEqual({
+      source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    })
 
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve()))

@@ -58,9 +58,9 @@ describe('sync cli', () => {
 
     await command.run?.({
       args: {
-        stripeApiKey: 'sk_test_123',
-        postgresUrl: 'postgresql://localhost/test',
-        postgresSchema: 'public',
+        'stripe-api-key': 'sk_test_123',
+        'postgres-url': 'postgresql://localhost/test',
+        'postgres-schema': 'public',
         plain: true,
       } as never,
     })
@@ -69,18 +69,18 @@ describe('sync cli', () => {
     expect(createRemoteEngine).not.toHaveBeenCalled()
   })
 
-  it('uses a remote engine only when engineUrl is provided', async () => {
+  it('uses a remote engine only when engine-url is provided', async () => {
     const { createSyncCmd } = await import('../cli/sync.js')
     const resolver = { resolveSource: vi.fn(), resolveDestination: vi.fn() }
     const command = createSyncCmd(Promise.resolve(resolver as never))
 
     await command.run?.({
       args: {
-        stripeApiKey: 'sk_test_123',
-        postgresUrl: 'postgresql://localhost/test',
-        postgresSchema: 'public',
+        'stripe-api-key': 'sk_test_123',
+        'postgres-url': 'postgresql://localhost/test',
+        'postgres-schema': 'public',
         plain: true,
-        engineUrl: 'http://localhost:4010',
+        'engine-url': 'http://localhost:4010',
       } as never,
     })
 

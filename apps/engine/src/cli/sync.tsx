@@ -16,24 +16,24 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
     },
     args: {
       // Source (Stripe)
-      stripeApiKey: {
+      'stripe-api-key': {
         type: 'string',
         description: 'Stripe API key (or STRIPE_API_KEY env)',
       },
-      stripeBaseUrl: {
+      'stripe-base-url': {
         type: 'string',
         description: 'Stripe API base URL (default: https://api.stripe.com)',
       },
-      stripeRateLimit: {
+      'stripe-rate-limit': {
         type: 'string',
         description: 'Max Stripe API requests per second (default: 20 live, 10 test)',
       },
       // Destination (Postgres)
-      postgresUrl: {
+      'postgres-url': {
         type: 'string',
         description: 'Postgres connection string (or POSTGRES_URL env)',
       },
-      postgresSchema: {
+      'postgres-schema': {
         type: 'string',
         default: 'public',
         description: 'Target Postgres schema (default: public)',
@@ -43,15 +43,15 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
         type: 'string',
         description: 'Comma-separated stream names (default: all)',
       },
-      backfillLimit: {
+      'backfill-limit': {
         type: 'string',
         description: 'Max records to backfill per stream',
       },
-      timeLimit: {
+      'time-limit': {
         type: 'string',
         description: 'Stop after N seconds',
       },
-      engineUrl: {
+      'engine-url': {
         type: 'string',
         description: 'URL of a running sync-engine server (skips spawning a subprocess)',
       },
@@ -67,20 +67,20 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       },
     },
     async run({ args }) {
-      const stripeApiKey = args.stripeApiKey || process.env.STRIPE_API_KEY
-      const postgresUrl = args.postgresUrl || process.env.POSTGRES_URL
+      const stripeApiKey = args['stripe-api-key'] || process.env.STRIPE_API_KEY
+      const postgresUrl = args['postgres-url'] || process.env.POSTGRES_URL
       if (!stripeApiKey) throw new Error('Missing --stripe-api-key or STRIPE_API_KEY env')
       if (!postgresUrl) throw new Error('Missing --postgres-url or POSTGRES_URL env')
 
-      const schema = args.postgresSchema
-      const backfillLimit = args.backfillLimit ? parseInt(args.backfillLimit) : undefined
-      const timeLimit = args.timeLimit ? parseInt(args.timeLimit) : undefined
+      const schema = args['postgres-schema']
+      const backfillLimit = args['backfill-limit'] ? parseInt(args['backfill-limit']) : undefined
+      const timeLimit = args['time-limit'] ? parseInt(args['time-limit']) : undefined
 
       const stripeConfig: Record<string, unknown> = {
         api_key: stripeApiKey,
       }
-      if (args.stripeBaseUrl) stripeConfig.base_url = args.stripeBaseUrl
-      if (args.stripeRateLimit) stripeConfig.rate_limit = parseInt(args.stripeRateLimit)
+      if (args['stripe-base-url']) stripeConfig.base_url = args['stripe-base-url']
+      if (args['stripe-rate-limit']) stripeConfig.rate_limit = parseInt(args['stripe-rate-limit'])
       if (backfillLimit) stripeConfig.backfill_limit = backfillLimit
       if (args.websocket) stripeConfig.websocket = true
 
@@ -95,8 +95,8 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
           : undefined,
       }
 
-      const engine = args.engineUrl
-        ? createRemoteEngine(args.engineUrl)
+      const engine = args['engine-url']
+        ? createRemoteEngine(args['engine-url'])
         : await createEngine(await resolverPromise)
 
       // Run connector setup and apply any config updates before syncing.

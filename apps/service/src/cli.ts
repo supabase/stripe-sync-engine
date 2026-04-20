@@ -341,9 +341,9 @@ export async function createProgram() {
       meta: { name: 'sync', description: 'Run sync for a pipeline' },
       args: {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
-        stateLimit: { type: 'string', description: 'Max state messages before stopping' },
-        timeLimit: { type: 'string', description: 'Stop after N seconds' },
-        syncRunId: {
+        'state-limit': { type: 'string', description: 'Max state messages before stopping' },
+        'time-limit': { type: 'string', description: 'Stop after N seconds' },
+        'sync-run-id': {
           type: 'string',
           description: 'Sync run identifier (resumes or starts fresh)',
         },
@@ -351,14 +351,14 @@ export async function createProgram() {
           type: 'string',
           description: 'Stream override as comma-separated names or JSON array',
         },
-        engineUrl: {
+        'engine-url': {
           type: 'string',
           description: 'Sync engine URL (overrides ENGINE_URL env var)',
         },
-        state: {
+        'reset-state': {
           type: 'boolean',
-          default: true,
-          description: 'Resume from and persist sync state (--no-state disables this)',
+          default: false,
+          description: 'Ignore persisted sync state and start fresh',
         },
         plain: {
           type: 'boolean',
@@ -367,18 +367,18 @@ export async function createProgram() {
         },
       },
       async run({ args }) {
-        if (args.engineUrl) {
-          engineUrl = args.engineUrl
+        if (args['engine-url']) {
+          engineUrl = args['engine-url']
         }
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,
           pipelineId: args.id as string,
-          stateLimit: args.stateLimit ? parseInt(args.stateLimit) : undefined,
-          timeLimit: args.timeLimit ? parseInt(args.timeLimit) : undefined,
-          syncRunId: args.syncRunId,
+          stateLimit: args['state-limit'] ? parseInt(args['state-limit']) : undefined,
+          timeLimit: args['time-limit'] ? parseInt(args['time-limit']) : undefined,
+          syncRunId: args['sync-run-id'],
           streams: parseStreamsArg(args.streams),
-          useState: args.state !== false,
+          resetState: args['reset-state'] === true,
           plain: args.plain || !process.stderr.isTTY,
         })
       },

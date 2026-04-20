@@ -15,12 +15,12 @@ export interface PipelineSyncOptions {
   timeLimit?: number
   syncRunId?: string
   streams?: StreamConfig[]
-  useState: boolean
+  resetState: boolean
   plain: boolean
 }
 
 export async function renderPipelineSync(opts: PipelineSyncOptions) {
-  const { handler, pipelineId, stateLimit, timeLimit, streams, useState, plain } = opts
+  const { handler, pipelineId, stateLimit, timeLimit, streams, resetState, plain } = opts
   const syncRunId = opts.syncRunId ?? randomUUID()
 
   const logFile = syncRunLogPath(pipelineId, syncRunId)
@@ -28,7 +28,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
 
   await withSyncRunLogContext(pipelineId, syncRunId, async () => {
     log.info(
-      { pipelineId, syncRunId, stateLimit, timeLimit, streams, useState },
+      { pipelineId, syncRunId, stateLimit, timeLimit, streams, resetState },
       'sync run started'
     )
 
@@ -42,7 +42,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
     let progress: ProgressPayload | undefined
     let prevProgress: ProgressPayload | undefined
     let lastRenderAt = 0
-    let loopState: unknown = undefined
+    let isFirstIteration = true
     let sawEof = false
 
     function renderProgressUpdate(next: ProgressPayload, previous?: ProgressPayload) {
@@ -60,12 +60,11 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         if (stateLimit) params.set('state_limit', String(stateLimit))
         if (timeLimit) params.set('time_limit', String(timeLimit))
         if (syncRunId) params.set('sync_run_id', syncRunId)
-        if (!useState) params.set('no_state', 'true')
+        if (resetState && isFirstIteration) params.set('reset_state', 'true')
         const qs = params.toString() ? `?${params}` : ''
 
         const body = {
           ...(streams ? { streams } : {}),
-          ...(!useState && loopState ? { sync_state: loopState } : {}),
         }
 
         const res = await handler(
@@ -100,7 +99,6 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         const decoder = new TextDecoder()
         let buffer = ''
         let hasMore = false
-        let endingState: unknown = undefined
 
         while (true) {
           const { done, value } = await reader.read()
@@ -130,7 +128,6 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
               prevProgress = progress
               progress = msg.eof.run_progress
               hasMore = msg.eof.has_more === true
-              endingState = msg.eof.ending_state
               sawEof = true
               log.info({ has_more: hasMore }, 'sync iteration complete')
               renderProgressUpdate(progress, prevProgress)
@@ -151,13 +148,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
           break
         }
 
-        if (!useState) {
-          if (!endingState) {
-            process.stderr.write('Sync returned has_more=true without ending_state\n')
-            exit(1)
-          }
-          loopState = endingState
-        }
+        isFirstIteration = false
       }
     } finally {
       inkInstance?.unmount()

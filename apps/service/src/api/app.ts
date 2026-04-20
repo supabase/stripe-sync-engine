@@ -393,10 +393,10 @@ export function createApp(options: AppOptions) {
       .string()
       .optional()
       .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
-    no_state: z.coerce
+    reset_state: z.coerce
       .boolean()
       .optional()
-      .meta({ description: 'Ignore and do not persist the pipeline sync_state checkpoint' }),
+      .meta({ description: 'Ignore persisted sync state and start fresh (ending state is still saved)' }),
   })
   const SyncBodySchema = z.object({
     source: SourceConfig.optional(),
@@ -435,7 +435,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit, sync_run_id, no_state } = c.req.valid('query')
+      const { state_limit, time_limit, sync_run_id, reset_state } = c.req.valid('query')
       const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
         {}) as z.infer<typeof SyncBodySchema>
 
@@ -458,7 +458,7 @@ export function createApp(options: AppOptions) {
         ...(body.streams !== undefined ? { streams: body.streams } : { streams: pipeline.streams }),
       }
       const output = engine.pipeline_sync(config, {
-        state: no_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
+        state: reset_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
         state_limit,
         time_limit,
         sync_run_id,
@@ -468,7 +468,7 @@ export function createApp(options: AppOptions) {
       const wrapped = (async function* () {
         for await (const msg of output) {
           yield msg
-          if (msg.type === 'eof' && msg.eof?.ending_state && !no_state) {
+          if (msg.type === 'eof' && msg.eof?.ending_state) {
             await pipelineStore.update(id, { sync_state: msg.eof.ending_state })
           }
         }
