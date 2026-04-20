@@ -548,11 +548,13 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             // takeLimits appends a minimal eof signal ({ type: 'eof', eof: { has_more } })
             if (raw.type === 'eof') {
               const hasMore = (raw as { eof: { has_more: boolean } }).eof.has_more
+              const runProgress = syncState.sync_run.progress
               yield emit(
                 engineMsg.eof({
+                  status: runProgress.derived.status,
                   has_more: hasMore,
                   ending_state: syncState,
-                  run_progress: syncState.sync_run.progress,
+                  run_progress: runProgress,
                   request_progress: requestProgress,
                 })
               )

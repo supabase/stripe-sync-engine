@@ -416,6 +416,7 @@ export type SyncState = z.infer<typeof SyncState>
 
 export const EofPayload = z
   .object({
+    status: RunStatus.describe('Terminal run status derived from stream outcomes.'),
     has_more: z
       .boolean()
       .describe(

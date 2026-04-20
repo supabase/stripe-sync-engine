@@ -1639,6 +1639,10 @@
       "EofPayload": {
         "type": "object",
         "properties": {
+          "status": {
+            "description": "Terminal run status derived from stream outcomes.",
+            "$ref": "#/components/schemas/RunStatus"
+          },
           "has_more": {
             "type": "boolean",
             "description": "Whether the client should continue with another request. true when cut off by limits; false when the source iterator exhausted naturally."
@@ -1657,6 +1661,7 @@
           }
         },
         "required": [
+          "status",
           "has_more",
           "run_progress",
           "request_progress"
