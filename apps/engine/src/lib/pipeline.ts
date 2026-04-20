@@ -100,7 +100,6 @@ export function filterType<T extends Message['type']>(
   }
 }
 
-
 // MARK: - takeLimits
 
 export interface TakeLimitsOptions {

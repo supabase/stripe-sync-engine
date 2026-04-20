@@ -40,7 +40,6 @@ vi.mock('../cli/sync.js', () => ({
   createSyncCmd,
 }))
 
-
 vi.mock('../lib/default-connectors.js', () => ({
   defaultConnectors,
 }))
