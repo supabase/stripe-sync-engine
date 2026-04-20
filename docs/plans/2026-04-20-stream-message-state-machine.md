@@ -308,6 +308,13 @@ Likely files:
   1. add `reason` as optional and emit it everywhere
   2. make `reason` required after all consumers are updated
 
+## Known Gaps
+
+- **EOF is not always emitted.** If the engine throws mid-stream (e.g. an unhandled invariant in a connector or the setup timeout fires), the stream may end without an `eof` message. Clients currently interpret socket close without `eof` as a crash. The validator (Phase 2) must guarantee that every stream ends with exactly one terminal `eof`, converting thrown exceptions into `eof(reason='error')`.
+- **`pipeline_setup` and `pipeline_teardown` do not emit `eof`.** These routes stream `log` and `control` messages but have no terminal signal. Clients use "stream ended" as the completion marker. This is fragile — a proxy timeout or broken pipe is indistinguishable from success.
+- **`pipeline_check` terminates with `connection_status` not `eof`.** This works but is inconsistent with the rest of the protocol.
+- **`takeLimits` emits a bare `eof` (`{ has_more }` only).** The engine's `pipeline_sync` intercepts and enriches it with `run_progress`, `status`, etc. If any code path consumes the raw `takeLimits` output without enrichment (e.g. `pipeline_read`), clients see a partial `eof` missing required fields.
+
 ## Open Questions
 
 1. Do we want an explicit `started` message eventually, or are route-specific preludes sufficient for v1?
