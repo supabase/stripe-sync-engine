@@ -23,7 +23,8 @@
   "dependencies": {
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-util-postgres": "workspace:*",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "pino": "^10"
   },
   "devDependencies": {
     "@types/node": "^24",

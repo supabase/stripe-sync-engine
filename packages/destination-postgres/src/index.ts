@@ -121,7 +121,7 @@ const destination = {
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
     try {
       await pool.query('SELECT 1')
       yield {
@@ -143,7 +143,7 @@ const destination = {
 
   async *setup({ config, catalog }) {
     logger.debug({ schema: config.schema }, 'dest setup: connecting to pool')
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
     try {
       yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       logger.debug('dest setup: creating schema')
@@ -186,7 +186,7 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
@@ -195,7 +195,7 @@ const destination = {
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), logger)
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
