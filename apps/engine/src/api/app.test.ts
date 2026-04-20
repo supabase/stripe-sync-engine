@@ -313,6 +313,26 @@ describe('GET /docs', () => {
   })
 })
 
+describe('engine request id header', () => {
+  it('adds engine-request-id to responses and generates a new value per request', async () => {
+    const app = await createApp(resolver)
+
+    const res1 = await app.request('/health')
+    const res2 = await app.request('/health')
+
+    const id1 = res1.headers.get('engine-request-id')
+    const id2 = res2.headers.get('engine-request-id')
+
+    expect(id1).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    )
+    expect(id2).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    )
+    expect(id1).not.toBe(id2)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Sync operations
 // ---------------------------------------------------------------------------

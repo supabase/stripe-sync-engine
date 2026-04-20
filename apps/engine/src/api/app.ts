@@ -51,6 +51,11 @@ import {
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import { syncRequestContext, logApiStream, createConnectionAbort, verboseInput } from './helpers.js'
+import {
+  ENGINE_REQUEST_ID_HEADER,
+  getEngineRequestId,
+  runWithEngineRequestContext,
+} from '../request-context.js'
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -68,39 +73,44 @@ export async function createApp(resolver: ConnectorResolver) {
   })
 
   app.onError((err, c) => {
+    const engineRequestId = getEngineRequestId()
     if (err instanceof HTTPException) {
+      if (engineRequestId) c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
       return c.json({ error: err.message }, err.status)
     }
     logger.error({ err }, 'Unhandled error')
+    if (engineRequestId) c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
     return c.json({ error: 'Internal server error' }, 500)
   })
 
   app.use('*', async (c, next) => {
-    const requestId = crypto.randomUUID()
-    const start = Date.now()
-    logger.info({ requestId, method: c.req.method, path: c.req.path }, 'request start')
-    await next()
-    let error: string | undefined
-    if (c.res.status >= 400) {
-      try {
-        const body = (await c.res.clone().json()) as { error: unknown }
-        error = typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
-      } catch {
-        // non-JSON error body, skip
+    const engineRequestId = crypto.randomUUID()
+    await runWithEngineRequestContext({ engineRequestId }, async () => {
+      const start = Date.now()
+      logger.info({ method: c.req.method, path: c.req.path }, 'request start')
+      await next()
+      c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
+      let error: string | undefined
+      if (c.res.status >= 400) {
+        try {
+          const body = (await c.res.clone().json()) as { error: unknown }
+          error = typeof body.error === 'string' ? body.error : JSON.stringify(body.error)
+        } catch {
+          // non-JSON error body, skip
+        }
       }
-    }
-    const level = c.res.status >= 200 && c.res.status < 300 ? 'info' : 'warn'
-    logger[level](
-      {
-        requestId,
-        method: c.req.method,
-        path: c.req.path,
-        status: c.res.status,
-        durationMs: Date.now() - start,
-        error,
-      },
-      'request end'
-    )
+      const level = c.res.status >= 200 && c.res.status < 300 ? 'info' : 'warn'
+      logger[level](
+        {
+          method: c.req.method,
+          path: c.req.path,
+          status: c.res.status,
+          durationMs: Date.now() - start,
+          error,
+        },
+        'request end'
+      )
+    })
   })
 
   /** Node.js 24 sets c.req.raw.body to a non-null empty ReadableStream even for bodyless POSTs. */

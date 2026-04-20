@@ -151,11 +151,12 @@ export function ProgressHeader({
   const cpDelta = cpDeltaStr.padStart(9)
   const cpRate = `${progress.derived.states_per_second.toFixed(1)}/s`.padStart(10)
 
-  const startedAt = new Date(progress.started_at).toLocaleString(undefined, {
+  const startedAt = new Date(progress.started_at).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
     timeZoneName: 'short',
   })
 
@@ -259,11 +260,12 @@ export function formatProgressHeader(progress: ProgressPayload): string {
         ? 'Sync complete'
         : 'Syncing'
 
-  const startedAt = new Date(progress.started_at).toLocaleString(undefined, {
+  const startedAt = new Date(progress.started_at).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
     timeZoneName: 'short',
   })
 
