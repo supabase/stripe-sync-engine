@@ -22,6 +22,7 @@ import {
 
 const engineMsg = createEngineMessageFactory()
 
+import { logger } from '../logger.js'
 import { enforceCatalog, filterType, log, pipe, takeLimits } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
 import { stateReducer, isProgressTrigger } from './state-reducer.js'
@@ -288,6 +289,45 @@ function tag<T extends Message>(emitter: string): (msg: T) => T {
   return (msg) => ({ ...msg, _emitted_by: emitter, _ts: new Date().toISOString() })
 }
 
+const SETUP_TIME_LIMIT_S = 30
+
+/** Apply takeLimits and strip the eof marker, emitting an error log on timeout. */
+function withSetupTimeout<T extends { type: string }>(
+  stream: AsyncIterable<T>,
+  label: string
+): AsyncIterable<T> {
+  const limited = takeLimits({ time_limit: SETUP_TIME_LIMIT_S })(stream)
+  return {
+    [Symbol.asyncIterator]() {
+      const iter = limited[Symbol.asyncIterator]()
+      return {
+        async next() {
+          while (true) {
+            const result = await iter.next()
+            if (result.done) return { value: undefined as unknown as T, done: true } as const
+            if ((result.value as { type: string }).type === 'eof') {
+              // Timeout hit — yield an error log message before ending
+              return {
+                value: {
+                  type: 'log',
+                  log: {
+                    level: 'error',
+                    message: `${label} setup timed out after ${SETUP_TIME_LIMIT_S}s`,
+                  },
+                } as unknown as T,
+                done: false,
+              } as const
+            }
+            return { value: result.value as T, done: false } as const
+          }
+        },
+        return: iter.return?.bind(iter),
+        throw: iter.throw?.bind(iter),
+      } as AsyncIterator<T>
+    },
+  }
+}
+
 /** Stamp a message as engine-emitted. */
 function emit(msg: Record<string, unknown>): SyncOutput {
   return { ...msg, _emitted_by: 'engine', _ts: new Date().toISOString() } as unknown as SyncOutput
@@ -366,16 +406,23 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const runSource = opts?.only !== 'destination'
       const runDest = opts?.only !== 'source'
 
+      logger.debug({ runSource, runDest }, 'pipeline_setup: resolving connectors')
       const [srcConnector, destConnector] = await Promise.all([
         runSource ? resolver.resolveSource(pipeline.source.type) : null,
         runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
+      logger.debug('pipeline_setup: resolving specs')
       const [srcSpec, destSpec] = await Promise.all([
         srcConnector ? getSpec(srcConnector, configPayload(pipeline.source)) : null,
         destConnector ? getSpec(destConnector, configPayload(pipeline.destination)) : null,
       ])
 
+      logger.debug('pipeline_setup: discovering catalog')
       const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
+      logger.debug(
+        { streams: catalog.streams.length },
+        'pipeline_setup: catalog discovered, running setup hooks'
+      )
 
       const sourceTag = `source/${pipeline.source.type}`
       const destTag = `destination/${pipeline.destination.type}`
@@ -383,14 +430,21 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       yield* merge(
         runSource &&
           srcConnector?.setup &&
-          map(srcConnector.setup({ config: srcSpec!.config, catalog }), tag(sourceTag)),
+          map(
+            withSetupTimeout(srcConnector.setup({ config: srcSpec!.config, catalog }), sourceTag),
+            tag(sourceTag)
+          ),
         runDest &&
           destConnector?.setup &&
           map(
-            destConnector.setup({ config: destSpec!.config, catalog: filteredCatalog }),
+            withSetupTimeout(
+              destConnector.setup({ config: destSpec!.config, catalog: filteredCatalog }),
+              destTag
+            ),
             tag(destTag)
           )
       )
+      logger.debug('pipeline_setup: setup hooks complete')
     },
 
     async *pipeline_teardown(pipeline, opts?) {

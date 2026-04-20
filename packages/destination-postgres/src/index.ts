@@ -121,7 +121,7 @@ const destination = {
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
     try {
       await pool.query('SELECT 1')
       yield {
@@ -142,10 +142,13 @@ const destination = {
   },
 
   async *setup({ config, catalog }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    logger.debug({ schema: config.schema }, 'dest setup: connecting to pool')
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
     try {
       yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
+      logger.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
+      logger.debug('dest setup: creating trigger function')
       await pool.query(sql`
         CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
             LANGUAGE plpgsql
@@ -159,6 +162,7 @@ const destination = {
         END;
         $$;
       `)
+      logger.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
       await Promise.all(
         catalog.streams.map(async (cs) => {
           await pool.query(
@@ -169,6 +173,7 @@ const destination = {
           )
         })
       )
+      logger.debug('dest setup: complete')
     } finally {
       await pool.end()
     }
@@ -181,7 +186,7 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
     try {
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
@@ -190,7 +195,7 @@ const destination = {
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), 'destination')
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()

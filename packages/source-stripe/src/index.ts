@@ -168,6 +168,7 @@ export function createStripeSource(
       })
 
       if (!config.account_id || config.account_created == null) {
+        logger.debug('source setup: resolving account metadata')
         try {
           const resolved = await resolveAccountMetadata(config, client)
           if (!config.account_id) updates.account_id = resolved.accountId
@@ -182,10 +183,12 @@ export function createStripeSource(
             'Failed to resolve account metadata during setup'
           )
         }
+        logger.debug('source setup: account metadata resolved')
       }
 
       // Create managed webhook endpoint if webhook_url is set
       if (config.webhook_url) {
+        logger.debug('source setup: listing webhook endpoints')
         const existing = await client.listWebhookEndpoints({ limit: 100 })
         const managed = existing.data.find(
           (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
@@ -220,8 +223,10 @@ export function createStripeSource(
             updates.webhook_secret = created.secret
           }
         }
+        logger.debug('source setup: webhook endpoints handled')
       }
 
+      logger.debug({ hasUpdates: Object.keys(updates).length > 0 }, 'source setup: complete')
       if (Object.keys(updates).length > 0) {
         yield msg.control({
           control_type: 'source_config',

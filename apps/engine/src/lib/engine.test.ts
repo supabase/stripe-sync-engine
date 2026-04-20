@@ -2,6 +2,7 @@ import type {
   CheckOutput,
   Destination,
   DiscoverOutput,
+  SetupOutput,
   Source,
   SpecOutput,
 } from '@stripe/sync-protocol'
@@ -21,7 +22,7 @@ import {
   Stream,
   withAbortOnReturn,
 } from '@stripe/sync-protocol'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { destinationTest } from './destination-test.js'
 import { buildCatalog, createEngine, withTimeRanges } from './engine.js'
@@ -1568,5 +1569,56 @@ describe('withTimeRanges', () => {
     const catalog = mkCatalog(['customers'])
     withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(catalog.streams[0]!.time_range).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// pipeline_setup timeout
+// ---------------------------------------------------------------------------
+
+describe('engine.pipeline_setup() timeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('emits an error log when source setup exceeds the time limit', async () => {
+    const hangingSource: Source = {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [{ name: 'items', primary_key: [['id']] }],
+          },
+        }
+      },
+      async *read() {},
+      async *setup(): AsyncIterable<SetupOutput> {
+        // Simulate a hang — never returns
+        await new Promise(() => {})
+      },
+    }
+
+    const engine = await createEngine(makeResolver(hangingSource, destinationTest))
+    const drainP = drain(engine.pipeline_setup(defaultPipeline))
+
+    // Advance past the hard deadline (30s + 1s buffer)
+    await vi.advanceTimersByTimeAsync(32_000)
+
+    const msgs = await drainP
+    const errorLogs = msgs.filter(
+      (m) => m.type === 'log' && (m as LogMessage).log.level === 'error'
+    )
+    expect(errorLogs.length).toBeGreaterThanOrEqual(1)
+    expect((errorLogs[0] as LogMessage).log.message).toMatch(/setup timed out/)
   })
 })
