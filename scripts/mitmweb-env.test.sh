@@ -1,9 +1,18 @@
 #!/bin/bash
 # Test that mitmweb-forward-proxy.sh correctly routes traffic through mitmweb.
-# Requires mitmweb to already be running, or the env script will start it.
+# Aborts unless mitmweb 12+ is available.
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mitmweb-forward-proxy.sh"
+
+MITM_VERSION_LINE="$(mitmweb --version | head -n 1)"
+MITM_MAJOR="$(printf '%s\n' "$MITM_VERSION_LINE" | sed -n 's/^Mitmproxy: \([0-9][0-9]*\)\..*/\1/p')"
+if [ -z "$MITM_MAJOR" ] || [ "$MITM_MAJOR" -lt 12 ]; then
+  echo "FAIL: mitmweb 12+ is required, got: ${MITM_VERSION_LINE:-unknown}" >&2
+  exit 1
+fi
 
 PASS=0
 FAIL=0
@@ -12,7 +21,6 @@ WSS_TARGET="wss://ws.postman-echo.com/raw"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# Run all tests in parallel
 curl -sk --max-time 15 "$FETCH_TARGET" > "$TMP/curl.out" 2>&1 &
 PID_CURL=$!
 
@@ -28,11 +36,9 @@ timeout 15 bun -e "
 " > "$TMP/bun.out" 2>&1 &
 PID_BUN=$!
 
-# ws does not respect HTTP_PROXY or --use-env-proxy; must use HttpsProxyAgent explicitly.
-# Run from source-stripe package dir so ws and https-proxy-agent can be resolved.
 timeout 15 node --input-type=module \
   --loader "data:text/javascript,import{createRequire}from'module';const r=createRequire('$SCRIPT_DIR/../packages/source-stripe/package.json');import.meta.resolve=s=>r.resolve(s);" \
-  <<EOF > "$TMP/ws.out" 2>&1 &
+  <<EOF2 > "$TMP/ws.out" 2>&1 &
 import { createRequire } from 'module';
 const require = createRequire('$SCRIPT_DIR/../packages/source-stripe/package.json');
 const { WebSocket } = require('ws');
@@ -43,12 +49,13 @@ ws.on('open', () => ws.send('probe'));
 ws.on('message', (d) => { console.log(JSON.stringify({ echo: d.toString() })); ws.close(); process.exit(0); });
 ws.on('error', (e) => { console.error(e.message); process.exit(1); });
 setTimeout(() => { console.error('timeout'); process.exit(1); }, 12000);
-EOF
+EOF2
 PID_WS=$!
 
 wait $PID_CURL $PID_NODE $PID_BUN $PID_WS 2>/dev/null
 
 echo ""
+echo "mitmweb version: $MITM_VERSION_LINE"
 for runtime in curl node bun; do
   file="$TMP/$runtime.out"
   origin=$(grep -o '"origin":\s*"[^"]*"' "$file" 2>/dev/null | head -1 | cut -d'"' -f4)
@@ -65,7 +72,6 @@ for runtime in curl node bun; do
   fi
 done
 
-# ws test: check the echoed message came back
 ws_echo=$(grep -o '"echo":\s*"[^"]*"' "$TMP/ws.out" 2>/dev/null | head -1 | cut -d'"' -f4)
 if [ "$ws_echo" = "probe" ]; then
   echo "PASS: ws WebSocket (echo=$ws_echo)"

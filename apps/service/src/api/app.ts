@@ -8,9 +8,9 @@ import { createEngine, createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
 import {
   collectFirst,
+  createEngineMessageFactory,
   drain,
   emptySyncState,
-  logMessage,
   type Message,
   SyncState,
 } from '@stripe/sync-protocol'
@@ -91,6 +91,8 @@ export interface AppOptions {
   pipelineStore: PipelineStore
   engineUrl?: string
 }
+
+const engineMsg = createEngineMessageFactory()
 
 export function createApp(options: AppOptions) {
   const temporal = options.temporal?.client
@@ -478,7 +480,7 @@ export function createApp(options: AppOptions) {
 
       return ndjsonResponse(wrapped, {
         onError: (err) =>
-          logMessage({
+          engineMsg.log({
             level: 'error' as const,
             message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
           }),
@@ -611,7 +613,7 @@ export function createApp(options: AppOptions) {
 
       return ndjsonResponse(
         (async function* () {
-          yield logMessage({
+          yield engineMsg.log({
             level: 'info' as const,
             message: `Fetched ${events.length} events (created > ${new Date(createdAfter * 1000).toISOString()})`,
           })
@@ -624,7 +626,7 @@ export function createApp(options: AppOptions) {
         })(),
         {
           onError: (err) =>
-            logMessage({
+            engineMsg.log({
               level: 'error' as const,
               message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
             }),

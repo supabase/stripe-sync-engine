@@ -78,6 +78,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipelines/{id}/simulate_webhook_sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate webhook sync by fetching events from the Stripe API
+         * @description Fetches events from /v1/events using the pipeline's Stripe API key, then pipes them as input into the sync engine's push mode. This exercises the same code path as real webhooks without needing webhook delivery.
+         */
+        post: operations["pipelines.simulate_webhook_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines/{id}/sync_workflow_test": {
         parameters: {
             query?: never;
@@ -680,6 +700,58 @@ export interface operations {
                 content: {
                     "application/x-ndjson": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.simulate_webhook_sync": {
+        parameters: {
+            query?: {
+                /** @description Only fetch events created after this Unix timestamp (default: 24 hours ago) */
+                created_after?: number;
+                /** @description Max events to fetch (default: all) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON sync output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline source is not Stripe */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
                     };
                 };
             };

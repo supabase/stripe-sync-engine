@@ -139,36 +139,6 @@ export async function drain(stream: AsyncIterable<{ type: string }>): Promise<{ 
   return collectMessages(stream)
 }
 
-// MARK: - Envelope constructors
-
-/** Shorthand to create a destination_config control message. */
-export function destinationControlMsg<T extends Record<string, unknown>>(
-  destination_config: T
-): ControlMessage {
-  return {
-    type: 'control',
-    control: { control_type: 'destination_config', destination_config },
-  }
-}
-
-/** Shorthand to create a log envelope message. */
-export function logMessage(payload: LogPayload): LogMessage {
-  return { type: 'log', log: payload }
-}
-
-/** Shorthand to create a stream source_state envelope message. */
-export function stateMsg(payload: { stream: string; data: unknown }): SourceStateMessage
-/** Shorthand to create a global source_state envelope message. */
-export function stateMsg(payload: { state_type: 'global'; data: unknown }): SourceStateMessage
-export function stateMsg(
-  payload: { stream: string; data: unknown } | { state_type: 'global'; data: unknown }
-): SourceStateMessage {
-  const source_state: StreamStatePayload | GlobalStatePayload =
-    'state_type' in payload
-      ? (payload as GlobalStatePayload)
-      : { state_type: 'stream' as const, ...(payload as { stream: string; data: unknown }) }
-  return { type: 'source_state', source_state }
-}
 
 // MARK: - Source message factory
 
@@ -257,6 +227,10 @@ export function createEngineMessageFactory() {
 
     progress(payload: ProgressPayload): ProgressMessage {
       return { type: 'progress', progress: payload }
+    },
+
+    log(payload: LogPayload): LogMessage {
+      return { type: 'log', log: payload }
     },
   }
 }

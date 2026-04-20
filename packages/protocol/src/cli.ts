@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { defineCommand, runMain } from 'citty'
 import type { CommandDef } from 'citty'
 import type { Source, Destination, DestinationInput } from './protocol.js'
-import { logMessage } from './helpers.js'
 import { parseNdjsonChunks, writeLine } from './ndjson.js'
 
 // MARK: - Config parsing
@@ -252,7 +251,7 @@ export async function runConnectorCli(
       type: 'connection_status' as const,
       connection_status: { status: 'failed' as const, message },
     }
-    process.stderr.write(JSON.stringify(logMessage({ level: 'error' as const, message })) + '\n')
+    console.error(message)
     process.stderr.write(JSON.stringify(connStatus) + '\n')
     process.exitCode = 1
   }

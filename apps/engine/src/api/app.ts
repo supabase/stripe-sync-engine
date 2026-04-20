@@ -164,10 +164,10 @@ export async function createApp(resolver: ConnectorResolver) {
       param: { content: { 'application/json': {} } },
     })
 
-  const pipelineHeaders = z.object({ 'x-pipeline': xPipelineHeader.optional() })
-  const sourceHeaders = z.object({ 'x-source': xSourceHeader.optional() })
+  const pipelineHeaders = z.object({ 'x-pipeline': xPipelineHeader })
+  const sourceHeaders = z.object({ 'x-source': xSourceHeader })
   const allSyncHeaders = z.object({
-    'x-pipeline': xPipelineHeader.optional(),
+    'x-pipeline': xPipelineHeader,
     'x-state': xStateHeader,
   })
 

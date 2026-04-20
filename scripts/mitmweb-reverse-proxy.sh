@@ -6,12 +6,39 @@
 #
 # Starts a reverse proxy on http://127.0.0.1:9090 with mitmweb UI on
 # http://127.0.0.1:9091 and logs in tmp/mitmweb-reverse-proxy-9090.log.
+#
+# Requires mitmproxy 12+ for store_streamed_bodies support.
+# Install or upgrade with:
+#   pip install --user --index-url https://pypi.org/simple --upgrade 'mitmproxy>=12,<13'
+#
+# mitmweb 12+ requires web auth. We use a fixed local password: sync-engine
 
 set -euo pipefail
+
+MITM_MIN_MAJOR=12
 
 _die() {
   echo "$1" >&2
   return 1 2>/dev/null || exit 1
+}
+
+_mitmweb_major_version() {
+  local version_line
+  version_line="$(mitmweb --version 2>/dev/null | head -n 1 || true)"
+  printf '%s\n' "$version_line" | sed -n 's/^Mitmproxy: \([0-9][0-9]*\)\..*/\1/p'
+}
+
+_abort_bad_mitmweb() {
+  local major version_line
+  if ! command -v mitmweb &>/dev/null; then
+    _die "ERROR: mitmweb not found. Install mitmproxy 12+ with: pip install --user --index-url https://pypi.org/simple --upgrade 'mitmproxy>=12,<13'"
+  fi
+
+  version_line="$(mitmweb --version | head -n 1)"
+  major="$(_mitmweb_major_version)"
+  if [[ -z "$major" || "$major" -lt "$MITM_MIN_MAJOR" ]]; then
+    _die "ERROR: $version_line is too old. mitmweb 12+ is required. Install with: pip install --user --index-url https://pypi.org/simple --upgrade 'mitmproxy>=12,<13'"
+  fi
 }
 
 if [ "$#" -ne 1 ]; then
@@ -24,13 +51,7 @@ MITM_TARGET="$1"
 MITM_LOG_FILE="tmp/mitmweb-reverse-proxy-9090.log"
 mkdir -p tmp
 
-if ! command -v mitmweb &>/dev/null; then
-  echo "mitmweb not found. Install it with one of:" >&2
-  echo "  pip install mitmproxy" >&2
-  echo "  brew install mitmproxy     # macOS" >&2
-  echo "  pipx install mitmproxy" >&2
-  return 1 2>/dev/null || exit 1
-fi
+_abort_bad_mitmweb
 
 _port_listening() {
   if command -v ss &>/dev/null; then
@@ -69,14 +90,14 @@ if _port_listening 9090 || _port_listening 9091; then
   sleep 0.5
 fi
 
-mkdir -p tmp
-
 mitmweb \
   --mode "reverse:$MITM_TARGET" \
   --listen-port 9090 \
   --web-port 9091 \
   --no-web-open-browser \
   --set stream_large_bodies=1b \
+  --set store_streamed_bodies=true \
+  --set web_password=sync-engine \
   >>"$MITM_LOG_FILE" 2>&1 &
 
 for _ in $(seq 1 10); do
@@ -95,3 +116,4 @@ echo "Proxy:   $MITM_PROXY"
 echo "Target:  $MITM_TARGET"
 echo "Web UI:  $MITM_WEB"
 echo "Logs:    $MITM_LOG_FILE"
+echo "Version: $(mitmweb --version | head -n 1)"

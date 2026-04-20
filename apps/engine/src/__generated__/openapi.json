@@ -62,7 +62,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {
@@ -130,7 +130,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {
@@ -198,7 +198,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {
@@ -252,7 +252,7 @@
           {
             "in": "header",
             "name": "x-source",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded source config ({ type, ...config })",
             "content": {
               "application/json": {
@@ -348,7 +348,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {
@@ -445,7 +445,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {
@@ -542,7 +542,7 @@
           {
             "in": "header",
             "name": "x-pipeline",
-            "required": false,
+            "required": true,
             "description": "JSON-encoded PipelineConfig",
             "content": {
               "application/json": {

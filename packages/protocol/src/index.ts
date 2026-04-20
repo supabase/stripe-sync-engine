@@ -2,10 +2,7 @@ export * from './protocol.js'
 export {
   // Message accessors
   stateData,
-  // Envelope constructors
-  stateMsg,
-  destinationControlMsg,
-  logMessage,
+  // Message factories
   createSourceMessageFactory,
   createEngineMessageFactory,
   // State constructors

@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/simulate_webhook_sync | Simulate webhook sync by fetching events from the Stripe API |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -578,6 +578,100 @@
                   "type": "object",
                   "properties": {},
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/simulate_webhook_sync": {
+      "post": {
+        "operationId": "pipelines.simulate_webhook_sync",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Simulate webhook sync by fetching events from the Stripe API",
+        "description": "Fetches events from /v1/events using the pipeline's Stripe API key, then pipes them as input into the sync engine's push mode. This exercises the same code path as real webhooks without needing webhook delivery.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "created_after",
+            "schema": {
+              "description": "Only fetch events created after this Unix timestamp (default: 24 hours ago)",
+              "type": "number"
+            },
+            "description": "Only fetch events created after this Unix timestamp (default: 24 hours ago)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "Max events to fetch (default: all)",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": "Max events to fetch (default: all)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Streaming NDJSON sync output",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pipeline source is not Stripe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

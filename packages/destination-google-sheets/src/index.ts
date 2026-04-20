@@ -1,5 +1,7 @@
 import type { Destination } from '@stripe/sync-protocol'
-import { destinationControlMsg } from '@stripe/sync-protocol'
+import { createSourceMessageFactory } from '@stripe/sync-protocol'
+
+const msg = createSourceMessageFactory()
 import type { sheets_v4 } from 'googleapis'
 import { google } from 'googleapis'
 import { z } from 'zod'
@@ -142,7 +144,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       // Protect all data tabs with a warning so users know edits may be overwritten
       await protectSheets(sheets, spreadsheetId, sheetIds)
 
-      yield destinationControlMsg({ ...config, spreadsheet_id: spreadsheetId })
+      yield msg.control({ control_type: 'destination_config', destination_config: { ...config, spreadsheet_id: spreadsheetId } })
     },
 
     async *teardown({ config }) {

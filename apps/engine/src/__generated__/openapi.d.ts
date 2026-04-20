@@ -850,9 +850,9 @@ export interface operations {
     pipeline_check: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -887,9 +887,9 @@ export interface operations {
                 /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
                 only?: "source" | "destination";
             };
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -924,9 +924,9 @@ export interface operations {
                 /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
                 only?: "source" | "destination";
             };
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -958,9 +958,9 @@ export interface operations {
     source_discover: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description JSON-encoded source config ({ type, ...config }) */
-                "x-source"?: string;
+                "x-source": string;
             };
             path?: never;
             cookie?: never;
@@ -999,9 +999,9 @@ export interface operations {
                 /** @description Optional sync run identifier used to track bounded sync progress. */
                 run_id?: string;
             };
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
                 /** @description JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
                 "x-state"?: string;
             };
@@ -1039,9 +1039,9 @@ export interface operations {
     pipeline_write: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
             };
             path?: never;
             cookie?: never;
@@ -1084,9 +1084,9 @@ export interface operations {
                 /** @description Optional sync run identifier used to track bounded sync progress. */
                 run_id?: string;
             };
-            header?: {
+            header: {
                 /** @description JSON-encoded PipelineConfig */
-                "x-pipeline"?: string;
+                "x-pipeline": string;
                 /** @description JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
                 "x-state"?: string;
             };
