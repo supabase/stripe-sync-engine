@@ -5,6 +5,7 @@ import { apiReference } from '@scalar/hono-api-reference'
 import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
+import { collectFirst, drain, type Message } from '@stripe/sync-protocol'
 import { createSchemas } from '../lib/createSchemas.js'
 import type { Pipeline } from '../lib/createSchemas.js'
 import type { PipelineStore } from '../lib/stores.js'
@@ -28,6 +29,44 @@ function ListResponse<T extends z.ZodType>(itemSchema: T) {
   })
 }
 
+function configPayload(envelope: { type: string; [key: string]: unknown }): Record<string, unknown> {
+  return (envelope[envelope.type] as Record<string, unknown>) ?? {}
+}
+
+async function parseConnectorConfig(
+  connector: { spec(): AsyncIterable<{ type: string; [k: string]: unknown }> },
+  rawConfig: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const specMsg = await collectFirst(connector.spec(), 'spec')
+  return z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
+}
+
+async function checkPipelineConnectors(
+  resolver: ConnectorResolver,
+  pipeline: Pick<Pipeline, 'source' | 'destination'>
+) {
+  const [sourceConnector, destinationConnector] = await Promise.all([
+    resolver.resolveSource(pipeline.source.type),
+    resolver.resolveDestination(pipeline.destination.type),
+  ])
+
+  const [sourceConfig, destinationConfig] = await Promise.all([
+    parseConnectorConfig(sourceConnector, configPayload(pipeline.source)),
+    parseConnectorConfig(destinationConnector, configPayload(pipeline.destination)),
+  ])
+
+  await Promise.all([
+    drain(sourceConnector.check({ config: sourceConfig })).catch((err) => {
+      throw new Error(`Source check failed (${pipeline.source.type}): ${String(err instanceof Error ? err.message : err)}`)
+    }),
+    drain(destinationConnector.check({ config: destinationConfig })).catch((err) => {
+      throw new Error(
+        `Destination check failed (${pipeline.destination.type}): ${String(err instanceof Error ? err.message : err)}`
+      )
+    }),
+  ])
+}
+
 // MARK: - App factory
 
 export interface AppOptions {
@@ -38,12 +77,12 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions) {
   const { client: temporal, taskQueue } = options.temporal
-  const { pipelineStore } = options
+  const { pipelineStore, resolver } = options
   const {
     Pipeline: PipelineSchema,
     CreatePipeline: CreatePipelineSchema,
     UpdatePipeline: UpdatePipelineSchema,
-  } = createSchemas(options.resolver)
+  } = createSchemas(resolver)
 
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -130,6 +169,11 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const body = c.req.valid('json')
+      try {
+        await checkPipelineConnectors(resolver, body as Pick<Pipeline, 'source' | 'destination'>)
+      } catch (err) {
+        return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+      }
       const id = genId('pipe')
       const pipeline: Pipeline = {
         id,

@@ -3,6 +3,7 @@ import type { WorkflowClient } from '@temporalio/client'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
 import path from 'node:path'
+import { z } from 'zod'
 import {
   createConnectorResolver,
   sourceTest,
@@ -14,6 +15,7 @@ import type { SyncActivities } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 import { memoryPipelineStore } from '../lib/stores-memory.js'
 import type { PipelineStore } from '../lib/stores.js'
+import type { CheckOutput, Destination, Source } from '@stripe/sync-protocol'
 
 let resolver: ConnectorResolver
 
@@ -148,6 +150,63 @@ function liveApp() {
   })
 }
 
+function createStripeCheckSource(checkImpl: Source['check']): Source<Record<string, unknown>> {
+  return {
+    async *spec() {
+      yield {
+        type: 'spec',
+        spec: {
+          config: z.toJSONSchema(
+            z.object({
+              api_key: z.string(),
+              api_version: z.string(),
+            })
+          ),
+        },
+      }
+    },
+    check: checkImpl,
+    async *discover() {
+      yield { type: 'catalog', catalog: { streams: [] } }
+    },
+    async *read() {},
+  }
+}
+
+function createPostgresCheckDestination(
+  checkImpl: Destination['check']
+): Destination<Record<string, unknown>> {
+  return {
+    async *spec() {
+      yield {
+        type: 'spec',
+        spec: {
+          config: z.toJSONSchema(
+            z.object({
+              connection_string: z.string(),
+              schema: z.string().default('public'),
+            })
+          ),
+        },
+      }
+    },
+    check: checkImpl,
+    async *write() {},
+  }
+}
+
+function mockTemporalClient() {
+  return {
+    start: vi.fn(async () => undefined),
+    getHandle: vi.fn(() => ({
+      signal: vi.fn(async () => undefined),
+      query: vi.fn(async () => ({})),
+      terminate: vi.fn(async () => undefined),
+    })),
+    list: vi.fn(async function* () {}),
+  } as unknown as WorkflowClient & { start: ReturnType<typeof vi.fn> }
+}
+
 /** Poll GET /pipelines/:id until the workflow is queryable (not 404). */
 async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
@@ -163,6 +222,117 @@ async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeou
 }
 
 describe('pipeline CRUD', () => {
+  it('runs stripe and postgres checks before creating a pipeline', async () => {
+    const stripeCheck = vi.fn(
+      () =>
+        (async function* (): AsyncIterable<CheckOutput> {
+          yield {
+            type: 'connection_status',
+            connection_status: { status: 'succeeded' as const },
+          }
+        })()
+    )
+    const postgresCheck = vi.fn(
+      () =>
+        (async function* (): AsyncIterable<CheckOutput> {
+          yield {
+            type: 'connection_status',
+            connection_status: { status: 'succeeded' as const },
+          }
+        })()
+    )
+    const checkedResolver = await createConnectorResolver({
+      sources: { stripe: createStripeCheckSource(stripeCheck) },
+      destinations: { postgres: createPostgresCheckDestination(postgresCheck) },
+    })
+    const pipelineStore = memoryPipelineStore()
+    const temporalClient = mockTemporalClient()
+    const checkedApp = createApp({
+      temporal: { client: temporalClient, taskQueue: 'test-checks' },
+      resolver: checkedResolver,
+      pipelineStore,
+    })
+
+    const res = await checkedApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          type: 'stripe',
+          stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+        },
+        destination: {
+          type: 'postgres',
+          postgres: { connection_string: 'postgres://localhost/db' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    expect(stripeCheck).toHaveBeenCalledWith({
+      config: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+    })
+    expect(postgresCheck).toHaveBeenCalledWith({
+      config: { connection_string: 'postgres://localhost/db', schema: 'public' },
+    })
+    expect(temporalClient.start).toHaveBeenCalledOnce()
+    expect(await pipelineStore.list()).toHaveLength(1)
+  })
+
+  it('returns 400 and does not create a pipeline when stripe check fails', async () => {
+    const stripeCheck = vi.fn(
+      () =>
+        (async function* (): AsyncIterable<CheckOutput> {
+          yield {
+            type: 'connection_status',
+            connection_status: { status: 'failed' as const, message: 'invalid api key' },
+          }
+        })()
+    )
+    const postgresCheck = vi.fn(
+      () =>
+        (async function* (): AsyncIterable<CheckOutput> {
+          yield {
+            type: 'connection_status',
+            connection_status: { status: 'succeeded' as const },
+          }
+        })()
+    )
+    const checkedResolver = await createConnectorResolver({
+      sources: { stripe: createStripeCheckSource(stripeCheck) },
+      destinations: { postgres: createPostgresCheckDestination(postgresCheck) },
+    })
+    const pipelineStore = memoryPipelineStore()
+    const temporalClient = mockTemporalClient()
+    const checkedApp = createApp({
+      temporal: { client: temporalClient, taskQueue: 'test-checks' },
+      resolver: checkedResolver,
+      pipelineStore,
+    })
+
+    const res = await checkedApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          type: 'stripe',
+          stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+        },
+        destination: {
+          type: 'postgres',
+          postgres: { connection_string: 'postgres://localhost/db' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'Source check failed (stripe): invalid api key',
+    })
+    expect(temporalClient.start).not.toHaveBeenCalled()
+    expect(await pipelineStore.list()).toEqual([])
+  })
+
   it('create returns full pipeline', async () => {
     const res = await liveApp().request('/pipelines', {
       method: 'POST',
