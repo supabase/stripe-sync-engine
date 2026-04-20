@@ -55,7 +55,6 @@
     "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
-    "@stripe/sync-state-postgres": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
     "@stripe/sync-util-postgres": "workspace:*",
     "citty": "^0.1.6",

@@ -2,12 +2,7 @@ import React from 'react'
 import { render } from 'ink'
 import { defineCommand } from 'citty'
 import { createEngine, createRemoteEngine, type ConnectorResolver } from '../lib/index.js'
-import {
-  type PipelineConfig,
-  type SyncState,
-  type ProgressPayload,
-  emptySyncState,
-} from '@stripe/sync-protocol'
+import { type PipelineConfig, type ProgressPayload } from '@stripe/sync-protocol'
 import { ProgressView, formatProgress } from '../lib/progress/format.js'
 import { applyControlToPipeline } from './source-config-cache.js'
 
@@ -56,16 +51,6 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
         type: 'string',
         description: 'Stop after N seconds',
       },
-      state: {
-        type: 'string',
-        default: 'postgres',
-        description: 'State backend: postgres (default), none',
-      },
-      noState: {
-        type: 'boolean',
-        default: false,
-        description: 'Shorthand for --state none',
-      },
       engineUrl: {
         type: 'string',
         description: 'URL of a running sync-engine server (skips spawning a subprocess)',
@@ -110,89 +95,52 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
           : undefined,
       }
 
-      // State store
-      const stateMode = args.noState ? 'none' : args.state
-      const noopStore = {
-        get: async () => undefined,
-        set: async () => {},
-        setGlobal: async () => {},
+      const engine = args.engineUrl
+        ? createRemoteEngine(args.engineUrl)
+        : await createEngine(await resolverPromise)
+
+      // Run connector setup and apply any config updates before syncing.
+      for await (const msg of engine.pipeline_setup(pipeline)) {
+        if (msg.type !== 'control') continue
+        pipeline = applyControlToPipeline(pipeline, msg.control)
       }
-      const store: typeof noopStore & { close?(): Promise<void> } =
-        stateMode === 'none' ? noopStore : await getPostgresStateStore(postgresUrl, schema)
-      const initialState = await store.get()
 
-      try {
-        const engine = args.engineUrl
-          ? createRemoteEngine(args.engineUrl)
-          : await createEngine(await resolverPromise)
+      const output = engine.pipeline_sync(pipeline, { time_limit: timeLimit })
 
-        // Run connector setup and apply any config updates before syncing.
-        for await (const msg of engine.pipeline_setup(pipeline)) {
-          if (msg.type !== 'control') continue
+      let progress: ProgressPayload | undefined
+      let prevProgress: ProgressPayload | undefined
+      const plain = args.plain || !process.stderr.isTTY
+      let lastRenderAt = 0
+
+      // Ink for TTY, plain text for non-TTY / --plain
+      const inkInstance = plain ? null : render(<></>, { stdout: process.stderr })
+
+      function renderProgress(next: ProgressPayload, previous?: ProgressPayload) {
+        if (inkInstance) {
+          inkInstance.rerender(<ProgressView progress={next} prev={previous} />)
+        } else {
+          process.stderr.write(formatProgress(next, previous) + '\n')
+        }
+        lastRenderAt = Date.now()
+      }
+
+      for await (const msg of output) {
+        if (msg.type === 'control') {
           pipeline = applyControlToPipeline(pipeline, msg.control)
-        }
-
-        const syncState: SyncState | undefined = initialState
-          ? { ...emptySyncState(), source: initialState }
-          : undefined
-        const output = engine.pipeline_sync(pipeline, { state: syncState, time_limit: timeLimit })
-
-        let progress: ProgressPayload | undefined
-        let prevProgress: ProgressPayload | undefined
-        const plain = args.plain || !process.stderr.isTTY
-        let lastRenderAt = 0
-
-        // Ink for TTY, plain text for non-TTY / --plain
-        const inkInstance = plain ? null : render(<></>, { stdout: process.stderr })
-
-        function renderProgress(next: ProgressPayload, previous?: ProgressPayload) {
-          if (inkInstance) {
-            inkInstance.rerender(<ProgressView progress={next} prev={previous} />)
-          } else {
-            process.stderr.write(formatProgress(next, previous) + '\n')
-          }
-          lastRenderAt = Date.now()
-        }
-
-        for await (const msg of output) {
-          if (msg.type === 'control') {
-            pipeline = applyControlToPipeline(pipeline, msg.control)
-          } else if (msg.type === 'source_state') {
-            if (msg.source_state.state_type === 'global') {
-              await store.setGlobal(msg.source_state.data)
-            } else {
-              await store.set(msg.source_state.stream, msg.source_state.data)
-            }
-          } else if (msg.type === 'progress') {
-            prevProgress = progress
-            progress = msg.progress
-            if (Date.now() - lastRenderAt >= PROGRESS_RENDER_INTERVAL_MS) {
-              renderProgress(progress, prevProgress)
-            }
-          } else if (msg.type === 'eof') {
-            prevProgress = progress
-            progress = msg.eof.run_progress
+        } else if (msg.type === 'progress') {
+          prevProgress = progress
+          progress = msg.progress
+          if (Date.now() - lastRenderAt >= PROGRESS_RENDER_INTERVAL_MS) {
             renderProgress(progress, prevProgress)
           }
+        } else if (msg.type === 'eof') {
+          prevProgress = progress
+          progress = msg.eof.run_progress
+          renderProgress(progress, prevProgress)
         }
-
-        inkInstance?.unmount()
-      } finally {
-        if (store.close) await store.close()
       }
+
+      inkInstance?.unmount()
     },
   })
-}
-
-
-async function getPostgresStateStore(connectionString: string, schema: string) {
-  const pkg = await import('@stripe/sync-state-postgres')
-  const stateConfig = { connection_string: connectionString, schema }
-  await pkg.setupStateStore(stateConfig)
-  return pkg.createStateStore(stateConfig) as {
-    get(): Promise<Record<string, unknown> | undefined>
-    set(stream: string, data: unknown): Promise<void>
-    setGlobal(data: unknown): Promise<void>
-    close(): Promise<void>
-  }
 }

@@ -61,7 +61,6 @@ describe('sync cli', () => {
         stripeApiKey: 'sk_test_123',
         postgresUrl: 'postgresql://localhost/test',
         postgresSchema: 'public',
-        noState: true,
         plain: true,
       } as never,
     })
@@ -80,7 +79,6 @@ describe('sync cli', () => {
         stripeApiKey: 'sk_test_123',
         postgresUrl: 'postgresql://localhost/test',
         postgresSchema: 'public',
-        noState: true,
         plain: true,
         engineUrl: 'http://localhost:4010',
       } as never,

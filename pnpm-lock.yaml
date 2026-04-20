@@ -176,9 +176,6 @@ importers:
       '@stripe/sync-source-stripe':
         specifier: workspace:*
         version: link:../../packages/source-stripe
-      '@stripe/sync-state-postgres':
-        specifier: workspace:*
-        version: link:../../packages/state-postgres
       '@stripe/sync-ts-cli':
         specifier: workspace:*
         version: link:../../packages/ts-cli
