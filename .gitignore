@@ -9,7 +9,7 @@ node_modules/
 *.tgz
 .mcp*
 private/
-.envrc
+.envrc.local
 
 .mcp.*
 .vercel
