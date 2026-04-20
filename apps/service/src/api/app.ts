@@ -70,13 +70,14 @@ async function checkPipelineConnectors(
 // MARK: - App factory
 
 export interface AppOptions {
-  temporal: { client: WorkflowClient; taskQueue: string }
+  temporal?: { client: WorkflowClient; taskQueue: string }
   resolver: ConnectorResolver
   pipelineStore: PipelineStore
 }
 
 export function createApp(options: AppOptions) {
-  const { client: temporal, taskQueue } = options.temporal
+  const temporal = options.temporal?.client
+  const taskQueue = options.temporal?.taskQueue
   const { pipelineStore, resolver } = options
   const {
     Pipeline: PipelineSchema,
@@ -182,11 +183,13 @@ export function createApp(options: AppOptions) {
         status: 'setup',
       } as Pipeline
       await pipelineStore.set(id, pipeline)
-      await temporal.start('pipelineWorkflow', {
-        workflowId: id,
-        taskQueue,
-        args: [id],
-      })
+      if (temporal && taskQueue) {
+        await temporal.start('pipelineWorkflow', {
+          workflowId: id,
+          taskQueue,
+          args: [id],
+        })
+      }
       return c.json(pipeline, 201)
     }
   )
@@ -283,7 +286,7 @@ export function createApp(options: AppOptions) {
       const updated = await pipelineStore.update(id, storePatch)
 
       // Best-effort: notify the workflow of pause/resume
-      if (patch.desired_status === 'paused' || patch.desired_status === 'active') {
+      if (temporal && (patch.desired_status === 'paused' || patch.desired_status === 'active')) {
         try {
           await temporal.getHandle(id).signal('paused', patch.desired_status === 'paused')
         } catch {
@@ -325,6 +328,11 @@ export function createApp(options: AppOptions) {
         await pipelineStore.get(id)
       } catch {
         return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+
+      if (!temporal) {
+        await pipelineStore.delete(id)
+        return c.json({ id, deleted: true as const }, 200)
       }
 
       // Soft-delete in store (workflow will hard-delete after teardown)
@@ -399,6 +407,10 @@ export function createApp(options: AppOptions) {
       }
 
       // Forward verified event to the pipeline workflow
+      if (!temporal) {
+        return c.text('temporal is not configured', 503)
+      }
+
       temporal
         .getHandle(pipeline_id)
         .signal('stripe_event', { body, headers: Object.fromEntries(c.req.raw.headers.entries()) })

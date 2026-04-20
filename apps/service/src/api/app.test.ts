@@ -29,7 +29,6 @@ beforeAll(async () => {
 // Lightweight app for spec/health tests (no Temporal needed)
 function app() {
   return createApp({
-    temporal: { client: {} as WorkflowClient, taskQueue: 'unused' },
     resolver,
     pipelineStore: memoryPipelineStore(),
   })
@@ -222,6 +221,28 @@ async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeou
 }
 
 describe('pipeline CRUD', () => {
+  it('create succeeds without temporal configured', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const pipeline = await res.json()
+    expect(pipeline.id).toMatch(/^pipe_/)
+    expect(await pipelineStore.list()).toHaveLength(1)
+  })
+
   it('runs stripe and postgres checks before creating a pipeline', async () => {
     const stripeCheck = vi.fn(
       () =>

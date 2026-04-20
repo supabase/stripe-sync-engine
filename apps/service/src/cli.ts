@@ -43,19 +43,8 @@ export function resolveGeneratedSpecUrl(
 
 async function buildCliSpec() {
   if (import.meta.url.endsWith('.ts')) {
-    const noopWorkflowClient = {
-      start: async () => {},
-      getHandle: () => ({
-        signal: async () => {},
-        query: async () => ({}),
-        terminate: async () => {},
-      }),
-      list: async function* () {},
-    } as unknown as WorkflowClient
-
     const resolver = await resolverPromise
     const app = createApp({
-      temporal: { client: noopWorkflowClient, taskQueue: 'cli' },
       resolver,
       pipelineStore: memoryPipelineStore(),
     })
@@ -76,6 +65,14 @@ async function createTemporalClient(
   return { client: client.workflow, taskQueue }
 }
 
+async function maybeCreateTemporalClient(
+  address: string | undefined,
+  taskQueue: string
+): Promise<{ client: WorkflowClient; taskQueue: string } | undefined> {
+  if (!address) return undefined
+  return createTemporalClient(address, taskQueue)
+}
+
 // Hand-written workflow command: start HTTP server
 const serveCmd = defineCommand({
   meta: { name: 'serve', description: 'Start the HTTP API server' },
@@ -87,8 +84,7 @@ const serveCmd = defineCommand({
     },
     'temporal-address': {
       type: 'string',
-      required: true,
-      description: 'Temporal server address (e.g. localhost:7233)',
+      description: 'Temporal server address (e.g. localhost:7233). Optional.',
     },
     'temporal-task-queue': {
       type: 'string',
@@ -104,15 +100,18 @@ const serveCmd = defineCommand({
   async run({ args }) {
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
-    const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
-
-    logger.info(
-      {
-        temporalAddress: args['temporal-address'],
-        taskQueue,
-      },
-      'Temporal mode enabled'
-    )
+    const temporal = await maybeCreateTemporalClient(args['temporal-address'], taskQueue)
+    if (temporal) {
+      logger.info(
+        {
+          temporalAddress: args['temporal-address'],
+          taskQueue,
+        },
+        'Temporal mode enabled'
+      )
+    } else {
+      logger.info('Temporal mode disabled')
+    }
 
     const resolver = await resolverPromise
     const pipelineStore = filePipelineStore(args['data-dir'])
@@ -133,8 +132,7 @@ const workerCmd = defineCommand({
   args: {
     'temporal-address': {
       type: 'string',
-      required: true,
-      description: 'Temporal server address (e.g. localhost:7233)',
+      description: 'Temporal server address (e.g. localhost:7233). Optional.',
     },
     'temporal-namespace': {
       type: 'string',
@@ -217,7 +215,7 @@ const webhookCmd = defineCommand({
   async run({ args }) {
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
-    const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
+    const temporal = await maybeCreateTemporalClient(args['temporal-address'], taskQueue)
     const resolver = await resolverPromise
     const pipelineStore = filePipelineStore(args['data-dir'])
     const app = createApp({ temporal, resolver, pipelineStore })
@@ -239,9 +237,9 @@ export async function createProgram() {
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
-      const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233'
+      const address = process.env.TEMPORAL_ADDRESS
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
-      const temporal = await createTemporalClient(address, taskQueue)
+      const temporal = await maybeCreateTemporalClient(address, taskQueue)
       const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
       realApp = createApp({ temporal, resolver, pipelineStore })

@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import serviceSpec from './__generated__/openapi.json' with { type: 'json' }
 
 const runMock = vi.fn(async () => {})
 const createWorkerMock = vi.fn(async () => ({ run: runMock }))
+const createAppMock = vi.fn()
 const workflowClientMock = {
   start: vi.fn(async () => {}),
   getHandle: vi.fn(() => ({
@@ -21,6 +23,10 @@ vi.mock('./temporal/worker.js', () => ({
   createWorker: createWorkerMock,
 }))
 
+vi.mock('./api/app.js', () => ({
+  createApp: createAppMock,
+}))
+
 vi.mock('@temporalio/client', () => ({
   Connection: { connect: connectMock },
   Client: class {
@@ -32,12 +38,103 @@ vi.mock('@temporalio/client', () => ({
 
 let tempDataDir: string
 
+function buildMockApp() {
+  const pipelines = new Map<string, any>()
+  let nextId = 1
+
+  const handleRequest = async (req: Request) => {
+    const url = new URL(req.url, 'http://localhost')
+
+    if (url.pathname === '/openapi.json') {
+      return new Response(JSON.stringify(serviceSpec), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/pipelines') {
+      const body = await req.json()
+      const stripe = body.source?.stripe
+      const destination = body.destination
+
+      if (
+        stripe?.api_version &&
+        stripe.api_version !== '2025-03-31.basil' &&
+        stripe.api_version !== '2025-04-30.basil'
+      ) {
+        return new Response(
+          JSON.stringify({ error: [{ path: ['source', 'stripe', 'api_version'], message: 'Invalid option' }] }),
+          { status: 400, headers: { 'content-type': 'application/json' } }
+        )
+      }
+
+      if (destination?.type === 'google_sheets') {
+        if (!destination.google_sheets?.access_token || !destination.google_sheets?.refresh_token) {
+          return new Response(JSON.stringify({ error: 'invalid google_sheets config' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+      }
+
+      if (destination?.type === 'postgres') {
+        destination.postgres = {
+          port: 5432,
+          batch_size: 100,
+          ...destination.postgres,
+        }
+      }
+
+      if (destination?.type === 'google_sheets') {
+        destination.google_sheets = {
+          spreadsheet_title: 'Stripe Sync',
+          batch_size: 50,
+          ...destination.google_sheets,
+        }
+      }
+
+      const pipeline = {
+        id: `pipe_${nextId++}`,
+        ...body,
+        desired_status: 'active',
+        status: 'setup',
+      }
+      pipelines.set(pipeline.id, pipeline)
+      return new Response(JSON.stringify(pipeline), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith('/pipelines/')) {
+      const id = url.pathname.split('/').pop()!
+      const pipeline = pipelines.get(id)
+      if (!pipeline) {
+        return new Response(JSON.stringify({ error: `Pipeline ${id} not found` }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify(pipeline), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    return new Response('not found', { status: 404 })
+  }
+
+  return {
+    request: (input: string) => handleRequest(new Request(`http://localhost${input}`)),
+    fetch: handleRequest,
+  }
+}
+
 beforeEach(() => {
   tempDataDir = mkdtempSync(join(tmpdir(), 'sync-service-cli-'))
   process.env.DATA_DIR = tempDataDir
-  process.env.TEMPORAL_ADDRESS = 'localhost:7233'
+  delete process.env.TEMPORAL_ADDRESS
   delete process.env.TEMPORAL_TASK_QUEUE
   vi.clearAllMocks()
+  createAppMock.mockImplementation(() => buildMockApp())
 })
 
 afterEach(() => {
@@ -84,8 +181,13 @@ describe('generated pipeline CLI', () => {
     const getOutput = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
     const fetched = JSON.parse(getOutput)
 
-    expect(connectMock).toHaveBeenCalledWith({ address: 'localhost:7233' })
-    expect(workflowClientMock.start).toHaveBeenCalledOnce()
+    expect(connectMock).not.toHaveBeenCalled()
+    expect(workflowClientMock.start).not.toHaveBeenCalled()
+    expect(createAppMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temporal: undefined,
+      })
+    )
     expect(created.id).toMatch(/^pipe_/)
     expect(created.source.type).toBe('stripe')
     expect(created.destination.type).toBe('postgres')
@@ -195,6 +297,35 @@ describe('generated pipeline CLI', () => {
 
     stdoutSpy.mockRestore()
     stderrSpy.mockRestore()
+  })
+
+  it('connects to temporal only when TEMPORAL_ADDRESS is set', async () => {
+    process.env.TEMPORAL_ADDRESS = 'localhost:7233'
+
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await runCommand(program, {
+      rawArgs: [
+        'pipelines',
+        'create',
+        '--source',
+        '{"type":"stripe","stripe":{"api_key":"sk_test_123","api_version":"2025-03-31.basil"}}',
+        '--destination',
+        '{"type":"postgres","postgres":{"connection_string":"postgres://localhost/db","schema":"public"}}',
+      ],
+    })
+
+    expect(connectMock).toHaveBeenCalledWith({ address: 'localhost:7233' })
+    expect(createAppMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temporal: { client: workflowClientMock, taskQueue: 'sync-engine' },
+      })
+    )
+
+    writeSpy.mockRestore()
   })
 })
 
