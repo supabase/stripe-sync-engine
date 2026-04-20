@@ -48,7 +48,6 @@ import {
   sslConfigFromConnectionString,
   stripSslParams,
   withPgConnectProxy,
-  withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import { syncRequestContext, logApiStream, createConnectionAbort, verboseInput } from './helpers.js'
 import {
@@ -89,7 +88,7 @@ export async function createApp(resolver: ConnectorResolver) {
       const start = Date.now()
       logger.info({ method: c.req.method, path: c.req.path }, 'request start')
       await next()
-      c.header(ENGINE_REQUEST_ID_HEADER, engineRequestId)
+      c.res.headers.set(ENGINE_REQUEST_ID_HEADER, engineRequestId)
       let error: string | undefined
       if (c.res.status >= 400) {
         try {
@@ -836,13 +835,12 @@ export async function createApp(resolver: ConnectorResolver) {
   app.openapi(internalQueryRoute, async (c) => {
     const { connection_string, sql } = c.req.valid('json')
     const ssl = sslConfigFromConnectionString(connection_string)
-    const pool = withQueryLogging(
-      new pg.Pool(
-        withPgConnectProxy({
-          connectionString: stripSslParams(connection_string),
-          ssl,
-        })
-      )
+    // No query logging — user-provided SQL may contain sensitive data
+    const pool = new pg.Pool(
+      withPgConnectProxy({
+        connectionString: stripSslParams(connection_string),
+        ssl,
+      })
     )
     try {
       const result = await pool.query(sql.trim())

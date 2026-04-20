@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectorResolver, Message, SourceStateMessage } from '../lib/index.js'
 import { sourceTest, destinationTest, collectFirst } from '../lib/index.js'
 import { createApp } from './app.js'
+import { z } from 'zod'
+import { createSourceMessageFactory, type Source } from '@stripe/sync-protocol'
+import { createLogger } from '@stripe/sync-logger'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -314,14 +317,14 @@ describe('GET /docs', () => {
 })
 
 describe('engine request id header', () => {
-  it('adds engine-request-id to responses and generates a new value per request', async () => {
+  it('adds sync-engine-reueest-id to responses and generates a new value per request', async () => {
     const app = await createApp(resolver)
 
     const res1 = await app.request('/health')
     const res2 = await app.request('/health')
 
-    const id1 = res1.headers.get('engine-request-id')
-    const id2 = res2.headers.get('engine-request-id')
+    const id1 = res1.headers.get('sync-engine-reueest-id')
+    const id2 = res2.headers.get('sync-engine-reueest-id')
 
     expect(id1).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -330,6 +333,92 @@ describe('engine request id header', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     )
     expect(id1).not.toBe(id2)
+  })
+
+  it('bridges pino logs into protocol log messages for streaming requests', async () => {
+    const bridgeLogger = createLogger({ name: 'bridge-source', level: 'debug' })
+    const bridgeMsg = createSourceMessageFactory<
+      Record<string, never>,
+      Record<string, never>,
+      Record<string, unknown>
+    >()
+    const bridgeSource = {
+      async *spec() {
+        yield { type: 'spec' as const, spec: { config: z.toJSONSchema(z.object({})) } }
+      },
+      async *check() {
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'succeeded' as const },
+        }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog' as const,
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        bridgeLogger.info({ stream: 'customers' }, 'connector logger message')
+        yield bridgeMsg.record({
+          stream: 'customers',
+          data: { id: 'cus_bridge' },
+          emitted_at: new Date().toISOString(),
+        })
+      },
+    } satisfies Source<Record<string, never>>
+
+    const destConfigSchema = await getRawConfigJsonSchema(destinationTest)
+    const bridgeResolver: ConnectorResolver = {
+      resolveSource: async () => bridgeSource,
+      resolveDestination: async () => destinationTest,
+      sources: () =>
+        new Map([
+          [
+            'bridge',
+            {
+              connector: bridgeSource,
+              configSchema: {} as any,
+              rawConfigJsonSchema: z.toJSONSchema(z.object({})),
+            },
+          ],
+        ]),
+      destinations: () =>
+        new Map([
+          [
+            'test',
+            {
+              connector: destinationTest,
+              configSchema: {} as any,
+              rawConfigJsonSchema: destConfigSchema,
+            },
+          ],
+        ]),
+    }
+
+    const app = await createApp(bridgeResolver)
+    const res = await app.request('/pipeline_read', {
+      method: 'POST',
+      headers: {
+        'X-Pipeline': JSON.stringify({
+          source: { type: 'bridge', bridge: {} },
+          destination: { type: 'test', test: {} },
+        }),
+      },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('sync-engine-reueest-id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    )
+    const events = await readNdjson<Message>(res)
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'log' &&
+          event.log.message.includes('[bridge-source] connector logger message')
+      )
+    ).toBe(true)
   })
 })
 
@@ -411,10 +500,11 @@ describe('POST /read', () => {
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
     const events = await readNdjson<Message>(res)
-    expect(events).toHaveLength(3)
-    expect(events[0]!.type).toBe('record')
-    expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+    const dataEvents = events.filter((event) => event.type !== 'log')
+    expect(dataEvents).toHaveLength(3)
+    expect(dataEvents[0]!.type).toBe('record')
+    expect(dataEvents[1]!.type).toBe('source_state')
+    expect(dataEvents[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   describe('SourceInputMessage validation (source with input schema)', () => {
@@ -702,11 +792,11 @@ describe('state_limit and time_limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    // 1 record + 1 state + 1 eof
-    expect(events).toHaveLength(3)
-    expect(events[0]!.type).toBe('record')
-    expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    const dataEvents = events.filter((event) => event.type !== 'log')
+    expect(dataEvents).toHaveLength(3)
+    expect(dataEvents[0]!.type).toBe('record')
+    expect(dataEvents[1]!.type).toBe('source_state')
+    expect(dataEvents[2]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
   it('POST /pipeline_sync?state_limit=1 stops after 1 state message and emits eof', async () => {
@@ -813,9 +903,9 @@ describe('state_limit and time_limit', () => {
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    // 4 original messages + eof
-    expect(events).toHaveLength(5)
-    expect(events[4]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+    const dataEvents = events.filter((event) => event.type !== 'log')
+    expect(dataEvents).toHaveLength(5)
+    expect(dataEvents[4]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 })
 
@@ -986,10 +1076,11 @@ describe('JSON body mode', () => {
     })
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
-    expect(events).toHaveLength(3)
-    expect(events[0]!.type).toBe('record')
-    expect(events[1]!.type).toBe('source_state')
-    expect(events[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+    const dataEvents = events.filter((event) => event.type !== 'log')
+    expect(dataEvents).toHaveLength(3)
+    expect(dataEvents[0]!.type).toBe('record')
+    expect(dataEvents[1]!.type).toBe('source_state')
+    expect(dataEvents[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('POST /pipeline_read accepts pipeline in JSON body without input', async () => {

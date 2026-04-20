@@ -22,9 +22,9 @@
     "dist"
   ],
   "dependencies": {
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-util-postgres": "workspace:*",
-    "pino": "^10",
     "pg": "^8.16.3",
     "zod": "^4.3.6"
   },

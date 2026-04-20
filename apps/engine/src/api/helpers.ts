@@ -1,4 +1,6 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
+import { mergeAsync } from '@stripe/sync-protocol'
+import { bindLogContext, createAsyncQueue, type RoutedLogEntry } from '@stripe/sync-logger'
 import { logger } from '../logger.js'
 
 export function syncRequestContext(pipeline: {
@@ -57,33 +59,62 @@ export async function* logApiStream<T>(
   context: Record<string, unknown>,
   startedAt = Date.now()
 ): AsyncIterable<T | LogMessage | ConnectionStatusMessage> {
-  let itemCount = 0
-  let hasError = false
-  try {
-    for await (const item of iter) {
-      itemCount++
-      const msg = item as { type?: string; connection_status?: { status?: string }; eof?: unknown }
-      if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
-        hasError = true
-      if (msg?.type === 'eof')
-        logger.info({ ...context, eof: msg.eof }, formatEof(msg.eof as EofPayload))
-      yield item
-    }
-    logger.debug(
-      { ...context, itemCount, durationMs: Date.now() - startedAt },
-      `${label} completed`
-    )
-  } catch (error) {
-    logger.error(
-      { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
-      `${label} failed`
-    )
-    if (!hasError) {
-      const [logMsg, connMsg] = errorMessages(error)
-      yield logMsg
-      yield connMsg
+  function toProtocolLog(entry: RoutedLogEntry): LogMessage {
+    return {
+      type: 'log',
+      log: {
+        level: entry.level,
+        message: entry.logger_name ? `[${entry.logger_name}] ${entry.message}` : entry.message,
+      },
     }
   }
+
+  const logQueue = createAsyncQueue<LogMessage>()
+
+  const main = bindLogContext(
+    (async function* () {
+      let itemCount = 0
+      let hasError = false
+      try {
+        for await (const item of iter) {
+          itemCount++
+          const msg = item as {
+            type?: string
+            connection_status?: { status?: string }
+            eof?: unknown
+          }
+          if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
+            hasError = true
+          if (msg?.type === 'eof')
+            logger.info({ ...context, eof: msg.eof }, formatEof(msg.eof as EofPayload))
+          yield item
+        }
+        logger.debug(
+          { ...context, itemCount, durationMs: Date.now() - startedAt },
+          `${label} completed`
+        )
+      } catch (error) {
+        logger.error(
+          { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
+          `${label} failed`
+        )
+        if (!hasError) {
+          const [logMsg, connMsg] = errorMessages(error)
+          yield logMsg
+          yield connMsg
+        }
+      } finally {
+        logQueue.close()
+      }
+    })(),
+    {
+      onLog(entry) {
+        logQueue.push(toProtocolLog(entry))
+      },
+    }
+  )
+
+  yield* mergeAsync([main, logQueue], 2)
 }
 
 /**

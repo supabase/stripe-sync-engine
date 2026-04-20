@@ -27,10 +27,10 @@
     "dist"
   ],
   "dependencies": {
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-openapi": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "https-proxy-agent": "^7.0.6",
-    "pino": "^10",
     "undici": "^7.16.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"

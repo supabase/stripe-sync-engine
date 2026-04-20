@@ -34,6 +34,7 @@
     "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-engine": "workspace:*",
     "@stripe/sync-hono-zod-openapi": "workspace:*",
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",

@@ -5,6 +5,7 @@ import type {
   Message,
 } from '@stripe/sync-protocol'
 import type { StateStore } from './state-store.js'
+import { withoutLogCapture } from '@stripe/sync-logger'
 import { logger } from '../logger.js'
 
 // MARK: - enforceCatalog
@@ -64,7 +65,7 @@ export function enforceCatalog<T extends Message>(
  */
 export async function* log<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
   for await (const msg of messages) {
-    if (msg.type === 'log') logger[msg.log.level](msg.log.message)
+    if (msg.type === 'log') withoutLogCapture(() => logger[msg.log.level](msg.log.message))
     else if (msg.type === 'stream_status') {
       logger.debug(
         { stream: msg.stream_status.stream, status: msg.stream_status.status },

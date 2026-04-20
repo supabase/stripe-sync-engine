@@ -2,6 +2,7 @@ import pino from 'pino'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { createLogger } from '@stripe/sync-logger'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
 
@@ -13,7 +14,11 @@ const baseOpts: pino.LoggerOptions = {
   },
 }
 
-export const logger = pino(baseOpts, pino.destination({ dest: 1, sync: false }))
+export const logger = createLogger({
+  ...baseOpts,
+  name: 'service',
+  destination: pino.destination({ dest: 1, sync: false }),
+})
 
 /**
  * Create a file-based logger for a sync run.
@@ -24,7 +29,11 @@ export function createSyncRunLogger(pipelineId: string, runId: string): pino.Log
   const dir = join(defaultDataDir, 'pipelines', pipelineId, 'sync_run')
   mkdirSync(dir, { recursive: true })
   const logPath = join(dir, `${runId}.log`)
-  return pino(baseOpts, pino.destination({ dest: logPath, sync: true }))
+  return createLogger({
+    ...baseOpts,
+    name: 'service',
+    destination: pino.destination({ dest: logPath, sync: true }),
+  })
 }
 
 /** Returns the log file path for a sync run (without creating it). */

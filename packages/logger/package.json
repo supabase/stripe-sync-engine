@@ -1,5 +1,5 @@
 {
-  "name": "@stripe/sync-util-postgres",
+  "name": "@stripe/sync-logger",
   "version": "0.2.5",
   "private": false,
   "type": "module",
@@ -11,16 +11,10 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
+    "build": "tsc"
   },
   "dependencies": {
-    "@stripe/sync-logger": "workspace:*",
-    "pg": "^8.16.3"
-  },
-  "devDependencies": {
-    "@types/pg": "^8.15.5",
-    "vitest": "^3.2.1"
+    "pino": "^10"
   },
   "files": [
     "src",

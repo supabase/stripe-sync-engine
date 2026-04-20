@@ -169,6 +169,9 @@ importers:
       '@stripe/sync-integration-supabase':
         specifier: workspace:*
         version: link:../supabase
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -260,6 +263,9 @@ importers:
       '@stripe/sync-hono-zod-openapi':
         specifier: workspace:*
         version: link:../../packages/hono-zod-openapi
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -505,6 +511,9 @@ importers:
 
   packages/destination-postgres:
     dependencies:
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../logger
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -514,9 +523,6 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.16.3
-      pino:
-        specifier: ^10
-        version: 10.1.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -556,6 +562,12 @@ importers:
         specifier: ^3.2
         version: 3.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  packages/logger:
+    dependencies:
+      pino:
+        specifier: ^10
+        version: 10.1.0
+
   packages/openapi:
     dependencies:
       zod:
@@ -587,6 +599,9 @@ importers:
 
   packages/source-stripe:
     dependencies:
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../logger
       '@stripe/sync-openapi':
         specifier: workspace:*
         version: link:../openapi
@@ -596,9 +611,6 @@ importers:
       https-proxy-agent:
         specifier: ^7.0.6
         version: 7.0.6(supports-color@10.2.2)
-      pino:
-        specifier: ^10
-        version: 10.1.0
       undici:
         specifier: ^7.16.0
         version: 7.24.6
@@ -690,12 +702,12 @@ importers:
 
   packages/util-postgres:
     dependencies:
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../logger
       pg:
         specifier: ^8.16.3
         version: 8.16.3
-      pino:
-        specifier: ^10
-        version: 10.1.0
     devDependencies:
       '@types/pg':
         specifier: ^8.15.5

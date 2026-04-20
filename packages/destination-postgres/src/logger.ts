@@ -1,9 +1,7 @@
-import pino from 'pino'
+import { createLogger } from '@stripe/sync-logger'
+import type { Logger } from '@stripe/sync-logger'
 
-export const logger = pino(
-  {
-    level: process.env.LOG_LEVEL ?? 'info',
-    name: 'destination-postgres',
-  },
-  pino.destination({ dest: 1, sync: false })
-)
+export const logger: Logger = createLogger({
+  level: process.env.LOG_LEVEL ?? 'info',
+  name: 'destination-postgres',
+})

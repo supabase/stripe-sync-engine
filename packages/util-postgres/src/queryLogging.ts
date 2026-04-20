@@ -1,5 +1,11 @@
 import type pg from 'pg'
-import type { Logger } from 'pino'
+import { createLogger } from '@stripe/sync-logger'
+import type { Logger } from '@stripe/sync-logger'
+
+export const logger: Logger = createLogger({
+  level: process.env.LOG_LEVEL ?? 'info',
+  name: 'util-postgres',
+})
 
 function extractSql(args: unknown[]): string | undefined {
   if (typeof args[0] === 'string') return args[0]
@@ -22,7 +28,7 @@ type Queryable = pg.Pool | pg.Client
  * - `debug` level: every successful query (sql, duration, row count, params)
  * - `error` level: every failed query (sql, duration, error message, params)
  */
-export function withQueryLogging<T extends Queryable>(queryable: T, log: Logger): T {
+export function withQueryLogging<T extends Queryable>(queryable: T, log: Logger = logger): T {
   const origQuery = queryable.query.bind(queryable) as typeof queryable.query
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

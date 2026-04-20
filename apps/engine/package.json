@@ -53,6 +53,7 @@
     "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-hono-zod-openapi": "workspace:*",
     "@stripe/sync-integration-supabase": "workspace:*",
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
     "@stripe/sync-state-postgres": "workspace:*",
