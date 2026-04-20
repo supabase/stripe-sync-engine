@@ -35,6 +35,7 @@ cleanup() {
   rm -f "$REPO_ROOT"/stripe-sync-ts-cli-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-hono-zod-openapi-*.tgz
   rm -f "$REPO_ROOT"/stripe-sync-integration-supabase-*.tgz
+  rm -f "$REPO_ROOT"/stripe-sync-logger-*.tgz
 }
 trap cleanup EXIT
 
@@ -58,9 +59,10 @@ UTIL_PG_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-util-postgres pack 2
 TSCLI_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-ts-cli pack 2>/dev/null | tail -1)
 HONO_ZOD_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-hono-zod-openapi pack 2>/dev/null | tail -1)
 SUPABASE_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-integration-supabase pack 2>/dev/null | tail -1)
+LOGGER_TGZ=$(cd "$REPO_ROOT" && pnpm --filter @stripe/sync-logger pack 2>/dev/null | tail -1)
 
 for tgz in "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ"; do
+           "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ"; do
   if [ ! -f "$tgz" ]; then
     echo "FAIL: tarball not found: $tgz"
     exit 1
@@ -106,7 +108,8 @@ cat > package.json <<EOF
       "@stripe/sync-util-postgres": "$UTIL_PG_TGZ",
       "@stripe/sync-ts-cli": "$TSCLI_TGZ",
       "@stripe/sync-hono-zod-openapi": "$HONO_ZOD_TGZ",
-      "@stripe/sync-integration-supabase": "$SUPABASE_TGZ"
+      "@stripe/sync-integration-supabase": "$SUPABASE_TGZ",
+      "@stripe/sync-logger": "$LOGGER_TGZ"
     }
   }
 }
