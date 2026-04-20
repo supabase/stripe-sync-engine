@@ -31,11 +31,12 @@ export async function pipelineBackfill(
   let operationCount = 0
 
   while (true) {
-    const result = await backfillStep(
-      { pipelineSync },
-      pipelineId,
-      { syncState, syncRunId, stateLimit: 100, timeLimit: 30 }
-    )
+    const result = await backfillStep({ pipelineSync }, pipelineId, {
+      syncState,
+      syncRunId,
+      stateLimit: 100,
+      timeLimit: 30,
+    })
     syncState = result.syncState
     operationCount++
 

@@ -172,8 +172,9 @@ function buildMockApp() {
         })
       }
 
-      const body =
-        req.headers.get('content-type')?.includes('application/json') ? await req.json() : {}
+      const body = req.headers.get('content-type')?.includes('application/json')
+        ? await req.json()
+        : {}
       syncRequests.push({
         id,
         query: Object.fromEntries(url.searchParams.entries()),

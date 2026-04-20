@@ -27,6 +27,7 @@ private/
 
 # Local cred storage
 .credentials/
+.stripe-sync/
 
 # Local test scripts
 scripts/test-all-accounts.sh

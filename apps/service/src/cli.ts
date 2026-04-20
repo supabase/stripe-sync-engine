@@ -107,7 +107,8 @@ const serveCmd = defineCommand({
     },
     'engine-url': {
       type: 'string',
-      description: 'Optional sync engine URL for ad-hoc sync execution. If omitted, runs in-process.',
+      description:
+        'Optional sync engine URL for ad-hoc sync execution. If omitted, runs in-process.',
     },
   },
   async run({ args }) {

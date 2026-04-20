@@ -429,9 +429,8 @@ export function createApp(options: AppOptions) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { state_limit, time_limit, sync_run_id, no_state } = c.req.valid('query')
-      const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ?? {}) as z.infer<
-        typeof SyncBodySchema
-      >
+      const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
+        {}) as z.infer<typeof SyncBodySchema>
 
       let pipeline: Pipeline
       try {
@@ -483,8 +482,7 @@ export function createApp(options: AppOptions) {
           type: 'log' as const,
           log: {
             level: 'error' as const,
-            message:
-              err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
+            message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
           },
         }),
       })
@@ -506,8 +504,14 @@ export function createApp(options: AppOptions) {
       requestParams: {
         path: PipelineIdParam,
         query: z.object({
-          state_limit: z.coerce.number().optional().meta({ description: 'Max state messages per iteration' }),
-          time_limit: z.coerce.number().optional().meta({ description: 'Time limit per iteration (seconds)' }),
+          state_limit: z.coerce
+            .number()
+            .optional()
+            .meta({ description: 'Max state messages per iteration' }),
+          time_limit: z.coerce
+            .number()
+            .optional()
+            .meta({ description: 'Time limit per iteration (seconds)' }),
         }),
       },
       responses: {
@@ -548,16 +552,12 @@ export function createApp(options: AppOptions) {
       })
 
       const syncRunId = crypto.randomUUID()
-      const result = await runBackfillToCompletion(
-        { pipelineSync: activities.pipelineSync },
-        id,
-        {
-          syncState: pipeline.sync_state ?? emptySyncState(),
-          syncRunId,
-          stateLimit: state_limit ?? 100,
-          timeLimit: time_limit ?? 30,
-        }
-      )
+      const result = await runBackfillToCompletion({ pipelineSync: activities.pipelineSync }, id, {
+        syncState: pipeline.sync_state ?? emptySyncState(),
+        syncRunId,
+        stateLimit: state_limit ?? 100,
+        timeLimit: time_limit ?? 30,
+      })
 
       return c.json({ eof: result.eof, sync_state: result.syncState }, 200)
     }

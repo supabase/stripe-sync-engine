@@ -480,9 +480,7 @@ describe('pipeline CRUD', () => {
       }
 
       seenPipeline = JSON.parse(String(req.headers['x-pipeline']))
-      seenState = req.headers['x-state']
-        ? JSON.parse(String(req.headers['x-state']))
-        : undefined
+      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
       seenQuery = url.searchParams
 
       const runProgress = {

@@ -730,6 +730,38 @@ describe('state_limit and time_limit', () => {
     expect(eofEvents[0]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
+  it('POST /pipeline_sync forwards sync_run_id into the emitted sync state', async () => {
+    const app = await createApp(resolver)
+
+    const body = toNdjson([
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
+    ])
+    const res = await app.request('/pipeline_sync?sync_run_id=run_demo', {
+      method: 'POST',
+      headers: {
+        'X-Pipeline': syncParams,
+        ...bodyHeaders(body),
+      },
+      body,
+    })
+
+    expect(res.status).toBe(200)
+    const events = await readNdjson<Message>(res)
+    const eofEvent = events.find((e) => e.type === 'eof')
+    expect(eofEvent).toMatchObject({
+      type: 'eof',
+      eof: { ending_state: { sync_run: { sync_run_id: 'run_demo' } } },
+    })
+  })
+
   it('POST /read without limits returns all messages plus eof:complete', async () => {
     const app = await createApp(resolver)
 
