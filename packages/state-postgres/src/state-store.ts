@@ -9,9 +9,7 @@ import {
 } from '@stripe/sync-util-postgres'
 import type { SourceState } from '@stripe/sync-protocol'
 
-const logger = createLogger({
-  name: 'state-store',
-})
+const logger = createLogger({ name: 'state-store' })
 
 /** Reserved stream name for global state in the _sync_state table. */
 const GLOBAL_KEY = '_global'

@@ -18,7 +18,6 @@ function devNull(): Writable {
 }
 
 afterEach(() => {
-  delete process.env.PINO_PRETTY
   vi.restoreAllMocks()
 })
 
@@ -173,9 +172,41 @@ describe('@stripe/sync-logger', () => {
     })
   })
 
-  it('falls back to normal pino output when PINO_PRETTY=true', () => {
-    process.env.PINO_PRETTY = 'true'
+  it('mirrors protocol log envelopes to async-local destinations', () => {
+    const writes: string[] = []
+    const log = createLogger({ name: 'logger-test', destination: devNull() })
 
+    runWithLogContext(
+      {
+        protocolLogDestinations: [
+          {
+            write(chunk: string) {
+              writes.push(chunk)
+              return true
+            },
+          } as unknown as Writable,
+        ],
+      },
+      () => {
+        log.info({ stream: 'customers' }, 'mirrored log')
+      }
+    )
+
+    expect(writes).toHaveLength(1)
+    expect(JSON.parse(writes[0]!)).toEqual({
+      type: 'log',
+      log: {
+        level: 'info',
+        message: 'mirrored log',
+        data: {
+          name: 'logger-test',
+          stream: 'customers',
+        },
+      },
+    })
+  })
+
+  it('applies default redaction in structured stdout logs', () => {
     const writes: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       writes.push(String(chunk))
@@ -183,13 +214,22 @@ describe('@stripe/sync-logger', () => {
     })
 
     const log = createLogger({ name: 'logger-test' })
-    log.info('pretty disabled protocol mode')
+    log.info({ api_key: 'sk_test_123', nested: { password: 'secret' } }, 'secret fields')
 
     expect(writes).toHaveLength(1)
-    expect(JSON.parse(writes[0]!)).toMatchObject({
-      level: 30,
-      name: 'logger-test',
-      msg: 'pretty disabled protocol mode',
+    expect(JSON.parse(writes[0]!)).toEqual({
+      type: 'log',
+      log: {
+        level: 'info',
+        message: 'secret fields',
+        data: {
+          name: 'logger-test',
+          api_key: '[redacted]',
+          nested: {
+            password: '[redacted]',
+          },
+        },
+      },
     })
   })
 })

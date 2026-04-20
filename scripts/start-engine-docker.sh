@@ -62,7 +62,6 @@ exec docker run \
   -e PORT="$PORT" \
   -e NODE_ENV=production \
   -e LOG_LEVEL="${LOG_LEVEL:-info}" \
-  -e LOG_PRETTY="${LOG_PRETTY:-true}" \
   -e http_proxy="$_http_proxy" \
   -e https_proxy="$_https_proxy" \
   -e no_proxy="$_no_proxy" \

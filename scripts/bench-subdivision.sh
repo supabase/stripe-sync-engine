@@ -22,7 +22,7 @@ for n in "${FACTORS[@]}"; do
   echo "--- N=$n ---"
   SUBDIVISION_FACTOR=$n \
   env -u PG_PROXY_HOST -u PG_PROXY_PORT \
-    LOG_LEVEL=debug LOG_PRETTY=false \
+    LOG_LEVEL=debug \
     node --use-env-proxy --conditions bun --import tsx apps/engine/src/bin/sync-engine.ts sync \
     --stripe-api-key "$STRIPE_API_KEY_GOLDILOCKS_PROD" \
     --postgres-url "$POSTGRES_URL" \

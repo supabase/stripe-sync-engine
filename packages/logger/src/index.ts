@@ -14,9 +14,13 @@ export type RoutedLogEntry = {
   data?: Record<string, unknown>
 }
 
+const DEFAULT_REDACT_PATHS = ['*.api_key', '*.connection_string', '*.password', '*.url']
+const DEFAULT_REDACT_CENSOR = '[redacted]'
+
 export type LoggerContext = {
   engineRequestId?: string
   onLog?: (entry: RoutedLogEntry) => void
+  protocolLogDestinations?: DestinationStream[]
   suppressLogCapture?: boolean
 }
 
@@ -151,9 +155,100 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+type RedactConfig = Exclude<LoggerOptions['redact'], string[] | undefined>
+
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function cloneForRedaction<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneForRedaction(item)) as T
+  }
+  if (isObjectLike(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, cloneForRedaction(nested)])
+    ) as T
+  }
+  return value
+}
+
+function applyRedactionPath(
+  value: unknown,
+  segments: string[],
+  censor: unknown,
+  remove: boolean,
+  index = 0
+): void {
+  if (!isObjectLike(value)) return
+
+  const segment = segments[index]
+  const entries = Array.isArray(value) ? value.entries() : Object.entries(value)
+
+  if (segment === '*') {
+    for (const [key, nested] of entries) {
+      if (index === segments.length - 1) {
+        if (remove) {
+          if (Array.isArray(value)) {
+            ;(value as unknown[])[Number(key)] = undefined
+          } else {
+            delete (value as Record<string, unknown>)[String(key)]
+          }
+        } else if (Array.isArray(value)) {
+          ;(value as unknown[])[Number(key)] = censor
+        } else {
+          ;(value as Record<string, unknown>)[String(key)] = censor
+        }
+      } else {
+        applyRedactionPath(nested, segments, censor, remove, index + 1)
+      }
+    }
+    return
+  }
+
+  if (!(segment in value)) return
+
+  if (index === segments.length - 1) {
+    if (remove) {
+      delete (value as Record<string, unknown>)[segment]
+    } else {
+      ;(value as Record<string, unknown>)[segment] = censor
+    }
+    return
+  }
+
+  applyRedactionPath((value as Record<string, unknown>)[segment], segments, censor, remove, index + 1)
+}
+
+function redactData(
+  data: Record<string, unknown> | undefined,
+  redact: LoggerOptions['redact']
+): Record<string, unknown> | undefined {
+  if (!data || !redact) return data
+
+  const config = Array.isArray(redact)
+    ? { paths: redact, censor: DEFAULT_REDACT_CENSOR, remove: false }
+    : redact
+
+  const cloned = cloneForRedaction(data)
+  for (const path of config.paths ?? []) {
+    applyRedactionPath(cloned, path.split('.'), config.censor ?? DEFAULT_REDACT_CENSOR, config.remove ?? false)
+    if (path.startsWith('*.')) {
+      applyRedactionPath(
+        cloned,
+        path.slice(2).split('.'),
+        config.censor ?? DEFAULT_REDACT_CENSOR,
+        config.remove ?? false
+      )
+    }
+  }
+  return cloned
+}
+
 function extractCapturedData(
   loggerName: string | undefined,
-  args: unknown[]
+  args: unknown[],
+  redact?: LoggerOptions['redact']
 ): Record<string, unknown> | undefined {
   const data: Record<string, unknown> = {}
 
@@ -169,7 +264,7 @@ function extractCapturedData(
     Object.assign(data, first)
   }
 
-  return Object.keys(data).length > 0 ? data : undefined
+  return redactData(Object.keys(data).length > 0 ? data : undefined, redact)
 }
 
 function formatCapturedMessage(args: unknown[]): string {
@@ -185,14 +280,19 @@ function formatCapturedMessage(args: unknown[]): string {
   return args.map(stringifyValue).join(' ')
 }
 
-function maybeRouteLog(loggerName: string | undefined, level: number, args: unknown[]) {
+function maybeRouteLog(
+  loggerName: string | undefined,
+  level: number,
+  args: unknown[],
+  redact?: LoggerOptions['redact']
+) {
   const context = storage.getStore()
   if (!context?.onLog || context.suppressLogCapture) return
   const message = formatCapturedMessage(args)
   context.onLog({
     level: mapLevel(level),
     message,
-    data: extractCapturedData(loggerName, args),
+    data: extractCapturedData(loggerName, args, redact),
   })
 }
 
@@ -200,21 +300,72 @@ function isProtocolStdoutMode(options: {
   destination?: DestinationStream
   transport?: LoggerOptions['transport']
 }): boolean {
-  return !options.destination && !options.transport && process.env.PINO_PRETTY !== 'true'
+  return !options.destination && !options.transport
 }
 
-function writeProtocolStdout(loggerName: string | undefined, level: number, args: unknown[]) {
-  const data = extractCapturedData(loggerName, args)
-  const payload = {
+function writeProtocolStdout(
+  loggerName: string | undefined,
+  level: number,
+  args: unknown[],
+  redact?: LoggerOptions['redact']
+) {
+  const data = extractCapturedData(loggerName, args, redact)
+  writeProtocolLogPayload(process.stdout, createProtocolLogPayload(level, formatCapturedMessage(args), data))
+}
+
+function createProtocolLogPayload(
+  level: number,
+  message: string,
+  data?: Record<string, unknown>
+) {
+  return {
     type: 'log',
     log: {
       level: mapLevel(level),
-      message: formatCapturedMessage(args),
+      message,
       ...(data ? { data } : {}),
     },
   }
+}
 
-  process.stdout.write(JSON.stringify(payload) + '\n')
+function writeProtocolLogPayload(destination: Pick<DestinationStream, 'write'>, payload: unknown) {
+  destination.write(JSON.stringify(payload) + '\n')
+}
+
+function writeContextProtocolLogs(
+  loggerName: string | undefined,
+  level: number,
+  args: unknown[],
+  redact?: LoggerOptions['redact']
+) {
+  const destinations = storage.getStore()?.protocolLogDestinations
+  if (!destinations?.length) return
+
+  const data = extractCapturedData(loggerName, args, redact)
+  const payload = createProtocolLogPayload(level, formatCapturedMessage(args), data)
+  for (const destination of destinations) writeProtocolLogPayload(destination, payload)
+}
+
+function mergeRedact(redact: LoggerOptions['redact']): RedactConfig {
+  if (!redact) {
+    return {
+      paths: DEFAULT_REDACT_PATHS,
+      censor: DEFAULT_REDACT_CENSOR,
+    }
+  }
+
+  if (Array.isArray(redact)) {
+    return {
+      paths: [...DEFAULT_REDACT_PATHS, ...redact],
+      censor: DEFAULT_REDACT_CENSOR,
+    }
+  }
+
+  return {
+    ...redact,
+    paths: [...DEFAULT_REDACT_PATHS, ...(redact.paths ?? [])],
+    censor: redact.censor ?? DEFAULT_REDACT_CENSOR,
+  }
 }
 
 export function createLogger(
@@ -226,17 +377,20 @@ export function createLogger(
 
   const loggerName = pinoOptions.name
   const protocolStdoutMode = isProtocolStdoutMode({ destination, transport: pinoOptions.transport })
+  const redact = mergeRedact(pinoOptions.redact)
 
   return pino(
     {
       level: process.env.LOG_LEVEL ?? 'info',
       ...pinoOptions,
+      redact,
       hooks: {
         ...userHooks,
         logMethod(inputArgs, method, level) {
-          maybeRouteLog(loggerName, level, inputArgs)
+          maybeRouteLog(loggerName, level, inputArgs, redact)
+          writeContextProtocolLogs(loggerName, level, inputArgs, redact)
           if (protocolStdoutMode) {
-            writeProtocolStdout(loggerName, level, inputArgs)
+            writeProtocolStdout(loggerName, level, inputArgs, redact)
             return
           }
           if (userHooks?.logMethod) {

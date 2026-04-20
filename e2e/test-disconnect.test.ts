@@ -161,7 +161,7 @@ async function startEngineNode(port: number): Promise<EngineProcess> {
   let output = ''
   let exited = false
   const child = spawn('node', [ENGINE_DIST], {
-    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace', LOG_PRETTY: '' },
+    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   // pino logs to stdout by default
@@ -194,7 +194,7 @@ async function startEngineBun(port: number): Promise<EngineProcess> {
   let output = ''
   let exited = false
   const child = spawn('bun', [ENGINE_SRC], {
-    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace', LOG_PRETTY: '' },
+    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.stdout.on('data', (chunk: Buffer) => {

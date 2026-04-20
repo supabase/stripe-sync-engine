@@ -9,9 +9,7 @@ import {
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 
-const pgLogger = createLogger({
-  name: 'migrate',
-})
+const pgLogger = createLogger({ name: 'migrate' })
 import { renderMigrationTemplate } from './migrationTemplate.js'
 import type { Migration } from './migrations/index.js'
 import { migrations as allMigrations } from './migrations/index.js'

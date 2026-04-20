@@ -2,9 +2,7 @@ import type pg from 'pg'
 import { createLogger } from '@stripe/sync-logger'
 import type { Logger } from '@stripe/sync-logger'
 
-export const logger: Logger = createLogger({
-  name: 'util-postgres',
-})
+export const logger: Logger = createLogger({ name: 'util-postgres' })
 
 function extractSql(args: unknown[]): string | undefined {
   if (typeof args[0] === 'string') return args[0]
