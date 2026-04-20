@@ -30,6 +30,40 @@ describe('stateReducer initialize event', () => {
     expect(state.sync_run.run_id).toBe('run-1')
   })
 
+  it('sets time_ceiling when run_id is provided', () => {
+    const before = new Date().toISOString()
+    const state = init(['customers'], 'run-1')
+    const after = new Date().toISOString()
+    expect(state.sync_run.time_ceiling).toBeDefined()
+    expect(state.sync_run.time_ceiling! >= before).toBe(true)
+    expect(state.sync_run.time_ceiling! <= after).toBe(true)
+  })
+
+  it('does not set time_ceiling when run_id is omitted', () => {
+    const state = init(['customers'])
+    expect(state.sync_run.time_ceiling).toBeUndefined()
+  })
+
+  it('preserves existing time_ceiling on continuation', () => {
+    const prior: SyncState = {
+      source: { streams: {}, global: {} },
+      destination: {},
+      sync_run: {
+        run_id: 'run-1',
+        time_ceiling: '2026-01-01T00:00:00.000Z',
+        progress: {
+          started_at: '2024-01-01T00:00:00Z',
+          elapsed_ms: 5000,
+          global_state_count: 3,
+          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
+        },
+      },
+    }
+    const state = init(['customers'], 'run-1', prior)
+    expect(state.sync_run.time_ceiling).toBe('2026-01-01T00:00:00.000Z')
+  })
+
   it('resets progress when run_id changes', () => {
     const prior: SyncState = {
       source: { streams: { customers: { cursor: 'cus_99' } }, global: {} },
