@@ -2,6 +2,7 @@ import type { ConfiguredCatalog, Message } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
 import type { Config, StreamState } from './index.js'
 import { msg } from './index.js'
+import { log } from './logger.js'
 import type { ResourceConfig } from './types.js'
 import type { StripeClient } from './client.js'
 import { processStripeEvent } from './process-event.js'
@@ -45,10 +46,9 @@ export async function* pollEvents(opts: {
   // Warn if cursor is too old (Stripe retains events for ~30 days)
   const ageInDays = (startTimestamp - cursor) / 86400
   if (ageInDays > EVENTS_MAX_AGE_DAYS) {
-    yield msg.log({
-      level: 'warn',
-      message: `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`,
-    })
+    log.warn(
+      `Events cursor is ${Math.round(ageInDays)} days old. Stripe retains events for ~30 days. Consider a full re-sync.`
+    )
   }
 
   // Fetch all events since cursor via pagination (API returns newest-first)

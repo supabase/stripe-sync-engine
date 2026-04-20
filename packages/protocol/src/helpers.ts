@@ -6,8 +6,6 @@ import type {
   EofMessage,
   EofPayload,
   GlobalStatePayload,
-  LogMessage,
-  LogPayload,
   Message,
   ProgressMessage,
   ProgressPayload,
@@ -201,7 +199,6 @@ type TypedGlobalStatePayload<TGlobalState> = {
  *   yield msg.source_state({ state_type: 'stream', stream: 'customers', data: { remaining: [] } })
  *   yield msg.source_state({ state_type: 'global', data: { events_cursor: 123 } })
  *   yield msg.connection_status({ status: 'failed', message: 'bad key' })
- *   yield msg.log({ level: 'warn', message: 'rate limited' })
  */
 export function createSourceMessageFactory<
   TStreamState,
@@ -229,10 +226,6 @@ export function createSourceMessageFactory<
       return { type: 'connection_status', connection_status: payload }
     },
 
-    log(payload: LogPayload): LogMessage {
-      return { type: 'log', log: payload }
-    },
-
     control<C extends ControlPayload['control_type']>(
       payload: Extract<ControlPayload, { control_type: C }>
     ): ControlMessage {
@@ -247,7 +240,7 @@ export function createSourceMessageFactory<
  * Type-safe message factory for the engine.
  *
  * Same 1:1 envelope pattern as `createSourceMessageFactory`.
- * Covers the message types the engine constructs: eof, progress, log.
+ * Covers the message types the engine constructs: eof and progress.
  */
 export function createEngineMessageFactory() {
   return {
@@ -257,10 +250,6 @@ export function createEngineMessageFactory() {
 
     progress(payload: ProgressPayload): ProgressMessage {
       return { type: 'progress', progress: payload }
-    },
-
-    log(payload: LogPayload): LogMessage {
-      return { type: 'log', log: payload }
     },
   }
 }

@@ -492,6 +492,9 @@ importers:
 
   packages/destination-google-sheets:
     dependencies:
+      '@stripe/sync-logger':
+        specifier: workspace:*
+        version: link:../logger
       '@stripe/sync-protocol':
         specifier: workspace:*
         version: link:../protocol

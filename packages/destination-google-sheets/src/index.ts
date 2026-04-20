@@ -12,6 +12,7 @@ import {
   serializeRowKey,
   stripSystemFields,
 } from './metadata.js'
+import { log } from './logger.js'
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import {
@@ -420,7 +421,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         }
 
         const errMsg = err instanceof Error ? err.message : String(err)
-        yield { type: 'log' as const, log: { level: 'error' as const, message: errMsg } }
+        log.error(errMsg)
         yield {
           type: 'connection_status' as const,
           connection_status: { status: 'failed' as const, message: errMsg },
@@ -429,25 +430,15 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       }
 
       if (Object.keys(rowAssignments).length > 0) {
-        yield {
-          type: 'log' as const,
-          log: {
-            level: 'debug' as const,
-            message: formatGoogleSheetsMetaLog({
-              type: 'row_assignments',
-              assignments: rowAssignments,
-            }),
-          },
-        }
+        log.debug(
+          formatGoogleSheetsMetaLog({
+            type: 'row_assignments',
+            assignments: rowAssignments,
+          })
+        )
       }
 
-      yield {
-        type: 'log' as const,
-        log: {
-          level: 'info' as const,
-          message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
-        },
-      }
+      log.info(`Sheets destination: wrote to spreadsheet ${spreadsheetId}`)
     },
   } satisfies Destination<Config>
 

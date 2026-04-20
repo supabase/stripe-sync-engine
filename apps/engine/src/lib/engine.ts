@@ -306,17 +306,8 @@ function withSetupTimeout<T extends { type: string }>(
             const result = await iter.next()
             if (result.done) return { value: undefined as unknown as T, done: true } as const
             if ((result.value as { type: string }).type === 'eof') {
-              // Timeout hit — yield an error log message before ending
-              return {
-                value: {
-                  type: 'log',
-                  log: {
-                    level: 'error',
-                    message: `${label} setup timed out after ${SETUP_TIME_LIMIT_S}s`,
-                  },
-                } as unknown as T,
-                done: false,
-              } as const
+              log.error(`${label} setup timed out after ${SETUP_TIME_LIMIT_S}s`)
+              return { value: undefined as unknown as T, done: true } as const
             }
             return { value: result.value as T, done: false } as const
           }
@@ -406,16 +397,15 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const runSource = opts?.only !== 'destination'
       const runDest = opts?.only !== 'source'
 
-      yield engineMsg.log({
-        level: 'info',
-        message: 'Starting pipeline setup',
-        data: {
+      log.info(
+        {
           source_type: pipeline.source.type,
           destination_type: pipeline.destination.type,
           run_source: runSource,
           run_destination: runDest,
         },
-      })
+        'Starting pipeline setup'
+      )
 
       log.debug({ runSource, runDest }, 'pipeline_setup: resolving connectors')
       const [srcConnector, destConnector] = await Promise.all([

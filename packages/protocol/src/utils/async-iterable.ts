@@ -179,28 +179,30 @@ export function map<T, U>(
 }
 
 /**
- * Merge multiple async generators into one, pulling from up to `concurrency`
- * generators at a time. As generators complete, new ones are pulled in from
+ * Merge multiple async iterables into one, pulling from up to `concurrency`
+ * iterables at a time. As iterables complete, new ones are pulled in from
  * the array (bounded concurrency pool).
  */
 export async function* mergeAsync<T>(
-  generators: AsyncGenerator<T>[],
+  iterables: AsyncIterable<T>[],
   concurrency: number
 ): AsyncGenerator<T> {
   type IndexedResult = { index: number; result: IteratorResult<T, undefined> }
   const active = new Map<number, Promise<IndexedResult>>()
+  const iterators = iterables.map((it) => it[Symbol.asyncIterator]())
   let nextIndex = 0
 
-  function pull(gen: AsyncGenerator<T>, index: number) {
+  function pull(index: number) {
+    const iterator = iterators[index]!
     active.set(
       index,
-      gen.next().then((result) => ({ index, result: result as IteratorResult<T, undefined> }))
+      iterator.next().then((result) => ({ index, result: result as IteratorResult<T, undefined> }))
     )
   }
 
-  const limit = Math.min(concurrency, generators.length)
+  const limit = Math.min(concurrency, iterables.length)
   for (let i = 0; i < limit; i++) {
-    pull(generators[i], i)
+    pull(i)
     nextIndex = i + 1
   }
 
@@ -209,13 +211,13 @@ export async function* mergeAsync<T>(
     active.delete(index)
 
     if (result.done) {
-      if (nextIndex < generators.length) {
-        pull(generators[nextIndex], nextIndex)
+      if (nextIndex < iterables.length) {
+        pull(nextIndex)
         nextIndex++
       }
     } else {
       yield result.value
-      pull(generators[index], index)
+      pull(index)
     }
   }
 }

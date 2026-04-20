@@ -6,6 +6,7 @@ import type {
   DiscoverOutput,
   CoreMessage,
 } from '@stripe/sync-protocol'
+import { log } from '../logger.js'
 
 export const spec = z.object({
   /** Stream definitions: name -> { primary_key? }. Used for catalog discovery only. */
@@ -54,10 +55,7 @@ export const sourceTest = {
     let recordCount = 0
     for await (const msg of $stdin as AsyncIterable<CoreMessage>) {
       if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
-        yield {
-          type: 'log' as const,
-          log: { level: 'error' as const, message: 'Simulated auth error' },
-        }
+        log.error('Simulated auth error')
         yield {
           type: 'connection_status' as const,
           connection_status: { status: 'failed' as const, message: 'Simulated auth error' },

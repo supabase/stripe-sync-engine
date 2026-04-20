@@ -426,10 +426,7 @@ async function* iterateStream(opts: {
     if (remaining.length === 0) return
   } else {
     if (opts.streamState && isLegacyState(opts.streamState)) {
-      yield msg.log({
-        level: 'warn',
-        message: `${streamName}: discarding legacy state, starting fresh`,
-      })
+      log.warn(`${streamName}: discarding legacy state, starting fresh`)
     }
     remaining = [{ gte: timeRange.gte, lt: timeRange.lt, cursor: null }]
   }

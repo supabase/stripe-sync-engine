@@ -1,6 +1,6 @@
 import pg from 'pg'
 import type { PoolConfig } from 'pg'
-import type { Destination, LogMessage } from '@stripe/sync-protocol'
+import type { Destination } from '@stripe/sync-protocol'
 import {
   sql,
   sslConfigFromConnectionString,
@@ -13,10 +13,6 @@ import { buildCreateTableDDL } from './schemaProjection.js'
 import defaultSpec from './spec.js'
 import { log } from './logger.js'
 import type { Config } from './spec.js'
-
-function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
-  return { type: 'log', log: { level, message } }
-}
 
 // MARK: - Spec
 
@@ -145,7 +141,7 @@ const destination = {
     log.debug({ schema: config.schema }, 'dest setup: connecting to pool')
     const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
     try {
-      yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
+      log.info(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       log.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
       log.debug('dest setup: creating trigger function')
@@ -285,13 +281,7 @@ const destination = {
         if (err) yield streamError(streamName, err)
       }
 
-      yield {
-        type: 'log' as const,
-        log: {
-          level: 'info' as const,
-          message: `Postgres destination: wrote to schema "${config.schema}"`,
-        },
-      }
+      log.info(`Postgres destination: wrote to schema "${config.schema}"`)
     } finally {
       await pool.end()
     }
