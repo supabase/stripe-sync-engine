@@ -5,6 +5,7 @@ import {
   executeChild,
   isCancellation,
   setHandler,
+  workflowInfo,
 } from '@temporalio/workflow'
 
 import type { SourceInputMessage, SyncState } from '@stripe/sync-protocol'
@@ -94,7 +95,7 @@ export async function pipelineWorkflow(
       const events = await waitForLiveEvents()
       if (!events) return
 
-      await pipelineSync(pipelineId, { input: events })
+      await pipelineSync(pipelineId, { input: events, sync_run_id: workflowInfo().runId })
       operationCount++
     }
   }

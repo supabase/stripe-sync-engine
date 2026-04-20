@@ -1,7 +1,8 @@
-import { ApplicationFailure, continueAsNew } from '@temporalio/workflow'
+import { ApplicationFailure, continueAsNew, workflowInfo } from '@temporalio/workflow'
 
 import type { EofPayload, SyncState } from '@stripe/sync-protocol'
 import { pipelineSync } from './_shared.js'
+import { backfillStep } from '../lib/backfill-loop.js'
 
 export interface PipelineBackfillOpts {
   syncState: SyncState
@@ -17,32 +18,33 @@ const BACKFILL_CONTINUE_AS_NEW_THRESHOLD = 200
  * Child workflow that runs a backfill from start to finish.
  * Calls pipelineSync in a loop until has_more=false, then returns the final eof.
  * The parent workflow inspects eof.run_progress.derived.status to decide next steps.
+ *
+ * Uses workflowInfo().runId as the sync_run_id so the engine tracks progress
+ * across continueAsNew boundaries within the same Temporal run.
  */
 export async function pipelineBackfill(
   pipelineId: string,
   opts: PipelineBackfillOpts
 ): Promise<PipelineBackfillResult> {
+  const syncRunId = workflowInfo().runId
   let syncState = opts.syncState
   let operationCount = 0
 
   while (true) {
-    const { eof } = await pipelineSync(pipelineId, {
-      state: syncState,
-      state_limit: 100,
-      time_limit: 30,
-    })
+    const result = await backfillStep(
+      { pipelineSync },
+      pipelineId,
+      { syncState, syncRunId, stateLimit: 100, timeLimit: 30 }
+    )
+    syncState = result.syncState
     operationCount++
 
-    if (eof.ending_state) {
-      syncState = eof.ending_state
-    }
-
-    if (!eof.has_more) {
-      if (eof.run_progress.derived.status === 'failed') {
-        const message = eof.run_progress.connection_status?.message ?? 'Sync failed'
+    if (!result.eof.has_more) {
+      if (result.eof.run_progress.derived.status === 'failed') {
+        const message = result.eof.run_progress.connection_status?.message ?? 'Sync failed'
         throw ApplicationFailure.nonRetryable(message, 'SyncFailed')
       }
-      return { eof }
+      return { eof: result.eof }
     }
 
     if (operationCount >= BACKFILL_CONTINUE_AS_NEW_THRESHOLD) {
