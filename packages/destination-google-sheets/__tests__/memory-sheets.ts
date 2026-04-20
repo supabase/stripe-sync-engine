@@ -69,6 +69,22 @@ export function createMemorySheets() {
     return tab
   }
 
+  function getTabBySheetId(spreadsheetId: string, sheetId: number): SheetTab {
+    const ss = getSpreadsheet(spreadsheetId)
+    for (const tab of ss.sheets.values()) {
+      if (tab.sheetId === sheetId) return tab
+    }
+    throw Object.assign(new Error(`Sheet not found: ${sheetId}`), { code: 400 })
+  }
+
+  function rowDataToValues(rowData: unknown): string[] {
+    const values = (rowData as { values?: unknown[] })?.values ?? []
+    return values.map((cell) => {
+      const uev = (cell as { userEnteredValue?: { stringValue?: string } })?.userEnteredValue
+      return uev?.stringValue ?? ''
+    })
+  }
+
   const sheets = {
     spreadsheets: {
       async create(params: { requestBody?: { properties?: { title?: string } }; fields?: string }) {
@@ -83,7 +99,11 @@ export function createMemorySheets() {
       async get(params: { spreadsheetId: string; fields?: string }) {
         const ss = getSpreadsheet(params.spreadsheetId)
         const sheetsMeta = Array.from(ss.sheets.entries()).map(([name, tab]) => ({
-          properties: { sheetId: tab.sheetId, title: name },
+          properties: {
+            sheetId: tab.sheetId,
+            title: name,
+            gridProperties: { rowCount: 1000, columnCount: 26 },
+          },
         }))
         return { data: { sheets: sheetsMeta } }
       },
@@ -115,6 +135,59 @@ export function createMemorySheets() {
                 ss.sheets.delete(oldName)
                 ss.sheets.set(update.properties.title, tab)
                 break
+              }
+            }
+            replies.push({})
+          } else if (req.appendCells) {
+            const ac = req.appendCells as { sheetId: number; rows?: unknown[] }
+            const tab = getTabBySheetId(params.spreadsheetId, ac.sheetId)
+            for (const row of ac.rows ?? []) tab.values.push(rowDataToValues(row))
+            replies.push({})
+          } else if (req.updateCells) {
+            const uc = req.updateCells as {
+              start?: { sheetId?: number; rowIndex?: number; columnIndex?: number }
+              rows?: unknown[]
+            }
+            const sheetId = uc.start?.sheetId
+            if (sheetId != null) {
+              const tab = getTabBySheetId(params.spreadsheetId, sheetId)
+              const rowIndex = uc.start?.rowIndex ?? 0
+              const rows = (uc.rows ?? []).map(rowDataToValues)
+              for (let i = 0; i < rows.length; i++) {
+                tab.values[rowIndex + i] = rows[i]
+              }
+            }
+            replies.push({})
+          } else if (req.appendDimension) {
+            // No-op in the fake: the backing arrays grow dynamically, so the
+            // grid never actually constrains writes. Accept and reply empty
+            // so production code paths that call appendDimension succeed.
+            replies.push({})
+          } else if (req.pasteData) {
+            // Parse a pasteData request and write its cells into the tab. The
+            // production code uses `\x1f` as column delimiter and `\n` as row
+            // delimiter (fixed by the API), with `PASTE_VALUES` semantics.
+            const pd = req.pasteData as {
+              coordinate?: { sheetId?: number; rowIndex?: number; columnIndex?: number }
+              data?: string
+              delimiter?: string
+              type?: string
+            }
+            const sheetId = pd.coordinate?.sheetId
+            if (sheetId != null) {
+              const tab = getTabBySheetId(params.spreadsheetId, sheetId)
+              const rowIndex = pd.coordinate?.rowIndex ?? 0
+              const columnIndex = pd.coordinate?.columnIndex ?? 0
+              const delimiter = pd.delimiter ?? '\t'
+              const raw = pd.data ?? ''
+              const rowLines = raw.length === 0 ? [] : raw.split('\n')
+              for (let i = 0; i < rowLines.length; i++) {
+                const cells = rowLines[i].split(delimiter)
+                const target: unknown[] = (tab.values[rowIndex + i] ?? []).slice()
+                for (let j = 0; j < cells.length; j++) {
+                  target[columnIndex + j] = cells[j]
+                }
+                tab.values[rowIndex + i] = target
               }
             }
             replies.push({})

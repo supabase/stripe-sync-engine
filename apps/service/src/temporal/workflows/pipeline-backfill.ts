@@ -14,6 +14,10 @@ export interface PipelineBackfillResult {
 
 const BACKFILL_CONTINUE_AS_NEW_THRESHOLD = 200
 
+// DEBUG: hard cap on activity iterations per workflow. Remove once the
+// sheets-destination looping bug is resolved.
+const DEBUG_MAX_OPERATIONS = 100
+
 /**
  * Child workflow that runs a backfill from start to finish.
  * Calls pipelineSync in a loop until has_more=false, then returns the final eof.
@@ -46,6 +50,15 @@ export async function pipelineBackfill(
         throw ApplicationFailure.nonRetryable(message, 'SyncFailed')
       }
       return { eof: result.eof }
+    }
+
+    if (operationCount >= DEBUG_MAX_OPERATIONS) {
+      log.warn('DEBUG_MAX_OPERATIONS reached — stopping backfill early', {
+        pipelineId,
+        operationCount,
+        has_more: eof.has_more,
+      })
+      return { eof }
     }
 
     if (operationCount >= BACKFILL_CONTINUE_AS_NEW_THRESHOLD) {

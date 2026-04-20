@@ -29,6 +29,22 @@ export function errorMessages(err: unknown): [LogMessage, ConnectionStatusMessag
   ]
 }
 
+/**
+ * Deep-clones the eof payload with every `completed_ranges` array removed.
+ * These arrays are noisy in logs (often hundreds of entries per stream) but
+ * still available on the raw message returned by the API.
+ */
+export function stripCompletedRanges<T>(value: T): T {
+  if (!value || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map(stripCompletedRanges) as unknown as T
+  const out: Record<string, unknown> = {}
+  for (const [key, val] of Object.entries(value)) {
+    if (key === 'completed_ranges') continue
+    out[key] = stripCompletedRanges(val)
+  }
+  return out as T
+}
+
 export function formatEof(eof: EofPayload): string {
   const rp = eof.request_progress
   const elapsed = rp?.elapsed_ms ? `${(rp.elapsed_ms / 1000).toFixed(1)}s` : ''

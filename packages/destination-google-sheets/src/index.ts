@@ -18,15 +18,17 @@ import { log } from './logger.js'
 import defaultSpec, { configSchema } from './spec.js'
 import type { Config } from './spec.js'
 import {
-  appendRows,
+  applyBatch,
   buildRowMap,
   createIntroSheet,
   deleteSpreadsheet,
   ensureSheet,
   ensureSpreadsheet,
+  findSheetId,
   protectSheets,
   readHeaderRow,
-  updateRows,
+  readSheet,
+  type StreamBatchOps,
 } from './writer.js'
 
 export {
@@ -176,7 +178,6 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
 
     async *write({ config, catalog }, $stdin) {
       const sheets = sheetsClient ?? makeSheetsClient(config)
-      const batchSize = config.batch_size ?? 50
       const primaryKeys = new Map<string, string[][]>(
         catalog.streams.map((configuredStream) => [
           configuredStream.stream.name,
@@ -188,16 +189,14 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         ? config.spreadsheet_id
         : await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
-      // Per-stream state: column headers plus buffered appends/updates.
+      // Per-stream state: column headers, sheetIds, plus buffered appends/updates.
+      // All writes are accumulated and flushed in a single `spreadsheets.batchUpdate`
+      // call at the end of this generator (see `flushAll` below).
       const streamHeaders = new Map<string, string[]>()
+      const sheetIds = new Map<string, number>()
       const appendBuffers = new Map<string, Array<{ row: string[]; rowKey?: string }>>()
       const updateBuffers = new Map<string, Array<{ rowNumber: number; values: string[] }>>()
       const rowAssignments: Record<string, Record<string, number>> = {}
-      // Row maps for native upsert: rowKey → 1-based row number per stream
-      const rowMaps = new Map<string, Map<string, number>>()
-      // Tracks whether we've refreshed the row map from the sheet for each stream
-      // (once per write() call, on first flush)
-      const rowMapRefreshed = new Set<string>()
       // Pending append index: rowKey → index in appendBuffers for O(1) in-batch dedup
       const appendKeyIndex = new Map<string, Map<string, number>>()
 
@@ -225,7 +224,11 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
             const pkFields = pk?.map((path) => path[0]) ?? []
             const rest = Object.keys(cleanData).filter((k) => !pkFields.includes(k))
             headers = [...pkFields.filter((k) => k in cleanData), ...rest]
-            await ensureSheet(sheets, spreadsheetId, streamName, headers)
+            const sheetId = await ensureSheet(sheets, spreadsheetId, streamName, headers)
+            sheetIds.set(streamName, sheetId)
+          } else {
+            const sheetId = await findSheetId(sheets, spreadsheetId, streamName)
+            if (sheetId !== undefined) sheetIds.set(streamName, sheetId)
           }
 
           streamHeaders.set(streamName, headers)
@@ -236,7 +239,8 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
 
         const next = extendHeaders(headers, cleanData)
         if (next.changed) {
-          await ensureSheet(sheets, spreadsheetId, streamName, next.headers)
+          const sheetId = await ensureSheet(sheets, spreadsheetId, streamName, next.headers)
+          sheetIds.set(streamName, sheetId)
           streamHeaders.set(streamName, next.headers)
           headers = next.headers
         }
@@ -244,115 +248,155 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         return headers
       }
 
-      const ensureRowMapForStream = async (streamName: string): Promise<Map<string, number>> => {
-        let map = rowMaps.get(streamName)
-        if (!map) {
+      const flushAll = async () => {
+        const flushStart = Date.now()
+        let totalBufferedAppends = 0
+        let totalBufferedUpdates = 0
+        for (const [, arr] of appendBuffers) totalBufferedAppends += arr.length
+        for (const [, arr] of updateBuffers) totalBufferedUpdates += arr.length
+        console.error(
+          `[google-sheets] flushAll start: ${totalBufferedAppends} appends + ${totalBufferedUpdates} updates across ${appendBuffers.size} streams`
+        )
+
+        const opsByStream = new Map<string, StreamBatchOps>()
+
+        for (const streamName of new Set([...appendBuffers.keys(), ...updateBuffers.keys()])) {
+          const bufferedAppends = appendBuffers.get(streamName) ?? []
+          const bufferedUpdates = (updateBuffers.get(streamName) ?? []).slice()
+          if (bufferedAppends.length === 0 && bufferedUpdates.length === 0) continue
+
+          const sheetId = sheetIds.get(streamName)
+          if (sheetId === undefined) continue
+
+          const headers = streamHeaders.get(streamName) ?? []
           const primaryKey = primaryKeys.get(streamName)
-          const headers = streamHeaders.get(streamName)
-          if (primaryKey && primaryKey.length > 0 && headers) {
+          let appends = bufferedAppends.slice()
+          let existingRowCount = 0
+
+          // Refresh from the sheet to (a) dedup against rows written by prior
+          // write() calls or Temporal retries and (b) compute the starting row
+          // number for new appends (needed because `appendCells` replies don't
+          // carry ranges).
+          if (
+            primaryKey &&
+            primaryKey.length > 0 &&
+            headers.length > 0 &&
+            appends.some((e) => e.rowKey)
+          ) {
+            const readStart = Date.now()
+            let converted = 0
             try {
-              map = await buildRowMap(sheets, spreadsheetId, streamName, headers, primaryKey)
-              rowMapRefreshed.add(streamName)
-            } catch {
-              map = new Map() // sheet doesn't exist yet or is empty
-            }
-          } else {
-            map = new Map() // no primary key or no headers = append-only
-          }
-          rowMaps.set(streamName, map)
-        }
-        return map
-      }
+              const allRows = await readSheet(sheets, spreadsheetId, streamName)
+              existingRowCount = allRows.length
+              const freshMap = await buildRowMap(
+                sheets,
+                spreadsheetId,
+                streamName,
+                headers,
+                primaryKey
+              )
 
-      const flushStream = async (streamName: string) => {
-        const updates = updateBuffers.get(streamName)
-        if (updates && updates.length > 0) {
-          await updateRows(sheets, spreadsheetId, streamName, updates)
-          updateBuffers.set(streamName, [])
-        }
-
-        let appends = appendBuffers.get(streamName)
-        if (!appends || appends.length === 0) return
-
-        // On the first flush per stream, refresh the row map from the sheet
-        // to catch rows written by previous write() calls or Temporal activity
-        // retries. Only done once per write() to avoid excessive API calls.
-        const primaryKey = primaryKeys.get(streamName)
-        const headers = streamHeaders.get(streamName)
-        if (
-          !rowMapRefreshed.has(streamName) &&
-          primaryKey &&
-          primaryKey.length > 0 &&
-          headers &&
-          appends.some((e) => e.rowKey)
-        ) {
-          rowMapRefreshed.add(streamName)
-          try {
-            const freshMap = await buildRowMap(
-              sheets,
-              spreadsheetId,
-              streamName,
-              headers,
-              primaryKey
-            )
-            rowMaps.set(streamName, freshMap)
-
-            const lateUpdates: Array<{ rowNumber: number; values: string[] }> = []
-            const remaining: typeof appends = []
-            for (const entry of appends) {
-              const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
-              if (existing !== undefined) {
-                lateUpdates.push({ rowNumber: existing, values: entry.row })
-              } else {
-                remaining.push(entry)
+              const remaining: typeof appends = []
+              for (const entry of appends) {
+                const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
+                if (existing !== undefined) {
+                  bufferedUpdates.push({ rowNumber: existing, values: entry.row })
+                  converted++
+                } else {
+                  remaining.push(entry)
+                }
               }
+              appends = remaining
+              console.error(
+                `[google-sheets] readSheet+buildRowMap(${streamName}): ${existingRowCount} rows, ${freshMap.size} keys, converted ${converted} appends→updates in ${Date.now() - readStart}ms`
+              )
+            } catch (err) {
+              console.error(
+                `[google-sheets] readSheet+buildRowMap(${streamName}) failed in ${Date.now() - readStart}ms: ${err instanceof Error ? err.message : String(err)}`
+              )
+              // Sheet read failed — proceed with append (best effort)
             }
-
-            if (lateUpdates.length > 0) {
-              await updateRows(sheets, spreadsheetId, streamName, lateUpdates)
-            }
-            appends = remaining
-          } catch {
-            // Sheet read failed — proceed with append (best effort)
           }
+
+          // Sort appends by rowKey so rows land in a deterministic order on
+          // the sheet regardless of the order the source emitted them (and
+          // regardless of interleaving from concurrent stream generators in
+          // the source). Keyless appends are grouped to the front in their
+          // insertion order — JavaScript's Array.prototype.sort is stable
+          // since ES2019. This is sorted here (before building opsByStream
+          // AND before stashing into appendBuffers) so that the row_assignments
+          // computation still maps each append's rowKey to its final rowNumber.
+          appends.sort((a, b) => {
+            const ak = a.rowKey ?? ''
+            const bk = b.rowKey ?? ''
+            if (ak === bk) return 0
+            return ak < bk ? -1 : 1
+          })
+
+          opsByStream.set(streamName, {
+            sheetId,
+            updates: bufferedUpdates,
+            appends: appends.map((entry) => entry.row),
+            existingRowCount,
+          })
+
+          // Stash the (deduped, sorted) append entries so we can emit
+          // row_assignments after applyBatch returns the start row per stream.
+          appendBuffers.set(streamName, appends)
         }
 
-        if (appends.length === 0) {
-          appendBuffers.set(streamName, [])
-          appendKeyIndex.get(streamName)?.clear()
+        if (opsByStream.size === 0) {
+          console.error(`[google-sheets] flushAll: nothing to flush (took ${Date.now() - flushStart}ms)`)
           return
         }
 
-        const range = await appendRows(
-          sheets,
-          spreadsheetId,
-          streamName,
-          appends.map((entry) => entry.row)
+        let totalAppends = 0
+        let totalUpdates = 0
+        for (const ops of opsByStream.values()) {
+          totalAppends += ops.appends.length
+          totalUpdates += ops.updates.length
+        }
+        console.error(
+          `[google-sheets] applyBatch start: ${totalAppends} appends + ${totalUpdates} updates across ${opsByStream.size} streams`
         )
-        if (range) {
-          const map = rowMaps.get(streamName)
+        const applyStart = Date.now()
+        const results = await applyBatch(sheets, spreadsheetId, opsByStream)
+        console.error(`[google-sheets] applyBatch done in ${Date.now() - applyStart}ms`)
+
+        for (const [streamName, { appendStartRow }] of results) {
+          const appends = appendBuffers.get(streamName) ?? []
           for (let index = 0; index < appends.length; index++) {
             const rowKey = appends[index]?.rowKey
             if (!rowKey) continue
-            const rowNumber = range.startRow + index
+            const rowNumber = appendStartRow + index
             rowAssignments[streamName] ??= {}
             rowAssignments[streamName][rowKey] = rowNumber
-            map?.set(rowKey, rowNumber)
           }
         }
-        appendBuffers.set(streamName, [])
-        appendKeyIndex.get(streamName)?.clear()
-      }
 
-      const flushAll = async () => {
-        for (const streamName of new Set([...appendBuffers.keys(), ...updateBuffers.keys()])) {
-          await flushStream(streamName)
+        for (const streamName of opsByStream.keys()) {
+          appendBuffers.set(streamName, [])
+          appendKeyIndex.get(streamName)?.clear()
+          updateBuffers.set(streamName, [])
         }
+
+        console.error(`[google-sheets] flushAll done in ${Date.now() - flushStart}ms`)
       }
 
+      const writeStart = Date.now()
+      let recordCount = 0
+      let stateCount = 0
+      let writeError: unknown = undefined
+      let cancelled = true
+
+      // The outer try/finally guarantees flushAll runs even when the generator is
+      // closed via iterator.return() (e.g. takeLimits emitting eof on
+      // state_limit/time_limit). Without this, the buffered batch would be
+      // silently dropped whenever an upstream consumer short-circuits the stream.
       try {
         for await (const msg of $stdin) {
           if (msg.type === 'record') {
+            recordCount++
             const { stream, data } = msg.record
             const cleanData = stripSystemFields(data)
             const headers = await ensureHeadersForRecord(stream, cleanData)
@@ -371,58 +415,58 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
               // 1. Explicit _row_number (backwards compat with service layer)
               updateBuffers.get(stream)!.push({ rowNumber, values: row })
             } else if (rowKey) {
-              // 2. Native upsert: look up row key in the map
-              const map = await ensureRowMapForStream(stream)
-              const existingRow = map.get(rowKey)
-              if (existingRow !== undefined) {
-                updateBuffers.get(stream)!.push({ rowNumber: existingRow, values: row })
+              // 2. Native upsert: buffer as append + dedup by rowKey within this batch.
+              //    Final append-vs-update split happens in flushAll once the sheet has been read.
+              const buffer = appendBuffers.get(stream)!
+              const keyIdx = appendKeyIndex.get(stream)!
+              const pendingIdx = keyIdx.get(rowKey)
+              if (pendingIdx !== undefined) {
+                buffer[pendingIdx] = { row, rowKey }
               } else {
-                const buffer = appendBuffers.get(stream)!
-                const keyIdx = appendKeyIndex.get(stream)!
-                const pendingIdx = keyIdx.get(rowKey)
-                if (pendingIdx !== undefined) {
-                  buffer[pendingIdx] = { row, rowKey }
-                } else {
-                  keyIdx.set(rowKey, buffer.length)
-                  buffer.push({ row, rowKey })
-                }
+                keyIdx.set(rowKey, buffer.length)
+                buffer.push({ row, rowKey })
               }
             } else {
               // 3. No key at all — pure append
               appendBuffers.get(stream)!.push({ row })
             }
-
-            const appendCount = appendBuffers.get(stream)?.length ?? 0
-            const updateCount = updateBuffers.get(stream)?.length ?? 0
-            if (appendCount + updateCount >= batchSize) {
-              await flushStream(stream)
-            }
-            yield msg
-          } else if (msg.type === 'source_state') {
-            // Flush the stream's pending rows, then re-emit the state checkpoint
-            if (msg.source_state.state_type === 'global') {
-              await flushAll()
-            } else {
-              await flushStream(msg.source_state.stream)
-            }
             yield msg
           } else {
-            // Pass through messages the destination doesn't handle
+            if (msg.type === 'source_state') stateCount++
+            // Pass through all non-record messages (including source_state — state
+            // checkpoints are re-emitted immediately; data is flushed once at end).
             yield msg
           }
         }
 
-        // Flush any remaining rows
-        await flushAll()
+        cancelled = false
+        console.error(
+          `[google-sheets] $stdin drained after ${Date.now() - writeStart}ms: ${recordCount} records, ${stateCount} source_state msgs`
+        )
       } catch (err: unknown) {
-        // Attempt to flush what we have before yielding the error
+        cancelled = false
+        writeError = err
+        console.error(
+          `[google-sheets] write() error after ${Date.now() - writeStart}ms (records=${recordCount}, states=${stateCount}): ${err instanceof Error ? err.message : String(err)}`
+        )
+      } finally {
+        if (cancelled) {
+          console.error(
+            `[google-sheets] write() cancelled by consumer after ${Date.now() - writeStart}ms (records=${recordCount}, states=${stateCount}) — flushing buffered data anyway`
+          )
+        }
         try {
           await flushAll()
-        } catch {
-          // ignore flush errors during error handling
+        } catch (flushErr) {
+          console.error(
+            `[google-sheets] flushAll failed during teardown: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`
+          )
+          if (!writeError) writeError = flushErr
         }
+      }
 
-        const errMsg = err instanceof Error ? err.message : String(err)
+      if (writeError) {
+        const errMsg = writeError instanceof Error ? writeError.message : String(writeError)
         log.error(errMsg)
         yield {
           type: 'connection_status' as const,
