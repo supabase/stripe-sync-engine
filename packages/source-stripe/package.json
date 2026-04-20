@@ -13,6 +13,11 @@
       "bun": "./src/openapi/browser.ts",
       "types": "./dist/openapi/browser.d.ts",
       "import": "./dist/openapi/browser.js"
+    },
+    "./client": {
+      "bun": "./src/client.ts",
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
     }
   },
   "bin": {

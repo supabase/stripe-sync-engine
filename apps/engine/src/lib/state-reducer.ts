@@ -22,12 +22,14 @@ export type StateEvent = Message | InitializeEvent
  */
 export function stateReducer(state: SyncState | undefined, event: StateEvent): SyncState {
   if (event.type === 'initialize') {
+    const time_ceiling = event.run_id ? new Date().toISOString() : undefined
     if (!state) {
       return {
         source: { streams: {}, global: {} },
         destination: {},
         sync_run: {
           run_id: event.run_id,
+          time_ceiling,
           progress: createInitialProgress(event.stream_names),
         },
       }
@@ -35,10 +37,12 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
     // Always reset progress on initialize — each pipeline_sync call is a new run.
     // Without this, resumed syncs (same run_id or no id) keep the original
     // started_at, making elapsed_ms grow across runs.
+    // Preserve existing time_ceiling on continuation (same run_id).
     return {
       ...state,
       sync_run: {
         run_id: event.run_id,
+        time_ceiling: state.sync_run.time_ceiling ?? time_ceiling,
         progress: createInitialProgress(event.stream_names),
       },
     }

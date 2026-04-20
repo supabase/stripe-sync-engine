@@ -486,6 +486,148 @@ export function createApp(options: AppOptions) {
     }
   )
 
+  // MARK: - Simulate webhook sync (fetch events from Stripe, pipe through push-mode sync)
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.simulate_webhook_sync',
+      method: 'post',
+      path: '/pipelines/{id}/simulate_webhook_sync',
+      tags: ['Pipelines'],
+      summary: 'Simulate webhook sync by fetching events from the Stripe API',
+      description:
+        'Fetches events from /v1/events using the pipeline\'s Stripe API key, then pipes them as input into the sync engine\'s push mode. ' +
+        'This exercises the same code path as real webhooks without needing webhook delivery.',
+      requestParams: {
+        path: PipelineIdParam,
+        query: z.object({
+          created_after: z.coerce
+            .number()
+            .optional()
+            .meta({
+              description:
+                'Only fetch events created after this Unix timestamp (default: 24 hours ago)',
+            }),
+          limit: z.coerce
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .meta({ description: 'Max events to fetch (default: all)' }),
+        }),
+      },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
+          description: 'Streaming NDJSON sync output',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+        400: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline source is not Stripe',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { created_after, limit: maxEvents } = c.req.valid('query')
+
+      let pipeline: Pipeline
+      try {
+        pipeline = await pipelineStore.get(id)
+      } catch {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.source.type !== 'stripe') {
+        return c.json({ error: 'simulate_webhook_sync only works with Stripe sources' }, 400)
+      }
+
+      const stripeConfig = configPayload(pipeline.source) as {
+        api_key: string
+        api_version: string
+        base_url?: string
+      }
+      const { makeClient } = await import('@stripe/sync-source-stripe/client')
+      const client = makeClient({
+        api_key: stripeConfig.api_key,
+        api_version: stripeConfig.api_version,
+        base_url: stripeConfig.base_url,
+      })
+
+      // Fetch events from Stripe
+      const createdAfter = created_after ?? Math.floor(Date.now() / 1000) - 86400
+      const events: unknown[] = []
+      let startingAfter: string | undefined
+      let hasMore = true
+      while (hasMore) {
+        const page = await client.listEvents({
+          created: { gt: createdAfter },
+          limit: 100,
+          starting_after: startingAfter,
+        })
+        events.push(...page.data)
+        hasMore = page.has_more
+        if (page.data.length > 0) {
+          startingAfter = (page.data[page.data.length - 1] as { id: string }).id
+        }
+        if (maxEvents && events.length >= maxEvents) {
+          events.length = maxEvents
+          break
+        }
+      }
+
+      // Process oldest-first (Stripe returns newest-first)
+      events.reverse()
+
+      // Pipe events as input to engine push-mode sync
+      const eventInput = (async function* () {
+        for (const event of events) yield event
+      })()
+
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const config = {
+        source: pipeline.source,
+        destination: pipeline.destination,
+        streams: pipeline.streams,
+      }
+      const output = engine.pipeline_sync(
+        config,
+        { state: pipeline.sync_state },
+        eventInput
+      )
+
+      return ndjsonResponse(
+        (async function* () {
+          yield logMessage({
+            level: 'info' as const,
+            message: `Fetched ${events.length} events (created > ${new Date(createdAfter * 1000).toISOString()})`,
+          })
+          for await (const msg of output) {
+            yield msg
+            if (msg.type === 'eof' && msg.eof?.ending_state) {
+              await pipelineStore.update(id, { sync_state: msg.eof.ending_state })
+            }
+          }
+        })(),
+        {
+          onError: (err) =>
+            logMessage({
+              level: 'error' as const,
+              message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
+            }),
+        }
+      )
+    }
+  )
+
   // MARK: - Workflow test (exercises the same code path as Temporal without Temporal)
 
   app.openapi(

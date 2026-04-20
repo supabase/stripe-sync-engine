@@ -383,6 +383,89 @@ export async function createProgram() {
         })
       },
     }) as CommandDef
+
+    pipelineSubCommands['simulate-webhook-sync'] = defineCommand({
+      meta: {
+        name: 'simulate-webhook-sync',
+        description: 'Simulate webhook sync by fetching events from the Stripe API',
+      },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        'created-after': {
+          type: 'string',
+          description: 'Only events created after this (Unix timestamp or ISO date, default: 24h ago)',
+        },
+        limit: {
+          type: 'string',
+          description: 'Max events to fetch',
+        },
+        plain: {
+          type: 'boolean',
+          default: false,
+          description: 'Plain text output (no Ink/ANSI)',
+        },
+      },
+      async run({ args }) {
+        const pipelineId = args.id as string
+        const params = new URLSearchParams()
+        if (args['created-after']) {
+          const raw = args['created-after']
+          // Accept Unix timestamp or ISO date
+          const ts = /^\d+$/.test(raw) ? raw : String(Math.floor(new Date(raw).getTime() / 1000))
+          params.set('created_after', ts)
+        }
+        if (args.limit) params.set('limit', args.limit)
+        const qs = params.toString() ? `?${params}` : ''
+
+        const res = await handler(
+          new Request(
+            `http://localhost/pipelines/${pipelineId}/simulate_webhook_sync${qs}`,
+            { method: 'POST' }
+          )
+        )
+
+        if (!res.ok) {
+          const text = await res.text()
+          process.stderr.write(`Error ${res.status}: ${text}\n`)
+          process.exit(1)
+        }
+        if (!res.body) {
+          process.stderr.write('No response body\n')
+          process.exit(1)
+        }
+
+        const { Message } = await import('@stripe/sync-protocol')
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            const msg = Message.parse(JSON.parse(line))
+
+            if (msg.type === 'log' && msg.log.message) {
+              process.stderr.write(`${msg.log.message}\n`)
+            } else if (msg.type === 'eof') {
+              const streams = msg.eof.run_progress?.streams ?? {}
+              const totalRecords = Object.values(streams).reduce(
+                (sum: number, s: { record_count?: number }) => sum + (s.record_count ?? 0),
+                0
+              )
+              process.stderr.write(
+                `Done: ${totalRecords} records synced, has_more=${msg.eof.has_more}\n`
+              )
+            }
+          }
+        }
+      },
+    }) as CommandDef
   }
 
   return defineCommand({
