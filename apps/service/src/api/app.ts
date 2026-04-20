@@ -1,26 +1,20 @@
-import os from 'node:os'
-import { OpenAPIHono, createRoute } from '@stripe/sync-hono-zod-openapi'
-import { z } from 'zod'
 import { apiReference } from '@scalar/hono-api-reference'
-import type { WorkflowClient } from '@temporalio/client'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { createEngine, createRemoteEngine } from '@stripe/sync-engine'
 import { endpointTable } from '@stripe/sync-engine/api/openapi-utils'
-import {
-  collectFirst,
-  createEngineMessageFactory,
-  drain,
-  emptySyncState,
-  type Message,
-  SyncState,
-} from '@stripe/sync-protocol'
-import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
-import { createSchemas, PipelineId } from '../lib/createSchemas.js'
-import type { Pipeline } from '../lib/createSchemas.js'
-import type { PipelineStore } from '../lib/stores.js'
+import { createRoute, OpenAPIHono } from '@stripe/sync-hono-zod-openapi'
+import { collectFirst, drain, emptySyncState, SyncState } from '@stripe/sync-protocol'
 import { verifyWebhookSignature, WebhookSignatureError } from '@stripe/sync-source-stripe'
-import { runBackfillToCompletion } from '../temporal/lib/backfill-loop.js'
+import { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
+import type { WorkflowClient } from '@temporalio/client'
+import os from 'node:os'
+import { z } from 'zod'
+import type { Pipeline } from '../lib/createSchemas.js'
+import { createSchemas, PipelineId } from '../lib/createSchemas.js'
+import type { PipelineStore } from '../lib/stores.js'
+import { log } from '../logger.js'
 import { createActivities } from '../temporal/activities/index.js'
+import { runBackfillToCompletion } from '../temporal/lib/backfill-loop.js'
 
 // MARK: - Helpers
 
@@ -91,8 +85,6 @@ export interface AppOptions {
   pipelineStore: PipelineStore
   engineUrl?: string
 }
-
-const engineMsg = createEngineMessageFactory()
 
 export function createApp(options: AppOptions) {
   const temporal = options.temporal?.client
@@ -395,12 +387,9 @@ export function createApp(options: AppOptions) {
       .string()
       .optional()
       .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
-    reset_state: z.coerce
-      .boolean()
-      .optional()
-      .meta({
-        description: 'Ignore persisted sync state and start fresh (ending state is still saved)',
-      }),
+    reset_state: z.coerce.boolean().optional().meta({
+      description: 'Ignore persisted sync state and start fresh (ending state is still saved)',
+    }),
   })
   const SyncBodySchema = z.object({
     source: SourceConfig.optional(),
@@ -478,13 +467,7 @@ export function createApp(options: AppOptions) {
         }
       })()
 
-      return ndjsonResponse(wrapped, {
-        onError: (err) =>
-          engineMsg.log({
-            level: 'error' as const,
-            message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
-          }),
-      })
+      return ndjsonResponse(wrapped)
     }
   )
 
@@ -498,18 +481,15 @@ export function createApp(options: AppOptions) {
       tags: ['Pipelines'],
       summary: 'Simulate webhook sync by fetching events from the Stripe API',
       description:
-        'Fetches events from /v1/events using the pipeline\'s Stripe API key, then pipes them as input into the sync engine\'s push mode. ' +
+        "Fetches events from /v1/events using the pipeline's Stripe API key, then pipes them as input into the sync engine's push mode. " +
         'This exercises the same code path as real webhooks without needing webhook delivery.',
       requestParams: {
         path: PipelineIdParam,
         query: z.object({
-          created_after: z.coerce
-            .number()
-            .optional()
-            .meta({
-              description:
-                'Only fetch events created after this Unix timestamp (default: 24 hours ago)',
-            }),
+          created_after: z.coerce.number().optional().meta({
+            description:
+              'Only fetch events created after this Unix timestamp (default: 24 hours ago)',
+          }),
           limit: z.coerce
             .number()
             .int()
@@ -605,33 +585,14 @@ export function createApp(options: AppOptions) {
         destination: pipeline.destination,
         streams: pipeline.streams,
       }
-      const output = engine.pipeline_sync(
-        config,
-        {},
-        eventInput
+      const output = engine.pipeline_sync(config, {}, eventInput)
+
+      log.info(
+        { events: events.length, createdAfter: new Date(createdAfter * 1000).toISOString() },
+        'simulate_webhook_sync: fetched events'
       )
 
-      return ndjsonResponse(
-        (async function* () {
-          yield engineMsg.log({
-            level: 'info' as const,
-            message: `Fetched ${events.length} events (created > ${new Date(createdAfter * 1000).toISOString()})`,
-          })
-          for await (const msg of output) {
-            yield msg
-            if (msg.type === 'eof' && msg.eof?.ending_state) {
-              await pipelineStore.update(id, { sync_state: msg.eof.ending_state })
-            }
-          }
-        })(),
-        {
-          onError: (err) =>
-            engineMsg.log({
-              level: 'error' as const,
-              message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
-            }),
-        }
-      )
+      return ndjsonResponse(output)
     }
   )
 
