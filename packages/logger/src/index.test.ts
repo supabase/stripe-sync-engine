@@ -172,6 +172,22 @@ describe('@stripe/sync-logger', () => {
     })
   })
 
+  it('suppresses default stdout protocol logs inside async-local context', () => {
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk))
+      return true
+    })
+
+    const log = createLogger({ name: 'logger-test' })
+
+    runWithLogContext({ suppressProtocolStdout: true }, () => {
+      log.info({ stream: 'customers' }, 'quiet log')
+    })
+
+    expect(writes).toHaveLength(0)
+  })
+
   it('mirrors protocol log envelopes to async-local destinations', () => {
     const writes: string[] = []
     const log = createLogger({ name: 'logger-test', destination: devNull() })

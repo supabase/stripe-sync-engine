@@ -198,7 +198,7 @@ importers:
         version: 4.12.8
       ink:
         specifier: ^7.0.1
-        version: 7.0.1(@types/react@19.2.14)(react@19.2.4)
+        version: 7.0.1(@types/react@19.2.14)(react@19.2.5)
       openapi-fetch:
         specifier: ^0.17.0
         version: 0.17.0
@@ -206,8 +206,8 @@ importers:
         specifier: ^8.16.3
         version: 8.16.3
       react:
-        specifier: ^19.2.4
-        version: 19.2.4
+        specifier: ^19.2.5
+        version: 19.2.5
       ws:
         specifier: ^8.18.0
         version: 8.18.3
@@ -8164,40 +8164,6 @@ snapshots:
 
   indexof@0.0.1: {}
 
-  ink@7.0.1(@types/react@19.2.14)(react@19.2.4):
-    dependencies:
-      '@alcalzone/ansi-tokenize': 0.3.0
-      ansi-escapes: 7.3.0
-      ansi-styles: 6.2.3
-      auto-bind: 5.0.1
-      chalk: 5.6.2
-      cli-boxes: 4.0.1
-      cli-cursor: 4.0.0
-      cli-truncate: 6.0.0
-      code-excerpt: 4.0.0
-      es-toolkit: 1.45.1
-      indent-string: 5.0.0
-      is-in-ci: 2.0.0
-      patch-console: 2.0.0
-      react: 19.2.4
-      react-reconciler: 0.33.0(react@19.2.4)
-      scheduler: 0.27.0
-      signal-exit: 3.0.7
-      slice-ansi: 9.0.0
-      stack-utils: 2.0.6
-      string-width: 8.2.0
-      terminal-size: 4.0.1
-      type-fest: 5.6.0
-      widest-line: 6.0.0
-      wrap-ansi: 10.0.0
-      ws: 8.20.0
-      yoga-layout: 3.2.1
-    optionalDependencies:
-      '@types/react': 19.2.14
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   ink@7.0.1(@types/react@19.2.14)(react@19.2.5):
     dependencies:
       '@alcalzone/ansi-tokenize': 0.3.0
@@ -8751,11 +8717,6 @@ snapshots:
   quick-format-unescaped@4.0.4: {}
 
   react-dom@19.2.4(react@19.2.4):
-    dependencies:
-      react: 19.2.4
-      scheduler: 0.27.0
-
-  react-reconciler@0.33.0(react@19.2.4):
     dependencies:
       react: 19.2.4
       scheduler: 0.27.0

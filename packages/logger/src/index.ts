@@ -21,6 +21,7 @@ export type LoggerContext = {
   engineRequestId?: string
   onLog?: (entry: RoutedLogEntry) => void
   protocolLogDestinations?: DestinationStream[]
+  suppressProtocolStdout?: boolean
   suppressLogCapture?: boolean
 }
 
@@ -300,7 +301,14 @@ function isProtocolStdoutMode(options: {
   destination?: DestinationStream
   transport?: LoggerOptions['transport']
 }): boolean {
-  return !options.destination && !options.transport
+  return !options.destination && !options.transport && !storage.getStore()?.suppressProtocolStdout
+}
+
+function shouldSuppressDefaultStdoutOutput(options: {
+  destination?: DestinationStream
+  transport?: LoggerOptions['transport']
+}): boolean {
+  return !options.destination && !options.transport && !!storage.getStore()?.suppressProtocolStdout
 }
 
 function writeProtocolStdout(
@@ -376,7 +384,6 @@ export function createLogger(
   const { destination, hooks: userHooks, mixin: userMixin, ...pinoOptions } = options
 
   const loggerName = pinoOptions.name
-  const protocolStdoutMode = isProtocolStdoutMode({ destination, transport: pinoOptions.transport })
   const redact = mergeRedact(pinoOptions.redact)
 
   return pino(
@@ -389,8 +396,11 @@ export function createLogger(
         logMethod(inputArgs, method, level) {
           maybeRouteLog(loggerName, level, inputArgs, redact)
           writeContextProtocolLogs(loggerName, level, inputArgs, redact)
-          if (protocolStdoutMode) {
+          if (isProtocolStdoutMode({ destination, transport: pinoOptions.transport })) {
             writeProtocolStdout(loggerName, level, inputArgs, redact)
+            return
+          }
+          if (shouldSuppressDefaultStdoutOutput({ destination, transport: pinoOptions.transport })) {
             return
           }
           if (userHooks?.logMethod) {

@@ -1,104 +1,12 @@
 import React from 'react'
 import { randomUUID } from 'node:crypto'
-import { render, Box, Text } from 'ink'
-import { Message, type ProgressPayload, type StreamProgress } from '@stripe/sync-protocol'
+import { render } from 'ink'
+import { ProgressView, formatProgress } from '@stripe/sync-engine/progress'
+import { Message, type ProgressPayload } from '@stripe/sync-protocol'
 import type { StreamConfig } from '../lib/createSchemas.js'
 import { log, syncRunLogPath, withSyncRunLogContext } from '../logger.js'
 
 const PROGRESS_RENDER_INTERVAL_MS = 200
-
-// MARK: - Ink Progress Components (local to avoid cross-package React issues)
-
-function StatusIcon({ status }: { status: string }) {
-  const icons: Record<string, { symbol: string; color: string }> = {
-    not_started: { symbol: '○', color: 'gray' },
-    started: { symbol: '●', color: 'yellow' },
-    completed: { symbol: '●', color: 'green' },
-    skipped: { symbol: '⏭', color: 'gray' },
-    errored: { symbol: '●', color: 'red' },
-  }
-  const icon = icons[status] ?? { symbol: '?', color: 'white' }
-  return <Text color={icon.color}>{icon.symbol} </Text>
-}
-
-function StreamRow({ name, stream }: { name: string; stream: StreamProgress }) {
-  const showCount = stream.record_count > 0 || stream.status === 'completed'
-  return (
-    <Box>
-      <StatusIcon status={stream.status} />
-      <Box minWidth={35}>
-        <Text>{name}</Text>
-      </Box>
-      {showCount && <Text dimColor>{String(stream.record_count).padStart(8)} records</Text>}
-      {stream.message && <Text dimColor> {stream.message.slice(0, 80)}</Text>}
-    </Box>
-  )
-}
-
-function SyncProgressView({
-  progress,
-  prev,
-}: {
-  progress: ProgressPayload
-  prev?: ProgressPayload
-}) {
-  const entries = Object.entries(progress.streams)
-  const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
-  const totalRecords = entries.reduce((sum, [, s]) => sum + s.record_count, 0)
-
-  const counts: Record<string, number> = {}
-  for (const [, s] of entries) {
-    counts[s.status] = (counts[s.status] ?? 0) + 1
-  }
-  const parts: string[] = []
-  if (counts.completed) parts.push(`${counts.completed} completed`)
-  if (counts.started) parts.push(`${counts.started} started`)
-  if (counts.errored) parts.push(`${counts.errored} errored`)
-  if (counts.skipped) parts.push(`${counts.skipped} skipped`)
-  if (counts.not_started) parts.push(`${counts.not_started} not_started`)
-
-  const statusLabel =
-    progress.derived.status === 'failed'
-      ? 'Sync failed'
-      : progress.derived.status === 'succeeded'
-        ? 'Sync complete'
-        : 'Syncing'
-  const statusColor =
-    progress.derived.status === 'failed'
-      ? 'red'
-      : progress.derived.status === 'succeeded'
-        ? 'green'
-        : 'yellow'
-
-  const visible = entries.filter(([, s]) => s.status !== 'not_started')
-  const notStarted = entries.filter(([, s]) => s.status === 'not_started')
-
-  return (
-    <Box flexDirection="column">
-      <Box>
-        <Text color={statusColor} bold>
-          {statusLabel}
-        </Text>
-        <Text dimColor>
-          {' '}
-          {entries.length} streams ({parts.join(', ')}) — {totalRecords.toLocaleString()} records,{' '}
-          {progress.derived.records_per_second.toFixed(1)}/s — {elapsed}s
-        </Text>
-      </Box>
-      <Box flexDirection="column" marginLeft={1}>
-        {visible.map(([name, stream]) => (
-          <StreamRow key={name} name={name} stream={stream} />
-        ))}
-        {notStarted.length > 0 && (
-          <Box>
-            <Text color="gray">○ </Text>
-            <Text dimColor>{notStarted.map(([n]) => n).join(', ')}</Text>
-          </Box>
-        )}
-      </Box>
-    </Box>
-  )
-}
 
 export interface PipelineSyncOptions {
   handler: (req: Request) => Promise<Response>
@@ -139,13 +47,9 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
 
     function renderProgressUpdate(next: ProgressPayload, previous?: ProgressPayload) {
       if (inkInstance) {
-        inkInstance.rerender(<SyncProgressView progress={next} prev={previous} />)
+        inkInstance.rerender(<ProgressView progress={next} prev={previous} />)
       } else {
-        const entries = Object.entries(next.streams)
-        const total = entries.length
-        const totalRecords = entries.reduce((sum, [, s]) => sum + s.record_count, 0)
-        const elapsed = (next.elapsed_ms / 1000).toFixed(1)
-        process.stderr.write(`${total} streams, ${totalRecords} records, ${elapsed}s\n`)
+        process.stderr.write(formatProgress(next, previous) + '\n')
       }
       lastRenderAt = Date.now()
     }

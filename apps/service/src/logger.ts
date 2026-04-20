@@ -18,7 +18,13 @@ export async function withSyncRunLogContext<T>(
   const fileDestination = destination({ dest: logPath, sync: true })
 
   try {
-    return await runWithLogContext({ protocolLogDestinations: [fileDestination] }, fn)
+    return await runWithLogContext(
+      {
+        protocolLogDestinations: [fileDestination],
+        suppressProtocolStdout: true,
+      },
+      fn
+    )
   } finally {
     fileDestination.flushSync?.()
     fileDestination.end?.()

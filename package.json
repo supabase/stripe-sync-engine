@@ -43,7 +43,11 @@
   },
   "pnpm": {
     "overrides": {
-      "esbuild": "^0.28.0"
+      "@types/react": "19.2.14",
+      "@types/react-dom": "19.2.3",
+      "esbuild": "^0.28.0",
+      "react": "19.2.5",
+      "react-dom": "19.2.0"
     }
   },
   "engines": {
