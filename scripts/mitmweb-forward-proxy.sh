@@ -26,6 +26,7 @@ MITM_PROXY="http://127.0.0.1:8080"
 MITM_WEB="http://127.0.0.1:8081"
 MITM_CA="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
 MITM_LOG_FILE="tmp/mitmweb-forward-proxy-8080.log"
+mkdir -p tmp
 
 # ---------------------------------------------------------------------------
 # 1. Ensure mitmweb is installed

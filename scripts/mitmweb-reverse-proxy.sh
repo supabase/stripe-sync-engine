@@ -22,6 +22,7 @@ MITM_PROXY="http://127.0.0.1:9090"
 MITM_WEB="http://127.0.0.1:9091"
 MITM_TARGET="$1"
 MITM_LOG_FILE="tmp/mitmweb-reverse-proxy-9090.log"
+mkdir -p tmp
 
 if ! command -v mitmweb &>/dev/null; then
   echo "mitmweb not found. Install it with one of:" >&2
