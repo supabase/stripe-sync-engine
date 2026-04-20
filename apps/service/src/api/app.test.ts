@@ -450,7 +450,7 @@ describe('pipeline CRUD', () => {
     expect(pipeline.destination.type).toBe('test')
   })
 
-  it('sync applies stream overrides and persists sync_state + last_progress', async () => {
+  it('sync applies stream overrides and persists sync_state', async () => {
     const pipelineStore = memoryPipelineStore()
     const initialSyncState = {
       source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
@@ -535,7 +535,6 @@ describe('pipeline CRUD', () => {
     expect(seenQuery?.get('sync_run_id')).toBe('run_demo')
 
     const updated = await pipelineStore.get('pipe_sync')
-    expect(updated.last_progress).toMatchObject({ global_state_count: 2 })
     expect(updated.sync_state).toEqual({
       source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
       destination: {},
@@ -615,7 +614,6 @@ describe('pipeline CRUD', () => {
     expect(seenState).toBeUndefined()
 
     const updated = await pipelineStore.get('pipe_sync')
-    expect(updated.last_progress).toEqual(successEof.run_progress)
     expect(updated.sync_state).toEqual(initialSyncState)
 
     await new Promise<void>((resolve, reject) =>
@@ -647,7 +645,6 @@ describe('pipeline CRUD', () => {
     expect(body).toContain('"type":"eof"')
 
     const updated = await pipelineStore.get('pipe_sync')
-    expect(updated.last_progress).toBeDefined()
     expect(updated.sync_state).toBeDefined()
   })
 

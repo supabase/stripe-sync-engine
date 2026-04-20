@@ -53,8 +53,8 @@ function StreamRow({
   const showCount = stream.record_count > 0 || stream.status === 'completed'
   const countStr = String(stream.record_count).padStart(8)
   const rangeBar =
-    stream.time_range && stream.completed_ranges
-      ? formatRangeBar(stream.time_range, stream.completed_ranges)
+    stream.total_range && stream.completed_ranges
+      ? formatRangeBar(stream.total_range, stream.completed_ranges)
       : null
 
   return (
@@ -84,7 +84,7 @@ function StreamRow({
   )
 }
 
-function Header({ progress, prev }: { progress: ProgressPayload; prev?: ProgressPayload }) {
+export function ProgressHeader({ progress, prev }: { progress: ProgressPayload; prev?: ProgressPayload }) {
   const streamEntries = Object.entries(progress.streams)
   const total = streamEntries.length
   const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
@@ -145,6 +145,14 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
   const cpDelta = cpDeltaStr.padStart(9)
   const cpRate = `${progress.derived.states_per_second.toFixed(1)}/s`.padStart(10)
 
+  const startedAt = new Date(progress.started_at).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
+
   return (
     <Box flexDirection="column">
       <Box>
@@ -153,7 +161,7 @@ function Header({ progress, prev }: { progress: ProgressPayload; prev?: Progress
         </Text>
         <Text dimColor>
           {' '}
-          {total} streams ({streamSummary}) — {elapsed}s
+          {total} streams ({streamSummary}) — {elapsed}s — started {startedAt}
         </Text>
         {globalErr && <Text color="red"> — {truncate(globalErr, 100)}</Text>}
       </Box>
@@ -195,7 +203,7 @@ export function ProgressView({
 
   return (
     <Box flexDirection="column">
-      <Header progress={progress} prev={prev} />
+      <ProgressHeader progress={progress} prev={prev} />
       <Box flexDirection="column" marginLeft={1}>
         {visible.map(([name, stream]) => (
           <StreamRow key={name} name={name} stream={stream} prev={prev?.streams[name]} />
@@ -216,9 +224,52 @@ export function ProgressView({
   )
 }
 
+const columns = process.stdout.columns || 200
+
 /**
- * Render progress as a plain text string (for logs, non-TTY output).
+ * Render progress header as a plain text string (no React/Ink dependency).
+ */
+export function formatProgressHeader(progress: ProgressPayload): string {
+  const streamEntries = Object.entries(progress.streams)
+  const total = streamEntries.length
+  const elapsed = (progress.elapsed_ms / 1000).toFixed(1)
+  const totalRecords = streamEntries.reduce((sum, [, s]) => sum + s.record_count, 0)
+
+  const counts: Record<string, number> = {}
+  for (const [, s] of streamEntries) {
+    counts[s.status] = (counts[s.status] ?? 0) + 1
+  }
+  const parts: string[] = []
+  if (counts.completed) parts.push(`${counts.completed} completed`)
+  if (counts.started) parts.push(`${counts.started} started`)
+  if (counts.errored) parts.push(`${counts.errored} errored`)
+  if (counts.skipped) parts.push(`${counts.skipped} skipped`)
+  if (counts.not_started) parts.push(`${counts.not_started} not_started`)
+
+  const statusLabel =
+    progress.derived.status === 'failed'
+      ? 'Sync failed'
+      : progress.derived.status === 'succeeded'
+        ? 'Sync complete'
+        : 'Syncing'
+
+  const startedAt = new Date(progress.started_at).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
+
+  const line1 = `${statusLabel} ${total} streams (${parts.join(', ')}) — ${elapsed}s — started ${startedAt}`
+  const line2 = `${totalRecords.toLocaleString()} records, ${progress.derived.records_per_second.toFixed(1)}/s`
+
+  return `${line1}\n  ${line2}`
+}
+
+/**
+ * Render full progress as a plain text string (for logs, non-TTY output).
  */
 export function formatProgress(progress: ProgressPayload, prev?: ProgressPayload): string {
-  return renderToString(<ProgressView progress={progress} prev={prev} />)
+  return renderToString(<ProgressView progress={progress} prev={prev} />, { columns })
 }

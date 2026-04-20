@@ -2,6 +2,7 @@ import { Readable } from 'node:stream'
 import { defineCommand } from 'citty'
 import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
+import { createPrettyFormatter } from './cli/pretty-output.js'
 import { serve } from '@hono/node-server'
 import { createConnectorResolver } from '@stripe/sync-engine'
 import sourceStripe from '@stripe/sync-source-stripe'
@@ -282,6 +283,10 @@ export async function createProgram() {
         return app.fetch(req)
       }
 
+  // Use pretty formatting by default in TTY, raw JSON with --json or when piped
+  const useJson = process.argv.includes('--json') || !process.stdout.isTTY
+  const responseFormatter = useJson ? undefined : createPrettyFormatter()
+
   const specCli = createCliFromSpec({
     spec,
     handler,
@@ -289,6 +294,14 @@ export async function createProgram() {
     exclude: ['health'],
     ndjsonBodyStream: () =>
       process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
+    responseFormatter,
+    rootArgs: {
+      json: {
+        type: 'boolean',
+        default: false,
+        description: 'Output raw JSON instead of pretty-printed format',
+      },
+    },
     meta: {
       name: 'sync-service',
       description: 'Stripe Sync Service — pipeline management and webhook ingress',

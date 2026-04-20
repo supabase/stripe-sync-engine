@@ -35,7 +35,6 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
       })
     }
     await context.pipelineStore.update(pipelineId, {
-      last_progress: eof.run_progress,
       sync_state: eof.ending_state,
     })
 

@@ -318,7 +318,7 @@ export const StreamProgress = z
       .string()
       .optional()
       .describe('Human-readable status message (error reason, skip reason, etc).'),
-    time_range: z
+    total_range: z
       .object({
         gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
         lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
@@ -333,7 +333,7 @@ export const StreamProgress = z
         })
       )
       .optional()
-      .describe('Completed time sub-ranges for streams that support time_range.'),
+      .describe('Completed time sub-ranges within the total_range.'),
   })
   .describe('Per-stream progress snapshot.')
 export type StreamProgress = z.infer<typeof StreamProgress>

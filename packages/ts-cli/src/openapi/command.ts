@@ -29,6 +29,8 @@ export interface CreateCliFromSpecOptions {
   rootArgs?: Record<string, ArgDef>
   /** Descriptions for tag groups (used with groupByTag). Keyed by tag name (after any renaming). */
   tagDescriptions?: Record<string, string>
+  /** Custom response formatter. Replaces default handleResponse for all JSON responses. */
+  responseFormatter?: (response: Response, operation: ParsedOperation) => Promise<void>
 }
 
 /** Returns a citty CommandDef with subcommands for each API operation. */
@@ -44,6 +46,7 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
     meta,
     rootArgs,
     tagDescriptions = {},
+    responseFormatter,
   } = opts
 
   // Build tag description lookup: explicit tagDescriptions override spec-level tags
@@ -78,7 +81,7 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
       const groupSubCommands: Record<string, CommandDef> = {}
       for (const op of ops) {
         const name = getOpName(op, nameOperation)
-        groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+        groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
       }
       const cliTag = toCliFlag(tag)
       subCommands[cliTag] = defineCommand({
@@ -89,12 +92,12 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
 
     for (const op of ungrouped) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
     }
   } else {
     for (const op of operations) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream, responseFormatter)
     }
   }
 
@@ -141,7 +144,8 @@ export function buildCommand(
   handler: Handler,
   baseUrl = 'http://localhost',
   nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string,
-  ndjsonBodyStream?: () => ReadableStream | null | undefined
+  ndjsonBodyStream?: () => ReadableStream | null | undefined,
+  responseFormatter?: (response: Response, operation: ParsedOperation) => Promise<void>
 ): CommandDef {
   const rawOp: OpenAPIOperation = {
     operationId: operation.operationId,
@@ -245,7 +249,11 @@ export function buildCommand(
       }
 
       const response = await handler(request)
-      await handleResponse(response, operation)
+      if (responseFormatter) {
+        await responseFormatter(response, operation)
+      } else {
+        await handleResponse(response, operation)
+      }
     },
   })
 }

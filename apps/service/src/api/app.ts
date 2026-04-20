@@ -461,18 +461,8 @@ export function createApp(options: AppOptions) {
       const wrapped = (async function* () {
         for await (const msg of output) {
           yield msg
-          if (msg.type === 'eof' && msg.eof?.ending_state) {
-            await pipelineStore.update(
-              id,
-              no_state
-                ? { last_progress: msg.eof.run_progress }
-                : {
-                    sync_state: msg.eof.ending_state,
-                    last_progress: msg.eof.run_progress,
-                  }
-            )
-          } else if (msg.type === 'progress' && msg.progress) {
-            await pipelineStore.update(id, { last_progress: msg.progress })
+          if (msg.type === 'eof' && msg.eof?.ending_state && !no_state) {
+            await pipelineStore.update(id, { sync_state: msg.eof.ending_state })
           }
         }
       })()
