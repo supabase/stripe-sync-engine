@@ -1,7 +1,5 @@
 import { HttpsProxyAgent } from 'https-proxy-agent'
-import pino from 'pino'
-
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+import { logger } from './logger.js'
 
 export type TransportEnv = Record<string, string | undefined>
 type ProxyTarget = URL | string

@@ -1,6 +1,6 @@
 import pg from 'pg'
 import type { PoolConfig } from 'pg'
-import type { Destination, DestinationInput, LogMessage } from '@stripe/sync-protocol'
+import type { Destination, LogMessage } from '@stripe/sync-protocol'
 import {
   sql,
   sslConfigFromConnectionString,
@@ -11,6 +11,7 @@ import {
 } from '@stripe/sync-util-postgres'
 import { buildCreateTableDDL } from './schemaProjection.js'
 import defaultSpec from './spec.js'
+import { logger } from './logger.js'
 import type { Config } from './spec.js'
 
 function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
@@ -99,20 +100,6 @@ export {
 // MARK: - Default export
 
 /** Check if an error looks transient (connection refused, timeout, etc.). */
-function isTransient(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  const msg = err.message.toLowerCase()
-  const code = ((err as NodeJS.ErrnoException).code ?? '').toLowerCase()
-  return (
-    msg.includes('econnrefused') ||
-    msg.includes('timeout') ||
-    msg.includes('connection') ||
-    code.includes('econnrefused') ||
-    code.includes('etimedout') ||
-    code.includes('econnreset')
-  )
-}
-
 function errorMessage(err: unknown): string {
   if (!(err instanceof Error)) return String(err)
   if (err.message) return err.message
@@ -123,7 +110,7 @@ function createPool(config: PoolConfig): pg.Pool {
   const pool = new pg.Pool(config)
   // Destination connectors should surface pool failures without crashing the host process.
   pool.on('error', (err) => {
-    console.error('Postgres destination pool error:', err)
+    logger.error({ err }, 'Postgres destination pool error')
   })
   return pool
 }

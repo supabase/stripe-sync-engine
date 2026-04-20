@@ -1,4 +1,3 @@
-import pino from 'pino'
 import type {
   CatalogPayload,
   Source,
@@ -32,6 +31,7 @@ import { createInMemoryRateLimiter } from './rate-limiter.js'
 import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
 import { resolveAccountMetadata } from './account-metadata.js'
+import { logger } from './logger.js'
 
 function combineSignals(
   ...signals: Array<AbortSignal | null | undefined>
@@ -101,8 +101,6 @@ export async function resolveAccountId(config: Config, client: StripeClient): Pr
 export type StripeSourceDeps = {
   rateLimiter?: RateLimiter
 }
-
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 export function createStripeSource(
   deps?: StripeSourceDeps
@@ -177,8 +175,11 @@ export function createStripeSource(
         } catch (err) {
           // Non-fatal: fall back to defaults. account_id may be derived from the API key later,
           // and account_created defaults to Stripe's launch date (2011-01-01).
-          console.error(
-            `[setup] Failed to resolve account metadata: ${err instanceof Error ? err.message : String(err)}`
+          logger.warn(
+            {
+              err,
+            },
+            'Failed to resolve account metadata during setup'
           )
         }
       }

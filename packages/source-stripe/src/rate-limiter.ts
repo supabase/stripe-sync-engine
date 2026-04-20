@@ -1,6 +1,4 @@
-import pino from 'pino'
-
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
+import { logger } from './logger.js'
 
 /**
  * A rate limiter returns the number of seconds the caller should wait

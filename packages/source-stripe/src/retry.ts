@@ -1,3 +1,5 @@
+import { logger } from './logger.js'
+
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_MAX_MS = 32000
 const MAX_RETRIES = 5
@@ -147,8 +149,18 @@ export async function withHttpRetry<T>(
       const errMsg = err instanceof Error ? err.message : String(err)
       const labelPart = opts.label ? ` ${opts.label}` : ''
       const retrySource = retryAfterMs ? ' (retry-after)' : ''
-      console.error(
-        `[source-stripe] retry${labelPart} attempt=${attempt + 1}/${maxRetries} delay=${actualDelay}ms${retrySource} status=${status ?? 'n/a'} error=${errName}: ${errMsg}`
+      logger.warn(
+        {
+          attempt: attempt + 1,
+          max_retries: maxRetries,
+          delay_ms: actualDelay,
+          status: status ?? null,
+          error_name: errName,
+          error_message: errMsg,
+          retry_after: retryAfterMs != null,
+          label: opts.label,
+        },
+        `Retrying Stripe request${labelPart}${retrySource}`
       )
 
       await sleep(actualDelay, opts.signal)

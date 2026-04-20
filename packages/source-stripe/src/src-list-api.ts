@@ -6,17 +6,15 @@ import {
   toIso,
   mergeAsync,
 } from '@stripe/sync-protocol'
-import pino from 'pino'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
 import { msg } from './index.js'
+import { logger } from './logger.js'
 import type { RateLimiter } from './rate-limiter.js'
 import { StripeApiRequestError } from '@stripe/sync-openapi'
 import type { StripeClient } from './client.js'
 import { STRIPE_LAUNCH_TIMESTAMP } from './account-metadata.js'
-
-const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
 // MARK: - Rate-limit wrapper
 
@@ -668,11 +666,13 @@ export async function* listApiBackfill(opts: {
             })
             return
           }
-          console.error({
-            msg: 'Stripe list page failed',
-            stream: stream.name,
-            error: err instanceof Error ? err.message : String(err),
-          })
+          logger.error(
+            {
+              stream: stream.name,
+              err,
+            },
+            'Stripe list page failed'
+          )
 
           yield msg.stream_status({
             stream: stream.name,
