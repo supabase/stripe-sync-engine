@@ -146,15 +146,12 @@ export function createSchemas(resolver: ConnectorResolver) {
         .optional()
         .describe('Selected streams to sync. All streams synced if omitted.'),
     })
-    .meta({ id: 'CreatePipeline' })
 
   const UpdatePipeline = CreatePipeline.extend({
     desired_status: DesiredStatus.optional().describe(
       'Set to "paused" to pause, "active" to resume, "deleted" to tear down.'
     ),
-  })
-    .partial()
-    .meta({ id: 'UpdatePipeline' })
+  }).partial()
 
   return {
     SourceConfig,

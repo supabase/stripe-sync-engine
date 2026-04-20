@@ -87,7 +87,56 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreatePipeline"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "destination"
+                ]
               }
             }
           }
@@ -219,7 +268,61 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdatePipeline"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_-]*$"
+                  },
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "description": "Selected streams to sync. All streams synced if omitted.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "desired_status": {
+                    "description": "Set to \"paused\" to pause, \"active\" to resume, \"deleted\" to tear down.",
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "deleted"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -625,58 +728,6 @@
   },
   "components": {
     "schemas": {
-      "CreatePipeline": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 64,
-            "pattern": "^[a-z][a-z0-9_-]*$"
-          },
-          "source": {
-            "$ref": "#/components/schemas/SourceConfig"
-          },
-          "destination": {
-            "$ref": "#/components/schemas/DestinationConfig"
-          },
-          "streams": {
-            "description": "Selected streams to sync. All streams synced if omitted.",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Stream (table) name to sync."
-                },
-                "sync_mode": {
-                  "description": "How the source reads this stream. Defaults to full_refresh.",
-                  "type": "string",
-                  "enum": [
-                    "incremental",
-                    "full_refresh"
-                  ]
-                },
-                "backfill_limit": {
-                  "description": "Cap backfill to this many records, then mark the stream complete.",
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "name"
-              ]
-            }
-          }
-        },
-        "required": [
-          "source",
-          "destination"
-        ]
-      },
       "SourceConfig": {
         "oneOf": [
           {
@@ -986,63 +1037,6 @@
           "refresh_token"
         ],
         "additionalProperties": false
-      },
-      "UpdatePipeline": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "description": "Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).",
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 64,
-            "pattern": "^[a-z][a-z0-9_-]*$"
-          },
-          "source": {
-            "$ref": "#/components/schemas/SourceConfig"
-          },
-          "destination": {
-            "$ref": "#/components/schemas/DestinationConfig"
-          },
-          "streams": {
-            "description": "Selected streams to sync. All streams synced if omitted.",
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Stream (table) name to sync."
-                },
-                "sync_mode": {
-                  "description": "How the source reads this stream. Defaults to full_refresh.",
-                  "type": "string",
-                  "enum": [
-                    "incremental",
-                    "full_refresh"
-                  ]
-                },
-                "backfill_limit": {
-                  "description": "Cap backfill to this many records, then mark the stream complete.",
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "name"
-              ]
-            }
-          },
-          "desired_status": {
-            "description": "Set to \"paused\" to pause, \"active\" to resume, \"deleted\" to tear down.",
-            "type": "string",
-            "enum": [
-              "active",
-              "paused",
-              "deleted"
-            ]
-          }
-        }
       },
       "SyncState": {
         "type": "object",
