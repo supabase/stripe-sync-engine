@@ -1124,6 +1124,135 @@ describe('engine.pipeline_sync() pipeline', () => {
     })
   })
 
+  it('preserves state for streams not in the current streams filter (no state emitted)', async () => {
+    // Source discovers both but emits NO state (simulates remaining:[] early return)
+    const silentSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'products', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read() {
+        // No records, no state — simulates a fully-synced stream
+      },
+    }
+
+    const engine = await createEngine(makeResolver(silentSource, destinationTest))
+    const pipeline = {
+      ...defaultPipeline,
+      streams: [{ name: 'products' }],
+    }
+    const initialState = {
+      source: {
+        streams: {
+          customers: { cursor: 'cus_existing' },
+          products: { cursor: 'prod_existing' },
+        },
+        global: {},
+      },
+      destination: {},
+      sync_run: {
+        progress: {
+          started_at: '2025-01-01T00:00:00Z',
+          elapsed_ms: 0,
+          global_state_count: 0,
+          derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+          streams: {},
+        },
+      },
+    }
+
+    const results = await drain(engine.pipeline_sync(pipeline, { state: initialState }))
+    const eof = results.find((msg) => msg.type === 'eof')
+
+    // Both cursors preserved even when source emits nothing
+    expect(eof!.eof.ending_state?.source.streams).toMatchObject({
+      customers: { cursor: 'cus_existing' },
+      products: { cursor: 'prod_existing' },
+    })
+  })
+
+  it('preserves state for streams not in the current streams filter', async () => {
+    // Source discovers both customers and products, but emits state only for products
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'products', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'source_state' as const,
+          source_state: {
+            state_type: 'stream',
+            stream: 'products',
+            data: { cursor: 'prod_new' },
+          },
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+
+    // Pipeline filters to only products — but state has cursors for both
+    const pipeline = {
+      ...defaultPipeline,
+      streams: [{ name: 'products' }],
+    }
+    const initialState = {
+      source: {
+        streams: {
+          customers: { cursor: 'cus_existing' },
+          products: { cursor: 'prod_old' },
+        },
+        global: {},
+      },
+      destination: {},
+      sync_run: {
+        progress: {
+          started_at: '2025-01-01T00:00:00Z',
+          elapsed_ms: 0,
+          global_state_count: 0,
+          derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+          streams: {},
+        },
+      },
+    }
+
+    const results = await drain(engine.pipeline_sync(pipeline, { state: initialState }))
+    const eof = results.find((msg) => msg.type === 'eof')
+
+    // customers cursor must be preserved even though only products was synced
+    expect(eof!.eof.ending_state?.source.streams).toMatchObject({
+      customers: { cursor: 'cus_existing' },
+      products: { cursor: 'prod_new' },
+    })
+  })
+
   it('basic pipeline: yields state messages from source → destination', async () => {
     const engine = await createEngine(makeResolver(sourceTest, destinationTest))
     const pipeline = {

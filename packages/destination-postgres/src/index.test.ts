@@ -180,9 +180,7 @@ describe('destination default export', () => {
       const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}".customers ORDER BY id`)
       expect(rows.map((r) => r.id)).toEqual(['cus_1', 'cus_2'])
 
-      // Should emit a log message
-      const logs = outputs.filter((m) => m.type === 'log')
-      expect(logs).toHaveLength(1)
+      // Log messages now go through pino, not the protocol stream
     })
 
     it('batches inserts with configurable batch size', async () => {
