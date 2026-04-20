@@ -252,6 +252,7 @@ export async function createProgram() {
   const serviceUrl = process.env.SERVICE_URL
 
   // Lazy real app — boots in-process when no SERVICE_URL is provided
+  let engineUrl: string | undefined = process.env.ENGINE_URL
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
@@ -260,7 +261,6 @@ export async function createProgram() {
       const temporal = await maybeCreateTemporalClient(address, taskQueue)
       const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
-      const engineUrl = process.env.ENGINE_URL
       realApp = createApp({ temporal, resolver, pipelineStore, engineUrl })
     }
     return realApp
@@ -351,6 +351,10 @@ export async function createProgram() {
           type: 'string',
           description: 'Stream override as comma-separated names or JSON array',
         },
+        engineUrl: {
+          type: 'string',
+          description: 'Sync engine URL (overrides ENGINE_URL env var)',
+        },
         state: {
           type: 'boolean',
           default: true,
@@ -363,6 +367,9 @@ export async function createProgram() {
         },
       },
       async run({ args }) {
+        if (args.engineUrl) {
+          engineUrl = args.engineUrl
+        }
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,

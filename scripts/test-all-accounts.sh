@@ -12,7 +12,7 @@ set -euo pipefail
 #   ./scripts/test-all-accounts.sh --time-limit 60          # explicit time limit (seconds)
 #   ./scripts/test-all-accounts.sh --rate-limit 40          # explicit Stripe rate limit
 #   ./scripts/test-all-accounts.sh --streams customers,invoices  # only sync these streams
-#   ./scripts/test-all-accounts.sh --sync-engine-url http://localhost:4242  # use running engine
+#   ./scripts/test-all-accounts.sh --engine-url http://localhost:4242  # use running engine
 
 trap 'echo ""; echo "Interrupted."; exit 130' INT
 
@@ -28,7 +28,7 @@ EXTRA_ARGS=()
 MODE="sync"
 RATE_LIMIT=80
 STATE_MODE="file"
-SYNC_ENGINE_URL="${SYNC_ENGINE_URL:-}"
+ENGINE_URL="${ENGINE_URL:-}"
 
 # Parse flags (can appear in any position)
 POSITIONAL=()
@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
     --time-limit) EXTRA_ARGS+=(--time-limit "$2"); shift 2 ;;
     --rate-limit) RATE_LIMIT="$2"; shift 2 ;;
     --streams) EXTRA_ARGS+=(--streams "$2"); shift 2 ;;
-    --sync-engine-url) SYNC_ENGINE_URL="$2"; shift 2 ;;
+    --engine-url) ENGINE_URL="$2"; shift 2 ;;
     *) POSITIONAL+=("$1"); shift ;;
   esac
 done
@@ -62,8 +62,8 @@ run_sync() {
   echo ""
 
   local engine_flag=()
-  if [[ -n "$SYNC_ENGINE_URL" ]]; then
-    engine_flag=(--sync-engine-url "$SYNC_ENGINE_URL")
+  if [[ -n "$ENGINE_URL" ]]; then
+    engine_flag=(--engine-url "$ENGINE_URL")
   fi
 
   env -u PG_PROXY_HOST -u PG_PROXY_PORT \

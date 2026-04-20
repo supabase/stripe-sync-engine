@@ -78,7 +78,7 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
         default: false,
         description: 'Shorthand for --state none',
       },
-      syncEngineUrl: {
+      engineUrl: {
         type: 'string',
         description: 'URL of a running sync-engine server (skips spawning a subprocess)',
       },
@@ -137,8 +137,8 @@ export function createSyncCmd(resolverPromise: Promise<ConnectorResolver>) {
       const initialState = await store.get()
 
       try {
-        const engine = args.syncEngineUrl
-          ? createRemoteEngine(args.syncEngineUrl)
+        const engine = args.engineUrl
+          ? createRemoteEngine(args.engineUrl)
           : await createEngine(await resolverPromise)
 
         // Run connector setup and apply any config updates before syncing.

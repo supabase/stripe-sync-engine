@@ -92,7 +92,7 @@ describe('sync cli', () => {
     expect(createRemoteEngine).not.toHaveBeenCalled()
   })
 
-  it('uses a remote engine only when syncEngineUrl is provided', async () => {
+  it('uses a remote engine only when engineUrl is provided', async () => {
     const { createSyncCmd } = await import('../cli/sync.js')
     const resolver = { resolveSource: vi.fn(), resolveDestination: vi.fn() }
     const command = createSyncCmd(Promise.resolve(resolver as never))
@@ -104,7 +104,7 @@ describe('sync cli', () => {
         postgresSchema: 'public',
         noState: true,
         plain: true,
-        syncEngineUrl: 'http://localhost:4010',
+        engineUrl: 'http://localhost:4010',
       } as never,
     })
 

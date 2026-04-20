@@ -1,9 +1,9 @@
 #!/bin/bash
-# Test that mitmweb-env.sh correctly routes traffic through mitmweb.
+# Test that mitmweb-forward-proxy.sh correctly routes traffic through mitmweb.
 # Requires mitmweb to already be running, or the env script will start it.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/mitmweb-env.sh"
+source "$SCRIPT_DIR/mitmweb-forward-proxy.sh"
 
 PASS=0
 FAIL=0

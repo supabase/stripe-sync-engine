@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # To use with test-all-accounts.sh:
 #   ./scripts/start-engine-docker.sh &
-#   ./scripts/test-all-accounts.sh --sync-engine-url http://localhost:4242
+#   ./scripts/test-all-accounts.sh --engine-url http://localhost:4242
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

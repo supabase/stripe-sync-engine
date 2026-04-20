@@ -8,8 +8,9 @@
 // Zero external dependencies — uses Node 24 built-in fetch and psql for Postgres.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { homedir } from 'node:os'
 
 const POLL_INTERVAL_MS = 3_000
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000
@@ -26,19 +27,32 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     const next = argv[i + 1]
-    if (arg === '--stripe-api-key') {
+    if (arg === '--pipeline-id') {
+      args.pipelineId = next
+      i += 1
+    } else if (arg === '--data-dir') {
+      args.dataDir = next
+      i += 1
+    } else if (arg === '--stripe-api-key') {
       args.stripeApiKey = next
       i += 1
     } else if (arg === '--db-url') {
       args.dbUrl = next
+      i += 1
+    } else if (arg === '--schema') {
+      args.schema = next
       i += 1
     } else if (arg === '--output') {
       args.output = next
       i += 1
     } else if (arg === '--help' || arg === '-h') {
       args.help = true
-    } else {
+    } else if (arg.startsWith('-')) {
       throw new UsageError(`Unknown argument: ${arg}`)
+    } else if (args.pipelineId) {
+      throw new UsageError(`Unexpected extra positional argument: ${arg}`)
+    } else {
+      args.pipelineId = arg
     }
   }
   return args
@@ -49,13 +63,24 @@ function usage() {
     'Reconcile Stripe Sigma IDs vs Postgres destination IDs.',
     '',
     'Usage:',
+    '  node scripts/reconcile-sigma-vs-postgres.js pipe_shop_prod_pg_docker',
+    '',
+    '  node scripts/reconcile-sigma-vs-postgres.js \\',
+    '    --pipeline-id pipe_shop_prod_pg_docker \\',
+    '    --data-dir ~/.stripe-sync',
+    '',
+    'Fallback mode:',
     '  node scripts/reconcile-sigma-vs-postgres.js \\',
     '    --stripe-api-key sk_live_... \\',
     '    --db-url postgresql://user:pass@host:5432/db',
     '',
     'Options:',
+    '  pipeline_id         Optional positional pipeline id. Reads <DATA_DIR>/<id>.json.',
+    '  --pipeline-id       Same as positional pipeline id.',
+    '  --data-dir          Optional. Falls back to DATA_DIR or ~/.stripe-sync.',
     '  --stripe-api-key    Required. Falls back to STRIPE_API_KEY env var.',
     '  --db-url            Optional. Falls back to DATABASE_URL or POSTGRES_URL.',
+    '  --schema            Optional. Falls back to destination.postgres.schema or public.',
     '  --output            Optional. Report path (default: tmp/reconcile-<timestamp>.json).',
   ].join('\n')
 }
@@ -64,11 +89,15 @@ function usage() {
 // Postgres — discover tables + counts dynamically
 // ---------------------------------------------------------------------------
 
-function discoverPostgresTables(dbUrl) {
+function escapeSqlLiteral(value) {
+  return value.replaceAll("'", "''")
+}
+
+function discoverPostgresTables(dbUrl, schema) {
   const sql = `
     SELECT table_name
     FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    WHERE table_schema = '${escapeSqlLiteral(schema)}' AND table_type = 'BASE TABLE'
     ORDER BY table_name;
   `
   const result = spawnSync('psql', [dbUrl, '--no-psqlrc', '--csv', '-c', sql], {
@@ -91,8 +120,8 @@ function discoverPostgresTables(dbUrl) {
  * Fetch the full set of IDs for a table from Postgres. Uses streaming so
  * very large tables (millions of rows) don't hit the spawnSync ENOBUFS limit.
  */
-function fetchPostgresIds(dbUrl, table) {
-  const sql = `SELECT id FROM public.${quoteIdent(table)} WHERE id IS NOT NULL;`
+function fetchPostgresIds(dbUrl, schema, table) {
+  const sql = `SELECT id FROM ${quoteIdent(schema)}.${quoteIdent(table)} WHERE id IS NOT NULL;`
   return new Promise((resolve, reject) => {
     const ids = new Set()
     const stderrChunks = []
@@ -596,6 +625,52 @@ function formatTable(rows) {
 // Main
 // ---------------------------------------------------------------------------
 
+const DEFAULT_DATA_DIR = process.env.DATA_DIR ?? join(homedir(), '.stripe-sync')
+
+function readPipeline(dataDir, pipelineId) {
+  const filePath = join(dataDir, `${pipelineId}.json`)
+  if (!existsSync(filePath)) {
+    throw new UsageError(`Pipeline ${pipelineId} not found in ${dataDir}`)
+  }
+  return JSON.parse(readFileSync(filePath, 'utf8'))
+}
+
+function resolveInputs(args) {
+  const dataDir = args.dataDir ?? DEFAULT_DATA_DIR
+
+  if (args.pipelineId) {
+    const pipeline = readPipeline(dataDir, args.pipelineId)
+    if (pipeline.source?.type !== 'stripe') {
+      throw new UsageError(`Pipeline ${args.pipelineId} source must be stripe`)
+    }
+    if (pipeline.destination?.type !== 'postgres') {
+      throw new UsageError(`Pipeline ${args.pipelineId} destination must be postgres`)
+    }
+
+    const stripe = pipeline.source.stripe ?? {}
+    const postgres = pipeline.destination.postgres ?? {}
+    const pipelineApiKey = stripe.api_key
+    const pipelineDbUrl = postgres.url ?? postgres.connection_string
+    const pipelineSchema = postgres.schema ?? 'public'
+
+    return {
+      dataDir,
+      pipelineId: args.pipelineId,
+      apiKey: pipelineApiKey,
+      dbUrl: pipelineDbUrl,
+      schema: pipelineSchema,
+    }
+  }
+
+  return {
+    dataDir,
+    pipelineId: undefined,
+    apiKey: args.stripeApiKey ?? process.env.STRIPE_API_KEY,
+    dbUrl: args.dbUrl ?? process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+    schema: args.schema ?? 'public',
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help) {
@@ -603,16 +678,15 @@ async function main() {
     return
   }
 
-  const apiKey = args.stripeApiKey ?? process.env.STRIPE_API_KEY
+  const { apiKey, dbUrl, schema, pipelineId } = resolveInputs(args)
   if (!apiKey) throw new UsageError('Provide --stripe-api-key or set STRIPE_API_KEY')
 
-  const dbUrl = args.dbUrl ?? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
   if (!dbUrl) throw new UsageError('Provide --db-url or set DATABASE_URL / POSTGRES_URL')
 
   // Step 1: discover tables from Postgres
-  console.error('Discovering tables from Postgres...')
-  const pgTables = discoverPostgresTables(dbUrl)
-  console.error(`  found ${pgTables.length} tables`)
+  console.error(`Discovering tables from Postgres schema ${schema}...`)
+  const pgTables = discoverPostgresTables(dbUrl, schema)
+  console.error(`  found ${pgTables.length} tables in ${schema}`)
 
   // Step 2: fetch IDs for every PG table (serial to avoid overloading psql)
   console.error(`Fetching IDs from Postgres (${pgTables.length} tables)...`)
@@ -620,7 +694,7 @@ async function main() {
   let pgDone = 0
   for (const table of pgTables) {
     try {
-      const ids = await fetchPostgresIds(dbUrl, table)
+      const ids = await fetchPostgresIds(dbUrl, schema, table)
       postgresIdsByTable.set(table, ids)
     } catch (err) {
       console.error(`\n  failed to fetch IDs from ${table}: ${err.message}`)
@@ -679,11 +753,14 @@ async function main() {
 
   // Write detailed report to file (defaults to tmp/reconcile-<timestamp>.json)
   const outputPath =
-    args.output ?? `tmp/reconcile-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    args.output ??
+    `tmp/reconcile-${pipelineId ?? 'manual'}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
   {
     mkdirSync(dirname(outputPath), { recursive: true })
     const report = {
       timestamp: new Date().toISOString(),
+      pipeline_id: pipelineId ?? null,
+      schema,
       summary: {
         tables: pgTables.length,
         compared: matchCount + diffCount,

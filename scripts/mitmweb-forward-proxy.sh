@@ -1,7 +1,11 @@
 #!/bin/bash
 # Source this file to route Node/Bun/curl fetch traffic through mitmweb.
 #
-#   source scripts/mitmweb-env.sh
+# Usage:
+#   source scripts/mitmweb-forward-proxy.sh
+#
+# Starts a forward proxy on http://127.0.0.1:8080 with mitmweb UI on
+# http://127.0.0.1:8081 and logs in tmp/mitmweb-forward-proxy-8080.log.
 #
 # mitmweb is started automatically if not already running.
 # If an upstream proxy is configured in http_proxy/https_proxy, mitmweb will
@@ -13,9 +17,15 @@
 #   brew install mitmproxy         # macOS
 #   pipx install mitmproxy         # isolated install
 
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  echo "Usage: source scripts/mitmweb-forward-proxy.sh" >&2
+  exit 1
+fi
+
 MITM_PROXY="http://127.0.0.1:8080"
 MITM_WEB="http://127.0.0.1:8081"
 MITM_CA="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
+MITM_LOG_FILE="tmp/mitmweb-forward-proxy-8080.log"
 
 # ---------------------------------------------------------------------------
 # 1. Ensure mitmweb is installed
@@ -55,6 +65,34 @@ _port_listening() {
   fi
 }
 
+_kill_mitmweb_listener() {
+  local port="$1"
+  if ! command -v lsof &>/dev/null; then
+    return 0
+  fi
+
+  local pids
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN -P -n 2>/dev/null || true)"
+  [ -z "$pids" ] && return 0
+
+  for pid in $pids; do
+    local args
+    args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    if [[ "$args" == *mitmweb* ]]; then
+      kill "$pid"
+    else
+      echo "ERROR: port $port is in use by a non-mitmweb process: $args"
+      return 1
+    fi
+  done
+}
+
+if _port_listening 8080 || _port_listening 8081; then
+  _kill_mitmweb_listener 8080 || return 1 2>/dev/null || exit 1
+  _kill_mitmweb_listener 8081 || return 1 2>/dev/null || exit 1
+  sleep 0.5
+fi
+
 if ! _port_listening 8080; then
   # Detect upstream proxy from the environment (set on Stripe dev boxes, absent in CI)
   UPSTREAM="${https_proxy:-${http_proxy:-}}"
@@ -73,7 +111,7 @@ if ! _port_listening 8080; then
   else
     echo "Starting mitmweb in direct mode (no upstream proxy detected)."
   fi
-  mitmweb "${MITM_ARGS[@]}" >>tmp/mitmweb-forward-proxy-8080.log 2>&1 &
+  mitmweb "${MITM_ARGS[@]}" >>"$MITM_LOG_FILE" 2>&1 &
 
   # Wait up to 5 s for the port to open
   for i in $(seq 1 10); do
@@ -140,7 +178,6 @@ export GOFLAGS="-insecure"
 echo "----------------------------------------------"
 echo "--------  MITMWEB INTERCEPT ACTIVE  ----------"
 echo "----------------------------------------------"
-echo "Name:    $MITM_INSTANCE_NAME"
 echo "Proxy:   $MITM_PROXY"
 echo "Web UI:  $MITM_WEB"
 echo "Logs:    $MITM_LOG_FILE"

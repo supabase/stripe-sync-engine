@@ -532,8 +532,8 @@ describe('generated pipeline CLI', () => {
       })
 
       const stderr = stderrSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
-      expect(stderr).toContain('Sync')
-      expect(stderr).toContain('checkpoints')
+      expect(stderr).toContain('Log:')
+      expect(renderMock).toHaveBeenCalled()
 
       stderrSpy.mockRestore()
     } finally {
