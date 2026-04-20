@@ -1434,172 +1434,178 @@
             "const": "progress"
           },
           "progress": {
-            "type": "object",
-            "properties": {
-              "started_at": {
-                "type": "string",
-                "description": "When this sync started (ISO 8601); generally equals time_ceiling."
-              },
-              "elapsed_ms": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991,
-                "description": "Wall-clock milliseconds since the sync run started."
-              },
-              "global_state_count": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991,
-                "description": "Total source_state messages observed so far."
-              },
-              "connection_status": {
-                "description": "Set when source or destination emits connection_status: failed.",
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "succeeded",
-                      "failed"
-                    ],
-                    "description": "Whether the connection check passed."
-                  },
-                  "message": {
-                    "description": "Human-readable explanation of the check result.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "derived": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "started",
-                      "succeeded",
-                      "failed"
-                    ],
-                    "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
-                  },
-                  "records_per_second": {
-                    "type": "number",
-                    "description": "Overall throughput for the entire run."
-                  },
-                  "states_per_second": {
-                    "type": "number",
-                    "description": "State checkpoints per second."
-                  }
-                },
-                "required": [
-                  "status",
-                  "records_per_second",
-                  "states_per_second"
-                ],
-                "description": "Computed aggregates."
-              },
-              "streams": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "not_started",
-                        "started",
-                        "completed",
-                        "skipped",
-                        "errored"
-                      ],
-                      "description": "Current state, derived from stream_status events."
-                    },
-                    "state_count": {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991,
-                      "description": "Number of state checkpoints for this stream."
-                    },
-                    "record_count": {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991,
-                      "description": "Records synced for this stream in this run."
-                    },
-                    "message": {
-                      "description": "Human-readable status message (error reason, skip reason, etc).",
-                      "type": "string"
-                    },
-                    "total_range": {
-                      "description": "Full backfill time span for this stream.",
-                      "type": "object",
-                      "properties": {
-                        "gte": {
-                          "type": "string",
-                          "description": "Inclusive lower bound (ISO 8601)."
-                        },
-                        "lt": {
-                          "type": "string",
-                          "description": "Exclusive upper bound (ISO 8601)."
-                        }
-                      },
-                      "required": [
-                        "gte",
-                        "lt"
-                      ]
-                    },
-                    "completed_ranges": {
-                      "description": "Completed time sub-ranges within the total_range.",
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "gte": {
-                            "type": "string",
-                            "description": "Inclusive lower bound (ISO 8601)."
-                          },
-                          "lt": {
-                            "type": "string",
-                            "description": "Exclusive upper bound (ISO 8601)."
-                          }
-                        },
-                        "required": [
-                          "gte",
-                          "lt"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "state_count",
-                    "record_count"
-                  ],
-                  "description": "Per-stream progress snapshot."
-                },
-                "description": "Per-stream progress, keyed by stream name."
-              }
-            },
-            "required": [
-              "started_at",
-              "elapsed_ms",
-              "global_state_count",
-              "derived",
-              "streams"
-            ],
-            "description": "Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement."
+            "$ref": "#/components/schemas/ProgressPayload"
           }
         },
         "required": [
           "type",
           "progress"
         ]
+      },
+      "ProgressPayload": {
+        "type": "object",
+        "properties": {
+          "started_at": {
+            "type": "string",
+            "description": "When this sync started (ISO 8601); generally equals time_ceiling."
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Wall-clock milliseconds since the sync run started."
+          },
+          "global_state_count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Total source_state messages observed so far."
+          },
+          "connection_status": {
+            "description": "Set when source or destination emits connection_status: failed.",
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "succeeded",
+                  "failed"
+                ],
+                "description": "Whether the connection check passed."
+              },
+              "message": {
+                "description": "Human-readable explanation of the check result.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "derived": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "started",
+                  "succeeded",
+                  "failed"
+                ],
+                "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
+              },
+              "records_per_second": {
+                "type": "number",
+                "description": "Overall throughput for the entire run."
+              },
+              "states_per_second": {
+                "type": "number",
+                "description": "State checkpoints per second."
+              }
+            },
+            "required": [
+              "status",
+              "records_per_second",
+              "states_per_second"
+            ],
+            "description": "Computed aggregates."
+          },
+          "streams": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StreamProgress"
+            },
+            "description": "Per-stream progress, keyed by stream name."
+          }
+        },
+        "required": [
+          "started_at",
+          "elapsed_ms",
+          "global_state_count",
+          "derived",
+          "streams"
+        ],
+        "description": "Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement."
+      },
+      "StreamProgress": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_started",
+              "started",
+              "completed",
+              "skipped",
+              "errored"
+            ],
+            "description": "Current state, derived from stream_status events."
+          },
+          "state_count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Number of state checkpoints for this stream."
+          },
+          "record_count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Records synced for this stream in this run."
+          },
+          "message": {
+            "description": "Human-readable status message (error reason, skip reason, etc).",
+            "type": "string"
+          },
+          "total_range": {
+            "description": "Full backfill time span for this stream.",
+            "type": "object",
+            "properties": {
+              "gte": {
+                "type": "string",
+                "description": "Inclusive lower bound (ISO 8601)."
+              },
+              "lt": {
+                "type": "string",
+                "description": "Exclusive upper bound (ISO 8601)."
+              }
+            },
+            "required": [
+              "gte",
+              "lt"
+            ]
+          },
+          "completed_ranges": {
+            "description": "Completed time sub-ranges within the total_range.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "gte": {
+                  "type": "string",
+                  "description": "Inclusive lower bound (ISO 8601)."
+                },
+                "lt": {
+                  "type": "string",
+                  "description": "Exclusive upper bound (ISO 8601)."
+                }
+              },
+              "required": [
+                "gte",
+                "lt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "status",
+          "state_count",
+          "record_count"
+        ],
+        "description": "Per-stream progress snapshot."
       },
       "EofMessage": {
         "type": "object",
@@ -1619,353 +1625,40 @@
             "const": "eof"
           },
           "eof": {
-            "type": "object",
-            "properties": {
-              "has_more": {
-                "type": "boolean",
-                "description": "Whether the client should continue with another request. true when cut off by limits; false when the source iterator exhausted naturally."
-              },
-              "ending_state": {
-                "description": "Full sync state at the end of this request. Round-trip this as starting_state on the next request.",
-                "$ref": "#/components/schemas/SyncState"
-              },
-              "run_progress": {
-                "type": "object",
-                "properties": {
-                  "started_at": {
-                    "type": "string",
-                    "description": "When this sync started (ISO 8601); generally equals time_ceiling."
-                  },
-                  "elapsed_ms": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Wall-clock milliseconds since the sync run started."
-                  },
-                  "global_state_count": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Total source_state messages observed so far."
-                  },
-                  "connection_status": {
-                    "description": "Set when source or destination emits connection_status: failed.",
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "Whether the connection check passed."
-                      },
-                      "message": {
-                        "description": "Human-readable explanation of the check result.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "status"
-                    ]
-                  },
-                  "derived": {
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "started",
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
-                      },
-                      "records_per_second": {
-                        "type": "number",
-                        "description": "Overall throughput for the entire run."
-                      },
-                      "states_per_second": {
-                        "type": "number",
-                        "description": "State checkpoints per second."
-                      }
-                    },
-                    "required": [
-                      "status",
-                      "records_per_second",
-                      "states_per_second"
-                    ],
-                    "description": "Computed aggregates."
-                  },
-                  "streams": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "not_started",
-                            "started",
-                            "completed",
-                            "skipped",
-                            "errored"
-                          ],
-                          "description": "Current state, derived from stream_status events."
-                        },
-                        "state_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Number of state checkpoints for this stream."
-                        },
-                        "record_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Records synced for this stream in this run."
-                        },
-                        "message": {
-                          "description": "Human-readable status message (error reason, skip reason, etc).",
-                          "type": "string"
-                        },
-                        "total_range": {
-                          "description": "Full backfill time span for this stream.",
-                          "type": "object",
-                          "properties": {
-                            "gte": {
-                              "type": "string",
-                              "description": "Inclusive lower bound (ISO 8601)."
-                            },
-                            "lt": {
-                              "type": "string",
-                              "description": "Exclusive upper bound (ISO 8601)."
-                            }
-                          },
-                          "required": [
-                            "gte",
-                            "lt"
-                          ]
-                        },
-                        "completed_ranges": {
-                          "description": "Completed time sub-ranges within the total_range.",
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "gte": {
-                                "type": "string",
-                                "description": "Inclusive lower bound (ISO 8601)."
-                              },
-                              "lt": {
-                                "type": "string",
-                                "description": "Exclusive upper bound (ISO 8601)."
-                              }
-                            },
-                            "required": [
-                              "gte",
-                              "lt"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "status",
-                        "state_count",
-                        "record_count"
-                      ],
-                      "description": "Per-stream progress snapshot."
-                    },
-                    "description": "Per-stream progress, keyed by stream name."
-                  }
-                },
-                "required": [
-                  "started_at",
-                  "elapsed_ms",
-                  "global_state_count",
-                  "derived",
-                  "streams"
-                ],
-                "description": "Accumulated progress across all requests in this sync run."
-              },
-              "request_progress": {
-                "type": "object",
-                "properties": {
-                  "started_at": {
-                    "type": "string",
-                    "description": "When this sync started (ISO 8601); generally equals time_ceiling."
-                  },
-                  "elapsed_ms": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Wall-clock milliseconds since the sync run started."
-                  },
-                  "global_state_count": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Total source_state messages observed so far."
-                  },
-                  "connection_status": {
-                    "description": "Set when source or destination emits connection_status: failed.",
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "Whether the connection check passed."
-                      },
-                      "message": {
-                        "description": "Human-readable explanation of the check result.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "status"
-                    ]
-                  },
-                  "derived": {
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "started",
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
-                      },
-                      "records_per_second": {
-                        "type": "number",
-                        "description": "Overall throughput for the entire run."
-                      },
-                      "states_per_second": {
-                        "type": "number",
-                        "description": "State checkpoints per second."
-                      }
-                    },
-                    "required": [
-                      "status",
-                      "records_per_second",
-                      "states_per_second"
-                    ],
-                    "description": "Computed aggregates."
-                  },
-                  "streams": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "not_started",
-                            "started",
-                            "completed",
-                            "skipped",
-                            "errored"
-                          ],
-                          "description": "Current state, derived from stream_status events."
-                        },
-                        "state_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Number of state checkpoints for this stream."
-                        },
-                        "record_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Records synced for this stream in this run."
-                        },
-                        "message": {
-                          "description": "Human-readable status message (error reason, skip reason, etc).",
-                          "type": "string"
-                        },
-                        "total_range": {
-                          "description": "Full backfill time span for this stream.",
-                          "type": "object",
-                          "properties": {
-                            "gte": {
-                              "type": "string",
-                              "description": "Inclusive lower bound (ISO 8601)."
-                            },
-                            "lt": {
-                              "type": "string",
-                              "description": "Exclusive upper bound (ISO 8601)."
-                            }
-                          },
-                          "required": [
-                            "gte",
-                            "lt"
-                          ]
-                        },
-                        "completed_ranges": {
-                          "description": "Completed time sub-ranges within the total_range.",
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "gte": {
-                                "type": "string",
-                                "description": "Inclusive lower bound (ISO 8601)."
-                              },
-                              "lt": {
-                                "type": "string",
-                                "description": "Exclusive upper bound (ISO 8601)."
-                              }
-                            },
-                            "required": [
-                              "gte",
-                              "lt"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "status",
-                        "state_count",
-                        "record_count"
-                      ],
-                      "description": "Per-stream progress snapshot."
-                    },
-                    "description": "Per-stream progress, keyed by stream name."
-                  }
-                },
-                "required": [
-                  "started_at",
-                  "elapsed_ms",
-                  "global_state_count",
-                  "derived",
-                  "streams"
-                ],
-                "description": "Progress for this specific request only."
-              }
-            },
-            "required": [
-              "has_more",
-              "run_progress",
-              "request_progress"
-            ],
-            "description": "Terminal message signaling end of this request."
+            "$ref": "#/components/schemas/EofPayload"
           }
         },
         "required": [
           "type",
           "eof"
         ]
+      },
+      "EofPayload": {
+        "type": "object",
+        "properties": {
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether the client should continue with another request. true when cut off by limits; false when the source iterator exhausted naturally."
+          },
+          "ending_state": {
+            "description": "Full sync state at the end of this request. Round-trip this as starting_state on the next request.",
+            "$ref": "#/components/schemas/SyncState"
+          },
+          "run_progress": {
+            "description": "Accumulated progress across all requests in this sync run.",
+            "$ref": "#/components/schemas/ProgressPayload"
+          },
+          "request_progress": {
+            "description": "Progress for this specific request only.",
+            "$ref": "#/components/schemas/ProgressPayload"
+          }
+        },
+        "required": [
+          "has_more",
+          "run_progress",
+          "request_progress"
+        ],
+        "description": "Terminal message signaling end of this request."
       },
       "SyncState": {
         "type": "object",
@@ -1993,166 +1686,8 @@
                 "type": "string"
               },
               "progress": {
-                "type": "object",
-                "properties": {
-                  "started_at": {
-                    "type": "string",
-                    "description": "When this sync started (ISO 8601); generally equals time_ceiling."
-                  },
-                  "elapsed_ms": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Wall-clock milliseconds since the sync run started."
-                  },
-                  "global_state_count": {
-                    "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991,
-                    "description": "Total source_state messages observed so far."
-                  },
-                  "connection_status": {
-                    "description": "Set when source or destination emits connection_status: failed.",
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "Whether the connection check passed."
-                      },
-                      "message": {
-                        "description": "Human-readable explanation of the check result.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "status"
-                    ]
-                  },
-                  "derived": {
-                    "type": "object",
-                    "properties": {
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "started",
-                          "succeeded",
-                          "failed"
-                        ],
-                        "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
-                      },
-                      "records_per_second": {
-                        "type": "number",
-                        "description": "Overall throughput for the entire run."
-                      },
-                      "states_per_second": {
-                        "type": "number",
-                        "description": "State checkpoints per second."
-                      }
-                    },
-                    "required": [
-                      "status",
-                      "records_per_second",
-                      "states_per_second"
-                    ],
-                    "description": "Computed aggregates."
-                  },
-                  "streams": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "not_started",
-                            "started",
-                            "completed",
-                            "skipped",
-                            "errored"
-                          ],
-                          "description": "Current state, derived from stream_status events."
-                        },
-                        "state_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Number of state checkpoints for this stream."
-                        },
-                        "record_count": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Records synced for this stream in this run."
-                        },
-                        "message": {
-                          "description": "Human-readable status message (error reason, skip reason, etc).",
-                          "type": "string"
-                        },
-                        "total_range": {
-                          "description": "Full backfill time span for this stream.",
-                          "type": "object",
-                          "properties": {
-                            "gte": {
-                              "type": "string",
-                              "description": "Inclusive lower bound (ISO 8601)."
-                            },
-                            "lt": {
-                              "type": "string",
-                              "description": "Exclusive upper bound (ISO 8601)."
-                            }
-                          },
-                          "required": [
-                            "gte",
-                            "lt"
-                          ]
-                        },
-                        "completed_ranges": {
-                          "description": "Completed time sub-ranges within the total_range.",
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "gte": {
-                                "type": "string",
-                                "description": "Inclusive lower bound (ISO 8601)."
-                              },
-                              "lt": {
-                                "type": "string",
-                                "description": "Exclusive upper bound (ISO 8601)."
-                              }
-                            },
-                            "required": [
-                              "gte",
-                              "lt"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "status",
-                        "state_count",
-                        "record_count"
-                      ],
-                      "description": "Per-stream progress snapshot."
-                    },
-                    "description": "Per-stream progress, keyed by stream name."
-                  }
-                },
-                "required": [
-                  "started_at",
-                  "elapsed_ms",
-                  "global_state_count",
-                  "derived",
-                  "streams"
-                ],
-                "description": "Accumulated progress from prior requests in this run."
+                "description": "Accumulated progress from prior requests in this run.",
+                "$ref": "#/components/schemas/ProgressPayload"
               }
             },
             "required": [

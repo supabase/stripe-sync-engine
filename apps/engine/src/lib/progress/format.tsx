@@ -27,17 +27,25 @@ function formatRangeBar(
   const totalEnd = new Date(timeRange.lt).getTime()
   const totalMs = totalEnd - totalStart
   if (totalMs <= 0) return null
-  const width = 20
-  // Build per-column coverage to show non-contiguous progress
-  const cols = new Array<boolean>(width).fill(false)
+  const width = 40
+  // Build per-column fractional coverage, then threshold to decide fill.
+  // Each column tracks what fraction of its time span is completed.
+  const colCoverage = new Float64Array(width)
+  const colSpanMs = totalMs / width
   for (const r of completedRanges) {
     const rStart = Math.max(new Date(r.gte).getTime(), totalStart)
     const rEnd = Math.min(new Date(r.lt).getTime(), totalEnd)
     if (rEnd <= rStart) continue
-    const colStart = Math.floor(((rStart - totalStart) / totalMs) * width)
-    const colEnd = Math.ceil(((rEnd - totalStart) / totalMs) * width)
-    for (let i = Math.max(0, colStart); i < Math.min(width, colEnd); i++) cols[i] = true
+    const startCol = Math.floor(((rStart - totalStart) / totalMs) * width)
+    const endCol = Math.floor(((rEnd - totalStart) / totalMs) * width)
+    for (let i = Math.max(0, startCol); i < Math.min(width, endCol + 1); i++) {
+      const colStart = totalStart + i * colSpanMs
+      const colEnd = colStart + colSpanMs
+      const overlap = Math.min(rEnd, colEnd) - Math.max(rStart, colStart)
+      if (overlap > 0) colCoverage[i] += overlap / colSpanMs
+    }
   }
+  const cols = Array.from(colCoverage, (c) => c >= 0.5)
   const bar = cols.map((c) => (c ? '\u2588' : '\u2591')).join('')
   return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
 }

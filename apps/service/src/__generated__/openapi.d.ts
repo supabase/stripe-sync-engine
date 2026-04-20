@@ -248,66 +248,7 @@ export interface components {
                 /** @description Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation. */
                 time_ceiling?: string;
                 /** @description Accumulated progress from prior requests in this run. */
-                progress: {
-                    /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
-                    started_at: string;
-                    /** @description Wall-clock milliseconds since the sync run started. */
-                    elapsed_ms: number;
-                    /** @description Total source_state messages observed so far. */
-                    global_state_count: number;
-                    /** @description Set when source or destination emits connection_status: failed. */
-                    connection_status?: {
-                        /**
-                         * @description Whether the connection check passed.
-                         * @enum {string}
-                         */
-                        status: "succeeded" | "failed";
-                        /** @description Human-readable explanation of the check result. */
-                        message?: string;
-                    };
-                    /** @description Computed aggregates. */
-                    derived: {
-                        /**
-                         * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
-                         * @enum {string}
-                         */
-                        status: "started" | "succeeded" | "failed";
-                        /** @description Overall throughput for the entire run. */
-                        records_per_second: number;
-                        /** @description State checkpoints per second. */
-                        states_per_second: number;
-                    };
-                    /** @description Per-stream progress, keyed by stream name. */
-                    streams: {
-                        [key: string]: {
-                            /**
-                             * @description Current state, derived from stream_status events.
-                             * @enum {string}
-                             */
-                            status: "not_started" | "started" | "completed" | "skipped" | "errored";
-                            /** @description Number of state checkpoints for this stream. */
-                            state_count: number;
-                            /** @description Records synced for this stream in this run. */
-                            record_count: number;
-                            /** @description Human-readable status message (error reason, skip reason, etc). */
-                            message?: string;
-                            /** @description Full backfill time span for this stream. */
-                            total_range?: {
-                                /** @description Inclusive lower bound (ISO 8601). */
-                                gte: string;
-                                /** @description Exclusive upper bound (ISO 8601). */
-                                lt: string;
-                            };
-                            /** @description Completed time sub-ranges within the total_range. */
-                            completed_ranges?: {
-                                /** @description Inclusive lower bound (ISO 8601). */
-                                gte: string;
-                                /** @description Exclusive upper bound (ISO 8601). */
-                                lt: string;
-                            }[];
-                        };
-                    };
-                };
+                progress: components["schemas"]["ProgressPayload"];
             };
         };
         /** @description Source connector state — cursors, backfill progress, events cursors. */
@@ -319,6 +260,69 @@ export interface components {
             /** @description Source-wide state shared across all streams. */
             global: {
                 [key: string]: unknown;
+            };
+        };
+        /** @description Per-stream progress snapshot. */
+        StreamProgress: {
+            /**
+             * @description Current state, derived from stream_status events.
+             * @enum {string}
+             */
+            status: "not_started" | "started" | "completed" | "skipped" | "errored";
+            /** @description Number of state checkpoints for this stream. */
+            state_count: number;
+            /** @description Records synced for this stream in this run. */
+            record_count: number;
+            /** @description Human-readable status message (error reason, skip reason, etc). */
+            message?: string;
+            /** @description Full backfill time span for this stream. */
+            total_range?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string;
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string;
+            };
+            /** @description Completed time sub-ranges within the total_range. */
+            completed_ranges?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string;
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string;
+            }[];
+        };
+        /** @description Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement. */
+        ProgressPayload: {
+            /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+            started_at: string;
+            /** @description Wall-clock milliseconds since the sync run started. */
+            elapsed_ms: number;
+            /** @description Total source_state messages observed so far. */
+            global_state_count: number;
+            /** @description Set when source or destination emits connection_status: failed. */
+            connection_status?: {
+                /**
+                 * @description Whether the connection check passed.
+                 * @enum {string}
+                 */
+                status: "succeeded" | "failed";
+                /** @description Human-readable explanation of the check result. */
+                message?: string;
+            };
+            /** @description Computed aggregates. */
+            derived: {
+                /**
+                 * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+                 * @enum {string}
+                 */
+                status: "started" | "succeeded" | "failed";
+                /** @description Overall throughput for the entire run. */
+                records_per_second: number;
+                /** @description State checkpoints per second. */
+                states_per_second: number;
+            };
+            /** @description Per-stream progress, keyed by stream name. */
+            streams: {
+                [key: string]: components["schemas"]["StreamProgress"];
             };
         };
         Pipeline: {

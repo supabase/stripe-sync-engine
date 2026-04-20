@@ -340,6 +340,7 @@ export const StreamProgress = z
       .describe('Completed time sub-ranges within the total_range.'),
   })
   .describe('Per-stream progress snapshot.')
+  .meta({ id: 'StreamProgress' })
 export type StreamProgress = z.infer<typeof StreamProgress>
 
 export const ProgressPayload = z
@@ -370,6 +371,7 @@ export const ProgressPayload = z
   .describe(
     'Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement.'
   )
+  .meta({ id: 'ProgressPayload' })
 export type ProgressPayload = z.infer<typeof ProgressPayload>
 
 // MARK: - Sync run state
@@ -450,6 +452,7 @@ export const EofPayload = z
     request_progress: ProgressPayload.describe('Progress for this specific request only.'),
   })
   .describe('Terminal message signaling end of this request.')
+  .meta({ id: 'EofPayload' })
 export type EofPayload = z.infer<typeof EofPayload>
 
 // MARK: - Envelope messages (the wire format)
