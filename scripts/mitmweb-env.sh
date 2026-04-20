@@ -73,8 +73,7 @@ if ! _port_listening 8080; then
   else
     echo "Starting mitmweb in direct mode (no upstream proxy detected)."
   fi
-
-  mitmweb "${MITM_ARGS[@]}" 2>/dev/null &
+  mitmweb "${MITM_ARGS[@]}" >>tmp/mitmweb-forward-proxy-8080.log 2>&1 &
 
   # Wait up to 5 s for the port to open
   for i in $(seq 1 10); do
@@ -141,8 +140,10 @@ export GOFLAGS="-insecure"
 echo "----------------------------------------------"
 echo "--------  MITMWEB INTERCEPT ACTIVE  ----------"
 echo "----------------------------------------------"
+echo "Name:    $MITM_INSTANCE_NAME"
 echo "Proxy:   $MITM_PROXY"
 echo "Web UI:  $MITM_WEB"
+echo "Logs:    $MITM_LOG_FILE"
 echo "CA Cert: $MITM_CA"
 echo ""
 echo "Supports: Node fetch, Bun fetch, curl, Python requests, Go net/http"
