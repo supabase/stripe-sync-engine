@@ -635,8 +635,8 @@ export interface operations {
                 time_limit?: number;
                 /** @description Sync run identifier (resumes or starts fresh) */
                 sync_run_id?: string;
-                /** @description Ignore and do not persist the pipeline sync_state checkpoint */
-                no_state?: boolean;
+                /** @description Ignore persisted sync state and start fresh (ending state is still saved) */
+                reset_state?: boolean;
             };
             header?: never;
             path: {

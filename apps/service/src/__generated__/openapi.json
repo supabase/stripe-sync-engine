@@ -510,12 +510,12 @@
           },
           {
             "in": "query",
-            "name": "no_state",
+            "name": "reset_state",
             "schema": {
-              "description": "Ignore and do not persist the pipeline sync_state checkpoint",
+              "description": "Ignore persisted sync state and start fresh (ending state is still saved)",
               "type": "boolean"
             },
-            "description": "Ignore and do not persist the pipeline sync_state checkpoint"
+            "description": "Ignore persisted sync state and start fresh (ending state is still saved)"
           }
         ],
         "requestBody": {

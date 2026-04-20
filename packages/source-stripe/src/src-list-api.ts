@@ -1,11 +1,12 @@
 import type { Message } from '@stripe/sync-protocol'
 import {
-  nextStep,
+  streamingSubdivide,
   DEFAULT_SUBDIVISION_FACTOR,
   toUnixSeconds,
   toIso,
   mergeAsync,
 } from '@stripe/sync-protocol'
+import type { PageResult } from '@stripe/sync-protocol'
 import type { ListFn } from '@stripe/sync-openapi'
 import type { ResourceConfig } from './types.js'
 import type { RemainingRange, StreamState } from './index.js'
@@ -204,37 +205,92 @@ function isLegacyState(data: unknown): boolean {
   return 'backfill' in obj || 'segments' in obj || 'status' in obj || 'page_cursor' in obj
 }
 
-// MARK: - Single-range pagination
+// MARK: - Page fetching for streamingSubdivide
 
-async function* paginateRange(opts: {
+/**
+ * Fetch one page for a time range — satisfies streamingSubdivide's fetchPage contract.
+ * Mutates range.cursor in-place. Returns raw data + lastObserved for subdivision.
+ */
+async function fetchPageForRange(opts: {
   range: RemainingRange
-  remaining: RemainingRange[]
+  listFn: ListFn
+  streamName: string
+  supportsLimit: boolean
+  supportsForwardPagination: boolean
+}): Promise<PageResult<Record<string, unknown>>> {
+  const { range, listFn, streamName, supportsLimit, supportsForwardPagination } = opts
+
+  const params: Record<string, unknown> = {
+    created: { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) },
+  }
+  if (supportsForwardPagination && supportsLimit) params.limit = 100
+  if (supportsForwardPagination && range.cursor) params.starting_after = range.cursor
+
+  const response = await listFn(params as Parameters<typeof listFn>[0])
+
+  const hasMore = supportsForwardPagination && response.has_more
+  let nextCursor: string | null = null
+  if (response.pageCursor) {
+    nextCursor = response.pageCursor
+  } else if (response.data.length > 0) {
+    nextCursor = (response.data[response.data.length - 1] as { id: string }).id
+  }
+
+  // lastObserved = oldest record's created timestamp on this page.
+  // Stripe returns newest-first, so the last record is the oldest.
+  let lastObserved: number | null = null
+  for (const item of response.data) {
+    const created = (item as Record<string, unknown>).created
+    if (typeof created === 'number') lastObserved = created
+  }
+
+  log.trace({
+    event: 'page_fetched',
+    stream: streamName,
+    range_gte: range.gte,
+    range_lt: range.lt,
+    range_span_s: toUnixSeconds(range.lt) - toUnixSeconds(range.gte),
+    had_cursor: range.cursor !== null,
+    records: response.data.length,
+    has_more: hasMore,
+  })
+
+  range.cursor = hasMore ? nextCursor : null
+
+  return { range, data: response.data as Record<string, unknown>[], hasMore, lastObserved }
+}
+
+// MARK: - Sequential pagination (no subdivision)
+
+/**
+ * Paginate a single range to exhaustion — for resources that don't support
+ * created-time filtering and can't be subdivided.
+ */
+async function* paginateSequential(opts: {
+  range: RemainingRange
   accountedRange: { gte: string; lt: string }
   listFn: ListFn
   streamName: string
   accountId: string
   supportsLimit: boolean
   supportsForwardPagination: boolean
-  supportsCreatedFilter: boolean
   backfillLimit?: number
   totalEmitted: { count: number }
-  lastSeenCreated: Map<RemainingRange, number>
-  rangeRecordCounts?: Map<RemainingRange, number>
+  totalApiCalls: { count: number }
+  drainQueue?: () => AsyncGenerator<Message>
 }): AsyncGenerator<Message> {
   const {
     range,
-    remaining,
     accountedRange,
     listFn,
     streamName,
     accountId,
     supportsLimit,
     supportsForwardPagination,
-    supportsCreatedFilter,
     backfillLimit,
     totalEmitted,
-    lastSeenCreated,
-    rangeRecordCounts,
+    totalApiCalls,
+    drainQueue,
   } = opts
 
   let cursor = range.cursor
@@ -242,70 +298,45 @@ async function* paginateRange(opts: {
   let prefetchedResponse: Promise<Awaited<ReturnType<ListFn>>> | null = null
 
   while (hasMore) {
+    if (drainQueue) yield* drainQueue()
+
     const params: Record<string, unknown> = {}
-    if (supportsCreatedFilter) {
-      params.created = { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) }
-    }
-    if (supportsForwardPagination && supportsLimit) {
-      params.limit = 100
-    }
-    if (supportsForwardPagination && cursor) {
-      params.starting_after = cursor
-    }
+    if (supportsForwardPagination && supportsLimit) params.limit = 100
+    if (supportsForwardPagination && cursor) params.starting_after = cursor
 
     const response = prefetchedResponse
       ? await prefetchedResponse
       : await listFn(params as Parameters<typeof listFn>[0])
     prefetchedResponse = null
+    totalApiCalls.count++
 
-    let nextCursor: string | null = null
     const responseHasMore = supportsForwardPagination && response.has_more
+    let nextCursor: string | null = null
     if (response.pageCursor) {
       nextCursor = response.pageCursor
     } else if (response.data.length > 0) {
       nextCursor = (response.data[response.data.length - 1] as { id: string }).id
     }
 
-    // Prefetch the next page to hide latency — but only for sequential ranges
-    // (no created filter). Subdivided ranges return after one page, so prefetch
-    // would be wasted.
-    if (!supportsCreatedFilter && backfillLimit == null && responseHasMore && nextCursor) {
+    // Prefetch next page to hide latency
+    if (backfillLimit == null && responseHasMore && nextCursor) {
       const nextParams: Record<string, unknown> = {}
-      if (supportsCreatedFilter) {
-        nextParams.created = { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) }
-      }
-      if (supportsForwardPagination && supportsLimit) {
-        nextParams.limit = 100
-      }
-      if (supportsForwardPagination) {
-        nextParams.starting_after = nextCursor
-      }
+      if (supportsForwardPagination && supportsLimit) nextParams.limit = 100
+      if (supportsForwardPagination) nextParams.starting_after = nextCursor
       prefetchedResponse = listFn(nextParams as Parameters<typeof listFn>[0])
     }
 
     log.trace({
       event: 'page_fetched',
       stream: streamName,
-      range_gte: range.gte,
-      range_lt: range.lt,
-      range_span_s: toUnixSeconds(range.lt) - toUnixSeconds(range.gte),
-      had_cursor: cursor !== null,
       records: response.data.length,
       has_more: responseHasMore,
     })
 
-    if (rangeRecordCounts && response.data.length > 0) {
-      rangeRecordCounts.set(range, (rangeRecordCounts.get(range) ?? 0) + response.data.length)
-    }
-
     for (const item of response.data) {
-      const record = item as Record<string, unknown>
-      if (typeof record.created === 'number') {
-        lastSeenCreated.set(range, record.created)
-      }
       yield msg.record({
         stream: streamName,
-        data: { ...record, _account_id: accountId },
+        data: { ...(item as Record<string, unknown>), _account_id: accountId },
         emitted_at: new Date().toISOString(),
       })
       totalEmitted.count++
@@ -313,12 +344,8 @@ async function* paginateRange(opts: {
 
     hasMore = responseHasMore
     cursor = nextCursor
+    if (backfillLimit && totalEmitted.count >= backfillLimit) hasMore = false
 
-    if (backfillLimit && totalEmitted.count >= backfillLimit) {
-      hasMore = false
-    }
-
-    // Update range cursor in-place for state checkpoint
     range.cursor = hasMore ? cursor : null
 
     yield msg.source_state({
@@ -326,33 +353,10 @@ async function* paginateRange(opts: {
       stream: streamName,
       data: {
         accounted_range: accountedRange,
-        remaining: remaining.filter((r) => r.cursor !== null || hasMore || r !== range),
+        remaining: hasMore ? [range] : [],
       },
     })
-
-    // Only return early for subdivision when there's a single range remaining.
-    // Once ranges have been subdivided, paginate each range sequentially to avoid
-    // exponential empty-probe blowup on sparse data.
-    if (supportsCreatedFilter && hasMore && remaining.length <= 1) {
-      const splitPoint = lastSeenCreated.get(range)
-      if (splitPoint != null) {
-        const fetchedHeadGteUnix = Math.max(toUnixSeconds(range.gte), splitPoint + 1)
-        const fetchedHeadLtUnix = toUnixSeconds(range.lt)
-        if (fetchedHeadGteUnix < fetchedHeadLtUnix) {
-          yield msg.stream_status({
-            stream: streamName,
-            status: 'range_complete',
-            range_complete: { gte: toIso(fetchedHeadGteUnix), lt: range.lt },
-          })
-        }
-      }
-      return
-    }
   }
-
-  // Range exhausted — remove from remaining and emit range_complete
-  const idx = remaining.indexOf(range)
-  if (idx !== -1) remaining.splice(idx, 1)
 
   yield msg.stream_status({
     stream: streamName,
@@ -438,120 +442,80 @@ async function* iterateStream(opts: {
   const supportsLimit = resourceConfig.supportsLimit !== false
   const supportsForwardPagination = resourceConfig.supportsForwardPagination !== false
   const totalEmitted = { count: 0 }
-  const lastSeenCreated = new Map<RemainingRange, number>()
-  // Track per-range record counts for this round (populated by paginateRange via page_fetched)
-  const rangeRecordCounts = new Map<RemainingRange, number>()
-  let roundNumber = 0
-  let totalApiCalls = 0
-  let totalEmptyProbes = 0
+  const totalApiCalls = { count: 0 }
   const syncStart = Date.now()
 
-  // Paginate ranges — subdivide after every page to maximize parallelism.
-  // Subdivision only helps when the API supports created-time filtering;
-  // without it every range produces the same request, so paginate sequentially.
-  while (remaining.length > 0) {
-    if (drainQueue) yield* drainQueue()
+  if (supportsCreatedFilter) {
+    // Streaming subdivision: each page completion immediately subdivides and
+    // enqueues children, keeping the pipeline full. Rate limiter controls concurrency.
+    const pages = streamingSubdivide<Record<string, unknown>>({
+      initial: remaining,
+      fetchPage: (range) =>
+        fetchPageForRange({
+          range,
+          listFn: rateLimitedListFn,
+          streamName,
+          supportsLimit,
+          supportsForwardPagination,
+        }),
+      concurrency: 100, // rate limiter is the real bottleneck
+      subdivisionFactor,
+    })
 
-    if (backfillLimit && totalEmitted.count >= backfillLimit) break
+    for await (const event of pages) {
+      totalApiCalls.count++
 
-    const roundStart = Date.now()
-    const rangesThisRound = remaining.length
-    const recordsBefore = totalEmitted.count
-    // Snapshot ranges before the round (paginateRange mutates remaining)
-    const roundRanges = remaining.map((r) => ({
-      ref: r,
-      gte: r.gte,
-      lt: r.lt,
-      hadCursor: r.cursor !== null,
-    }))
-    rangeRecordCounts.clear()
+      if (drainQueue) yield* drainQueue()
 
-    // Fetch one page from each range in parallel (rate limiter controls concurrency)
-    const generators = remaining.map((range) =>
-      paginateRange({
-        range,
-        remaining,
-        accountedRange,
-        listFn: rateLimitedListFn,
-        streamName,
-        accountId,
-        supportsLimit,
-        supportsForwardPagination,
-        supportsCreatedFilter,
-        backfillLimit,
-        totalEmitted,
-        lastSeenCreated,
-        rangeRecordCounts,
-      })
-    )
+      for (const item of event.data) {
+        yield msg.record({
+          stream: streamName,
+          data: { ...item, _account_id: accountId },
+          emitted_at: new Date().toISOString(),
+        })
+        totalEmitted.count++
+      }
 
-    if (generators.length === 1) {
-      yield* generators[0]
-    } else {
-      yield* mergeAsync(generators, generators.length)
-    }
-
-    totalApiCalls += rangesThisRound
-    const recordsThisRound = totalEmitted.count - recordsBefore
-
-    // After pages complete, subdivide based on what we learned
-    if (supportsCreatedFilter && remaining.length > 0) {
-      const rangesWithData = lastSeenCreated.size
-      // Ranges that completed (removed from remaining) with 0 records
-      const rangesExhausted = rangesThisRound - remaining.length
-      const emptyExhausted = roundRanges.filter(
-        (r) => !remaining.includes(r.ref) && !rangeRecordCounts.has(r.ref)
-      ).length
-      totalEmptyProbes += emptyExhausted
-
-      // Build per-segment histogram: how many records each segment returned
-      const segmentCounts = roundRanges.map((r) => rangeRecordCounts.get(r.ref) ?? 0)
-      segmentCounts.sort((a, b) => a - b)
-
-      const subdivided = nextStep({ remaining, lastObserved: lastSeenCreated }, subdivisionFactor)
-
-      log.debug({
-        event: 'subdivision_round',
+      yield msg.source_state({
+        state_type: 'stream',
         stream: streamName,
-        subdivision_factor: subdivisionFactor,
-        round: roundNumber,
-        round_ms: Date.now() - roundStart,
-        ranges_fetched: rangesThisRound,
-        ranges_with_data: rangesWithData,
-        ranges_exhausted: rangesExhausted,
-        ranges_empty: emptyExhausted,
-        records_this_round: recordsThisRound,
-        records_per_segment: {
-          min: segmentCounts[0],
-          p50: segmentCounts[Math.floor(segmentCounts.length / 2)],
-          p90: segmentCounts[Math.floor(segmentCounts.length * 0.9)],
-          max: segmentCounts[segmentCounts.length - 1],
-          histogram: segmentCounts,
-        },
-        new_ranges: subdivided.length,
-        total_records: totalEmitted.count,
-        total_api_calls: totalApiCalls,
-        total_empty_probes: totalEmptyProbes,
-        elapsed_ms: Date.now() - syncStart,
+        data: { accounted_range: accountedRange, remaining: event.remaining },
       })
 
-      remaining.length = 0
-      remaining.push(...subdivided)
-      lastSeenCreated.clear()
-    }
+      if (event.exhausted) {
+        yield msg.stream_status({
+          stream: streamName,
+          status: 'range_complete',
+          range_complete: { gte: event.range.gte, lt: event.range.lt },
+        })
+      }
 
-    roundNumber++
+      if (backfillLimit && totalEmitted.count >= backfillLimit) break
+    }
+  } else {
+    // No created filter — paginate sequentially (no subdivision possible)
+    yield* paginateSequential({
+      range: remaining[0],
+      accountedRange,
+      listFn: rateLimitedListFn,
+      streamName,
+      accountId,
+      supportsLimit,
+      supportsForwardPagination,
+      backfillLimit,
+      totalEmitted,
+      totalApiCalls,
+      drainQueue,
+    })
   }
 
   log.debug({
     event: 'subdivision_complete',
     stream: streamName,
-    total_rounds: roundNumber,
-    total_api_calls: totalApiCalls,
-    total_empty_probes: totalEmptyProbes,
+    total_api_calls: totalApiCalls.count,
     total_records: totalEmitted.count,
     elapsed_ms: Date.now() - syncStart,
-    effective_rps: totalApiCalls / ((Date.now() - syncStart) / 1000),
+    effective_rps: totalApiCalls.count / ((Date.now() - syncStart) / 1000),
   })
 
   // Emit final state with empty remaining so consumers always see the completed state,

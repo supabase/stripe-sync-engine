@@ -23,17 +23,22 @@ function formatRangeBar(
   timeRange: { gte: string; lt: string },
   completedRanges: { gte: string; lt: string }[]
 ): string | null {
-  const totalMs = new Date(timeRange.lt).getTime() - new Date(timeRange.gte).getTime()
+  const totalStart = new Date(timeRange.gte).getTime()
+  const totalEnd = new Date(timeRange.lt).getTime()
+  const totalMs = totalEnd - totalStart
   if (totalMs <= 0) return null
-  const completedMs = completedRanges.reduce((sum, r) => {
-    const start = Math.max(new Date(r.gte).getTime(), new Date(timeRange.gte).getTime())
-    const end = Math.min(new Date(r.lt).getTime(), new Date(timeRange.lt).getTime())
-    return sum + Math.max(0, end - start)
-  }, 0)
-  const ratio = Math.min(1, completedMs / totalMs)
   const width = 20
-  const filled = Math.round(ratio * width)
-  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(width - filled)
+  // Build per-column coverage to show non-contiguous progress
+  const cols = new Array<boolean>(width).fill(false)
+  for (const r of completedRanges) {
+    const rStart = Math.max(new Date(r.gte).getTime(), totalStart)
+    const rEnd = Math.min(new Date(r.lt).getTime(), totalEnd)
+    if (rEnd <= rStart) continue
+    const colStart = Math.floor(((rStart - totalStart) / totalMs) * width)
+    const colEnd = Math.ceil(((rEnd - totalStart) / totalMs) * width)
+    for (let i = Math.max(0, colStart); i < Math.min(width, colEnd); i++) cols[i] = true
+  }
+  const bar = cols.map((c) => (c ? '\u2588' : '\u2591')).join('')
   return `[${shortDate(timeRange.gte)} ${bar} ${shortDate(timeRange.lt)}]`
 }
 
