@@ -9,9 +9,7 @@
     "/health": {
       "get": {
         "operationId": "health",
-        "tags": [
-          "Status"
-        ],
+        "tags": ["Status"],
         "summary": "Health check",
         "responses": {
           "200": {
@@ -29,10 +27,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "ok",
-                    "hostname"
-                  ],
+                  "required": ["ok", "hostname"],
                   "additionalProperties": false
                 }
               }
@@ -44,9 +39,7 @@
     "/pipelines": {
       "get": {
         "operationId": "pipelines.list",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "List pipelines",
         "responses": {
           "200": {
@@ -66,10 +59,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": [
-                    "data",
-                    "has_more"
-                  ],
+                  "required": ["data", "has_more"],
                   "additionalProperties": false
                 }
               }
@@ -79,9 +69,7 @@
       },
       "post": {
         "operationId": "pipelines.create",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Create pipeline",
         "requestBody": {
           "content": {
@@ -115,10 +103,7 @@
                         "sync_mode": {
                           "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
-                          "enum": [
-                            "incremental",
-                            "full_refresh"
-                          ]
+                          "enum": ["incremental", "full_refresh"]
                         },
                         "backfill_limit": {
                           "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -127,16 +112,11 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": [
-                        "name"
-                      ]
+                      "required": ["name"]
                     }
                   }
                 },
-                "required": [
-                  "source",
-                  "destination"
-                ]
+                "required": ["source", "destination"]
               }
             }
           }
@@ -161,9 +141,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -178,9 +156,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -192,9 +168,7 @@
     "/pipelines/{id}": {
       "get": {
         "operationId": "pipelines.get",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Retrieve pipeline",
         "parameters": [
           {
@@ -232,9 +206,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -244,9 +216,7 @@
       },
       "patch": {
         "operationId": "pipelines.update",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Update pipeline",
         "parameters": [
           {
@@ -296,10 +266,7 @@
                         "sync_mode": {
                           "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
-                          "enum": [
-                            "incremental",
-                            "full_refresh"
-                          ]
+                          "enum": ["incremental", "full_refresh"]
                         },
                         "backfill_limit": {
                           "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -308,19 +275,13 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": [
-                        "name"
-                      ]
+                      "required": ["name"]
                     }
                   },
                   "desired_status": {
                     "description": "Set to \"paused\" to pause, \"active\" to resume, \"deleted\" to tear down.",
                     "type": "string",
-                    "enum": [
-                      "active",
-                      "paused",
-                      "deleted"
-                    ]
+                    "enum": ["active", "paused", "deleted"]
                   }
                 }
               }
@@ -347,9 +308,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -364,9 +323,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -381,9 +338,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -393,9 +348,7 @@
       },
       "delete": {
         "operationId": "pipelines.delete",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Delete pipeline",
         "parameters": [
           {
@@ -429,10 +382,7 @@
                       "const": true
                     }
                   },
-                  "required": [
-                    "id",
-                    "deleted"
-                  ],
+                  "required": ["id", "deleted"],
                   "additionalProperties": false
                 }
               }
@@ -447,9 +397,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -461,9 +409,7 @@
     "/pipelines/{id}/sync": {
       "post": {
         "operationId": "pipelines.sync",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Run sync for a pipeline",
         "description": "Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.",
         "parameters": [
@@ -543,10 +489,7 @@
                         "sync_mode": {
                           "description": "How the source reads this stream. Defaults to full_refresh.",
                           "type": "string",
-                          "enum": [
-                            "incremental",
-                            "full_refresh"
-                          ]
+                          "enum": ["incremental", "full_refresh"]
                         },
                         "backfill_limit": {
                           "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -555,9 +498,7 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": [
-                        "name"
-                      ]
+                      "required": ["name"]
                     }
                   },
                   "sync_state": {
@@ -591,9 +532,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -605,9 +544,7 @@
     "/pipelines/{id}/sync_workflow_test": {
       "post": {
         "operationId": "pipelines.sync_workflow_test",
-        "tags": [
-          "Pipelines"
-        ],
+        "tags": ["Pipelines"],
         "summary": "Run sync using the workflow backfill loop (no Temporal)",
         "description": "Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.",
         "parameters": [
@@ -663,9 +600,7 @@
                       "additionalProperties": {}
                     }
                   },
-                  "required": [
-                    "eof"
-                  ],
+                  "required": ["eof"],
                   "additionalProperties": false
                 }
               }
@@ -680,9 +615,7 @@
                   "properties": {
                     "error": {}
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -694,9 +627,7 @@
     "/webhooks/{pipeline_id}": {
       "post": {
         "operationId": "webhooks.push",
-        "tags": [
-          "Webhooks"
-        ],
+        "tags": ["Webhooks"],
         "summary": "Ingest a Stripe webhook event",
         "description": "Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.",
         "parameters": [
@@ -741,10 +672,7 @@
                 "$ref": "#/components/schemas/SourceStripeConfig"
               }
             },
-            "required": [
-              "type",
-              "stripe"
-            ]
+            "required": ["type", "stripe"]
           }
         ],
         "type": "object",
@@ -883,9 +811,7 @@
             "description": "Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test)."
           }
         },
-        "required": [
-          "api_key"
-        ],
+        "required": ["api_key"],
         "additionalProperties": false
       },
       "DestinationConfig": {
@@ -901,10 +827,7 @@
                 "$ref": "#/components/schemas/DestinationPostgresConfig"
               }
             },
-            "required": [
-              "type",
-              "postgres"
-            ]
+            "required": ["type", "postgres"]
           },
           {
             "type": "object",
@@ -917,10 +840,7 @@
                 "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
               }
             },
-            "required": [
-              "type",
-              "google_sheets"
-            ]
+            "required": ["type", "google_sheets"]
           }
         ],
         "type": "object",
@@ -982,12 +902,7 @@
                 "description": "External ID for STS AssumeRole"
               }
             },
-            "required": [
-              "host",
-              "database",
-              "user",
-              "region"
-            ],
+            "required": ["host", "database", "user", "region"],
             "additionalProperties": false,
             "description": "AWS RDS IAM authentication config"
           },
@@ -1032,10 +947,7 @@
             "description": "Rows per Sheets API append call"
           }
         },
-        "required": [
-          "access_token",
-          "refresh_token"
-        ],
+        "required": ["access_token", "refresh_token"],
         "additionalProperties": false
       },
       "SyncState": {
@@ -1088,10 +1000,7 @@
                     "properties": {
                       "status": {
                         "type": "string",
-                        "enum": [
-                          "succeeded",
-                          "failed"
-                        ],
+                        "enum": ["succeeded", "failed"],
                         "description": "Whether the connection check passed."
                       },
                       "message": {
@@ -1099,20 +1008,14 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "status"
-                    ]
+                    "required": ["status"]
                   },
                   "derived": {
                     "type": "object",
                     "properties": {
                       "status": {
                         "type": "string",
-                        "enum": [
-                          "started",
-                          "succeeded",
-                          "failed"
-                        ],
+                        "enum": ["started", "succeeded", "failed"],
                         "description": "succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored."
                       },
                       "records_per_second": {
@@ -1124,11 +1027,7 @@
                         "description": "State checkpoints per second."
                       }
                     },
-                    "required": [
-                      "status",
-                      "records_per_second",
-                      "states_per_second"
-                    ],
+                    "required": ["status", "records_per_second", "states_per_second"],
                     "description": "Computed aggregates."
                   },
                   "streams": {
@@ -1141,13 +1040,7 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": [
-                            "not_started",
-                            "started",
-                            "completed",
-                            "skipped",
-                            "errored"
-                          ],
+                          "enum": ["not_started", "started", "completed", "skipped", "errored"],
                           "description": "Current state, derived from stream_status events."
                         },
                         "state_count": {
@@ -1179,10 +1072,7 @@
                               "description": "Exclusive upper bound (ISO 8601)."
                             }
                           },
-                          "required": [
-                            "gte",
-                            "lt"
-                          ]
+                          "required": ["gte", "lt"]
                         },
                         "completed_ranges": {
                           "description": "Completed time sub-ranges within the total_range.",
@@ -1199,18 +1089,11 @@
                                 "description": "Exclusive upper bound (ISO 8601)."
                               }
                             },
-                            "required": [
-                              "gte",
-                              "lt"
-                            ]
+                            "required": ["gte", "lt"]
                           }
                         }
                       },
-                      "required": [
-                        "status",
-                        "state_count",
-                        "record_count"
-                      ],
+                      "required": ["status", "state_count", "record_count"],
                       "description": "Per-stream progress snapshot."
                     },
                     "description": "Per-stream progress, keyed by stream name."
@@ -1226,17 +1109,11 @@
                 "description": "Accumulated progress from prior requests in this run."
               }
             },
-            "required": [
-              "progress"
-            ],
+            "required": ["progress"],
             "description": "Engine-managed run state — sync_run_id, time_ceiling, accumulated progress."
           }
         },
-        "required": [
-          "source",
-          "destination",
-          "sync_run"
-        ],
+        "required": ["source", "destination", "sync_run"],
         "description": "Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing."
       },
       "SourceState": {
@@ -1259,10 +1136,7 @@
             "description": "Source-wide state shared across all streams."
           }
         },
-        "required": [
-          "streams",
-          "global"
-        ],
+        "required": ["streams", "global"],
         "description": "Source connector state — cursors, backfill progress, events cursors."
       },
       "Pipeline": {
@@ -1294,10 +1168,7 @@
                 "sync_mode": {
                   "description": "How the source reads this stream. Defaults to full_refresh.",
                   "type": "string",
-                  "enum": [
-                    "incremental",
-                    "full_refresh"
-                  ]
+                  "enum": ["incremental", "full_refresh"]
                 },
                 "backfill_limit": {
                   "description": "Cap backfill to this many records, then mark the stream complete.",
@@ -1306,9 +1177,7 @@
                   "maximum": 9007199254740991
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "additionalProperties": false
             }
           },
@@ -1316,37 +1185,20 @@
             "default": "active",
             "description": "User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.",
             "type": "string",
-            "enum": [
-              "active",
-              "paused",
-              "deleted"
-            ]
+            "enum": ["active", "paused", "deleted"]
           },
           "status": {
             "default": "setup",
             "description": "Workflow-controlled execution state. Updated by the Temporal workflow.",
             "type": "string",
-            "enum": [
-              "setup",
-              "backfill",
-              "ready",
-              "paused",
-              "teardown",
-              "error"
-            ]
+            "enum": ["setup", "backfill", "ready", "paused", "teardown", "error"]
           },
           "sync_state": {
             "description": "Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request.",
             "$ref": "#/components/schemas/SyncState"
           }
         },
-        "required": [
-          "id",
-          "source",
-          "destination",
-          "desired_status",
-          "status"
-        ],
+        "required": ["id", "source", "destination", "desired_status", "status"],
         "additionalProperties": false
       }
     }

@@ -4,759 +4,812 @@
  */
 
 export interface paths {
-    "/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Health check */
-        get: operations["health"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipelines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List pipelines */
-        get: operations["pipelines.list"];
-        put?: never;
-        /** Create pipeline */
-        post: operations["pipelines.create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipelines/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Retrieve pipeline */
-        get: operations["pipelines.get"];
-        put?: never;
-        post?: never;
-        /** Delete pipeline */
-        delete: operations["pipelines.delete"];
-        options?: never;
-        head?: never;
-        /** Update pipeline */
-        patch: operations["pipelines.update"];
-        trace?: never;
-    };
-    "/pipelines/{id}/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run sync for a pipeline
-         * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.
-         */
-        post: operations["pipelines.sync"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/pipelines/{id}/sync_workflow_test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run sync using the workflow backfill loop (no Temporal)
-         * @description Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.
-         */
-        post: operations["pipelines.sync_workflow_test"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/webhooks/{pipeline_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Ingest a Stripe webhook event
-         * @description Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.
-         */
-        post: operations["webhooks.push"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
+  '/health': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Health check */
+    get: operations['health']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipelines': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List pipelines */
+    get: operations['pipelines.list']
+    put?: never
+    /** Create pipeline */
+    post: operations['pipelines.create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipelines/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Retrieve pipeline */
+    get: operations['pipelines.get']
+    put?: never
+    post?: never
+    /** Delete pipeline */
+    delete: operations['pipelines.delete']
+    options?: never
+    head?: never
+    /** Update pipeline */
+    patch: operations['pipelines.update']
+    trace?: never
+  }
+  '/pipelines/{id}/sync': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run sync for a pipeline
+     * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.
+     */
+    post: operations['pipelines.sync']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/pipelines/{id}/sync_workflow_test': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run sync using the workflow backfill loop (no Temporal)
+     * @description Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.
+     */
+    post: operations['pipelines.sync_workflow_test']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/webhooks/{pipeline_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Ingest a Stripe webhook event
+     * @description Receives a raw Stripe webhook event, verifies its signature using the pipeline's webhook secret, and enqueues it for processing by the active pipeline.
+     */
+    post: operations['webhooks.push']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
-export type webhooks = Record<string, never>;
+export type webhooks = Record<string, never>
 export interface components {
-    schemas: {
-        SourceConfig: {
-            /** @constant */
-            type: "stripe";
-            stripe: components["schemas"]["SourceStripeConfig"];
-        };
-        SourceStripeConfig: {
-            /** @description Stripe API key (sk_test_... or sk_live_...) */
-            api_key: string;
-            /** @description Stripe account ID (resolved from API if omitted) */
-            account_id?: string;
-            /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
-            account_created?: number;
-            /** @description Whether this is a live mode sync */
-            livemode?: boolean;
-            /** @enum {string} */
-            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
+  schemas: {
+    SourceConfig: {
+      /** @constant */
+      type: 'stripe'
+      stripe: components['schemas']['SourceStripeConfig']
+    }
+    SourceStripeConfig: {
+      /** @description Stripe API key (sk_test_... or sk_live_...) */
+      api_key: string
+      /** @description Stripe account ID (resolved from API if omitted) */
+      account_id?: string
+      /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
+      account_created?: number
+      /** @description Whether this is a live mode sync */
+      livemode?: boolean
+      /** @enum {string} */
+      api_version?:
+        | '2026-03-25.dahlia'
+        | '2026-02-25.clover'
+        | '2026-01-28.clover'
+        | '2025-12-15.clover'
+        | '2025-11-17.clover'
+        | '2025-10-29.clover'
+        | '2025-09-30.clover'
+        | '2025-08-27.basil'
+        | '2025-07-30.basil'
+        | '2025-06-30.basil'
+        | '2025-05-28.basil'
+        | '2025-04-30.basil'
+        | '2025-03-31.basil'
+        | '2025-02-24.acacia'
+        | '2025-01-27.acacia'
+        | '2024-12-18.acacia'
+        | '2024-11-20.acacia'
+        | '2024-10-28.acacia'
+        | '2024-09-30.acacia'
+        | '2024-06-20'
+        | '2024-04-10'
+        | '2024-04-03'
+        | '2023-10-16'
+        | '2023-08-16'
+        | '2022-11-15'
+        | '2022-08-01'
+        | '2020-08-27'
+        | '2020-03-02'
+        | '2019-12-03'
+        | '2019-11-05'
+        | '2019-10-17'
+        | '2019-10-08'
+        | '2019-09-09'
+        | '2019-08-14'
+        | '2019-05-16'
+        | '2019-03-14'
+        | '2019-02-19'
+        | '2019-02-11'
+        | '2018-11-08'
+        | '2018-10-31'
+        | '2018-09-24'
+        | '2018-09-06'
+        | '2018-08-23'
+        | '2018-07-27'
+        | '2018-05-21'
+        | '2018-02-28'
+        | '2018-02-06'
+        | '2018-02-05'
+        | '2018-01-23'
+        | '2017-12-14'
+        | '2017-08-15'
+      /**
+       * Format: uri
+       * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+       */
+      base_url?: string
+      /**
+       * Format: uri
+       * @description URL for managed webhook endpoint registration
+       */
+      webhook_url?: string
+      /** @description Webhook signing secret (whsec_...) for signature verification */
+      webhook_secret?: string
+      /** @description Enable WebSocket streaming for live events */
+      websocket?: boolean
+      /** @description Enable events API polling for incremental sync after backfill */
+      poll_events?: boolean
+      /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+      webhook_port?: number
+      /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+      revalidate_objects?: string[]
+      /** @description Max objects to backfill per stream (useful for testing) */
+      backfill_limit?: number
+      /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
+      max_concurrent_streams?: number
+      /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
+      rate_limit?: number
+    }
+    DestinationConfig:
+      | {
+          /** @constant */
+          type: 'postgres'
+          postgres: components['schemas']['DestinationPostgresConfig']
+        }
+      | {
+          /** @constant */
+          type: 'google_sheets'
+          google_sheets: components['schemas']['DestinationGoogleSheetsConfig']
+        }
+    DestinationPostgresConfig: {
+      /** @description Postgres connection string */
+      url?: string
+      /** @description Deprecated alias for url; prefer url */
+      connection_string?: string
+      /**
+       * @description Target schema name (e.g. "stripe")
+       * @default public
+       */
+      schema: string
+      /**
+       * @description Records to buffer before flushing
+       * @default 100
+       */
+      batch_size: number
+      /** @description AWS RDS IAM authentication config */
+      aws?: {
+        /** @description Postgres host for RDS IAM auth */
+        host: string
+        /**
+         * @description Postgres port for RDS IAM auth
+         * @default 5432
+         */
+        port: number
+        /** @description Database name for RDS IAM auth */
+        database: string
+        /** @description Database user for RDS IAM auth */
+        user: string
+        /** @description AWS region for RDS instance */
+        region: string
+        /** @description IAM role ARN to assume (cross-account) */
+        role_arn?: string
+        /** @description External ID for STS AssumeRole */
+        external_id?: string
+      }
+      /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+      ssl_ca_pem?: string
+    }
+    DestinationGoogleSheetsConfig: {
+      /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+      client_id?: string
+      /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+      client_secret?: string
+      /** @description OAuth2 access token */
+      access_token: string
+      /** @description OAuth2 refresh token */
+      refresh_token: string
+      /** @description Target spreadsheet ID (created if omitted) */
+      spreadsheet_id?: string
+      /**
+       * @description Title when creating a new spreadsheet
+       * @default Stripe Sync
+       */
+      spreadsheet_title: string
+      /**
+       * @description Rows per Sheets API append call
+       * @default 50
+       */
+      batch_size: number
+    }
+    /** @description Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing. */
+    SyncState: {
+      source: components['schemas']['SourceState']
+      /** @description Destination connector state. */
+      destination: {
+        [key: string]: unknown
+      }
+      /** @description Engine-managed run state — sync_run_id, time_ceiling, accumulated progress. */
+      sync_run: {
+        /** @description Identifies a finite backfill run. Omit for continuous sync. */
+        sync_run_id?: string
+        /** @description Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation. */
+        time_ceiling?: string
+        /** @description Accumulated progress from prior requests in this run. */
+        progress: {
+          /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+          started_at: string
+          /** @description Wall-clock milliseconds since the sync run started. */
+          elapsed_ms: number
+          /** @description Total source_state messages observed so far. */
+          global_state_count: number
+          /** @description Set when source or destination emits connection_status: failed. */
+          connection_status?: {
             /**
-             * Format: uri
-             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-             */
-            base_url?: string;
-            /**
-             * Format: uri
-             * @description URL for managed webhook endpoint registration
-             */
-            webhook_url?: string;
-            /** @description Webhook signing secret (whsec_...) for signature verification */
-            webhook_secret?: string;
-            /** @description Enable WebSocket streaming for live events */
-            websocket?: boolean;
-            /** @description Enable events API polling for incremental sync after backfill */
-            poll_events?: boolean;
-            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-            webhook_port?: number;
-            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-            revalidate_objects?: string[];
-            /** @description Max objects to backfill per stream (useful for testing) */
-            backfill_limit?: number;
-            /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
-            max_concurrent_streams?: number;
-            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
-            rate_limit?: number;
-        };
-        DestinationConfig: {
-            /** @constant */
-            type: "postgres";
-            postgres: components["schemas"]["DestinationPostgresConfig"];
-        } | {
-            /** @constant */
-            type: "google_sheets";
-            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
-        };
-        DestinationPostgresConfig: {
-            /** @description Postgres connection string */
-            url?: string;
-            /** @description Deprecated alias for url; prefer url */
-            connection_string?: string;
-            /**
-             * @description Target schema name (e.g. "stripe")
-             * @default public
-             */
-            schema: string;
-            /**
-             * @description Records to buffer before flushing
-             * @default 100
-             */
-            batch_size: number;
-            /** @description AWS RDS IAM authentication config */
-            aws?: {
-                /** @description Postgres host for RDS IAM auth */
-                host: string;
-                /**
-                 * @description Postgres port for RDS IAM auth
-                 * @default 5432
-                 */
-                port: number;
-                /** @description Database name for RDS IAM auth */
-                database: string;
-                /** @description Database user for RDS IAM auth */
-                user: string;
-                /** @description AWS region for RDS instance */
-                region: string;
-                /** @description IAM role ARN to assume (cross-account) */
-                role_arn?: string;
-                /** @description External ID for STS AssumeRole */
-                external_id?: string;
-            };
-            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-            ssl_ca_pem?: string;
-        };
-        DestinationGoogleSheetsConfig: {
-            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-            client_id?: string;
-            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-            client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
-            /** @description OAuth2 refresh token */
-            refresh_token: string;
-            /** @description Target spreadsheet ID (created if omitted) */
-            spreadsheet_id?: string;
-            /**
-             * @description Title when creating a new spreadsheet
-             * @default Stripe Sync
-             */
-            spreadsheet_title: string;
-            /**
-             * @description Rows per Sheets API append call
-             * @default 50
-             */
-            batch_size: number;
-        };
-        /** @description Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing. */
-        SyncState: {
-            source: components["schemas"]["SourceState"];
-            /** @description Destination connector state. */
-            destination: {
-                [key: string]: unknown;
-            };
-            /** @description Engine-managed run state — sync_run_id, time_ceiling, accumulated progress. */
-            sync_run: {
-                /** @description Identifies a finite backfill run. Omit for continuous sync. */
-                sync_run_id?: string;
-                /** @description Frozen upper bound (ISO 8601). Set on first invocation when sync_run_id is present; reused on continuation. */
-                time_ceiling?: string;
-                /** @description Accumulated progress from prior requests in this run. */
-                progress: {
-                    /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
-                    started_at: string;
-                    /** @description Wall-clock milliseconds since the sync run started. */
-                    elapsed_ms: number;
-                    /** @description Total source_state messages observed so far. */
-                    global_state_count: number;
-                    /** @description Set when source or destination emits connection_status: failed. */
-                    connection_status?: {
-                        /**
-                         * @description Whether the connection check passed.
-                         * @enum {string}
-                         */
-                        status: "succeeded" | "failed";
-                        /** @description Human-readable explanation of the check result. */
-                        message?: string;
-                    };
-                    /** @description Computed aggregates. */
-                    derived: {
-                        /**
-                         * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
-                         * @enum {string}
-                         */
-                        status: "started" | "succeeded" | "failed";
-                        /** @description Overall throughput for the entire run. */
-                        records_per_second: number;
-                        /** @description State checkpoints per second. */
-                        states_per_second: number;
-                    };
-                    /** @description Per-stream progress, keyed by stream name. */
-                    streams: {
-                        [key: string]: {
-                            /**
-                             * @description Current state, derived from stream_status events.
-                             * @enum {string}
-                             */
-                            status: "not_started" | "started" | "completed" | "skipped" | "errored";
-                            /** @description Number of state checkpoints for this stream. */
-                            state_count: number;
-                            /** @description Records synced for this stream in this run. */
-                            record_count: number;
-                            /** @description Human-readable status message (error reason, skip reason, etc). */
-                            message?: string;
-                            /** @description Full backfill time span for this stream. */
-                            total_range?: {
-                                /** @description Inclusive lower bound (ISO 8601). */
-                                gte: string;
-                                /** @description Exclusive upper bound (ISO 8601). */
-                                lt: string;
-                            };
-                            /** @description Completed time sub-ranges within the total_range. */
-                            completed_ranges?: {
-                                /** @description Inclusive lower bound (ISO 8601). */
-                                gte: string;
-                                /** @description Exclusive upper bound (ISO 8601). */
-                                lt: string;
-                            }[];
-                        };
-                    };
-                };
-            };
-        };
-        /** @description Source connector state — cursors, backfill progress, events cursors. */
-        SourceState: {
-            /** @description Per-stream checkpoint data, keyed by stream name. */
-            streams: {
-                [key: string]: unknown;
-            };
-            /** @description Source-wide state shared across all streams. */
-            global: {
-                [key: string]: unknown;
-            };
-        };
-        Pipeline: {
-            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-            id: string;
-            source: components["schemas"]["SourceConfig"];
-            destination: components["schemas"]["DestinationConfig"];
-            /** @description Selected streams to sync. All streams synced if omitted. */
-            streams?: {
-                /** @description Stream (table) name to sync. */
-                name: string;
-                /**
-                 * @description How the source reads this stream. Defaults to full_refresh.
-                 * @enum {string}
-                 */
-                sync_mode?: "incremental" | "full_refresh";
-                /** @description Cap backfill to this many records, then mark the stream complete. */
-                backfill_limit?: number;
-            }[];
-            /**
-             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-             * @default active
+             * @description Whether the connection check passed.
              * @enum {string}
              */
-            desired_status: "active" | "paused" | "deleted";
+            status: 'succeeded' | 'failed'
+            /** @description Human-readable explanation of the check result. */
+            message?: string
+          }
+          /** @description Computed aggregates. */
+          derived: {
             /**
-             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-             * @default setup
+             * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
              * @enum {string}
              */
-            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-            /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
-            sync_state?: components["schemas"]["SyncState"];
-        };
-    };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+            status: 'started' | 'succeeded' | 'failed'
+            /** @description Overall throughput for the entire run. */
+            records_per_second: number
+            /** @description State checkpoints per second. */
+            states_per_second: number
+          }
+          /** @description Per-stream progress, keyed by stream name. */
+          streams: {
+            [key: string]: {
+              /**
+               * @description Current state, derived from stream_status events.
+               * @enum {string}
+               */
+              status: 'not_started' | 'started' | 'completed' | 'skipped' | 'errored'
+              /** @description Number of state checkpoints for this stream. */
+              state_count: number
+              /** @description Records synced for this stream in this run. */
+              record_count: number
+              /** @description Human-readable status message (error reason, skip reason, etc). */
+              message?: string
+              /** @description Full backfill time span for this stream. */
+              total_range?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string
+              }
+              /** @description Completed time sub-ranges within the total_range. */
+              completed_ranges?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string
+              }[]
+            }
+          }
+        }
+      }
+    }
+    /** @description Source connector state — cursors, backfill progress, events cursors. */
+    SourceState: {
+      /** @description Per-stream checkpoint data, keyed by stream name. */
+      streams: {
+        [key: string]: unknown
+      }
+      /** @description Source-wide state shared across all streams. */
+      global: {
+        [key: string]: unknown
+      }
+    }
+    Pipeline: {
+      /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+      id: string
+      source: components['schemas']['SourceConfig']
+      destination: components['schemas']['DestinationConfig']
+      /** @description Selected streams to sync. All streams synced if omitted. */
+      streams?: {
+        /** @description Stream (table) name to sync. */
+        name: string
+        /**
+         * @description How the source reads this stream. Defaults to full_refresh.
+         * @enum {string}
+         */
+        sync_mode?: 'incremental' | 'full_refresh'
+        /** @description Cap backfill to this many records, then mark the stream complete. */
+        backfill_limit?: number
+      }[]
+      /**
+       * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+       * @default active
+       * @enum {string}
+       */
+      desired_status: 'active' | 'paused' | 'deleted'
+      /**
+       * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+       * @default setup
+       * @enum {string}
+       */
+      status: 'setup' | 'backfill' | 'ready' | 'paused' | 'teardown' | 'error'
+      /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+      sync_state?: components['schemas']['SyncState']
+    }
+  }
+  responses: never
+  parameters: never
+  requestBodies: never
+  headers: never
+  pathItems: never
 }
-export type $defs = Record<string, never>;
+export type $defs = Record<string, never>
 export interface operations {
-    health: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Server is healthy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        ok: true;
-                        hostname: string;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of pipelines */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["Pipeline"][];
-                        has_more: boolean;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
-                    id?: string;
-                    source: components["schemas"]["SourceConfig"];
-                    destination: components["schemas"]["DestinationConfig"];
-                    /** @description Selected streams to sync. All streams synced if omitted. */
-                    streams?: {
-                        /** @description Stream (table) name to sync. */
-                        name: string;
-                        /**
-                         * @description How the source reads this stream. Defaults to full_refresh.
-                         * @enum {string}
-                         */
-                        sync_mode?: "incremental" | "full_refresh";
-                        /** @description Cap backfill to this many records, then mark the stream complete. */
-                        backfill_limit?: number;
-                    }[];
-                };
-            };
-        };
-        responses: {
-            /** @description Created pipeline */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Pipeline"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-            /** @description Pipeline id already exists */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Retrieved pipeline with status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Pipeline"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted pipeline */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        id: string;
-                        /** @constant */
-                        deleted: true;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
-                    id?: string;
-                    source?: components["schemas"]["SourceConfig"];
-                    destination?: components["schemas"]["DestinationConfig"];
-                    /** @description Selected streams to sync. All streams synced if omitted. */
-                    streams?: {
-                        /** @description Stream (table) name to sync. */
-                        name: string;
-                        /**
-                         * @description How the source reads this stream. Defaults to full_refresh.
-                         * @enum {string}
-                         */
-                        sync_mode?: "incremental" | "full_refresh";
-                        /** @description Cap backfill to this many records, then mark the stream complete. */
-                        backfill_limit?: number;
-                    }[];
-                    /**
-                     * @description Set to "paused" to pause, "active" to resume, "deleted" to tear down.
-                     * @enum {string}
-                     */
-                    desired_status?: "active" | "paused" | "deleted";
-                };
-            };
-        };
-        responses: {
-            /** @description Updated pipeline */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Pipeline"];
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-            /** @description Invalid status transition */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.sync": {
-        parameters: {
-            query?: {
-                /** @description Max state messages before stopping */
-                state_limit?: number;
-                /** @description Stop after N seconds */
-                time_limit?: number;
-                /** @description Sync run identifier (resumes or starts fresh) */
-                sync_run_id?: string;
-                /** @description Ignore and do not persist the pipeline sync_state checkpoint */
-                no_state?: boolean;
-            };
-            header?: never;
-            path: {
-                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    source?: components["schemas"]["SourceConfig"];
-                    destination?: components["schemas"]["DestinationConfig"];
-                    streams?: {
-                        /** @description Stream (table) name to sync. */
-                        name: string;
-                        /**
-                         * @description How the source reads this stream. Defaults to full_refresh.
-                         * @enum {string}
-                         */
-                        sync_mode?: "incremental" | "full_refresh";
-                        /** @description Cap backfill to this many records, then mark the stream complete. */
-                        backfill_limit?: number;
-                    }[];
-                    /** @description Explicit sync checkpoint override for resumed ad-hoc runs */
-                    sync_state?: components["schemas"]["SyncState"];
-                };
-            };
-        };
-        responses: {
-            /** @description Streaming NDJSON sync output */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/x-ndjson": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Pipeline not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "pipelines.sync_workflow_test": {
-        parameters: {
-            query?: {
-                /** @description Max state messages per iteration */
-                state_limit?: number;
-                /** @description Time limit per iteration (seconds) */
-                time_limit?: number;
-            };
-            header?: never;
-            path: {
-                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Backfill result with final eof and sync state */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        eof: {
-                            [key: string]: unknown;
-                        };
-                        sync_state?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description Pipeline not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: unknown;
-                    };
-                };
-            };
-        };
-    };
-    "webhooks.push": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                pipeline_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Event accepted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/plain": "ok";
-                };
-            };
-        };
-    };
+  health: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Server is healthy */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            /** @constant */
+            ok: true
+            hostname: string
+          }
+        }
+      }
+    }
+  }
+  'pipelines.list': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description List of pipelines */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            data: components['schemas']['Pipeline'][]
+            has_more: boolean
+          }
+        }
+      }
+    }
+  }
+  'pipelines.create': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+          id?: string
+          source: components['schemas']['SourceConfig']
+          destination: components['schemas']['DestinationConfig']
+          /** @description Selected streams to sync. All streams synced if omitted. */
+          streams?: {
+            /** @description Stream (table) name to sync. */
+            name: string
+            /**
+             * @description How the source reads this stream. Defaults to full_refresh.
+             * @enum {string}
+             */
+            sync_mode?: 'incremental' | 'full_refresh'
+            /** @description Cap backfill to this many records, then mark the stream complete. */
+            backfill_limit?: number
+          }[]
+        }
+      }
+    }
+    responses: {
+      /** @description Created pipeline */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Pipeline']
+        }
+      }
+      /** @description Invalid input */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+      /** @description Pipeline id already exists */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'pipelines.get': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Retrieved pipeline with status */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Pipeline']
+        }
+      }
+      /** @description Not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'pipelines.delete': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Deleted pipeline */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            id: string
+            /** @constant */
+            deleted: true
+          }
+        }
+      }
+      /** @description Not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'pipelines.update': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+          id?: string
+          source?: components['schemas']['SourceConfig']
+          destination?: components['schemas']['DestinationConfig']
+          /** @description Selected streams to sync. All streams synced if omitted. */
+          streams?: {
+            /** @description Stream (table) name to sync. */
+            name: string
+            /**
+             * @description How the source reads this stream. Defaults to full_refresh.
+             * @enum {string}
+             */
+            sync_mode?: 'incremental' | 'full_refresh'
+            /** @description Cap backfill to this many records, then mark the stream complete. */
+            backfill_limit?: number
+          }[]
+          /**
+           * @description Set to "paused" to pause, "active" to resume, "deleted" to tear down.
+           * @enum {string}
+           */
+          desired_status?: 'active' | 'paused' | 'deleted'
+        }
+      }
+    }
+    responses: {
+      /** @description Updated pipeline */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Pipeline']
+        }
+      }
+      /** @description Bad request */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+      /** @description Not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+      /** @description Invalid status transition */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'pipelines.sync': {
+    parameters: {
+      query?: {
+        /** @description Max state messages before stopping */
+        state_limit?: number
+        /** @description Stop after N seconds */
+        time_limit?: number
+        /** @description Sync run identifier (resumes or starts fresh) */
+        sync_run_id?: string
+        /** @description Ignore and do not persist the pipeline sync_state checkpoint */
+        no_state?: boolean
+      }
+      header?: never
+      path: {
+        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': {
+          source?: components['schemas']['SourceConfig']
+          destination?: components['schemas']['DestinationConfig']
+          streams?: {
+            /** @description Stream (table) name to sync. */
+            name: string
+            /**
+             * @description How the source reads this stream. Defaults to full_refresh.
+             * @enum {string}
+             */
+            sync_mode?: 'incremental' | 'full_refresh'
+            /** @description Cap backfill to this many records, then mark the stream complete. */
+            backfill_limit?: number
+          }[]
+          /** @description Explicit sync checkpoint override for resumed ad-hoc runs */
+          sync_state?: components['schemas']['SyncState']
+        }
+      }
+    }
+    responses: {
+      /** @description Streaming NDJSON sync output */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/x-ndjson': {
+            [key: string]: unknown
+          }
+        }
+      }
+      /** @description Pipeline not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'pipelines.sync_workflow_test': {
+    parameters: {
+      query?: {
+        /** @description Max state messages per iteration */
+        state_limit?: number
+        /** @description Time limit per iteration (seconds) */
+        time_limit?: number
+      }
+      header?: never
+      path: {
+        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Backfill result with final eof and sync state */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            eof: {
+              [key: string]: unknown
+            }
+            sync_state?: {
+              [key: string]: unknown
+            }
+          }
+        }
+      }
+      /** @description Pipeline not found */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            error: unknown
+          }
+        }
+      }
+    }
+  }
+  'webhooks.push': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        pipeline_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Event accepted */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/plain': 'ok'
+        }
+      }
+    }
+  }
 }

@@ -116,7 +116,7 @@ cat > package.json <<EOF
 EOF
 
 pnpm add "$PROTOCOL_TGZ" "$OPENAPI_TGZ" "$ENGINE_TGZ" "$SOURCE_TGZ" "$DEST_TGZ" "$DEST_SHEETS_TGZ" \
-         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" \
+         "$STATE_PG_TGZ" "$UTIL_PG_TGZ" "$TSCLI_TGZ" "$HONO_ZOD_TGZ" "$SUPABASE_TGZ" "$LOGGER_TGZ" \
          2>&1 | tail -5
 echo ""
 

@@ -134,18 +134,17 @@ export function createSchemas(resolver: ConnectorResolver) {
     })
     .meta({ id: 'Pipeline' })
 
-  const CreatePipeline = z
-    .object({
-      id: PipelineId.optional().describe(
-        'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
-      ),
-      source: SourceConfig,
-      destination: DestinationConfig,
-      streams: z
-        .array(StreamConfig)
-        .optional()
-        .describe('Selected streams to sync. All streams synced if omitted.'),
-    })
+  const CreatePipeline = z.object({
+    id: PipelineId.optional().describe(
+      'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
+    ),
+    source: SourceConfig,
+    destination: DestinationConfig,
+    streams: z
+      .array(StreamConfig)
+      .optional()
+      .describe('Selected streams to sync. All streams synced if omitted.'),
+  })
 
   const UpdatePipeline = CreatePipeline.extend({
     desired_status: DesiredStatus.optional().describe(
