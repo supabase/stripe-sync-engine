@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import type { ProgressPayload } from '@stripe/sync-protocol'
 import { formatProgress } from '@stripe/sync-engine/progress'
 import type { StreamConfig } from '../lib/createSchemas.js'
+import { createSyncRunLogger, syncRunLogPath } from '../logger.js'
 
 const PROGRESS_RENDER_INTERVAL_MS = 200
 
@@ -16,8 +18,19 @@ export interface PipelineSyncOptions {
 }
 
 export async function renderPipelineSync(opts: PipelineSyncOptions) {
-  const { handler, pipelineId, stateLimit, timeLimit, syncRunId, streams, useState, plain } =
-    opts
+  const { handler, pipelineId, stateLimit, timeLimit, streams, useState, plain } = opts
+  const syncRunId = opts.syncRunId ?? randomUUID()
+
+  // Set up file logger for this sync run
+  const logFile = syncRunLogPath(pipelineId, syncRunId)
+  const log = createSyncRunLogger(pipelineId, syncRunId)
+  log.info({ pipelineId, syncRunId, stateLimit, timeLimit, streams, useState }, 'sync run started')
+  process.stderr.write(`Log: ${logFile}\n`)
+
+  function exit(code: number): never {
+    log.flush()
+    process.exit(code)
+  }
 
   let progress: ProgressPayload | undefined
   let prevProgress: ProgressPayload | undefined
@@ -64,12 +77,12 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         } catch {
           process.stderr.write(`Error ${res.status}: ${text}\n`)
         }
-        process.exit(1)
+        exit(1)
       }
 
       if (!res.body) {
         process.stderr.write('No response body\n')
-        process.exit(1)
+        exit(1)
       }
 
       const reader = res.body.getReader()
@@ -91,7 +104,13 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
             type: string
             progress?: ProgressPayload
             log?: { level?: string; message?: string }
+            stream_status?: { stream?: string; status?: string; message?: string }
             eof?: { has_more?: boolean; ending_state?: unknown; run_progress?: ProgressPayload }
+          }
+
+          // Log all messages to file (except progress which is too chatty)
+          if (msg.type !== 'progress') {
+            log.debug({ msg_type: msg.type, ...msg }, 'message')
           }
 
           if (msg.type === 'progress' && msg.progress) {
@@ -100,23 +119,27 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
             if (Date.now() - lastRenderAt >= PROGRESS_RENDER_INTERVAL_MS) {
               renderProgressUpdate(progress, prevProgress)
             }
+          } else if (msg.type === 'stream_status' && msg.stream_status) {
+            log.info(msg.stream_status, `stream ${msg.stream_status.status}`)
           } else if (msg.type === 'eof' && msg.eof?.run_progress) {
             prevProgress = progress
             progress = msg.eof.run_progress
             hasMore = msg.eof.has_more === true
             endingState = msg.eof.ending_state
             sawEof = true
+            log.info({ has_more: hasMore }, 'sync iteration complete')
             renderProgressUpdate(progress, prevProgress)
           } else if (msg.type === 'log' && msg.log?.level === 'error') {
+            log.error({ message: msg.log.message }, 'sync error')
             process.stderr.write(`${msg.log.message ?? 'Sync failed'}\n`)
-            process.exit(1)
+            exit(1)
           }
         }
       }
 
       if (!sawEof) {
         process.stderr.write('Sync stream ended without eof\n')
-        process.exit(1)
+        exit(1)
       }
 
       if (!hasMore) {
@@ -126,7 +149,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
       if (!useState) {
         if (!endingState) {
           process.stderr.write('Sync returned has_more=true without ending_state\n')
-          process.exit(1)
+          exit(1)
         }
         loopState = endingState
       }
@@ -135,5 +158,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
     if (!plain && progress) {
       process.stderr.write(formatProgress(progress) + '\n')
     }
+    log.info('sync run finished')
+    log.flush()
   }
 }
