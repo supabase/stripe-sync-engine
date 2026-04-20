@@ -406,6 +406,17 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const runSource = opts?.only !== 'destination'
       const runDest = opts?.only !== 'source'
 
+      yield engineMsg.log({
+        level: 'info',
+        message: 'Starting pipeline setup',
+        data: {
+          source_type: pipeline.source.type,
+          destination_type: pipeline.destination.type,
+          run_source: runSource,
+          run_destination: runDest,
+        },
+      })
+
       logger.debug({ runSource, runDest }, 'pipeline_setup: resolving connectors')
       const [srcConnector, destConnector] = await Promise.all([
         runSource ? resolver.resolveSource(pipeline.source.type) : null,

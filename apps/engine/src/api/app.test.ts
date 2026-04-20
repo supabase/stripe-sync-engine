@@ -450,9 +450,21 @@ describe('POST /setup', () => {
     })
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
-    // sourceTest and destinationTest have no setup(), so stream is empty
-    const events = await readNdjson(res)
-    expect(events).toHaveLength(0)
+    const events = await readNdjson<Message>(res)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'log',
+      log: {
+        level: 'info',
+        message: 'Starting pipeline setup',
+        data: {
+          source_type: 'test',
+          destination_type: 'test',
+          run_source: true,
+          run_destination: true,
+        },
+      },
+    })
   })
 })
 

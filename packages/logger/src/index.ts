@@ -41,29 +41,35 @@ export function withoutLogCapture<T>(fn: () => T): T {
 export function bindLogContext<T>(
   iterable: AsyncIterable<T>,
   patch: Partial<LoggerContext>
-): AsyncIterableIterator<T> {
+): AsyncIterable<T> {
   const base = storage.getStore() ?? {}
-  const iterator = iterable[Symbol.asyncIterator]()
-  const context = { ...base, ...patch }
 
   return {
     [Symbol.asyncIterator]() {
-      return this
-    },
-    next(value?: unknown) {
-      return storage.run(context, () => iterator.next(value as never)) as Promise<IteratorResult<T>>
-    },
-    return(value?: unknown) {
-      if (!iterator.return) {
-        return Promise.resolve({ value: value as T, done: true })
-      }
-      return storage.run(context, () => iterator.return!(value as never)) as Promise<
-        IteratorResult<T>
-      >
-    },
-    throw(error?: unknown) {
-      if (!iterator.throw) return Promise.reject(error)
-      return storage.run(context, () => iterator.throw!(error)) as Promise<IteratorResult<T>>
+      const iterator = iterable[Symbol.asyncIterator]()
+      const context = { ...base, ...patch }
+
+      return {
+        next(value?: unknown) {
+          return storage.run(context, () => iterator.next(value as never)) as Promise<
+            IteratorResult<T>
+          >
+        },
+        return(value?: unknown) {
+          if (!iterator.return) {
+            return Promise.resolve({ value: value as T, done: true })
+          }
+          return storage.run(context, () => iterator.return!(value as never)) as Promise<
+            IteratorResult<T>
+          >
+        },
+        throw(error?: unknown) {
+          if (!iterator.throw) return Promise.reject(error)
+          return storage.run(context, () => iterator.throw!(error)) as Promise<
+            IteratorResult<T>
+          >
+        },
+      } satisfies AsyncIterator<T>
     },
   }
 }
@@ -71,7 +77,8 @@ export function bindLogContext<T>(
 export function createAsyncQueue<T>(): {
   push(item: T): void
   close(): void
-} & AsyncIterableIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>
+} {
   const items: T[] = []
   const waiters: Array<(result: IteratorResult<T>) => void> = []
   let closed = false
@@ -91,32 +98,27 @@ export function createAsyncQueue<T>(): {
     }
   }
 
-  function next() {
-    if (items.length > 0) {
-      return Promise.resolve({ value: items.shift()!, done: false } as IteratorResult<T>)
-    }
-    if (closed) {
-      return Promise.resolve({ value: undefined as T, done: true } as IteratorResult<T>)
-    }
-    return new Promise<IteratorResult<T>>((resolve) => {
-      waiters.push(resolve)
-    })
-  }
-
   return {
     push,
     close,
     [Symbol.asyncIterator]() {
-      return this
-    },
-    next,
-    return() {
-      close()
-      return Promise.resolve({ value: undefined as T, done: true } as IteratorResult<T>)
-    },
-    throw(error?: unknown) {
-      close()
-      return Promise.reject(error)
+      return {
+        next() {
+          if (items.length > 0) {
+            return Promise.resolve({ value: items.shift()!, done: false })
+          }
+          if (closed) {
+            return Promise.resolve({ value: undefined as T, done: true })
+          }
+          return new Promise<IteratorResult<T>>((resolve) => {
+            waiters.push(resolve)
+          })
+        },
+        return() {
+          close()
+          return Promise.resolve({ value: undefined as T, done: true })
+        },
+      } satisfies AsyncIterator<T>
     },
   }
 }
