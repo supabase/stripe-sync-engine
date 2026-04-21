@@ -329,6 +329,34 @@ export async function createProgram() {
       }
     }
 
+    // Fetch a pipeline and merge connector overrides (e.g. --postgres.url) on top,
+    // validating against the connector's OAS config schema.
+    async function fetchAndMergeOverrides(
+      pipelineId: string,
+      overrides: { source?: Record<string, unknown>; destination?: Record<string, unknown> }
+    ) {
+      const res = await handler(new Request(`http://localhost/pipelines/${pipelineId}`))
+      if (!res.ok) {
+        const text = await res.text()
+        process.stderr.write(`Error ${res.status}: ${text}\n`)
+        process.exit(1)
+      }
+      const pipeline = await res.json()
+      if (overrides.source || overrides.destination) {
+        const configSchemas: { source?: import('zod').ZodType; destination?: import('zod').ZodType } = {}
+        if (overrides.source) {
+          const name = (overrides.source.type ?? pipeline.source?.type) as string
+          configSchemas.source = resolver.sources().get(name)?.configSchema
+        }
+        if (overrides.destination) {
+          const name = (overrides.destination.type ?? pipeline.destination?.type) as string
+          configSchemas.destination = resolver.destinations().get(name)?.configSchema
+        }
+        mergeConnectorOverrides(pipeline, overrides, configSchemas)
+      }
+      return pipeline
+    }
+
     const getCommand = pipelineSubCommands['get']
     if (getCommand) {
       // Replace `get` to accept connector shorthand flags (e.g. --postgres.url)
@@ -348,29 +376,10 @@ export async function createProgram() {
             sources: sourceNames,
             destinations: destinationNames,
           })
-          const res = await handler(new Request(`http://localhost/pipelines/${args.id}`))
-          if (!res.ok) {
-            const text = await res.text()
-            process.stderr.write(`Error ${res.status}: ${text}\n`)
-            process.exit(1)
-          }
-          const pipeline = await res.json()
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
           if (args['reset-state']) {
             delete pipeline.sync_state
           }
-          const configSchemas: {
-            source?: import('zod').ZodType
-            destination?: import('zod').ZodType
-          } = {}
-          if (overrides.source) {
-            const name = (overrides.source.type ?? pipeline.source?.type) as string
-            configSchemas.source = resolver.sources().get(name)?.configSchema
-          }
-          if (overrides.destination) {
-            const name = (overrides.destination.type ?? pipeline.destination?.type) as string
-            configSchemas.destination = resolver.destinations().get(name)?.configSchema
-          }
-          mergeConnectorOverrides(pipeline, overrides, configSchemas)
           if (responseFormatter) {
             await responseFormatter(
               new Response(JSON.stringify(pipeline), {
@@ -448,6 +457,16 @@ export async function createProgram() {
           sources: sourceNames,
           destinations: destinationNames,
         })
+        // When overrides are present, fetch the pipeline, merge + validate against
+        // the connector's OAS schema, then pass full merged configs to sync.
+        let connectorOverrides = overrides
+        if (overrides.source || overrides.destination) {
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
+          connectorOverrides = {
+            source: overrides.source ? pipeline.source : undefined,
+            destination: overrides.destination ? pipeline.destination : undefined,
+          }
+        }
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,
@@ -458,7 +477,7 @@ export async function createProgram() {
           streams: parseStreamsArg(args.streams),
           resetState: args['reset-state'] === true,
           plain: args.plain || !process.stderr.isTTY,
-          connectorOverrides: overrides,
+          connectorOverrides,
         })
       },
     }) as CommandDef
