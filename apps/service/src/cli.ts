@@ -352,7 +352,12 @@ export async function createProgram() {
           const name = (overrides.destination.type ?? pipeline.destination?.type) as string
           configSchemas.destination = resolver.destinations().get(name)?.configSchema
         }
-        mergeConnectorOverrides(pipeline, overrides, configSchemas)
+        try {
+          mergeConnectorOverrides(pipeline, overrides, configSchemas)
+        } catch (err) {
+          process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`)
+          process.exit(1)
+        }
       }
       return pipeline
     }
