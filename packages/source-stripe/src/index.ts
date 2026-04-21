@@ -145,18 +145,16 @@ export function createStripeSource(
       }
 
       const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch())
-      const parser = new SpecParser()
-      const parsed = parser.parse(resolved.spec, {
-        resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
-      })
-      const allowedTables = new Set(parsed.tables.map((t) => t.tableName))
       const registry = buildResourceRegistry(
         resolved.spec,
         config.api_key,
         resolved.apiVersion,
-        config.base_url,
-        allowedTables
+        config.base_url
       )
+      const parser = new SpecParser()
+      const parsed = parser.parse(resolved.spec, {
+        resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
+      })
       const catalog = catalogFromOpenApi(parsed.tables, registry)
       discoverCache.set(apiVersion, catalog)
       yield { type: 'catalog' as const, catalog }
