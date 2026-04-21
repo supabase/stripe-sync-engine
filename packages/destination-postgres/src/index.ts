@@ -111,14 +111,83 @@ function createPool(config: PoolConfig): pg.Pool {
   return pool
 }
 
+function poolStats(pool: pg.Pool) {
+  return {
+    total_count: pool.totalCount,
+    idle_count: pool.idleCount,
+    waiting_count: pool.waitingCount,
+  }
+}
+
+function describePoolConfig(config: PoolConfig) {
+  return {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    has_connection_string: Boolean(config.connectionString),
+    ssl: config.ssl === true ? true : config.ssl ? 'custom' : false,
+    max: config.max,
+    min: config.min,
+    connection_timeout_millis: config.connectionTimeoutMillis,
+    idle_timeout_millis: config.idleTimeoutMillis,
+    allow_exit_on_idle: config.allowExitOnIdle,
+  }
+}
+
+async function createInstrumentedPool(config: Config, operation: string): Promise<pg.Pool> {
+  const configStartedAt = Date.now()
+  log.debug({ operation }, 'dest postgres: building pool config')
+  const poolConfig = await buildPoolConfig(config)
+  log.debug(
+    {
+      operation,
+      duration_ms: Date.now() - configStartedAt,
+      pool_config: describePoolConfig(poolConfig),
+    },
+    'dest postgres: built pool config'
+  )
+
+  const pool = withQueryLogging(createPool(poolConfig), log)
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool created')
+  return pool
+}
+
+async function connectAndRelease(pool: pg.Pool, operation: string): Promise<void> {
+  const startedAt = Date.now()
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.connect start')
+  const client = await pool.connect()
+  try {
+    log.debug(
+      {
+        operation,
+        duration_ms: Date.now() - startedAt,
+        ...poolStats(pool),
+      },
+      'dest postgres: pool.connect complete'
+    )
+  } finally {
+    client.release()
+    log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.connect released')
+  }
+}
+
+async function endPool(pool: pg.Pool, operation: string): Promise<void> {
+  const startedAt = Date.now()
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.end start')
+  await pool.end()
+  log.debug({ operation, duration_ms: Date.now() - startedAt }, 'dest postgres: pool.end complete')
+}
+
 const destination = {
   async *spec() {
     yield { type: 'spec' as const, spec: defaultSpec }
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
+    const pool = await createInstrumentedPool(config, 'check')
     try {
+      await connectAndRelease(pool, 'check')
       await pool.query('SELECT 1')
       yield {
         type: 'connection_status' as const,
@@ -133,14 +202,15 @@ const destination = {
         },
       }
     } finally {
-      await pool.end()
+      await endPool(pool, 'check')
     }
   },
 
   async *setup({ config, catalog }) {
     log.debug({ schema: config.schema }, 'dest setup: connecting to pool')
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
+    const pool = await createInstrumentedPool(config, 'setup')
     try {
+      await connectAndRelease(pool, 'setup')
       log.info(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       log.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
@@ -171,7 +241,7 @@ const destination = {
       )
       log.debug('dest setup: complete')
     } finally {
-      await pool.end()
+      await endPool(pool, 'setup')
     }
   },
 
@@ -182,16 +252,17 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
+    const pool = await createInstrumentedPool(config, 'teardown')
     try {
+      await connectAndRelease(pool, 'teardown')
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
-      await pool.end()
+      await endPool(pool, 'teardown')
     }
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)), log)
+    const pool = await createInstrumentedPool(config, 'write')
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
@@ -216,12 +287,45 @@ const destination = {
       if (!buffer || buffer.length === 0) return undefined
       const pk = streamKeyColumns.get(streamName) ?? ['id']
       const newerThan = streamNewerThanField.get(streamName)
+      const startedAt = Date.now()
+      log.debug(
+        {
+          stream: streamName,
+          batch_size: buffer.length,
+          schema: config.schema,
+          primary_key: pk,
+          newer_than_field: newerThan,
+          ...poolStats(pool),
+        },
+        'dest write: flush start'
+      )
       try {
         await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
+        log.debug(
+          {
+            stream: streamName,
+            batch_size: buffer.length,
+            schema: config.schema,
+            duration_ms: Date.now() - startedAt,
+            ...poolStats(pool),
+          },
+          'dest write: flush complete'
+        )
       } catch (err) {
         const detail =
           `stream=${streamName} table=${config.schema}.${streamName} ` +
           `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
+        log.error(
+          {
+            stream: streamName,
+            batch_size: buffer.length,
+            schema: config.schema,
+            duration_ms: Date.now() - startedAt,
+            err,
+            ...poolStats(pool),
+          },
+          'dest write: flush failed'
+        )
         failedStreams.add(streamName)
         streamBuffers.set(streamName, [])
         return `${errorMessage(err)} (${detail})`
@@ -238,6 +342,7 @@ const destination = {
     }
 
     try {
+      await connectAndRelease(pool, 'write')
       for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg.record
@@ -283,7 +388,7 @@ const destination = {
 
       log.info(`Postgres destination: wrote to schema "${config.schema}"`)
     } finally {
-      await pool.end()
+      await endPool(pool, 'write')
     }
   },
 } satisfies Destination<Config>
