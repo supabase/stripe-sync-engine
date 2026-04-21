@@ -40,7 +40,11 @@ function waitForRateLimit(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-export function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortSignal): ListFn {
+export function withRateLimit(
+  listFn: ListFn,
+  rateLimiter: RateLimiter,
+  signal?: AbortSignal
+): ListFn {
   return async (params) => {
     signal?.throwIfAborted()
     const wait = await rateLimiter()

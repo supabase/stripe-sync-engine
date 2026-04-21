@@ -23,25 +23,14 @@ export interface PipelineSyncOptions {
 }
 
 export async function renderPipelineSync(opts: PipelineSyncOptions) {
-  const {
-    handler,
-    pipelineId,
-    timeLimit,
-    streams,
-    resetState,
-    plain,
-    connectorOverrides,
-  } = opts
+  const { handler, pipelineId, timeLimit, streams, resetState, plain, connectorOverrides } = opts
   const syncRunId = opts.syncRunId ?? randomUUID()
 
   const logFile = syncRunLogPath(pipelineId, syncRunId)
   process.stderr.write(`Log: ${logFile}\n`)
 
   await withSyncRunLogContext(pipelineId, syncRunId, async () => {
-    log.info(
-      { pipelineId, syncRunId, timeLimit, streams, resetState },
-      'sync run started'
-    )
+    log.info({ pipelineId, syncRunId, timeLimit, streams, resetState }, 'sync run started')
 
     function exit(code: number): never {
       inkInstance?.unmount()

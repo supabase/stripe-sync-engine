@@ -124,8 +124,16 @@ export const ConfiguredStream = z
 
     time_range: z
       .object({
-        gte: z.string().optional().describe('Inclusive lower bound (ISO 8601). Source fills from account metadata if absent.'),
-        lt: z.string().optional().describe('Exclusive upper bound (ISO 8601). Engine sets from time_ceiling if absent.'),
+        gte: z
+          .string()
+          .optional()
+          .describe(
+            'Inclusive lower bound (ISO 8601). Source fills from account metadata if absent.'
+          ),
+        lt: z
+          .string()
+          .optional()
+          .describe('Exclusive upper bound (ISO 8601). Engine sets from time_ceiling if absent.'),
       })
       .optional()
       .describe(

@@ -96,7 +96,10 @@ function formatDataKV(data: Record<string, unknown>): string {
   return parts.length > 0 ? '\n' + DATA_INDENT + parts.join('\n' + DATA_INDENT) : ''
 }
 
-function formatLog(msg: { log: { level: string; message: string; data?: Record<string, unknown> }; _ts?: string }): string | null {
+function formatLog(msg: {
+  log: { level: string; message: string; data?: Record<string, unknown> }
+  _ts?: string
+}): string | null {
   const { level, message, data } = msg.log
   if (LEVEL_ORDER[level] !== undefined && LEVEL_ORDER[level]! < minLevel) return null
 
@@ -106,7 +109,16 @@ function formatLog(msg: { log: { level: string; message: string; data?: Record<s
   return `${ts(msg._ts)}${typeLabel('log', style.color)} ${style.color}${style.label}${RESET} ${component}${message}${kv}`
 }
 
-function formatStreamStatus(msg: { stream_status: { stream: string; status: string; time_range?: { gte?: string; lt?: string }; error?: string; reason?: string }; _ts?: string }): string {
+function formatStreamStatus(msg: {
+  stream_status: {
+    stream: string
+    status: string
+    time_range?: { gte?: string; lt?: string }
+    error?: string
+    reason?: string
+  }
+  _ts?: string
+}): string {
   const { stream, status, time_range, error, reason } = msg.stream_status
   const icon = STATUS_ICON[status] ?? { symbol: '?', color: '' }
   const statusLabel = status.toUpperCase()
@@ -130,32 +142,43 @@ const columns = process.stdout.columns || 200
 function formatProgress(msg: { progress: Record<string, unknown>; _ts?: string }): string | null {
   if (!showProgress) return null
   const progress = msg.progress as import('@stripe/sync-protocol').ProgressPayload
-  const rendered = renderToString(
-    React.createElement(ProgressHeader, { progress }),
-    { columns }
-  )
+  const rendered = renderToString(React.createElement(ProgressHeader, { progress }), { columns })
   const timestamp = ts(msg._ts)
-  const indented = rendered.split('\n').map((l) => `${DATA_INDENT}${l}`).join('\n')
+  const indented = rendered
+    .split('\n')
+    .map((l) => `${DATA_INDENT}${l}`)
+    .join('\n')
   return `${timestamp}${typeLabel('progress', YELLOW)}\n${indented}`
 }
 
 function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string {
-  const eof = msg.eof as { status?: string; has_more?: boolean; run_progress?: Record<string, unknown> }
+  const eof = msg.eof as {
+    status?: string
+    has_more?: boolean
+    run_progress?: Record<string, unknown>
+  }
   const timestamp = ts(msg._ts)
   const statusColor = eof.status === 'failed' ? RED : eof.status === 'succeeded' ? GREEN : YELLOW
 
   if (eof.run_progress) {
     const progress = eof.run_progress as import('@stripe/sync-protocol').ProgressPayload
-    const borderColor = eof.status === 'failed' ? 'red' : eof.status === 'succeeded' ? 'green' : 'yellow'
+    const borderColor =
+      eof.status === 'failed' ? 'red' : eof.status === 'succeeded' ? 'green' : 'yellow'
     const rendered = renderToString(
-      React.createElement(Box, {
-        borderStyle: 'round',
-        borderColor,
-        paddingX: 1,
-        flexDirection: 'column',
-      },
-        React.createElement(Text, { bold: true }, `${eof.status?.toUpperCase() ?? 'EOF'}  has_more=${String(eof.has_more ?? false)}`),
-        React.createElement(ProgressView, { progress }),
+      React.createElement(
+        Box,
+        {
+          borderStyle: 'round',
+          borderColor,
+          paddingX: 1,
+          flexDirection: 'column',
+        },
+        React.createElement(
+          Text,
+          { bold: true },
+          `${eof.status?.toUpperCase() ?? 'EOF'}  has_more=${String(eof.has_more ?? false)}`
+        ),
+        React.createElement(ProgressView, { progress })
       ),
       { columns }
     )
@@ -165,25 +188,37 @@ function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string 
   return `${timestamp}${typeLabel('eof', statusColor)} ${statusColor}${BOLD}${eof.status?.toUpperCase() ?? 'EOF'}${RESET}  has_more=${String(eof.has_more ?? false)}`
 }
 
-function formatRecord(msg: { record: { stream: string; data: Record<string, unknown> }; _ts?: string }): string {
+function formatRecord(msg: {
+  record: { stream: string; data: Record<string, unknown> }
+  _ts?: string
+}): string {
   const { stream, data } = msg.record
   const id = data?.id ? `  id=${String(data.id)}` : ''
   return `${ts(msg._ts)}${typeLabel('record', MAGENTA)} ${BOLD}${stream}${RESET}${id}`
 }
 
-function formatSourceState(msg: { source_state: { stream?: string; state_type?: string; state?: unknown }; _ts?: string }): string {
+function formatSourceState(msg: {
+  source_state: { stream?: string; state_type?: string; state?: unknown }
+  _ts?: string
+}): string {
   const { stream, state_type } = msg.source_state
   const label = stream ?? 'global'
   return `${ts(msg._ts)}${typeLabel('source_state', CYAN)} ${BOLD}${label}${RESET}  ${state_type ?? 'stream'}`
 }
 
-function formatCatalog(msg: { catalog: { streams: Array<{ stream: { name: string } }> }; _ts?: string }): string {
+function formatCatalog(msg: {
+  catalog: { streams: Array<{ stream: { name: string } }> }
+  _ts?: string
+}): string {
   const streams = msg.catalog.streams
   const names = streams.map((s) => s.stream.name).join(', ')
   return `${ts(msg._ts)}${typeLabel('catalog', CYAN)} ${streams.length} streams: ${truncate(names, columns - 30)}`
 }
 
-function formatConnectionStatus(msg: { connection_status: { status: string; message?: string }; _ts?: string }): string {
+function formatConnectionStatus(msg: {
+  connection_status: { status: string; message?: string }
+  _ts?: string
+}): string {
   const { status, message } = msg.connection_status
   const color = status === 'succeeded' ? GREEN : status === 'failed' ? RED : YELLOW
   const detail = message ? `: ${message}` : ''

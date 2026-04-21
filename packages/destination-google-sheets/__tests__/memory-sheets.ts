@@ -67,8 +67,7 @@ export function createMemorySheets() {
     if (bang < 0) return values
     const m = range.slice(bang + 1).match(/^([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?$/)
     if (!m) return values
-    const colIdx = (s: string) =>
-      [...s].reduce((v, ch) => v * 26 + (ch.charCodeAt(0) - 64), 0) - 1
+    const colIdx = (s: string) => [...s].reduce((v, ch) => v * 26 + (ch.charCodeAt(0) - 64), 0) - 1
     const startCol = colIdx(m[1])
     const startRow = m[2] ? Number(m[2]) - 1 : 0
     const endCol = m[3] !== undefined ? colIdx(m[3]) : Infinity

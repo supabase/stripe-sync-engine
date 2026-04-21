@@ -171,10 +171,12 @@ export async function* streamingSubdivide<T>(opts: {
     const range = queue.shift()!
     const id = nextId++
     inflightRanges.set(id, range)
-    inflight.set(
-      id,
-      fetchPage(range).then((result) => ({ id, result }))
-    )
+    // Attach a no-op catch to prevent unhandled rejection when the generator
+    // returns early (e.g. pipeline shutdown via abort signal). The actual error
+    // is still available via the original promise stored in the map.
+    const p = fetchPage(range).then((result) => ({ id, result }))
+    p.catch(() => {})
+    inflight.set(id, p)
     return true
   }
 
@@ -186,36 +188,46 @@ export async function* streamingSubdivide<T>(opts: {
   // Fill up to concurrency
   while (launchNext()) {}
 
-  while (inflight.size > 0) {
-    // Wait for any one to finish
-    const { id, result } = await Promise.race(inflight.values())
-    inflight.delete(id)
-    inflightRanges.delete(id)
+  try {
+    while (inflight.size > 0) {
+      // Wait for any one to finish
+      const { id, result } = await Promise.race(inflight.values())
+      inflight.delete(id)
+      inflightRanges.delete(id)
 
-    const { range, data, hasMore, lastObserved } = result
+      const { range, data, hasMore, lastObserved } = result
 
-    if (data.length === 0 && !hasMore) {
-      // Empty range — fully exhausted
-    } else if (!hasMore) {
-      // Range completed with data — no more pages
-    } else if (lastObserved != null) {
-      // Range has more data — subdivide and enqueue children
-      const children = subdivideRanges([range], new Map([[range, lastObserved]]), subdivisionFactor)
-      for (const child of children) queue.push(child)
-    } else {
-      // Has more but no lastObserved — re-enqueue to continue paginating
-      queue.push(range)
+      if (data.length === 0 && !hasMore) {
+        // Empty range — fully exhausted
+      } else if (!hasMore) {
+        // Range completed with data — no more pages
+      } else if (lastObserved != null) {
+        // Range has more data — subdivide and enqueue children
+        const children = subdivideRanges(
+          [range],
+          new Map([[range, lastObserved]]),
+          subdivisionFactor
+        )
+        for (const child of children) queue.push(child)
+      } else {
+        // Has more but no lastObserved — re-enqueue to continue paginating
+        queue.push(range)
+      }
+
+      // Launch new work BEFORE yielding so fetches run while consumer processes
+      while (launchNext()) {}
+
+      yield {
+        range,
+        data,
+        hasMore,
+        exhausted: !hasMore,
+        remaining: snapshotRemaining(),
+      }
     }
-
-    // Launch new work BEFORE yielding so fetches run while consumer processes
-    while (launchNext()) {}
-
-    yield {
-      range,
-      data,
-      hasMore,
-      exhausted: !hasMore,
-      remaining: snapshotRemaining(),
-    }
+  } finally {
+    // On early return (e.g. pipeline shutdown), swallow remaining in-flight
+    // rejections — they are expected when the abort signal fires.
+    inflight.clear()
   }
 }

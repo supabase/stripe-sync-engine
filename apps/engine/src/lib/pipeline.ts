@@ -271,7 +271,6 @@ export function takeLimits<T extends { type: string }>(
           await closeIterator()
           return
         }
-
       }
     } finally {
       cleanup()

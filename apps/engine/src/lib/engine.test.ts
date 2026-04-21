@@ -1157,9 +1157,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     const runId = 'two-chunk-run'
 
     // Chunk 1: both streams run; customers partially completes, charges errors
-    const chunk1 = await drain(
-      engine.pipeline_sync(defaultPipeline, { run_id: runId })
-    )
+    const chunk1 = await drain(engine.pipeline_sync(defaultPipeline, { run_id: runId }))
     const eof1 = chunk1.find((m) => m.type === 'eof')!
     expect(eof1.eof.ending_state?.sync_run.progress?.streams.customers).toMatchObject({
       status: 'started',
