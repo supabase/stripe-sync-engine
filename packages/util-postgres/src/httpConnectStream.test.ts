@@ -30,7 +30,13 @@ describe('withPgConnectProxy', () => {
 })
 
 describe('normalizePgSslConfig', () => {
+  it('is a no-op when PG_NORMALIZE_SSL is not set', () => {
+    const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=require' }
+    expect(normalizePgSslConfig(config)).toBe(config)
+  })
+
   it('translates sslmode=require to ssl:{rejectUnauthorized:false} and strips it from the URL', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
     const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=require' }
     const result = normalizePgSslConfig(config)
 
@@ -39,6 +45,7 @@ describe('normalizePgSslConfig', () => {
   })
 
   it('translates sslmode=verify-full to ssl:{rejectUnauthorized:true}', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
     const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full' }
     const result = normalizePgSslConfig(config)
 
@@ -47,6 +54,7 @@ describe('normalizePgSslConfig', () => {
   })
 
   it('respects explicit ssl when caller provides it alongside connectionString with sslmode', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
     const explicitSsl = { rejectUnauthorized: false, ca: 'custom-ca' }
     const config = {
       connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
@@ -59,6 +67,7 @@ describe('normalizePgSslConfig', () => {
   })
 
   it('returns config unchanged when no connectionString', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
     const config = { host: 'localhost', port: 5432 }
     expect(normalizePgSslConfig(config)).toEqual(config)
   })

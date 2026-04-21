@@ -184,12 +184,12 @@ function shouldBypassPgProxy(targetHost: string | undefined, env: PgProxyEnv): b
  * strips SSL params from the connection string and translates `sslmode` to Node.js TLS options,
  * but only when the caller hasn't already set an explicit `ssl` key.
  *
- * Not currently called — this area has been repeatedly tricky (proxy + SSL + node-postgres
- * interactions) and needs thorough testing across RDS, local Docker, and tunneled connections
- * before enabling in production. When enabled, should be applied consistently to all pg
- * connections (not just proxied ones) — call it in the pool factory, not inside withPgConnectProxy.
+ * Gated by `PG_NORMALIZE_SSL=1` env var. This area has been repeatedly tricky (proxy + SSL +
+ * node-postgres interactions) and needs thorough testing across RDS, local Docker, and tunneled
+ * connections. Enable it for testing, but verify before making it the default.
  */
 export function normalizePgSslConfig<T extends object>(config: T): T {
+  if (!process.env.PG_NORMALIZE_SSL) return config
   const raw = config as Record<string, unknown>
   if (typeof raw.connectionString !== 'string') return config
 
@@ -204,18 +204,20 @@ export function normalizePgSslConfig<T extends object>(config: T): T {
 }
 
 export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv = process.env): T {
+  const normalized = normalizePgSslConfig(config)
+
   const proxyHost = env.PG_PROXY_HOST?.trim()
   if (!proxyHost) {
-    return config
+    return normalized
   }
 
-  const targetHost = getTargetHost(config as Record<string, unknown>)
+  const targetHost = getTargetHost(normalized as Record<string, unknown>)
   if (shouldBypassPgProxy(targetHost, env)) {
-    return config
+    return normalized
   }
 
   return {
-    ...config,
+    ...normalized,
     stream: createPgHttpConnectStreamFactory({
       proxyHost,
       proxyPort: parsePositiveInteger('PG_PROXY_PORT', env.PG_PROXY_PORT, 10072),
