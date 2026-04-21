@@ -873,7 +873,7 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(1000)
   })
 
-  it('resets run progress even when run_id matches (each pipeline_sync is a new run)', async () => {
+  it('preserves run progress when run_id matches on continuation', async () => {
     const source: Source = {
       async *spec() {
         yield { type: 'spec', spec: { config: {} } }
@@ -918,8 +918,181 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     const eof = output.find((m) => m.type === 'eof')!
     expect(eof.eof.ending_state?.sync_run.run_id).toBe('same-run')
-    // Progress is always reset on initialize — each pipeline_sync is a fresh run
-    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeLessThan(5000)
+    expect(eof.eof.ending_state?.sync_run.progress?.global_state_count).toBe(4)
+    expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeGreaterThan(5000)
+  })
+
+  it('skips previously terminal streams on same-run continuation', async () => {
+    let receivedCatalogNames: string[] = []
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'charges', primary_key: [['id']] },
+              { name: 'invoices', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read(params) {
+        receivedCatalogNames = params.catalog.streams.map((stream) => stream.stream.name)
+        for (const streamName of receivedCatalogNames) {
+          yield {
+            type: 'stream_status' as const,
+            stream_status: { stream: streamName, status: 'start' },
+          }
+          yield {
+            type: 'stream_status' as const,
+            stream_status: { stream: streamName, status: 'complete' },
+          }
+          yield {
+            type: 'source_state' as const,
+            source_state: {
+              state_type: 'stream',
+              stream: streamName,
+              data: { cursor: streamName },
+            },
+          }
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const output = await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: {
+          source: { streams: {}, global: {} },
+          destination: {},
+          sync_run: {
+            run_id: 'same-run',
+            progress: {
+              started_at: '2025-01-01T00:00:00Z',
+              elapsed_ms: 5000,
+              global_state_count: 0,
+              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              streams: {
+                customers: { status: 'not_started', state_count: 0, record_count: 0 },
+                charges: {
+                  status: 'skipped',
+                  state_count: 0,
+                  record_count: 0,
+                  message: 'not available',
+                },
+                invoices: {
+                  status: 'completed',
+                  state_count: 0,
+                  record_count: 0,
+                },
+              },
+            },
+          },
+        },
+        run_id: 'same-run',
+      })
+    )
+
+    const eof = output.find((m) => m.type === 'eof')!
+    expect(receivedCatalogNames).toEqual(['customers'])
+    expect(eof.eof.request_progress?.streams).toEqual({
+      customers: expect.objectContaining({ status: 'completed' }),
+    })
+    expect(eof.eof.ending_state?.sync_run.progress?.streams.charges).toEqual(
+      expect.objectContaining({ status: 'skipped', message: 'not available' })
+    )
+    expect(eof.eof.ending_state?.sync_run.progress?.streams.invoices).toEqual(
+      expect.objectContaining({ status: 'completed' })
+    )
+    expect(eof.eof.status).toBe('succeeded')
+  })
+
+  it('retries previously errored streams when run_id changes', async () => {
+    let receivedCatalogNames: string[] = []
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'charges', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read(params) {
+        receivedCatalogNames = params.catalog.streams.map((stream) => stream.stream.name)
+        for (const streamName of receivedCatalogNames) {
+          yield {
+            type: 'stream_status' as const,
+            stream_status: { stream: streamName, status: 'start' },
+          }
+          yield {
+            type: 'stream_status' as const,
+            stream_status: { stream: streamName, status: 'complete' },
+          }
+          yield {
+            type: 'source_state' as const,
+            source_state: {
+              state_type: 'stream',
+              stream: streamName,
+              data: { cursor: streamName },
+            },
+          }
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const output = await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: {
+          source: { streams: {}, global: {} },
+          destination: {},
+          sync_run: {
+            run_id: 'old-run',
+            progress: {
+              started_at: '2025-01-01T00:00:00Z',
+              elapsed_ms: 5000,
+              global_state_count: 0,
+              derived: { status: 'failed', records_per_second: 0, states_per_second: 0 },
+              streams: {
+                customers: { status: 'not_started', state_count: 0, record_count: 0 },
+                charges: {
+                  status: 'errored',
+                  state_count: 0,
+                  record_count: 0,
+                  message: 'upstream 500',
+                },
+              },
+            },
+          },
+        },
+        run_id: 'new-run',
+      })
+    )
+
+    const eof = output.find((m) => m.type === 'eof')!
+    expect(receivedCatalogNames).toEqual(['customers', 'charges'])
+    expect(eof.eof.ending_state?.sync_run.progress?.streams).toEqual({
+      customers: expect.objectContaining({ status: 'completed' }),
+      charges: expect.objectContaining({ status: 'completed' }),
+    })
+    expect(eof.eof.status).toBe('succeeded')
   })
 
   it('returns final eof state by merging run updates into the initial sync state', async () => {

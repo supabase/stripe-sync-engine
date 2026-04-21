@@ -431,6 +431,11 @@ export async function createProgram() {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
         'state-limit': { type: 'string', description: 'Max state messages before stopping' },
         'time-limit': { type: 'string', description: 'Stop after N seconds' },
+        bounded: {
+          type: 'boolean',
+          default: false,
+          description: 'Run in bounded mode with 30-second sync requests',
+        },
         'sync-run-id': {
           type: 'string',
           description: 'Sync run identifier (resumes or starts fresh)',
@@ -473,11 +478,14 @@ export async function createProgram() {
           }
         }
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
+        const boundedTimeLimit =
+          args.bounded === true && !args['time-limit'] ? 30 : undefined
         await renderPipelineSync({
           handler,
           pipelineId: args.id as string,
           stateLimit: args['state-limit'] ? parseInt(args['state-limit']) : undefined,
-          timeLimit: args['time-limit'] ? parseInt(args['time-limit']) : undefined,
+          timeLimit:
+            args['time-limit'] ? parseInt(args['time-limit']) : boundedTimeLimit,
           syncRunId: args['sync-run-id'],
           streams: parseStreamsArg(args.streams),
           resetState: args['reset-state'] === true,

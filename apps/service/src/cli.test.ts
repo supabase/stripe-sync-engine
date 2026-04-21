@@ -489,6 +489,44 @@ describe('generated pipeline CLI', () => {
     stderrSpy.mockRestore()
   })
 
+  it('sync bounded mode uses 30-second requests by default', async () => {
+    const mockApp = buildMockApp()
+    createAppMock.mockImplementation(() => mockApp)
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    const pipelineId = 'pipe_shop_prod_pg_docker'
+    await mockApp.fetch(
+      new Request('http://localhost/pipelines', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: pipelineId,
+          source: {
+            type: 'stripe',
+            stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+          },
+          destination: {
+            type: 'postgres',
+            postgres: { url: 'postgres://localhost/db', schema: 'public' },
+          },
+        }),
+      })
+    )
+
+    await runCommand(program, {
+      rawArgs: ['pipelines', 'sync', pipelineId, '--bounded'],
+    })
+
+    expect(syncRequests).toHaveLength(2)
+    expect(syncRequests[0]?.query).toMatchObject({ time_limit: '30' })
+    expect(syncRequests[1]?.query).toMatchObject({ time_limit: '30' })
+
+    stderrSpy.mockRestore()
+  })
+
   it('sync leaves a final progress summary visible in interactive mode', async () => {
     const renderMock = vi.fn(() => ({
       rerender: vi.fn(),

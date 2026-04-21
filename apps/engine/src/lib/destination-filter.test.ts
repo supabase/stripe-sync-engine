@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ConfiguredCatalog } from '@stripe/sync-protocol'
-import { applySelection } from './destination-filter.js'
+import { applySelection, excludeTerminalStreams } from './destination-filter.js'
 
 function makeCatalog(
   streams: Array<{
@@ -99,5 +99,42 @@ describe('applySelection()', () => {
     const filtered = applySelection(catalog)
     expect(Object.keys(props(filtered, 0))).toEqual(['id', 'email'])
     expect(Object.keys(props(filtered, 1))).toEqual(['id', 'name'])
+  })
+})
+
+describe('excludeTerminalStreams()', () => {
+  it('excludes completed, skipped, and errored streams', () => {
+    const catalog = makeCatalog([
+      { name: 'customers' },
+      { name: 'charges' },
+      { name: 'invoices' },
+      { name: 'products' },
+      { name: 'prices' },
+    ])
+
+    const filtered = excludeTerminalStreams(catalog, {
+      streams: {
+        customers: { status: 'completed', state_count: 0, record_count: 0 },
+        charges: { status: 'skipped', state_count: 0, record_count: 0 },
+        invoices: { status: 'errored', state_count: 0, record_count: 0 },
+        products: { status: 'started', state_count: 0, record_count: 0 },
+        prices: { status: 'not_started', state_count: 0, record_count: 0 },
+      },
+    })
+
+    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['products', 'prices'])
+  })
+
+  it('passes catalog through when no terminal streams are recorded', () => {
+    const catalog = makeCatalog([{ name: 'customers' }, { name: 'charges' }])
+
+    const filtered = excludeTerminalStreams(catalog, {
+      streams: {
+        customers: { status: 'started', state_count: 0, record_count: 0 },
+        charges: { status: 'not_started', state_count: 0, record_count: 0 },
+      },
+    })
+
+    expect(filtered.streams.map((stream) => stream.stream.name)).toEqual(['customers', 'charges'])
   })
 })

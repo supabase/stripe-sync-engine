@@ -86,7 +86,7 @@ describe('stateReducer initialize event', () => {
     expect(state.source.streams['customers']).toEqual({ cursor: 'cus_99' })
   })
 
-  it('resets progress even when run_id matches (each pipeline_sync is a new run)', () => {
+  it('preserves progress when run_id matches on continuation', () => {
     const prior: SyncState = {
       source: { streams: {}, global: {} },
       destination: {},
@@ -102,8 +102,8 @@ describe('stateReducer initialize event', () => {
       },
     }
     const state = init(['customers'], 'same-run', prior)
-    expect(state.sync_run.progress.elapsed_ms).toBe(0)
-    expect(state.sync_run.progress.streams['customers'].record_count).toBe(0)
+    expect(state.sync_run.progress.elapsed_ms).toBe(5000)
+    expect(state.sync_run.progress.streams['customers'].record_count).toBe(500)
   })
 })
 

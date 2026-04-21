@@ -27,7 +27,7 @@ import { log } from '../logger.js'
 import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
 import { stateReducer, isProgressTrigger } from './state-reducer.js'
-import { applySelection } from './destination-filter.js'
+import { applySelection, excludeTerminalStreams } from './destination-filter.js'
 import type { ConnectorResolver } from './resolver.js'
 
 // MARK: - Engine interface
@@ -279,7 +279,10 @@ export function withTimeRanges(
     streams: catalog.streams.map((cs) =>
       cs.supports_time_range === false
         ? cs
-        : { ...cs, time_range: { ...cs.time_range, ...(!cs.time_range?.lt && { lt: timeCeiling }) } }
+        : {
+            ...cs,
+            time_range: { ...cs.time_range, ...(!cs.time_range?.lt && { lt: timeCeiling }) },
+          }
     ),
   }
 }
@@ -527,13 +530,21 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         (async function* () {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
+          const isContinuation = opts?.run_id != null && p.state?.sync_run.run_id === opts.run_id
+          const activeCatalog = isContinuation
+            ? excludeTerminalStreams(p.catalog, p.state?.sync_run.progress)
+            : p.catalog
+          const activeFilteredCatalog = isContinuation
+            ? excludeTerminalStreams(p.filteredCatalog, p.state?.sync_run.progress)
+            : p.filteredCatalog
+
           // Source → destination pipeline. The destination is the sole consumer,
           // giving natural pull-based backpressure with zero intermediate buffering.
           const sourceOutput = p.source.connector.read(
-            { config: p.source.config, catalog: p.catalog, state: p.state?.source },
+            { config: p.source.config, catalog: activeCatalog, state: p.state?.source },
             input
           )
-          const streamNames = p.filteredCatalog.streams.map((s) => s.stream.name)
+          const streamNames = activeFilteredCatalog.streams.map((s) => s.stream.name)
           let syncState = stateReducer(p.state, {
             type: 'initialize',
             stream_names: streamNames,
@@ -541,9 +552,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           })
           let requestProgress = createInitialProgress(streamNames)
 
-          const destInput = pipe(sourceOutput, enforceCatalog(p.filteredCatalog), tapLog)
+          const destInput = pipe(sourceOutput, enforceCatalog(activeFilteredCatalog), tapLog)
           const destOutput = p.destination.connector.write(
-            { config: p.destination.config, catalog: p.filteredCatalog },
+            { config: p.destination.config, catalog: activeFilteredCatalog },
             destInput
           )
           // Apply limits (takeLimits appends eof)

@@ -1,4 +1,4 @@
-import type { ConfiguredCatalog } from '@stripe/sync-protocol'
+import type { ConfiguredCatalog, ProgressPayload } from '@stripe/sync-protocol'
 
 export type CatalogMiddleware = (catalog: ConfiguredCatalog) => ConfiguredCatalog
 
@@ -28,5 +28,29 @@ export function applySelection(catalog: ConfiguredCatalog): ConfiguredCatalog {
         },
       }
     }),
+  }
+}
+
+/** Exclude streams that already reached a terminal state in prior run progress. */
+export function excludeTerminalStreams(
+  catalog: ConfiguredCatalog,
+  progress?: Pick<ProgressPayload, 'streams'>
+): ConfiguredCatalog {
+  const terminalStreams = new Set(
+    Object.entries(progress?.streams ?? {})
+      .filter(
+        ([, stream]) =>
+          stream.status === 'completed' ||
+          stream.status === 'skipped' ||
+          stream.status === 'errored'
+      )
+      .map(([name]) => name)
+  )
+
+  if (terminalStreams.size === 0) return catalog
+
+  return {
+    ...catalog,
+    streams: catalog.streams.filter((stream) => !terminalStreams.has(stream.stream.name)),
   }
 }
