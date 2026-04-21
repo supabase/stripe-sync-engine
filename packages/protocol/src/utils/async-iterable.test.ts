@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { merge, map, withAbortOnReturn } from './async-iterable.js'
+import { merge, mergeAsync, map, withAbortOnReturn } from './async-iterable.js'
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = []
@@ -96,6 +96,69 @@ describe('merge', () => {
     await iter.next()
     await iter.return?.()
     await new Promise((r) => setTimeout(r, 0))
+    expect(aClosed).toBe(true)
+    expect(bClosed).toBe(true)
+  })
+})
+
+describe('mergeAsync', () => {
+  it('merges iterables with bounded concurrency', async () => {
+    const a = fromArray([1, 3, 5])
+    const b = fromArray([2, 4, 6])
+    const result = await collect(mergeAsync([a, b], 2))
+    expect(result.sort()).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('respects concurrency limit', async () => {
+    // Track how many iterators have been started (first .next() called)
+    let started = 0
+
+    async function* tracked(id: number): AsyncIterable<number> {
+      started++
+      yield id
+    }
+
+    const result = await collect(mergeAsync([tracked(1), tracked(2), tracked(3)], 2))
+    // All three eventually run, but only 2 should start before the first completes
+    expect(result.sort()).toEqual([1, 2, 3])
+    expect(started).toBe(3)
+  })
+
+  it('calls return() on child iterators when consumer stops early', async () => {
+    let aClosed = false
+    let bClosed = false
+
+    const a: AsyncIterableIterator<number> = {
+      [Symbol.asyncIterator]() {
+        return this
+      },
+      next() {
+        return Promise.resolve({ value: 1, done: false })
+      },
+      return() {
+        aClosed = true
+        return Promise.resolve({ value: undefined, done: true as const })
+      },
+    }
+    const b: AsyncIterableIterator<number> = {
+      [Symbol.asyncIterator]() {
+        return this
+      },
+      next() {
+        return Promise.resolve({ value: 2, done: false })
+      },
+      return() {
+        bClosed = true
+        return Promise.resolve({ value: undefined, done: true as const })
+      },
+    }
+
+    const iter = mergeAsync([a, b], 2)
+    const iterator = iter[Symbol.asyncIterator]()
+    await iterator.next()
+    await iterator.return?.()
+    await new Promise((r) => setTimeout(r, 0))
+
     expect(aClosed).toBe(true)
     expect(bClosed).toBe(true)
   })
