@@ -135,7 +135,8 @@ function formatProgress(msg: { progress: Record<string, unknown>; _ts?: string }
     { columns }
   )
   const timestamp = ts(msg._ts)
-  return `${timestamp}${typeLabel('progress', YELLOW)}\n${rendered}`
+  const indented = rendered.split('\n').map((l) => `${DATA_INDENT}${l}`).join('\n')
+  return `${timestamp}${typeLabel('progress', YELLOW)}\n${indented}`
 }
 
 function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string {
