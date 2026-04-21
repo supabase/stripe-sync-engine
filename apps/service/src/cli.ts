@@ -9,7 +9,10 @@ import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import { createApp } from './api/app.js'
-import { wrapPipelineConnectorShorthand } from './lib/cli-connector-shorthand.js'
+import {
+  wrapPipelineConnectorShorthand,
+  extractConnectorOverrides,
+} from './lib/cli-connector-shorthand.js'
 import { filePipelineStore } from './lib/stores-fs.js'
 import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
@@ -326,14 +329,69 @@ export async function createProgram() {
     }
 
     const getCommand = pipelineSubCommands['get']
-    if (getCommand && !pipelineSubCommands['check']) {
-      pipelineSubCommands['check'] = defineCommand({
-        ...getCommand,
-        meta: {
-          name: 'check',
-          description: 'Retrieve pipeline',
+    if (getCommand) {
+      // Replace `get` to accept connector shorthand flags (e.g. --postgres.url)
+      // and merge overrides into the displayed pipeline config
+      pipelineSubCommands['get'] = defineCommand({
+        meta: { name: 'get', description: 'Retrieve pipeline' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
         },
-      })
+        async run({ args }) {
+          const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+            sources: sourceNames,
+            destinations: destinationNames,
+          })
+          const res = await handler(
+            new Request(`http://localhost/pipelines/${args.id}`)
+          )
+          if (!res.ok) {
+            const text = await res.text()
+            process.stderr.write(`Error ${res.status}: ${text}\n`)
+            process.exit(1)
+          }
+          const pipeline = await res.json()
+          if (overrides.source) {
+            const connectorName = overrides.source.type as string
+            const existing = pipeline.source?.[connectorName] ?? {}
+            pipeline.source = {
+              ...pipeline.source,
+              type: connectorName,
+              [connectorName]: { ...existing, ...(overrides.source[connectorName] as Record<string, unknown>) },
+            }
+          }
+          if (overrides.destination) {
+            const connectorName = overrides.destination.type as string
+            const existing = pipeline.destination?.[connectorName] ?? {}
+            pipeline.destination = {
+              ...pipeline.destination,
+              type: connectorName,
+              [connectorName]: { ...existing, ...(overrides.destination[connectorName] as Record<string, unknown>) },
+            }
+          }
+          if (responseFormatter) {
+            await responseFormatter(
+              new Response(JSON.stringify(pipeline), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }),
+              { operationId: 'pipelines.get', method: 'get', path: '/pipelines/{id}', tags: ['Pipelines'], summary: 'Retrieve pipeline', pathParams: [], queryParams: [], headerParams: [], bodySchema: undefined, bodyRequired: false, ndjsonRequest: false, ndjsonResponse: false, noContent: false }
+            )
+          } else {
+            process.stdout.write(JSON.stringify(pipeline, null, 2) + '\n')
+          }
+        },
+      }) as CommandDef
+
+      if (!pipelineSubCommands['check']) {
+        pipelineSubCommands['check'] = defineCommand({
+          ...pipelineSubCommands['get'],
+          meta: {
+            name: 'check',
+            description: 'Retrieve pipeline',
+          },
+        })
+      }
     }
 
     // Override the auto-generated sync command with an Ink-based progress display
@@ -370,6 +428,10 @@ export async function createProgram() {
         if (args['engine-url']) {
           engineUrl = args['engine-url']
         }
+        const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,
@@ -380,6 +442,7 @@ export async function createProgram() {
           streams: parseStreamsArg(args.streams),
           resetState: args['reset-state'] === true,
           plain: args.plain || !process.stderr.isTTY,
+          connectorOverrides: overrides,
         })
       },
     }) as CommandDef

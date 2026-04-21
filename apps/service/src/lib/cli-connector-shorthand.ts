@@ -105,6 +105,68 @@ export function applyConnectorShorthand(
   }
 }
 
+/**
+ * Extracts connector override objects from CLI args (e.g. --postgres.url → destination override).
+ * Returns `{ source?, destination? }` suitable for merging into pipeline configs or POST bodies.
+ */
+export function extractConnectorOverrides(
+  args: Record<string, unknown>,
+  options: { sources: string[]; destinations: string[] }
+): { source?: Record<string, unknown>; destination?: Record<string, unknown> } {
+  const result: { source?: Record<string, unknown>; destination?: Record<string, unknown> } = {}
+
+  const allConnectors = [...options.sources, ...options.destinations]
+  const connectorByPrefix = new Map(allConnectors.map((name) => [normalizeCliKey(name), name]))
+  const sourceSet = new Set(options.sources.map(normalizeCliKey))
+
+  assertNoDottedUnknownFlags(args, allConnectors)
+
+  const grouped = new Map<string, Record<string, unknown>>()
+
+  for (const [rawKey, rawValue] of Object.entries(args)) {
+    const dotIndex = rawKey.indexOf('.')
+    if (dotIndex === -1) continue
+
+    const connector = connectorByPrefix.get(normalizeCliKey(rawKey.slice(0, dotIndex)))
+    if (!connector) continue
+
+    const path = rawKey
+      .slice(dotIndex + 1)
+      .split('.')
+      .map((segment) => normalizeCliKey(segment))
+    if (path.length === 0) continue
+
+    const config = grouped.get(connector) ?? {}
+    setNestedValue(config, path, parseCliValue(rawValue))
+    grouped.set(connector, config)
+  }
+
+  for (const [connectorName, config] of grouped) {
+    const bodyKey = sourceSet.has(normalizeCliKey(connectorName)) ? 'source' : 'destination'
+    result[bodyKey] = { type: connectorName, [connectorName]: config }
+  }
+
+  return result
+}
+
+export function assertNoDottedUnknownFlags(
+  args: Record<string, unknown>,
+  knownConnectors: string[]
+) {
+  const known = new Set(knownConnectors.map(normalizeCliKey))
+  for (const rawKey of Object.keys(args)) {
+    const dotIndex = rawKey.indexOf('.')
+    if (dotIndex === -1) continue
+    const prefix = normalizeCliKey(rawKey.slice(0, dotIndex))
+    if (!known.has(prefix)) {
+      throw new Error(
+        `Unknown connector flag --${rawKey}: "${prefix}" is not a known connector. ` +
+          `Available connectors: ${knownConnectors.join(', ')}`
+      )
+    }
+  }
+}
+
 export function assertNoAmbiguousConnectorNames(sources: string[], destinations: string[]) {
   const sourceNames = new Map(sources.map((name) => [normalizeCliKey(name), name]))
   const overlaps = destinations
@@ -173,6 +235,7 @@ export function wrapPipelineConnectorShorthand(
         }
       }
 
+      assertNoDottedUnknownFlags(resolvedArgs, [...options.sources, ...options.destinations])
       const argsWithSource = applyConnectorShorthand(resolvedArgs, 'source', options.sources)
       const argsWithDestination = applyConnectorShorthand(
         argsWithSource,
