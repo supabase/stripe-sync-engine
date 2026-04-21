@@ -136,12 +136,24 @@ export function wrapPipelineConnectorShorthand(
     required: false,
     description: 'Full pipeline config as inline JSON or path to a JSON file',
   }
+  // Override the auto-generated skipCheck (camelCase string) with kebab-case boolean
+  delete args['skipCheck']
+  args['skip-check'] = {
+    type: 'boolean',
+    default: false,
+    description: 'Skip connector validation checks',
+  }
 
   return defineCommand({
     ...command,
     args,
     async run(input) {
       let resolvedArgs = input.args as Record<string, unknown>
+
+      // --skip-check → dispatch expects skipCheck (the toOptName key for skip_check)
+      if (resolvedArgs['skip-check']) {
+        resolvedArgs = { ...resolvedArgs, skipCheck: 'true' }
+      }
 
       // --x-pipeline provides the full PipelineConfig (same format as the engine's
       // X-Pipeline header): { source: { type, [type]: {...} }, destination: {...}, streams?: [...] }

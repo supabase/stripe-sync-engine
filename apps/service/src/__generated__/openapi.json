@@ -83,6 +83,17 @@
           "Pipelines"
         ],
         "summary": "Create pipeline",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip_check",
+            "schema": {
+              "description": "Skip connector validation checks",
+              "type": "boolean"
+            },
+            "description": "Skip connector validation checks"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

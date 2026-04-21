@@ -177,6 +177,14 @@ export function createApp(options: AppOptions) {
       path: '/pipelines',
       tags: ['Pipelines'],
       summary: 'Create pipeline',
+      requestParams: {
+        query: z.object({
+          skip_check: z.coerce
+            .boolean()
+            .optional()
+            .meta({ description: 'Skip connector validation checks' }),
+        }),
+      },
       requestBody: {
         content: { 'application/json': { schema: CreatePipelineSchema } },
       },
@@ -197,10 +205,13 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const body = c.req.valid('json')
-      try {
-        await checkPipelineConnectors(resolver, body as Pick<Pipeline, 'source' | 'destination'>)
-      } catch (err) {
-        return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+      const { skip_check } = c.req.valid('query')
+      if (!skip_check) {
+        try {
+          await checkPipelineConnectors(resolver, body as Pick<Pipeline, 'source' | 'destination'>)
+        } catch (err) {
+          return c.json({ error: err instanceof Error ? err.message : String(err) }, 400)
+        }
       }
       const id = body.id ?? genId('pipe')
       try {

@@ -436,7 +436,10 @@ export interface operations {
     };
     "pipelines.create": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Skip connector validation checks */
+                skip_check?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
