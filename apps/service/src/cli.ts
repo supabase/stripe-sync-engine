@@ -256,7 +256,11 @@ export async function createProgram() {
   const serviceUrl = process.env.SERVICE_URL
 
   // Lazy real app — boots in-process when no SERVICE_URL is provided
-  let engineUrl: string | undefined = process.env.ENGINE_URL
+  // --engine-url is a global option parsed early so all subcommands respect it
+  let engineUrl: string | undefined = (() => {
+    const idx = process.argv.indexOf('--engine-url')
+    return idx !== -1 ? process.argv[idx + 1] : undefined
+  })() || process.env.ENGINE_URL
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
@@ -304,6 +308,10 @@ export async function createProgram() {
         type: 'boolean',
         default: false,
         description: 'Output raw JSON instead of pretty-printed format',
+      },
+      'engine-url': {
+        type: 'string',
+        description: 'Sync engine URL (overrides ENGINE_URL env var)',
       },
     },
     meta: {
@@ -416,15 +424,56 @@ export async function createProgram() {
         },
       }) as CommandDef
 
-      if (!pipelineSubCommands['check']) {
-        pipelineSubCommands['check'] = defineCommand({
-          ...pipelineSubCommands['get'],
-          meta: {
-            name: 'check',
-            description: 'Retrieve pipeline',
-          },
-        })
-      }
+      pipelineSubCommands['check'] = defineCommand({
+        meta: { name: 'check', description: 'Check pipeline connectivity' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        },
+        async run({ args }) {
+          const res = await handler(
+            new Request(`http://localhost/pipelines/${args.id}/check`, { method: 'POST' })
+          )
+          if (!res.ok) {
+            const text = await res.text()
+            process.stderr.write(`Error ${res.status}: ${text}\n`)
+            process.exit(1)
+          }
+          if (!res.body) {
+            process.stderr.write('No response body\n')
+            process.exit(1)
+          }
+
+          let failed = false
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.trim()) continue
+              const msg = JSON.parse(line)
+              if (msg.type === 'connection_status') {
+                const s = msg.connection_status
+                const tag = msg._emitted_by ?? ''
+                if (s.status === 'succeeded') {
+                  process.stderr.write(`✓ ${tag}: connected\n`)
+                } else {
+                  process.stderr.write(`✗ ${tag}: ${s.message ?? 'failed'}\n`)
+                  failed = true
+                }
+              } else if (msg.type === 'log') {
+                process.stderr.write(`[${msg.log?.level ?? 'info'}] ${msg.log?.message ?? ''}\n`)
+              }
+              process.stdout.write(line + '\n')
+            }
+          }
+          process.exit(failed ? 1 : 0)
+        },
+      }) as CommandDef
     }
 
     // Override the auto-generated sync command with an Ink-based progress display
@@ -444,10 +493,6 @@ export async function createProgram() {
           type: 'string',
           description: 'Stream override as comma-separated names or JSON array',
         },
-        'engine-url': {
-          type: 'string',
-          description: 'Sync engine URL (overrides ENGINE_URL env var)',
-        },
         'reset-state': {
           type: 'boolean',
           default: false,
@@ -460,9 +505,6 @@ export async function createProgram() {
         },
       },
       async run({ args }) {
-        if (args['engine-url']) {
-          engineUrl = args['engine-url']
-        }
         const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
           sources: sourceNames,
           destinations: destinationNames,
@@ -507,10 +549,6 @@ export async function createProgram() {
           type: 'string',
           description: 'Max events to fetch',
         },
-        'engine-url': {
-          type: 'string',
-          description: 'Sync engine URL (overrides ENGINE_URL env var)',
-        },
         plain: {
           type: 'boolean',
           default: false,
@@ -518,9 +556,6 @@ export async function createProgram() {
         },
       },
       async run({ args }) {
-        if (args['engine-url']) {
-          engineUrl = args['engine-url']
-        }
         const pipelineId = args.id as string
         const params = new URLSearchParams()
         if (args['created-after']) {

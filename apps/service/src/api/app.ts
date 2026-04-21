@@ -491,6 +491,60 @@ export function createApp(options: AppOptions) {
     }
   )
 
+  // MARK: - Pipeline check
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.check',
+      method: 'post',
+      path: '/pipelines/{id}/check',
+      tags: ['Pipelines'],
+      summary: 'Check pipeline connectivity',
+      description:
+        'Runs the `check()` method on both source and destination connectors and streams back NDJSON messages (connection_status, log, trace).',
+      requestParams: { path: PipelineIdParam },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
+          description: 'Streaming NDJSON check output',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+
+      let pipeline: Pipeline
+      try {
+        pipeline = await pipelineStore.get(id)
+      } catch {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const output = engine.pipeline_check({
+        source: pipeline.source,
+        destination: pipeline.destination,
+      })
+
+      return ndjsonResponse(output, {
+        onError: (err) =>
+          engineMsg.log({
+            level: 'error' as const,
+            message: err instanceof Error ? err.message : `Check failed: ${String(err)}`,
+          }),
+      })
+    }
+  )
+
   // MARK: - Simulate webhook sync (fetch events from Stripe, pipe through push-mode sync)
 
   app.openapi(
