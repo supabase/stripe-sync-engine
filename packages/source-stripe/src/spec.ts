@@ -50,12 +50,6 @@ export const configSchema = z.object({
     .positive()
     .optional()
     .describe('Max objects to backfill per stream (useful for testing)'),
-  max_concurrent_streams: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Max streams paginating in parallel (default: 5, capped at catalog size).'),
   rate_limit: z
     .number()
     .int()

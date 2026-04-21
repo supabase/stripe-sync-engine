@@ -262,10 +262,7 @@ export function createStripeSource(
           const liveMode =
             config.api_key.startsWith('sk_live_') || config.api_key.startsWith('rk_live_')
           const maxRequestsPerSecond = config.rate_limit ?? (liveMode ? 20 : 10)
-          const maxConcurrentStreams = Math.min(
-            config.max_concurrent_streams ?? 5,
-            catalog.streams.length
-          )
+          const maxConcurrentStreams = Math.min(maxRequestsPerSecond, catalog.streams.length)
 
           const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)
           const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
