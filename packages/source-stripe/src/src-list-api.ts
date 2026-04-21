@@ -40,8 +40,9 @@ function waitForRateLimit(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortSignal): ListFn {
+export function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortSignal): ListFn {
   return async (params) => {
+    signal?.throwIfAborted()
     const wait = await rateLimiter()
     if (wait > 0) {
       const wait_ms = Math.round(wait * 1000)
@@ -55,7 +56,21 @@ function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?: AbortS
         waited_ms: wait_ms,
       })
     }
-    return listFn(params)
+    signal?.throwIfAborted()
+    if (!signal) return listFn(params)
+
+    // Race listFn (which includes withHttpRetry) against the abort signal
+    // so retries don't block past pipeline teardown.
+    return Promise.race([
+      listFn(params),
+      new Promise<never>((_, reject) => {
+        if (signal.aborted) {
+          reject(signal.reason)
+          return
+        }
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }),
+    ])
   }
 }
 
@@ -650,6 +665,17 @@ export async function* listApiBackfill(opts: {
             })
             return
           }
+
+          // Abort means the pipeline is shutting down (chunk time limit).
+          // The stream stays 'started' so it will retry on the next chunk.
+          if (err instanceof Error && err.name === 'AbortError') {
+            log.warn(
+              { stream: stream.name },
+              'Stream aborted during retry — will retry on next chunk; may loop if first page consistently exceeds chunk time limit'
+            )
+            return
+          }
+
           log.error(
             {
               stream: stream.name,

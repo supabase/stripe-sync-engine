@@ -961,6 +961,55 @@ describe('StripeSource', () => {
       expect(hasStreamStatus(messages, 'complete', 'customers')).toBe(false)
       expect(hasStreamStatus(messages, 'complete', 'invoices')).toBe(true)
     })
+
+    it('swallows AbortError without emitting stream_status error', async () => {
+      // A listFn that blocks until the signal aborts, then throws AbortError
+      // (simulates withRateLimit racing listFn against the signal)
+      const listFn = vi.fn().mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            // Block for 10s — will be aborted much sooner
+            setTimeout(() => reject(new Error('should not reach')), 10_000)
+          })
+      )
+
+      const registry: Record<string, ResourceConfig> = {
+        customers: makeConfig({
+          order: 1,
+          tableName: 'customers',
+          listFn: listFn as ResourceConfig['listFn'],
+        }),
+      }
+
+      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+      const iter = source.read({
+        config,
+        catalog: catalog({ name: 'customers', primary_key: [['id']] }),
+      })
+
+      const messages: Message[] = []
+      for await (const msg of iter) {
+        messages.push(msg)
+        // After stream starts, abort by breaking the consumer loop.
+        // withAbortOnReturn fires the signal, withRateLimit's Promise.race
+        // rejects with AbortError, and the catch block swallows it.
+        if (
+          msg.type === 'stream_status' &&
+          (msg as StreamStatusMessage).stream_status.status === 'start'
+        ) {
+          break
+        }
+      }
+
+      // Should only have stream_status:start, no error or complete
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toMatchObject({
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'start' },
+      })
+      // Notably absent: stream_status:error — the AbortError was swallowed
+      expect(hasStreamStatus(messages, 'error')).toBe(false)
+    })
   })
 
   describe('read() — error state persistence and skip/retry', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RemainingRange } from './index.js'
-import { reconcileRanges } from './src-list-api.js'
+import { reconcileRanges, withRateLimit } from './src-list-api.js'
+import type { ListFn } from '@stripe/sync-openapi'
 
 describe('reconcileRanges', () => {
   it('returns remaining unchanged when accounted === incoming', () => {
@@ -110,5 +111,52 @@ describe('reconcileRanges', () => {
       { gte: '2018', lt: '2024' }
     )
     expect(result).toEqual([])
+  })
+})
+
+describe('withRateLimit', () => {
+  const noopRateLimiter = async () => 0
+
+  it('passes through to listFn when no signal is provided', async () => {
+    const listFn: ListFn = async () => ({ data: [{ id: '1' }], has_more: false })
+    const wrapped = withRateLimit(listFn, noopRateLimiter)
+    const result = await wrapped({})
+    expect(result).toEqual({ data: [{ id: '1' }], has_more: false })
+  })
+
+  it('aborts a blocked listFn when signal fires', async () => {
+    const ac = new AbortController()
+    // listFn that blocks for 10s (simulates slow retry backoff)
+    const listFn: ListFn = () =>
+      new Promise((resolve) => setTimeout(() => resolve({ data: [], has_more: false }), 10_000))
+
+    const wrapped = withRateLimit(listFn, noopRateLimiter, ac.signal)
+    const promise = wrapped({})
+
+    // Abort after 10ms
+    setTimeout(() => ac.abort(), 10)
+
+    await expect(promise).rejects.toThrow()
+    // Should resolve nearly instantly, not after 10s
+  })
+
+  it('throws immediately if signal is already aborted', async () => {
+    const ac = new AbortController()
+    ac.abort()
+
+    const listFn: ListFn = async () => ({ data: [], has_more: false })
+    const wrapped = withRateLimit(listFn, noopRateLimiter, ac.signal)
+
+    await expect(wrapped({})).rejects.toThrow()
+  })
+
+  it('does not interfere with listFn errors when signal is present', async () => {
+    const ac = new AbortController()
+    const listFn: ListFn = async () => {
+      throw new Error('API error')
+    }
+    const wrapped = withRateLimit(listFn, noopRateLimiter, ac.signal)
+
+    await expect(wrapped({})).rejects.toThrow('API error')
   })
 })

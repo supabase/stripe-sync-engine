@@ -1095,6 +1095,105 @@ describe('engine.pipeline_sync() pipeline', () => {
     expect(eof.eof.status).toBe('succeeded')
   })
 
+  it('two-chunk flow: errored stream in chunk 1 is skipped in chunk 2', async () => {
+    let readCount = 0
+    let receivedCatalogNames: string[] = []
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']] },
+              { name: 'charges', primary_key: [['id']] },
+            ],
+          },
+        }
+      },
+      async *read(params) {
+        readCount++
+        receivedCatalogNames = params.catalog.streams.map((s) => s.stream.name)
+        for (const streamName of receivedCatalogNames) {
+          yield {
+            type: 'stream_status' as const,
+            stream_status: { stream: streamName, status: 'start' },
+          }
+          if (streamName === 'charges' && readCount === 1) {
+            // Chunk 1: charges errors
+            yield {
+              type: 'stream_status' as const,
+              stream_status: { stream: streamName, status: 'error', error: 'upstream 500' },
+            }
+          } else {
+            // customers: emit a state checkpoint but NOT complete in chunk 1
+            // (simulates partial progress, stream stays 'started')
+            // In chunk 2: complete normally
+            yield {
+              type: 'source_state' as const,
+              source_state: {
+                state_type: 'stream',
+                stream: streamName,
+                data: { cursor: `${streamName}_${readCount}` },
+              },
+            }
+            if (readCount > 1) {
+              yield {
+                type: 'stream_status' as const,
+                stream_status: { stream: streamName, status: 'complete' },
+              }
+            }
+          }
+        }
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, destinationTest))
+    const runId = 'two-chunk-run'
+
+    // Chunk 1: both streams run; customers partially completes, charges errors
+    const chunk1 = await drain(
+      engine.pipeline_sync(defaultPipeline, { run_id: runId })
+    )
+    const eof1 = chunk1.find((m) => m.type === 'eof')!
+    expect(eof1.eof.ending_state?.sync_run.progress?.streams.customers).toMatchObject({
+      status: 'started',
+    })
+    expect(eof1.eof.ending_state?.sync_run.progress?.streams.charges).toMatchObject({
+      status: 'errored',
+      message: 'upstream 500',
+    })
+
+    // Chunk 2: pass ending_state from chunk 1, same run_id
+    receivedCatalogNames = []
+    const chunk2 = await drain(
+      engine.pipeline_sync(defaultPipeline, {
+        state: eof1.eof.ending_state,
+        run_id: runId,
+      })
+    )
+
+    // charges (errored) should have been excluded; only customers retries
+    expect(receivedCatalogNames).toEqual(['customers'])
+
+    const eof2 = chunk2.find((m) => m.type === 'eof')!
+    // charges errored status preserved from chunk 1
+    expect(eof2.eof.ending_state?.sync_run.progress?.streams.charges).toMatchObject({
+      status: 'errored',
+      message: 'upstream 500',
+    })
+    // customers completed in chunk 2
+    expect(eof2.eof.ending_state?.sync_run.progress?.streams.customers).toMatchObject({
+      status: 'completed',
+    })
+    expect(eof2.eof.status).toBe('failed') // errored stream → overall failed
+  })
+
   it('returns final eof state by merging run updates into the initial sync state', async () => {
     const source: Source = {
       async *spec() {
