@@ -426,6 +426,29 @@ export function buildRowMapFromRows(
 }
 
 /**
+ * Like `buildRowMapFromRows` but for a header-less PK-only slice
+ * (see `batchReadSheets` with `columnCount`). Row i → sheet row i + 2.
+ */
+export function buildRowMapFromPkColumns(
+  pkRows: unknown[][],
+  primaryKey: string[][]
+): Map<string, number> {
+  const pkFields = primaryKey.map((path) => path[0])
+  const map = new Map<string, number>()
+  for (let i = 0; i < pkRows.length; i++) {
+    const row = pkRows[i] as string[]
+    const data: Record<string, unknown> = {}
+    for (let j = 0; j < pkFields.length; j++) {
+      data[pkFields[j]] = row[j] ?? ''
+    }
+    const rowKey = serializeRowKey(primaryKey, data)
+    if (rowKey === '[""]' || rowKey === '[null]') continue
+    map.set(rowKey, i + 2)
+  }
+  return map
+}
+
+/**
  * Build a map from serialized primary key → 1-based row number by reading
  * existing sheet data and extracting only the primary key columns.
  *
@@ -457,30 +480,56 @@ export async function readSheet(
   return (res.data.values ?? []) as unknown[][]
 }
 
+function columnLetter(index: number): string {
+  let value = index + 1
+  let label = ''
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    label = String.fromCharCode(65 + remainder) + label
+    value = Math.floor((value - 1) / 26)
+  }
+  return label
+}
+
+export interface BatchReadRequest {
+  name: string
+  /** Read only the first N columns starting at row 2 (header skipped). */
+  columnCount?: number
+}
+
 /**
  * Read multiple sheet tabs in one `values.batchGet` call. Replaces N
  * parallel reads with 1 request and 1 read-quota unit — required for wide
  * catalogs (otherwise blows the 300/min read limit). Missing tabs map to
  * empty arrays so callers can always `.get()` safely.
+ *
+ * With `columnCount` set: response is PK-only, header-less — use with
+ * {@link buildRowMapFromPkColumns}. Without: whole tab — use with
+ * {@link buildRowMapFromRows}.
  */
 export async function batchReadSheets(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
-  sheetNames: string[]
+  requests: Array<string | BatchReadRequest>
 ): Promise<Map<string, unknown[][]>> {
   const result = new Map<string, unknown[][]>()
-  if (sheetNames.length === 0) return result
+  if (requests.length === 0) return result
+  const normalized = requests.map((r) => (typeof r === 'string' ? { name: r } : r))
   const res = await withRetry(() =>
     sheets.spreadsheets.values.batchGet({
       spreadsheetId,
-      ranges: sheetNames.map((name) => `'${name}'`),
+      ranges: normalized.map((req) =>
+        req.columnCount && req.columnCount > 0
+          ? `'${req.name}'!A2:${columnLetter(req.columnCount - 1)}`
+          : `'${req.name}'`
+      ),
     })
   )
   const valueRanges = res.data.valueRanges ?? []
-  for (let i = 0; i < sheetNames.length; i++) {
+  for (let i = 0; i < normalized.length; i++) {
     const entry = valueRanges[i]
     const values = (entry?.values ?? []) as unknown[][]
-    result.set(sheetNames[i], values)
+    result.set(normalized[i].name, values)
   }
   return result
 }

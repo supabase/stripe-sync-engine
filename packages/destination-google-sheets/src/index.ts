@@ -20,6 +20,7 @@ import type { Config } from './spec.js'
 import {
   applyBatch,
   batchReadSheets,
+  buildRowMapFromPkColumns,
   buildRowMapFromRows,
   createIntroSheet,
   deleteSpreadsheet,
@@ -28,6 +29,7 @@ import {
   findSheetId,
   protectSheets,
   readHeaderRow,
+  type BatchReadRequest,
   type StreamBatchOps,
 } from './writer.js'
 
@@ -308,7 +310,21 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
 
         // One batchGet fetches all streams' existing rows at the cost of one
         // read-quota unit, avoiding the 300 reads/min limit on wide catalogs.
-        const streamsToRead = prepInputs.filter((p) => p.needsRead).map((p) => p.streamName)
+        // Narrow per-stream range when PK columns are the first N headers
+        // (guaranteed by setup); otherwise read the whole tab to locate PK.
+        const streamsToRead: BatchReadRequest[] = []
+        const narrowByStream = new Map<string, boolean>()
+        for (const prep of prepInputs) {
+          if (!prep.needsRead || !prep.primaryKey) continue
+          const pkFields = prep.primaryKey.map((p) => p[0])
+          const pkIsFirstN = pkFields.every((field, i) => prep.headers[i] === field)
+          narrowByStream.set(prep.streamName, pkIsFirstN)
+          streamsToRead.push({
+            name: prep.streamName,
+            ...(pkIsFirstN ? { columnCount: pkFields.length } : {}),
+          })
+        }
+
         let sheetRows = new Map<string, unknown[][]>()
         if (streamsToRead.length > 0) {
           const readStart = Date.now()
@@ -319,6 +335,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
             log.debug(
               {
                 streams: streamsToRead.length,
+                narrow: streamsToRead.filter((r) => r.columnCount).length,
                 totalRows,
                 durationMs: Date.now() - readStart,
               },
@@ -342,8 +359,12 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
           if (needsRead && primaryKey) {
             const allRows = sheetRows.get(streamName)
             if (allRows) {
-              existingRowCount = allRows.length
-              const freshMap = buildRowMapFromRows(allRows, headers, primaryKey)
+              const isNarrow = narrowByStream.get(streamName) === true
+              // Narrow reads skip the header row; add 1 so append startRow is correct.
+              existingRowCount = isNarrow ? allRows.length + 1 : allRows.length
+              const freshMap = isNarrow
+                ? buildRowMapFromPkColumns(allRows, primaryKey)
+                : buildRowMapFromRows(allRows, headers, primaryKey)
               const remaining: typeof appends = []
               let converted = 0
               for (const entry of appends) {

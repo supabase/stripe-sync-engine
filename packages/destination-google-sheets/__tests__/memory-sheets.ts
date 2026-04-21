@@ -61,6 +61,28 @@ export function createMemorySheets() {
     return label || 'A'
   }
 
+  // Slice `values` to an A1 range. `'Name'` → whole tab; `'Name'!A2:C[100]` → bounded.
+  function sliceByRange(values: unknown[][], range: string): unknown[][] {
+    const bang = range.indexOf('!')
+    if (bang < 0) return values
+    const m = range.slice(bang + 1).match(/^([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?$/)
+    if (!m) return values
+    const colIdx = (s: string) =>
+      [...s].reduce((v, ch) => v * 26 + (ch.charCodeAt(0) - 64), 0) - 1
+    const startCol = colIdx(m[1])
+    const startRow = m[2] ? Number(m[2]) - 1 : 0
+    const endCol = m[3] !== undefined ? colIdx(m[3]) : Infinity
+    const endRow = m[4] !== undefined ? Number(m[4]) - 1 : values.length - 1
+    const out: unknown[][] = []
+    for (let r = startRow; r <= Math.min(endRow, values.length - 1); r++) {
+      const src = values[r] ?? []
+      const slice: unknown[] = []
+      for (let c = startCol; c <= Math.min(endCol, src.length - 1); c++) slice.push(src[c])
+      out.push(slice)
+    }
+    return out
+  }
+
   function getTab(spreadsheetId: string, range: string): SheetTab {
     const ss = getSpreadsheet(spreadsheetId)
     const name = parseSheetName(range)
@@ -264,7 +286,7 @@ export function createMemorySheets() {
           const valueRanges = ranges.map((range) => {
             try {
               const tab = getTab(params.spreadsheetId, range)
-              return { range, values: tab.values }
+              return { range, values: sliceByRange(tab.values, range) }
             } catch {
               return { range, values: [] }
             }
