@@ -66,24 +66,10 @@ export function parseSyncState(
 ): SyncState | undefined {
   if (input == null) return undefined
   const envelope = SyncStateSchema.safeParse(input)
-  if (!envelope.success) {
-    console.error(
-      '[protocol] parseSyncState: envelope validation failed — discarding entire sync state',
-      { issues: envelope.error.issues }
-    )
-    return emptySyncState()
-  }
+  if (!envelope.success) return emptySyncState()
   if (!streamStateSchema) return envelope.data
-  for (const [streamName, value] of Object.entries(envelope.data.source.streams)) {
-    if (value == null) continue
-    const result = streamStateSchema.safeParse(value)
-    if (!result.success) {
-      // Discarding state here causes the source to re-sync the entire time range
-      // on the next run. Make this loud so schema drift doesn't hide silently.
-      console.error(
-        `[protocol] parseSyncState: stream "${streamName}" failed streamStateSchema — discarding entire sync state`,
-        { issues: result.error.issues }
-      )
+  for (const value of Object.values(envelope.data.source.streams)) {
+    if (value != null && !streamStateSchema.safeParse(value).success) {
       return emptySyncState()
     }
   }

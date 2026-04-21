@@ -1,12 +1,8 @@
 import type { drive_v3, sheets_v4 } from 'googleapis'
+import { log } from './logger.js'
 import { serializeRowKey } from './metadata.js'
 
-/**
- * Low-level Sheets API write operations.
- *
- * Takes an already-authenticated `sheets_v4.Sheets` client (injected by caller).
- * Handles spreadsheet creation, tab management, header rows, and batch appends.
- */
+/** Low-level Sheets API ops. Caller supplies an authenticated client. */
 
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_MAX_MS = 32000
@@ -16,7 +12,7 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
   let delay = BACKOFF_BASE_MS
   const overallStart = Date.now()
   if (label) {
-    console.error(`[google-sheets] withRetry(${label}) start`)
+    log.debug({ label }, 'withRetry start')
   }
   for (let attempt = 0; ; attempt++) {
     const attemptStart = Date.now()
@@ -26,10 +22,11 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
         const attemptMs = Date.now() - attemptStart
         const totalMs = Date.now() - overallStart
         if (attempt === 0) {
-          console.error(`[google-sheets] withRetry(${label}) OK first-try in ${attemptMs}ms`)
+          log.debug({ label, attemptMs }, 'withRetry OK first-try')
         } else {
-          console.error(
-            `[google-sheets] withRetry(${label}) OK after ${attempt + 1} attempts (last=${attemptMs}ms, total=${totalMs}ms)`
+          log.debug(
+            { label, attempts: attempt + 1, attemptMs, totalMs },
+            'withRetry OK after retries'
           )
         }
       }
@@ -37,19 +34,25 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
     } catch (err: unknown) {
       const attemptMs = Date.now() - attemptStart
       const rawCode =
-        err instanceof Error && 'code' in err
-          ? (err as { code?: number | string }).code
-          : undefined
+        err instanceof Error && 'code' in err ? (err as { code?: number | string }).code : undefined
       const status = typeof rawCode === 'number' ? rawCode : undefined
       const isRateLimit = status === 429
       const isServerError = status !== undefined && status >= 500
       const retriable = isRateLimit || isServerError
-      const errMsg = err instanceof Error ? err.message : String(err)
 
       if (retriable && attempt < MAX_RETRIES) {
         if (label) {
-          console.error(
-            `[google-sheets] withRetry(${label}) retry attempt=${attempt + 1}/${MAX_RETRIES} status=${status} attempt_ms=${attemptMs} backing_off_ms=${delay} err=${errMsg}`
+          log.warn(
+            {
+              err,
+              label,
+              attempt: attempt + 1,
+              maxRetries: MAX_RETRIES,
+              status,
+              attemptMs,
+              backingOffMs: delay,
+            },
+            'withRetry retry'
           )
         }
         await new Promise((r) => setTimeout(r, delay))
@@ -62,8 +65,9 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
         const reason = retriable
           ? `exhausted ${MAX_RETRIES} retries`
           : `non-retriable (status=${rawCode ?? 'none'})`
-        console.error(
-          `[google-sheets] withRetry(${label}) FAIL ${reason} after ${attempt + 1} attempts (last=${attemptMs}ms, total=${totalMs}ms) err=${errMsg}`
+        log.error(
+          { err, label, reason, attempts: attempt + 1, attemptMs, totalMs },
+          'withRetry FAIL'
         )
       }
       throw err
@@ -85,9 +89,8 @@ export async function ensureSpreadsheet(sheets: sheets_v4.Sheets, title: string)
 }
 
 /**
- * Ensure a tab (sheet) exists for a given stream name with a header row.
- * If the spreadsheet already has a "Sheet1" default tab, rename it for the first stream.
- * Returns the numeric sheetId for use in subsequent API calls (e.g. protect range).
+ * Ensure a tab exists for `streamName` and write its header row. Renames
+ * the default "Sheet1" on first use. Returns the numeric sheetId.
  */
 export async function ensureSheet(
   sheets: sheets_v4.Sheets,
@@ -95,7 +98,6 @@ export async function ensureSheet(
   streamName: string,
   headers: string[]
 ): Promise<number> {
-  // Get existing sheets
   const meta = await withRetry(() =>
     sheets.spreadsheets.get({
       spreadsheetId,
@@ -104,14 +106,13 @@ export async function ensureSheet(
   )
   const existing = meta.data.sheets ?? []
 
-  // Tab already exists — write header row and return its ID
   const found = existing.find((s) => s.properties?.title === streamName)
   if (found) {
     await writeHeaderRow(sheets, spreadsheetId, streamName, headers)
     return found.properties!.sheetId!
   }
 
-  // If there's a default "Sheet1" and this is the first real stream, rename it
+  // First stream on a fresh spreadsheet: reuse the default Sheet1.
   if (
     existing.length === 1 &&
     existing[0]?.properties?.title === 'Sheet1' &&
@@ -137,7 +138,6 @@ export async function ensureSheet(
     return sheetId
   }
 
-  // Add a new tab and capture its sheetId from the response
   const addRes = await withRetry(() =>
     sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -209,10 +209,7 @@ function parseUpdatedRows(updatedRange: string): { startRow: number; endRow: num
   }
 }
 
-/**
- * Create or update an "Overview" intro tab at index 0.
- * Lists the synced streams and warns users not to edit data tabs.
- */
+/** Create/update an "Overview" intro tab at index 0. */
 export async function createIntroSheet(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -227,7 +224,7 @@ export async function createIntroSheet(
   const hasOverview = existing.some((s) => s.properties?.title === TITLE)
 
   if (!hasOverview) {
-    // Rename "Sheet1" if it's the only tab, otherwise insert at index 0
+    // Reuse Sheet1 if it's the only tab, otherwise insert at index 0.
     const onlySheet1 =
       existing.length === 1 &&
       existing[0]?.properties?.title === 'Sheet1' &&
@@ -291,9 +288,8 @@ export async function createIntroSheet(
 }
 
 /**
- * Add warning-only protection to a set of sheets by their numeric sheetIds.
- * Users will see a warning dialog before editing but are not blocked.
- * Idempotent — skips sheets that already have protection.
+ * Add warning-only protection to a set of sheets. Users are shown a warning
+ * dialog but not blocked. Idempotent — skips already-protected sheets.
  */
 export async function protectSheets(
   sheets: sheets_v4.Sheets,
@@ -328,7 +324,7 @@ export async function protectSheets(
   }
 }
 
-/** Append rows to a named sheet tab. Values are stringified for Sheets. */
+/** Append rows to a named sheet tab. */
 export async function appendRows(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -350,10 +346,7 @@ export async function appendRows(
   return updatedRange ? parseUpdatedRows(updatedRange) : undefined
 }
 
-/**
- * Update specific rows in a sheet by their 1-based row numbers.
- * Uses a single batchUpdate call for efficiency.
- */
+/** Update rows by 1-based row number. One batchUpdate for all. */
 export async function updateRows(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -376,10 +369,7 @@ export async function updateRows(
   )
 }
 
-/**
- * Permanently delete a spreadsheet file via the Drive API.
- * The Sheets API does not support deletion — Drive is required.
- */
+/** Delete a spreadsheet. Uses Drive — Sheets API has no delete. */
 export async function deleteSpreadsheet(
   drive: drive_v3.Drive,
   spreadsheetId: string
@@ -388,12 +378,9 @@ export async function deleteSpreadsheet(
 }
 
 /**
- * Pure builder: serialized primary key → 1-based row number, derived from
- * already-fetched sheet rows. Use this after a single `readSheet` call when
- * you also want the row data for other purposes — avoids the double-read
- * that `buildRowMap` would otherwise incur.
- *
- * `headers` must already be known (from `readHeaderRow` or first-record discovery).
+ * Pure: serialized primary key → 1-based sheet row number, from rows you've
+ * already fetched. `headers` must be known. Prefer this over `buildRowMap`
+ * when you also need the row data; avoids a second read.
  */
 export function buildRowMapFromRows(
   allRows: unknown[][],
@@ -405,7 +392,7 @@ export function buildRowMapFromRows(
   if (pkIndices.some((i) => i === -1)) return new Map()
 
   const map = new Map<string, number>()
-  // Skip header row (index 0), data starts at index 1
+  // allRows[0] is the header row; data starts at index 1.
   for (let i = 1; i < allRows.length; i++) {
     const row = allRows[i] as string[]
     const data: Record<string, unknown> = {}
@@ -414,16 +401,12 @@ export function buildRowMapFromRows(
     }
     const rowKey = serializeRowKey(primaryKey, data)
     if (rowKey === '[""]' || rowKey === '[null]') continue
-    map.set(rowKey, i + 1) // 1-based: row 1 = headers, so data row at index i → row i+1
+    map.set(rowKey, i + 1)
   }
   return map
 }
 
-/**
- * Read the sheet and build a map from serialized primary key → 1-based row
- * number. Thin wrapper over `readSheet` + `buildRowMapFromRows`. Prefer
- * `buildRowMapFromRows` directly if you already have the rows in hand.
- */
+/** readSheet + buildRowMapFromRows. Use the latter directly if you have the rows. */
 export async function buildRowMap(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -435,7 +418,7 @@ export async function buildRowMap(
   return buildRowMapFromRows(allRows, headers, primaryKey)
 }
 
-/** Read all values from a sheet tab. Used for verification in tests. */
+/** Read all values from a sheet tab. */
 export async function readSheet(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -450,6 +433,34 @@ export async function readSheet(
   return (res.data.values ?? []) as unknown[][]
 }
 
+/**
+ * Read multiple sheet tabs in one `values.batchGet` call. Replaces N
+ * parallel reads with 1 request and 1 read-quota unit — required for wide
+ * catalogs (otherwise blows the 300/min read limit). Missing tabs map to
+ * empty arrays so callers can always `.get()` safely.
+ */
+export async function batchReadSheets(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  sheetNames: string[]
+): Promise<Map<string, unknown[][]>> {
+  const result = new Map<string, unknown[][]>()
+  if (sheetNames.length === 0) return result
+  const res = await withRetry(() =>
+    sheets.spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: sheetNames.map((name) => `'${name}'`),
+    })
+  )
+  const valueRanges = res.data.valueRanges ?? []
+  for (let i = 0; i < sheetNames.length; i++) {
+    const entry = valueRanges[i]
+    const values = (entry?.values ?? []) as unknown[][]
+    result.set(sheetNames[i], values)
+  }
+  return result
+}
+
 export interface StreamBatchOps {
   sheetId: number
   updates: { rowNumber: number; values: string[] }[]
@@ -457,12 +468,10 @@ export interface StreamBatchOps {
   existingRowCount: number
 }
 
-// `pasteData` column delimiter. Unit Separator (U+001F / `\x1f`) is an ASCII
-// control char that should never appear in Stripe data (JSON-stringified
-// values, object IDs, timestamps, names, descriptions, etc.). Rows are
-// separated by `\n` which is NOT configurable on `pasteData` — so we must
-// sanitize any `\n`, `\r`, or `PASTE_COL_DELIMITER` that appears inside cell
-// values to keep the paste parser from misaligning columns.
+// `pasteData` column delimiter. Unit Separator (U+001F) — a control char
+// that won't naturally appear in Stripe data. Row separator is always `\n`
+// (not configurable), so any `\n`, `\r`, or U+001F inside cells must be
+// sanitized or the paste parser misaligns columns.
 export const PASTE_COL_DELIMITER = '\x1f'
 const PASTE_SANITIZE_RE = /[\n\r\x1f]/g
 
@@ -483,36 +492,18 @@ export function rowsToTsv(rows: string[][]): string {
   return out
 }
 
-function describeError(err: unknown): string {
-  const code =
-    err instanceof Error && 'code' in err ? (err as { code?: number | string }).code : undefined
-  const errors =
-    err instanceof Error && 'errors' in err
-      ? ((err as { errors?: unknown }).errors as unknown[])
-      : undefined
-  const message = err instanceof Error ? err.message : String(err)
-  return `code=${code ?? 'unknown'} message=${message}${errors ? ` errors=${JSON.stringify(errors)}` : ''}`
-}
-
 /**
- * Flush buffered updates and appends across ALL streams. The call flow is:
+ * Flush buffered updates + appends across all streams.
  *
- *   Phase 1 (parallel structural reads) — `gridProperties` for every sheet,
- *     plus column-A row counts for any non-PK stream with appends.
- *   Phase 3a (grid expansion, conditional) — ONE `spreadsheets.batchUpdate`
- *     with only `appendDimension` requests, fired ONLY when some sheet's
- *     grid doesn't already fit. Skipped entirely when grids are roomy.
- *   Phase 3b (parallel data writes) — `pasteData` requests (one per update
- *     group + one per append stream) are split into up to
- *     `PARALLEL_BATCH_COUNT` chunks and fired concurrently via
- *     `Promise.all`. Each chunk is its own `spreadsheets.batchUpdate` HTTP
- *     call. Wall-clock approaches the slowest single chunk rather than the
- *     sum of all serialized work. `pasteData` with `PASTE_VALUES` sends raw
- *     `\x1f`-delimited TSV strings — the cheapest wire payload available,
- *     and server-side it skips formula evaluation and cell-level parsing.
+ *   Phase 1  — parallel reads: gridProperties + per-stream row counts.
+ *   Phase 3a — one batchUpdate with appendDimension requests (only if grids
+ *              need to grow). Must precede data writes.
+ *   Phase 3b — pasteData requests fan out into up to PARALLEL_BATCH_COUNT
+ *              parallel batchUpdate calls. Wall-clock ≈ slowest chunk.
+ *              PASTE_VALUES + TSV is the cheapest wire payload (no formula
+ *              eval, no cell-level parsing server-side).
  *
- * Returns the 1-based `appendStartRow` per stream so the caller can emit
- * row_key → row_number assignments.
+ * Returns per-stream 1-based `appendStartRow` for row_assignments.
  */
 export async function applyBatch(
   sheets: sheets_v4.Sheets,
@@ -522,9 +513,8 @@ export async function applyBatch(
   const applyStart = Date.now()
 
   // ── Phase 1 (parallel reads) ────────────────────────────────────
-  // Resolve `existingRowCount` for any stream with appends that didn't go
-  // through `buildRowMap`, and fetch current `gridProperties` for every sheet
-  // so we know which grids need to grow.
+  // gridProperties for every sheet + per-stream column-A row counts when
+  // we don't already have them (streams that bypassed buildRowMap).
   type GridInfo = { rowCount: number; columnCount: number }
   const gridInfo = new Map<number, GridInfo>()
   const probes: Array<Promise<void>> = []
@@ -548,13 +538,9 @@ export async function applyBatch(
             gridInfo.set(id, { rowCount: gp.rowCount ?? 1000, columnCount: gp.columnCount ?? 26 })
           }
         }
-        console.error(
-          `[google-sheets] gridMetadata: ${gridInfo.size} sheets in ${Date.now() - metaStart}ms`
-        )
+        log.debug({ sheets: gridInfo.size, durationMs: Date.now() - metaStart }, 'gridMetadata')
       } catch (err) {
-        console.error(
-          `[google-sheets] gridMetadata failed in ${Date.now() - metaStart}ms: ${describeError(err)}`
-        )
+        log.warn({ err, durationMs: Date.now() - metaStart }, 'gridMetadata failed')
       }
     })()
   )
@@ -575,12 +561,18 @@ export async function applyBatch(
               `rowCountProbe(${streamName})`
             )
             ops.existingRowCount = (res.data.values ?? []).length
-            console.error(
-              `[google-sheets] rowCountProbe(${streamName}): ${ops.existingRowCount} rows in ${Date.now() - probeStart}ms`
+            log.debug(
+              {
+                streamName,
+                rows: ops.existingRowCount,
+                durationMs: Date.now() - probeStart,
+              },
+              'rowCountProbe'
             )
           } catch (err) {
-            console.error(
-              `[google-sheets] rowCountProbe(${streamName}) failed in ${Date.now() - probeStart}ms: ${describeError(err)}`
+            log.warn(
+              { err, streamName, durationMs: Date.now() - probeStart },
+              'rowCountProbe failed'
             )
           }
         })()
@@ -589,29 +581,29 @@ export async function applyBatch(
   }
   const phase1Start = Date.now()
   await Promise.all(probes)
-  console.error(
-    `[google-sheets] phase1 (reads) done: ${probes.length} parallel calls in ${Date.now() - phase1Start}ms (wall clock, max of all probes)`
+  log.debug(
+    { parallelCalls: probes.length, durationMs: Date.now() - phase1Start },
+    'phase1 (reads) done'
   )
 
   // ── Phase 2 (build payloads) ────────────────────────────────────
-  // Two output containers:
-  //   `expansionRequests` — structural `appendDimension` requests that MUST
-  //     complete before the data writes (the grid has to fit first).
-  //   `dataRequests` — pasteData requests for updates + appends. These can
-  //     be split into multiple parallel `spreadsheets.batchUpdate` HTTP calls
-  //     since pasteData operations target distinct, non-overlapping ranges.
-  // Cap on parallel HTTP fan-out for the data write. Also used in Phase 2
-  // to row-slice each stream's appends so a single-stream flush can still
-  // fan out across multiple parallel `batchUpdate` calls instead of
-  // bottlenecking on one giant pasteData.
+  // `expansionRequests` run first (Phase 3a) — the grid must fit before
+  // pasteData writes. `dataRequests` run in parallel (Phase 3b) since each
+  // pasteData targets a distinct row range.
+  //
+  // `PARALLEL_BATCH_COUNT` bounds HTTP fan-out AND row-slices each stream's
+  // appends, so a single big stream can still fan out instead of bottlenecking
+  // on one giant pasteData. Each data request carries its cell weight so the
+  // Phase-3b bin-packer can balance chunks; wall-clock scales ~linearly with
+  // cells per request.
   const PARALLEL_BATCH_COUNT = 4
 
   const appendStartRows = new Map<string, { appendStartRow: number }>()
   const expansionRequests: sheets_v4.Schema$Request[] = []
-  const dataRequests: sheets_v4.Schema$Request[] = []
+  const dataRequests: Array<{ request: sheets_v4.Schema$Request; cells: number }> = []
   const EXPAND_ROW_BUFFER = 1000
 
-  // 2a) appendDimension requests — only for sheets whose grid doesn't already fit
+  // 2a) appendDimension — only for grids that don't already fit.
   const phase2aStart = Date.now()
   for (const [, ops] of opsByStream) {
     const maxUpdateRow = ops.updates.reduce((m, u) => Math.max(m, u.rowNumber), 0)
@@ -623,7 +615,7 @@ export async function applyBatch(
     const neededCols = Math.max(maxUpdateCol, maxAppendCol)
 
     const current = gridInfo.get(ops.sheetId)
-    if (!current) continue // metadata missing — best-effort; fall through and hope grid fits
+    if (!current) continue // metadata missing — best-effort; hope the grid fits
 
     if (neededRows > current.rowCount) {
       expansionRequests.push({
@@ -645,17 +637,15 @@ export async function applyBatch(
     }
   }
   const expansionCount = expansionRequests.length
-  console.error(
-    `[google-sheets] phase2a (expansions): ${expansionCount} appendDimension requests in ${Date.now() - phase2aStart}ms`
+  log.debug(
+    { expansions: expansionCount, durationMs: Date.now() - phase2aStart },
+    'phase2a (expansions) planned'
   )
 
-  // 2b) pasteData requests for contiguous update groups (one per group).
+  // 2b) pasteData for contiguous update groups (one per group).
   //
-  // DEBUG: updates are temporarily disabled to isolate the append path while
-  // investigating flush performance. Buffered updates are still counted (for
-  // logging parity) but NOT pushed into `dataRequests[]`. Flip
-  // `DEBUG_SKIP_UPDATES` to `false` to re-enable, or remove the guard when
-  // done debugging.
+  // DEBUG: updates suppressed while investigating flush perf. Flip to false
+  // to re-enable; counters stay updated for logging parity.
   const DEBUG_SKIP_UPDATES = true
   const phase2bStart = Date.now()
   let updateGroupCount = 0
@@ -676,8 +666,10 @@ export async function applyBatch(
         groupEnd++
       }
       const firstRow = sortedUpdates[groupStart].rowNumber
+      let groupCells = 0
       const groupRows = sortedUpdates.slice(groupStart, groupEnd + 1).map((u) => {
         updateCellCount += u.values.length
+        groupCells += u.values.length
         for (const v of u.values) updateBytesEstimate += v.length
         return u.values
       })
@@ -685,12 +677,15 @@ export async function applyBatch(
         skippedUpdateGroups++
       } else {
         dataRequests.push({
-          pasteData: {
-            coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
-            data: rowsToTsv(groupRows),
-            delimiter: PASTE_COL_DELIMITER,
-            type: 'PASTE_VALUES',
+          request: {
+            pasteData: {
+              coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
+              data: rowsToTsv(groupRows),
+              delimiter: PASTE_COL_DELIMITER,
+              type: 'PASTE_VALUES',
+            },
           },
+          cells: groupCells,
         })
         updateGroupCount++
       }
@@ -699,21 +694,35 @@ export async function applyBatch(
     }
   }
   if (DEBUG_SKIP_UPDATES && skippedUpdateGroups > 0) {
-    console.error(
-      `[google-sheets] phase2b (updates): DEBUG_SKIP_UPDATES=true — skipped ${skippedUpdateGroups} pasteData groups, ${updateRowCount} rows, ${updateCellCount} cells, ~${Math.round(updateBytesEstimate / 1024)}KB values (would-have-taken ${Date.now() - phase2bStart}ms to build)`
+    log.debug(
+      {
+        skippedGroups: skippedUpdateGroups,
+        rows: updateRowCount,
+        cells: updateCellCount,
+        bytes: updateBytesEstimate,
+        durationMs: Date.now() - phase2bStart,
+      },
+      'phase2b (updates) skipped (DEBUG_SKIP_UPDATES)'
     )
   } else {
-    console.error(
-      `[google-sheets] phase2b (updates): ${updateGroupCount} pasteData groups, ${updateRowCount} rows, ${updateCellCount} cells, ~${Math.round(updateBytesEstimate / 1024)}KB values in ${Date.now() - phase2bStart}ms`
+    log.debug(
+      {
+        groups: updateGroupCount,
+        rows: updateRowCount,
+        cells: updateCellCount,
+        bytes: updateBytesEstimate,
+        durationMs: Date.now() - phase2bStart,
+      },
+      'phase2b (updates) planned'
     )
   }
 
-  // 2c) pasteData requests for appends. To enable 4-way parallel dispatch
-  //     in Phase 3b even on single-stream flushes, slice each stream's
-  //     append block into up to `PARALLEL_BATCH_COUNT` row-ranges (disjoint,
-  //     contiguous). Each slice targets its own `coordinate.rowIndex`, so
-  //     Google writes them to non-overlapping rows and they can run fully
-  //     in parallel with no data loss.
+  // 2c) pasteData for appends. Slice each stream's block by cell count so
+  // Phase 3b can balance evenly even when one big stream dominates (e.g.
+  // `customers` ~10k rows). Each slice targets a distinct rowIndex, so
+  // parallel writes hit non-overlapping rows. 100k cells ≈ 3-5 MB on
+  // Stripe-shaped records and writes in ~1-2s.
+  const APPEND_SLICE_CELLS_TARGET = 100_000
   const phase2cStart = Date.now()
   let appendGroupCount = 0
   let appendRowCount = 0
@@ -722,32 +731,48 @@ export async function applyBatch(
   for (const [streamName, ops] of opsByStream) {
     if (ops.appends.length === 0) continue
     const startRow = ops.existingRowCount + 1
+    const cols = ops.appends[0]?.length ?? 1
     for (const row of ops.appends) {
       appendCellCount += row.length
       for (const v of row) appendBytesEstimate += v.length
     }
-    const sliceSize = Math.max(1, Math.ceil(ops.appends.length / PARALLEL_BATCH_COUNT))
-    for (let offset = 0; offset < ops.appends.length; offset += sliceSize) {
-      const slice = ops.appends.slice(offset, offset + sliceSize)
+    // Pick the smaller slice size so we (a) fan out across all PARALLEL_BATCH
+    // chunks and (b) cap max slice size so the bin-packer can balance.
+    const byCellsSliceRows = Math.max(1, Math.floor(APPEND_SLICE_CELLS_TARGET / Math.max(1, cols)))
+    const byParallelismSliceRows = Math.max(1, Math.ceil(ops.appends.length / PARALLEL_BATCH_COUNT))
+    const sliceRowSize = Math.min(byCellsSliceRows, byParallelismSliceRows)
+    for (let offset = 0; offset < ops.appends.length; offset += sliceRowSize) {
+      const slice = ops.appends.slice(offset, offset + sliceRowSize)
+      const sliceCells = slice.reduce((sum, row) => sum + row.length, 0)
       dataRequests.push({
-        pasteData: {
-          coordinate: {
-            sheetId: ops.sheetId,
-            rowIndex: startRow - 1 + offset,
-            columnIndex: 0,
+        request: {
+          pasteData: {
+            coordinate: {
+              sheetId: ops.sheetId,
+              rowIndex: startRow - 1 + offset,
+              columnIndex: 0,
+            },
+            data: rowsToTsv(slice),
+            delimiter: PASTE_COL_DELIMITER,
+            type: 'PASTE_VALUES',
           },
-          data: rowsToTsv(slice),
-          delimiter: PASTE_COL_DELIMITER,
-          type: 'PASTE_VALUES',
         },
+        cells: sliceCells,
       })
       appendGroupCount++
     }
     appendStartRows.set(streamName, { appendStartRow: startRow })
     appendRowCount += ops.appends.length
   }
-  console.error(
-    `[google-sheets] phase2c (appends): ${appendGroupCount} pasteData groups, ${appendRowCount} rows, ${appendCellCount} cells, ~${Math.round(appendBytesEstimate / 1024)}KB values in ${Date.now() - phase2cStart}ms`
+  log.debug(
+    {
+      groups: appendGroupCount,
+      rows: appendRowCount,
+      cells: appendCellCount,
+      bytes: appendBytesEstimate,
+      durationMs: Date.now() - phase2cStart,
+    },
+    'phase2c (appends) planned'
   )
 
   if (expansionRequests.length === 0 && dataRequests.length === 0) return appendStartRows
@@ -755,7 +780,7 @@ export async function applyBatch(
   const totalCells = updateCellCount + appendCellCount
   const totalBytesEstimate = updateBytesEstimate + appendBytesEstimate
 
-  // ── Phase 3a (grid expansion — only when needed, runs first) ────
+  // ── Phase 3a (grid expansion — runs first, only if needed) ─────
   if (expansionRequests.length > 0) {
     const expandStart = Date.now()
     try {
@@ -767,34 +792,66 @@ export async function applyBatch(
           }),
         'gridExpansion'
       )
-      console.error(
-        `[google-sheets] gridExpansion OK: status=${res.status} requests=${expansionRequests.length} elapsed=${Date.now() - expandStart}ms`
+      log.debug(
+        {
+          status: res.status,
+          requests: expansionRequests.length,
+          durationMs: Date.now() - expandStart,
+        },
+        'gridExpansion OK'
       )
     } catch (err) {
-      console.error(
-        `[google-sheets] gridExpansion FAILED after ${Date.now() - expandStart}ms (${expansionRequests.length} requests): ${describeError(err)}`
+      log.error(
+        { err, requests: expansionRequests.length, durationMs: Date.now() - expandStart },
+        'gridExpansion FAILED'
       )
       throw err
     }
   }
 
   // ── Phase 3b (parallel data writes) ─────────────────────────────
-  // Split the pasteData requests across up to PARALLEL_BATCH_COUNT HTTP
-  // calls, fired concurrently via Promise.all. Google Sheets happily
-  // accepts several concurrent batchUpdate calls against the same
-  // spreadsheet — each one targets distinct rows, no ordering required
-  // between them. Total wall-clock drops toward the slowest individual
-  // call instead of the sum of all serialized work.
+  // Up to PARALLEL_BATCH_COUNT concurrent batchUpdate calls. Sheets accepts
+  // parallel writes to distinct row ranges; wall-clock ≈ slowest chunk.
+  //
+  // Longest Processing Time (LPT) bin-packing on cell count: sort desc,
+  // greedily assign each request to the least-loaded bin. Bounded by
+  // (4/3 - 1/3m)× optimal makespan, near-optimal when a few large streams
+  // dominate. Replaces the prior consecutive-index split which produced
+  // wildly uneven chunks (heaviest had ~13× the work of the lightest).
   if (dataRequests.length === 0) return appendStartRows
 
-  const chunkSize = Math.ceil(dataRequests.length / PARALLEL_BATCH_COUNT)
-  const chunks: sheets_v4.Schema$Request[][] = []
-  for (let i = 0; i < dataRequests.length; i += chunkSize) {
-    chunks.push(dataRequests.slice(i, i + chunkSize))
+  const binCount = Math.min(PARALLEL_BATCH_COUNT, dataRequests.length)
+  type Bin = { requests: sheets_v4.Schema$Request[]; cells: number }
+  const bins: Bin[] = Array.from({ length: binCount }, () => ({ requests: [], cells: 0 }))
+  const sorted = [...dataRequests].sort((a, b) => b.cells - a.cells)
+  for (const entry of sorted) {
+    let minIdx = 0
+    for (let i = 1; i < bins.length; i++) {
+      if (bins[i].cells < bins[minIdx].cells) minIdx = i
+    }
+    bins[minIdx].requests.push(entry.request)
+    bins[minIdx].cells += entry.cells
   }
+  const chunks = bins.map((b) => b.requests)
+  const chunkCells = bins.map((b) => b.cells)
 
-  console.error(
-    `[google-sheets] batchUpdate dispatching: streams=${opsByStream.size} total_requests=${dataRequests.length} split_across=${chunks.length} parallel_calls (expansions_done=${expansionCount}, updateRows=${updateRowCount}, appendRows=${appendRowCount}) cells=${totalCells} values~${Math.round(totalBytesEstimate / 1024)}KB`
+  const minChunkCells = Math.min(...chunkCells)
+  const maxChunkCells = Math.max(...chunkCells)
+  const imbalanceRatio = minChunkCells === 0 ? Infinity : maxChunkCells / minChunkCells
+  log.debug(
+    {
+      streams: opsByStream.size,
+      totalRequests: dataRequests.length,
+      parallelCalls: chunks.length,
+      expansions: expansionCount,
+      updateRows: updateRowCount,
+      appendRows: appendRowCount,
+      cells: totalCells,
+      bytes: totalBytesEstimate,
+      chunkCells,
+      imbalanceRatio: Number(imbalanceRatio.toFixed(2)),
+    },
+    'batchUpdate dispatching'
   )
 
   const httpStart = Date.now()
@@ -803,6 +860,7 @@ export async function applyBatch(
       chunks.map(async (chunk, idx) => {
         const chunkStart = Date.now()
         const chunkLabel = `batchUpdate[${idx + 1}/${chunks.length}]`
+        const chunkCellCount = chunkCells[idx]
         try {
           const res = await withRetry(
             () =>
@@ -813,25 +871,57 @@ export async function applyBatch(
             chunkLabel
           )
           const replyCount = res.data.replies?.length ?? 0
-          console.error(
-            `[google-sheets] ${chunkLabel} OK: status=${res.status} requests=${chunk.length} replies=${replyCount} elapsed=${Date.now() - chunkStart}ms`
+          log.debug(
+            {
+              label: chunkLabel,
+              status: res.status,
+              requests: chunk.length,
+              cells: chunkCellCount,
+              replies: replyCount,
+              durationMs: Date.now() - chunkStart,
+            },
+            'batchUpdate chunk OK'
           )
         } catch (err) {
-          console.error(
-            `[google-sheets] ${chunkLabel} FAILED after ${Date.now() - chunkStart}ms (${chunk.length} requests): ${describeError(err)}`
+          log.error(
+            {
+              err,
+              label: chunkLabel,
+              requests: chunk.length,
+              cells: chunkCellCount,
+              durationMs: Date.now() - chunkStart,
+            },
+            'batchUpdate chunk FAILED'
           )
           throw err
         }
       })
     )
     const httpElapsed = Date.now() - httpStart
-    console.error(
-      `[google-sheets] batchUpdate OK (all parallel): chunks=${chunks.length} total_requests=${dataRequests.length} wall_clock=${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms`
+    log.debug(
+      {
+        chunks: chunks.length,
+        totalRequests: dataRequests.length,
+        wallClockMs: httpElapsed,
+        applyBatchTotalMs: Date.now() - applyStart,
+      },
+      'batchUpdate OK (all parallel)'
     )
   } catch (err) {
     const httpElapsed = Date.now() - httpStart
-    console.error(
-      `[google-sheets] batchUpdate FAILED (parallel) after ${httpElapsed}ms applyBatch_total=${Date.now() - applyStart}ms (chunks=${chunks.length} total_requests=${dataRequests.length} expansions=${expansionCount} updateRows=${updateRowCount} appendRows=${appendRowCount} cells=${totalCells}): ${describeError(err)}`
+    log.error(
+      {
+        err,
+        chunks: chunks.length,
+        totalRequests: dataRequests.length,
+        expansions: expansionCount,
+        updateRows: updateRowCount,
+        appendRows: appendRowCount,
+        cells: totalCells,
+        wallClockMs: httpElapsed,
+        applyBatchTotalMs: Date.now() - applyStart,
+      },
+      'batchUpdate FAILED (parallel)'
     )
     throw err
   }

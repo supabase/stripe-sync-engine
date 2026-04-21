@@ -258,6 +258,19 @@ export function createMemorySheets() {
           const tab = getTab(params.spreadsheetId, params.range)
           return { data: { values: tab.values } }
         },
+
+        async batchGet(params: { spreadsheetId: string; ranges?: string[] }) {
+          const ranges = params.ranges ?? []
+          const valueRanges = ranges.map((range) => {
+            try {
+              const tab = getTab(params.spreadsheetId, range)
+              return { range, values: tab.values }
+            } catch {
+              return { range, values: [] }
+            }
+          })
+          return { data: { valueRanges } }
+        },
       },
     },
   } as unknown as sheets_v4.Sheets
