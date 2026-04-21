@@ -339,6 +339,25 @@ describe('progressReducer — derived.status', () => {
     expect(p.derived.status).toBe('failed')
   })
 
+  it('is failed when connection_status fails even with active streams', () => {
+    let p = createInitialProgress()
+    p = progressReducer(
+      p,
+      at({
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'start' },
+      })
+    )
+    p = progressReducer(
+      p,
+      at({
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'GET /v1/account (500)' },
+      })
+    )
+    expect(p.derived.status).toBe('failed')
+  })
+
   it('is failed when any stream errored', () => {
     let p = createInitialProgress()
     p = progressReducer(

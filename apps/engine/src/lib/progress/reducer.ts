@@ -25,12 +25,19 @@ function getStream(progress: ProgressPayload, stream: string): StreamProgress {
 
 function deriveStatus(progress: ProgressPayload): 'started' | 'succeeded' | 'failed' {
   const streams = Object.values(progress.streams)
+
+  // Connection failure is immediately terminal — the source cannot proceed,
+  // so streams will never advance from their current state.
+  if (progress.connection_status?.status === 'failed') return 'failed'
+
   const hasActive = streams.some((s) => s.status === 'started' || s.status === 'not_started')
 
-  // Can't be terminal if streams are still active
+  // NB: It is still strange that errored streams don't immediately fail the
+  // overall status while other streams are active. In practice the engine stops
+  // all streams on the first error, so hasActive should be false by the time we
+  // check. But if that assumption ever breaks, this ordering would hide the error.
   if (hasActive) return 'started'
 
-  if (progress.connection_status?.status === 'failed') return 'failed'
   if (streams.some((s) => s.status === 'errored')) return 'failed'
   if (
     streams.length > 0 &&
