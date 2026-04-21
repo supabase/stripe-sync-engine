@@ -36,10 +36,8 @@ const STATUS_ICON: Record<string, { symbol: string; color: string }> = {
 // Keys to omit from log data display
 const SKIP_DATA_KEYS = new Set(['name', 'engine_request_id'])
 
-// Consistent type label width (padded to 8 chars, lowercase with colon)
-const TYPE_WIDTH = 9
 function typeLabel(label: string, color: string): string {
-  return `${color}${(label.toLowerCase() + ':').padEnd(TYPE_WIDTH)}${RESET}`
+  return `${color}${label}:${RESET}`
 }
 
 // MARK: - CLI args
@@ -86,7 +84,7 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '\u2026'
 }
 
-const DATA_INDENT = ' '.repeat(24) // extra indent so data is visually separate from message
+const DATA_INDENT = ' '.repeat(20) // indent data under the message content
 
 function formatDataKV(data: Record<string, unknown>): string {
   const parts: string[] = []
@@ -105,7 +103,7 @@ function formatLog(msg: { log: { level: string; message: string; data?: Record<s
   const style = LEVEL_STYLE[level] ?? { label: level.toUpperCase().padEnd(5), color: '' }
   const component = data?.name ? `${DIM}[${data.name}]${RESET} ` : ''
   const kv = data ? formatDataKV(data) : ''
-  return `${ts(msg._ts)}${typeLabel('LOG', style.color)} ${style.color}${style.label}${RESET} ${component}${message}${kv}`
+  return `${ts(msg._ts)}${typeLabel('log', style.color)} ${style.color}${style.label}${RESET} ${component}${message}${kv}`
 }
 
 function formatStreamStatus(msg: { stream_status: { stream: string; status: string; time_range?: { gte?: string; lt?: string }; error?: string; reason?: string }; _ts?: string }): string {
@@ -115,8 +113,8 @@ function formatStreamStatus(msg: { stream_status: { stream: string; status: stri
 
   let detail = ''
   if ((status === 'start' || status === 'range_complete') && time_range) {
-    const gte = time_range.gte ?? '?'
-    const lt = time_range.lt ?? '?'
+    const gte = time_range.gte?.slice(0, 19) ?? '?'
+    const lt = time_range.lt?.slice(0, 19) ?? '?'
     detail = `  ${DIM}[${gte} \u2192 ${lt})${RESET}`
   } else if (error) {
     detail = `  ${truncate(error, 100)}`
@@ -124,7 +122,7 @@ function formatStreamStatus(msg: { stream_status: { stream: string; status: stri
     detail = `  ${truncate(reason, 100)}`
   }
 
-  return `${ts(msg._ts)}${typeLabel('STREAM', icon.color)} ${icon.color}${icon.symbol}${RESET} ${BOLD}${stream}${RESET}  ${icon.color}${statusLabel}${RESET}${detail}`
+  return `${ts(msg._ts)}${typeLabel('stream_status', icon.color)} ${icon.color}${icon.symbol}${RESET} ${BOLD}${stream}${RESET}  ${icon.color}${statusLabel}${RESET}${detail}`
 }
 
 const columns = process.stdout.columns || 200
@@ -134,7 +132,7 @@ function formatProgress(msg: { progress: Record<string, unknown>; _ts?: string }
   const progress = msg.progress as import('@stripe/sync-protocol').ProgressPayload
   const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 18 })
   const timestamp = ts(msg._ts)
-  const prefix = `${timestamp}${typeLabel('PROGRESS', YELLOW)} `
+  const prefix = `${timestamp}${typeLabel('progress', YELLOW)} `
   const indent = ' '.repeat(18)
   const lines = rendered.split('\n')
   return lines.map((line, i) => (i === 0 ? `${prefix}${line}` : `${indent}${line}`)).join('\n')
@@ -144,7 +142,7 @@ function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string 
   const eof = msg.eof as { status?: string; has_more?: boolean; run_progress?: Record<string, unknown> }
   const timestamp = ts(msg._ts)
   const statusColor = eof.status === 'failed' ? RED : eof.status === 'succeeded' ? GREEN : YELLOW
-  const header = `${timestamp}${typeLabel('EOF', statusColor)} ${statusColor}${BOLD}\u2550\u2550\u2550 ${eof.status?.toUpperCase() ?? 'EOF'} \u2550\u2550\u2550${RESET}  has_more=${String(eof.has_more ?? false)}`
+  const header = `${timestamp}${typeLabel('eof', statusColor)} ${statusColor}${BOLD}\u2550\u2550\u2550 ${eof.status?.toUpperCase() ?? 'EOF'} \u2550\u2550\u2550${RESET}  has_more=${String(eof.has_more ?? false)}`
 
   if (eof.run_progress) {
     const progress = eof.run_progress as import('@stripe/sync-protocol').ProgressPayload
@@ -160,40 +158,40 @@ function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string 
 function formatRecord(msg: { record: { stream: string; data: Record<string, unknown> }; _ts?: string }): string {
   const { stream, data } = msg.record
   const id = data?.id ? `  id=${String(data.id)}` : ''
-  return `${ts(msg._ts)}${typeLabel('RECORD', MAGENTA)} ${BOLD}${stream}${RESET}${id}`
+  return `${ts(msg._ts)}${typeLabel('record', MAGENTA)} ${BOLD}${stream}${RESET}${id}`
 }
 
 function formatSourceState(msg: { source_state: { stream?: string; state_type?: string; state?: unknown }; _ts?: string }): string {
   const { stream, state_type } = msg.source_state
   const label = stream ?? 'global'
-  return `${ts(msg._ts)}${typeLabel('STATE', CYAN)} ${BOLD}${label}${RESET}  ${state_type ?? 'stream'}`
+  return `${ts(msg._ts)}${typeLabel('source_state', CYAN)} ${BOLD}${label}${RESET}  ${state_type ?? 'stream'}`
 }
 
 function formatCatalog(msg: { catalog: { streams: Array<{ stream: { name: string } }> }; _ts?: string }): string {
   const streams = msg.catalog.streams
   const names = streams.map((s) => s.stream.name).join(', ')
-  return `${ts(msg._ts)}${typeLabel('CATALOG', CYAN)} ${streams.length} streams: ${truncate(names, columns - 30)}`
+  return `${ts(msg._ts)}${typeLabel('catalog', CYAN)} ${streams.length} streams: ${truncate(names, columns - 30)}`
 }
 
 function formatConnectionStatus(msg: { connection_status: { status: string; message?: string }; _ts?: string }): string {
   const { status, message } = msg.connection_status
   const color = status === 'succeeded' ? GREEN : status === 'failed' ? RED : YELLOW
   const detail = message ? `: ${message}` : ''
-  return `${ts(msg._ts)}${typeLabel('CONN', color)} ${status}${detail}`
+  return `${ts(msg._ts)}${typeLabel('connection_status', color)} ${status}${detail}`
 }
 
 function formatSpec(msg: { _ts?: string }): string {
-  return `${ts(msg._ts)}${typeLabel('SPEC', DIM)} config schema received`
+  return `${ts(msg._ts)}${typeLabel('spec', DIM)} config schema received`
 }
 
 function formatControl(msg: { control: { control_type: string }; _ts?: string }): string {
-  return `${ts(msg._ts)}${typeLabel('CTRL', DIM)} ${msg.control.control_type}`
+  return `${ts(msg._ts)}${typeLabel('control', DIM)} ${msg.control.control_type}`
 }
 
 function formatSourceInput(msg: { source_input: unknown; _ts?: string }): string {
   const input = msg.source_input as Record<string, unknown> | undefined
   const summary = input?.type ? String(input.type) : 'event'
-  return `${ts(msg._ts)}${typeLabel('INPUT', CYAN)} ${summary}`
+  return `${ts(msg._ts)}${typeLabel('source_input', CYAN)} ${summary}`
 }
 
 // MARK: - Main loop
