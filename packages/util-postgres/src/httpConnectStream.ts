@@ -1,6 +1,6 @@
 import net from 'node:net'
 import { Duplex } from 'node:stream'
-import { sslConfigFromConnectionString, stripSslParams } from './sslConfigFromConnectionString.js'
+// import { sslConfigFromConnectionString, stripSslParams } from './sslConfigFromConnectionString.js'
 
 type PgTargetConfig = {
   host?: string
@@ -187,24 +187,27 @@ export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv 
     return config
   }
 
-  const raw = config as Record<string, unknown>
+  // TODO: We may want to re-enable SSL stripping from the connection string.
   // node-postgres parses connectionString last (Object.assign({}, config, parse(connectionString))),
   // so sslmode in the URL always overwrites any `ssl` key we set — including explicit caller values.
-  // Fix: always strip SSL params from the connection string. Translate sslmode to Node.js TLS
-  // options only when the caller hasn't already set an explicit `ssl` key.
-  let mergedConfig = { ...config }
-  if (typeof raw.connectionString === 'string') {
-    mergedConfig = { ...mergedConfig, connectionString: stripSslParams(raw.connectionString) }
-    if (!('ssl' in raw)) {
-      const ssl = sslConfigFromConnectionString(raw.connectionString)
-      if (ssl !== false) {
-        mergedConfig = { ...mergedConfig, ssl }
-      }
-    }
-  }
+  // The fix below strips SSL params and translates sslmode to Node.js TLS options. However, this
+  // area has been repeatedly tricky (proxy + SSL + node-postgres interactions) and needs thorough
+  // testing across RDS, local Docker, and tunneled connections before enabling.
+  //
+  // const raw = config as Record<string, unknown>
+  // let mergedConfig = { ...config }
+  // if (typeof raw.connectionString === 'string') {
+  //   mergedConfig = { ...mergedConfig, connectionString: stripSslParams(raw.connectionString) }
+  //   if (!('ssl' in raw)) {
+  //     const ssl = sslConfigFromConnectionString(raw.connectionString)
+  //     if (ssl !== false) {
+  //       mergedConfig = { ...mergedConfig, ssl }
+  //     }
+  //   }
+  // }
 
   return {
-    ...mergedConfig,
+    ...config,
     stream: createPgHttpConnectStreamFactory({
       proxyHost,
       proxyPort: parsePositiveInteger('PG_PROXY_PORT', env.PG_PROXY_PORT, 10072),
