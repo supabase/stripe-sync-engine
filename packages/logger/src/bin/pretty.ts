@@ -117,7 +117,7 @@ function formatStreamStatus(msg: { stream_status: { stream: string; status: stri
   if ((status === 'start' || status === 'range_complete') && time_range) {
     const gte = time_range.gte ?? '?'
     const lt = time_range.lt ?? '?'
-    detail = `  ${DIM}[${gte} \u2192 ${lt}]${RESET}`
+    detail = `  ${DIM}[${gte} \u2192 ${lt})${RESET}`
   } else if (error) {
     detail = `  ${truncate(error, 100)}`
   } else if (reason) {
