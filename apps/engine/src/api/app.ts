@@ -701,7 +701,8 @@ export async function createApp(resolver: ConnectorResolver) {
       content: {
         'application/json': {
           schema: z.object({
-            connection_string: z.string(),
+            connection_string: z.string().optional(),
+            url: z.string().optional(),
             sql: z.string(),
           }),
         },
@@ -723,12 +724,16 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(internalQueryRoute, async (c) => {
-    const { connection_string, sql } = c.req.valid('json')
-    const ssl = sslConfigFromConnectionString(connection_string)
+    const { connection_string, url, sql } = c.req.valid('json')
+    const connStr = connection_string ?? url
+    if (!connStr) {
+      return c.json({ error: 'connection_string or url is required' }, 400)
+    }
+    const ssl = sslConfigFromConnectionString(connStr)
     // No query logging — user-provided SQL may contain sensitive data
     const pool = new pg.Pool(
       withPgConnectProxy({
-        connectionString: stripSslParams(connection_string),
+        connectionString: stripSslParams(connStr),
         ssl,
       })
     )
