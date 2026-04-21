@@ -18,9 +18,16 @@ export async function resolveAccountMetadata(
   let accountCreated = config.account_created
 
   if (needsAccountId || needsAccountCreated) {
-    const account = await client.getAccount({ maxRetries: 0 })
-    accountId ??= account.id
-    accountCreated ??= account.created ?? STRIPE_LAUNCH_TIMESTAMP
+    try {
+      const account = await client.getAccount({ maxRetries: 0 })
+      accountId ??= account.id
+      accountCreated ??= account.created ?? STRIPE_LAUNCH_TIMESTAMP
+    } catch (err) {
+      // account_id is required — rethrow if we can't resolve it
+      if (needsAccountId) throw err
+      // account_created is best-effort — fall back to epoch if account_id is known
+      accountCreated ??= STRIPE_LAUNCH_TIMESTAMP
+    }
   }
 
   return {
