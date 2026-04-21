@@ -348,9 +348,7 @@ export async function createProgram() {
             sources: sourceNames,
             destinations: destinationNames,
           })
-          const res = await handler(
-            new Request(`http://localhost/pipelines/${args.id}`)
-          )
+          const res = await handler(new Request(`http://localhost/pipelines/${args.id}`))
           if (!res.ok) {
             const text = await res.text()
             process.stderr.write(`Error ${res.status}: ${text}\n`)
@@ -360,14 +358,40 @@ export async function createProgram() {
           if (args['reset-state']) {
             delete pipeline.sync_state
           }
-          mergeConnectorOverrides(pipeline, overrides)
+          const configSchemas: {
+            source?: import('zod').ZodType
+            destination?: import('zod').ZodType
+          } = {}
+          if (overrides.source) {
+            const name = (overrides.source.type ?? pipeline.source?.type) as string
+            configSchemas.source = resolver.sources().get(name)?.configSchema
+          }
+          if (overrides.destination) {
+            const name = (overrides.destination.type ?? pipeline.destination?.type) as string
+            configSchemas.destination = resolver.destinations().get(name)?.configSchema
+          }
+          mergeConnectorOverrides(pipeline, overrides, configSchemas)
           if (responseFormatter) {
             await responseFormatter(
               new Response(JSON.stringify(pipeline), {
                 status: 200,
                 headers: { 'content-type': 'application/json' },
               }),
-              { operationId: 'pipelines.get', method: 'get', path: '/pipelines/{id}', tags: ['Pipelines'], summary: 'Retrieve pipeline', pathParams: [], queryParams: [], headerParams: [], bodySchema: undefined, bodyRequired: false, ndjsonRequest: false, ndjsonResponse: false, noContent: false }
+              {
+                operationId: 'pipelines.get',
+                method: 'get',
+                path: '/pipelines/{id}',
+                tags: ['Pipelines'],
+                summary: 'Retrieve pipeline',
+                pathParams: [],
+                queryParams: [],
+                headerParams: [],
+                bodySchema: undefined,
+                bodyRequired: false,
+                ndjsonRequest: false,
+                ndjsonResponse: false,
+                noContent: false,
+              }
             )
           } else {
             process.stdout.write(JSON.stringify(pipeline, null, 2) + '\n')
@@ -448,7 +472,8 @@ export async function createProgram() {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
         'created-after': {
           type: 'string',
-          description: 'Only events created after this (Unix timestamp or ISO date, default: 24h ago)',
+          description:
+            'Only events created after this (Unix timestamp or ISO date, default: 24h ago)',
         },
         limit: {
           type: 'string',
@@ -480,10 +505,9 @@ export async function createProgram() {
         const qs = params.toString() ? `?${params}` : ''
 
         const res = await handler(
-          new Request(
-            `http://localhost/pipelines/${pipelineId}/simulate_webhook_sync${qs}`,
-            { method: 'POST' }
-          )
+          new Request(`http://localhost/pipelines/${pipelineId}/simulate_webhook_sync${qs}`, {
+            method: 'POST',
+          })
         )
 
         if (!res.ok) {

@@ -24,7 +24,16 @@ export interface PipelineSyncOptions {
 }
 
 export async function renderPipelineSync(opts: PipelineSyncOptions) {
-  const { handler, pipelineId, stateLimit, timeLimit, streams, resetState, plain, connectorOverrides } = opts
+  const {
+    handler,
+    pipelineId,
+    stateLimit,
+    timeLimit,
+    streams,
+    resetState,
+    plain,
+    connectorOverrides,
+  } = opts
   const syncRunId = opts.syncRunId ?? randomUUID()
 
   const logFile = syncRunLogPath(pipelineId, syncRunId)
@@ -70,7 +79,9 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         const body = {
           ...(streams ? { streams } : {}),
           ...(connectorOverrides?.source ? { source: connectorOverrides.source } : {}),
-          ...(connectorOverrides?.destination ? { destination: connectorOverrides.destination } : {}),
+          ...(connectorOverrides?.destination
+            ? { destination: connectorOverrides.destination }
+            : {}),
         }
 
         const res = await handler(

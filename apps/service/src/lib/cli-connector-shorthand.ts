@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty'
 import type { CommandDef } from 'citty'
+import { z } from 'zod'
 
 export type ConnectorBodyKey = 'source' | 'destination'
 
@@ -152,43 +153,43 @@ export function extractConnectorOverrides(
 /**
  * Merges connector overrides (from extractConnectorOverrides) into a pipeline object in-place.
  * Each override's type-keyed config is shallow-merged on top of the existing connector config.
- * If a connector spec schema is provided, override keys are validated against it.
+ * When a Zod configSchema is provided, the merged config is validated through it so that
+ * unknown keys and type mismatches are caught immediately.
  */
 export function mergeConnectorOverrides(
   pipeline: Record<string, unknown>,
   overrides: { source?: Record<string, unknown>; destination?: Record<string, unknown> },
-  specSchemas?: { source?: Record<string, unknown>; destination?: Record<string, unknown> }
+  configSchemas?: { source?: z.ZodType; destination?: z.ZodType }
 ) {
   for (const key of ['source', 'destination'] as const) {
     const override = overrides[key]
     if (!override) continue
     const connectorName = override.type as string
     const overrideConfig = override[connectorName] as Record<string, unknown>
-    const existing =
-      (pipeline[key] as Record<string, unknown>)?.[connectorName] ?? {}
+    const existing = (pipeline[key] as Record<string, unknown>)?.[connectorName] ?? {}
+    const merged = { ...(existing as Record<string, unknown>), ...overrideConfig }
 
-    // Validate override keys against the spec schema or existing config
-    const knownKeys = specSchemas?.[key]
-      ? new Set(Object.keys(specSchemas[key]!))
-      : new Set(Object.keys(existing as Record<string, unknown>))
-    if (knownKeys.size > 0) {
-      for (const k of Object.keys(overrideConfig)) {
-        if (!knownKeys.has(k)) {
-          throw new Error(
-            `Unknown ${key} config key --${connectorName}.${k}. ` +
-              `Known keys: ${[...knownKeys].join(', ')}`
+    const schema = configSchemas?.[key]
+    if (schema) {
+      // Use strict mode so unknown keys (typos) are rejected
+      const strict = schema instanceof z.ZodObject ? schema.strict() : schema
+      const result = strict.safeParse(merged)
+      if (!result.success) {
+        const issues = result.error.issues
+          .map((i) =>
+            i.path.length > 0
+              ? `  --${connectorName}.${i.path.join('.')}: ${i.message}`
+              : `  ${i.message}`
           )
-        }
+          .join('\n')
+        throw new Error(`Invalid ${key} config override:\n${issues}`)
       }
     }
 
     pipeline[key] = {
       ...(pipeline[key] as Record<string, unknown>),
       type: connectorName,
-      [connectorName]: {
-        ...(existing as Record<string, unknown>),
-        ...overrideConfig,
-      },
+      [connectorName]: merged,
     }
   }
 }
@@ -272,7 +273,10 @@ export function wrapPipelineConnectorShorthand(
           resolvedArgs = { ...resolvedArgs, source: JSON.stringify(pipelineConfig.source) }
         }
         if (pipelineConfig.destination && resolvedArgs.destination === undefined) {
-          resolvedArgs = { ...resolvedArgs, destination: JSON.stringify(pipelineConfig.destination) }
+          resolvedArgs = {
+            ...resolvedArgs,
+            destination: JSON.stringify(pipelineConfig.destination),
+          }
         }
         if (pipelineConfig.streams && resolvedArgs.streams === undefined) {
           resolvedArgs = { ...resolvedArgs, streams: JSON.stringify(pipelineConfig.streams) }
