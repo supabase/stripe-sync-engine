@@ -1,6 +1,6 @@
 import net from 'node:net'
 import { Duplex } from 'node:stream'
-// import { sslConfigFromConnectionString, stripSslParams } from './sslConfigFromConnectionString.js'
+import { sslConfigFromConnectionString, stripSslParams } from './sslConfigFromConnectionString.js'
 
 type PgTargetConfig = {
   host?: string
@@ -176,6 +176,33 @@ function shouldBypassPgProxy(targetHost: string | undefined, env: PgProxyEnv): b
   return entries.includes(targetHost.toLowerCase())
 }
 
+/**
+ * Normalize SSL config for a node-postgres connection.
+ *
+ * node-postgres parses connectionString last (`Object.assign({}, config, parse(connectionString))`),
+ * so `sslmode` in the URL always overwrites any `ssl` key on the config object. This function
+ * strips SSL params from the connection string and translates `sslmode` to Node.js TLS options,
+ * but only when the caller hasn't already set an explicit `ssl` key.
+ *
+ * Not currently called — this area has been repeatedly tricky (proxy + SSL + node-postgres
+ * interactions) and needs thorough testing across RDS, local Docker, and tunneled connections
+ * before enabling in production. When enabled, should be applied consistently to all pg
+ * connections (not just proxied ones) — call it in the pool factory, not inside withPgConnectProxy.
+ */
+export function normalizePgSslConfig<T extends object>(config: T): T {
+  const raw = config as Record<string, unknown>
+  if (typeof raw.connectionString !== 'string') return config
+
+  let result = { ...config, connectionString: stripSslParams(raw.connectionString) } as T
+  if (!('ssl' in raw)) {
+    const ssl = sslConfigFromConnectionString(raw.connectionString)
+    if (ssl !== false) {
+      result = { ...result, ssl } as T
+    }
+  }
+  return result
+}
+
 export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv = process.env): T {
   const proxyHost = env.PG_PROXY_HOST?.trim()
   if (!proxyHost) {
@@ -186,25 +213,6 @@ export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv 
   if (shouldBypassPgProxy(targetHost, env)) {
     return config
   }
-
-  // TODO: We may want to re-enable SSL stripping from the connection string.
-  // node-postgres parses connectionString last (Object.assign({}, config, parse(connectionString))),
-  // so sslmode in the URL always overwrites any `ssl` key we set — including explicit caller values.
-  // The fix below strips SSL params and translates sslmode to Node.js TLS options. However, this
-  // area has been repeatedly tricky (proxy + SSL + node-postgres interactions) and needs thorough
-  // testing across RDS, local Docker, and tunneled connections before enabling.
-  //
-  // const raw = config as Record<string, unknown>
-  // let mergedConfig = { ...config }
-  // if (typeof raw.connectionString === 'string') {
-  //   mergedConfig = { ...mergedConfig, connectionString: stripSslParams(raw.connectionString) }
-  //   if (!('ssl' in raw)) {
-  //     const ssl = sslConfigFromConnectionString(raw.connectionString)
-  //     if (ssl !== false) {
-  //       mergedConfig = { ...mergedConfig, ssl }
-  //     }
-  //   }
-  // }
 
   return {
     ...config,
