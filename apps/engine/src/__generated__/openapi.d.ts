@@ -430,9 +430,9 @@ export interface components {
                 /** @description Full backfill time span for this stream. */
                 time_range?: {
                     /** @description Inclusive lower bound (ISO 8601). */
-                    gte: string;
+                    gte?: string;
                     /** @description Exclusive upper bound (ISO 8601). */
-                    lt: string;
+                    lt?: string;
                 };
             } | {
                 /** @description Stream being reported on. */
@@ -708,8 +708,6 @@ export interface components {
             revalidate_objects?: string[];
             /** @description Max objects to backfill per stream (useful for testing) */
             backfill_limit?: number;
-            /** @description Max streams paginating in parallel (default: 5, capped at catalog size). */
-            max_concurrent_streams?: number;
             /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
             rate_limit?: number;
         };

@@ -550,13 +550,25 @@ importers:
 
   packages/logger:
     dependencies:
+      ink:
+        specifier: ^7
+        version: 7.0.1(@types/react@19.2.14)(react@19.2.5)
       pino:
         specifier: ^10
         version: 10.1.0
+      react:
+        specifier: 19.2.5
+        version: 19.2.5
     devDependencies:
+      '@stripe/sync-protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@types/node':
         specifier: ^24.5.0
         version: 24.10.1
+      '@types/react':
+        specifier: 19.2.14
+        version: 19.2.14
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)

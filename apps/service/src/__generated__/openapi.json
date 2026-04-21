@@ -975,12 +975,6 @@
             "maximum": 9007199254740991,
             "description": "Max objects to backfill per stream (useful for testing)"
           },
-          "max_concurrent_streams": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Max streams paginating in parallel (default: 5, capped at catalog size)."
-          },
           "rate_limit": {
             "type": "integer",
             "exclusiveMinimum": 0,
