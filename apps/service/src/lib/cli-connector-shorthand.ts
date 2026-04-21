@@ -131,16 +131,37 @@ export function wrapPipelineConnectorShorthand(
   if (args.destination && typeof args.destination === 'object') {
     args.destination = { ...args.destination, required: false }
   }
+  args['x-pipeline'] = {
+    type: 'string',
+    required: false,
+    description: 'Full pipeline config as inline JSON or path to a JSON file',
+  }
 
   return defineCommand({
     ...command,
     args,
     async run(input) {
-      const argsWithSource = applyConnectorShorthand(
-        input.args as Record<string, unknown>,
-        'source',
-        options.sources
-      )
+      let resolvedArgs = input.args as Record<string, unknown>
+
+      // --x-pipeline provides the full PipelineConfig (same format as the engine's
+      // X-Pipeline header): { source: { type, [type]: {...} }, destination: {...}, streams?: [...] }
+      const xPipeline = resolvedArgs['x-pipeline'] as string | undefined
+      if (xPipeline) {
+        const { parseJsonOrFile } = await import('@stripe/sync-ts-cli')
+        const pipelineConfig = parseJsonOrFile(xPipeline)
+        // Map PipelineConfig fields to the service body fields
+        if (pipelineConfig.source && resolvedArgs.source === undefined) {
+          resolvedArgs = { ...resolvedArgs, source: JSON.stringify(pipelineConfig.source) }
+        }
+        if (pipelineConfig.destination && resolvedArgs.destination === undefined) {
+          resolvedArgs = { ...resolvedArgs, destination: JSON.stringify(pipelineConfig.destination) }
+        }
+        if (pipelineConfig.streams && resolvedArgs.streams === undefined) {
+          resolvedArgs = { ...resolvedArgs, streams: JSON.stringify(pipelineConfig.streams) }
+        }
+      }
+
+      const argsWithSource = applyConnectorShorthand(resolvedArgs, 'source', options.sources)
       const argsWithDestination = applyConnectorShorthand(
         argsWithSource,
         'destination',
