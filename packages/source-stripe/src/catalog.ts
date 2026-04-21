@@ -15,7 +15,7 @@ export function catalogFromOpenApi(
   const tableMap = new Map(tables.map((t) => [t.tableName, t]))
 
   const streams: Stream[] = Object.entries(registry)
-    .filter(([, cfg]) => cfg.sync !== false)
+    .filter(([, cfg]) => cfg.sync !== false && tableMap.has(cfg.tableName))
     .sort(([, a], [, b]) => a.order - b.order)
     .map(([name, cfg]) => {
       const table = tableMap.get(cfg.tableName)
