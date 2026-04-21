@@ -99,7 +99,8 @@ export function buildResourceRegistry(
   spec: OpenApiSpec,
   apiKey: string,
   apiVersion: string,
-  baseUrl?: string
+  baseUrl?: string,
+  allowedTables?: Set<string>
 ): Record<string, ResourceConfig> {
   const endpoints = discoverListEndpoints(spec)
   const nestedEndpoints = discoverNestedEndpoints(spec, endpoints)
@@ -108,6 +109,7 @@ export function buildResourceRegistry(
 
   for (const [tableName, endpoint] of endpoints) {
     if (EXCLUDED_TABLES.has(tableName)) continue
+    if (allowedTables && !allowedTables.has(tableName)) continue
     const isV2 = isV2Path(endpoint.apiPath)
     const children = nestedEndpoints
       .filter((n: NestedEndpoint) => n.parentTableName === tableName)

@@ -145,16 +145,18 @@ export function createStripeSource(
       }
 
       const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch())
-      const registry = buildResourceRegistry(
-        resolved.spec,
-        config.api_key,
-        resolved.apiVersion,
-        config.base_url
-      )
       const parser = new SpecParser()
       const parsed = parser.parse(resolved.spec, {
         resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
       })
+      const allowedTables = new Set(parsed.tables.map((t) => t.tableName))
+      const registry = buildResourceRegistry(
+        resolved.spec,
+        config.api_key,
+        resolved.apiVersion,
+        config.base_url,
+        allowedTables
+      )
       const catalog = catalogFromOpenApi(parsed.tables, registry)
       discoverCache.set(apiVersion, catalog)
       yield { type: 'catalog' as const, catalog }
@@ -267,13 +269,14 @@ export function createStripeSource(
           const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)
           const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
           const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch(signal))
+          const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
           const registry = buildResourceRegistry(
             resolved.spec,
             config.api_key,
             resolved.apiVersion,
-            config.base_url
+            config.base_url,
+            streamNames
           )
-          const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
           let accountId: string
           let accountCreated: number
           try {
