@@ -691,6 +691,7 @@ export async function createApp(resolver: ConnectorResolver) {
   // NOTE: no HTTP auth on /internal/* — only safe on a trusted private network.
 
   const internalQueryRoute = createRoute({
+    operationId: 'internalQuery',
     method: 'post',
     path: '/internal/query',
     tags: ['Internal'],

@@ -239,50 +239,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Run a SQL query against a Postgres connection */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        connection_string?: string;
-                        url?: string;
-                        sql: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Query results */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            rows: {
-                                [key: string]: unknown;
-                            }[];
-                            rowCount: number | null;
-                        };
-                    };
-                };
-                /** @description Invalid params */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: unknown;
-                        };
-                    };
-                };
-            };
-        };
+        post: operations["internalQuery"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1292,6 +1249,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    internalQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    connection_string?: string;
+                    url?: string;
+                    sql: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Query results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        rows: {
+                            [key: string]: unknown;
+                        }[];
+                        rowCount: number | null;
+                    };
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
             };
         };
     };

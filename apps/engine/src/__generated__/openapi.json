@@ -799,6 +799,7 @@
     },
     "/internal/query": {
       "post": {
+        "operationId": "internalQuery",
         "tags": [
           "Internal"
         ],
