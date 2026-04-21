@@ -11,10 +11,6 @@ function extractSql(args: unknown[]): string | undefined {
   return undefined
 }
 
-function extractParams(args: unknown[]): unknown[] | undefined {
-  if (Array.isArray(args[1])) return args[1]
-  return undefined
-}
 
 type Queryable = pg.Pool | pg.Client
 
@@ -32,7 +28,6 @@ export function withQueryLogging<T extends Queryable>(queryable: T, log: Logger 
   ;(queryable as any).query = async function (...args: unknown[]) {
     const sqlText = extractSql(args)
     const sqlLabel = sqlText?.replace(/\s+/g, ' ').slice(0, 300) ?? '(unknown)'
-    const params = extractParams(args)
     const start = Date.now()
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,7 +37,6 @@ export function withQueryLogging<T extends Queryable>(queryable: T, log: Logger 
         duration_ms: Date.now() - start,
         rows: result?.rowCount ?? 0,
         sql: sqlLabel,
-        ...(params && { params }),
       })
       return result
     } catch (err) {
@@ -52,7 +46,6 @@ export function withQueryLogging<T extends Queryable>(queryable: T, log: Logger 
         duration_ms: Date.now() - start,
         error: msg,
         sql: sqlLabel,
-        ...(params && { params }),
       })
       throw err
     }
