@@ -81,7 +81,7 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
 }
 
 /** Create a new spreadsheet and return its ID. */
-export async function ensureSpreadsheet(sheets: sheets_v4.Sheets, title: string): Promise<string> {
+export async function createSpreadsheet(sheets: sheets_v4.Sheets, title: string): Promise<string> {
   const res = await withRetry(() =>
     sheets.spreadsheets.create({
       requestBody: { properties: { title } },
@@ -93,10 +93,134 @@ export async function ensureSpreadsheet(sheets: sheets_v4.Sheets, title: string)
   return id
 }
 
+/** Metadata returned by {@link getSpreadsheetMeta} for reuse across setup steps. */
+export interface SpreadsheetMeta {
+  sheets: Array<{
+    title: string
+    sheetId: number
+    hasProtection: boolean
+  }>
+}
+
+/** Fetch spreadsheet metadata once for reuse by ensureSheets, ensureIntroSheet, protectSheets. */
+export async function getSpreadsheetMeta(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string
+): Promise<SpreadsheetMeta> {
+  const meta = await withRetry(
+    () =>
+      sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets(properties(sheetId,title),protectedRanges(protectedRangeId))',
+      }),
+    'getSpreadsheetMeta'
+  )
+  return {
+    sheets: (meta.data.sheets ?? []).map((s) => ({
+      title: s.properties?.title ?? '',
+      sheetId: s.properties?.sheetId ?? 0,
+      hasProtection: (s.protectedRanges ?? []).length > 0,
+    })),
+  }
+}
+
 /**
- * Ensure a tab (sheet) exists for a given stream name with a header row.
- * If the spreadsheet already has a "Sheet1" default tab, rename it for the first stream.
- * Returns the numeric sheetId for use in subsequent API calls (e.g. protect range).
+ * Ensure tabs exist for all streams in one pass.
+ *
+ * 1. Uses pre-fetched metadata to find existing/missing tabs.
+ * 2. Creates all missing tabs in a single batchUpdate (renames Sheet1 for first if present).
+ * 3. Writes all header rows in a single values.batchUpdate.
+ *
+ * Returns a Map of stream name → numeric sheetId.
+ */
+export async function ensureSheets(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  meta: SpreadsheetMeta,
+  streamHeaders: Array<{ streamName: string; headers: string[] }>
+): Promise<Map<string, number>> {
+  const existingByName = new Map(meta.sheets.map((s) => [s.title, s.sheetId]))
+  const result = new Map<string, number>()
+  const toCreate: string[] = []
+
+  for (const { streamName } of streamHeaders) {
+    const existingId = existingByName.get(streamName)
+    if (existingId !== undefined) {
+      result.set(streamName, existingId)
+    } else {
+      toCreate.push(streamName)
+    }
+  }
+
+  if (toCreate.length > 0) {
+    const requests: sheets_v4.Schema$Request[] = []
+    let renamedSheet1 = false
+
+    // Rename Sheet1 for the first missing tab if available
+    const sheet1 = meta.sheets.find((s) => s.title === 'Sheet1')
+    if (sheet1) {
+      requests.push({
+        updateSheetProperties: {
+          properties: { sheetId: sheet1.sheetId, title: toCreate[0] },
+          fields: 'title',
+        },
+      })
+      result.set(toCreate[0], sheet1.sheetId)
+      renamedSheet1 = true
+    }
+
+    const startIdx = renamedSheet1 ? 1 : 0
+    for (let i = startIdx; i < toCreate.length; i++) {
+      requests.push({ addSheet: { properties: { title: toCreate[i] } } })
+    }
+
+    const res = await withRetry(
+      () =>
+        sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: { requests },
+        }),
+      'ensureSheets:create'
+    )
+
+    const replies = res.data.replies ?? []
+    let replyIdx = renamedSheet1 ? 1 : 0
+    for (let i = startIdx; i < toCreate.length; i++) {
+      const sheetId = replies[replyIdx]?.addSheet?.properties?.sheetId
+      if (sheetId == null) {
+        throw new Error(`Failed to get sheetId for new sheet "${toCreate[i]}"`)
+      }
+      result.set(toCreate[i], sheetId)
+      replyIdx++
+    }
+  }
+
+  // Write all header rows in one values.batchUpdate
+  const headerData = streamHeaders
+    .filter(({ headers }) => headers.length > 0)
+    .map(({ streamName, headers }) => ({
+      range: `'${streamName}'!A1`,
+      values: [headers],
+    }))
+
+  if (headerData.length > 0) {
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId,
+          requestBody: { valueInputOption: 'RAW', data: headerData },
+        }),
+      'ensureSheets:headers'
+    )
+  }
+
+  return result
+}
+
+/**
+ * Ensure a single tab exists with a header row.
+ * Used by the write path for on-demand tab creation (new stream or header change).
+ * For bulk setup, prefer {@link ensureSheets}.
  */
 export async function ensureSheet(
   sheets: sheets_v4.Sheets,
@@ -104,63 +228,9 @@ export async function ensureSheet(
   streamName: string,
   headers: string[]
 ): Promise<number> {
-  // Get existing sheets
-  const meta = await withRetry(() =>
-    sheets.spreadsheets.get({
-      spreadsheetId,
-      fields: 'sheets.properties',
-    })
-  )
-  const existing = meta.data.sheets ?? []
-
-  // Tab already exists — write header row and return its ID
-  const found = existing.find((s) => s.properties?.title === streamName)
-  if (found) {
-    await writeHeaderRow(sheets, spreadsheetId, streamName, headers)
-    return found.properties!.sheetId!
-  }
-
-  // If there's a default "Sheet1" and this is the first real stream, rename it
-  if (
-    existing.length === 1 &&
-    existing[0]?.properties?.title === 'Sheet1' &&
-    existing[0]?.properties?.sheetId !== undefined
-  ) {
-    const sheetId = existing[0].properties.sheetId!
-    await withRetry(() =>
-      sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        requestBody: {
-          requests: [
-            {
-              updateSheetProperties: {
-                properties: { sheetId, title: streamName },
-                fields: 'title',
-              },
-            },
-          ],
-        },
-      })
-    )
-    await writeHeaderRow(sheets, spreadsheetId, streamName, headers)
-    return sheetId
-  }
-
-  // Add a new tab and capture its sheetId from the response
-  const addRes = await withRetry(() =>
-    sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: {
-        requests: [{ addSheet: { properties: { title: streamName } } }],
-      },
-    })
-  )
-  const sheetId = addRes.data.replies?.[0]?.addSheet?.properties?.sheetId
-  if (sheetId == null) {
-    throw new Error(`Failed to get sheetId for new sheet "${streamName}"`)
-  }
-  await writeHeaderRow(sheets, spreadsheetId, streamName, headers)
-  return sheetId
+  const meta = await getSpreadsheetMeta(sheets, spreadsheetId)
+  const result = await ensureSheets(sheets, spreadsheetId, meta, [{ streamName, headers }])
+  return result.get(streamName)!
 }
 
 async function writeHeaderRow(
@@ -222,26 +292,19 @@ function parseUpdatedRows(updatedRange: string): { startRow: number; endRow: num
  * Create or update an "Overview" intro tab at index 0.
  * Lists the synced streams and warns users not to edit data tabs.
  */
-export async function createIntroSheet(
+export async function ensureIntroSheet(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
+  meta: SpreadsheetMeta,
   streamNames: string[]
 ): Promise<void> {
   const TITLE = 'Overview'
-
-  const meta = await withRetry(() =>
-    sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' })
-  )
-  const existing = meta.data.sheets ?? []
-  const hasOverview = existing.some((s) => s.properties?.title === TITLE)
+  const hasOverview = meta.sheets.some((s) => s.title === TITLE)
 
   if (!hasOverview) {
     // Rename "Sheet1" if it's the only tab, otherwise insert at index 0
-    const onlySheet1 =
-      existing.length === 1 &&
-      existing[0]?.properties?.title === 'Sheet1' &&
-      existing[0]?.properties?.sheetId !== undefined
-    if (onlySheet1) {
+    const sheet1 = meta.sheets.find((s) => s.title === 'Sheet1')
+    if (meta.sheets.length === 1 && sheet1) {
       await withRetry(() =>
         sheets.spreadsheets.batchUpdate({
           spreadsheetId,
@@ -249,7 +312,7 @@ export async function createIntroSheet(
             requests: [
               {
                 updateSheetProperties: {
-                  properties: { sheetId: existing[0]!.properties!.sheetId!, title: TITLE },
+                  properties: { sheetId: sheet1.sheetId, title: TITLE },
                   fields: 'title',
                 },
               },
@@ -300,41 +363,41 @@ export async function createIntroSheet(
 }
 
 /**
- * Add warning-only protection to a set of sheets by their numeric sheetIds.
- * Users will see a warning dialog before editing but are not blocked.
- * Idempotent — skips sheets that already have protection.
+ * Add warning-only protection to sheets that don't already have it.
+ * Uses pre-fetched metadata to skip already-protected sheets and batches
+ * all `addProtectedRange` requests into a single API call.
  */
 export async function protectSheets(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
+  meta: SpreadsheetMeta,
   sheetIds: number[]
 ): Promise<void> {
+  const alreadyProtected = new Set(
+    meta.sheets.filter((s) => s.hasProtection).map((s) => s.sheetId)
+  )
+  const requests: sheets_v4.Schema$Request[] = []
   for (const sheetId of sheetIds) {
-    try {
-      await withRetry(() =>
-        sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                addProtectedRange: {
-                  protectedRange: {
-                    range: { sheetId },
-                    description:
-                      'Managed by Stripe Sync Engine — edits may be overwritten on next sync',
-                    warningOnly: true,
-                  },
-                },
-              },
-            ],
-          },
-        })
-      )
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('already has sheet protection')) continue
-      throw err
-    }
+    if (alreadyProtected.has(sheetId)) continue
+    requests.push({
+      addProtectedRange: {
+        protectedRange: {
+          range: { sheetId },
+          description: 'Managed by Stripe Sync Engine — edits may be overwritten on next sync',
+          warningOnly: true,
+        },
+      },
+    })
   }
+  if (requests.length === 0) return
+  await withRetry(
+    () =>
+      sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      }),
+    'protectSheets'
+  )
 }
 
 /** Append rows to a named sheet tab. Values are stringified for Sheets. */

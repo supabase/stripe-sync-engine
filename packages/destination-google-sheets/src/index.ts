@@ -22,10 +22,12 @@ import {
   batchReadSheets,
   buildRowMapFromPkColumns,
   buildRowMapFromRows,
-  createIntroSheet,
+  ensureIntroSheet,
   deleteSpreadsheet,
   ensureSheet,
-  ensureSpreadsheet,
+  ensureSheets,
+  getSpreadsheetMeta,
+  createSpreadsheet,
   findSheetId,
   protectSheets,
   readHeaderRow,
@@ -34,14 +36,16 @@ import {
 } from './writer.js'
 
 export {
-  ensureSpreadsheet,
+  createSpreadsheet,
   ensureSheet,
+  ensureSheets,
+  getSpreadsheetMeta,
   appendRows,
   updateRows,
   readHeaderRow,
   readSheet,
   buildRowMap,
-  createIntroSheet,
+  ensureIntroSheet,
   protectSheets,
   deleteSpreadsheet,
 } from './writer.js'
@@ -128,31 +132,38 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
     },
 
     async *setup({ config, catalog }) {
-      if (config.spreadsheet_id) return
       const sheets = sheetsClient ?? makeSheetsClient(config)
-      const spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
+      const isNew = !config.spreadsheet_id
+      const spreadsheetId = isNew
+        ? await createSpreadsheet(sheets, config.spreadsheet_title)
+        : config.spreadsheet_id!
 
+      // Fetch metadata once, reuse for all setup steps
+      const meta = await getSpreadsheetMeta(sheets, spreadsheetId)
+
+      // Ensure every catalog stream has a tab and headers (single batchUpdate + single values.batchUpdate).
       // Data tabs must exist before the Overview is written: its rows contain
       // `=COUNTUNIQUE('<stream>'!A2:A)` formulas that Sheets parses with
       // USER_ENTERED. If the referenced sheet doesn't exist yet the API
       // rejects the update with `Unable to parse range: <stream>!A2:A`.
-      const sheetIds: number[] = []
-      for (const { stream } of catalog.streams) {
+      const streamHeaders = catalog.streams.map(({ stream }) => {
         const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
-        const headers = properties ? Object.keys(properties) : []
-        const sheetId = await ensureSheet(sheets, spreadsheetId, stream.name, headers)
-        sheetIds.push(sheetId)
-      }
+        return { streamName: stream.name, headers: properties ? Object.keys(properties) : [] }
+      })
+      const sheetIdMap = await ensureSheets(sheets, spreadsheetId, meta, streamHeaders)
+      const sheetIds = catalog.streams.map((s) => sheetIdMap.get(s.stream.name)!)
 
       const streamNames = catalog.streams.map((s) => s.stream.name)
-      await createIntroSheet(sheets, spreadsheetId, streamNames)
+      await ensureIntroSheet(sheets, spreadsheetId, meta, streamNames)
 
-      await protectSheets(sheets, spreadsheetId, sheetIds)
+      await protectSheets(sheets, spreadsheetId, meta, sheetIds)
 
-      yield msg.control({
-        control_type: 'destination_config',
-        destination_config: { ...config, spreadsheet_id: spreadsheetId },
-      })
+      if (isNew) {
+        yield msg.control({
+          control_type: 'destination_config',
+          destination_config: { ...config, spreadsheet_id: spreadsheetId },
+        })
+      }
     },
 
     async *teardown({ config }) {
@@ -193,7 +204,7 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
 
       const spreadsheetId = config.spreadsheet_id
         ? config.spreadsheet_id
-        : await ensureSpreadsheet(sheets, config.spreadsheet_title)
+        : await createSpreadsheet(sheets, config.spreadsheet_title)
 
       // Per-stream state: column headers plus buffered appends/updates.
       const streamHeaders = new Map<string, string[]>()
