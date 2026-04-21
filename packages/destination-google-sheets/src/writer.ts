@@ -2,7 +2,12 @@ import type { drive_v3, sheets_v4 } from 'googleapis'
 import { log } from './logger.js'
 import { serializeRowKey } from './metadata.js'
 
-/** Low-level Sheets API ops. Caller supplies an authenticated client. */
+/**
+ * Low-level Sheets API write operations.
+ *
+ * Takes an already-authenticated `sheets_v4.Sheets` client (injected by caller).
+ * Handles spreadsheet creation, tab management, header rows, and batch appends.
+ */
 
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_MAX_MS = 32000
@@ -89,8 +94,9 @@ export async function ensureSpreadsheet(sheets: sheets_v4.Sheets, title: string)
 }
 
 /**
- * Ensure a tab exists for `streamName` and write its header row. Renames
- * the default "Sheet1" on first use. Returns the numeric sheetId.
+ * Ensure a tab (sheet) exists for a given stream name with a header row.
+ * If the spreadsheet already has a "Sheet1" default tab, rename it for the first stream.
+ * Returns the numeric sheetId for use in subsequent API calls (e.g. protect range).
  */
 export async function ensureSheet(
   sheets: sheets_v4.Sheets,
@@ -98,6 +104,7 @@ export async function ensureSheet(
   streamName: string,
   headers: string[]
 ): Promise<number> {
+  // Get existing sheets
   const meta = await withRetry(() =>
     sheets.spreadsheets.get({
       spreadsheetId,
@@ -106,13 +113,14 @@ export async function ensureSheet(
   )
   const existing = meta.data.sheets ?? []
 
+  // Tab already exists — write header row and return its ID
   const found = existing.find((s) => s.properties?.title === streamName)
   if (found) {
     await writeHeaderRow(sheets, spreadsheetId, streamName, headers)
     return found.properties!.sheetId!
   }
 
-  // First stream on a fresh spreadsheet: reuse the default Sheet1.
+  // If there's a default "Sheet1" and this is the first real stream, rename it
   if (
     existing.length === 1 &&
     existing[0]?.properties?.title === 'Sheet1' &&
@@ -138,6 +146,7 @@ export async function ensureSheet(
     return sheetId
   }
 
+  // Add a new tab and capture its sheetId from the response
   const addRes = await withRetry(() =>
     sheets.spreadsheets.batchUpdate({
       spreadsheetId,
@@ -209,7 +218,10 @@ function parseUpdatedRows(updatedRange: string): { startRow: number; endRow: num
   }
 }
 
-/** Create/update an "Overview" intro tab at index 0. */
+/**
+ * Create or update an "Overview" intro tab at index 0.
+ * Lists the synced streams and warns users not to edit data tabs.
+ */
 export async function createIntroSheet(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -224,7 +236,7 @@ export async function createIntroSheet(
   const hasOverview = existing.some((s) => s.properties?.title === TITLE)
 
   if (!hasOverview) {
-    // Reuse Sheet1 if it's the only tab, otherwise insert at index 0.
+    // Rename "Sheet1" if it's the only tab, otherwise insert at index 0
     const onlySheet1 =
       existing.length === 1 &&
       existing[0]?.properties?.title === 'Sheet1' &&
@@ -288,8 +300,9 @@ export async function createIntroSheet(
 }
 
 /**
- * Add warning-only protection to a set of sheets. Users are shown a warning
- * dialog but not blocked. Idempotent — skips already-protected sheets.
+ * Add warning-only protection to a set of sheets by their numeric sheetIds.
+ * Users will see a warning dialog before editing but are not blocked.
+ * Idempotent — skips sheets that already have protection.
  */
 export async function protectSheets(
   sheets: sheets_v4.Sheets,
@@ -324,7 +337,7 @@ export async function protectSheets(
   }
 }
 
-/** Append rows to a named sheet tab. */
+/** Append rows to a named sheet tab. Values are stringified for Sheets. */
 export async function appendRows(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -346,7 +359,10 @@ export async function appendRows(
   return updatedRange ? parseUpdatedRows(updatedRange) : undefined
 }
 
-/** Update rows by 1-based row number. One batchUpdate for all. */
+/**
+ * Update specific rows in a sheet by their 1-based row numbers.
+ * Uses a single batchUpdate call for efficiency.
+ */
 export async function updateRows(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -369,7 +385,10 @@ export async function updateRows(
   )
 }
 
-/** Delete a spreadsheet. Uses Drive — Sheets API has no delete. */
+/**
+ * Permanently delete a spreadsheet file via the Drive API.
+ * The Sheets API does not support deletion — Drive is required.
+ */
 export async function deleteSpreadsheet(
   drive: drive_v3.Drive,
   spreadsheetId: string
@@ -391,8 +410,8 @@ export function buildRowMapFromRows(
   const pkIndices = pkFields.map((field) => headers.indexOf(field))
   if (pkIndices.some((i) => i === -1)) return new Map()
 
+  // Skip header row (index 0), data starts at index 1
   const map = new Map<string, number>()
-  // allRows[0] is the header row; data starts at index 1.
   for (let i = 1; i < allRows.length; i++) {
     const row = allRows[i] as string[]
     const data: Record<string, unknown> = {}
@@ -401,12 +420,17 @@ export function buildRowMapFromRows(
     }
     const rowKey = serializeRowKey(primaryKey, data)
     if (rowKey === '[""]' || rowKey === '[null]') continue
-    map.set(rowKey, i + 1)
+    map.set(rowKey, i + 1) // 1-based: row 1 = headers, so data row at index i → row i+1
   }
   return map
 }
 
-/** readSheet + buildRowMapFromRows. Use the latter directly if you have the rows. */
+/**
+ * Build a map from serialized primary key → 1-based row number by reading
+ * existing sheet data and extracting only the primary key columns.
+ *
+ * `headers` must already be known (from `readHeaderRow` or first-record discovery).
+ */
 export async function buildRowMap(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
@@ -418,7 +442,7 @@ export async function buildRowMap(
   return buildRowMapFromRows(allRows, headers, primaryKey)
 }
 
-/** Read all values from a sheet tab. */
+/** Read all values from a sheet tab. Used for verification in tests. */
 export async function readSheet(
   sheets: sheets_v4.Sheets,
   spreadsheetId: string,
