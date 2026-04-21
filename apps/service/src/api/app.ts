@@ -491,7 +491,25 @@ export function createApp(options: AppOptions) {
     }
   )
 
-  // MARK: - Pipeline check
+  // MARK: - Pipeline check / setup / teardown
+
+  const OnlyParam = z.object({
+    only: z.enum(['source', 'destination']).optional().meta({
+      description: 'Run only the source or destination side',
+      example: 'destination',
+    }),
+  })
+
+  /** Fetch pipeline or return 404. */
+  async function requirePipeline(id: string) {
+    let pipeline: Pipeline
+    try {
+      pipeline = await pipelineStore.get(id)
+    } catch {
+      return null
+    }
+    return pipeline.desired_status === 'deleted' ? null : pipeline
+  }
 
   app.openapi(
     createRoute({
@@ -501,8 +519,9 @@ export function createApp(options: AppOptions) {
       tags: ['Pipelines'],
       summary: 'Check pipeline connectivity',
       description:
-        'Runs the `check()` method on both source and destination connectors and streams back NDJSON messages (connection_status, log, trace).',
-      requestParams: { path: PipelineIdParam },
+        'Runs the `check()` method on source and/or destination connectors and streams back NDJSON messages (connection_status, log, trace). ' +
+        'Pass ?only=source or ?only=destination to check a single side.',
+      requestParams: { path: PipelineIdParam, query: OnlyParam },
       responses: {
         200: {
           content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
@@ -516,30 +535,115 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-
-      let pipeline: Pipeline
-      try {
-        pipeline = await pipelineStore.get(id)
-      } catch {
-        return c.json({ error: `Pipeline ${id} not found` }, 404)
-      }
-      if (pipeline.desired_status === 'deleted') {
-        return c.json({ error: `Pipeline ${id} not found` }, 404)
-      }
+      const { only } = c.req.valid('query')
+      const pipeline = await requirePipeline(id)
+      if (!pipeline) return c.json({ error: `Pipeline ${id} not found` }, 404)
 
       const engine = options.engineUrl
         ? createRemoteEngine(options.engineUrl)
         : await localEnginePromise!
-      const output = engine.pipeline_check({
-        source: pipeline.source,
-        destination: pipeline.destination,
-      })
+      const output = engine.pipeline_check(
+        { source: pipeline.source, destination: pipeline.destination },
+        only ? { only } : undefined
+      )
 
       return ndjsonResponse(output, {
         onError: (err) =>
           engineMsg.log({
             level: 'error' as const,
             message: err instanceof Error ? err.message : `Check failed: ${String(err)}`,
+          }),
+      })
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.setup',
+      method: 'post',
+      path: '/pipelines/{id}/setup',
+      tags: ['Pipelines'],
+      summary: 'Run pipeline setup hooks',
+      description:
+        'Runs the `setup()` method on source and/or destination connectors (e.g. creating destination tables). ' +
+        'Streams NDJSON messages (control, log, trace). Pass ?only=source or ?only=destination to run a single side.',
+      requestParams: { path: PipelineIdParam, query: OnlyParam },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
+          description: 'Streaming NDJSON setup output',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { only } = c.req.valid('query')
+      const pipeline = await requirePipeline(id)
+      if (!pipeline) return c.json({ error: `Pipeline ${id} not found` }, 404)
+
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const output = engine.pipeline_setup(
+        { source: pipeline.source, destination: pipeline.destination, streams: pipeline.streams },
+        only ? { only } : undefined
+      )
+
+      return ndjsonResponse(output, {
+        onError: (err) =>
+          engineMsg.log({
+            level: 'error' as const,
+            message: err instanceof Error ? err.message : `Setup failed: ${String(err)}`,
+          }),
+      })
+    }
+  )
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.teardown',
+      method: 'post',
+      path: '/pipelines/{id}/teardown',
+      tags: ['Pipelines'],
+      summary: 'Run pipeline teardown hooks',
+      description:
+        'Runs the `teardown()` method on source and/or destination connectors (e.g. dropping destination tables). ' +
+        'Streams NDJSON messages (log, trace). Pass ?only=source or ?only=destination to run a single side.',
+      requestParams: { path: PipelineIdParam, query: OnlyParam },
+      responses: {
+        200: {
+          content: { 'application/x-ndjson': { schema: z.object({}).passthrough() } },
+          description: 'Streaming NDJSON teardown output',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { only } = c.req.valid('query')
+      const pipeline = await requirePipeline(id)
+      if (!pipeline) return c.json({ error: `Pipeline ${id} not found` }, 404)
+
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const output = engine.pipeline_teardown(
+        { source: pipeline.source, destination: pipeline.destination },
+        only ? { only } : undefined
+      )
+
+      return ndjsonResponse(output, {
+        onError: (err) =>
+          engineMsg.log({
+            level: 'error' as const,
+            message: err instanceof Error ? err.message : `Teardown failed: ${String(err)}`,
           }),
       })
     }

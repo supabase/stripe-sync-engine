@@ -79,10 +79,15 @@ export interface Engine {
   meta_destinations_get(type: string): Promise<ConnectorInfo>
 
   /**
-   * Run connector `check()` for both source and destination.
+   * Run connector `check()` for source and/or destination.
    * Yields {@link CheckOutput} messages (connection_status, log, trace) tagged with `_emitted_by`.
+   *
+   * Pass `only` to run a single side.
    */
-  pipeline_check(pipeline: PipelineConfig): AsyncIterable<CheckOutput>
+  pipeline_check(
+    pipeline: PipelineConfig,
+    opts?: { only?: 'source' | 'destination' }
+  ): AsyncIterable<CheckOutput>
 
   /**
    * Run connector `setup()` hooks for source and/or destination.
@@ -377,24 +382,25 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       yield* connector.discover({ config: sourceConfig })
     },
 
-    async *pipeline_check(pipeline) {
+    async *pipeline_check(pipeline, opts?) {
+      const runSource = opts?.only !== 'destination'
+      const runDest = opts?.only !== 'source'
+
       const [srcConnector, destConnector] = await Promise.all([
-        resolver.resolveSource(pipeline.source.type),
-        resolver.resolveDestination(pipeline.destination.type),
+        runSource ? resolver.resolveSource(pipeline.source.type) : null,
+        runDest ? resolver.resolveDestination(pipeline.destination.type) : null,
       ])
-      const rawSrc = configPayload(pipeline.source)
-      const rawDest = configPayload(pipeline.destination)
-      const [{ config: sourceConfig }, { config: destConfig }] = await Promise.all([
-        getSpec(srcConnector, rawSrc),
-        getSpec(destConnector, rawDest),
+      const [srcSpec, destSpec] = await Promise.all([
+        srcConnector ? getSpec(srcConnector, configPayload(pipeline.source)) : null,
+        destConnector ? getSpec(destConnector, configPayload(pipeline.destination)) : null,
       ])
 
       const sourceTag = `source/${pipeline.source.type}`
       const destTag = `destination/${pipeline.destination.type}`
 
       yield* merge(
-        map(srcConnector.check({ config: sourceConfig }), tag(sourceTag)),
-        map(destConnector.check({ config: destConfig }), tag(destTag))
+        runSource && srcConnector && map(srcConnector.check({ config: srcSpec!.config }), tag(sourceTag)),
+        runDest && destConnector && map(destConnector.check({ config: destSpec!.config }), tag(destTag))
       )
     },
 

@@ -1,4 +1,8 @@
 import { Readable } from 'node:stream'
+import net from 'node:net'
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, openSync } from 'node:fs'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { defineCommand } from 'citty'
 import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
@@ -85,6 +89,81 @@ async function maybeCreateTemporalClient(
 ): Promise<{ client: WorkflowClient; taskQueue: string } | undefined> {
   if (!address) return undefined
   return createTemporalClient(address, taskQueue)
+}
+
+function checkPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ port, host })
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', (error: NodeJS.ErrnoException) => {
+      socket.destroy()
+      if (error.code === 'ECONNREFUSED') {
+        resolve(false)
+        return
+      }
+      reject(error)
+    })
+  })
+}
+
+async function waitForHealth(url: string, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${url}/health`)
+      if (res.ok) return
+      lastError = new Error(`health responded ${res.status}`)
+    } catch (error) {
+      lastError = error
+    }
+    await sleep(250)
+  }
+  throw new Error(
+    `Timed out waiting for ${url}/health${lastError ? `: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''}`
+  )
+}
+
+async function setupEngineMitm(): Promise<string> {
+  const engineUrl = 'http://127.0.0.1:3000'
+  const proxyUrl = 'http://127.0.0.1:9090'
+
+  if (await checkPortOpen(3000)) {
+    throw new Error('Port 3000 already has a listener. Stop it before using --engine-mitm.')
+  }
+
+  mkdirSync('tmp', { recursive: true })
+  const logFd = openSync('tmp/engine-mitm-3000.log', 'a')
+  const child = spawn(
+    'node',
+    ['--use-env-proxy', '--conditions', 'bun', '--import', 'tsx', 'apps/engine/src/bin/serve.ts'],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, PORT: '3000' },
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    }
+  )
+  child.unref()
+
+  await waitForHealth(engineUrl, 15000)
+
+  const proxy = spawnSync(
+    'bash',
+    ['-lc', 'scripts/mitmweb-reverse-proxy.sh http://127.0.0.1:3000'],
+    { cwd: process.cwd(), encoding: 'utf8' }
+  )
+  if (proxy.status !== 0) {
+    throw new Error((proxy.stderr || proxy.stdout || 'Failed to start mitm reverse proxy').trim())
+  }
+
+  await waitForHealth(proxyUrl, 10000)
+  process.stderr.write(proxy.stdout)
+  process.stderr.write(`Engine MITM log: tmp/engine-mitm-3000.log\n`)
+  return proxyUrl
 }
 
 // Hand-written workflow command: start HTTP server
@@ -424,54 +503,94 @@ export async function createProgram() {
         },
       }) as CommandDef
 
+      /** Stream NDJSON from a pipeline endpoint, print status/log lines, exit on failure. */
+      async function streamPipelineAction(
+        pipelineId: string,
+        action: string,
+        only?: string
+      ): Promise<never> {
+        const qs = only ? `?only=${only}` : ''
+        const res = await handler(
+          new Request(`http://localhost/pipelines/${pipelineId}/${action}${qs}`, { method: 'POST' })
+        )
+        if (!res.ok) {
+          const text = await res.text()
+          process.stderr.write(`Error ${res.status}: ${text}\n`)
+          process.exit(1)
+        }
+        if (!res.body) {
+          process.stderr.write('No response body\n')
+          process.exit(1)
+        }
+
+        let failed = false
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.trim()) continue
+            const msg = JSON.parse(line)
+            if (msg.type === 'connection_status') {
+              const s = msg.connection_status
+              const tag = msg._emitted_by ?? ''
+              if (s.status === 'succeeded') {
+                process.stderr.write(`✓ ${tag}: connected\n`)
+              } else {
+                process.stderr.write(`✗ ${tag}: ${s.message ?? 'failed'}\n`)
+                failed = true
+              }
+            } else if (msg.type === 'log') {
+              process.stderr.write(`[${msg.log?.level ?? 'info'}] ${msg.log?.message ?? ''}\n`)
+            }
+            process.stdout.write(line + '\n')
+          }
+        }
+        process.exit(failed ? 1 : 0)
+      }
+
+      const onlyArg = {
+        only: {
+          type: 'string' as const,
+          description: 'Run only source or destination side (source|destination)',
+        },
+      }
+
       pipelineSubCommands['check'] = defineCommand({
         meta: { name: 'check', description: 'Check pipeline connectivity' },
         args: {
           id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
         },
         async run({ args }) {
-          const res = await handler(
-            new Request(`http://localhost/pipelines/${args.id}/check`, { method: 'POST' })
-          )
-          if (!res.ok) {
-            const text = await res.text()
-            process.stderr.write(`Error ${res.status}: ${text}\n`)
-            process.exit(1)
-          }
-          if (!res.body) {
-            process.stderr.write('No response body\n')
-            process.exit(1)
-          }
+          await streamPipelineAction(args.id as string, 'check', args.only)
+        },
+      }) as CommandDef
 
-          let failed = false
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-            for (const line of lines) {
-              if (!line.trim()) continue
-              const msg = JSON.parse(line)
-              if (msg.type === 'connection_status') {
-                const s = msg.connection_status
-                const tag = msg._emitted_by ?? ''
-                if (s.status === 'succeeded') {
-                  process.stderr.write(`✓ ${tag}: connected\n`)
-                } else {
-                  process.stderr.write(`✗ ${tag}: ${s.message ?? 'failed'}\n`)
-                  failed = true
-                }
-              } else if (msg.type === 'log') {
-                process.stderr.write(`[${msg.log?.level ?? 'info'}] ${msg.log?.message ?? ''}\n`)
-              }
-              process.stdout.write(line + '\n')
-            }
-          }
-          process.exit(failed ? 1 : 0)
+      pipelineSubCommands['setup'] = defineCommand({
+        meta: { name: 'setup', description: 'Run pipeline setup hooks (e.g. create tables)' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
+        },
+        async run({ args }) {
+          await streamPipelineAction(args.id as string, 'setup', args.only)
+        },
+      }) as CommandDef
+
+      pipelineSubCommands['teardown'] = defineCommand({
+        meta: { name: 'teardown', description: 'Run pipeline teardown hooks (e.g. drop tables)' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
+        },
+        async run({ args }) {
+          await streamPipelineAction(args.id as string, 'teardown', args.only)
         },
       }) as CommandDef
     }
@@ -503,8 +622,27 @@ export async function createProgram() {
           default: false,
           description: 'Plain text output (no Ink/ANSI)',
         },
+        'engine-mitm': {
+          type: 'boolean',
+          default: false,
+          description:
+            'Start a local engine on :3000 and route sync requests through mitm reverse proxy on :9090',
+        },
       },
       async run({ args }) {
+        if (args['engine-mitm']) {
+          if (serviceUrl) {
+            process.stderr.write('--engine-mitm is only supported when running the service CLI in-process\n')
+            process.exit(1)
+          }
+          try {
+            engineUrl = await setupEngineMitm()
+          } catch (error) {
+            process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+            process.exit(1)
+          }
+        }
+
         const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
           sources: sourceNames,
           destinations: destinationNames,

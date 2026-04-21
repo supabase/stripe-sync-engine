@@ -233,6 +233,14 @@ export async function createApp(resolver: ConnectorResolver) {
       )
   )
 
+  const onlyQueryParam = z.object({
+    only: z.enum(['source', 'destination']).optional().meta({
+      description:
+        'Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.',
+      example: 'destination',
+    }),
+  })
+
   const pipelineCheckRoute = createRoute({
     operationId: 'pipeline_check',
     method: 'post',
@@ -240,8 +248,9 @@ export async function createApp(resolver: ConnectorResolver) {
     tags: ['Stateless Sync API'],
     summary: 'Check connector connection',
     description:
-      'Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.',
-    requestParams: { header: pipelineHeaders },
+      'Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. ' +
+      'Pass ?only=source or ?only=destination to check a single side.',
+    requestParams: { header: pipelineHeaders, query: onlyQueryParam },
     responses: {
       200: {
         description: 'NDJSON stream of check messages',
@@ -255,18 +264,15 @@ export async function createApp(resolver: ConnectorResolver) {
       c.req.valid('header')['x-pipeline'],
       'x-pipeline header is required'
     )
+    const only = c.req.valid('query').only
     const context = { path: '/pipeline_check', ...syncRequestContext(pipeline) }
     return ndjsonResponse(
-      logApiStream('Engine API /pipeline_check', engine.pipeline_check(pipeline), context)
+      logApiStream(
+        'Engine API /pipeline_check',
+        engine.pipeline_check(pipeline, only ? { only } : undefined),
+        context
+      )
     )
-  })
-
-  const onlyQueryParam = z.object({
-    only: z.enum(['source', 'destination']).optional().meta({
-      description:
-        'Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.',
-      example: 'destination',
-    }),
   })
 
   const pipelineSetupRoute = createRoute({
