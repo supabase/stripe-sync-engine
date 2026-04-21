@@ -206,18 +206,23 @@ export async function* mergeAsync<T>(
     nextIndex = i + 1
   }
 
-  while (active.size > 0) {
-    const { index, result } = await Promise.race(active.values())
-    active.delete(index)
+  try {
+    while (active.size > 0) {
+      const { index, result } = await Promise.race(active.values())
+      active.delete(index)
 
-    if (result.done) {
-      if (nextIndex < iterables.length) {
-        pull(nextIndex)
-        nextIndex++
+      if (result.done) {
+        if (nextIndex < iterables.length) {
+          pull(nextIndex)
+          nextIndex++
+        }
+      } else {
+        yield result.value
+        pull(index)
       }
-    } else {
-      yield result.value
-      pull(index)
     }
+  } finally {
+    active.clear()
+    void Promise.allSettled(iterators.map((it) => it.return?.()))
   }
 }
