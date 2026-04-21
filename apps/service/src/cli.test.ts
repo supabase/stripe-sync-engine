@@ -463,7 +463,7 @@ describe('generated pipeline CLI', () => {
         pipelineId,
         '--streams',
         'customers,prices',
-        '--sync-run-id',
+        '--run-id',
         'run_demo',
         '--reset-state',
       ],

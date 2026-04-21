@@ -436,7 +436,7 @@ export async function createProgram() {
           type: 'string',
           description: 'Run sync in N-second chunks until complete',
         },
-        'sync-run-id': {
+        'run-id': {
           type: 'string',
           description: 'Sync run identifier (resumes or starts fresh)',
         },
@@ -482,7 +482,7 @@ export async function createProgram() {
           handler,
           pipelineId: args.id as string,
           timeLimit: args['chunk-time-limit'] ? parseInt(args['chunk-time-limit']) : undefined,
-          syncRunId: args['sync-run-id'],
+          syncRunId: args['run-id'],
           streams: parseStreamsArg(args.streams),
           resetState: args['reset-state'] === true,
           plain: args.plain || !process.stderr.isTTY,
