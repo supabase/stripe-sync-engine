@@ -70,12 +70,12 @@ async function main() {
     }
   }
 
-  for (const tab of tabs) {
-    for (const protectedRange of tab.protectedRanges ?? []) {
-      const protectedRangeId = protectedRange.protectedRangeId
-      if (protectedRangeId != null) {
-        requests.push({ deleteProtectedRange: { protectedRangeId } })
-      }
+  // Only remove protected ranges from the keeper tab — deleted tabs
+  // take their protected ranges with them automatically.
+  for (const protectedRange of keeper.protectedRanges ?? []) {
+    const protectedRangeId = protectedRange.protectedRangeId
+    if (protectedRangeId != null) {
+      requests.push({ deleteProtectedRange: { protectedRangeId } })
     }
   }
 
