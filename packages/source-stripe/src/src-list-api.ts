@@ -61,16 +61,21 @@ export function withRateLimit(listFn: ListFn, rateLimiter: RateLimiter, signal?:
 
     // Race listFn (which includes withHttpRetry) against the abort signal
     // so retries don't block past pipeline teardown.
-    return Promise.race([
-      listFn(params),
-      new Promise<never>((_, reject) => {
-        if (signal.aborted) {
-          reject(signal.reason)
-          return
-        }
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-      }),
-    ])
+    // Always throw AbortError so callers can reliably detect pipeline shutdown.
+    // Swallow the loser's rejection to avoid unhandled promise rejections.
+    const abortError = new DOMException('The operation was aborted', 'AbortError')
+    const listP = listFn(params)
+    const abortP = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(abortError)
+        return
+      }
+      signal.addEventListener('abort', () => reject(abortError), { once: true })
+    })
+    return Promise.race([listP, abortP]).finally(() => {
+      listP.catch(() => {})
+      abortP.catch(() => {})
+    })
   }
 }
 
