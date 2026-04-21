@@ -147,6 +147,32 @@ function buildMockApp() {
       })
     }
 
+    if (req.method === 'POST' && url.pathname.match(/^\/pipelines\/[^/]+\/check$/)) {
+      const id = url.pathname.split('/')[2]!
+      const pipeline = pipelines.get(id)
+      if (!pipeline) {
+        return new Response(JSON.stringify({ error: `Pipeline ${id} not found` }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      const lines = [
+        JSON.stringify({
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' },
+          _emitted_by: 'source/stripe',
+        }),
+        JSON.stringify({
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' },
+          _emitted_by: 'destination/postgres',
+        }),
+      ]
+      return new Response(lines.join('\n') + '\n', {
+        headers: { 'content-type': 'application/x-ndjson' },
+      })
+    }
+
     if (req.method === 'DELETE' && url.pathname.startsWith('/pipelines/')) {
       const id = url.pathname.split('/').pop()!
       const pipeline = pipelines.get(id)
@@ -348,9 +374,12 @@ describe('generated pipeline CLI', () => {
     expect(JSON.parse(getOutput)).toMatchObject({ id: 'pipe_shop_docker_pg' })
 
     writeSpy.mockClear()
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
     await runCommand(program, { rawArgs: ['pipelines', 'check', 'pipe_shop_docker_pg'] })
     const checkOutput = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join('')
-    expect(JSON.parse(checkOutput)).toMatchObject({ id: 'pipe_shop_docker_pg' })
+    expect(checkOutput).toContain('connection_status')
+    expect(exitSpy).toHaveBeenCalledWith(0)
+    exitSpy.mockRestore()
 
     writeSpy.mockClear()
     await runCommand(program, { rawArgs: ['pipelines', 'delete', 'pipe_shop_docker_pg'] })
