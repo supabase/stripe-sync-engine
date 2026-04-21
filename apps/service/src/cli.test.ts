@@ -489,7 +489,7 @@ describe('generated pipeline CLI', () => {
     stderrSpy.mockRestore()
   })
 
-  it('sync bounded mode uses 30-second requests by default', async () => {
+  it('sync chunk-time-limit uses repeated chunked requests', async () => {
     const mockApp = buildMockApp()
     createAppMock.mockImplementation(() => mockApp)
     vi.resetModules()
@@ -517,7 +517,7 @@ describe('generated pipeline CLI', () => {
     )
 
     await runCommand(program, {
-      rawArgs: ['pipelines', 'sync', pipelineId, '--bounded'],
+      rawArgs: ['pipelines', 'sync', pipelineId, '--chunk-time-limit', '30'],
     })
 
     expect(syncRequests).toHaveLength(2)

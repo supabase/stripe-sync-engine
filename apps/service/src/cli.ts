@@ -343,7 +343,10 @@ export async function createProgram() {
       }
       const pipeline = await res.json()
       if (overrides.source || overrides.destination) {
-        const configSchemas: { source?: import('zod').ZodType; destination?: import('zod').ZodType } = {}
+        const configSchemas: {
+          source?: import('zod').ZodType
+          destination?: import('zod').ZodType
+        } = {}
         if (overrides.source) {
           const name = (overrides.source.type ?? pipeline.source?.type) as string
           configSchemas.source = resolver.sources().get(name)?.configSchema
@@ -429,12 +432,9 @@ export async function createProgram() {
       meta: { name: 'sync', description: 'Run sync for a pipeline' },
       args: {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
-        'state-limit': { type: 'string', description: 'Max state messages before stopping' },
-        'time-limit': { type: 'string', description: 'Stop after N seconds' },
-        bounded: {
-          type: 'boolean',
-          default: false,
-          description: 'Run in bounded mode with 30-second sync requests',
+        'chunk-time-limit': {
+          type: 'string',
+          description: 'Run sync in N-second chunks until complete',
         },
         'sync-run-id': {
           type: 'string',
@@ -478,14 +478,10 @@ export async function createProgram() {
           }
         }
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
-        const boundedTimeLimit =
-          args.bounded === true && !args['time-limit'] ? 30 : undefined
         await renderPipelineSync({
           handler,
           pipelineId: args.id as string,
-          stateLimit: args['state-limit'] ? parseInt(args['state-limit']) : undefined,
-          timeLimit:
-            args['time-limit'] ? parseInt(args['time-limit']) : boundedTimeLimit,
+          timeLimit: args['chunk-time-limit'] ? parseInt(args['chunk-time-limit']) : undefined,
           syncRunId: args['sync-run-id'],
           streams: parseStreamsArg(args.streams),
           resetState: args['reset-state'] === true,
