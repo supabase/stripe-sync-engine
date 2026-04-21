@@ -25,6 +25,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { destinationTest } from './destination-test.js'
+import { log } from '../logger.js'
 import { buildCatalog, createEngine, withTimeRanges } from './engine.js'
 import type { ConnectorResolver } from './resolver.js'
 import { sourceTest } from './source-test.js'
@@ -1713,6 +1714,26 @@ describe('engine.pipeline_setup() timeout', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('does not log a timeout when setup completes without yielding messages', async () => {
+    const silentDestination = {
+      ...destinationTest,
+      async *setup(): AsyncIterable<SetupOutput> {
+        return
+      },
+    }
+
+    const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log)
+
+    const engine = await createEngine(makeResolver(sourceTest, silentDestination))
+    await drain(engine.pipeline_setup(defaultPipeline))
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'destination/destination-test setup timed out after 30s'
+    )
+
+    errorSpy.mockRestore()
   })
 
   it('terminates the stream when source setup exceeds the time limit', async () => {

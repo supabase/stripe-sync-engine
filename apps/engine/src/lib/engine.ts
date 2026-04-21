@@ -18,6 +18,7 @@ import {
   merge,
   map,
   withAbortOnReturn,
+  EofMessage,
 } from '@stripe/sync-protocol'
 
 const engineMsg = createEngineMessageFactory()
@@ -294,9 +295,10 @@ const SETUP_TIME_LIMIT_S = 30
 /** Apply takeLimits and strip the eof marker, emitting an error log on timeout. */
 function withSetupTimeout<T extends { type: string }>(
   stream: AsyncIterable<T>,
-  label: string
+  label: string,
+  opts: { timeLimitS: number }
 ): AsyncIterable<T> {
-  const limited = takeLimits({ time_limit: SETUP_TIME_LIMIT_S })(stream)
+  const limited = takeLimits({ time_limit: opts.timeLimitS })(stream)
   return {
     [Symbol.asyncIterator]() {
       const iter = limited[Symbol.asyncIterator]()
@@ -306,7 +308,10 @@ function withSetupTimeout<T extends { type: string }>(
             const result = await iter.next()
             if (result.done) return { value: undefined as unknown as T, done: true } as const
             if ((result.value as { type: string }).type === 'eof') {
-              log.error(`${label} setup timed out after ${SETUP_TIME_LIMIT_S}s`)
+              const eof = result.value as EofMessage
+              if (eof.eof.has_more) {
+                log.error(`${label} setup timed out after ${opts.timeLimitS}s`)
+              }
               return { value: undefined as unknown as T, done: true } as const
             }
             return { value: result.value as T, done: false } as const
@@ -432,7 +437,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
         runSource &&
           srcConnector?.setup &&
           map(
-            withSetupTimeout(srcConnector.setup({ config: srcSpec!.config, catalog }), sourceTag),
+            withSetupTimeout(srcConnector.setup({ config: srcSpec!.config, catalog }), sourceTag, {
+              timeLimitS: SETUP_TIME_LIMIT_S,
+            }),
             tag(sourceTag)
           ),
         runDest &&
@@ -440,7 +447,8 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           map(
             withSetupTimeout(
               destConnector.setup({ config: destSpec!.config, catalog: filteredCatalog }),
-              destTag
+              destTag,
+              { timeLimitS: SETUP_TIME_LIMIT_S }
             ),
             tag(destTag)
           )
