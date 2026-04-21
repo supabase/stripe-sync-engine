@@ -49,16 +49,17 @@ export function toIso(unixSeconds: number): string {
 export const DEFAULT_SUBDIVISION_FACTOR = 2
 
 /**
- * Subdivide ranges that have a cursor (were in progress but didn't complete).
+ * Subdivide an in-progress range (cursor set, one page fetched) into `n`
+ * parallel children covering the unfetched older remainder.
  *
- * Stripe list APIs return newest records first. After one page, the newer side
- * of the range is already fetched; the unfetched remainder is the older side,
- * plus the boundary second that may still have more rows after the current
- * cursor.
+ * Stripe returns records newest-first; the page covered `[splitPoint, range.lt)`.
+ * Split `[rangeStart, splitPoint)` into `n` equal segments; the top segment
+ * widens its `lt` to `splitPoint + 1` and inherits the cursor so one request
+ * drains the boundary second AND its older window via `starting_after` + a
+ * widened `created` filter.
  *
- * N-ary subdivision: split the older remainder into `n` equal segments.
- * Reaches full parallelism in O(log_n M) rounds. Wastes at most n-1 empty
- * probes per split on skewed data.
+ * Ranges with segment duration below 30s pass through unchanged so the cursor
+ * paginates them sequentially instead of fanning out empty probes.
  */
 export function subdivideRanges(
   remaining: Range[],
@@ -72,36 +73,32 @@ export function subdivideRanges(
       result.push(range)
       continue
     }
+    const newEnd = lastObserved.get(range)!
+    const start = toUnixSeconds(range.gte)
 
-    const splitPoint = lastObserved.get(range)!
-    const rangeStartUnix = toUnixSeconds(range.gte)
-    const rangeEndUnix = toUnixSeconds(range.lt)
-    const olderEndUnix = splitPoint
-
-    // Nothing older to split — keep paginating sequentially.
-    if (olderEndUnix <= rangeStartUnix) {
+    if (newEnd <= start) {
       result.push(range)
       continue
     }
 
-    // Boundary range: keeps the cursor to drain remaining records at this second.
-    const boundaryGteUnix = Math.max(rangeStartUnix, splitPoint)
-    const boundaryLtUnix = Math.min(rangeEndUnix, splitPoint + 1)
-    result.push({ gte: toIso(boundaryGteUnix), lt: toIso(boundaryLtUnix), cursor: range.cursor })
+    const secondsLeft = newEnd - start
+    const segments = Math.min(n, secondsLeft)
+    const segmentDuration = Math.floor(secondsLeft / segments)
+    if (segmentDuration < 30) {
+      result.push(range)
+      continue
+    }
 
-    // Split the older remainder [rangeStart, splitPoint) into n equal segments.
-    const span = olderEndUnix - rangeStartUnix
-    if (span <= 1) {
-      // Can't split a 1-second range further.
-      result.push({ gte: toIso(rangeStartUnix), lt: toIso(olderEndUnix), cursor: null })
-    } else {
-      const segments = Math.min(n, span) // don't create more segments than seconds
-      for (let i = 0; i < segments; i++) {
-        const segGte = rangeStartUnix + Math.floor((span * i) / segments)
-        const segLt = rangeStartUnix + Math.floor((span * (i + 1)) / segments)
-        if (segLt > segGte) {
-          result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
-        }
+    for (let i = 0; i < segments; i++) {
+      const segGte = start + segmentDuration * i
+      const segLt = Math.min(newEnd, segGte + segmentDuration) // set a ceiling to newEnd
+      const lastSegment = i === segments - 1
+      if (lastSegment) {
+        // handle the edge case where there are multiple objects created in a same second
+        //  but our fetch didn't return all of them because of the limit of 100.
+        result.push({ gte: toIso(segGte), lt: toIso(newEnd + 1), cursor: range.cursor })
+      } else {
+        result.push({ gte: toIso(segGte), lt: toIso(segLt), cursor: null })
       }
     }
   }

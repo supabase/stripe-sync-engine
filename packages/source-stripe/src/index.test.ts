@@ -2399,7 +2399,7 @@ describe('StripeSource', () => {
   })
 
   describe('read() — streams without supportsCreatedFilter sync sequentially', () => {
-    it('subdivides after first page and fetches boundary + halves in parallel', async () => {
+    it('subdivides after first page and fetches two older halves in parallel', async () => {
       const listFn = vi
         .fn()
         .mockResolvedValueOnce({
@@ -2440,9 +2440,11 @@ describe('StripeSource', () => {
       )
 
       // First call: full range → has_more + created=1_500_000_000.
-      // streamingSubdivide splits into: boundary [1_500_000_000, 1_500_000_001) + 2 older halves.
-      // All 3 child ranges return empty → exhausted → range_complete for each.
-      expect(listFn).toHaveBeenCalledTimes(4)
+      // streamingSubdivide splits into 2 older halves; the newest half widens
+      // its lt to splitPoint+1 and inherits the cursor, so the boundary second
+      // is drained inline instead of via a separate request.
+      // Both child ranges return has_more=false → exhausted → range_complete for each.
+      expect(listFn).toHaveBeenCalledTimes(3)
       expect(listFn).toHaveBeenNthCalledWith(1, {
         limit: 100,
         created: {
@@ -2467,20 +2469,20 @@ describe('StripeSource', () => {
           }),
         })
       )
-      // Boundary range around the split point should complete
+      // The newest older half absorbs the boundary: its lt extends to
+      // splitPoint+1 so the cursor paginates any shared-second records inline.
       expect(rangeCompletes).toContainEqual(
         expect.objectContaining({
           stream_status: expect.objectContaining({
             stream: 'customers',
-            range_complete: {
-              gte: new Date(1_500_000_000 * 1000).toISOString(),
+            range_complete: expect.objectContaining({
               lt: new Date(1_500_000_001 * 1000).toISOString(),
-            },
+            }),
           }),
         })
       )
-      // Head + boundary + 2 older halves = 4 range_complete events
-      expect(rangeCompletes).toHaveLength(4)
+      // Head + 2 older halves = 3 range_complete events
+      expect(rangeCompletes).toHaveLength(3)
     })
 
     it('uses sequential pagination (no created filter) for non-parallel streams', async () => {
