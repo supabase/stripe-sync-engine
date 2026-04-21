@@ -86,14 +86,16 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '\u2026'
 }
 
+const DATA_INDENT = ' '.repeat(19) // align under message text (timestamp + type label)
+
 function formatDataKV(data: Record<string, unknown>): string {
   const parts: string[] = []
   for (const [k, v] of Object.entries(data)) {
     if (SKIP_DATA_KEYS.has(k)) continue
     const val = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)
-    parts.push(`${DIM}${k}=${RESET}${truncate(val, 80)}`)
+    parts.push(`${DIM}${k}=${RESET}${truncate(val, 120)}`)
   }
-  return parts.length > 0 ? '  ' + parts.join(' ') : ''
+  return parts.length > 0 ? '\n' + DATA_INDENT + parts.join('\n' + DATA_INDENT) : ''
 }
 
 function formatLog(msg: { log: { level: string; message: string; data?: Record<string, unknown> }; _ts?: string }): string | null {
