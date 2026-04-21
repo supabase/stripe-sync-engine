@@ -247,11 +247,10 @@ async function resolvePipeline(
   ])
   const { catalog, filteredCatalog } = await discoverCatalog(engine, pipeline)
   const normalizedState = parseSyncState(state, srcSpec.streamStateSchema)
-  const catalogWithRanges = withTimeRanges(catalog, normalizedState?.sync_run?.time_ceiling)
   return {
     source: { connector: srcConnector, config: srcSpec.config },
     destination: { connector: destConnector, config: destSpec.config },
-    catalog: catalogWithRanges,
+    catalog,
     filteredCatalog,
     state: normalizedState,
   }
@@ -487,8 +486,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       return withAbortOnReturn((signal) =>
         (async function* (): AsyncGenerator<Message> {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
+          const catalogWithRanges = withTimeRanges(
+            p.catalog,
+            p.state?.sync_run?.time_ceiling
+          )
           const raw = p.source.connector.read(
-            { config: p.source.config, catalog: p.catalog, state: p.state?.source },
+            { config: p.source.config, catalog: catalogWithRanges, state: p.state?.source },
             input
           )
           const parsed = map(raw, (msg) => Message.parse(msg))
@@ -527,19 +530,11 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
           const isContinuation = opts?.run_id != null && p.state?.sync_run.run_id === opts.run_id
-          const activeCatalog = isContinuation
-            ? excludeTerminalStreams(p.catalog, p.state?.sync_run.progress)
-            : p.catalog
           const activeFilteredCatalog = isContinuation
             ? excludeTerminalStreams(p.filteredCatalog, p.state?.sync_run.progress)
             : p.filteredCatalog
 
-          // Source → destination pipeline. The destination is the sole consumer,
-          // giving natural pull-based backpressure with zero intermediate buffering.
-          const sourceOutput = p.source.connector.read(
-            { config: p.source.config, catalog: activeCatalog, state: p.state?.source },
-            input
-          )
+          // Run reducer first so time_ceiling is correct for a new run_id.
           const streamNames = activeFilteredCatalog.streams.map((s) => s.stream.name)
           let syncState = stateReducer(p.state, {
             type: 'initialize',
@@ -547,6 +542,18 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             run_id: opts?.run_id,
           })
           let requestProgress = createInitialProgress(streamNames)
+
+          const catalogWithRanges = withTimeRanges(p.catalog, syncState.sync_run.time_ceiling)
+          const activeCatalog = isContinuation
+            ? excludeTerminalStreams(catalogWithRanges, p.state?.sync_run.progress)
+            : catalogWithRanges
+
+          // Source → destination pipeline. The destination is the sole consumer,
+          // giving natural pull-based backpressure with zero intermediate buffering.
+          const sourceOutput = p.source.connector.read(
+            { config: p.source.config, catalog: activeCatalog, state: p.state?.source },
+            input
+          )
 
           const destInput = pipe(sourceOutput, enforceCatalog(activeFilteredCatalog), tapLog)
           const destOutput = p.destination.connector.write(

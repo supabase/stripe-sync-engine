@@ -22,14 +22,13 @@ export type StateEvent = Message | InitializeEvent
  */
 export function stateReducer(state: SyncState | undefined, event: StateEvent): SyncState {
   if (event.type === 'initialize') {
-    const time_ceiling = event.run_id ? new Date().toISOString() : undefined
     if (!state) {
       return {
         source: { streams: {}, global: {} },
         destination: {},
         sync_run: {
           run_id: event.run_id,
-          time_ceiling,
+          time_ceiling: event.run_id ? new Date().toISOString() : undefined,
           progress: createInitialProgress(event.stream_names),
         },
       }
@@ -39,7 +38,11 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
       ...state,
       sync_run: {
         run_id: event.run_id,
-        time_ceiling: state.sync_run.time_ceiling ?? time_ceiling,
+        time_ceiling: isContinuation
+          ? state.sync_run.time_ceiling
+          : event.run_id
+            ? new Date().toISOString()
+            : state.sync_run.time_ceiling,
         progress: isContinuation
           ? state.sync_run.progress
           : createInitialProgress(event.stream_names),

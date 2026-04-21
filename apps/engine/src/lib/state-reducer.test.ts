@@ -12,10 +12,6 @@ function init(streamNames: string[], syncRunId?: string, prior?: SyncState): Syn
   })
 }
 
-function msg<T extends Message>(m: T): T & { _ts: string } {
-  return { _ts: TS, ...m } as T & { _ts: string }
-}
-
 describe('stateReducer initialize event', () => {
   it('creates fresh state with progress seeded from stream names', () => {
     const state = init(['customers', 'invoices'])
@@ -84,6 +80,30 @@ describe('stateReducer initialize event', () => {
     expect(state.sync_run.progress.elapsed_ms).toBe(0)
     // Source state is preserved
     expect(state.source.streams['customers']).toEqual({ cursor: 'cus_99' })
+  })
+
+  it('resets time_ceiling when run_id changes', () => {
+    const prior: SyncState = {
+      source: { streams: {}, global: {} },
+      destination: {},
+      sync_run: {
+        run_id: 'old-run',
+        time_ceiling: '2020-01-01T00:00:00.000Z',
+        progress: {
+          started_at: '2024-01-01T00:00:00Z',
+          elapsed_ms: 5000,
+          global_state_count: 3,
+          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
+        },
+      },
+    }
+    const before = new Date().toISOString()
+    const state = init(['customers'], 'new-run', prior)
+    const after = new Date().toISOString()
+    expect(state.sync_run.time_ceiling).not.toBe('2020-01-01T00:00:00.000Z')
+    expect(state.sync_run.time_ceiling! >= before).toBe(true)
+    expect(state.sync_run.time_ceiling! <= after).toBe(true)
   })
 
   it('preserves progress when run_id matches on continuation', () => {
