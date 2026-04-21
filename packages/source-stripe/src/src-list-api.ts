@@ -609,7 +609,7 @@ export async function* listApiBackfill(opts: {
 
     if (!resourceConfig.listFn) continue
 
-    // Compute time_range: prefer catalog, fall back to account created -> now
+    // Compute time_range: prefer catalog, fill missing bounds from account metadata
     let timeRange = configuredStream.time_range
     if (!timeRange) {
       if (accountCreated === null) {
@@ -617,6 +617,11 @@ export async function* listApiBackfill(opts: {
       }
       const now = Math.floor(Date.now() / 1000) + 1
       timeRange = { gte: toIso(accountCreated), lt: toIso(now) }
+    } else if (!timeRange.gte) {
+      if (accountCreated === null) {
+        accountCreated = await getAccountCreatedTimestamp(client)
+      }
+      timeRange = { ...timeRange, gte: toIso(accountCreated) }
     }
 
     const streamState = state?.[stream.name] as StreamState | undefined
