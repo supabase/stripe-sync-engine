@@ -571,10 +571,9 @@ export function rowsToTsv(rows: string[][]): string {
  *   Phase 1  — parallel reads: gridProperties + per-stream row counts.
  *   Phase 3a — one batchUpdate with appendDimension requests (only if grids
  *              need to grow). Must precede data writes.
- *   Phase 3b — pasteData requests fan out into up to PARALLEL_BATCH_COUNT
- *              parallel batchUpdate calls. Wall-clock ≈ slowest chunk.
- *              PASTE_VALUES + TSV is the cheapest wire payload (no formula
- *              eval, no cell-level parsing server-side).
+ *   Phase 3b — one batchUpdate with all pasteData requests. PASTE_VALUES +
+ *              TSV is the cheapest wire payload (no formula eval, no
+ *              cell-level parsing server-side).
  *
  * Returns per-stream 1-based `appendStartRow` for row_assignments.
  */
@@ -661,19 +660,11 @@ export async function applyBatch(
 
   // ── Phase 2 (build payloads) ────────────────────────────────────
   // `expansionRequests` run first (Phase 3a) — the grid must fit before
-  // pasteData writes. `dataRequests` run in parallel (Phase 3b) since each
-  // pasteData targets a distinct row range.
-  //
-  // `PARALLEL_BATCH_COUNT` bounds HTTP fan-out AND row-slices each stream's
-  // appends, so a single big stream can still fan out instead of bottlenecking
-  // on one giant pasteData. Each data request carries its cell weight so the
-  // Phase-3b bin-packer can balance chunks; wall-clock scales ~linearly with
-  // cells per request.
-  const PARALLEL_BATCH_COUNT = 1
-
+  // pasteData writes. `dataRequests` are all dispatched in one batchUpdate
+  // (Phase 3b); each pasteData targets a distinct row range on its sheet.
   const appendStartRows = new Map<string, { appendStartRow: number }>()
   const expansionRequests: sheets_v4.Schema$Request[] = []
-  const dataRequests: Array<{ request: sheets_v4.Schema$Request; cells: number }> = []
+  const dataRequests: sheets_v4.Schema$Request[] = []
   const EXPAND_ROW_BUFFER = 1000
 
   // 2a) appendDimension — only for grids that don't already fit.
@@ -734,23 +725,18 @@ export async function applyBatch(
         groupEnd++
       }
       const firstRow = sortedUpdates[groupStart].rowNumber
-      let groupCells = 0
       const groupRows = sortedUpdates.slice(groupStart, groupEnd + 1).map((u) => {
         updateCellCount += u.values.length
-        groupCells += u.values.length
         for (const v of u.values) updateBytesEstimate += v.length
         return u.values
       })
       dataRequests.push({
-        request: {
-          pasteData: {
-            coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
-            data: rowsToTsv(groupRows),
-            delimiter: PASTE_COL_DELIMITER,
-            type: 'PASTE_VALUES',
-          },
+        pasteData: {
+          coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
+          data: rowsToTsv(groupRows),
+          delimiter: PASTE_COL_DELIMITER,
+          type: 'PASTE_VALUES',
         },
-        cells: groupCells,
       })
       updateGroupCount++
       updateRowCount += groupEnd - groupStart + 1
@@ -768,56 +754,32 @@ export async function applyBatch(
     'phase2b (updates) planned'
   )
 
-  // 2c) pasteData for appends. Slice each stream's block by cell count so
-  // Phase 3b can balance evenly even when one big stream dominates (e.g.
-  // `customers` ~10k rows). Each slice targets a distinct rowIndex, so
-  // parallel writes hit non-overlapping rows. 100k cells ≈ 3-5 MB on
-  // Stripe-shaped records and writes in ~1-2s.
-  const APPEND_SLICE_CELLS_TARGET = 100_000
+  // 2c) pasteData for appends — one request per stream.
   const phase2cStart = Date.now()
-  let appendGroupCount = 0
   let appendRowCount = 0
   let appendCellCount = 0
   let appendBytesEstimate = 0
   for (const [streamName, ops] of opsByStream) {
     if (ops.appends.length === 0) continue
     const startRow = ops.existingRowCount + 1
-    const cols = ops.appends[0]?.length ?? 1
     for (const row of ops.appends) {
       appendCellCount += row.length
       for (const v of row) appendBytesEstimate += v.length
     }
-    // Pick the smaller slice size so we (a) fan out across all PARALLEL_BATCH
-    // chunks and (b) cap max slice size so the bin-packer can balance.
-    const byCellsSliceRows = Math.max(1, Math.floor(APPEND_SLICE_CELLS_TARGET / Math.max(1, cols)))
-    const byParallelismSliceRows = Math.max(1, Math.ceil(ops.appends.length / PARALLEL_BATCH_COUNT))
-    const sliceRowSize = Math.min(byCellsSliceRows, byParallelismSliceRows)
-    for (let offset = 0; offset < ops.appends.length; offset += sliceRowSize) {
-      const slice = ops.appends.slice(offset, offset + sliceRowSize)
-      const sliceCells = slice.reduce((sum, row) => sum + row.length, 0)
-      dataRequests.push({
-        request: {
-          pasteData: {
-            coordinate: {
-              sheetId: ops.sheetId,
-              rowIndex: startRow - 1 + offset,
-              columnIndex: 0,
-            },
-            data: rowsToTsv(slice),
-            delimiter: PASTE_COL_DELIMITER,
-            type: 'PASTE_VALUES',
-          },
-        },
-        cells: sliceCells,
-      })
-      appendGroupCount++
-    }
+    dataRequests.push({
+      pasteData: {
+        coordinate: { sheetId: ops.sheetId, rowIndex: startRow - 1, columnIndex: 0 },
+        data: rowsToTsv(ops.appends),
+        delimiter: PASTE_COL_DELIMITER,
+        type: 'PASTE_VALUES',
+      },
+    })
     appendStartRows.set(streamName, { appendStartRow: startRow })
     appendRowCount += ops.appends.length
   }
   log.warn(
     {
-      groups: appendGroupCount,
+      streams: appendStartRows.size,
       rows: appendRowCount,
       cells: appendCellCount,
       bytes: appendBytesEstimate,
@@ -860,119 +822,56 @@ export async function applyBatch(
     }
   }
 
-  // ── Phase 3b (parallel data writes) ─────────────────────────────
-  // Up to PARALLEL_BATCH_COUNT concurrent batchUpdate calls. Sheets accepts
-  // parallel writes to distinct row ranges; wall-clock ≈ slowest chunk.
-  //
-  // Longest Processing Time (LPT) bin-packing on cell count: sort desc,
-  // greedily assign each request to the least-loaded bin. Bounded by
-  // (4/3 - 1/3m)× optimal makespan, near-optimal when a few large streams
-  // dominate. Replaces the prior consecutive-index split which produced
-  // wildly uneven chunks (heaviest had ~13× the work of the lightest).
+  // ── Phase 3b (single batchUpdate with all data writes) ──────────
   if (dataRequests.length === 0) return appendStartRows
 
-  const binCount = Math.min(PARALLEL_BATCH_COUNT, dataRequests.length)
-  type Bin = { requests: sheets_v4.Schema$Request[]; cells: number }
-  const bins: Bin[] = Array.from({ length: binCount }, () => ({ requests: [], cells: 0 }))
-  const sorted = [...dataRequests].sort((a, b) => b.cells - a.cells)
-  for (const entry of sorted) {
-    let minIdx = 0
-    for (let i = 1; i < bins.length; i++) {
-      if (bins[i].cells < bins[minIdx].cells) minIdx = i
-    }
-    bins[minIdx].requests.push(entry.request)
-    bins[minIdx].cells += entry.cells
-  }
-  const chunks = bins.map((b) => b.requests)
-  const chunkCells = bins.map((b) => b.cells)
-
-  const minChunkCells = Math.min(...chunkCells)
-  const maxChunkCells = Math.max(...chunkCells)
-  const imbalanceRatio = minChunkCells === 0 ? Infinity : maxChunkCells / minChunkCells
   log.warn(
     {
       streams: opsByStream.size,
       totalRequests: dataRequests.length,
-      parallelCalls: chunks.length,
       expansions: expansionCount,
       updateRows: updateRowCount,
       appendRows: appendRowCount,
       cells: totalCells,
       bytes: totalBytesEstimate,
-      chunkCells,
-      imbalanceRatio: Number(imbalanceRatio.toFixed(2)),
     },
     'batchUpdate dispatching'
   )
 
   const httpStart = Date.now()
   try {
-    await Promise.all(
-      chunks.map(async (chunk, idx) => {
-        const chunkStart = Date.now()
-        const chunkLabel = `batchUpdate[${idx + 1}/${chunks.length}]`
-        const chunkCellCount = chunkCells[idx]
-        try {
-          const res = await withRetry(
-            () =>
-              sheets.spreadsheets.batchUpdate({
-                spreadsheetId,
-                requestBody: { requests: chunk },
-              }),
-            chunkLabel
-          )
-          const replyCount = res.data.replies?.length ?? 0
-          log.debug(
-            {
-              label: chunkLabel,
-              status: res.status,
-              requests: chunk.length,
-              cells: chunkCellCount,
-              replies: replyCount,
-              durationMs: Date.now() - chunkStart,
-            },
-            'batchUpdate chunk OK'
-          )
-        } catch (err) {
-          log.error(
-            {
-              err,
-              label: chunkLabel,
-              requests: chunk.length,
-              cells: chunkCellCount,
-              durationMs: Date.now() - chunkStart,
-            },
-            'batchUpdate chunk FAILED'
-          )
-          throw err
-        }
-      })
+    const res = await withRetry(
+      () =>
+        sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: { requests: dataRequests },
+        }),
+      'batchUpdate'
     )
-    const httpElapsed = Date.now() - httpStart
     log.debug(
       {
-        chunks: chunks.length,
-        totalRequests: dataRequests.length,
-        wallClockMs: httpElapsed,
+        status: res.status,
+        requests: dataRequests.length,
+        cells: totalCells,
+        replies: res.data.replies?.length ?? 0,
+        wallClockMs: Date.now() - httpStart,
         applyBatchTotalMs: Date.now() - applyStart,
       },
-      'batchUpdate OK (all parallel)'
+      'batchUpdate OK'
     )
   } catch (err) {
-    const httpElapsed = Date.now() - httpStart
     log.error(
       {
         err,
-        chunks: chunks.length,
         totalRequests: dataRequests.length,
         expansions: expansionCount,
         updateRows: updateRowCount,
         appendRows: appendRowCount,
         cells: totalCells,
-        wallClockMs: httpElapsed,
+        wallClockMs: Date.now() - httpStart,
         applyBatchTotalMs: Date.now() - applyStart,
       },
-      'batchUpdate FAILED (parallel)'
+      'batchUpdate FAILED'
     )
     throw err
   }
