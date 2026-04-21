@@ -11,7 +11,6 @@ function extractSql(args: unknown[]): string | undefined {
   return undefined
 }
 
-
 type Queryable = pg.Pool | pg.Client
 
 /**
