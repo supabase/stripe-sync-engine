@@ -56,7 +56,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
     let prevProgress: ProgressPayload | undefined
     let lastRenderAt = 0
     let isFirstIteration = true
-    let sawEof = false
+    let finalStatus: string | undefined
 
     function renderProgressUpdate(next: ProgressPayload, previous?: ProgressPayload) {
       if (inkInstance) {
@@ -116,6 +116,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         const decoder = new TextDecoder()
         let buffer = ''
         let hasMore = false
+        let sawEof = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -145,13 +146,13 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
               prevProgress = progress
               progress = msg.eof.run_progress
               hasMore = msg.eof.has_more === true
+              finalStatus = msg.eof.status
               sawEof = true
               log.info({ has_more: hasMore }, 'sync iteration complete')
               renderProgressUpdate(progress, prevProgress)
             } else if (msg.type === 'log' && msg.log.level === 'error') {
               log.error({ message: msg.log.message }, 'sync error')
               process.stderr.write(`${msg.log.message ?? 'Sync failed'}\n`)
-              exit(1)
             }
           }
         }
@@ -162,6 +163,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
         }
 
         if (!hasMore) {
+          if (finalStatus) process.stderr.write(`Final status: ${finalStatus}\n`)
           break
         }
 

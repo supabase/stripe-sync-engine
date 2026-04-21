@@ -523,6 +523,136 @@ describe('generated pipeline CLI', () => {
     expect(syncRequests).toHaveLength(2)
     expect(syncRequests[0]?.query).toMatchObject({ time_limit: '30' })
     expect(syncRequests[1]?.query).toMatchObject({ time_limit: '30' })
+    expect(stderrSpy).toHaveBeenCalledWith('Final status: succeeded\n')
+
+    stderrSpy.mockRestore()
+  })
+
+  it('sync continues after streamed error logs when later chunks remain', async () => {
+    const pipelineId = 'pipe_retry_after_error'
+    let syncCount = 0
+    const mockApp = {
+      async request(input: string) {
+        return mockApp.fetch(new Request(`http://localhost${input}`))
+      },
+      async fetch(req: Request) {
+        const url = new URL(req.url)
+
+        if (url.pathname === '/openapi.json') {
+          return new Response(JSON.stringify(serviceSpec), {
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+
+        if (req.method === 'GET' && url.pathname === `/pipelines/${pipelineId}`) {
+          return new Response(
+            JSON.stringify({
+              id: pipelineId,
+              source: {
+                type: 'stripe',
+                stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+              },
+              destination: {
+                type: 'postgres',
+                postgres: { url: 'postgres://localhost/db', schema: 'public' },
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } }
+          )
+        }
+
+        if (req.method === 'POST' && url.pathname === `/pipelines/${pipelineId}/sync`) {
+          syncCount += 1
+          syncRequests.push({
+            id: pipelineId,
+            query: Object.fromEntries(url.searchParams.entries()),
+            body: {},
+          })
+
+          const runProgress = {
+            started_at: new Date().toISOString(),
+            elapsed_ms: syncCount * 100,
+            global_state_count: syncCount,
+            derived: {
+              status: syncCount === 1 ? 'started' : 'succeeded',
+              records_per_second: 10,
+              states_per_second: 1,
+            },
+            streams: {
+              charges: {
+                status: 'errored',
+                state_count: 0,
+                record_count: 0,
+                message: 'Stripe list page failed',
+              },
+              customers: {
+                status: syncCount === 1 ? 'started' : 'completed',
+                state_count: 0,
+                record_count: 10,
+              },
+            },
+          }
+
+          const messages =
+            syncCount === 1
+              ? [
+                  { type: 'log', log: { level: 'error', message: 'Stripe list page failed' } },
+                  {
+                    type: 'eof',
+                    eof: {
+                      status: 'started',
+                      has_more: true,
+                      ending_state: {
+                        source: { streams: {}, global: {} },
+                        destination: {},
+                        sync_run: { progress: runProgress },
+                      },
+                      run_progress: runProgress,
+                      request_progress: runProgress,
+                    },
+                  },
+                ]
+              : [
+                  {
+                    type: 'eof',
+                    eof: {
+                      status: 'succeeded',
+                      has_more: false,
+                      ending_state: {
+                        source: { streams: {}, global: {} },
+                        destination: {},
+                        sync_run: { progress: runProgress },
+                      },
+                      run_progress: runProgress,
+                      request_progress: runProgress,
+                    },
+                  },
+                ]
+
+          return new Response(messages.map((msg) => JSON.stringify(msg)).join('\n') + '\n', {
+            headers: { 'content-type': 'application/x-ndjson' },
+          })
+        }
+
+        return new Response('not found', { status: 404 })
+      },
+    }
+
+    createAppMock.mockImplementation(() => mockApp)
+    vi.resetModules()
+    const { createProgram } = await import('./cli.js')
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const program = await createProgram()
+
+    await runCommand(program, {
+      rawArgs: ['pipelines', 'sync', pipelineId, '--chunk-time-limit', '30'],
+    })
+
+    expect(syncRequests).toHaveLength(2)
+    expect(syncRequests[0]?.query).toMatchObject({ time_limit: '30' })
+    expect(syncRequests[1]?.query).toMatchObject({ time_limit: '30' })
+    expect(stderrSpy).toHaveBeenCalledWith('Stripe list page failed\n')
+    expect(stderrSpy).toHaveBeenCalledWith('Final status: succeeded\n')
 
     stderrSpy.mockRestore()
   })
