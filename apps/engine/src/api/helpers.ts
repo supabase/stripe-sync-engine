@@ -30,7 +30,6 @@ export function errorMessages(err: unknown): [LogMessage, ConnectionStatusMessag
 }
 
 export function formatEof(eof: EofPayload): string {
-  const emoji = eof.status === 'failed' ? '❌' : eof.has_more ? '⏱️' : '✅'
   const rp = eof.request_progress
   const elapsed = rp?.elapsed_ms ? `${(rp.elapsed_ms / 1000).toFixed(1)}s` : ''
   const rps = rp?.derived?.records_per_second?.toFixed(1) ?? '0'
@@ -41,7 +40,7 @@ export function formatEof(eof: EofPayload): string {
 
   const lines: string[] = []
   lines.push(
-    `${emoji} Sync ${eof.status === 'failed' ? 'failed' : eof.has_more ? 'paused' : 'complete'}${elapsed ? ` (${elapsed}` : ''}${totalRows ? ` | ${totalRows} rows, ${rps} rows/s` : ''}${states ? `, ${states} checkpoints` : ''}${elapsed ? ')' : ''}`
+    `${eof.status === 'failed' ? 'Sync failed' : `has_more: ${eof.has_more}`}${elapsed ? ` (${elapsed}` : ''}${totalRows ? ` | ${totalRows} rows, ${rps} rows/s` : ''}${states ? `, ${states} checkpoints` : ''}${elapsed ? ')' : ''}`
   )
 
   if (streamEntries.length > 0) {

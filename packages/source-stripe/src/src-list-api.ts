@@ -220,8 +220,11 @@ async function fetchPageForRange(opts: {
 }): Promise<PageResult<Record<string, unknown>>> {
   const { range, listFn, streamName, supportsLimit, supportsForwardPagination } = opts
 
+  const created: Record<string, number> = {}
+  if (range.gte) created.gte = toUnixSeconds(range.gte)
+  if (range.lt) created.lt = toUnixSeconds(range.lt)
   const params: Record<string, unknown> = {
-    created: { gte: toUnixSeconds(range.gte), lt: toUnixSeconds(range.lt) },
+    ...(Object.keys(created).length > 0 && { created }),
   }
   if (supportsForwardPagination && supportsLimit) params.limit = 100
   if (supportsForwardPagination && range.cursor) params.starting_after = range.cursor

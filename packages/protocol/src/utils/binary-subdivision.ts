@@ -34,7 +34,9 @@ export type TimeBound = { gte: string; lt: string }
 // MARK: - Time helpers
 
 export function toUnixSeconds(iso: string): number {
-  return Math.floor(new Date(iso).getTime() / 1000)
+  const ms = new Date(iso).getTime()
+  if (!Number.isFinite(ms)) throw new Error(`Invalid ISO date: ${JSON.stringify(iso)}`)
+  return Math.floor(ms / 1000)
 }
 
 export function toIso(unixSeconds: number): string {
