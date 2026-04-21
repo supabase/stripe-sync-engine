@@ -14,7 +14,7 @@ export type RoutedLogEntry = {
   data?: Record<string, unknown>
 }
 
-const DEFAULT_REDACT_PATHS = ['*.api_key', '*.connection_string', '*.password', '*.url']
+const DEFAULT_REDACT_PATHS = ['*.api_key', '*.connection_string', '*.password', '*.postgres.url']
 const DEFAULT_REDACT_CENSOR = '[redacted]'
 
 export type LoggerContext = {
