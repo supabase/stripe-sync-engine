@@ -64,22 +64,22 @@ for runtime in curl node bun; do
   fi
   if [ -n "$origin" ]; then
     echo "PASS: $runtime fetch (origin=$origin)"
-    ((PASS++))
+    PASS=$((PASS + 1))
   else
     echo "FAIL: $runtime fetch"
     echo "  output: $(head -5 "$file" 2>/dev/null)"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
   fi
 done
 
 ws_echo=$(grep -o '"echo":\s*"[^"]*"' "$TMP/ws.out" 2>/dev/null | head -1 | cut -d'"' -f4)
 if [ "$ws_echo" = "probe" ]; then
   echo "PASS: ws WebSocket (echo=$ws_echo)"
-  ((PASS++))
+  PASS=$((PASS + 1))
 else
   echo "FAIL: ws WebSocket"
   echo "  output: $(head -5 "$TMP/ws.out" 2>/dev/null)"
-  ((FAIL++))
+  FAIL=$((FAIL + 1))
 fi
 
 echo ""
