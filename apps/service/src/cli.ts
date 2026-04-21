@@ -12,6 +12,7 @@ import { createApp } from './api/app.js'
 import {
   wrapPipelineConnectorShorthand,
   extractConnectorOverrides,
+  mergeConnectorOverrides,
 } from './lib/cli-connector-shorthand.js'
 import { filePipelineStore } from './lib/stores-fs.js'
 import { memoryPipelineStore } from './lib/stores-memory.js'
@@ -336,6 +337,11 @@ export async function createProgram() {
         meta: { name: 'get', description: 'Retrieve pipeline' },
         args: {
           id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          'reset-state': {
+            type: 'boolean',
+            default: false,
+            description: 'Show pipeline as if sync state were cleared',
+          },
         },
         async run({ args }) {
           const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
@@ -351,24 +357,10 @@ export async function createProgram() {
             process.exit(1)
           }
           const pipeline = await res.json()
-          if (overrides.source) {
-            const connectorName = overrides.source.type as string
-            const existing = pipeline.source?.[connectorName] ?? {}
-            pipeline.source = {
-              ...pipeline.source,
-              type: connectorName,
-              [connectorName]: { ...existing, ...(overrides.source[connectorName] as Record<string, unknown>) },
-            }
+          if (args['reset-state']) {
+            delete pipeline.sync_state
           }
-          if (overrides.destination) {
-            const connectorName = overrides.destination.type as string
-            const existing = pipeline.destination?.[connectorName] ?? {}
-            pipeline.destination = {
-              ...pipeline.destination,
-              type: connectorName,
-              [connectorName]: { ...existing, ...(overrides.destination[connectorName] as Record<string, unknown>) },
-            }
-          }
+          mergeConnectorOverrides(pipeline, overrides)
           if (responseFormatter) {
             await responseFormatter(
               new Response(JSON.stringify(pipeline), {

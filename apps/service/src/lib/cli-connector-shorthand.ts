@@ -149,6 +149,50 @@ export function extractConnectorOverrides(
   return result
 }
 
+/**
+ * Merges connector overrides (from extractConnectorOverrides) into a pipeline object in-place.
+ * Each override's type-keyed config is shallow-merged on top of the existing connector config.
+ * If a connector spec schema is provided, override keys are validated against it.
+ */
+export function mergeConnectorOverrides(
+  pipeline: Record<string, unknown>,
+  overrides: { source?: Record<string, unknown>; destination?: Record<string, unknown> },
+  specSchemas?: { source?: Record<string, unknown>; destination?: Record<string, unknown> }
+) {
+  for (const key of ['source', 'destination'] as const) {
+    const override = overrides[key]
+    if (!override) continue
+    const connectorName = override.type as string
+    const overrideConfig = override[connectorName] as Record<string, unknown>
+    const existing =
+      (pipeline[key] as Record<string, unknown>)?.[connectorName] ?? {}
+
+    // Validate override keys against the spec schema or existing config
+    const knownKeys = specSchemas?.[key]
+      ? new Set(Object.keys(specSchemas[key]!))
+      : new Set(Object.keys(existing as Record<string, unknown>))
+    if (knownKeys.size > 0) {
+      for (const k of Object.keys(overrideConfig)) {
+        if (!knownKeys.has(k)) {
+          throw new Error(
+            `Unknown ${key} config key --${connectorName}.${k}. ` +
+              `Known keys: ${[...knownKeys].join(', ')}`
+          )
+        }
+      }
+    }
+
+    pipeline[key] = {
+      ...(pipeline[key] as Record<string, unknown>),
+      type: connectorName,
+      [connectorName]: {
+        ...(existing as Record<string, unknown>),
+        ...overrideConfig,
+      },
+    }
+  }
+}
+
 export function assertNoDottedUnknownFlags(
   args: Record<string, unknown>,
   knownConnectors: string[]
