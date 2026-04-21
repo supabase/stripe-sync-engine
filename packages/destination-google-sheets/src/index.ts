@@ -21,13 +21,13 @@ import {
   applyBatch,
   batchReadSheets,
   buildRowMapFromRows,
+  createIntroSheet,
   deleteSpreadsheet,
   ensureSheet,
   ensureSpreadsheet,
   findSheetId,
-  PASTE_COL_DELIMITER,
+  protectSheets,
   readHeaderRow,
-  rowsToTsv,
   type StreamBatchOps,
 } from './writer.js'
 
@@ -111,29 +111,6 @@ function extendHeaders(
   return { headers, changed }
 }
 
-/** Overview tab content. Inlined so setup can bundle it into one batchUpdate. */
-function buildOverviewRows(streamNames: string[]): string[][] {
-  const now = new Date().toISOString()
-  return [
-    ['Stripe Sync Engine'],
-    [''],
-    ['This spreadsheet is managed by Stripe Sync Engine.'],
-    ['Data is synced automatically from your Stripe account.'],
-    [''],
-    ['Synced streams:', '', 'Unique rows', 'Duplicate rows'],
-    ...streamNames.map((name) => [
-      `  • ${name}`,
-      '',
-      `=COUNTUNIQUE('${name}'!A2:A)`,
-      `=COUNTA('${name}'!A2:A)-COUNTUNIQUE('${name}'!A2:A)`,
-    ]),
-    [''],
-    [`Last setup: ${now}`],
-    [''],
-    ['⚠️  Do not edit data in the synced tabs. Changes will be overwritten on the next sync.'],
-  ]
-}
-
 // MARK: - Destination
 
 /**
@@ -151,84 +128,25 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
     async *setup({ config, catalog }) {
       if (config.spreadsheet_id) return
       const sheets = sheetsClient ?? makeSheetsClient(config)
-
-      // Two API calls total: create + one batchUpdate (rename Sheet1,
-      // add tabs, write headers, protect). Avoids the 60 writes/min quota.
-      const createRes = await sheets.spreadsheets.create({
-        requestBody: { properties: { title: config.spreadsheet_title } },
-        fields: 'spreadsheetId,sheets(properties(sheetId))',
-      })
-      const spreadsheetId = createRes.data.spreadsheetId
-      if (!spreadsheetId) throw new Error('spreadsheet create returned no id')
-      const sheet1Id = createRes.data.sheets?.[0]?.properties?.sheetId
-      if (sheet1Id == null) throw new Error('spreadsheet create returned no sheet1 id')
-
-      const requests: sheets_v4.Schema$Request[] = []
+      const spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
       const streamNames = catalog.streams.map((s) => s.stream.name)
-      const overviewRows = buildOverviewRows(streamNames)
-      requests.push({
-        updateSheetProperties: {
-          properties: { sheetId: sheet1Id, title: 'Overview' },
-          fields: 'title',
-        },
-      })
-      if (overviewRows.length > 0) {
-        requests.push({
-          pasteData: {
-            coordinate: { sheetId: sheet1Id, rowIndex: 0, columnIndex: 0 },
-            // PASTE_NORMAL lets =COUNTUNIQUE(...) formulas evaluate.
-            data: rowsToTsv(overviewRows),
-            delimiter: PASTE_COL_DELIMITER,
-            type: 'PASTE_NORMAL',
-          },
-        })
-      }
+      await createIntroSheet(sheets, spreadsheetId, streamNames)
 
-      // Pre-assign sheetIds so pasteData/addProtectedRange can target the
-      // tabs about to be created by addSheet in the same sequential batch.
       const sheetIds: number[] = []
-      let nextSheetId = 1_000_000
       for (const { stream } of catalog.streams) {
-        const propsSchema = stream.json_schema?.['properties'] as
-          | Record<string, unknown>
-          | undefined
-        const headers = propsSchema ? Object.keys(propsSchema) : []
-        const sheetId = nextSheetId++
+        const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
+        const headers = properties ? Object.keys(properties) : []
+        const sheetId = await ensureSheet(sheets, spreadsheetId, stream.name, headers)
         sheetIds.push(sheetId)
-
-        requests.push({
-          addSheet: { properties: { sheetId, title: stream.name } },
-        })
-
-        if (headers.length > 0) {
-          requests.push({
-            pasteData: {
-              coordinate: { sheetId, rowIndex: 0, columnIndex: 0 },
-              data: rowsToTsv([headers]),
-              delimiter: PASTE_COL_DELIMITER,
-              type: 'PASTE_VALUES',
-            },
-          })
-        }
-
-        requests.push({
-          addProtectedRange: {
-            protectedRange: {
-              range: { sheetId },
-              description: 'Managed by Stripe Sync Engine — edits may be overwritten on next sync',
-              warningOnly: true,
-            },
-          },
-        })
       }
 
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        requestBody: { requests },
-      })
+      await protectSheets(sheets, spreadsheetId, sheetIds)
 
-      yield msg.control({ control_type: 'destination_config', destination_config: { ...config, spreadsheet_id: spreadsheetId } })
+      yield msg.control({
+        control_type: 'destination_config',
+        destination_config: { ...config, spreadsheet_id: spreadsheetId },
+      })
     },
 
     async *teardown({ config }) {
