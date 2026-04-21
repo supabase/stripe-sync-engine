@@ -145,7 +145,6 @@ describe('test-server sync via Docker engine', () => {
           api_key: 'sk_test_fake',
           api_version: '2025-04-30.basil',
           base_url: harness.testServerContainerUrl(),
-          max_concurrent_streams: 10,
           ...opts.sourceOverrides,
         },
       },
