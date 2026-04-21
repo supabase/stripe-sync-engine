@@ -84,7 +84,7 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '\u2026'
 }
 
-const DATA_INDENT = ' '.repeat(20) // indent data under the message content
+const DATA_INDENT = ' '.repeat(4)
 
 function formatDataKV(data: Record<string, unknown>): string {
   const parts: string[] = []
@@ -130,12 +130,11 @@ const columns = process.stdout.columns || 200
 function formatProgress(msg: { progress: Record<string, unknown>; _ts?: string }): string | null {
   if (!showProgress) return null
   const progress = msg.progress as import('@stripe/sync-protocol').ProgressPayload
-  const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 18 })
+  const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 4 })
   const timestamp = ts(msg._ts)
   const prefix = `${timestamp}${typeLabel('progress', YELLOW)} `
-  const indent = ' '.repeat(18)
   const lines = rendered.split('\n')
-  return lines.map((line, i) => (i === 0 ? `${prefix}${line}` : `${indent}${line}`)).join('\n')
+  return lines.map((line, i) => (i === 0 ? `${prefix}${line}` : `${DATA_INDENT}${line}`)).join('\n')
 }
 
 function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string {
@@ -146,9 +145,8 @@ function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string 
 
   if (eof.run_progress) {
     const progress = eof.run_progress as import('@stripe/sync-protocol').ProgressPayload
-    const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 18 })
-    const indent = ' '.repeat(18)
-    const lines = rendered.split('\n').map((l) => `${indent}${l}`).join('\n')
+    const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 4 })
+    const lines = rendered.split('\n').map((l) => `${DATA_INDENT}${l}`).join('\n')
     return `${header}\n${lines}`
   }
 
