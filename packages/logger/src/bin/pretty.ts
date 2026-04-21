@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline'
-import { renderToString } from 'ink'
+import { Box, Text, renderToString } from 'ink'
 import React from 'react'
-import { ProgressView } from '../format/progress.js'
+import { ProgressView, ProgressHeader, formatProgressHeader } from '../format/progress.js'
 
 // MARK: - ANSI helpers
 
@@ -130,27 +130,38 @@ const columns = process.stdout.columns || 200
 function formatProgress(msg: { progress: Record<string, unknown>; _ts?: string }): string | null {
   if (!showProgress) return null
   const progress = msg.progress as import('@stripe/sync-protocol').ProgressPayload
-  const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 4 })
+  const rendered = renderToString(
+    React.createElement(ProgressHeader, { progress }),
+    { columns }
+  )
   const timestamp = ts(msg._ts)
-  const prefix = `${timestamp}${typeLabel('progress', YELLOW)} `
-  const lines = rendered.split('\n')
-  return lines.map((line, i) => (i === 0 ? `${prefix}${line}` : `${DATA_INDENT}${line}`)).join('\n')
+  return `${timestamp}${typeLabel('progress', YELLOW)}\n${rendered}`
 }
 
 function formatEof(msg: { eof: Record<string, unknown>; _ts?: string }): string {
   const eof = msg.eof as { status?: string; has_more?: boolean; run_progress?: Record<string, unknown> }
   const timestamp = ts(msg._ts)
   const statusColor = eof.status === 'failed' ? RED : eof.status === 'succeeded' ? GREEN : YELLOW
-  const header = `${timestamp}${typeLabel('eof', statusColor)} ${statusColor}${BOLD}\u2550\u2550\u2550 ${eof.status?.toUpperCase() ?? 'EOF'} \u2550\u2550\u2550${RESET}  has_more=${String(eof.has_more ?? false)}`
 
   if (eof.run_progress) {
     const progress = eof.run_progress as import('@stripe/sync-protocol').ProgressPayload
-    const rendered = renderToString(React.createElement(ProgressView, { progress }), { columns: columns - 4 })
-    const lines = rendered.split('\n').map((l) => `${DATA_INDENT}${l}`).join('\n')
-    return `${header}\n${lines}`
+    const borderColor = eof.status === 'failed' ? 'red' : eof.status === 'succeeded' ? 'green' : 'yellow'
+    const rendered = renderToString(
+      React.createElement(Box, {
+        borderStyle: 'round',
+        borderColor,
+        paddingX: 1,
+        flexDirection: 'column',
+      },
+        React.createElement(Text, { bold: true }, `${eof.status?.toUpperCase() ?? 'EOF'}  has_more=${String(eof.has_more ?? false)}`),
+        React.createElement(ProgressView, { progress }),
+      ),
+      { columns }
+    )
+    return `${timestamp}${typeLabel('eof', statusColor)}\n${rendered}`
   }
 
-  return header
+  return `${timestamp}${typeLabel('eof', statusColor)} ${statusColor}${BOLD}${eof.status?.toUpperCase() ?? 'EOF'}${RESET}  has_more=${String(eof.has_more ?? false)}`
 }
 
 function formatRecord(msg: { record: { stream: string; data: Record<string, unknown> }; _ts?: string }): string {
