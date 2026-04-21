@@ -1,14 +1,12 @@
 import { Readable } from 'node:stream'
 import net from 'node:net'
-import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, openSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { defineCommand } from 'citty'
 import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { createPrettyFormatter } from './cli/pretty-output.js'
 import { serve } from '@hono/node-server'
-import { createConnectorResolver } from '@stripe/sync-engine'
+import { createConnectorResolver, startApiServer } from '@stripe/sync-engine'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
@@ -127,42 +125,47 @@ async function waitForHealth(url: string, timeoutMs: number) {
   )
 }
 
+async function assertMitmReverseProxyReady(timeoutMs: number) {
+  const url = 'http://127.0.0.1:9091/flows'
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: 'Bearer sync-engine' },
+      })
+      if (res.ok) return
+      lastError = new Error(`mitmweb responded ${res.status}`)
+    } catch (error) {
+      lastError = error
+    }
+    await sleep(250)
+  }
+  throw new Error(
+    `MITM reverse proxy is not healthy at ${url}${lastError ? `: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''}`
+  )
+}
+
+let mitmEngineServerStarted = false
+
 async function setupEngineMitm(): Promise<string> {
   const engineUrl = 'http://127.0.0.1:3000'
   const proxyUrl = 'http://127.0.0.1:9090'
+
+  await assertMitmReverseProxyReady(2000)
 
   if (await checkPortOpen(3000)) {
     throw new Error('Port 3000 already has a listener. Stop it before using --engine-mitm.')
   }
 
-  mkdirSync('tmp', { recursive: true })
-  const logFd = openSync('tmp/engine-mitm-3000.log', 'a')
-  const child = spawn(
-    'node',
-    ['--use-env-proxy', '--conditions', 'bun', '--import', 'tsx', 'apps/engine/src/bin/serve.ts'],
-    {
-      cwd: process.cwd(),
-      env: { ...process.env, PORT: '3000' },
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
-    }
-  )
-  child.unref()
-
-  await waitForHealth(engineUrl, 15000)
-
-  const proxy = spawnSync(
-    'bash',
-    ['-lc', 'scripts/mitmweb-reverse-proxy.sh http://127.0.0.1:3000'],
-    { cwd: process.cwd(), encoding: 'utf8' }
-  )
-  if (proxy.status !== 0) {
-    throw new Error((proxy.stderr || proxy.stdout || 'Failed to start mitm reverse proxy').trim())
+  if (!mitmEngineServerStarted) {
+    const resolver = await resolverPromise
+    await startApiServer({ resolver, port: 3000 })
+    mitmEngineServerStarted = true
   }
 
+  await waitForHealth(engineUrl, 15000)
   await waitForHealth(proxyUrl, 10000)
-  process.stderr.write(proxy.stdout)
-  process.stderr.write(`Engine MITM log: tmp/engine-mitm-3000.log\n`)
   return proxyUrl
 }
 
@@ -340,9 +343,18 @@ export async function createProgram() {
     const idx = process.argv.indexOf('--engine-url')
     return idx !== -1 ? process.argv[idx + 1] : undefined
   })() || process.env.ENGINE_URL
+  const engineMitm = process.argv.includes('--engine-mitm')
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
+      if (engineMitm) {
+        if (serviceUrl) {
+          throw new Error('--engine-mitm is only supported when running the service CLI in-process')
+        }
+        if (!engineUrl) {
+          engineUrl = await setupEngineMitm()
+        }
+      }
       const address = process.env.TEMPORAL_ADDRESS
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
       const temporal = await maybeCreateTemporalClient(address, taskQueue)
@@ -391,6 +403,12 @@ export async function createProgram() {
       'engine-url': {
         type: 'string',
         description: 'Sync engine URL (overrides ENGINE_URL env var)',
+      },
+      'engine-mitm': {
+        type: 'boolean',
+        default: false,
+        description:
+          'Start a local engine on :3000 and route requests through mitm reverse proxy on :9090',
       },
     },
     meta: {
@@ -622,27 +640,8 @@ export async function createProgram() {
           default: false,
           description: 'Plain text output (no Ink/ANSI)',
         },
-        'engine-mitm': {
-          type: 'boolean',
-          default: false,
-          description:
-            'Start a local engine on :3000 and route sync requests through mitm reverse proxy on :9090',
-        },
       },
       async run({ args }) {
-        if (args['engine-mitm']) {
-          if (serviceUrl) {
-            process.stderr.write('--engine-mitm is only supported when running the service CLI in-process\n')
-            process.exit(1)
-          }
-          try {
-            engineUrl = await setupEngineMitm()
-          } catch (error) {
-            process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
-            process.exit(1)
-          }
-        }
-
         const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
           sources: sourceNames,
           destinations: destinationNames,
