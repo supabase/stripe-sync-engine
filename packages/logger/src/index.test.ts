@@ -159,7 +159,8 @@ describe('@stripe/sync-logger', () => {
     log.info({ stream: 'customers' }, 'protocol stdout')
 
     expect(writes).toHaveLength(1)
-    expect(JSON.parse(writes[0]!)).toEqual({
+    const parsed = JSON.parse(writes[0]!)
+    expect(parsed).toMatchObject({
       type: 'log',
       log: {
         level: 'info',
@@ -170,6 +171,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
     })
+    expect(parsed._ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
   it('suppresses default stdout protocol logs inside async-local context', () => {
@@ -209,7 +211,8 @@ describe('@stripe/sync-logger', () => {
     )
 
     expect(writes).toHaveLength(1)
-    expect(JSON.parse(writes[0]!)).toEqual({
+    const parsed = JSON.parse(writes[0]!)
+    expect(parsed).toMatchObject({
       type: 'log',
       log: {
         level: 'info',
@@ -220,6 +223,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
     })
+    expect(parsed._ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
   it('applies default redaction in structured stdout logs', () => {
@@ -233,7 +237,8 @@ describe('@stripe/sync-logger', () => {
     log.info({ api_key: 'sk_test_123', nested: { password: 'secret' } }, 'secret fields')
 
     expect(writes).toHaveLength(1)
-    expect(JSON.parse(writes[0]!)).toEqual({
+    const parsed = JSON.parse(writes[0]!)
+    expect(parsed).toMatchObject({
       type: 'log',
       log: {
         level: 'info',
@@ -247,5 +252,6 @@ describe('@stripe/sync-logger', () => {
         },
       },
     })
+    expect(parsed._ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 })

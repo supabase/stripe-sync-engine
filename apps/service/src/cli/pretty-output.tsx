@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, Text, renderToString as inkRenderToString } from 'ink'
-import { formatProgress } from '@stripe/sync-engine/progress'
+import { formatProgress } from '@stripe/sync-logger/progress'
 import type { ProgressPayload } from '@stripe/sync-protocol'
 import type { Pipeline } from '../lib/createSchemas.js'
 

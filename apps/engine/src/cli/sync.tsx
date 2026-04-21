@@ -3,7 +3,7 @@ import { render } from 'ink'
 import { defineCommand } from 'citty'
 import { createEngine, createRemoteEngine, type ConnectorResolver } from '../lib/index.js'
 import { type PipelineConfig, type ProgressPayload } from '@stripe/sync-protocol'
-import { ProgressView, formatProgress } from '../lib/progress/format.js'
+import { ProgressView, formatProgress } from '@stripe/sync-logger/progress'
 import { applyControlToPipeline } from './source-config-cache.js'
 
 const PROGRESS_RENDER_INTERVAL_MS = 200

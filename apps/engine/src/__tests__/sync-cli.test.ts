@@ -16,7 +16,7 @@ vi.mock('../cli/source-config-cache.js', () => ({
   applyControlToPipeline: vi.fn((pipeline) => pipeline),
 }))
 
-vi.mock('../lib/progress/format.js', () => ({
+vi.mock('@stripe/sync-logger/progress', () => ({
   ProgressView: () => null,
   formatProgress: vi.fn(() => 'progress'),
 }))

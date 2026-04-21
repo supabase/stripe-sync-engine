@@ -343,6 +343,7 @@ function createProtocolLogPayload(level: number, message: string, data?: Record<
       message,
       ...(data ? { data } : {}),
     },
+    _ts: new Date().toISOString(),
   }
 }
 

@@ -1,7 +1,7 @@
 import React from 'react'
 import { randomUUID } from 'node:crypto'
 import { render } from 'ink'
-import { ProgressView, formatProgress } from '@stripe/sync-engine/progress'
+import { ProgressView, formatProgress } from '@stripe/sync-logger/progress'
 import { Message, type ProgressPayload } from '@stripe/sync-protocol'
 import type { StreamConfig } from '../lib/createSchemas.js'
 import { log, syncRunLogPath, withSyncRunLogContext } from '../logger.js'
