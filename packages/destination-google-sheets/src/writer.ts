@@ -581,7 +581,7 @@ export async function applyBatch(
   }
   const phase1Start = Date.now()
   await Promise.all(probes)
-  log.debug(
+  log.warn(
     { parallelCalls: probes.length, durationMs: Date.now() - phase1Start },
     'phase1 (reads) done'
   )
@@ -596,7 +596,7 @@ export async function applyBatch(
   // on one giant pasteData. Each data request carries its cell weight so the
   // Phase-3b bin-packer can balance chunks; wall-clock scales ~linearly with
   // cells per request.
-  const PARALLEL_BATCH_COUNT = 4
+  const PARALLEL_BATCH_COUNT = 1
 
   const appendStartRows = new Map<string, { appendStartRow: number }>()
   const expansionRequests: sheets_v4.Schema$Request[] = []
@@ -643,16 +643,11 @@ export async function applyBatch(
   )
 
   // 2b) pasteData for contiguous update groups (one per group).
-  //
-  // DEBUG: updates suppressed while investigating flush perf. Flip to false
-  // to re-enable; counters stay updated for logging parity.
-  const DEBUG_SKIP_UPDATES = true
   const phase2bStart = Date.now()
   let updateGroupCount = 0
   let updateRowCount = 0
   let updateCellCount = 0
   let updateBytesEstimate = 0
-  let skippedUpdateGroups = 0
   for (const [, ops] of opsByStream) {
     if (ops.updates.length === 0) continue
     const sortedUpdates = [...ops.updates].sort((a, b) => a.rowNumber - b.rowNumber)
@@ -673,49 +668,32 @@ export async function applyBatch(
         for (const v of u.values) updateBytesEstimate += v.length
         return u.values
       })
-      if (DEBUG_SKIP_UPDATES) {
-        skippedUpdateGroups++
-      } else {
-        dataRequests.push({
-          request: {
-            pasteData: {
-              coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
-              data: rowsToTsv(groupRows),
-              delimiter: PASTE_COL_DELIMITER,
-              type: 'PASTE_VALUES',
-            },
+      dataRequests.push({
+        request: {
+          pasteData: {
+            coordinate: { sheetId: ops.sheetId, rowIndex: firstRow - 1, columnIndex: 0 },
+            data: rowsToTsv(groupRows),
+            delimiter: PASTE_COL_DELIMITER,
+            type: 'PASTE_VALUES',
           },
-          cells: groupCells,
-        })
-        updateGroupCount++
-      }
+        },
+        cells: groupCells,
+      })
+      updateGroupCount++
       updateRowCount += groupEnd - groupStart + 1
       groupStart = groupEnd + 1
     }
   }
-  if (DEBUG_SKIP_UPDATES && skippedUpdateGroups > 0) {
-    log.debug(
-      {
-        skippedGroups: skippedUpdateGroups,
-        rows: updateRowCount,
-        cells: updateCellCount,
-        bytes: updateBytesEstimate,
-        durationMs: Date.now() - phase2bStart,
-      },
-      'phase2b (updates) skipped (DEBUG_SKIP_UPDATES)'
-    )
-  } else {
-    log.debug(
-      {
-        groups: updateGroupCount,
-        rows: updateRowCount,
-        cells: updateCellCount,
-        bytes: updateBytesEstimate,
-        durationMs: Date.now() - phase2bStart,
-      },
-      'phase2b (updates) planned'
-    )
-  }
+  log.debug(
+    {
+      groups: updateGroupCount,
+      rows: updateRowCount,
+      cells: updateCellCount,
+      bytes: updateBytesEstimate,
+      durationMs: Date.now() - phase2bStart,
+    },
+    'phase2b (updates) planned'
+  )
 
   // 2c) pasteData for appends. Slice each stream's block by cell count so
   // Phase 3b can balance evenly even when one big stream dominates (e.g.
@@ -764,7 +742,7 @@ export async function applyBatch(
     appendStartRows.set(streamName, { appendStartRow: startRow })
     appendRowCount += ops.appends.length
   }
-  log.debug(
+  log.warn(
     {
       groups: appendGroupCount,
       rows: appendRowCount,
@@ -792,7 +770,7 @@ export async function applyBatch(
           }),
         'gridExpansion'
       )
-      log.debug(
+      log.warn(
         {
           status: res.status,
           requests: expansionRequests.length,
@@ -838,7 +816,7 @@ export async function applyBatch(
   const minChunkCells = Math.min(...chunkCells)
   const maxChunkCells = Math.max(...chunkCells)
   const imbalanceRatio = minChunkCells === 0 ? Infinity : maxChunkCells / minChunkCells
-  log.debug(
+  log.warn(
     {
       streams: opsByStream.size,
       totalRequests: dataRequests.length,
