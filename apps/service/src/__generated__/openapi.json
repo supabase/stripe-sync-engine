@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/simulate_webhook_sync | Simulate webhook sync by fetching events from the Stripe API |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/check | Check pipeline connectivity |\n| POST | /pipelines/{id}/setup | Run pipeline setup hooks |\n| POST | /pipelines/{id}/teardown | Run pipeline teardown hooks |\n| POST | /pipelines/{id}/simulate_webhook_sync | Simulate webhook sync by fetching events from the Stripe API |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -604,6 +604,219 @@
         }
       }
     },
+    "/pipelines/{id}/check": {
+      "post": {
+        "operationId": "pipelines.check",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Check pipeline connectivity",
+        "description": "Runs the `check()` method on source and/or destination connectors and streams back NDJSON messages (connection_status, log, trace). Pass ?only=source or ?only=destination to check a single side.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Streaming NDJSON check output",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/setup": {
+      "post": {
+        "operationId": "pipelines.setup",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Run pipeline setup hooks",
+        "description": "Runs the `setup()` method on source and/or destination connectors (e.g. creating destination tables). Streams NDJSON messages (control, log, trace). Pass ?only=source or ?only=destination to run a single side.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Streaming NDJSON setup output",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/teardown": {
+      "post": {
+        "operationId": "pipelines.teardown",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Run pipeline teardown hooks",
+        "description": "Runs the `teardown()` method on source and/or destination connectors (e.g. dropping destination tables). Streams NDJSON messages (log, trace). Pass ?only=source or ?only=destination to run a single side.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Streaming NDJSON teardown output",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pipelines/{id}/simulate_webhook_sync": {
       "post": {
         "operationId": "pipelines.simulate_webhook_sync",
@@ -1091,8 +1304,14 @@
             "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)"
           },
           "access_token": {
-            "type": "string",
-            "description": "OAuth2 access token"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "refresh_token": {
             "type": "string",
@@ -1114,7 +1333,6 @@
           }
         },
         "required": [
-          "access_token",
           "refresh_token"
         ],
         "additionalProperties": false

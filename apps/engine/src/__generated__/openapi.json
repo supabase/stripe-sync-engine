@@ -57,8 +57,22 @@
           "Stateless Sync API"
         ],
         "summary": "Check connector connection",
-        "description": "Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.",
+        "description": "Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass ?only=source or ?only=destination to check a single side.",
         "parameters": [
+          {
+            "in": "query",
+            "name": "only",
+            "schema": {
+              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
+              "example": "destination",
+              "type": "string",
+              "enum": [
+                "source",
+                "destination"
+              ]
+            },
+            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
+          },
           {
             "in": "header",
             "name": "x-pipeline",
@@ -2208,8 +2222,14 @@
             "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)"
           },
           "access_token": {
-            "type": "string",
-            "description": "OAuth2 access token"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "refresh_token": {
             "type": "string",
@@ -2231,7 +2251,6 @@
           }
         },
         "required": [
-          "access_token",
           "refresh_token"
         ],
         "additionalProperties": false

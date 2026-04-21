@@ -78,6 +78,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipelines/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check pipeline connectivity
+         * @description Runs the `check()` method on source and/or destination connectors and streams back NDJSON messages (connection_status, log, trace). Pass ?only=source or ?only=destination to check a single side.
+         */
+        post: operations["pipelines.check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run pipeline setup hooks
+         * @description Runs the `setup()` method on source and/or destination connectors (e.g. creating destination tables). Streams NDJSON messages (control, log, trace). Pass ?only=source or ?only=destination to run a single side.
+         */
+        post: operations["pipelines.setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run pipeline teardown hooks
+         * @description Runs the `teardown()` method on source and/or destination connectors (e.g. dropping destination tables). Streams NDJSON messages (log, trace). Pass ?only=source or ?only=destination to run a single side.
+         */
+        post: operations["pipelines.teardown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines/{id}/simulate_webhook_sync": {
         parameters: {
             query?: never;
@@ -235,8 +295,7 @@ export interface components {
             client_id?: string;
             /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
             client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
+            access_token?: string | null;
             /** @description OAuth2 refresh token */
             refresh_token: string;
             /** @description Target spreadsheet ID (created if omitted) */
@@ -692,6 +751,123 @@ export interface operations {
         };
         responses: {
             /** @description Streaming NDJSON sync output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.check": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON check output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.setup": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON setup output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.teardown": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON teardown output */
             200: {
                 headers: {
                     [name: string]: unknown;

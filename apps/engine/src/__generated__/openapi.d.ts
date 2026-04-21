@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Check connector connection
-         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by.
+         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass ?only=source or ?only=destination to check a single side.
          */
         post: operations["pipeline_check"];
         delete?: never;
@@ -780,8 +780,7 @@ export interface components {
             client_id?: string;
             /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
             client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
+            access_token?: string | null;
             /** @description OAuth2 refresh token */
             refresh_token: string;
             /** @description Target spreadsheet ID (created if omitted) */
@@ -864,7 +863,10 @@ export interface operations {
     };
     pipeline_check: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
+                only?: "source" | "destination";
+            };
             header: {
                 /** @description JSON-encoded PipelineConfig */
                 "x-pipeline": string;
