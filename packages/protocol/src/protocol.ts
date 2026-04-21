@@ -124,13 +124,13 @@ export const ConfiguredStream = z
 
     time_range: z
       .object({
-        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
-        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+        gte: z.string().optional().describe('Inclusive lower bound (ISO 8601). Source fills from account metadata if absent.'),
+        lt: z.string().optional().describe('Exclusive upper bound (ISO 8601). Engine sets from time_ceiling if absent.'),
       })
       .optional()
       .describe(
-        'Time window for this stream. The engine computes this from synced_ranges + started_at. ' +
-          'Sources use it as the created filter range. If absent, the source computes its own range.'
+        'Time window for this stream. Either bound may be omitted: the engine sets lt from time_ceiling, ' +
+          'the source fills gte from account metadata. If absent entirely, the source computes its own range.'
       ),
   })
   .describe('A stream selected by the user with sync settings applied.')
@@ -273,8 +273,8 @@ export const StreamStatusPayload = z
       status: z.literal('start'),
       time_range: z
         .object({
-          gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
-          lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+          gte: z.string().optional().describe('Inclusive lower bound (ISO 8601).'),
+          lt: z.string().optional().describe('Exclusive upper bound (ISO 8601).'),
         })
         .optional()
         .describe('Full backfill time span for this stream.'),
@@ -540,6 +540,13 @@ export const PipelineConfig = z.object({
         sync_mode: z.enum(['incremental', 'full_refresh']).optional(),
         fields: z.array(z.string()).optional(),
         backfill_limit: z.number().int().positive().optional(),
+        time_range: z
+          .object({
+            gte: z.string().optional().describe('Inclusive lower bound (ISO 8601).'),
+            lt: z.string().optional().describe('Exclusive upper bound (ISO 8601).'),
+          })
+          .optional()
+          .describe('Optional time window to restrict the sync to a specific range.'),
       })
     )
     .optional(),

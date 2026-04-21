@@ -1672,20 +1672,32 @@ describe('withTimeRanges', () => {
   it('sets time_range.lt to timeCeiling on all eligible streams', () => {
     const catalog = mkCatalog(['customers', 'invoices'])
     const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
-    expect(result.streams[0]!.time_range).toEqual({ gte: '', lt: '2025-01-01T00:00:00Z' })
-    expect(result.streams[1]!.time_range).toEqual({ gte: '', lt: '2025-01-01T00:00:00Z' })
+    expect(result.streams[0]!.time_range).toEqual({ lt: '2025-01-01T00:00:00Z' })
+    expect(result.streams[1]!.time_range).toEqual({ lt: '2025-01-01T00:00:00Z' })
   })
 
   it('preserves existing time_range.gte if already set', () => {
     const catalog = mkCatalog(['customers'])
     catalog.streams[0]!.time_range = {
       gte: '2024-01-01T00:00:00Z',
-      lt: '2025-06-01T00:00:00Z',
     }
     const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
     expect(result.streams[0]!.time_range).toEqual({
       gte: '2024-01-01T00:00:00Z',
       lt: '2025-01-01T00:00:00Z',
+    })
+  })
+
+  it('does not override user-provided lt', () => {
+    const catalog = mkCatalog(['customers'])
+    catalog.streams[0]!.time_range = {
+      gte: '2024-01-01T00:00:00Z',
+      lt: '2024-06-01T00:00:00Z',
+    }
+    const result = withTimeRanges(catalog, '2025-01-01T00:00:00Z')
+    expect(result.streams[0]!.time_range).toEqual({
+      gte: '2024-01-01T00:00:00Z',
+      lt: '2024-06-01T00:00:00Z',
     })
   })
 

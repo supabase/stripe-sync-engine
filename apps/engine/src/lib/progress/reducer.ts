@@ -135,7 +135,10 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       let total_range = sp.total_range
       if (ss.status === 'start') {
         status = 'started'
-        if ('time_range' in ss && ss.time_range) total_range = ss.time_range
+        if ('time_range' in ss && ss.time_range) {
+          const tr = ss.time_range
+          if (tr.gte && tr.lt) total_range = { gte: tr.gte, lt: tr.lt }
+        }
       } else if (ss.status === 'complete') status = 'completed'
       else if (ss.status === 'skip') {
         status = 'skipped'

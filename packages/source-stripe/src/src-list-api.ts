@@ -559,7 +559,7 @@ export async function* listApiBackfill(opts: {
     streams: Array<{
       stream: { name: string }
       backfill_limit?: number | undefined
-      time_range?: { gte: string; lt: string } | undefined
+      time_range?: { gte?: string; lt?: string } | undefined
     }>
   }
   state: Record<string, unknown> | undefined
@@ -609,20 +609,20 @@ export async function* listApiBackfill(opts: {
 
     if (!resourceConfig.listFn) continue
 
-    // Compute time_range: prefer catalog, fill missing bounds from account metadata
-    let timeRange = configuredStream.time_range
-    if (!timeRange) {
+    // Resolve time_range: fill missing bounds from account metadata
+    const catalogRange = configuredStream.time_range
+    let gte = catalogRange?.gte
+    let lt = catalogRange?.lt
+    if (!gte) {
       if (accountCreated === null) {
         accountCreated = await getAccountCreatedTimestamp(client)
       }
-      const now = Math.floor(Date.now() / 1000) + 1
-      timeRange = { gte: toIso(accountCreated), lt: toIso(now) }
-    } else if (!timeRange.gte) {
-      if (accountCreated === null) {
-        accountCreated = await getAccountCreatedTimestamp(client)
-      }
-      timeRange = { ...timeRange, gte: toIso(accountCreated) }
+      gte = toIso(accountCreated)
     }
+    if (!lt) {
+      lt = toIso(Math.floor(Date.now() / 1000) + 1)
+    }
+    const timeRange = { gte, lt }
 
     const streamState = state?.[stream.name] as StreamState | undefined
 

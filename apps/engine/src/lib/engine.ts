@@ -187,6 +187,7 @@ export function buildCatalog(
           destination_sync_mode: 'append' as const,
           fields: cfg.fields,
           backfill_limit: cfg.backfill_limit,
+          time_range: cfg.time_range,
         }
       })
   } else {
@@ -278,7 +279,7 @@ export function withTimeRanges(
     streams: catalog.streams.map((cs) =>
       cs.supports_time_range === false
         ? cs
-        : { ...cs, time_range: { gte: cs.time_range?.gte ?? '', lt: timeCeiling } }
+        : { ...cs, time_range: { ...cs.time_range, ...(!cs.time_range?.lt && { lt: timeCeiling }) } }
     ),
   }
 }
