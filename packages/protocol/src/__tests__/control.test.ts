@@ -28,4 +28,3 @@ describe('ControlPayload', () => {
     expect(() => ControlPayload.parse({ control_type: 'unknown', data: {} })).toThrow()
   })
 })
-

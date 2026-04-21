@@ -139,7 +139,6 @@ export async function drain(stream: AsyncIterable<{ type: string }>): Promise<{ 
   return collectMessages(stream)
 }
 
-
 // MARK: - Source message factory
 
 /** Per-stream state payload with typed data field. */

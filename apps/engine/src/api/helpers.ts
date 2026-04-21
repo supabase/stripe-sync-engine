@@ -85,10 +85,10 @@ export async function* logApiStream<T>(
           if (msg?.type === 'connection_status' && msg?.connection_status?.status === 'failed')
             hasError = true
           if (msg?.type === 'eof') {
-              const eofPayload = msg.eof as EofPayload
-              const eofLog = eofPayload.status === 'failed' ? log.error : log.info
-              eofLog.call(log, { ...context, eof: eofPayload }, formatEof(eofPayload))
-            }
+            const eofPayload = msg.eof as EofPayload
+            const eofLog = eofPayload.status === 'failed' ? log.error : log.info
+            eofLog.call(log, { ...context, eof: eofPayload }, formatEof(eofPayload))
+          }
           yield item
         }
         const summary = { ...context, itemCount, durationMs: Date.now() - startedAt }
