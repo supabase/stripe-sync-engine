@@ -86,7 +86,7 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '\u2026'
 }
 
-const DATA_INDENT = ' '.repeat(19) // align under message text (timestamp + type label)
+const DATA_INDENT = ' '.repeat(24) // extra indent so data is visually separate from message
 
 function formatDataKV(data: Record<string, unknown>): string {
   const parts: string[] = []
@@ -115,8 +115,8 @@ function formatStreamStatus(msg: { stream_status: { stream: string; status: stri
 
   let detail = ''
   if ((status === 'start' || status === 'range_complete') && time_range) {
-    const gte = time_range.gte?.slice(0, 10) ?? '?'
-    const lt = time_range.lt?.slice(0, 10) ?? '?'
+    const gte = time_range.gte ?? '?'
+    const lt = time_range.lt ?? '?'
     detail = `  ${DIM}[${gte} \u2192 ${lt}]${RESET}`
   } else if (error) {
     detail = `  ${truncate(error, 100)}`
