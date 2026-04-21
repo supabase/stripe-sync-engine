@@ -73,9 +73,9 @@ export function createRemoteEngine(engineUrl: string): Engine {
   }
 
   /** Convert `{ only }` opts into the shape `post()` expects for query params. */
-  function onlyToReadOpts(
-    opts?: { only?: 'source' | 'destination' }
-  ): SourceReadOptions & { only?: string } {
+  function onlyToReadOpts(opts?: {
+    only?: 'source' | 'destination'
+  }): SourceReadOptions & { only?: string } {
     return opts?.only ? { only: opts.only } : {}
   }
 

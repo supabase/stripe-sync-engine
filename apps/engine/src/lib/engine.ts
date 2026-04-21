@@ -399,8 +399,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       const destTag = `destination/${pipeline.destination.type}`
 
       yield* merge(
-        runSource && srcConnector && map(srcConnector.check({ config: srcSpec!.config }), tag(sourceTag)),
-        runDest && destConnector && map(destConnector.check({ config: destSpec!.config }), tag(destTag))
+        runSource &&
+          srcConnector &&
+          map(srcConnector.check({ config: srcSpec!.config }), tag(sourceTag)),
+        runDest &&
+          destConnector &&
+          map(destConnector.check({ config: destSpec!.config }), tag(destTag))
       )
     },
 
@@ -492,10 +496,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       return withAbortOnReturn((signal) =>
         (async function* (): AsyncGenerator<Message> {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
-          const catalogWithRanges = withTimeRanges(
-            p.catalog,
-            p.state?.sync_run?.time_ceiling
-          )
+          const catalogWithRanges = withTimeRanges(p.catalog, p.state?.sync_run?.time_ceiling)
           const raw = p.source.connector.read(
             { config: p.source.config, catalog: catalogWithRanges, state: p.state?.source },
             input

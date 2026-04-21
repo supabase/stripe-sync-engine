@@ -339,10 +339,11 @@ export async function createProgram() {
 
   // Lazy real app — boots in-process when no SERVICE_URL is provided
   // --engine-url is a global option parsed early so all subcommands respect it
-  let engineUrl: string | undefined = (() => {
-    const idx = process.argv.indexOf('--engine-url')
-    return idx !== -1 ? process.argv[idx + 1] : undefined
-  })() || process.env.ENGINE_URL
+  let engineUrl: string | undefined =
+    (() => {
+      const idx = process.argv.indexOf('--engine-url')
+      return idx !== -1 ? process.argv[idx + 1] : undefined
+    })() || process.env.ENGINE_URL
   const engineMitm = process.argv.includes('--engine-mitm')
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {

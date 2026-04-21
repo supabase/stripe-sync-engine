@@ -373,9 +373,7 @@ export async function protectSheets(
   meta: SpreadsheetMeta,
   sheetIds: number[]
 ): Promise<void> {
-  const alreadyProtected = new Set(
-    meta.sheets.filter((s) => s.hasProtection).map((s) => s.sheetId)
-  )
+  const alreadyProtected = new Set(meta.sheets.filter((s) => s.hasProtection).map((s) => s.sheetId))
   const requests: sheets_v4.Schema$Request[] = []
   for (const sheetId of sheetIds) {
     if (alreadyProtected.has(sheetId)) continue
