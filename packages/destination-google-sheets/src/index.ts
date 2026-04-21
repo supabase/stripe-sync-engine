@@ -130,9 +130,10 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       const sheets = sheetsClient ?? makeSheetsClient(config)
       const spreadsheetId = await ensureSpreadsheet(sheets, config.spreadsheet_title)
 
-      const streamNames = catalog.streams.map((s) => s.stream.name)
-      await createIntroSheet(sheets, spreadsheetId, streamNames)
-
+      // Data tabs must exist before the Overview is written: its rows contain
+      // `=COUNTUNIQUE('<stream>'!A2:A)` formulas that Sheets parses with
+      // USER_ENTERED. If the referenced sheet doesn't exist yet the API
+      // rejects the update with `Unable to parse range: <stream>!A2:A`.
       const sheetIds: number[] = []
       for (const { stream } of catalog.streams) {
         const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
@@ -140,6 +141,9 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         const sheetId = await ensureSheet(sheets, spreadsheetId, stream.name, headers)
         sheetIds.push(sheetId)
       }
+
+      const streamNames = catalog.streams.map((s) => s.stream.name)
+      await createIntroSheet(sheets, spreadsheetId, streamNames)
 
       await protectSheets(sheets, spreadsheetId, sheetIds)
 
