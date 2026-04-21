@@ -52,11 +52,7 @@ setTimeout(() => { console.error('timeout'); process.exit(1); }, 12000);
 EOF2
 PID_WS=$!
 
-# Wait for all subprocesses — don't fail early if one exits non-zero
-wait $PID_CURL 2>/dev/null || true
-wait $PID_NODE 2>/dev/null || true
-wait $PID_BUN 2>/dev/null || true
-wait $PID_WS 2>/dev/null || true
+wait $PID_CURL $PID_NODE $PID_BUN $PID_WS 2>/dev/null || true
 
 echo ""
 echo "mitmweb version: $MITM_VERSION_LINE"
