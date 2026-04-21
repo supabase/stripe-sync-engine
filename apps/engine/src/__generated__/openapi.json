@@ -314,18 +314,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "state_limit",
-            "schema": {
-              "description": "Stop streaming after N state messages.",
-              "example": "100",
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            },
-            "description": "Stop streaming after N state messages."
-          },
-          {
-            "in": "query",
             "name": "time_limit",
             "schema": {
               "description": "Stop streaming after N seconds.",
@@ -506,18 +494,6 @@
         "summary": "Run sync pipeline (read → write)",
         "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
         "parameters": [
-          {
-            "in": "query",
-            "name": "state_limit",
-            "schema": {
-              "description": "Stop streaming after N state messages.",
-              "example": "100",
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
-            },
-            "description": "Stop streaming after N state messages."
-          },
           {
             "in": "query",
             "name": "time_limit",

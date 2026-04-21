@@ -34,7 +34,6 @@ export async function pipelineBackfill(
     const result = await backfillStep({ pipelineSync }, pipelineId, {
       syncState,
       syncRunId,
-      stateLimit: 100,
       timeLimit: 30,
     })
     syncState = result.syncState

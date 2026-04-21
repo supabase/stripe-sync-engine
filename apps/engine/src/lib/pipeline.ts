@@ -103,7 +103,6 @@ export function filterType<T extends Message['type']>(
 // MARK: - takeLimits
 
 export interface TakeLimitsOptions {
-  state_limit?: number
   time_limit?: number
   signal?: AbortSignal
 }
@@ -113,7 +112,6 @@ const DEADLINE_BUFFER_MS = 1000
 /**
  * Applies stream limits and emits an `eof` terminal message as the final item.
  *
- * - `state_limit`: stop after N state messages (state message boundary)
  * - `time_limit`: two-phase wall-clock deadline:
  *     - **soft** (deadline − 1 s): checked between messages, graceful return
  *     - **hard** (deadline + 1 s): `Promise.race` forces return even if upstream blocks
@@ -129,7 +127,6 @@ export function takeLimits<T extends { type: string }>(
 ): (msgs: AsyncIterable<T>) => AsyncIterable<T | EofMessage> {
   return async function* (messages) {
     const startedAt = Date.now()
-    let stateCount = 0
 
     const hasTimeLimit = opts.time_limit != null && opts.time_limit > 0
     const nominalDeadline = hasTimeLimit ? startedAt + opts.time_limit! * 1000 : undefined
@@ -156,10 +153,6 @@ export function takeLimits<T extends { type: string }>(
     if (!needsRace) {
       for await (const msg of messages) {
         yield msg
-        if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof(true)
-          return
-        }
       }
       yield makeEof(false)
       return
@@ -279,12 +272,6 @@ export function takeLimits<T extends { type: string }>(
           return
         }
 
-        // Check state limit
-        if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof(true)
-          await closeIterator()
-          return
-        }
       }
     } finally {
       cleanup()

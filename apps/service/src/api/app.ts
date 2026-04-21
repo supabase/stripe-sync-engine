@@ -397,10 +397,6 @@ export function createApp(options: AppOptions) {
   // MARK: - Pipeline sync (ad-hoc)
 
   const SyncQueryParams = z.object({
-    state_limit: z.coerce
-      .number()
-      .optional()
-      .meta({ description: 'Max state messages before stopping' }),
     time_limit: z.coerce.number().optional().meta({ description: 'Stop after N seconds' }),
     run_id: z
       .string()
@@ -447,7 +443,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit, run_id, reset_state } = c.req.valid('query')
+      const { time_limit, run_id, reset_state } = c.req.valid('query')
       const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
         {}) as z.infer<typeof SyncBodySchema>
 
@@ -471,7 +467,6 @@ export function createApp(options: AppOptions) {
       }
       const output = engine.pipeline_sync(config, {
         state: reset_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
-        state_limit,
         time_limit,
         run_id,
       })
@@ -636,10 +631,6 @@ export function createApp(options: AppOptions) {
       requestParams: {
         path: PipelineIdParam,
         query: z.object({
-          state_limit: z.coerce
-            .number()
-            .optional()
-            .meta({ description: 'Max state messages per iteration' }),
           time_limit: z.coerce
             .number()
             .optional()
@@ -666,7 +657,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { state_limit, time_limit } = c.req.valid('query')
+      const { time_limit } = c.req.valid('query')
 
       let pipeline: Pipeline
       try {
@@ -687,7 +678,6 @@ export function createApp(options: AppOptions) {
       const result = await runBackfillToCompletion({ pipelineSync: activities.pipelineSync }, id, {
         syncState: pipeline.sync_state ?? emptySyncState(),
         syncRunId,
-        stateLimit: state_limit ?? 100,
         timeLimit: time_limit ?? 30,
       })
 

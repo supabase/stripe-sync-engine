@@ -35,8 +35,6 @@ import type { ConnectorResolver } from './resolver.js'
 export const SourceReadOptions = z.object({
   /** Sync state. Normalized at runtime to SyncState for backward compatibility. */
   state: z.unknown().optional(),
-  /** Stop after emitting this many state messages (useful for paging). */
-  state_limit: z.number().int().positive().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */
   time_limit: z.number().positive().optional(),
   /** Identifies the current sync run. If it differs from state.sync_run.run_id, run progress is reset. */
@@ -47,7 +45,6 @@ export interface SourceReadOptions {
     | SyncState
     | { streams: Record<string, unknown>; global: Record<string, unknown> }
     | Record<string, unknown>
-  state_limit?: number
   time_limit?: number
   run_id?: string
 }
@@ -496,7 +493,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           )
           const parsed = map(raw, (msg) => Message.parse(msg))
           yield* takeLimits({
-            state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
           })(parsed) as AsyncIterable<Message>
@@ -559,7 +555,6 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           )
           // Apply limits (takeLimits appends eof)
           const limited = takeLimits({
-            state_limit: opts?.state_limit,
             time_limit: opts?.time_limit,
             signal,
           })(destOutput)

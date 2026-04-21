@@ -27,7 +27,7 @@ export function withAbortOnReturn<T>(
 
   function abortLocal() {
     if (!controller.signal.aborted) {
-      controller.abort(new Error('iterator returned'))
+      controller.abort(new DOMException('iterator returned', 'AbortError'))
     }
   }
 

@@ -166,7 +166,6 @@ describe('test-server sync via Docker engine', () => {
     streams?: PipelineConfig['streams']
     sourceOverrides?: Record<string, unknown>
     state?: SourceState
-    state_limit?: number
     time_limit?: number
   }): Promise<{ messages: Message[]; state: SourceState }> {
     const pipeline = makePipelineConfig(opts)
@@ -175,7 +174,6 @@ describe('test-server sync via Docker engine', () => {
 
     for await (const msg of engine.pipeline_read(pipeline, {
       state: wrapSyncState(opts.state),
-      state_limit: opts.state_limit,
       time_limit: opts.time_limit,
     })) {
       messages.push(msg)
@@ -209,7 +207,6 @@ describe('test-server sync via Docker engine', () => {
     streams?: PipelineConfig['streams']
     sourceOverrides?: Record<string, unknown>
     state?: SourceState
-    state_limit?: number
     time_limit?: number
   }): Promise<{ messages: SyncOutput[]; state: SourceState }> {
     const pipeline = makePipelineConfig(opts)
@@ -223,7 +220,6 @@ describe('test-server sync via Docker engine', () => {
 
     for await (const msg of engine.pipeline_sync(pipeline, {
       state: wrapSyncState(opts.state),
-      state_limit: opts.state_limit,
       time_limit: opts.time_limit,
     })) {
       messages.push(msg)

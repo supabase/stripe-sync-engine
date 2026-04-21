@@ -11,7 +11,6 @@ const PROGRESS_RENDER_INTERVAL_MS = 200
 export interface PipelineSyncOptions {
   handler: (req: Request) => Promise<Response>
   pipelineId: string
-  stateLimit?: number
   timeLimit?: number
   syncRunId?: string
   streams?: StreamConfig[]
@@ -27,7 +26,6 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
   const {
     handler,
     pipelineId,
-    stateLimit,
     timeLimit,
     streams,
     resetState,
@@ -41,7 +39,7 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
 
   await withSyncRunLogContext(pipelineId, syncRunId, async () => {
     log.info(
-      { pipelineId, syncRunId, stateLimit, timeLimit, streams, resetState },
+      { pipelineId, syncRunId, timeLimit, streams, resetState },
       'sync run started'
     )
 
@@ -70,7 +68,6 @@ export async function renderPipelineSync(opts: PipelineSyncOptions) {
     try {
       while (true) {
         const params = new URLSearchParams()
-        if (stateLimit) params.set('state_limit', String(stateLimit))
         if (timeLimit) params.set('time_limit', String(timeLimit))
         if (syncRunId) params.set('run_id', syncRunId)
         if (resetState && isFirstIteration) params.set('reset_state', 'true')

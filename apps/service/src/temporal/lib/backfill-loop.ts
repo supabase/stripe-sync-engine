@@ -4,7 +4,6 @@ import type { SyncActivities } from '../activities/index.js'
 export interface BackfillLoopOpts {
   syncState: SyncState
   syncRunId: string
-  stateLimit?: number
   timeLimit?: number
 }
 
@@ -19,7 +18,6 @@ export async function backfillStep(
 ): Promise<{ eof: EofPayload; syncState: SyncState }> {
   const { eof } = await activities.pipelineSync(pipelineId, {
     state: opts.syncState,
-    state_limit: opts.stateLimit ?? 100,
     time_limit: opts.timeLimit ?? 30,
     run_id: opts.syncRunId,
   })

@@ -494,15 +494,6 @@
           },
           {
             "in": "query",
-            "name": "state_limit",
-            "schema": {
-              "description": "Max state messages before stopping",
-              "type": "number"
-            },
-            "description": "Max state messages before stopping"
-          },
-          {
-            "in": "query",
             "name": "time_limit",
             "schema": {
               "description": "Stop after N seconds",
@@ -729,15 +720,6 @@
             },
             "required": true,
             "description": "Unique pipeline identifier (e.g. pipe_abc123)."
-          },
-          {
-            "in": "query",
-            "name": "state_limit",
-            "schema": {
-              "description": "Max state messages per iteration",
-              "type": "number"
-            },
-            "description": "Max state messages per iteration"
           },
           {
             "in": "query",

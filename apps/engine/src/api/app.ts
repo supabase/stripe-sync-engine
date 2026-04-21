@@ -177,10 +177,6 @@ export async function createApp(resolver: ConnectorResolver) {
   }
 
   const syncQueryParams = z.object({
-    state_limit: z.coerce.number().int().positive().optional().meta({
-      description: 'Stop streaming after N state messages.',
-      example: '100',
-    }),
     time_limit: z.coerce.number().positive().optional().meta({
       description: 'Stop streaming after N seconds.',
       example: '10',
@@ -394,7 +390,7 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(pipelineReadRoute, async (c) => {
-    const { state_limit, time_limit } = c.req.valid('query')
+    const { time_limit } = c.req.valid('query')
 
     const pipeline = requireHeaderValue(
       c.req.valid('header')['x-pipeline'],
@@ -431,7 +427,7 @@ export async function createApp(resolver: ConnectorResolver) {
       )
     const ac = createConnectionAbort(c, onDisconnect)
 
-    const output = engine.pipeline_read(pipeline, { state, state_limit, time_limit }, input)
+    const output = engine.pipeline_read(pipeline, { state, time_limit }, input)
     return ndjsonResponse(logApiStream('Engine API /pipeline_read', output, context, startedAt), {
       signal: ac.signal,
     })
@@ -527,7 +523,7 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(pipelineSyncRoute, async (c) => {
-    const { state_limit, time_limit, run_id } = c.req.valid('query')
+    const { time_limit, run_id } = c.req.valid('query')
 
     const pipeline = requireHeaderValue(
       c.req.valid('header')['x-pipeline'],
@@ -550,7 +546,7 @@ export async function createApp(resolver: ConnectorResolver) {
       )
     const ac = createConnectionAbort(c, onDisconnect)
 
-    const output = engine.pipeline_sync(pipeline, { state, state_limit, time_limit, run_id }, input)
+    const output = engine.pipeline_sync(pipeline, { state, time_limit, run_id }, input)
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {
       signal: ac.signal,
     })

@@ -66,7 +66,6 @@ export function createRemoteEngine(engineUrl: string): Engine {
 
   function queryParams(opts?: SourceReadOptions): Record<string, string> {
     const q: Record<string, string> = {}
-    if (opts?.state_limit != null) q.state_limit = String(opts.state_limit)
     if (opts?.time_limit != null) q.time_limit = String(opts.time_limit)
     if (opts?.run_id != null) q.run_id = opts.run_id
     return q

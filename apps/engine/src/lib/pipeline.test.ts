@@ -373,69 +373,6 @@ describe('filterType()', () => {
 // ---------------------------------------------------------------------------
 
 describe('takeLimits()', () => {
-  it('stops after N state messages and emits eof with state_limit reason', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_2' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 1 })(toAsync(msgs)))
-    expect(result).toHaveLength(3)
-    expect(result[0]).toMatchObject({ type: 'record', record: { data: { id: 'cus_1' } } })
-    expect(result[1]).toMatchObject({
-      type: 'source_state',
-      source_state: { data: { cursor: '1' } },
-    })
-    expect(result[2]).toMatchObject({
-      type: 'eof',
-      eof: { has_more: true },
-    })
-  })
-
-  it('emits eof with complete reason when source exhausts', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 5 })(toAsync(msgs)))
-    expect(result).toHaveLength(3)
-    expect(result[2]).toMatchObject({
-      type: 'eof',
-      eof: { has_more: false },
-    })
-  })
-
   it('emits eof complete with no limits set', async () => {
     const msgs: Message[] = [
       {
@@ -446,57 +383,6 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits()(toAsync(msgs)))
     expect(result).toHaveLength(2)
     expect(result[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
-  })
-
-  it('counts state messages across multiple streams', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'a' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'products',
-          data: { id: 'prod_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'products', data: { cursor: 'b' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_2' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'c' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 2 })(toAsync(msgs)))
-    expect(result).toHaveLength(5)
-    expect(result[3]).toMatchObject({
-      type: 'source_state',
-      source_state: { state_type: 'stream', stream: 'products' },
-    })
-    expect(result[4]).toMatchObject({
-      type: 'eof',
-      eof: { has_more: true },
-    })
   })
 
   it('stops on time limit at any message boundary (short time_limit)', async () => {
@@ -665,26 +551,6 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
     const eof = result.at(-1) as any
     expect(eof.eof.has_more).toBe(true)
-  })
-
-  it('time limit and state limit: whichever fires first wins', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '3' } },
-      },
-    ]
-    // State limit of 1 fires before any time limit
-    const result = await drain(takeLimits({ state_limit: 1, time_limit: 60 })(toAsync(msgs)))
-    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
   it('emits eof for empty stream', async () => {

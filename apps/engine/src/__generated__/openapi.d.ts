@@ -990,8 +990,6 @@ export interface operations {
     pipeline_read: {
         parameters: {
             query?: {
-                /** @description Stop streaming after N state messages. */
-                state_limit?: number;
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
                 /** @description Optional sync run identifier used to track bounded sync progress. */
@@ -1075,8 +1073,6 @@ export interface operations {
     pipeline_sync: {
         parameters: {
             query?: {
-                /** @description Stop streaming after N state messages. */
-                state_limit?: number;
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
                 /** @description Optional sync run identifier used to track bounded sync progress. */

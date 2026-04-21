@@ -655,8 +655,6 @@ export interface operations {
     "pipelines.sync": {
         parameters: {
             query?: {
-                /** @description Max state messages before stopping */
-                state_limit?: number;
                 /** @description Stop after N seconds */
                 time_limit?: number;
                 /** @description Sync run identifier (resumes or starts fresh) */
@@ -772,8 +770,6 @@ export interface operations {
     "pipelines.sync_workflow_test": {
         parameters: {
             query?: {
-                /** @description Max state messages per iteration */
-                state_limit?: number;
                 /** @description Time limit per iteration (seconds) */
                 time_limit?: number;
             };
