@@ -847,14 +847,7 @@
                       }
                     },
                     "rowCount": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "number"
                     }
                   },
                   "required": [

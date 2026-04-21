@@ -1279,7 +1279,7 @@ export interface operations {
                         rows: {
                             [key: string]: unknown;
                         }[];
-                        rowCount: number | null;
+                        rowCount: number;
                     };
                 };
             };

@@ -715,7 +715,7 @@ export async function createApp(resolver: ConnectorResolver) {
           'application/json': {
             schema: z.object({
               rows: z.array(z.record(z.string(), z.unknown())),
-              rowCount: z.number().nullable(),
+              rowCount: z.number(),
             }),
           },
         },
