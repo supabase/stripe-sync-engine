@@ -5,7 +5,7 @@ import {
   sql,
   sslConfigFromConnectionString,
   stripSslParams,
-  upsert,
+  upsertWithStats,
   withPgConnectProxy,
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
@@ -52,10 +52,17 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
 
 // MARK: - upsertMany
 
+export interface UpsertManyResult {
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  skipped_count: number
+}
+
 /**
  * Upsert records into a Postgres table using the _raw_data jsonb pattern.
- * Delegates to util-postgres `upsert()` which batches all rows into a single
- * multi-row INSERT ... ON CONFLICT statement.
+ * Delegates to util-postgres `upsertWithStats()` which batches all rows into a
+ * single multi-row INSERT ... ON CONFLICT statement and returns write stats.
  */
 export async function upsertMany(
   pool: pg.Pool,
@@ -65,9 +72,10 @@ export async function upsertMany(
   entries: Record<string, any>[],
   primaryKeyColumns: string[] = ['id'],
   newerThanField?: string
-): Promise<void> {
-  if (!entries.length) return
-  await upsert(
+): Promise<UpsertManyResult> {
+  if (!entries.length)
+    return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+  return await upsertWithStats(
     pool,
     entries.map((e) => ({ _raw_data: e })),
     {
@@ -75,7 +83,8 @@ export async function upsertMany(
       table,
       primaryKeyColumns,
       ...(newerThanField && { newerThanColumn: newerThanField }),
-    }
+    },
+    `"_raw_data"->>'deleted' = 'true'`
   )
 }
 
@@ -300,27 +309,34 @@ const destination = {
         'dest write: flush start'
       )
       try {
-        await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
-        log.debug(
+        const stats = await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
+        log.info(
           {
             stream: streamName,
-            batch_size: buffer.length,
             schema: config.schema,
+            table: `${config.schema}.${streamName}`,
+            batch_size: buffer.length,
+            inserted: stats.created_count,
+            updated: stats.updated_count,
+            deleted: stats.deleted_count,
+            skipped: stats.skipped_count,
             duration_ms: Date.now() - startedAt,
             ...poolStats(pool),
           },
-          'dest write: flush complete'
+          `dest write: upsert ${config.schema}.${streamName}`
         )
       } catch (err) {
         const detail =
           `stream=${streamName} table=${config.schema}.${streamName} ` +
           `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
+        const errMsg = errorMessage(err)
         log.error(
           {
             stream: streamName,
             batch_size: buffer.length,
             schema: config.schema,
             duration_ms: Date.now() - startedAt,
+            error: errMsg,
             err,
             ...poolStats(pool),
           },
@@ -328,7 +344,7 @@ const destination = {
         )
         failedStreams.add(streamName)
         streamBuffers.set(streamName, [])
-        return `${errorMessage(err)} (${detail})`
+        return `${errMsg} (${detail})`
       }
       streamBuffers.set(streamName, [])
       return undefined
@@ -347,7 +363,10 @@ const destination = {
         if (msg.type === 'record') {
           const { stream, data } = msg.record
 
-          if (failedStreams.has(stream)) continue
+          if (failedStreams.has(stream)) {
+            log.debug({ stream }, 'dest write: skipping record for failed stream')
+            continue
+          }
 
           if (!streamBuffers.has(stream)) {
             streamBuffers.set(stream, [])
@@ -359,6 +378,10 @@ const destination = {
           if (buffer.length >= batchSize) {
             const err = await flushStream(stream)
             if (err) {
+              log.error(
+                { stream, error: err },
+                'dest write: yielding stream_status error (batch flush)'
+              )
               yield streamError(stream, err)
               continue
             }
@@ -367,9 +390,16 @@ const destination = {
         } else if (msg.type === 'source_state') {
           if (msg.source_state.state_type !== 'global') {
             const stream = msg.source_state.stream
-            if (failedStreams.has(stream)) continue
+            if (failedStreams.has(stream)) {
+              log.debug({ stream }, 'dest write: skipping source_state for failed stream')
+              continue
+            }
             const err = await flushStream(stream)
             if (err) {
+              log.error(
+                { stream, error: err },
+                'dest write: yielding stream_status error (state flush)'
+              )
               yield streamError(stream, err)
               continue
             }
@@ -383,10 +413,23 @@ const destination = {
       // Final flush for all remaining buffers
       for (const streamName of streamBuffers.keys()) {
         const err = await flushStream(streamName)
-        if (err) yield streamError(streamName, err)
+        if (err) {
+          log.error(
+            { stream: streamName, error: err },
+            'dest write: yielding stream_status error (final flush)'
+          )
+          yield streamError(streamName, err)
+        }
       }
 
-      log.info(`Postgres destination: wrote to schema "${config.schema}"`)
+      if (failedStreams.size > 0) {
+        log.error(
+          { failed_streams: [...failedStreams], schema: config.schema },
+          `Postgres destination: completed with ${failedStreams.size} failed stream(s) in schema "${config.schema}"`
+        )
+      } else {
+        log.info(`Postgres destination: wrote to schema "${config.schema}"`)
+      }
     } finally {
       await endPool(pool, 'write')
     }

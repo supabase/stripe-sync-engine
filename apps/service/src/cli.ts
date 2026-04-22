@@ -6,7 +6,7 @@ import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
 import { createPrettyFormatter } from './cli/pretty-output.js'
 import { serve } from '@hono/node-server'
-import { createConnectorResolver, startApiServer } from '@stripe/sync-engine'
+import { createConnectorResolver, startApiServer, type ApiServerHandle } from '@stripe/sync-engine'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
@@ -146,7 +146,7 @@ async function assertMitmReverseProxyReady(timeoutMs: number) {
   )
 }
 
-let mitmEngineServerStarted = false
+let mitmEngineServer: ApiServerHandle | null = null
 
 async function setupEngineMitm(): Promise<string> {
   const engineUrl = 'http://127.0.0.1:3000'
@@ -158,15 +158,21 @@ async function setupEngineMitm(): Promise<string> {
     throw new Error('Port 3000 already has a listener. Stop it before using --engine-mitm.')
   }
 
-  if (!mitmEngineServerStarted) {
+  if (!mitmEngineServer) {
     const resolver = await resolverPromise
-    await startApiServer({ resolver, port: 3000 })
-    mitmEngineServerStarted = true
+    mitmEngineServer = await startApiServer({ resolver, port: 3000 })
   }
 
   await waitForHealth(engineUrl, 15000)
   await waitForHealth(proxyUrl, 10000)
   return proxyUrl
+}
+
+function closeMitmEngine() {
+  if (mitmEngineServer) {
+    mitmEngineServer.close()
+    mitmEngineServer = null
+  }
 }
 
 // Hand-written workflow command: start HTTP server
@@ -751,6 +757,7 @@ export async function createProgram() {
             }
           }
         }
+        closeMitmEngine()
       },
     }) as CommandDef
   }

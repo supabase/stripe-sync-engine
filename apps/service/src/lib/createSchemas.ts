@@ -20,8 +20,8 @@ export const PipelineId = z
   .min(3)
   .max(64)
   .regex(
-    /^[a-z][a-z0-9_-]*$/,
-    'Pipeline id must start with a lowercase letter and contain only lowercase letters, numbers, underscores, or hyphens.'
+    /^[a-zA-Z][a-zA-Z0-9_-]*$/,
+    'Pipeline id must start with a letter and contain only letters, numbers, underscores, or hyphens.'
   )
   .describe('Unique pipeline identifier (e.g. pipe_abc123).')
 

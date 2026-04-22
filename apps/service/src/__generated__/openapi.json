@@ -105,7 +105,7 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9_-]*$"
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
                   },
                   "source": {
                     "$ref": "#/components/schemas/SourceConfig"
@@ -215,7 +215,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -267,7 +267,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -286,7 +286,7 @@
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9_-]*$"
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
                   },
                   "source": {
                     "$ref": "#/components/schemas/SourceConfig"
@@ -416,7 +416,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -485,7 +485,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -620,7 +620,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -691,7 +691,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -762,7 +762,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -833,7 +833,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -927,7 +927,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
               "description": "Unique pipeline identifier (e.g. pipe_abc123).",
               "example": "pipe_abc123"
             },
@@ -1581,7 +1581,7 @@
             "type": "string",
             "minLength": 3,
             "maxLength": 64,
-            "pattern": "^[a-z][a-z0-9_-]*$",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
             "description": "Unique pipeline identifier (e.g. pipe_abc123)."
           },
           "source": {

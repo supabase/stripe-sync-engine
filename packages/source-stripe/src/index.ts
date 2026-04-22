@@ -299,8 +299,9 @@ export function createStripeSource(
                   accountId
                 )
               } else {
+                const event = stripeEventSchema.parse(input)
                 yield* processStripeEvent(
-                  input as StripeEvent,
+                  event,
                   config,
                   catalog,
                   registry,

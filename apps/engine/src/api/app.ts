@@ -539,7 +539,19 @@ export async function createApp(resolver: ConnectorResolver) {
     let input: AsyncIterable<unknown> | undefined
 
     if (hasBody(c)) {
-      input = verboseInput('pipeline_sync', parseNdjsonStream(c.req.raw.body!))
+      if (SourceInputMessage) {
+        input = (async function* () {
+          for await (const msg of verboseInput(
+            'pipeline_sync',
+            parseNdjsonStream(c.req.raw.body!)
+          )) {
+            const parsed = SourceInputMessage.parse(msg)
+            yield (parsed as { source_input: unknown }).source_input
+          }
+        })()
+      } else {
+        input = verboseInput('pipeline_sync', parseNdjsonStream(c.req.raw.body!))
+      }
     }
 
     const context = { path: '/pipeline_sync', ...syncRequestContext(pipeline) }

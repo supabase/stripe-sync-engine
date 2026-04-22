@@ -19,22 +19,29 @@ type BunLike = {
   }) => unknown
 }
 
-export async function startApiServer({ resolver, port }: StartApiServerOptions) {
+export interface ApiServerHandle {
+  close: () => void
+}
+
+export async function startApiServer({
+  resolver,
+  port,
+}: StartApiServerOptions): Promise<ApiServerHandle> {
   const listenPort = port ?? Number(process.env['PORT'] || 3000)
 
   const app = await createApp(resolver)
   const bun = (globalThis as typeof globalThis & { Bun?: BunLike }).Bun
 
   if (bun) {
-    bun.serve({ fetch: app.fetch, port: listenPort, idleTimeout: 60 })
+    const server = bun.serve({ fetch: app.fetch, port: listenPort, idleTimeout: 60 })
     log.warn(
       { port: listenPort, server: 'Bun.serve' },
       `Sync Engine API listening on http://localhost:${listenPort}`
     )
-    return
+    return { close: () => (server as { stop?: () => void }).stop?.() }
   }
 
-  return serve(
+  const server = serve(
     {
       fetch: app.fetch,
       port: listenPort,
@@ -44,4 +51,5 @@ export async function startApiServer({ resolver, port }: StartApiServerOptions) 
       log.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
     }
   )
+  return { close: () => server.close() }
 }

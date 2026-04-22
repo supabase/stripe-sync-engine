@@ -632,19 +632,27 @@ describe('POST /read', () => {
       expect(text).toContain('error')
     })
 
-    it('pipeline_sync: accepts raw (already-unwrapped) input and produces output', async () => {
-      // pipeline_sync passes input as-is to engine — no SourceInputMessage unwrapping in the handler.
-      // Clients send the connector-specific payload directly (not the SourceInputMessage envelope).
+    it('pipeline_sync: unwraps SourceInputMessage envelope and produces output', async () => {
+      // pipeline_sync unwraps { type: 'source_input', source_input: ... } just like pipeline_read.
       const body = toNdjson([
         {
-          type: 'record',
-          record: {
-            stream: 'customers',
-            data: { id: 'cus_1' },
-            emitted_at: new Date().toISOString(),
+          type: 'source_input',
+          source_input: {
+            type: 'record',
+            record: {
+              stream: 'customers',
+              data: { id: 'cus_1' },
+              emitted_at: new Date().toISOString(),
+            },
           },
         },
-        { type: 'source_state', source_state: { stream: 'customers', data: {} } },
+        {
+          type: 'source_input',
+          source_input: {
+            type: 'source_state',
+            source_state: { stream: 'customers', data: {} },
+          },
+        },
       ])
       const res = await inputApp.request('/pipeline_sync', {
         method: 'POST',

@@ -1,8 +1,8 @@
 import type { ConnectionStatusMessage, LogMessage, EofPayload } from '@stripe/sync-protocol'
-import { createEngineMessageFactory, mergeAsync } from '@stripe/sync-protocol'
+import { createEngineMessageFactory } from '@stripe/sync-protocol'
 
 const engineMsg = createEngineMessageFactory()
-import { bindLogContext, createAsyncQueue, type RoutedLogEntry } from '@stripe/sync-logger'
+import { bindLogContext, type RoutedLogEntry } from '@stripe/sync-logger'
 import { log } from '../logger.js'
 
 export function syncRequestContext(pipeline: {
@@ -68,14 +68,22 @@ export async function* logApiStream<T>(
     })
   }
 
-  const logQueue = createAsyncQueue<LogMessage>()
+  const pending: LogMessage[] = []
 
-  const main = bindLogContext(
+  function* flushLogs() {
+    while (pending.length > 0) yield pending.shift()!
+  }
+
+  yield* bindLogContext(
     (async function* () {
       let itemCount = 0
       let hasError = false
       try {
         for await (const item of iter) {
+          // Yield any logs produced while generating this item before the item itself.
+          // onLog is synchronous (pino logMethod hook), so all logs from iter.next()
+          // are already in pending[] by the time the Promise resolves here.
+          yield* flushLogs()
           itemCount++
           const msg = item as {
             type?: string
@@ -97,28 +105,26 @@ export async function* logApiStream<T>(
         } else {
           log.debug(summary, `${label} completed`)
         }
+        yield* flushLogs()
       } catch (error) {
         log.error(
           { ...context, itemCount, durationMs: Date.now() - startedAt, err: error },
           `${label} failed`
         )
+        yield* flushLogs()
         if (!hasError) {
           const [logMsg, connMsg] = errorMessages(error)
           yield logMsg
           yield connMsg
         }
-      } finally {
-        logQueue.close()
       }
     })(),
     {
       onLog(entry) {
-        logQueue.push(toProtocolLog(entry))
+        pending.push(toProtocolLog(entry))
       },
     }
   )
-
-  yield* mergeAsync([main, logQueue], 2)
 }
 
 /**

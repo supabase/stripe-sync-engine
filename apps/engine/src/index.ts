@@ -3,7 +3,7 @@ export * from './lib/index.js'
 
 // Re-export the API helpers
 export { createApp, startApiServer } from './api/index.js'
-export type { StartApiServerOptions } from './api/index.js'
+export type { StartApiServerOptions, ApiServerHandle } from './api/index.js'
 
 // Re-export ndjson response helper
 export { ndjsonResponse } from '@stripe/sync-ts-cli/ndjson'
