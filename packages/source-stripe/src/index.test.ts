@@ -872,50 +872,72 @@ describe('StripeSource', () => {
       })
     })
 
-    it('emits stream_status skip for known skippable Stripe list errors', async () => {
-      const { StripeApiRequestError } = await import('@stripe/sync-openapi')
-      const listFn = vi.fn().mockRejectedValueOnce(
-        new StripeApiRequestError(
-          400,
-          {
-            error: {
-              type: 'invalid_request_error',
-              message:
-                'This endpoint is only available in testmode. Try using your test keys instead.',
+    it.each([
+      [
+        'test_helpers test_clocks',
+        'This endpoint is only available in testmode. Try using your test keys instead.',
+        '/v1/test_helpers/test_clocks',
+        'only available in testmode',
+      ],
+      ['testmode-only resource', 'This object is only available in testmode', '/v1/invoices', 'testmode'],
+      [
+        'v2 core accounts in test mode',
+        "Accounts v2 isn't available in test mode. Switch to a sandbox to test.",
+        '/v2/core/accounts',
+        'isn\'t available in test mode',
+      ],
+      [
+        'sigma scheduled_query_runs testmode',
+        'This API surface is not enabled for testmode usage.',
+        '/v1/sigma/scheduled_query_runs',
+        'API surface is not enabled',
+      ],
+    ])(
+      'emits stream_status skip for known skippable Stripe list errors (%s)',
+      async (_label, apiMessage, path, reasonSubstring) => {
+        const { StripeApiRequestError } = await import('@stripe/sync-openapi')
+        const listFn = vi.fn().mockRejectedValueOnce(
+          new StripeApiRequestError(
+            400,
+            {
+              error: {
+                type: 'invalid_request_error',
+                message: apiMessage,
+              },
             },
-          },
-          'GET',
-          '/v1/test_helpers/test_clocks'
+            'GET',
+            path
+          )
         )
-      )
 
-      const registry: Record<string, ResourceConfig> = {
-        invoices: makeConfig({
-          order: 1,
-          tableName: 'invoices',
-          listFn: listFn as ResourceConfig['listFn'],
-        }),
+        const registry: Record<string, ResourceConfig> = {
+          invoices: makeConfig({
+            order: 1,
+            tableName: 'invoices',
+            listFn: listFn as ResourceConfig['listFn'],
+          }),
+        }
+
+        vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+        const messages = await collect(
+          source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
+        )
+
+        expect(messages).toHaveLength(2)
+        expect(messages[0]).toMatchObject({
+          type: 'stream_status',
+          stream_status: { stream: 'invoices', status: 'start' },
+        })
+        expect(messages[1]).toMatchObject({
+          type: 'stream_status',
+          stream_status: {
+            stream: 'invoices',
+            status: 'skip',
+            reason: expect.stringContaining(reasonSubstring),
+          },
+        })
       }
-
-      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
-      const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
-      )
-
-      expect(messages).toHaveLength(2)
-      expect(messages[0]).toMatchObject({
-        type: 'stream_status',
-        stream_status: { stream: 'invoices', status: 'start' },
-      })
-      expect(messages[1]).toMatchObject({
-        type: 'stream_status',
-        stream_status: {
-          stream: 'invoices',
-          status: 'skip',
-          reason: expect.stringContaining('only available in testmode'),
-        },
-      })
-    })
+    )
 
     it('continues to next stream after error on previous stream', async () => {
       const failingListFn = vi.fn().mockRejectedValueOnce(new Error('Connection refused'))
