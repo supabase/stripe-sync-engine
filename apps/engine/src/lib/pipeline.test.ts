@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits, limitSource } from './pipeline.js'
 
 vi.mock('../logger.js', () => ({
   log: {
@@ -557,6 +557,43 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits()(toAsync([])))
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// limitSource()
+// ---------------------------------------------------------------------------
+
+describe('limitSource()', () => {
+  it('passes messages through and reports stopped=false on natural completion', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      {
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
+      },
+    ]
+    const gate = limitSource(toAsync(msgs))
+    const result = await drain(gate.iterable)
+    expect(result).toHaveLength(2)
+    expect(gate.stopped).toBe(false)
+  })
+
+  it('reports stopped=true when a limit fires, and never yields the synthetic eof', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const gate = limitSource<Message>(toAsync([]), { signal: ac.signal })
+    const result = await drain(gate.iterable)
+    // Synthetic eof from takeLimits is swallowed
+    expect(result).toHaveLength(0)
+    expect(gate.stopped).toBe(true)
   })
 })
 

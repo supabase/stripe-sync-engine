@@ -279,22 +279,6 @@ export function takeLimits<T extends { type: string }>(
   }
 }
 
-// MARK: - collect
-
-/**
- * Identity pass-through for DestinationOutput — useful as a terminal stage.
- */
-export async function* collect(
-  output: AsyncIterable<DestinationOutput>
-): AsyncIterable<DestinationOutput> {
-  for await (const msg of output) {
-    yield msg
-  }
-}
-
-// MARK: - pipe
-
-export function pipe<A>(src: AsyncIterable<A>): AsyncIterable<A>
 export function pipe<A, B>(
   src: AsyncIterable<A>,
   f1: (a: AsyncIterable<A>) => AsyncIterable<B>
@@ -323,3 +307,58 @@ export function pipe(
 ): AsyncIterable<unknown> {
   return fns.reduce((acc, fn) => fn(acc), src)
 }
+
+/**
+ * Handle returned by {@link limitSource}. The engine reads `stopped` *after*
+ * the downstream pipeline has drained to set `eof.has_more`.
+ */
+export interface LimitSourceHandle<T> {
+  iterable: AsyncIterable<T>
+  /** True once a limit fired (time_limit or signal). */
+  readonly stopped: boolean
+}
+
+/**
+ * Source-side graceful stop. Wraps {@link takeLimits} and hides its synthetic
+ * `eof` marker — when a limit fires, `stopped` flips true and the iterable
+ * returns done, letting downstream stages (destination `write()`) run their
+ * `finally` blocks and yield post-teardown messages naturally.
+ */
+export function limitSource<T extends { type: string }>(
+  source: AsyncIterable<T>,
+  opts: TakeLimitsOptions = {}
+): LimitSourceHandle<T> {
+  const state = { stopped: false }
+  async function* gate(): AsyncIterable<T> {
+    for await (const msg of takeLimits<T>(opts)(source)) {
+      if (msg.type === 'eof') {
+        state.stopped = (msg as EofMessage).eof.has_more
+        return
+      }
+      yield msg as T
+    }
+  }
+  return {
+    iterable: gate(),
+    get stopped() {
+      return state.stopped
+    },
+  }
+}
+
+// MARK: - collect
+
+/**
+ * Identity pass-through for DestinationOutput — useful as a terminal stage.
+ */
+export async function* collect(
+  output: AsyncIterable<DestinationOutput>
+): AsyncIterable<DestinationOutput> {
+  for await (const msg of output) {
+    yield msg
+  }
+}
+
+// MARK: - pipe
+
+export function pipe<A>(src: AsyncIterable<A>): AsyncIterable<A>

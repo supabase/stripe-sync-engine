@@ -24,7 +24,7 @@ import {
 const engineMsg = createEngineMessageFactory()
 
 import { log } from '../logger.js'
-import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits, limitSource } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
 import { stateReducer, isProgressTrigger } from './state-reducer.js'
 import { applySelection, excludeTerminalStreams } from './destination-filter.js'
@@ -561,34 +561,24 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             input
           )
 
-          const destInput = pipe(sourceOutput, enforceCatalog(activeFilteredCatalog), tapLog)
+          // Graceful close: limits apply to the source side. On soft/hard
+          // deadline or abort, limitSource closes the source iterator; the
+          // destination then sees end-of-input, runs its finally (e.g.
+          // flushAll), and yields any post-teardown messages back through
+          // destOutput. The engine synthesizes its own eof after destOutput
+          // drains.
+          const gate = limitSource(sourceOutput, {
+            time_limit: opts?.time_limit,
+            signal,
+          })
+
+          const destInput = pipe(gate.iterable, enforceCatalog(activeFilteredCatalog), tapLog)
           const destOutput = p.destination.connector.write(
             { config: p.destination.config, catalog: activeFilteredCatalog },
             destInput
           )
-          // Apply limits (takeLimits appends eof)
-          const limited = takeLimits({
-            time_limit: opts?.time_limit,
-            signal,
-          })(destOutput)
 
-          for await (const raw of limited) {
-            // takeLimits appends a minimal eof signal ({ type: 'eof', eof: { has_more } })
-            if (raw.type === 'eof') {
-              const hasMore = (raw as { eof: { has_more: boolean } }).eof.has_more
-              const runProgress = syncState.sync_run.progress
-              yield emit(
-                engineMsg.eof({
-                  status: runProgress.derived.status,
-                  has_more: hasMore,
-                  ending_state: syncState,
-                  run_progress: runProgress,
-                  request_progress: requestProgress,
-                })
-              )
-              return
-            }
-
+          for await (const raw of destOutput) {
             const msg = {
               ...raw,
               _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString(),
@@ -601,6 +591,17 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             }
             if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
           }
+
+          const runProgress = syncState.sync_run.progress
+          yield emit(
+            engineMsg.eof({
+              status: runProgress.derived.status,
+              has_more: gate.stopped,
+              ending_state: syncState,
+              run_progress: runProgress,
+              request_progress: requestProgress,
+            })
+          )
         })()
       )
     },

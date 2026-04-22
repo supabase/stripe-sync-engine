@@ -1687,6 +1687,197 @@ describe('engine.pipeline_sync() pipeline', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// engine.pipeline_sync() graceful close
+// ---------------------------------------------------------------------------
+
+describe('engine.pipeline_sync() graceful close', () => {
+  /**
+   * Builds a destination that simulates the "buffer-then-flush" pattern used
+   * by destination-google-sheets: records and source_state messages are
+   * buffered during the loop; flushAll and the state messages are only
+   * emitted after $stdin ends (in the finally block).
+   */
+  function makeBufferingDestination(flushLog: string[]): Destination {
+    return {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [] },
+        } as unknown as DiscoverOutput
+      },
+      async *write(_params, $stdin) {
+        const bufferedRecords: string[] = []
+        const bufferedStates: SourceStateMessage[] = []
+        try {
+          for await (const msg of $stdin) {
+            if (msg.type === 'record') {
+              bufferedRecords.push((msg.record.data as { id: string }).id)
+            } else if (msg.type === 'source_state') {
+              bufferedStates.push(msg as SourceStateMessage)
+            }
+          }
+        } finally {
+          // Simulate flush work
+          flushLog.push(`flushed:${bufferedRecords.join(',')}`)
+          for (const state of bufferedStates) {
+            // Critical: yield happens AFTER the flush log above
+            yield state
+          }
+        }
+      },
+    }
+  }
+
+  it('eof.has_more=false on natural source completion', async () => {
+    const flushLog: string[] = []
+    const finite: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      async *read() {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        } satisfies RecordMessage
+        yield {
+          type: 'source_state',
+          source_state: { stream: 'customers', data: { cursor: 'cus_1' } },
+        } satisfies SourceStateMessage
+      },
+    }
+
+    const engine = await createEngine(makeResolver(finite, makeBufferingDestination(flushLog)))
+    const results = await drain(engine.pipeline_sync(defaultPipeline))
+
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.has_more).toBe(false)
+    // Destination yielded the state AFTER flushing, and engine saw it
+    expect(flushLog).toEqual(['flushed:cus_1'])
+    const states = results.filter((m) => m.type === 'source_state')
+    expect(states).toHaveLength(1)
+  })
+
+  it("state emitted after destination's flush is reflected in eof.ending_state", async () => {
+    // The destination yields source_state ONLY in its finally block, after
+    // flushing. Under the new engine behavior, those messages reach the
+    // engine's reducer before the eof is synthesized.
+    const flushLog: string[] = []
+    const source: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      async *read() {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        } satisfies RecordMessage
+        yield {
+          type: 'source_state',
+          source_state: {
+            state_type: 'stream',
+            stream: 'customers',
+            data: { cursor: 'cus_1' },
+          },
+        } satisfies SourceStateMessage
+      },
+    }
+
+    const engine = await createEngine(makeResolver(source, makeBufferingDestination(flushLog)))
+    const results = await drain(engine.pipeline_sync(defaultPipeline))
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.ending_state?.source.streams.customers).toEqual({ cursor: 'cus_1' })
+  })
+
+  it('time_limit soft deadline drains destination; eof.has_more=true with post-flush state', async () => {
+    const flushLog: string[] = []
+    // Source emits records forever; soft deadline stops it mid-stream.
+    const infiniteSource: Source = {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } as any }
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      async *read() {
+        let i = 0
+        while (true) {
+          yield {
+            type: 'record',
+            record: {
+              stream: 'customers',
+              data: { id: `cus_${++i}` },
+              emitted_at: '2024-01-01T00:00:00.000Z',
+            },
+          } satisfies RecordMessage
+          yield {
+            type: 'source_state',
+            source_state: {
+              state_type: 'stream',
+              stream: 'customers',
+              data: { cursor: `cus_${i}` },
+            },
+          } satisfies SourceStateMessage
+          await new Promise((r) => setTimeout(r, 50))
+        }
+      },
+    }
+
+    const engine = await createEngine(
+      makeResolver(infiniteSource, makeBufferingDestination(flushLog))
+    )
+    const results = await drain(engine.pipeline_sync(defaultPipeline, { time_limit: 2 }))
+
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.has_more).toBe(true)
+    // Destination ran its finally (flush happened)
+    expect(flushLog.length).toBe(1)
+    // Engine received at least one post-flush state and advanced ending_state
+    const states = results.filter((m) => m.type === 'source_state')
+    expect(states.length).toBeGreaterThan(0)
+    expect(eof.eof.ending_state?.source.streams.customers).toHaveProperty('cursor')
+  }, 10_000)
+
+})
+
 function waitForAbortOrRelease(
   signal: AbortSignal,
   onAbort: () => void,
