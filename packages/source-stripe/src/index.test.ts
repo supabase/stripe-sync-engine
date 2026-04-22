@@ -789,40 +789,51 @@ describe('StripeSource', () => {
       })
     })
 
-    it('marks known skippable Stripe list errors as complete without emitting error traces', async () => {
-      const listFn = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('This object is only available in testmode'))
+    it.each([
+      ['testmode-only resource', 'This object is only available in testmode'],
+      [
+        'v2 core accounts in test mode',
+        "Accounts v2 isn't available in test mode. Switch to a sandbox to test. [GET /v2/core/accounts (400)] {request-id=req_x, stripe-should-retry=false}",
+      ],
+      [
+        'sigma scheduled_query_runs testmode',
+        'This API surface is not enabled for testmode usage. [GET /v1/sigma/scheduled_query_runs (400)] {request-id=req_y}',
+      ],
+    ])(
+      'marks known skippable Stripe list errors as complete without emitting error traces (%s)',
+      async (_label, errorMessage) => {
+        const listFn = vi.fn().mockRejectedValueOnce(new Error(errorMessage))
 
-      const registry: Record<string, ResourceConfig> = {
-        invoices: makeConfig({
-          order: 1,
-          tableName: 'invoices',
-          listFn: listFn as ResourceConfig['listFn'],
-        }),
+        const registry: Record<string, ResourceConfig> = {
+          invoices: makeConfig({
+            order: 1,
+            tableName: 'invoices',
+            listFn: listFn as ResourceConfig['listFn'],
+          }),
+        }
+
+        vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
+        const messages = await collect(
+          source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
+        )
+
+        expect(messages).toHaveLength(2)
+        expect(messages[0]).toMatchObject({
+          type: 'trace',
+          trace: {
+            trace_type: 'stream_status',
+            stream_status: { stream: 'invoices', status: 'started' },
+          },
+        })
+        expect(messages[1]).toMatchObject({
+          type: 'trace',
+          trace: {
+            trace_type: 'stream_status',
+            stream_status: { stream: 'invoices', status: 'complete' },
+          },
+        })
       }
-
-      vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
-      const messages = await collect(
-        source.read({ config, catalog: catalog({ name: 'invoices', primary_key: [['id']] }) })
-      )
-
-      expect(messages).toHaveLength(2)
-      expect(messages[0]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'started' },
-        },
-      })
-      expect(messages[1]).toMatchObject({
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'invoices', status: 'complete' },
-        },
-      })
-    })
+    )
 
     it('continues to next stream after error on previous stream', async () => {
       const failingListFn = vi.fn().mockRejectedValueOnce(new Error('Connection refused'))
