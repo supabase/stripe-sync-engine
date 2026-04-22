@@ -49,7 +49,6 @@ async function withRetry<T>(fn: () => Promise<T>, label?: string): Promise<T> {
         if (label) {
           log.warn(
             {
-              err,
               label,
               attempt: attempt + 1,
               maxRetries: MAX_RETRIES,

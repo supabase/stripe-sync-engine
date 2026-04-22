@@ -1,4 +1,4 @@
-import type { Destination } from '@stripe/sync-protocol'
+import type { Destination, SourceStateMessage } from '@stripe/sync-protocol'
 import { createSourceMessageFactory } from '@stripe/sync-protocol'
 
 const msg = createSourceMessageFactory()
@@ -126,6 +126,7 @@ function extendHeaders(
  * (each method creates a real client from config credentials).
  */
 export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<Config> {
+  const flushHeartbeatMs = 20_000
   const destination = {
     async *spec() {
       yield { type: 'spec' as const, spec: defaultSpec }
@@ -138,9 +139,6 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         ? await createSpreadsheet(sheets, config.spreadsheet_title)
         : config.spreadsheet_id!
 
-      // Fetch metadata once, reuse for all setup steps
-      const meta = await getSpreadsheetMeta(sheets, spreadsheetId)
-
       // Ensure every catalog stream has a tab and headers (single batchUpdate + single values.batchUpdate).
       // Data tabs must exist before the Overview is written: its rows contain
       // `=COUNTUNIQUE('<stream>'!A2:A)` formulas that Sheets parses with
@@ -150,13 +148,17 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
         return { streamName: stream.name, headers: properties ? Object.keys(properties) : [] }
       })
-      const sheetIdMap = await ensureSheets(sheets, spreadsheetId, meta, streamHeaders)
+      // Fetch fresh metadata before each step that reads titles. Reusing a
+      // single snapshot caused Sheet1 to be renamed twice
+      const metaBeforeEnsure = await getSpreadsheetMeta(sheets, spreadsheetId)
+      const sheetIdMap = await ensureSheets(sheets, spreadsheetId, metaBeforeEnsure, streamHeaders)
       const sheetIds = catalog.streams.map((s) => sheetIdMap.get(s.stream.name)!)
 
       const streamNames = catalog.streams.map((s) => s.stream.name)
-      await ensureIntroSheet(sheets, spreadsheetId, meta, streamNames)
+      const metaAfterEnsure = await getSpreadsheetMeta(sheets, spreadsheetId)
+      await ensureIntroSheet(sheets, spreadsheetId, metaAfterEnsure, streamNames)
 
-      await protectSheets(sheets, spreadsheetId, meta, sheetIds)
+      await protectSheets(sheets, spreadsheetId, metaAfterEnsure, sheetIds)
 
       if (isNew) {
         yield msg.control({
@@ -457,6 +459,11 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       let stateCount = 0
       let writeError: unknown = undefined
       let cancelled = true
+      // Buffer source_state until after flushAll so the "state emitted ⇒
+      // records durable" invariant holds. The engine uses these to advance
+      // sync_state/eof.ending_state; emitting them before the flush would
+      // let the engine checkpoint cursors the sheet hasn't actually written.
+      const bufferedStates: SourceStateMessage[] = []
 
       // try/finally ensures flushAll runs even when the consumer closes us
       // early via iterator.return() (e.g. takeLimits eof). Otherwise the
@@ -499,9 +506,10 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
               appendBuffers.get(stream)!.push({ row })
             }
             yield msg
+          } else if (msg.type === 'source_state') {
+            stateCount++
+            bufferedStates.push(msg)
           } else {
-            if (msg.type === 'source_state') stateCount++
-            // Pass through non-record messages immediately; data is flushed at end.
             yield msg
           }
         }
@@ -525,11 +533,38 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
             'write() cancelled by consumer; flushing buffered data anyway'
           )
         }
-        try {
-          await flushAll()
-        } catch (flushErr) {
-          log.error({ err: flushErr }, 'flushAll failed during teardown')
-          if (!writeError) writeError = flushErr
+        // flushAll can take minutes for large batches. Bun's HTTP server
+        // has a 60 s idleTimeout (see apps/engine/src/api/server.ts); if no
+        // bytes cross the wire in that window the client connection is
+        // dropped. Yield a heartbeat log every flushHeartbeatMs so the
+        // response stream stays active until flushAll resolves.
+        const flushState = { done: false, error: undefined as unknown }
+        const flushP = flushAll().then(
+          () => {
+            flushState.done = true
+          },
+          (err) => {
+            flushState.error = err
+            flushState.done = true
+          }
+        )
+        const flushStartedAt = Date.now()
+        while (!flushState.done) {
+          await Promise.race([flushP, new Promise((r) => setTimeout(r, flushHeartbeatMs))])
+          if (flushState.done) break
+          const elapsedSec = Math.round((Date.now() - flushStartedAt) / 1000)
+          log.info({ elapsedSec }, 'flushing to Sheets (in progress)')
+          yield {
+            type: 'log' as const,
+            log: {
+              level: 'debug' as const,
+              message: `flushing to Sheets (in progress, ${elapsedSec}s)`,
+            },
+          }
+        }
+        if (flushState.error) {
+          log.error({ err: flushState.error }, 'flushAll failed during teardown')
+          if (!writeError) writeError = flushState.error
         }
       }
 
@@ -541,6 +576,11 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
           connection_status: { status: 'failed' as const, message: errMsg },
         }
         return
+      }
+
+      // Flush succeeded — now safe to emit states so the engine can advance cursors.
+      for (const state of bufferedStates) {
+        yield state
       }
 
       if (Object.keys(rowAssignments).length > 0) {

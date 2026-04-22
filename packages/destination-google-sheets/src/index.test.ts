@@ -88,7 +88,9 @@ describe('destination-google-sheets', () => {
     expect(rows[5]).toEqual(['5'])
   })
 
-  it('state passthrough — flushes buffer then re-emits state', async () => {
+  it('state is re-emitted after flush, not mid-stream', async () => {
+    // State messages are buffered and yielded only after flushAll succeeds,
+    // so the engine only advances its checkpoint once the data is durable.
     const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
@@ -103,7 +105,6 @@ describe('destination-google-sheets', () => {
       dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages))
     )
 
-    // State should be re-emitted (envelope format)
     const states = output.filter((m) => m.type === 'source_state')
     expect(states).toHaveLength(1)
     expect(states[0]).toMatchObject({
@@ -111,10 +112,87 @@ describe('destination-google-sheets', () => {
       source_state: { stream: 'orders', data: { cursor: 'o2' } },
     })
 
-    // All 3 records should be written (2 flushed by state, 1 flushed at end)
+    // Ordering: every record passthrough precedes every state in the output.
+    const lastRecordIdx = output.findLastIndex((m) => m.type === 'record')
+    const firstStateIdx = output.findIndex((m) => m.type === 'source_state')
+    expect(lastRecordIdx).toBeGreaterThanOrEqual(0)
+    expect(firstStateIdx).toBeGreaterThan(lastRecordIdx)
+
+    // All 3 records should be written (flushed at end before state was yielded)
     const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'orders')!
     expect(rows).toHaveLength(4) // header + 3 rows
+  })
+
+  it('emits heartbeat log messages while flushAll is in flight', async () => {
+    // flushAll must keep the HTTP response non-idle (Bun closes idle sockets
+    // at 60 s). Here we slow batchUpdate and lower flushHeartbeatMs so we can
+    // observe the heartbeat loop firing.
+    const { sheets } = createMemorySheets()
+    const originalBatchUpdate = sheets.spreadsheets.batchUpdate.bind(sheets.spreadsheets)
+    sheets.spreadsheets.batchUpdate = (async (params: unknown) => {
+      await new Promise((r) => setTimeout(r, 120))
+      return originalBatchUpdate(params as Parameters<typeof originalBatchUpdate>[0])
+    }) as typeof sheets.spreadsheets.batchUpdate
+
+    const dest = createDestination(sheets, { flushHeartbeatMs: 20 })
+    const messages: DestinationInput[] = [
+      record('beat', { id: 'b1' }),
+      state('beat', { cursor: 'b1' }),
+    ]
+
+    const output = await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
+
+    const heartbeats = output.filter(
+      (m) => m.type === 'log' && m.log.message.startsWith('flushing to Sheets')
+    )
+    expect(heartbeats.length).toBeGreaterThanOrEqual(1)
+
+    // State still emits after the flush completes
+    const states = output.filter((m) => m.type === 'source_state')
+    expect(states).toHaveLength(1)
+    // And every heartbeat precedes the state
+    const lastHeartbeatIdx = output.findLastIndex(
+      (m) => m.type === 'log' && m.log.message.startsWith('flushing to Sheets')
+    )
+    const stateIdx = output.findIndex((m) => m.type === 'source_state')
+    expect(lastHeartbeatIdx).toBeLessThan(stateIdx)
+  })
+
+  it('state messages are suppressed when flushAll fails', async () => {
+    // If the flush throws, we must NOT yield buffered state — otherwise the
+    // engine would checkpoint cursors the sheet never received.
+    const { sheets } = createMemorySheets()
+    // Force batchUpdate to fail so applyBatch throws inside flushAll.
+    const originalBatchUpdate = sheets.spreadsheets.batchUpdate.bind(sheets.spreadsheets)
+    let firstBatch = true
+    sheets.spreadsheets.batchUpdate = (async (params: unknown) => {
+      if (firstBatch) {
+        // allow initial sheet creation to succeed
+        firstBatch = false
+        return originalBatchUpdate(params as Parameters<typeof originalBatchUpdate>[0])
+      }
+      // 400 is non-retriable, so withRetry doesn't back-off 30+ seconds
+      throw Object.assign(new Error('boom'), { code: 400 })
+    }) as typeof sheets.spreadsheets.batchUpdate
+
+    const dest = createDestination(sheets)
+    const messages: DestinationInput[] = [
+      record('orders', { id: 'o1' }),
+      state('orders', { cursor: 'o1' }),
+    ]
+
+    const output = await collect(
+      dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages))
+    )
+
+    // No state should escape since flush failed.
+    expect(output.filter((m) => m.type === 'source_state')).toHaveLength(0)
+    // A failed connection_status should surface instead.
+    const connFail = output.find(
+      (m) => m.type === 'connection_status' && m.connection_status.status === 'failed'
+    )
+    expect(connFail).toBeDefined()
   })
 
   it('multi-stream — two streams get independent tabs and headers', async () => {
@@ -255,6 +333,77 @@ describe('destination-google-sheets', () => {
 
     // Log messages now go through pino, not protocol stream
     expect(output.length).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('setup', () => {
+  it('does not corrupt the first stream tab when creating the Overview tab', async () => {
+    // Regression: `setup` used a single cached meta snapshot across both
+    // ensureSheets and ensureIntroSheet. ensureSheets would rename "Sheet1"
+    // to the first stream; ensureIntroSheet then rename the same sheetId
+    // to "Overview", clobbering the first stream's header row. The fix is
+    // to refetch meta between the two calls.
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    const catalogMulti: ConfiguredCatalog = {
+      streams: [
+        {
+          stream: {
+            name: 'charges',
+            primary_key: [['id']],
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, amount: { type: 'number' } },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+        {
+          stream: {
+            name: 'customers',
+            primary_key: [['id']],
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, email: { type: 'string' } },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+        {
+          stream: {
+            name: 'invoices',
+            primary_key: [['id']],
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, total: { type: 'number' } },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+      ],
+    }
+
+    // Consume the setup generator
+    for await (const _ of dest.setup({
+      config: cfg({ spreadsheet_id: '', spreadsheet_title: 'Setup Test' }),
+      catalog: catalogMulti,
+    })) {
+      // drain
+    }
+
+    const id = getSpreadsheetIds()[0]!
+    // Every stream tab must exist with its header row intact
+    expect(getData(id, 'charges')?.[0]).toEqual(['id', 'amount'])
+    expect(getData(id, 'customers')?.[0]).toEqual(['id', 'email'])
+    expect(getData(id, 'invoices')?.[0]).toEqual(['id', 'total'])
+    // And the Overview tab exists independently
+    expect(getData(id, 'Overview')).toBeDefined()
+    // The original Sheet1 has been consumed (renamed into the catalog)
+    expect(getData(id, 'Sheet1')).toBeUndefined()
   })
 })
 
