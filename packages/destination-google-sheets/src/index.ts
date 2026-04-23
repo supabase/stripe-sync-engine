@@ -153,10 +153,16 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
       const sheetIdMap = await ensureSheets(sheets, spreadsheetId, meta, streamHeaders)
       const sheetIds = catalog.streams.map((s) => sheetIdMap.get(s.stream.name)!)
 
-      const streamNames = catalog.streams.map((s) => s.stream.name)
-      await ensureIntroSheet(sheets, spreadsheetId, meta, streamNames)
+      // Re-fetch metadata after ensureSheets: it may have renamed Sheet1 to the first
+      // stream tab, making the original `meta` stale. ensureIntroSheet uses meta to
+      // check whether Sheet1 exists (to rename vs. insert) — if it sees the stale
+      // Sheet1 entry it will rename the first stream's tab to "Overview".
+      const freshMeta = await getSpreadsheetMeta(sheets, spreadsheetId)
 
-      await protectSheets(sheets, spreadsheetId, meta, sheetIds)
+      const streamNames = catalog.streams.map((s) => s.stream.name)
+      await ensureIntroSheet(sheets, spreadsheetId, freshMeta, streamNames)
+
+      await protectSheets(sheets, spreadsheetId, freshMeta, sheetIds)
 
       if (isNew) {
         yield msg.control({

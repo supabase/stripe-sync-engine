@@ -188,6 +188,48 @@ describe('destination-google-sheets', () => {
     expect(getData(id, 'my_stream')).toBeDefined()
   })
 
+  it('setup — all stream tabs created with correct headers, Overview does not clobber first stream', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    const streamNames = ['stream_a', 'stream_b', 'stream_c', 'stream_d', 'stream_e']
+    const multiCatalog: ConfiguredCatalog = {
+      streams: streamNames.map((name) => ({
+        stream: {
+          name,
+          primary_key: [['id']],
+          json_schema: {
+            type: 'object',
+            properties: { id: { type: 'string' }, value: { type: 'string' } },
+          },
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'append',
+      })),
+    }
+
+    for await (const _ of dest.setup({ config: cfg(), catalog: multiCatalog })) {
+      // drain
+    }
+
+    const id = getSpreadsheetIds()[0]
+
+    // All 5 stream tabs must exist with correct headers
+    for (const name of streamNames) {
+      const rows = getData(id, name)
+      expect(rows, `tab "${name}" should exist`).toBeDefined()
+      expect(rows![0], `tab "${name}" should have correct headers`).toEqual(['id', 'value'])
+    }
+
+    // Overview tab must exist and start with the spreadsheet title, not stream headers
+    const overviewRows = getData(id, 'Overview')
+    expect(overviewRows, 'Overview tab should exist').toBeDefined()
+    expect(overviewRows![0][0]).toBe('Stripe Sync Engine')
+
+    // Sheet1 should be gone (renamed to a stream tab or Overview)
+    expect(getData(id, 'Sheet1')).toBeUndefined()
+  })
+
   it('end-of-stream flush — remaining buffered rows written when input ends', async () => {
     const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
