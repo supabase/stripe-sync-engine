@@ -13,13 +13,15 @@ jobs:
     name: Create DB & monitor sync progress
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 75
+    env:
+      STRIPE_API_KEY: ${{ secrets.GOLDI_LIVE_KEY }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
 
@@ -30,27 +32,13 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/stripe.list
           sudo apt-get update -qq && sudo apt-get install -y -qq stripe
 
-      - name: Write Stripe CLI config
-        env:
-          STRIPE_CONFIG_TOML: ${{ secrets.STRIPE_CONFIG_TOML }}
-        run: |
-          mkdir -p ~/.config/stripe
-          echo "$STRIPE_CONFIG_TOML" > ~/.config/stripe/config.toml
-          chmod 600 ~/.config/stripe/config.toml
-          echo "Stripe CLI config written to ~/.config/stripe/config.toml"
-
-      - name: Stripe CLI login
-        env:
-          STRIPE_API_KEY: ${{ secrets.GOLDI_LIVE_KEY }}
-        run: echo "$STRIPE_API_KEY" | stripe login --interactive
-
       - name: Create Stripe database
         id: create-db
         run: |
           echo "Creating Stripe database..."
-          RESULT=$(stripe databases create)
+          RESULT=$(stripe databases create --live)
 
-          DB_ID=$(echo "$RESULT" | grep -oE 'db_test_[A-Za-z0-9]+' | head -1)
+          DB_ID=$(echo "$RESULT" | grep -oE 'db_[A-Za-z0-9]+' | head -1)
           DB_STRING=$(echo "$RESULT" | grep -oE 'postgresql://[^[:space:]]+')
 
           if [ -z "$DB_ID" ]; then
@@ -141,7 +129,6 @@ jobs:
 
       - name: Sigma validation
         env:
-          STRIPE_API_KEY: ${{ secrets.GOLDI_LIVE_KEY }}
           DATABASE_URL: ${{ steps.create-db.outputs.db_string }}
         run: |
           set +e
