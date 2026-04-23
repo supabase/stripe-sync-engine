@@ -836,7 +836,7 @@ export function createApp(options: AppOptions) {
       const result = await runBackfillToCompletion({ pipelineSync: activities.pipelineSync }, id, {
         syncState: pipeline.sync_state ?? emptySyncState(),
         syncRunId,
-        timeLimit: time_limit ?? 30,
+        timeLimit: time_limit ?? 300,
       })
 
       return c.json({ eof: result.eof, sync_state: result.syncState }, 200)

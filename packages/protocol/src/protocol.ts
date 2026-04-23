@@ -171,6 +171,12 @@ export const ConnectorSpecification = z
       .record(z.string(), z.unknown())
       .optional()
       .describe('JSON Schema for the read() input parameter (e.g. a webhook event).'),
+    soft_limit_fraction: z
+      .number()
+      .positive()
+      .max(1)
+      .optional()
+      .describe('Fraction of `time_limit` to use as default `soft_time_limit` (e.g. 0.5).'),
   })
   .describe('JSON Schema describing the configuration a connector requires.')
 export type ConnectorSpecification = z.infer<typeof ConnectorSpecification>

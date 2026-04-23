@@ -5,6 +5,7 @@ export interface BackfillLoopOpts {
   syncState: SyncState
   syncRunId: string
   timeLimit?: number
+  softLimit?: number
 }
 
 /**
@@ -18,7 +19,7 @@ export async function backfillStep(
 ): Promise<{ eof: EofPayload; syncState: SyncState }> {
   const { eof } = await activities.pipelineSync(pipelineId, {
     state: opts.syncState,
-    time_limit: opts.timeLimit ?? 30,
+    time_limit: opts.timeLimit ?? 300,
     run_id: opts.syncRunId,
   })
   const syncState = eof.ending_state ?? opts.syncState

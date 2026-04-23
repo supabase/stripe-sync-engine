@@ -1687,6 +1687,163 @@ describe('engine.pipeline_sync() pipeline', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// engine.pipeline_sync() graceful close (soft_time_limit)
+// ---------------------------------------------------------------------------
+
+describe('engine.pipeline_sync() graceful close', () => {
+  /**
+   * Mirrors destination-google-sheets: records and source_state are buffered
+   * during the loop; flushAll and state yields run after $stdin ends
+   * (no finally — iterator.return() drops the batch by design).
+   */
+  function makeBufferingDestination(flushLog: string[]): Destination {
+    return {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } } as SpecOutput
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *write(_params, $stdin) {
+        const bufferedRecords: string[] = []
+        const bufferedStates: SourceStateMessage[] = []
+        for await (const msg of $stdin) {
+          if (msg.type === 'record') {
+            bufferedRecords.push((msg.record.data as { id: string }).id)
+          } else if (msg.type === 'source_state') {
+            bufferedStates.push(msg as SourceStateMessage)
+          }
+        }
+        flushLog.push(`flushed:${bufferedRecords.join(',')}`)
+        for (const state of bufferedStates) {
+          yield state
+        }
+      },
+    }
+  }
+
+  function customersSource(readBody: () => AsyncIterable<Message>): Source {
+    return {
+      async *spec() {
+        yield { type: 'spec', spec: { config: {} } } as SpecOutput
+      },
+      async *check() {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        } as CatalogMessage
+      },
+      async *read() {
+        yield* readBody()
+      },
+    }
+  }
+
+  it('eof.has_more=false on natural source completion', async () => {
+    const flushLog: string[] = []
+    async function* body(): AsyncIterable<Message> {
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      } satisfies RecordMessage
+      yield {
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'cus_1' } },
+      } satisfies SourceStateMessage
+    }
+
+    const engine = await createEngine(
+      makeResolver(customersSource(body), makeBufferingDestination(flushLog))
+    )
+    const results = await drain(engine.pipeline_sync(defaultPipeline))
+
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.has_more).toBe(false)
+    expect(flushLog).toEqual(['flushed:cus_1'])
+    const states = results.filter((m) => m.type === 'source_state')
+    expect(states).toHaveLength(1)
+  })
+
+  it("state emitted after destination's flush is reflected in eof.ending_state", async () => {
+    const flushLog: string[] = []
+    async function* body(): AsyncIterable<Message> {
+      yield {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      } satisfies RecordMessage
+      yield {
+        type: 'source_state',
+        source_state: {
+          state_type: 'stream',
+          stream: 'customers',
+          data: { cursor: 'cus_1' },
+        },
+      } satisfies SourceStateMessage
+    }
+
+    const engine = await createEngine(
+      makeResolver(customersSource(body), makeBufferingDestination(flushLog))
+    )
+    const results = await drain(engine.pipeline_sync(defaultPipeline))
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.ending_state?.source.streams.customers).toEqual({ cursor: 'cus_1' })
+  })
+
+  it('soft_time_limit drains destination; eof.has_more=true with post-flush state', async () => {
+    const flushLog: string[] = []
+    async function* body(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        } satisfies RecordMessage
+        yield {
+          type: 'source_state',
+          source_state: {
+            state_type: 'stream',
+            stream: 'customers',
+            data: { cursor: `cus_${i}` },
+          },
+        } satisfies SourceStateMessage
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+
+    const engine = await createEngine(
+      makeResolver(customersSource(body), makeBufferingDestination(flushLog))
+    )
+    const results = await drain(
+      engine.pipeline_sync(defaultPipeline, { soft_time_limit: 0.3, time_limit: 5 })
+    )
+
+    const eof = results.find((m) => m.type === 'eof')!
+    expect(eof.eof.has_more).toBe(true)
+    // Destination ran its finally (flush happened)
+    expect(flushLog.length).toBe(1)
+    // Engine received post-flush state and advanced ending_state
+    const states = results.filter((m) => m.type === 'source_state')
+    expect(states.length).toBeGreaterThan(0)
+    expect(eof.eof.ending_state?.source.streams.customers).toHaveProperty('cursor')
+  }, 10_000)
+})
+
 function waitForAbortOrRelease(
   signal: AbortSignal,
   onAbort: () => void,

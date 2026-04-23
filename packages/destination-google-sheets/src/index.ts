@@ -1,4 +1,4 @@
-import type { Destination } from '@stripe/sync-protocol'
+import type { Destination, SourceStateMessage } from '@stripe/sync-protocol'
 import { createSourceMessageFactory } from '@stripe/sync-protocol'
 
 const msg = createSourceMessageFactory()
@@ -119,13 +119,50 @@ function extendHeaders(
 
 // MARK: - Destination
 
+/** Runs flushAll, yielding heartbeat logs while it runs; returns any flush error via `yield*`. */
+async function* uploadToSheet(
+  flushAll: () => Promise<void>,
+  heartbeatMs: number
+): AsyncGenerator<{ type: 'log'; log: { level: 'debug'; message: string } }, unknown, unknown> {
+  const flushState = { done: false, error: undefined as unknown }
+  const flushP = flushAll().then(
+    () => {
+      flushState.done = true
+    },
+    (err) => {
+      flushState.error = err
+      flushState.done = true
+    }
+  )
+  const flushStartedAt = Date.now()
+  while (!flushState.done) {
+    await Promise.race([flushP, new Promise((r) => setTimeout(r, heartbeatMs))])
+    if (flushState.done) break
+    const elapsedSec = Math.round((Date.now() - flushStartedAt) / 1000)
+    log.info(`flushing to Sheets (in progress, ${elapsedSec}s)`)
+    yield {
+      type: 'log' as const,
+      log: {
+        level: 'debug' as const,
+        message: `flushing to Sheets (in progress, ${elapsedSec}s)`,
+      },
+    }
+  }
+  return flushState.error
+}
+
 /**
  * Create a Google Sheets destination.
  *
  * Pass a `sheetsClient` to inject a fake for testing; omit it for production
  * (each method creates a real client from config credentials).
+ * `options.flushHeartbeatMs` overrides the in-progress heartbeat cadence (default 20s).
  */
-export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<Config> {
+export function createDestination(
+  sheetsClient?: sheets_v4.Sheets,
+  options?: { flushHeartbeatMs?: number }
+): Destination<Config> {
+  const flushHeartbeatMs = options?.flushHeartbeatMs ?? 20_000
   const destination = {
     async *spec() {
       yield { type: 'spec' as const, spec: defaultSpec }
@@ -138,9 +175,6 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         ? await createSpreadsheet(sheets, config.spreadsheet_title)
         : config.spreadsheet_id!
 
-      // Fetch metadata once, reuse for all setup steps
-      const meta = await getSpreadsheetMeta(sheets, spreadsheetId)
-
       // Ensure every catalog stream has a tab and headers (single batchUpdate + single values.batchUpdate).
       // Data tabs must exist before the Overview is written: its rows contain
       // `=COUNTUNIQUE('<stream>'!A2:A)` formulas that Sheets parses with
@@ -150,19 +184,16 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         const properties = stream.json_schema?.['properties'] as Record<string, unknown> | undefined
         return { streamName: stream.name, headers: properties ? Object.keys(properties) : [] }
       })
-      const sheetIdMap = await ensureSheets(sheets, spreadsheetId, meta, streamHeaders)
+      // Refetch meta before each step that reads titles; reusing one snapshot renamed Sheet1 twice.
+      const metaBeforeEnsure = await getSpreadsheetMeta(sheets, spreadsheetId)
+      const sheetIdMap = await ensureSheets(sheets, spreadsheetId, metaBeforeEnsure, streamHeaders)
       const sheetIds = catalog.streams.map((s) => sheetIdMap.get(s.stream.name)!)
 
-      // Re-fetch metadata after ensureSheets: it may have renamed Sheet1 to the first
-      // stream tab, making the original `meta` stale. ensureIntroSheet uses meta to
-      // check whether Sheet1 exists (to rename vs. insert) — if it sees the stale
-      // Sheet1 entry it will rename the first stream's tab to "Overview".
-      const freshMeta = await getSpreadsheetMeta(sheets, spreadsheetId)
-
       const streamNames = catalog.streams.map((s) => s.stream.name)
-      await ensureIntroSheet(sheets, spreadsheetId, freshMeta, streamNames)
+      const metaAfterEnsure = await getSpreadsheetMeta(sheets, spreadsheetId)
+      await ensureIntroSheet(sheets, spreadsheetId, metaAfterEnsure, streamNames)
 
-      await protectSheets(sheets, spreadsheetId, freshMeta, sheetIds)
+      await protectSheets(sheets, spreadsheetId, metaAfterEnsure, sheetIds)
 
       if (isNew) {
         yield msg.control({
@@ -455,18 +486,19 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
           updateBuffers.set(streamName, [])
         }
 
-        log.debug({ durationMs: Date.now() - flushStart }, 'flushAll done')
+        log.info({ durationMs: Date.now() - flushStart }, 'flushAll done')
       }
 
       const writeStart = Date.now()
       let recordCount = 0
       let stateCount = 0
-      let writeError: unknown = undefined
-      let cancelled = true
+      // Buffer source_state until after flushAll so checkpoints only advance once records are durable.
+      const bufferedStates: SourceStateMessage[] = []
+      let flushSucceeded = false
 
-      // try/finally ensures flushAll runs even when the consumer closes us
-      // early via iterator.return() (e.g. takeLimits eof). Otherwise the
-      // buffered batch would be silently dropped.
+      // Flush runs only after $stdin completes normally. Early iterator.return()
+      // (hard time_limit / abort) drops the batch — state-after-flush must not
+      // advance a checkpoint past data we never wrote.
       try {
         for await (const msg of $stdin) {
           if (msg.type === 'record') {
@@ -505,48 +537,43 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
               appendBuffers.get(stream)!.push({ row })
             }
             yield msg
+          } else if (msg.type === 'source_state') {
+            stateCount++
+            bufferedStates.push(msg)
           } else {
-            if (msg.type === 'source_state') stateCount++
-            // Pass through non-record messages immediately; data is flushed at end.
             yield msg
           }
         }
-
-        cancelled = false
         log.debug(
           { durationMs: Date.now() - writeStart, recordCount, stateCount },
-          '$stdin drained'
+          'Source drained in google sheet write, starting upload step...'
         )
+        const flushError = yield* uploadToSheet(flushAll, flushHeartbeatMs)
+        if (flushError) {
+          log.error({ err: flushError }, 'flushAll failed during teardown')
+          const errMsg = flushError instanceof Error ? flushError.message : String(flushError)
+          yield {
+            type: 'connection_status' as const,
+            connection_status: { status: 'failed' as const, message: errMsg },
+          }
+        } else {
+          flushSucceeded = true
+          for (const state of bufferedStates) {
+            yield state
+          }
+        }
       } catch (err: unknown) {
-        cancelled = false
-        writeError = err
         log.error(
           { err, durationMs: Date.now() - writeStart, recordCount, stateCount },
           'write() error'
         )
-      } finally {
-        if (cancelled) {
-          log.warn(
-            { durationMs: Date.now() - writeStart, recordCount, stateCount },
-            'write() cancelled by consumer; flushing buffered data anyway'
-          )
-        }
-        try {
-          await flushAll()
-        } catch (flushErr) {
-          log.error({ err: flushErr }, 'flushAll failed during teardown')
-          if (!writeError) writeError = flushErr
-        }
-      }
-
-      if (writeError) {
-        const errMsg = writeError instanceof Error ? writeError.message : String(writeError)
-        log.error(errMsg)
         yield {
           type: 'connection_status' as const,
-          connection_status: { status: 'failed' as const, message: errMsg },
+          connection_status: {
+            status: 'failed' as const,
+            message: err instanceof Error ? err.message : String(err),
+          },
         }
-        return
       }
 
       if (Object.keys(rowAssignments).length > 0) {
@@ -558,13 +585,14 @@ export function createDestination(sheetsClient?: sheets_v4.Sheets): Destination<
         yield { type: 'log' as const, log: { level: 'debug' as const, message: metaMsg } }
       }
 
-      log.info(`Sheets destination: wrote to spreadsheet ${spreadsheetId}`)
-      yield {
-        type: 'log' as const,
-        log: {
-          level: 'info' as const,
-          message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
-        },
+      if (flushSucceeded) {
+        yield {
+          type: 'log' as const,
+          log: {
+            level: 'info' as const,
+            message: `Sheets destination: wrote to spreadsheet ${spreadsheetId}`,
+          },
+        }
       }
     },
   } satisfies Destination<Config>

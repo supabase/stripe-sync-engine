@@ -331,11 +331,22 @@
             "name": "time_limit",
             "schema": {
               "description": "Stop streaming after N seconds.",
-              "example": "10",
+              "example": "300",
               "type": "number",
               "exclusiveMinimum": 0
             },
             "description": "Stop streaming after N seconds."
+          },
+          {
+            "in": "query",
+            "name": "soft_time_limit",
+            "schema": {
+              "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
+              "example": "150",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires."
           },
           {
             "in": "query",
@@ -513,11 +524,22 @@
             "name": "time_limit",
             "schema": {
               "description": "Stop streaming after N seconds.",
-              "example": "10",
+              "example": "300",
               "type": "number",
               "exclusiveMinimum": 0
             },
             "description": "Stop streaming after N seconds."
+          },
+          {
+            "in": "query",
+            "name": "soft_time_limit",
+            "schema": {
+              "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
+              "example": "150",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires."
           },
           {
             "in": "query",
@@ -1198,6 +1220,12 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "soft_limit_fraction": {
+                "description": "Fraction of `time_limit` to use as default `soft_time_limit` (e.g. 0.5).",
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
               }
             },
             "required": [

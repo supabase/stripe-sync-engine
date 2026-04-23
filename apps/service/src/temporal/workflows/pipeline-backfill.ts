@@ -29,12 +29,11 @@ export async function pipelineBackfill(
   const syncRunId = workflowInfo().runId
   let syncState = opts.syncState
   let operationCount = 0
-
   while (true) {
     const result = await backfillStep({ pipelineSync }, pipelineId, {
       syncState,
       syncRunId,
-      timeLimit: 30,
+      timeLimit: 300,
     })
     syncState = result.syncState
     operationCount++

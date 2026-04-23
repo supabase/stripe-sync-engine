@@ -261,7 +261,7 @@ export function createStripeSource(
           // Derive concurrency params from API key mode (overridable via config)
           const liveMode =
             config.api_key.startsWith('sk_live_') || config.api_key.startsWith('rk_live_')
-          const maxRequestsPerSecond = config.rate_limit ?? (liveMode ? 20 : 10)
+          const maxRequestsPerSecond = config.rate_limit ?? (liveMode ? 50 : 10) // 50% of rate limits by default
           const maxConcurrentStreams = Math.min(maxRequestsPerSecond, catalog.streams.length)
 
           const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)

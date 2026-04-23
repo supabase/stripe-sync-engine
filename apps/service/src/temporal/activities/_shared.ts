@@ -41,6 +41,7 @@ export async function drainMessages(
   let destConfig: Record<string, unknown> | undefined
   let eof: EofPayload | undefined
   let count = 0
+  let lastHb = 0
 
   for await (const message of stream) {
     count++
@@ -53,9 +54,13 @@ export async function drainMessages(
         destConfig = message.control.destination_config!
       }
     }
-    if (count % 50 === 0) heartbeat({ messages: count })
+    const now = Date.now()
+    if (now - lastHb >= 15_000) {
+      heartbeat({ messages: count })
+      lastHb = now
+    }
   }
-  if (count % 50 !== 0) heartbeat({ messages: count })
+  heartbeat({ messages: count })
 
   return { sourceConfig, destConfig, eof }
 }

@@ -10,9 +10,13 @@ export function createPipelineSyncActivity(context: ActivitiesContext) {
     opts?: SourceReadOptions & { input?: SourceInputMessage[] }
   ): Promise<{ eof: EofPayload }> {
     const pipeline = await context.pipelineStore.get(pipelineId)
+
     const { id: _, ...config } = pipeline
     const { input: inputArr, ...readOpts } = opts ?? {}
     const input = inputArr?.length ? asIterable(inputArr) : undefined
+
+    // Destination-specific soft_time_limit defaults now live in the engine
+    // (driven by spec.soft_limit_fraction). The activity just forwards readOpts.
     const initialState = parseSyncState(readOpts.state)
     const { sourceConfig, destConfig, eof } = await drainMessages(
       context.engine.pipeline_sync(config, readOpts, input),

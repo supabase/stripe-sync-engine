@@ -180,8 +180,19 @@ export async function createApp(resolver: ConnectorResolver) {
   const syncQueryParams = z.object({
     time_limit: z.coerce.number().positive().optional().meta({
       description: 'Stop streaming after N seconds.',
-      example: '10',
+      example: '300',
     }),
+    soft_time_limit: z.coerce
+      .number()
+      .positive()
+      .optional()
+      .meta({
+        description:
+          'Soft wall-clock deadline in seconds. Stops reading from the source ' +
+          'between messages; the destination continues to drain and flush until ' +
+          'time_limit fires.',
+        example: '150',
+      }),
     run_id: z.string().optional().meta({
       description: 'Optional sync run identifier used to track bounded sync progress.',
       example: 'run_demo',
@@ -530,7 +541,7 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(pipelineSyncRoute, async (c) => {
-    const { time_limit, run_id } = c.req.valid('query')
+    const { time_limit, soft_time_limit, run_id } = c.req.valid('query')
 
     const pipeline = requireHeaderValue(
       c.req.valid('header')['x-pipeline'],
@@ -565,7 +576,11 @@ export async function createApp(resolver: ConnectorResolver) {
       )
     const ac = createConnectionAbort(c, onDisconnect)
 
-    const output = engine.pipeline_sync(pipeline, { state, time_limit, run_id }, input)
+    const output = engine.pipeline_sync(
+      pipeline,
+      { state, time_limit, soft_time_limit, run_id },
+      input
+    )
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {
       signal: ac.signal,
     })

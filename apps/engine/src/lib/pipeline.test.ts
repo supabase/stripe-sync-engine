@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits, limitSource } from './pipeline.js'
 
 vi.mock('../logger.js', () => ({
   log: {
@@ -415,7 +415,7 @@ describe('takeLimits()', () => {
     expect(result.length).toBeLessThanOrEqual(3)
   })
 
-  it('soft cutoff: emits eof with time_limit reason between messages when deadline-1s crossed', async () => {
+  it('soft_time_limit: stops between messages cooperatively', async () => {
     async function* fastMessages(): AsyncIterable<Message> {
       let i = 0
       while (true) {
@@ -432,16 +432,15 @@ describe('takeLimits()', () => {
     }
 
     const start = Date.now()
-    const result = await drain(takeLimits({ time_limit: 3 })(fastMessages()))
+    const result = await drain(takeLimits({ soft_time_limit: 0.5 })(fastMessages()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
     expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
-    // Soft deadline fires at ~2s (deadline - 1s buffer)
-    expect(elapsed).toBeGreaterThan(1500)
-    expect(elapsed).toBeLessThan(4000)
+    expect(elapsed).toBeGreaterThanOrEqual(500)
+    expect(elapsed).toBeLessThan(1500)
   })
 
-  it('hard cutoff: forces return when source blocks past deadline+1s', async () => {
+  it('time_limit: hard cutoff forces return even if upstream is blocked', async () => {
     async function* blockingSource(): AsyncIterable<Message> {
       yield {
         type: 'record',
@@ -451,7 +450,6 @@ describe('takeLimits()', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       }
-      // Block for 10 seconds — way past the hard deadline
       await new Promise((r) => setTimeout(r, 10_000))
       yield {
         type: 'record',
@@ -464,14 +462,40 @@ describe('takeLimits()', () => {
     }
 
     const start = Date.now()
-    const result = await drain(takeLimits({ time_limit: 2 })(blockingSource()))
+    const result = await drain(takeLimits({ time_limit: 0.5 })(blockingSource()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
     expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
-    // Hard deadline fires at ~3s (deadline + 1s), NOT at 10s
-    expect(elapsed).toBeGreaterThan(2000)
-    expect(elapsed).toBeLessThan(5000)
-  }, 10_000)
+    expect(elapsed).toBeGreaterThanOrEqual(400)
+    expect(elapsed).toBeLessThan(2000)
+  }, 5_000)
+
+  it('soft and hard together: soft wins when reached first', async () => {
+    async function* fastMessages(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+
+    const start = Date.now()
+    const result = await drain(
+      takeLimits({ soft_time_limit: 0.3, time_limit: 2 })(fastMessages())
+    )
+    const elapsed = Date.now() - start
+    const eof = result.at(-1) as any
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    expect(elapsed).toBeGreaterThanOrEqual(300)
+    expect(elapsed).toBeLessThan(1500)
+  })
 
   it('abort signal: terminates immediately when signal is aborted', async () => {
     async function* infiniteSource(): AsyncIterable<Message> {
@@ -557,6 +581,64 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits()(toAsync([])))
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// limitSource()
+// ---------------------------------------------------------------------------
+
+describe('limitSource()', () => {
+  it('passes messages through and reports stopped=false on natural completion', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      {
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
+      },
+    ]
+    const gate = limitSource(toAsync(msgs))
+    const result = await drain(gate.iterable)
+    expect(result).toHaveLength(2)
+    expect(gate.stopped).toBe(false)
+  })
+
+  it('reports stopped=true when a limit fires, and never yields the synthetic eof', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const gate = limitSource<Message>(toAsync([]), { signal: ac.signal })
+    const result = await drain(gate.iterable)
+    expect(result).toHaveLength(0)
+    expect(gate.stopped).toBe(true)
+  })
+
+  it('reports stopped=true when soft_time_limit fires between messages', async () => {
+    async function* fastMessages(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+    const gate = limitSource<Message>(fastMessages(), { soft_time_limit: 0.2 })
+    const result = await drain(gate.iterable)
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.every((m) => m.type !== 'eof')).toBe(true)
+    expect(gate.stopped).toBe(true)
   })
 })
 

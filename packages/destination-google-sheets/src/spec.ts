@@ -29,4 +29,6 @@ export type Config = z.infer<typeof configSchema>
 
 export default {
   config: z.toJSONSchema(configSchema),
+  // sheet flushAll can take tens of seconds on wide catalogs; give it half the budget.
+  soft_limit_fraction: 0.5,
 } satisfies ConnectorSpecification

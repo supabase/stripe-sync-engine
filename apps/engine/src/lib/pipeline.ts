@@ -104,23 +104,22 @@ export function filterType<T extends Message['type']>(
 
 export interface TakeLimitsOptions {
   time_limit?: number
+  soft_time_limit?: number
   signal?: AbortSignal
 }
-
-const DEADLINE_BUFFER_MS = 1000
 
 /**
  * Applies stream limits and emits an `eof` terminal message as the final item.
  *
- * - `time_limit`: two-phase wall-clock deadline:
- *     - **soft** (deadline − 1 s): checked between messages, graceful return
- *     - **hard** (deadline + 1 s): `Promise.race` forces return even if upstream blocks
- *   For short time limits (< 2 s) soft = hard = deadline.
- * - `signal`: external `AbortSignal` (e.g. client disconnect). When aborted the
- *   stream terminates immediately with `reason: 'aborted'`.
+ * - `soft_time_limit`: between-message cooperative deadline. Closes the
+ *   iterator via `return()`, letting upstream `finally` blocks run.
+ * - `time_limit`: hard deadline enforced via `Promise.race`. Forces eof even
+ *   if upstream is blocked.
+ * - `signal`: external `AbortSignal` (e.g. client disconnect). Terminates
+ *   immediately.
  *
  * When multiple limits are set, whichever fires first wins.
- * The last yielded item is always `{ type: 'eof', eof: { reason, ... } }`.
+ * The last yielded item is always `{ type: 'eof', eof: { has_more } }`.
  */
 export function takeLimits<T extends { type: string }>(
   opts: TakeLimitsOptions = {}
@@ -128,29 +127,24 @@ export function takeLimits<T extends { type: string }>(
   return async function* (messages) {
     const startedAt = Date.now()
 
-    const hasTimeLimit = opts.time_limit != null && opts.time_limit > 0
-    const nominalDeadline = hasTimeLimit ? startedAt + opts.time_limit! * 1000 : undefined
     const softDeadline =
-      nominalDeadline != null
-        ? opts.time_limit! >= 2
-          ? nominalDeadline - DEADLINE_BUFFER_MS
-          : nominalDeadline
+      opts.soft_time_limit != null && opts.soft_time_limit > 0
+        ? startedAt + opts.soft_time_limit * 1000
         : undefined
     const hardDeadline =
-      nominalDeadline != null
-        ? opts.time_limit! >= 2
-          ? nominalDeadline + DEADLINE_BUFFER_MS
-          : nominalDeadline
+      opts.time_limit != null && opts.time_limit > 0
+        ? startedAt + opts.time_limit * 1000
         : undefined
 
     const needsRace = hardDeadline != null || opts.signal != null
+    const needsSlowPath = needsRace || softDeadline != null
 
     function makeEof(hasMore: boolean): EofMessage {
       return { type: 'eof' as const, eof: { has_more: hasMore } } as EofMessage
     }
 
-    // Fast path: no time limit and no signal — simple cooperative loop
-    if (!needsRace) {
+    // Fast path: no limits and no signal — simple cooperative loop
+    if (!needsSlowPath) {
       for await (const msg of messages) {
         yield msg
       }
@@ -235,7 +229,6 @@ export function takeLimits<T extends { type: string }>(
             'SYNC_TIME_LIMIT_HARD'
           )
           yield makeEof(true)
-          // Fire-and-forget: don't await return() since the iterator may be blocked
           closeIteratorInBackground()
           return
         }
@@ -257,12 +250,11 @@ export function takeLimits<T extends { type: string }>(
         const msg = result.value
         yield msg
 
-        // Check soft deadline between messages
         if (softDeadline != null && Date.now() >= softDeadline) {
           log.warn(
             {
               elapsed_ms: Date.now() - startedAt,
-              time_limit: opts.time_limit,
+              soft_time_limit: opts.soft_time_limit,
               event: 'SYNC_TIME_LIMIT_SOFT',
             },
             'SYNC_TIME_LIMIT_SOFT'
@@ -276,6 +268,54 @@ export function takeLimits<T extends { type: string }>(
       cleanup()
       await closeIterator()
     }
+  }
+}
+
+// MARK: - limitSource
+
+/**
+ * Handle returned by {@link limitSource}. Read `stopped` *after* draining the
+ * iterable to decide whether the upstream stopped because of a limit (used to
+ * set `eof.has_more`).
+ */
+export interface LimitSourceHandle<T> {
+  iterable: AsyncIterable<T>
+  /** True once a limit fired (soft_time_limit, time_limit, or signal). */
+  readonly stopped: boolean
+}
+
+/**
+ * Source-side graceful stop. Wraps {@link takeLimits} and hides its synthetic
+ * terminal `eof` marker — when a limit fires, `stopped` flips true and the
+ * iterable returns done, letting downstream stages (e.g. destination
+ * `write()`) run their `finally` blocks and yield post-teardown messages
+ * naturally (such as flushed state updates).
+ *
+ * Typical usage:
+ *   const gate = limitSource(sourceOutput, { soft_time_limit, signal })
+ *   const destOutput = destination.write(cfg, pipe(gate.iterable, ...))
+ *   for await (const msg of destOutput) { ... }
+ *   // Use gate.stopped to populate eof.has_more
+ */
+export function limitSource<T extends { type: string }>(
+  source: AsyncIterable<T>,
+  opts: TakeLimitsOptions = {}
+): LimitSourceHandle<T> {
+  const state = { stopped: false }
+  async function* gate(): AsyncIterable<T> {
+    for await (const msg of takeLimits<T>(opts)(source)) {
+      if (msg.type === 'eof') {
+        state.stopped = (msg as EofMessage).eof.has_more
+        return
+      }
+      yield msg as T
+    }
+  }
+  return {
+    iterable: gate(),
+    get stopped() {
+      return state.stopped
+    },
   }
 }
 

@@ -24,7 +24,7 @@ import {
 const engineMsg = createEngineMessageFactory()
 
 import { log } from '../logger.js'
-import { enforceCatalog, filterType, tapLog, pipe, takeLimits } from './pipeline.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits, limitSource } from './pipeline.js'
 import { createInitialProgress, progressReducer } from './progress/index.js'
 import { stateReducer, isProgressTrigger } from './state-reducer.js'
 import { applySelection, excludeTerminalStreams } from './destination-filter.js'
@@ -37,6 +37,8 @@ export const SourceReadOptions = z.object({
   state: z.unknown().optional(),
   /** Wall-clock time limit in seconds; the stream stops after this duration. */
   time_limit: z.number().positive().optional(),
+  /** Wall-clock time limit in seconds; the source read stops after this duration. */
+  soft_time_limit: z.number().positive().optional(),
   /** Identifies the current sync run. If it differs from state.sync_run.run_id, run progress is reset. */
   run_id: z.string().optional(),
 })
@@ -46,6 +48,7 @@ export interface SourceReadOptions {
     | { streams: Record<string, unknown>; global: Record<string, unknown> }
     | Record<string, unknown>
   time_limit?: number
+  soft_time_limit?: number
   run_id?: string
 }
 
@@ -215,13 +218,17 @@ function configPayload(envelope: {
 async function getSpec(
   connector: { spec(): AsyncIterable<Message> },
   rawConfig: Record<string, unknown>
-): Promise<{ config: Record<string, unknown>; streamStateSchema?: z.ZodType }> {
+): Promise<{
+  config: Record<string, unknown>
+  streamStateSchema?: z.ZodType
+  softLimitFraction?: number
+}> {
   const specMsg = await collectFirst(connector.spec(), 'spec')
   const config = z.fromJSONSchema(specMsg.spec.config).parse(rawConfig) as Record<string, unknown>
   const streamStateSchema = specMsg.spec.source_state_stream
     ? z.fromJSONSchema(specMsg.spec.source_state_stream)
     : undefined
-  return { config, streamStateSchema }
+  return { config, streamStateSchema, softLimitFraction: specMsg.spec.soft_limit_fraction }
 }
 
 /** Discover and build catalog for a pipeline. */
@@ -254,7 +261,11 @@ async function resolvePipeline(
   const normalizedState = parseSyncState(state, srcSpec.streamStateSchema)
   return {
     source: { connector: srcConnector, config: srcSpec.config },
-    destination: { connector: destConnector, config: destSpec.config },
+    destination: {
+      connector: destConnector,
+      config: destSpec.config,
+      softLimitFraction: destSpec.softLimitFraction,
+    },
     catalog,
     filteredCatalog,
     state: normalizedState,
@@ -332,6 +343,21 @@ function withSetupTimeout<T extends { type: string }>(
 /** Stamp a message as engine-emitted. */
 function emit(msg: Record<string, unknown>): SyncOutput {
   return { ...msg, _emitted_by: 'engine', _ts: new Date().toISOString() } as unknown as SyncOutput
+}
+
+/**
+ * Derive `soft_time_limit` from `time_limit` when the caller didn't set one.
+ * Destinations can request a fraction via `spec.soft_limit_fraction`
+ * (e.g. 0.5 for Sheets); otherwise soft = time_limit - 1 (mirrors the old
+ * two-phase takeLimits behaviour). Returns undefined for `time_limit < 2`.
+ */
+function defaultSoftTimeLimit(
+  timeLimit: number | undefined,
+  fraction: number | undefined
+): number | undefined {
+  if (timeLimit == null || timeLimit < 2) return undefined
+  const derived = fraction != null ? timeLimit * fraction : timeLimit - 1
+  return derived > 0 ? derived : undefined
 }
 
 /** Accumulate source state from messages. Pure. */
@@ -504,6 +530,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const parsed = map(raw, (msg) => Message.parse(msg))
           yield* takeLimits({
             time_limit: opts?.time_limit,
+            soft_time_limit: opts?.time_limit ? opts?.time_limit - 1 : undefined,
             signal,
           })(parsed) as AsyncIterable<Message>
         })()
@@ -562,7 +589,18 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             input
           )
 
-          const destInput = pipe(sourceOutput, enforceCatalog(activeFilteredCatalog), tapLog)
+          // Graceful close: soft_time_limit stops reading from the source
+          // between messages while the destination drains/flushes until
+          // time_limit fires on destOutput. Default: `time_limit - 1`, or
+          // `time_limit * spec.soft_limit_fraction` for destinations with
+          // long flush tails (e.g. Sheets: 0.5).
+          const softTimeLimit =
+            opts?.soft_time_limit ??
+            defaultSoftTimeLimit(opts?.time_limit, p.destination.softLimitFraction)
+          // signal is enforced on destOutput's takeLimits below — don't duplicate here.
+          const sourceGate = limitSource(sourceOutput, { soft_time_limit: softTimeLimit })
+
+          const destInput = pipe(sourceGate.iterable, enforceCatalog(activeFilteredCatalog), tapLog)
           const destOutput = p.destination.connector.write(
             { config: p.destination.config, catalog: activeFilteredCatalog },
             destInput
@@ -581,7 +619,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
               yield emit(
                 engineMsg.eof({
                   status: runProgress.derived.status,
-                  has_more: hasMore,
+                  has_more: hasMore || sourceGate.stopped,
                   ending_state: syncState,
                   run_progress: runProgress,
                   request_progress: requestProgress,

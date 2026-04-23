@@ -399,6 +399,8 @@ export interface components {
                 source_input?: {
                     [key: string]: unknown;
                 };
+                /** @description Fraction of `time_limit` to use as default `soft_time_limit` (e.g. 0.5). */
+                soft_limit_fraction?: number;
             };
         };
         ConnectionStatusMessage: {
@@ -1011,6 +1013,8 @@ export interface operations {
             query?: {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
+                /** @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires. */
+                soft_time_limit?: number;
                 /** @description Optional sync run identifier used to track bounded sync progress. */
                 run_id?: string;
             };
@@ -1094,6 +1098,8 @@ export interface operations {
             query?: {
                 /** @description Stop streaming after N seconds. */
                 time_limit?: number;
+                /** @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires. */
+                soft_time_limit?: number;
                 /** @description Optional sync run identifier used to track bounded sync progress. */
                 run_id?: string;
             };
