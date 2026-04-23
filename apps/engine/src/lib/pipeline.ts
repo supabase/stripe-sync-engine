@@ -139,8 +139,31 @@ export function takeLimits<T extends { type: string }>(
     const needsRace = hardDeadline != null || opts.signal != null
     const needsSlowPath = needsRace || softDeadline != null
 
-    function makeEof(hasMore: boolean): EofMessage {
-      return { type: 'eof' as const, eof: { has_more: hasMore } } as EofMessage
+    let iterator: AsyncIterator<T> | undefined
+    let hardTimer: ReturnType<typeof setTimeout> | undefined
+    let iteratorClosed = false
+
+    /**
+     * Build the terminal eof message and close the upstream iterator
+     * (fire-and-forget). This MUST happen before `yield` because:
+     *
+     * After `yield`, the generator suspends. The consumer (e.g.
+     * pipeline_sync) receives the eof, then `return`s from its
+     * `for await`, which calls `.return()` on this generator — jumping
+     * straight to our `finally` block. The code after the `yield`
+     * never executes. If the iterator isn't already closed, `finally`
+     * calls `await closeIterator()` which awaits the upstream's
+     * `.return()` (e.g. a destination flushing to Postgres). That
+     * blocks the entire chain back to the HTTP response, which never
+     * closes even though the client already received the eof line.
+     *
+     * By closing here (before the yield), `iteratorClosed` is already
+     * true when `finally` runs, so `closeIterator()` is a no-op.
+     */
+    function closeIteratorAndMakeEof({ has_more }: { has_more: boolean }): EofMessage {
+      iteratorClosed = true
+      void iterator?.return?.(undefined)?.catch(() => {})
+      return { type: 'eof' as const, eof: { has_more } } as EofMessage
     }
 
     // Fast path: no limits and no signal — simple cooperative loop
@@ -148,14 +171,12 @@ export function takeLimits<T extends { type: string }>(
       for await (const msg of messages) {
         yield msg
       }
-      yield makeEof(false)
+      yield closeIteratorAndMakeEof({ has_more: false })
       return
     }
 
     // Slow path: manual iterator + Promise.race for hard deadline / signal
-    const iterator = messages[Symbol.asyncIterator]()
-    let hardTimer: ReturnType<typeof setTimeout> | undefined
-    let iteratorClosed = false
+    iterator = messages[Symbol.asyncIterator]()
 
     function cleanup() {
       if (hardTimer != null) clearTimeout(hardTimer)
@@ -164,13 +185,7 @@ export function takeLimits<T extends { type: string }>(
     async function closeIterator() {
       if (iteratorClosed) return
       iteratorClosed = true
-      await iterator.return?.(undefined)
-    }
-
-    function closeIteratorInBackground() {
-      if (iteratorClosed) return
-      iteratorClosed = true
-      void iterator.return?.(undefined)?.catch(() => {})
+      await iterator!.return?.(undefined)
     }
 
     // Create the abort promise once so we don't leak listeners per iteration
@@ -192,8 +207,7 @@ export function takeLimits<T extends { type: string }>(
         if (opts.signal?.aborted) {
           cleanup()
           log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof(true)
-          await closeIterator()
+          yield closeIteratorAndMakeEof({ has_more: true })
           return
         }
 
@@ -228,22 +242,20 @@ export function takeLimits<T extends { type: string }>(
             },
             'SYNC_TIME_LIMIT_HARD'
           )
-          yield makeEof(true)
-          closeIteratorInBackground()
+          yield closeIteratorAndMakeEof({ has_more: true })
           return
         }
 
         if (winner.kind === 'aborted') {
           log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof(true)
-          await closeIterator()
+          yield closeIteratorAndMakeEof({ has_more: true })
           return
         }
 
         // kind === 'next'
         const { result } = winner
         if (result.done) {
-          yield makeEof(false)
+          yield closeIteratorAndMakeEof({ has_more: false })
           return
         }
 
@@ -259,8 +271,7 @@ export function takeLimits<T extends { type: string }>(
             },
             'SYNC_TIME_LIMIT_SOFT'
           )
-          yield makeEof(true)
-          await closeIterator()
+          yield closeIteratorAndMakeEof({ has_more: true })
           return
         }
       }

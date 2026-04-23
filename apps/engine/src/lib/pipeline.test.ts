@@ -582,6 +582,51 @@ describe('takeLimits()', () => {
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
+
+  // Regression: before the fix, this would hang because yield suspends
+  // the generator and the consumer's for-await cleanup triggers finally
+  // which awaits the slow upstream return(). The eof() helper now closes
+  // the iterator before the yield so finally is a no-op.
+  it('hard limit: consumer returning early completes promptly even when upstream return() is slow', async () => {
+    function slowReturnSource(): AsyncIterable<{ type: string }> {
+      let yielded = false
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            async next() {
+              if (!yielded) {
+                yielded = true
+                return { value: { type: 'data' }, done: false }
+              }
+              return new Promise(() => {})
+            },
+            async return() {
+              await new Promise((r) => setTimeout(r, 30_000))
+              return { value: undefined, done: true } as IteratorResult<{ type: string }>
+            },
+          }
+        },
+      }
+    }
+
+    async function consumeUntilEof<T extends { type: string }>(
+      iter: AsyncIterable<T>
+    ): Promise<T[]> {
+      const result: T[] = []
+      for await (const msg of iter) {
+        result.push(msg)
+        if (msg.type === 'eof') return result
+      }
+      return result
+    }
+
+    const start = Date.now()
+    const result = await consumeUntilEof(takeLimits({ time_limit: 0.3 })(slowReturnSource()))
+    const elapsed = Date.now() - start
+
+    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    expect(elapsed).toBeLessThan(5000)
+  }, 10_000)
 })
 
 // ---------------------------------------------------------------------------

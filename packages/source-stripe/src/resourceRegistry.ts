@@ -100,7 +100,8 @@ export function buildResourceRegistry(
   apiKey: string,
   apiVersion: string,
   baseUrl?: string,
-  allowedTables?: Set<string>
+  allowedTables?: Set<string>,
+  signal?: AbortSignal
 ): Record<string, ResourceConfig> {
   const endpoints = discoverListEndpoints(spec)
   const nestedEndpoints = discoverNestedEndpoints(spec, endpoints)
@@ -136,6 +137,7 @@ export function buildResourceRegistry(
         (params) =>
           withHttpRetry(() => rawListFn(params), {
             label: `LIST ${endpoint.apiPath} (${tableName})`,
+            signal,
           }),
         {
           isV2,
@@ -148,6 +150,7 @@ export function buildResourceRegistry(
       retrieveFn: (id) =>
         withHttpRetry(() => rawRetrieveFn(id), {
           label: `GET ${endpoint.apiPath}/${id} (${tableName})`,
+          signal,
         }),
       nestedResources: children.length > 0 ? children : undefined,
     }

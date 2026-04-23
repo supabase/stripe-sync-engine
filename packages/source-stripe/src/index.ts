@@ -273,7 +273,8 @@ export function createStripeSource(
             config.api_key,
             resolved.apiVersion,
             config.base_url,
-            streamNames
+            streamNames,
+            signal
           )
           let accountId: string
           let accountCreated: number

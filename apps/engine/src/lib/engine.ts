@@ -347,16 +347,17 @@ function emit(msg: Record<string, unknown>): SyncOutput {
 
 /**
  * Derive `soft_time_limit` from `time_limit` when the caller didn't set one.
- * Destinations can request a fraction via `spec.soft_limit_fraction`
- * (e.g. 0.5 for Sheets); otherwise soft = time_limit - 1 (mirrors the old
- * two-phase takeLimits behaviour). Returns undefined for `time_limit < 2`.
+ * Defaults to 80% of `time_limit` to give even Postgres enough headroom
+ * for final flushes.
+ * Destinations can override via `spec.soft_limit_fraction` (e.g. 0.5 for Sheets).
+ * Returns undefined for `time_limit < 2`.
  */
 function defaultSoftTimeLimit(
   timeLimit: number | undefined,
   fraction: number | undefined
 ): number | undefined {
   if (timeLimit == null || timeLimit < 2) return undefined
-  const derived = fraction != null ? timeLimit * fraction : timeLimit - 1
+  const derived = (fraction ?? 0.8) * timeLimit
   return derived > 0 ? derived : undefined
 }
 
@@ -530,7 +531,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           const parsed = map(raw, (msg) => Message.parse(msg))
           yield* takeLimits({
             time_limit: opts?.time_limit,
-            soft_time_limit: opts?.time_limit ? opts?.time_limit - 1 : undefined,
+            soft_time_limit: defaultSoftTimeLimit(opts?.time_limit, undefined),
             signal,
           })(parsed) as AsyncIterable<Message>
         })()
@@ -591,9 +592,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           // Graceful close: soft_time_limit stops reading from the source
           // between messages while the destination drains/flushes until
-          // time_limit fires on destOutput. Default: `time_limit - 1`, or
-          // `time_limit * spec.soft_limit_fraction` for destinations with
-          // long flush tails (e.g. Sheets: 0.5).
+          // time_limit fires on destOutput. Default: 80% of time_limit;
+          // destinations can override via spec.soft_limit_fraction
+          // (e.g. Sheets: 0.5).
           const softTimeLimit =
             opts?.soft_time_limit ??
             defaultSoftTimeLimit(opts?.time_limit, p.destination.softLimitFraction)
