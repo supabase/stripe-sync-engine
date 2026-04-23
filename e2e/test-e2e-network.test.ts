@@ -66,7 +66,7 @@ async function createCustomersPipeline(
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: harness.destPgContainerUrl(),
+          url: harness.destPgContainerUrl(),
           schema,
         },
       },
@@ -132,7 +132,7 @@ async function waitForCompletionWithoutFalseReady(opts: {
         `pipeline ${opts.pipelineId} reached ready with only ${rows}/${opts.expectedCount} rows`
       )
     }
-    if (rows === opts.expectedCount) {
+    if (rows === opts.expectedCount && pipeline?.status === 'ready') {
       return
     }
 
@@ -242,9 +242,9 @@ describe('network interruption e2e via Docker service', () => {
     let pipelineId: string | undefined
 
     try {
-      harness = await startServiceHarness({ customerCount: 400 })
+      harness = await startServiceHarness({ customerCount: 2000 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 2,
       })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
@@ -270,9 +270,9 @@ describe('network interruption e2e via Docker service', () => {
     let pipelineId: string | undefined
 
     try {
-      harness = await startServiceHarness({ customerCount: 400 })
+      harness = await startServiceHarness({ customerCount: 2000 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 2,
       })
 
       await waitForPartialRows(harness, schema, harness.expectedIds.length)
@@ -304,9 +304,9 @@ describe('network interruption e2e via Docker service', () => {
     let pipelineId: string | undefined
 
     try {
-      harness = await startServiceHarness({ customerCount: 400 })
+      harness = await startServiceHarness({ customerCount: 2000 })
       pipelineId = await createCustomersPipeline(harness, schema, {
-        rate_limit: 1,
+        rate_limit: 2,
       })
 
       const rowsBeforePause = await waitForPartialRows(harness, schema, harness.expectedIds.length)

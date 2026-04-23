@@ -7,13 +7,12 @@ import type {
   SetupOutput,
   TeardownOutput,
 } from '@stripe/sync-protocol'
-import { sourceControlMsg, withAbortOnReturn } from '@stripe/sync-protocol'
-import { z } from 'zod'
-import defaultSpec, { configSchema } from './spec.js'
+import { createSourceMessageFactory, withAbortOnReturn } from '@stripe/sync-protocol'
+import defaultSpec from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
-import { catalogFromRegistry, catalogFromOpenApi } from './catalog.js'
+import { catalogFromOpenApi } from './catalog.js'
 import {
   BUNDLED_API_VERSION,
   resolveOpenApiSpec,
@@ -22,18 +21,21 @@ import {
 } from '@stripe/sync-openapi'
 import { processStripeEvent } from './process-event.js'
 import { processWebhookInput, createInputQueue, startWebhookServer } from './src-webhook.js'
-import { listApiBackfill, errorToTrace } from './src-list-api.js'
+import { listApiBackfill, errorToConnectionStatus } from './src-list-api.js'
 import { pollEvents } from './src-events-api.js'
 import type { StripeWebSocketClient, StripeWebhookEvent } from './src-websocket.js'
 import { createStripeWebSocketClient } from './src-websocket.js'
-import type { ResourceConfig } from './types.js'
 import { makeClient, type StripeClient } from './client.js'
 import type { RateLimiter } from './rate-limiter.js'
-import { createInMemoryRateLimiter, DEFAULT_MAX_RPS } from './rate-limiter.js'
+import { createInMemoryRateLimiter } from './rate-limiter.js'
 import { tracedFetch } from './transport.js'
 import { stripeEventSchema } from './spec.js'
+import { resolveAccountMetadata } from './account-metadata.js'
+import { log } from './logger.js'
 
-function combineSignals(...signals: Array<AbortSignal | null | undefined>): AbortSignal | undefined {
+function combineSignals(
+  ...signals: Array<AbortSignal | null | undefined>
+): AbortSignal | undefined {
   const activeSignals = signals.filter((signal): signal is AbortSignal => signal != null)
   if (activeSignals.length === 0) return undefined
   if (activeSignals.length === 1) return activeSignals[0]
@@ -63,42 +65,35 @@ export type WebhookInput = {
 
 // MARK: - Stream state
 
-export type SegmentState = {
-  index: number
-  gte: number
-  lt: number
-  page_cursor: string | null
-  status: 'pending' | 'complete'
+export type RemainingRange = {
+  gte: string // ISO 8601
+  lt: string // ISO 8601
+  cursor: string | null // Stripe pagination cursor; null = not yet started
 }
 
-/** Compact backfill state — O(concurrency) not O(total segments). */
-export type BackfillState = {
-  range: { gte: number; lt: number }
-  num_segments: number
-  completed: Array<{ gte: number; lt: number }>
-  in_flight: Array<{ gte: number; lt: number; page_cursor: string }>
+export type StreamState = {
+  accounted_range?: {
+    gte: string // ISO 8601 — inclusive lower bound
+    lt: string // ISO 8601 — exclusive upper bound
+  }
+  remaining: RemainingRange[]
 }
 
-export type StreamErrorStatus = 'transient_error' | 'system_error' | 'config_error' | 'auth_error'
+export type EventState = { eventId: string; eventCreated: number }
 
-export type StripeStreamState = {
-  page_cursor: string | null
-  status: 'pending' | 'complete' | StreamErrorStatus
-  events_cursor?: number
-  /** @deprecated Legacy — use backfill instead */
-  segments?: SegmentState[]
-  backfill?: BackfillState
-}
+export type GlobalState = { events_cursor: number }
+
+/** Single message factory for the entire Stripe source. All files import this. */
+export const msg = createSourceMessageFactory<
+  StreamState | EventState,
+  GlobalState,
+  Record<string, unknown>
+>()
 
 // MARK: - Account ID resolution
 
 export async function resolveAccountId(config: Config, client: StripeClient): Promise<string> {
-  if (config.account_id) {
-    return config.account_id
-  }
-
-  const account = await client.getAccount()
-  return account.id
+  return (await resolveAccountMetadata(config, client)).accountId
 }
 
 // MARK: - Source
@@ -109,7 +104,7 @@ export type StripeSourceDeps = {
 
 export function createStripeSource(
   deps?: StripeSourceDeps
-): Source<Config, StripeStreamState, WebhookInput | StripeEvent> {
+): Source<Config, StreamState, WebhookInput | StripeEvent> {
   const externalRateLimiter = deps?.rateLimiter
 
   return {
@@ -124,15 +119,12 @@ export function createStripeSource(
           api_version: config.api_version ?? BUNDLED_API_VERSION,
         })
         await client.getAccount()
-        yield {
-          type: 'connection_status' as const,
-          connection_status: { status: 'succeeded' as const },
-        }
-      } catch (err: any) {
-        yield {
-          type: 'connection_status' as const,
-          connection_status: { status: 'failed' as const, message: err.message },
-        }
+        yield msg.connection_status({ status: 'succeeded' })
+      } catch (err: unknown) {
+        yield msg.connection_status({
+          status: 'failed',
+          message: err instanceof Error ? err.message : String(err),
+        })
       }
     },
 
@@ -159,43 +151,52 @@ export function createStripeSource(
         resolved.apiVersion,
         config.base_url
       )
-      let catalog: CatalogPayload
-      try {
-        const parser = new SpecParser()
-        const parsed = parser.parse(resolved.spec, {
-          resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
-        })
-        catalog = catalogFromOpenApi(parsed.tables, registry)
-      } catch {
-        catalog = catalogFromRegistry(registry)
-      }
+      const parser = new SpecParser()
+      const parsed = parser.parse(resolved.spec, {
+        resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
+      })
+      const catalog = catalogFromOpenApi(parsed.tables, registry)
       discoverCache.set(apiVersion, catalog)
       yield { type: 'catalog' as const, catalog }
     },
 
-    async *setup({ config, catalog }): AsyncGenerator<SetupOutput> {
+    async *setup({ config, catalog: _catalog }): AsyncGenerator<SetupOutput> {
       const updates: Partial<Config> = {}
       const client = makeClient({
         ...config,
         api_version: config.api_version ?? BUNDLED_API_VERSION,
       })
 
-      // Resolve account_id if not already set
-      if (!config.account_id) {
-        const account = await client.getAccount()
-        updates.account_id = account.id
+      if (!config.account_id || config.account_created == null) {
+        log.debug('source setup: resolving account metadata')
+        try {
+          const resolved = await resolveAccountMetadata(config, client)
+          if (!config.account_id) updates.account_id = resolved.accountId
+          if (config.account_created == null) updates.account_created = resolved.accountCreated
+        } catch (err) {
+          // Non-fatal: fall back to defaults. account_id may be derived from the API key later,
+          // and account_created defaults to Stripe's launch date (2011-01-01).
+          log.warn(
+            {
+              err,
+            },
+            'Failed to resolve account metadata during setup'
+          )
+        }
+        log.debug('source setup: account metadata resolved')
       }
 
       // Create managed webhook endpoint if webhook_url is set
       if (config.webhook_url) {
+        log.debug('source setup: listing webhook endpoints')
         const existing = await client.listWebhookEndpoints({ limit: 100 })
         const managed = existing.data.find(
           (wh) => wh.url === config.webhook_url && wh.metadata?.managed_by === 'stripe-sync'
         )
         if (managed && managed.status === 'enabled') {
-          // Endpoint already exists — ensure we have the secret to verify webhooks
+          // Endpoint already exists — warn if we don't have the secret to verify webhooks
           if (!config.webhook_secret) {
-            throw new Error(
+            log.error(
               'Existing managed webhook endpoint found for this URL but webhook_secret ' +
                 'is not configured. The secret is only available at endpoint creation time — ' +
                 'provide it in the pipeline config.'
@@ -222,10 +223,15 @@ export function createStripeSource(
             updates.webhook_secret = created.secret
           }
         }
+        log.debug('source setup: webhook endpoints handled')
       }
 
+      log.debug({ hasUpdates: Object.keys(updates).length > 0 }, 'source setup: complete')
       if (Object.keys(updates).length > 0) {
-        yield sourceControlMsg({ ...config, ...updates })
+        yield msg.control({
+          control_type: 'source_config',
+          source_config: { ...config, ...updates },
+        })
       }
     },
 
@@ -251,22 +257,32 @@ export function createStripeSource(
       return withAbortOnReturn((signal) =>
         (async function* () {
           const apiVersion = config.api_version ?? BUNDLED_API_VERSION
-          const rateLimiter =
-            externalRateLimiter ?? createInMemoryRateLimiter(config.rate_limit ?? DEFAULT_MAX_RPS)
+
+          // Derive concurrency params from API key mode (overridable via config)
+          const liveMode =
+            config.api_key.startsWith('sk_live_') || config.api_key.startsWith('rk_live_')
+          const maxRequestsPerSecond = config.rate_limit ?? (liveMode ? 50 : 10) // 50% of rate limits by default
+          const maxConcurrentStreams = Math.min(maxRequestsPerSecond, catalog.streams.length)
+
+          const rateLimiter = externalRateLimiter ?? createInMemoryRateLimiter(maxRequestsPerSecond)
           const client = makeClient({ ...config, api_version: apiVersion }, undefined, signal)
           const resolved = await resolveOpenApiSpec({ apiVersion }, makeApiFetch(signal))
+          const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
           const registry = buildResourceRegistry(
             resolved.spec,
             config.api_key,
             resolved.apiVersion,
-            config.base_url
+            config.base_url,
+            streamNames
           )
-          const streamNames = new Set(catalog.streams.map((s) => s.stream.name))
           let accountId: string
+          let accountCreated: number
           try {
-            accountId = await resolveAccountId(config, client)
+            const resolvedAccount = await resolveAccountMetadata(config, client)
+            accountId = resolvedAccount.accountId
+            accountCreated = resolvedAccount.accountCreated
           } catch (err) {
-            yield errorToTrace(err, catalog.streams[0]?.stream.name ?? 'unknown')
+            yield errorToConnectionStatus(err)
             return
           }
 
@@ -283,8 +299,9 @@ export function createStripeSource(
                   accountId
                 )
               } else {
+                const event = stripeEventSchema.parse(input)
                 yield* processStripeEvent(
-                  input as StripeEvent,
+                  event,
                   config,
                   catalog,
                   registry,
@@ -317,12 +334,14 @@ export function createStripeSource(
             // Backfill: paginate through each configured stream
             yield* listApiBackfill({
               catalog,
-              state: state?.streams as Parameters<typeof listApiBackfill>[0]['state'],
+              state: state?.streams as Record<string, unknown> | undefined,
               registry,
               rateLimiter,
               client,
+              accountCreated,
               accountId,
               backfillLimit: config.backfill_limit,
+              maxConcurrentStreams,
               signal,
               drainQueue: wsClient
                 ? () => inputQueue.drain(config, catalog, registry, streamNames, accountId)
@@ -336,7 +355,8 @@ export function createStripeSource(
               catalog,
               registry,
               streamNames,
-              state: state?.streams as Record<string, StripeStreamState> | undefined,
+              state: state?.streams as Record<string, StreamState> | undefined,
+              globalState: state?.global as { events_cursor?: number } | undefined,
               startTimestamp,
               accountId,
             })
@@ -400,16 +420,11 @@ export default createStripeSource()
 
 // MARK: - Re-exports
 
-export { expandState } from './src-list-api.js'
-export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS } from './resourceRegistry.js'
-export { catalogFromRegistry } from './catalog.js'
+export { subdivideRanges } from '@stripe/sync-protocol'
+export { buildResourceRegistry, DEFAULT_SYNC_OBJECTS, EXCLUDED_TABLES } from './resourceRegistry.js'
+export { catalogFromOpenApi } from './catalog.js'
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './openapi/specParser.js'
 export type { ParsedResourceTable, ParsedOpenApiSpec } from './openapi/types.js'
 export type { RateLimiter } from './rate-limiter.js'
-export {
-  createInMemoryRateLimiter,
-  DEFAULT_MAX_RPS,
-  MAX_SEGMENTS,
-  MAX_CONCURRENCY,
-} from './rate-limiter.js'
+export { createInMemoryRateLimiter } from './rate-limiter.js'
 export { verifyWebhookSignature, WebhookSignatureError } from './webhookVerify.js'

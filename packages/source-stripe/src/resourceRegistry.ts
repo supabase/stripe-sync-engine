@@ -85,11 +85,22 @@ export type RevalidateEntityName = (typeof REVALIDATE_ENTITIES)[number]
  * Build a ResourceConfig for every listable resource discovered in the OpenAPI spec.
  * All resources get list + retrieve functions derived dynamically from the spec paths.
  */
+/**
+ * Endpoints that the OAS spec marks as listable but require a parent param
+ * at runtime (the spec incorrectly marks the param as optional).
+ */
+export const EXCLUDED_TABLES = new Set([
+  // /v1/billing/credit_balance_transactions — requires `customer` query param
+  // despite the spec marking it as optional. Always returns 400 without it.
+  'billing_credit_balance_transactions',
+])
+
 export function buildResourceRegistry(
   spec: OpenApiSpec,
   apiKey: string,
   apiVersion: string,
-  baseUrl?: string
+  baseUrl?: string,
+  allowedTables?: Set<string>
 ): Record<string, ResourceConfig> {
   const endpoints = discoverListEndpoints(spec)
   const nestedEndpoints = discoverNestedEndpoints(spec, endpoints)
@@ -97,6 +108,8 @@ export function buildResourceRegistry(
   const seenNested = new Set<string>()
 
   for (const [tableName, endpoint] of endpoints) {
+    if (EXCLUDED_TABLES.has(tableName)) continue
+    if (allowedTables && !allowedTables.has(tableName)) continue
     const isV2 = isV2Path(endpoint.apiPath)
     const children = nestedEndpoints
       .filter((n: NestedEndpoint) => n.parentTableName === tableName)
@@ -119,14 +132,23 @@ export function buildResourceRegistry(
       supportsForwardPagination: isV2 || endpoint.supportsStartingAfter,
       sync: true,
       dependencies: [],
-      listFn: buildSpecAwareListFn((params) => withHttpRetry(() => rawListFn(params), { label: `LIST ${endpoint.apiPath} (${tableName})` }), {
-        isV2,
-        supportsLimit: endpoint.supportsLimit,
-        supportsStartingAfter: endpoint.supportsStartingAfter,
-        supportsEndingBefore: endpoint.supportsEndingBefore,
-        supportsCreatedFilter: endpoint.supportsCreatedFilter,
-      }),
-      retrieveFn: (id) => withHttpRetry(() => rawRetrieveFn(id), { label: `GET ${endpoint.apiPath}/${id} (${tableName})` }),
+      listFn: buildSpecAwareListFn(
+        (params) =>
+          withHttpRetry(() => rawListFn(params), {
+            label: `LIST ${endpoint.apiPath} (${tableName})`,
+          }),
+        {
+          isV2,
+          supportsLimit: endpoint.supportsLimit,
+          supportsStartingAfter: endpoint.supportsStartingAfter,
+          supportsEndingBefore: endpoint.supportsEndingBefore,
+          supportsCreatedFilter: endpoint.supportsCreatedFilter,
+        }
+      ),
+      retrieveFn: (id) =>
+        withHttpRetry(() => rawRetrieveFn(id), {
+          label: `GET ${endpoint.apiPath}/${id} (${tableName})`,
+        }),
       nestedResources: children.length > 0 ? children : undefined,
     }
     registry[tableName] = config

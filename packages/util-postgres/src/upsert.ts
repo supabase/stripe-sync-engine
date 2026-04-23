@@ -2,22 +2,122 @@ import type pg from 'pg'
 import { ident, identList, qualifiedTable } from './sql.js'
 
 export type UpsertOptions = {
+  /**
+   * Postgres schema name (e.g. `public`, `stripe`). Omit for the default search_path.
+   *
+   * Example: Multi-tenant setup where each account's data lives in a separate
+   * schema — pass `schema: accountId` to write to the correct namespace.
+   */
   schema?: string
+
+  /**
+   * Target table name.
+   *
+   * Example: `"customers"` for a table storing Stripe customer objects.
+   */
   table: string
-  /** ON CONFLICT target columns. */
-  keyColumns: string[]
-  /** JSONB columns that get shallow-merged: COALESCE(tbl.col, '{}'::jsonb) || EXCLUDED.col */
+
+  /**
+   * ON CONFLICT target columns — the unique constraint used to detect existing rows.
+   *
+   * Example: `["id"]` for a Stripe resource table keyed on the object ID.
+   * For a composite key: `["account_id", "item_id"]`.
+   */
+  primaryKeyColumns: string[]
+
+  /**
+   * JSONB columns that get shallow-merged instead of replaced.
+   * SQL: `col = COALESCE(tbl.col, '{}'::jsonb) || EXCLUDED.col`
+   *
+   * Example: A `metadata` column where each sync adds keys without clobbering
+   * existing ones. Source A writes `{"source": "stripe"}`, source B writes
+   * `{"tier": "premium"}` — the result is `{"source": "stripe", "tier": "premium"}`.
+   */
   shallowMergeJsonbColumns?: string[]
-  /** Columns excluded from IS DISTINCT FROM check (still updated). */
-  noDiffColumns?: string[]
-  /** Columns set on INSERT only — never overwritten on conflict. */
+
+  /**
+   * Columns excluded from the IS DISTINCT FROM no-op check, but still updated.
+   * Use for columns that change every write but shouldn't prevent the update
+   * from being skipped as a no-op.
+   *
+   * Example: A `synced_at` timestamp set to `now()` on every upsert. Without
+   * this option, every row would appear "changed" due to `synced_at` differing,
+   * defeating `skipNoopUpdates`.
+   */
+  volatileColumns?: string[]
+
+  /**
+   * Columns written on INSERT only — never overwritten on conflict.
+   *
+   * Example: A `first_seen_at` timestamp that records when the row was first
+   * created. On subsequent upserts the value is preserved regardless of what
+   * the incoming record contains.
+   */
   insertOnlyColumns?: string[]
-  /** Guard columns: update only proceeds if these match EXCLUDED values. */
-  mustMatchColumns?: string[]
-  /** Skip no-op updates via IS DISTINCT FROM (default: true). */
+
+  /**
+   * Guard columns: the update only proceeds if the existing row's value for
+   * these columns matches the incoming value.
+   * SQL: `WHERE tbl.col = EXCLUDED.col`
+   *
+   * Application-level tenant isolation for when RLS is not available.
+   * With Postgres RLS enabled, this option is unnecessary — the policy
+   * enforces isolation transparently.
+   *
+   * Example: Multi-tenant table keyed on `(id)` with an `_account_id` system
+   * column. Adding `_account_id` as a guard ensures a row written by account A
+   * is only updated by account A — a conflicting upsert from account B becomes
+   * a silent no-op instead of overwriting the row.
+   */
+  guardColumns?: string[]
+
+  /**
+   * Only update if the incoming row is newer than the existing row, based on
+   * this column. SQL: `WHERE EXCLUDED.col > tbl.col`
+   *
+   * Example: Stripe webhook events arriving out of order. Using `updated` as
+   * the newerThanColumn ensures a stale event (lower `updated` timestamp)
+   * cannot overwrite a row that was already updated by a more recent event.
+   */
+  newerThanColumn?: string
+
+  /**
+   * Skip no-op updates via IS DISTINCT FROM (default: true).
+   *
+   * When true, the ON CONFLICT DO UPDATE adds a WHERE clause that compares
+   * every non-volatile column against the existing row. If nothing changed,
+   * the UPDATE is skipped entirely — no dead tuple, no trigger fired, no
+   * WAL entry.
+   *
+   * Why it matters:
+   * - Stripe backfills re-fetch every object in a time range. Most rows
+   *   haven't changed since the last sync — without this, every row gets
+   *   a pointless UPDATE that bloats WAL and triggers autovacuum.
+   * - CDC / logical replication subscribers see fewer no-op changes.
+   * - `updated_at` trigger columns don't get bumped on unchanged rows.
+   *
+   * Set to false only when every upsert is expected to be a real change
+   * (e.g. append-only event logs).
+   */
   skipNoopUpdates?: boolean
+
   /** Append RETURNING * (default: false). */
   returning?: boolean
+}
+
+/** Internal extension used by buildUpsertSql to append write-stats columns. */
+type BuildUpsertSqlOptions = UpsertOptions & {
+  /** Append RETURNING (xmax = 0) AS _sync_created instead of RETURNING *. */
+  returningWriteStats?: boolean
+  /** SQL expression for soft-delete detection, added to RETURNING when returningWriteStats is true. */
+  softDeleteExpression?: string
+}
+
+export type UpsertResult = {
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  skipped_count: number
 }
 
 function isJsonbValue(v: unknown): boolean {
@@ -38,7 +138,7 @@ function serializeValue(v: unknown): unknown {
  */
 export function buildUpsertSql(
   records: Record<string, unknown>[],
-  options: UpsertOptions
+  options: BuildUpsertSqlOptions
 ): { sql: string; params: unknown[] } {
   if (records.length === 0) {
     throw new Error('buildUpsertSql requires at least one record')
@@ -47,13 +147,16 @@ export function buildUpsertSql(
   const {
     schema,
     table,
-    keyColumns,
+    primaryKeyColumns,
     shallowMergeJsonbColumns = [],
-    noDiffColumns = [],
+    volatileColumns = [],
     insertOnlyColumns = [],
-    mustMatchColumns = [],
+    guardColumns = [],
+    newerThanColumn,
     skipNoopUpdates = true,
     returning = false,
+    returningWriteStats = false,
+    softDeleteExpression,
   } = options
 
   // Derive column list from the first record — all records must have the same shape.
@@ -61,8 +164,8 @@ export function buildUpsertSql(
   const tbl = qualifiedTable(schema, table)
   const shallowMergeSet = new Set(shallowMergeJsonbColumns)
   const insertOnlySet = new Set(insertOnlyColumns)
-  const noDiffSet = new Set(noDiffColumns)
-  const keySet = new Set(keyColumns)
+  const noDiffSet = new Set(volatileColumns)
+  const keySet = new Set(primaryKeyColumns)
 
   // --- VALUES rows -----------------------------------------------------------
   const params: unknown[] = []
@@ -100,12 +203,18 @@ export function buildUpsertSql(
     }
   }
 
-  for (const col of mustMatchColumns) {
+  for (const col of guardColumns) {
     whereParts.push(`${ident(table)}.${ident(col)} = EXCLUDED.${ident(col)}`)
   }
 
+  if (newerThanColumn) {
+    whereParts.push(
+      `EXCLUDED.${ident(newerThanColumn)} > ${ident(table)}.${ident(newerThanColumn)}`
+    )
+  }
+
   // --- Assemble --------------------------------------------------------------
-  let sql = `INSERT INTO ${tbl} (${identList(columns)})\nVALUES ${valueRows.join(',\n       ')}\nON CONFLICT (${identList(keyColumns)})`
+  let sql = `INSERT INTO ${tbl} (${identList(columns)})\nVALUES ${valueRows.join(',\n       ')}\nON CONFLICT (${identList(primaryKeyColumns)})`
 
   if (setClauses.length > 0) {
     sql += `\nDO UPDATE SET ${setClauses.join(',\n              ')}`
@@ -116,7 +225,14 @@ export function buildUpsertSql(
     sql += '\nDO NOTHING'
   }
 
-  if (returning) {
+  if (returningWriteStats) {
+    const parts = returning ? ['*'] : []
+    parts.push('(xmax = 0) AS _sync_created')
+    if (softDeleteExpression) {
+      parts.push(`(${softDeleteExpression})::boolean AS _sync_deleted`)
+    }
+    sql += `\nRETURNING ${parts.join(', ')}`
+  } else if (returning) {
     sql += '\nRETURNING *'
   }
 
@@ -135,5 +251,84 @@ export async function upsert(
   options: UpsertOptions
 ): Promise<pg.QueryResult> {
   const { sql, params } = buildUpsertSql(records, options)
-  return client.query(sql, params)
+  try {
+    return await client.query(sql, params)
+  } catch (err) {
+    const table = qualifiedTable(options.schema, options.table)
+    const columns = Object.keys(records[0]!)
+    const detail =
+      `table=${table} columns=[${columns.join(', ')}] ` +
+      `pk=[${options.primaryKeyColumns.join(', ')}]` +
+      (options.newerThanColumn ? ` newerThan=${options.newerThanColumn}` : '')
+    const wrapped = new Error(
+      `upsert failed: ${err instanceof Error ? err.message : String(err)} (${detail})`,
+      { cause: err }
+    )
+    if (err instanceof Error) wrapped.stack = err.stack
+    throw wrapped
+  }
+}
+
+/**
+ * Upsert with created/updated/deleted/skipped breakdown.
+ *
+ * Uses Postgres `xmax = 0` to distinguish inserts from updates, and an
+ * optional `softDeleteExpression` to classify soft-deleted records.
+ *
+ * @param softDeleteExpression - SQL expression that evaluates to a boolean
+ *   indicating a soft-deleted record, e.g. `"_raw_data->>'deleted'"`.
+ */
+export async function upsertWithStats(
+  client: { query(text: string, values?: unknown[]): Promise<pg.QueryResult> },
+  records: Record<string, unknown>[],
+  options: UpsertOptions,
+  softDeleteExpression?: string
+): Promise<UpsertResult> {
+  if (records.length === 0) {
+    return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+  }
+
+  const { sql, params } = buildUpsertSql(records, {
+    ...options,
+    returningWriteStats: true,
+    returning: false,
+    softDeleteExpression,
+  })
+
+  let result: pg.QueryResult
+  try {
+    result = await client.query(sql, params)
+  } catch (err) {
+    const table = qualifiedTable(options.schema, options.table)
+    const columns = Object.keys(records[0]!)
+    const detail =
+      `table=${table} columns=[${columns.join(', ')}] ` +
+      `pk=[${options.primaryKeyColumns.join(', ')}]` +
+      (options.newerThanColumn ? ` newerThan=${options.newerThanColumn}` : '')
+    const wrapped = new Error(
+      `upsertWithStats failed: ${err instanceof Error ? err.message : String(err)} (${detail})`,
+      { cause: err }
+    )
+    if (err instanceof Error) wrapped.stack = err.stack
+    throw wrapped
+  }
+
+  let created_count = 0
+  let updated_count = 0
+  let deleted_count = 0
+
+  for (const row of result.rows) {
+    const isDeleted = softDeleteExpression ? Boolean(row._sync_deleted) : false
+    if (isDeleted) {
+      deleted_count++
+    } else if (row._sync_created) {
+      created_count++
+    } else {
+      updated_count++
+    }
+  }
+
+  const skipped_count = records.length - result.rows.length
+
+  return { created_count, updated_count, deleted_count, skipped_count }
 }

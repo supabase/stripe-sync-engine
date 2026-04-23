@@ -6,7 +6,7 @@ import type {
   SetupOutput,
   TeardownOutput,
   ConfiguredCatalog,
-  Message,
+  CoreMessage,
 } from '@stripe/sync-protocol'
 import { withAbortOnReturn } from '@stripe/sync-protocol'
 import { splitCmd, spawnAndStream, spawnWithStdin } from './exec-helpers.js'
@@ -54,7 +54,7 @@ export function createSourceFromExec(cmd: string): Source {
         state?: Record<string, unknown>
       },
       $stdin?: AsyncIterable<unknown>
-    ): AsyncIterable<Message> {
+    ): AsyncIterable<CoreMessage> {
       const args = [
         ...baseArgs,
         'read',
@@ -68,9 +68,9 @@ export function createSourceFromExec(cmd: string): Source {
       }
       return withAbortOnReturn((signal) => {
         if ($stdin) {
-          return spawnWithStdin<unknown, Message>(bin, args, $stdin, signal)
+          return spawnWithStdin<unknown, CoreMessage>(bin, args, $stdin, signal)
         }
-        return spawnAndStream<Message>(bin, args, signal)
+        return spawnAndStream<CoreMessage>(bin, args, signal)
       })
     },
 

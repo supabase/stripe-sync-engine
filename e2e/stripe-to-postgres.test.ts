@@ -70,7 +70,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
       },
       destination: {
         type: 'postgres',
-        postgres: { connection_string: POSTGRES_URL, schema: SCHEMA },
+        postgres: { url: POSTGRES_URL, schema: SCHEMA },
       },
       streams: STREAMS.map((name) => ({ name })),
     }
@@ -128,7 +128,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         if (done) throw new Error('Pipeline ended before backfill completed')
         if (
           value.type === 'source_state' &&
-          (value.source_state.data as any)?.status === 'complete'
+          (value.source_state.data as any)?.remaining?.length === 0
         ) {
           completed.add(value.source_state.stream)
         }

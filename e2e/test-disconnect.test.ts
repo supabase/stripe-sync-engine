@@ -161,7 +161,7 @@ async function startEngineNode(port: number): Promise<EngineProcess> {
   let output = ''
   let exited = false
   const child = spawn('node', [ENGINE_DIST], {
-    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace', LOG_PRETTY: '' },
+    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   // pino logs to stdout by default
@@ -194,7 +194,7 @@ async function startEngineBun(port: number): Promise<EngineProcess> {
   let output = ''
   let exited = false
   const child = spawn('bun', [ENGINE_SRC], {
-    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace', LOG_PRETTY: '' },
+    env: { ...process.env, PORT: String(port), LOG_LEVEL: 'trace' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.stdout.on('data', (chunk: Buffer) => {
@@ -296,7 +296,7 @@ function makePipelineHeader(mockStripeUrl: string): string {
     destination: {
       type: 'postgres',
       postgres: {
-        connection_string: 'postgres://user:pass@localhost:65432/testdb',
+        url: 'postgres://user:pass@localhost:65432/testdb',
         schema: 'test_disconnect',
       },
     },
@@ -463,11 +463,8 @@ for (const runtime of runtimes) {
       const eof = lines.find((l: any) => l.type === 'eof') as any
 
       expect(eof).toBeDefined()
-      expect(eof.eof.reason).toBe('time_limit')
-      expect(eof.eof.cutoff).toBe('soft')
-      expect(typeof eof.eof.elapsed_ms).toBe('number')
-      expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
-      expect(eof.eof.elapsed_ms).toBeLessThan(5000)
+      expect(eof.eof.has_more).toBe(true)
+      // Verify wall-clock elapsed is within the time limit window
       expect(elapsed).toBeGreaterThan(1500)
       expect(elapsed).toBeLessThan(5000)
 
@@ -505,9 +502,7 @@ for (const runtime of runtimes) {
         const eof = lines.find((l: any) => l.type === 'eof') as any
 
         expect(eof).toBeDefined()
-        expect(eof.eof.reason).toBe('time_limit')
-        expect(eof.eof.cutoff).toBe('hard')
-        expect(typeof eof.eof.elapsed_ms).toBe('number')
+        expect(eof.eof.has_more).toBe(true)
         // Hard deadline = 2s + 1s = 3s. Allow generous CI slack.
         expect(elapsed).toBeGreaterThan(2000)
         expect(elapsed).toBeLessThan(15000)

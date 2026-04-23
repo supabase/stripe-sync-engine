@@ -19,12 +19,25 @@ import {
   generateObjectsFromSchema,
 } from '@stripe/sync-openapi'
 import destinationPostgres from '@stripe/sync-destination-postgres'
-import sourceStripe, { type StripeStreamState } from '@stripe/sync-source-stripe'
+import sourceStripe, { type StreamState, EXCLUDED_TABLES } from '@stripe/sync-source-stripe'
 import { utc } from './test-server-harness.js'
 
 const SOURCE_SCHEMA = 'stripe'
-const OBJECTS_PER_STREAM = 1200
-const RATE_LIMIT = 100000
+
+/** Tuning knobs — override via env vars. */
+const OBJECTS_PER_STREAM = parseInt(process.env.OBJECTS_PER_STREAM ?? '1200', 10)
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT ?? '100000', 10)
+const SEED_CONCURRENCY = parseInt(process.env.SEED_CONCURRENCY ?? '8', 10)
+const INSERT_BATCH = parseInt(process.env.INSERT_BATCH ?? '1000', 10)
+
+/** Optional stream filter via STREAMS=customers,invoices env var. */
+const STREAM_FILTER: Set<string> | null = process.env.STREAMS
+  ? new Set(
+      process.env.STREAMS.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  : null
 
 const RANGE_START = utc('2025-01-01')
 const RANGE_END = utc('2026-01-01')
@@ -41,8 +54,6 @@ type StreamSeed = {
   tableName: string
   objectIds: string[]
 }
-
-const INSERT_BATCH = 1000
 
 async function replaceTableObjects(
   tableName: string,
@@ -160,11 +171,16 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
   )
 
   try {
+    // v2_core_events uses ISO timestamps for created filter and opaque page tokens;
+    // the test-server's V2 pagination + subdivision interaction is not yet verified.
+    const TEST_EXCLUDED = new Set([...EXCLUDED_TABLES, 'v2_core_events'])
     const seedable = sortedEndpoints.filter(
-      (ep) => findSchemaNameByResourceId(endpointSet.spec, ep.resourceId) != null
+      (ep) =>
+        findSchemaNameByResourceId(endpointSet.spec, ep.resourceId) != null &&
+        !TEST_EXCLUDED.has(ep.tableName) &&
+        (!STREAM_FILTER || STREAM_FILTER.has(ep.tableName))
     )
 
-    const SEED_CONCURRENCY = 8
     for (let i = 0; i < seedable.length; i += SEED_CONCURRENCY) {
       const batch = seedable.slice(i, i + SEED_CONCURRENCY)
       await Promise.all(
@@ -200,7 +216,7 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: destDocker.connectionString,
+          url: destDocker.connectionString,
           schema: destSchema,
           batch_size: 100,
         },
@@ -267,10 +283,10 @@ async function syncAllEndpointsForVersion(apiVersion: string): Promise<void> {
         )
       }
 
-      const streamState = finalState[seed.tableName] as StripeStreamState | undefined
-      if (streamState?.status !== 'complete') {
+      const streamState = finalState[seed.tableName] as StreamState | undefined
+      if (!streamState || streamState.remaining.length !== 0) {
         failures.push(
-          `${apiVersion}/${seed.tableName}: final state was ${streamState?.status ?? 'missing'}`
+          `${apiVersion}/${seed.tableName}: final state was ${streamState ? `remaining=${streamState.remaining.length}` : 'missing'}`
         )
       }
     }

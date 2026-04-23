@@ -1,15 +1,18 @@
 import { collectMessages } from '@stripe/sync-protocol'
 
 import type { ActivitiesContext } from './_shared.js'
+import { log } from '../../logger.js'
 
 export function createPipelineSetupActivity(context: ActivitiesContext) {
   return async function pipelineSetup(pipelineId: string): Promise<void> {
     const pipeline = await context.pipelineStore.get(pipelineId)
     const { id: _, ...config } = pipeline
+    log.info({ pipelineId }, 'pipeline_setup: starting')
     const { messages: controlMsgs } = await collectMessages(
       context.engine.pipeline_setup(config),
       'control'
     )
+    log.info({ pipelineId, controlMsgCount: controlMsgs.length }, 'pipeline_setup: complete')
     // Full replacement — connector emits the complete updated config, no merging.
     let sourceConfig: Record<string, unknown> | undefined
     let destConfig: Record<string, unknown> | undefined

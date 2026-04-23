@@ -13,6 +13,7 @@
 ### Task 1: Lock in the new runtime boundaries with tests
 
 **Files:**
+
 - Create: `apps/engine/src/api/index.test.ts`
 - Create: `apps/engine/src/__tests__/bin-serve.test.ts`
 - Modify: `apps/engine/src/api/index.ts`
@@ -21,6 +22,7 @@
 **Step 1: Write the failing tests**
 
 Add tests that prove:
+
 1. Importing `apps/engine/src/api/index.ts` does not start a server or resolve connectors, and it exports `createApp` plus `startApiServer`.
 2. Importing `apps/engine/src/bin/serve.ts` bootstraps dotenv/env-proxy, builds a resolver from `defaultConnectors` with `{ path: false, npm: false }`, and passes that resolver into `startApiServer()`.
 
@@ -33,11 +35,13 @@ Expected: FAIL because `src/api/index.ts` is currently a runnable server entrypo
 **Step 3: Implement the minimal code to make the tests pass**
 
 Create:
+
 - `apps/engine/src/bin/bootstrap.ts`
 - `apps/engine/src/bin/serve.ts`
 - `apps/engine/src/api/server.ts`
 
 Refactor:
+
 - `apps/engine/src/api/index.ts` into an export-only module surface.
 
 **Step 4: Run test to verify it passes**
@@ -49,6 +53,7 @@ Expected: PASS
 ### Task 2: Move the interactive CLI to its own binary and keep serve policy outside startup
 
 **Files:**
+
 - Create: `apps/engine/src/bin/sync-engine.ts`
 - Modify: `apps/engine/src/cli/command.ts`
 - Delete: `apps/engine/src/cli/index.ts`
@@ -69,6 +74,7 @@ Expected: Existing tests stay green while the old runtime layout still points pa
 **Step 3: Write minimal implementation**
 
 Implement:
+
 1. `src/bin/sync-engine.ts` as the citty/OpenAPI entrypoint using shared bootstrap.
 2. `src/cli/command.ts` so `serve` calls `startApiServer({ resolver, port })` with the CLI-built resolver.
 3. `apps/engine/package.json` bin/script/exports updates:
@@ -80,16 +86,19 @@ Implement:
 **Step 4: Verify the new binaries exist and behave**
 
 Run:
+
 - `pnpm build`
 - `node dist/bin/sync-engine.js --help`
 
 Expected:
+
 - build succeeds
 - help output shows the interactive CLI, including `serve`
 
 ### Task 3: Repoint operational callsites and verify the minimal server path
 
 **Files:**
+
 - Modify: `Dockerfile`
 - Modify: `scripts/open-docs.sh`
 - Modify: `e2e/header-size-docker.test.ts`
@@ -104,6 +113,7 @@ Expected:
 **Step 1: Update runtime callsites only**
 
 Repoint current operational scripts, tests, and active docs to:
+
 - `src/bin/serve.ts`
 - `src/bin/sync-engine.ts`
 - `dist/bin/serve.js`
@@ -114,12 +124,14 @@ Do not rewrite historical or completed plan docs that intentionally preserve old
 **Step 2: Run focused verification**
 
 Run:
+
 - `pnpm lint`
 - `pnpm exec vitest run src/api/index.test.ts src/__tests__/bin-serve.test.ts`
 - `node apps/engine/dist/bin/serve.js`
 - `PORT=4000 node apps/engine/dist/bin/serve.js`
 
 Expected:
+
 - lint passes
 - focused tests pass
 - `/health` is reachable on default port `3000`
@@ -128,9 +140,11 @@ Expected:
 **Step 3: Full package verification**
 
 Run:
+
 - `pnpm build`
 - `pnpm --filter @stripe/sync-engine test`
 
 Expected:
+
 - build succeeds
 - package tests are green except for environment-dependent Docker coverage if Docker is unavailable

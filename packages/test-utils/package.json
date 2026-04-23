@@ -17,8 +17,8 @@
     "test": "vitest"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
     "@hono/node-server": "^1.19.11",

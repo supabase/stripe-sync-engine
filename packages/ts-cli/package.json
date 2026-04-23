@@ -42,7 +42,7 @@
     "vitest": "^3.2"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ]
 }

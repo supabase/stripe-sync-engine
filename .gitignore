@@ -9,7 +9,7 @@ node_modules/
 *.tgz
 .mcp*
 private/
-.envrc
+.envrc.local
 
 .mcp.*
 .vercel
@@ -27,6 +27,10 @@ private/
 
 # Local cred storage
 .credentials/
+.stripe-sync/
+
+# Local test scripts
+scripts/test-all-accounts.sh
 
 # Git worktrees
 .worktrees/
@@ -50,3 +54,9 @@ test-results/
 apps/visualizer/out/
 
 .sync-state*.json
+*.log
+
+# Reconcile / verification output
+tmp/
+prev-run.txt
+verify-*.json

@@ -1,16 +1,27 @@
 import { Readable } from 'node:stream'
+import net from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { defineCommand } from 'citty'
+import type { CommandDef } from 'citty'
 import { createCliFromSpec } from '@stripe/sync-ts-cli/openapi'
+import { createPrettyFormatter } from './cli/pretty-output.js'
 import { serve } from '@hono/node-server'
-import { createConnectorResolver } from '@stripe/sync-engine'
+import { createConnectorResolver, startApiServer, type ApiServerHandle } from '@stripe/sync-engine'
 import sourceStripe from '@stripe/sync-source-stripe'
 import destinationPostgres from '@stripe/sync-destination-postgres'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
 import { createApp } from './api/app.js'
+import {
+  wrapPipelineConnectorShorthand,
+  extractConnectorOverrides,
+  mergeConnectorOverrides,
+} from './lib/cli-connector-shorthand.js'
 import { filePipelineStore } from './lib/stores-fs.js'
+import { memoryPipelineStore } from './lib/stores-memory.js'
 import type { WorkflowClient } from '@temporalio/client'
+import type { StreamConfig } from './lib/createSchemas.js'
 import { homedir } from 'node:os'
-import { logger } from './logger.js'
+import { log } from './logger.js'
 
 const defaultDataDir = process.env.DATA_DIR ?? `${homedir()}/.stripe-sync`
 
@@ -19,14 +30,149 @@ const resolverPromise = createConnectorResolver({
   destinations: { postgres: destinationPostgres, google_sheets: destinationGoogleSheets },
 })
 
+async function buildCliSpec() {
+  const resolver = await resolverPromise
+  const app = createApp({
+    resolver,
+    pipelineStore: memoryPipelineStore(),
+  })
+  const response = await app.request('/openapi.json')
+  return response.json()
+}
+
+function parseStreamsArg(raw: string | undefined): StreamConfig[] | undefined {
+  if (!raw) return undefined
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      throw new Error('Expected JSON array')
+    }
+    return parsed.map((item) =>
+      typeof item === 'string' ? ({ name: item } satisfies StreamConfig) : (item as StreamConfig)
+    )
+  } catch {
+    return raw
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => ({ name }))
+  }
+}
+
 async function createTemporalClient(
   address: string,
   taskQueue: string
 ): Promise<{ client: WorkflowClient; taskQueue: string }> {
   const { Client, Connection } = await import('@temporalio/client')
-  const connection = await Connection.connect({ address })
-  const client = new Client({ connection })
-  return { client: client.workflow, taskQueue }
+  // Retry connection — Temporal may not accept connections immediately after
+  // its health check passes (Docker Compose depends_on race).
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const connection = await Connection.connect({ address })
+      const client = new Client({ connection })
+      return { client: client.workflow, taskQueue }
+    } catch (err) {
+      lastErr = err
+      if (attempt < 9) await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+  throw lastErr
+}
+
+async function maybeCreateTemporalClient(
+  address: string | undefined,
+  taskQueue: string
+): Promise<{ client: WorkflowClient; taskQueue: string } | undefined> {
+  if (!address) return undefined
+  return createTemporalClient(address, taskQueue)
+}
+
+function checkPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ port, host })
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', (error: NodeJS.ErrnoException) => {
+      socket.destroy()
+      if (error.code === 'ECONNREFUSED') {
+        resolve(false)
+        return
+      }
+      reject(error)
+    })
+  })
+}
+
+async function waitForHealth(url: string, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${url}/health`)
+      if (res.ok) return
+      lastError = new Error(`health responded ${res.status}`)
+    } catch (error) {
+      lastError = error
+    }
+    await sleep(250)
+  }
+  throw new Error(
+    `Timed out waiting for ${url}/health${lastError ? `: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''}`
+  )
+}
+
+async function assertMitmReverseProxyReady(timeoutMs: number) {
+  const url = 'http://127.0.0.1:9091/flows'
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: 'Bearer sync-engine' },
+      })
+      if (res.ok) return
+      lastError = new Error(`mitmweb responded ${res.status}`)
+    } catch (error) {
+      lastError = error
+    }
+    await sleep(250)
+  }
+  throw new Error(
+    `MITM reverse proxy is not healthy at ${url}${lastError ? `: ${lastError instanceof Error ? lastError.message : String(lastError)}` : ''}`
+  )
+}
+
+let mitmEngineServer: ApiServerHandle | null = null
+
+async function setupEngineMitm(): Promise<string> {
+  const engineUrl = 'http://127.0.0.1:3000'
+  const proxyUrl = 'http://127.0.0.1:9090'
+
+  await assertMitmReverseProxyReady(2000)
+
+  if (await checkPortOpen(3000)) {
+    throw new Error('Port 3000 already has a listener. Stop it before using --engine-mitm.')
+  }
+
+  if (!mitmEngineServer) {
+    const resolver = await resolverPromise
+    mitmEngineServer = await startApiServer({ resolver, port: 3000 })
+  }
+
+  await waitForHealth(engineUrl, 15000)
+  await waitForHealth(proxyUrl, 10000)
+  return proxyUrl
+}
+
+function closeMitmEngine() {
+  if (mitmEngineServer) {
+    mitmEngineServer.close()
+    mitmEngineServer = null
+  }
 }
 
 // Hand-written workflow command: start HTTP server
@@ -40,8 +186,7 @@ const serveCmd = defineCommand({
     },
     'temporal-address': {
       type: 'string',
-      required: true,
-      description: 'Temporal server address (e.g. localhost:7233)',
+      description: 'Temporal server address (e.g. localhost:7233). Optional.',
     },
     'temporal-task-queue': {
       type: 'string',
@@ -53,29 +198,38 @@ const serveCmd = defineCommand({
       default: defaultDataDir,
       description: `Directory to persist pipeline configs as JSON files (default: ${defaultDataDir}).`,
     },
+    'engine-url': {
+      type: 'string',
+      description:
+        'Optional sync engine URL for ad-hoc sync execution. If omitted, runs in-process.',
+    },
   },
   async run({ args }) {
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
-    const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
-
-    logger.info(
-      {
-        temporalAddress: args['temporal-address'],
-        taskQueue,
-      },
-      'Temporal mode enabled'
-    )
+    const temporal = await maybeCreateTemporalClient(args['temporal-address'], taskQueue)
+    if (temporal) {
+      log.info(
+        {
+          temporalAddress: args['temporal-address'],
+          taskQueue,
+        },
+        'Temporal mode enabled'
+      )
+    } else {
+      log.info('Temporal mode disabled')
+    }
 
     const resolver = await resolverPromise
     const pipelineStore = filePipelineStore(args['data-dir'])
-    logger.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
+    log.info({ dataDir: args['data-dir'] }, 'Pipeline store enabled')
 
-    const app = createApp({ temporal, resolver, pipelineStore })
+    const engineUrl = args['engine-url'] || undefined
+    const app = createApp({ temporal, resolver, pipelineStore, engineUrl })
 
     serve({ fetch: app.fetch, port }, () => {
-      logger.info({ port }, `Sync Service listening on http://localhost:${port}`)
-      logger.info({ url: `http://localhost:${port}/docs` }, 'API docs available')
+      log.info({ port }, `Sync Service listening on http://localhost:${port}`)
+      log.info({ url: `http://localhost:${port}/docs` }, 'API docs available')
     })
   },
 })
@@ -86,8 +240,7 @@ const workerCmd = defineCommand({
   args: {
     'temporal-address': {
       type: 'string',
-      required: true,
-      description: 'Temporal server address (e.g. localhost:7233)',
+      description: 'Temporal server address (e.g. localhost:7233). Optional.',
     },
     'temporal-namespace': {
       type: 'string',
@@ -136,7 +289,7 @@ const workerCmd = defineCommand({
       workflowsPath,
     })
 
-    logger.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
+    log.info({ temporalAddress, namespace, taskQueue, engineUrl }, 'Starting Temporal worker')
 
     await worker.run()
   },
@@ -170,13 +323,13 @@ const webhookCmd = defineCommand({
   async run({ args }) {
     const port = Number(args.port)
     const taskQueue = args['temporal-task-queue'] || 'sync-engine'
-    const temporal = await createTemporalClient(args['temporal-address'], taskQueue)
+    const temporal = await maybeCreateTemporalClient(args['temporal-address'], taskQueue)
     const resolver = await resolverPromise
     const pipelineStore = filePipelineStore(args['data-dir'])
     const app = createApp({ temporal, resolver, pipelineStore })
 
     serve({ fetch: app.fetch, port }, () => {
-      logger.info(
+      log.info(
         { port, temporalAddress: args['temporal-address'], taskQueue },
         `Webhook server listening on http://localhost:${port}`
       )
@@ -185,65 +338,429 @@ const webhookCmd = defineCommand({
 })
 
 export async function createProgram() {
-  // Mock client/store used only for OpenAPI spec generation (builds CLI structure)
-  const mockClient = {
-    start: async () => {},
-    getHandle: () => ({
-      signal: async () => {},
-      query: async () => ({}),
-      terminate: async () => {},
-    }),
-    list: async function* () {},
-  } as any
-  const mockStore = {
-    get: async () => ({}),
-    set: async () => {},
-    update: async () => ({}),
-    delete: async () => {},
-    list: async () => [],
-  } as any
-
+  const spec = await buildCliSpec()
   const resolver = await resolverPromise
-  const mockApp = createApp({
-    temporal: { client: mockClient, taskQueue: 'cli' },
-    resolver,
-    pipelineStore: mockStore,
-  })
-  const res = await mockApp.request('/openapi.json')
-  const spec = await res.json()
 
-  // Lazy real app — connects to Temporal on first CLI command execution
+  const serviceUrl = process.env.SERVICE_URL
+
+  // Lazy real app — boots in-process when no SERVICE_URL is provided
+  // --engine-url is a global option parsed early so all subcommands respect it
+  let engineUrl: string | undefined =
+    (() => {
+      const idx = process.argv.indexOf('--engine-url')
+      return idx !== -1 ? process.argv[idx + 1] : undefined
+    })() || process.env.ENGINE_URL
+  const engineMitm = process.argv.includes('--engine-mitm')
   let realApp: ReturnType<typeof createApp> | null = null
   async function getApp() {
     if (!realApp) {
-      const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233'
+      if (engineMitm) {
+        if (serviceUrl) {
+          throw new Error('--engine-mitm is only supported when running the service CLI in-process')
+        }
+        if (!engineUrl) {
+          engineUrl = await setupEngineMitm()
+        }
+      }
+      const address = process.env.TEMPORAL_ADDRESS
       const taskQueue = process.env.TEMPORAL_TASK_QUEUE || 'sync-engine'
-      const temporal = await createTemporalClient(address, taskQueue)
-      const r = await resolverPromise
-      const dataDir = process.env.DATA_DIR
-      if (!dataDir) throw new Error('DATA_DIR environment variable is required')
+      const temporal = await maybeCreateTemporalClient(address, taskQueue)
+      const dataDir = process.env.DATA_DIR || defaultDataDir
       const pipelineStore = filePipelineStore(dataDir)
-      realApp = createApp({ temporal, resolver: r, pipelineStore })
+      realApp = createApp({ temporal, resolver, pipelineStore, engineUrl })
     }
     return realApp
   }
 
+  const handler = serviceUrl
+    ? async (req: Request) => {
+        // Forward to a running service server
+        const url = new URL(req.url)
+        const target = new URL(url.pathname + url.search, serviceUrl)
+        return fetch(target, {
+          method: req.method,
+          headers: req.headers,
+          body: req.body,
+          duplex: 'half',
+        } as RequestInit)
+      }
+    : async (req: Request) => {
+        const app = await getApp()
+        return app.fetch(req)
+      }
+
+  // Use pretty formatting by default in TTY, raw JSON with --json or when piped
+  const useJson = process.argv.includes('--json') || !process.stdout.isTTY
+  const responseFormatter = useJson ? undefined : createPrettyFormatter()
+
   const specCli = createCliFromSpec({
     spec,
-    handler: async (req) => {
-      const app = await getApp()
-      return app.fetch(req)
-    },
+    handler,
     groupByTag: true,
     exclude: ['health'],
     ndjsonBodyStream: () =>
       process.stdin.isTTY ? null : (Readable.toWeb(process.stdin) as ReadableStream),
+    responseFormatter,
+    rootArgs: {
+      json: {
+        type: 'boolean',
+        default: false,
+        description: 'Output raw JSON instead of pretty-printed format',
+      },
+      'engine-url': {
+        type: 'string',
+        description: 'Sync engine URL (overrides ENGINE_URL env var)',
+      },
+      'engine-mitm': {
+        type: 'boolean',
+        default: false,
+        description:
+          'Start a local engine on :3000 and route requests through mitm reverse proxy on :9090',
+      },
+    },
     meta: {
       name: 'sync-service',
       description: 'Stripe Sync Service — pipeline management and webhook ingress',
       version: '0.1.0',
     },
   })
+
+  const subCommands = specCli.subCommands as Record<string, CommandDef> | undefined
+  const pipelineGroup = subCommands?.['pipelines'] as CommandDef | undefined
+  if (pipelineGroup?.subCommands) {
+    const pipelineSubCommands = pipelineGroup.subCommands as Record<string, CommandDef>
+    const sourceNames = [...resolver.sources()].map(([name]) => name)
+    const destinationNames = [...resolver.destinations()].map(([name]) => name)
+    for (const commandName of ['create', 'update']) {
+      const command = pipelineSubCommands[commandName]
+      if (command) {
+        pipelineSubCommands[commandName] = wrapPipelineConnectorShorthand(command, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
+      }
+    }
+
+    // Fetch a pipeline and merge connector overrides (e.g. --postgres.url) on top,
+    // validating against the connector's OAS config schema.
+    async function fetchAndMergeOverrides(
+      pipelineId: string,
+      overrides: { source?: Record<string, unknown>; destination?: Record<string, unknown> }
+    ) {
+      const res = await handler(new Request(`http://localhost/pipelines/${pipelineId}`))
+      if (!res.ok) {
+        const text = await res.text()
+        process.stderr.write(`Error ${res.status}: ${text}\n`)
+        process.exit(1)
+      }
+      const pipeline = await res.json()
+      if (overrides.source || overrides.destination) {
+        const configSchemas: {
+          source?: import('zod').ZodType
+          destination?: import('zod').ZodType
+        } = {}
+        if (overrides.source) {
+          const name = (overrides.source.type ?? pipeline.source?.type) as string
+          configSchemas.source = resolver.sources().get(name)?.configSchema
+        }
+        if (overrides.destination) {
+          const name = (overrides.destination.type ?? pipeline.destination?.type) as string
+          configSchemas.destination = resolver.destinations().get(name)?.configSchema
+        }
+        try {
+          mergeConnectorOverrides(pipeline, overrides, configSchemas)
+        } catch (err) {
+          process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`)
+          process.exit(1)
+        }
+      }
+      return pipeline
+    }
+
+    const getCommand = pipelineSubCommands['get']
+    if (getCommand) {
+      // Replace `get` to accept connector shorthand flags (e.g. --postgres.url)
+      // and merge overrides into the displayed pipeline config
+      pipelineSubCommands['get'] = defineCommand({
+        meta: { name: 'get', description: 'Retrieve pipeline' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          'reset-state': {
+            type: 'boolean',
+            default: false,
+            description: 'Show pipeline as if sync state were cleared',
+          },
+        },
+        async run({ args }) {
+          const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+            sources: sourceNames,
+            destinations: destinationNames,
+          })
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
+          if (args['reset-state']) {
+            delete pipeline.sync_state
+          }
+          if (responseFormatter) {
+            await responseFormatter(
+              new Response(JSON.stringify(pipeline), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }),
+              {
+                operationId: 'pipelines.get',
+                method: 'get',
+                path: '/pipelines/{id}',
+                tags: ['Pipelines'],
+                summary: 'Retrieve pipeline',
+                pathParams: [],
+                queryParams: [],
+                headerParams: [],
+                bodySchema: undefined,
+                bodyRequired: false,
+                ndjsonRequest: false,
+                ndjsonResponse: false,
+                noContent: false,
+              }
+            )
+          } else {
+            process.stdout.write(JSON.stringify(pipeline, null, 2) + '\n')
+          }
+        },
+      }) as CommandDef
+
+      /** Stream NDJSON from a pipeline endpoint, print status/log lines, exit on failure. */
+      async function streamPipelineAction(
+        pipelineId: string,
+        action: string,
+        only?: string
+      ): Promise<never> {
+        const qs = only ? `?only=${only}` : ''
+        const res = await handler(
+          new Request(`http://localhost/pipelines/${pipelineId}/${action}${qs}`, { method: 'POST' })
+        )
+        if (!res.ok) {
+          const text = await res.text()
+          process.stderr.write(`Error ${res.status}: ${text}\n`)
+          process.exit(1)
+        }
+        if (!res.body) {
+          process.stderr.write('No response body\n')
+          process.exit(1)
+        }
+
+        let failed = false
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.trim()) continue
+            const msg = JSON.parse(line)
+            if (msg.type === 'connection_status') {
+              const s = msg.connection_status
+              const tag = msg._emitted_by ?? ''
+              if (s.status === 'succeeded') {
+                process.stderr.write(`✓ ${tag}: connected\n`)
+              } else {
+                process.stderr.write(`✗ ${tag}: ${s.message ?? 'failed'}\n`)
+                failed = true
+              }
+            } else if (msg.type === 'log') {
+              process.stderr.write(`[${msg.log?.level ?? 'info'}] ${msg.log?.message ?? ''}\n`)
+            }
+            process.stdout.write(line + '\n')
+          }
+        }
+        process.exit(failed ? 1 : 0)
+      }
+
+      const onlyArg = {
+        only: {
+          type: 'string' as const,
+          description: 'Run only source or destination side (source|destination)',
+        },
+      }
+
+      pipelineSubCommands['check'] = defineCommand({
+        meta: { name: 'check', description: 'Check pipeline connectivity' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
+        },
+        async run({ args }) {
+          await streamPipelineAction(args.id as string, 'check', args.only)
+        },
+      }) as CommandDef
+
+      pipelineSubCommands['setup'] = defineCommand({
+        meta: { name: 'setup', description: 'Run pipeline setup hooks (e.g. create tables)' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
+        },
+        async run({ args }) {
+          await streamPipelineAction(args.id as string, 'setup', args.only)
+        },
+      }) as CommandDef
+
+      pipelineSubCommands['teardown'] = defineCommand({
+        meta: { name: 'teardown', description: 'Run pipeline teardown hooks (e.g. drop tables)' },
+        args: {
+          id: { type: 'positional', required: true, description: 'Pipeline ID' },
+          ...onlyArg,
+        },
+        async run({ args }) {
+          await streamPipelineAction(args.id as string, 'teardown', args.only)
+        },
+      }) as CommandDef
+    }
+
+    // Override the auto-generated sync command with an Ink-based progress display
+    pipelineSubCommands['sync'] = defineCommand({
+      meta: { name: 'sync', description: 'Run sync for a pipeline' },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        'chunk-time-limit': {
+          type: 'string',
+          description: 'Run sync in N-second chunks until complete',
+        },
+        'run-id': {
+          type: 'string',
+          description: 'Sync run identifier (resumes or starts fresh)',
+        },
+        streams: {
+          type: 'string',
+          description: 'Stream override as comma-separated names or JSON array',
+        },
+        'reset-state': {
+          type: 'boolean',
+          default: false,
+          description: 'Ignore persisted sync state and start fresh',
+        },
+        plain: {
+          type: 'boolean',
+          default: false,
+          description: 'Plain text output (no Ink/ANSI)',
+        },
+      },
+      async run({ args }) {
+        const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
+        // When overrides are present, fetch the pipeline, merge + validate against
+        // the connector's OAS schema, then pass full merged configs to sync.
+        let connectorOverrides = overrides
+        if (overrides.source || overrides.destination) {
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
+          connectorOverrides = {
+            source: overrides.source ? pipeline.source : undefined,
+            destination: overrides.destination ? pipeline.destination : undefined,
+          }
+        }
+        const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
+        await renderPipelineSync({
+          handler,
+          pipelineId: args.id as string,
+          timeLimit: args['chunk-time-limit'] ? parseInt(args['chunk-time-limit']) : undefined,
+          syncRunId: args['run-id'],
+          streams: parseStreamsArg(args.streams),
+          resetState: args['reset-state'] === true,
+          plain: args.plain || !process.stderr.isTTY,
+          connectorOverrides,
+        })
+      },
+    }) as CommandDef
+
+    pipelineSubCommands['simulate-webhook-sync'] = defineCommand({
+      meta: {
+        name: 'simulate-webhook-sync',
+        description: 'Simulate webhook sync by fetching events from the Stripe API',
+      },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        'created-after': {
+          type: 'string',
+          description:
+            'Only events created after this (Unix timestamp or ISO date, default: 24h ago)',
+        },
+        limit: {
+          type: 'string',
+          description: 'Max events to fetch',
+        },
+        plain: {
+          type: 'boolean',
+          default: false,
+          description: 'Plain text output (no Ink/ANSI)',
+        },
+      },
+      async run({ args }) {
+        const pipelineId = args.id as string
+        const params = new URLSearchParams()
+        if (args['created-after']) {
+          const raw = args['created-after']
+          // Accept Unix timestamp or ISO date
+          const ts = /^\d+$/.test(raw) ? raw : String(Math.floor(new Date(raw).getTime() / 1000))
+          params.set('created_after', ts)
+        }
+        if (args.limit) params.set('limit', args.limit)
+        const qs = params.toString() ? `?${params}` : ''
+
+        const res = await handler(
+          new Request(`http://localhost/pipelines/${pipelineId}/simulate_webhook_sync${qs}`, {
+            method: 'POST',
+          })
+        )
+
+        if (!res.ok) {
+          const text = await res.text()
+          process.stderr.write(`Error ${res.status}: ${text}\n`)
+          process.exit(1)
+        }
+        if (!res.body) {
+          process.stderr.write('No response body\n')
+          process.exit(1)
+        }
+
+        const { Message } = await import('@stripe/sync-protocol')
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            const msg = Message.parse(JSON.parse(line))
+
+            if (msg.type === 'log' && msg.log.message) {
+              process.stderr.write(`${msg.log.message}\n`)
+            } else if (msg.type === 'eof') {
+              const streams = msg.eof.run_progress?.streams ?? {}
+              const totalRecords = Object.values(streams).reduce(
+                (sum: number, s: { record_count?: number }) => sum + (s.record_count ?? 0),
+                0
+              )
+              process.stderr.write(
+                `Done: ${totalRecords} records synced, has_more=${msg.eof.has_more}\n`
+              )
+            }
+          }
+        }
+        closeMitmEngine()
+      },
+    }) as CommandDef
+  }
 
   return defineCommand({
     ...specCli,

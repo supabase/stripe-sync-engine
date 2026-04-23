@@ -4,6 +4,8 @@ export interface ParsedOperation {
   method: string
   path: string
   operationId?: string
+  summary?: string
+  description?: string
   tags: string[]
   pathParams: OpenAPIParameter[]
   queryParams: OpenAPIParameter[]
@@ -32,12 +34,11 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
       const queryParams = params.filter((p: OpenAPIParameter) => p.in === 'query')
       const headerParams = params.filter((p: OpenAPIParameter) => p.in === 'header')
 
-      // Prefer NDJSON when both content types are available so the generated CLI
-      // preserves streaming stdin behavior instead of flattening the JSON-body
-      // alternative into required --flags.
+      // Prefer NDJSON when available (streaming endpoints); fall back to JSON
+      // for pure-JSON routes (e.g. service /pipelines CRUD).
       const content = operation.requestBody?.content ?? {}
-      const jsonContent = content['application/json']
       const ndjsonContent = content['application/x-ndjson']
+      const jsonContent = content['application/json']
       const bodySchema = ndjsonContent?.schema ?? jsonContent?.schema
       const ndjsonRequest = !!ndjsonContent
 
@@ -45,6 +46,8 @@ export function parseSpec(spec: OpenAPISpec): ParsedOperation[] {
         method,
         path,
         operationId: operation.operationId,
+        summary: operation.summary,
+        description: operation.description,
         tags: operation.tags ?? [],
         pathParams,
         queryParams,

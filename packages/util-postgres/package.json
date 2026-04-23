@@ -15,15 +15,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "pg": "^8.16.3",
-    "pino": "^10"
+    "@stripe/sync-logger": "workspace:*",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/pg": "^8.15.5",
     "vitest": "^3.2.1"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ]
 }

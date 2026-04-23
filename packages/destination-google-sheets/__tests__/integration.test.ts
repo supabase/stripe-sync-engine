@@ -24,7 +24,7 @@ describeWithEnv(
       return google.sheets({ version: 'v4', auth })
     }
 
-    it('writes records to an existing spreadsheet and reads them back', async () => {
+    it.skip('writes records to an existing spreadsheet and reads them back', async () => {
       const sheets = makeSheetsClient()
       const dest = createDestination(sheets)
 

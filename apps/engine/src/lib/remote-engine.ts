@@ -64,11 +64,20 @@ export function createRemoteEngine(engineUrl: string): Engine {
     return h
   }
 
-  function queryParams(opts?: SourceReadOptions): Record<string, string> {
+  function queryParams(opts?: SourceReadOptions & { only?: string }): Record<string, string> {
     const q: Record<string, string> = {}
-    if (opts?.state_limit != null) q.state_limit = String(opts.state_limit)
     if (opts?.time_limit != null) q.time_limit = String(opts.time_limit)
+    if (opts?.soft_time_limit != null) q.soft_time_limit = String(opts.soft_time_limit)
+    if (opts?.run_id != null) q.run_id = opts.run_id
+    if (opts?.only != null) q.only = opts.only
     return q
+  }
+
+  /** Convert `{ only }` opts into the shape `post()` expects for query params. */
+  function onlyToReadOpts(opts?: {
+    only?: 'source' | 'destination'
+  }): SourceReadOptions & { only?: string } {
+    return opts?.only ? { only: opts.only } : {}
   }
 
   async function post(
@@ -80,7 +89,7 @@ export function createRemoteEngine(engineUrl: string): Engine {
       | '/pipeline_setup'
       | '/pipeline_teardown',
     pipeline: PipelineConfig,
-    opts?: SourceReadOptions,
+    opts?: SourceReadOptions & { only?: string },
     body?: ReadableStream<Uint8Array>,
     signal?: AbortSignal
   ): Promise<Response> {
@@ -145,18 +154,27 @@ export function createRemoteEngine(engineUrl: string): Engine {
       yield* parseNdjsonStream<DiscoverOutput>(response.body!)
     },
 
-    async *pipeline_check(pipeline: PipelineConfig): AsyncIterable<CheckOutput> {
-      const res = await post('/pipeline_check', pipeline)
+    async *pipeline_check(
+      pipeline: PipelineConfig,
+      opts?: { only?: 'source' | 'destination' }
+    ): AsyncIterable<CheckOutput> {
+      const res = await post('/pipeline_check', pipeline, onlyToReadOpts(opts))
       yield* parseNdjsonStream<CheckOutput>(res.body!)
     },
 
-    async *pipeline_setup(pipeline: PipelineConfig): AsyncIterable<SetupOutput> {
-      const res = await post('/pipeline_setup', pipeline)
+    async *pipeline_setup(
+      pipeline: PipelineConfig,
+      opts?: { only?: 'source' | 'destination' }
+    ): AsyncIterable<SetupOutput> {
+      const res = await post('/pipeline_setup', pipeline, onlyToReadOpts(opts))
       yield* parseNdjsonStream<SetupOutput>(res.body!)
     },
 
-    async *pipeline_teardown(pipeline: PipelineConfig): AsyncIterable<TeardownOutput> {
-      const res = await post('/pipeline_teardown', pipeline)
+    async *pipeline_teardown(
+      pipeline: PipelineConfig,
+      opts?: { only?: 'source' | 'destination' }
+    ): AsyncIterable<TeardownOutput> {
+      const res = await post('/pipeline_teardown', pipeline, onlyToReadOpts(opts))
       yield* parseNdjsonStream<TeardownOutput>(res.body!)
     },
 

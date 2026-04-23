@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import type { ConnectorResolver } from '../lib/index.js'
 import { createApp } from './app.js'
-import { logger } from '../logger.js'
+import { log } from '../logger.js'
 import { ENGINE_SERVER_OPTIONS } from '../http-server-options.js'
 
 export interface StartApiServerOptions {
@@ -19,38 +19,37 @@ type BunLike = {
   }) => unknown
 }
 
-export async function startApiServer({ resolver, port }: StartApiServerOptions) {
-  const listenPort = port ?? Number(process.env['PORT'] || 3000)
+export interface ApiServerHandle {
+  close: () => void
+}
 
-  if (process.env.DANGEROUSLY_VERBOSE_LOGGING === 'true') {
-    logger.warn(
-      '⚠️  DANGEROUSLY_VERBOSE_LOGGING is enabled — all request headers and message payloads will be logged. Do not use in production.'
-    )
-  }
+export async function startApiServer({
+  resolver,
+  port,
+}: StartApiServerOptions): Promise<ApiServerHandle> {
+  const listenPort = port ?? Number(process.env['PORT'] || 3000)
 
   const app = await createApp(resolver)
   const bun = (globalThis as typeof globalThis & { Bun?: BunLike }).Bun
 
   if (bun) {
-    bun.serve({ fetch: app.fetch, port: listenPort, idleTimeout: 60 })
-    logger.warn(
+    const server = bun.serve({ fetch: app.fetch, port: listenPort, idleTimeout: 60 })
+    log.warn(
       { port: listenPort, server: 'Bun.serve' },
       `Sync Engine API listening on http://localhost:${listenPort}`
     )
-    return
+    return { close: () => (server as { stop?: () => void }).stop?.() }
   }
 
-  return serve(
+  const server = serve(
     {
       fetch: app.fetch,
       port: listenPort,
       serverOptions: ENGINE_SERVER_OPTIONS,
     },
     (info) => {
-      logger.info(
-        { port: info.port },
-        `Sync Engine API listening on http://localhost:${info.port}`
-      )
+      log.info({ port: info.port }, `Sync Engine API listening on http://localhost:${info.port}`)
     }
   )
+  return { close: () => server.close() }
 }

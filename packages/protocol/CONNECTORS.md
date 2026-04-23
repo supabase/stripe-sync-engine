@@ -223,7 +223,7 @@ import { z } from 'zod'
 import type { Destination } from '@stripe/sync-protocol'
 
 export const spec = z.object({
-  connection_string: z.string().describe('Connection string'),
+  url: z.string().describe('Connection string'),
 })
 
 export type Config = z.infer<typeof spec>
@@ -271,5 +271,5 @@ source-stripe read \
 
 # write (--config + --catalog, messages from stdin pipe)
 source-stripe read --config '...' --catalog '...' \
-  | dest-postgres write --config '{"connection_string":"postgres://..."}' --catalog '...'
+  | dest-postgres write --config '{"url":"postgres://..."}' --catalog '...'
 ```

@@ -12,39 +12,23 @@ import { z } from 'zod'
 
 // MARK: - Aggregate state
 
-export const SectionState = z
+export const SourceState = z
   .object({
     streams: z
       .record(z.string(), z.unknown())
       .describe('Per-stream checkpoint data, keyed by stream name.'),
     global: z
       .record(z.string(), z.unknown())
-      .describe('Section-wide state shared across all streams.'),
+      .describe('Source-wide state shared across all streams.'),
   })
-  .describe('A partition of sync state with per-stream and global slots.')
-export type SectionState = z.infer<typeof SectionState>
+  .describe('Source connector state — cursors, backfill progress, events cursors.')
+  .meta({ id: 'SourceState' })
+export type SourceState = z.infer<typeof SourceState>
 
-export const SyncState = z
-  .object({
-    source: SectionState.describe(
-      'Source connector state — cursors, backfill progress, events cursors.'
-    ),
-    destination: SectionState.describe('Destination connector state — reserved for future use.'),
-    engine: SectionState.describe(
-      'Engine-managed state — cumulative record counts, sync metadata not owned by connectors.'
-    ),
-  })
-  .describe(
-    'Full sync checkpoint with separate sections for source, destination, and engine. ' +
-      'Connectors only see their own section; the engine manages routing.'
-  )
-  .meta({ id: 'SyncState' })
-export type SyncState = z.infer<typeof SyncState>
-
-/** @deprecated Use SectionState. */
-export const SourceState = SectionState.meta({ id: 'SourceState' })
-/** @deprecated Use SectionState. */
-export type SourceState = SectionState
+/** @deprecated Use SourceState. */
+export const SectionState = SourceState
+/** @deprecated Use SourceState. */
+export type SectionState = SourceState
 
 // MARK: - Data model
 
@@ -70,6 +54,20 @@ export const Stream = z
       .optional()
       .describe(
         'Source-specific metadata that applies to every record in this stream. The destination can use these for schema naming, partitioning, etc. Examples: Stripe: { api_version, account_id, live_mode }.'
+      ),
+
+    newer_than_field: z
+      .string()
+      .optional()
+      .describe(
+        'Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. "updated").'
+      ),
+
+    soft_delete_field: z
+      .string()
+      .optional()
+      .describe(
+        'Field in record data that signals a soft delete (e.g. "deleted"). Destination uses this to classify upserts as deletes when the field is truthy.'
       ),
   })
   .describe('A named collection of records — analogous to a table or API resource.')
@@ -116,6 +114,32 @@ export const ConfiguredStream = z
       .positive()
       .optional()
       .describe('Cap backfill to this many records, then mark the stream complete.'),
+
+    supports_time_range: z
+      .boolean()
+      .optional()
+      .describe(
+        'Source capability from discover/spec. When true, the engine may inject time_range.'
+      ),
+
+    time_range: z
+      .object({
+        gte: z
+          .string()
+          .optional()
+          .describe(
+            'Inclusive lower bound (ISO 8601). Source fills from account metadata if absent.'
+          ),
+        lt: z
+          .string()
+          .optional()
+          .describe('Exclusive upper bound (ISO 8601). Engine sets from time_ceiling if absent.'),
+      })
+      .optional()
+      .describe(
+        'Time window for this stream. Either bound may be omitted: the engine sets lt from time_ceiling, ' +
+          'the source fills gte from account metadata. If absent entirely, the source computes its own range.'
+      ),
   })
   .describe('A stream selected by the user with sync settings applied.')
 export type ConfiguredStream = z.infer<typeof ConfiguredStream>
@@ -147,6 +171,12 @@ export const ConnectorSpecification = z
       .record(z.string(), z.unknown())
       .optional()
       .describe('JSON Schema for the read() input parameter (e.g. a webhook event).'),
+    soft_limit_fraction: z
+      .number()
+      .positive()
+      .max(1)
+      .optional()
+      .describe('Fraction of `time_limit` to use as default `soft_time_limit` (e.g. 0.5).'),
   })
   .describe('JSON Schema describing the configuration a connector requires.')
 export type ConnectorSpecification = z.infer<typeof ConnectorSpecification>
@@ -208,6 +238,10 @@ export const LogPayload = z
   .object({
     level: z.enum(['debug', 'info', 'warn', 'error']).describe('Log severity level.'),
     message: z.string().describe('Human-readable log message.'),
+    data: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Structured log fields emitted alongside the message.'),
   })
   .describe('Structured log output from a connector.')
 export type LogPayload = z.infer<typeof LogPayload>
@@ -242,219 +276,178 @@ export const ControlPayload = z
   .describe('Control signal from a connector to the orchestrator.')
 export type ControlPayload = z.infer<typeof ControlPayload>
 
-// Trace subtypes
+/** Per-request aggregate stats. Used in EOF and periodic progress snapshots. */
 
-export const TraceError = z
-  .object({
-    failure_type: z
-      .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
-      .describe('Error category — lets the orchestrator decide whether to retry, alert, or abort.'),
-    message: z.string().describe('Human-readable error description.'),
-    stream: z.string().optional().describe('Stream that triggered the error, if applicable.'),
-    stack_trace: z.string().optional().describe('Full stack trace for debugging.'),
-  })
-  .describe('Structured error from a connector.')
-export type TraceError = z.infer<typeof TraceError>
+// MARK: - Stream status payload (top-level message type)
 
-export const TraceStreamStatus = z
-  .object({
-    stream: z.string().describe('Stream being reported on.'),
-    status: z
-      .enum([
-        'started',
-        'running',
-        'complete',
-        'transient_error',
-        'system_error',
-        'config_error',
-        'auth_error',
-      ])
-      .describe('Current phase of the stream within this sync run.'),
-    cumulative_record_count: z
-      .number()
-      .int()
-      .optional()
-      .describe(
-        'Cumulative records synced for this stream across all sync runs. ' +
-          'Monotonically increasing; initialized from engine state on resume. ' +
-          'Set by the engine, not the source.'
-      ),
-    run_record_count: z
-      .number()
-      .int()
-      .optional()
-      .describe('Records synced for this stream in the current sync run. Set by the engine.'),
-    window_record_count: z
-      .number()
-      .int()
-      .optional()
-      .describe(
-        'Records synced since the last stream_status emission for this stream. ' +
-          'Set by the engine. Used for instantaneous per-stream throughput.'
-      ),
-    records_per_second: z
-      .number()
-      .optional()
-      .describe(
-        'Average records per second for this stream over the entire run: ' +
-          'run_record_count / elapsed seconds. Set by the engine.'
-      ),
-    requests_per_second: z
-      .number()
-      .optional()
-      .describe(
-        'Average API requests per second for this stream over the entire run. ' +
-          'Set by the engine from source-reported request counts.'
-      ),
-  })
-  .describe(
-    'Per-stream status update. Sources emit the minimal form (stream + status). ' +
-      'The engine emits enriched versions with record counts and throughput rates.'
-  )
-export type TraceStreamStatus = z.infer<typeof TraceStreamStatus>
-
-export const TraceEstimate = z
-  .object({
-    stream: z.string().describe('Stream being estimated.'),
-    row_count: z.number().int().optional().describe('Estimated total row count for this stream.'),
-    byte_count: z.number().int().optional().describe('Estimated total byte count for this stream.'),
-  })
-  .describe('Sync progress estimate for a stream.')
-export type TraceEstimate = z.infer<typeof TraceEstimate>
-
-export const TraceProgress = z
-  .object({
-    elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the sync run started.'),
-    run_record_count: z
-      .number()
-      .int()
-      .describe('Total records synced across all streams in this run.'),
-    rows_per_second: z
-      .number()
-      .describe('Overall throughput for the entire run: run_record_count / elapsed seconds.'),
-    window_rows_per_second: z
-      .number()
-      .describe(
-        'Instantaneous throughput: total records in last window / window duration. ' +
-          'Measures only the most recent reporting interval.'
-      ),
-    state_checkpoint_count: z
-      .number()
-      .int()
-      .describe('Total source_state messages observed so far in this sync run.'),
-  })
-  .describe(
-    'Periodic global sync progress emitted by the engine. ' +
-      'Aggregate stats only — per-stream detail is in stream_status messages. ' +
-      'Each emission is a full replacement.'
-  )
-export type TraceProgress = z.infer<typeof TraceProgress>
-
-export const TracePayload = z
-  .discriminatedUnion('trace_type', [
+export const StreamStatusPayload = z
+  .discriminatedUnion('status', [
     z.object({
-      trace_type: z.literal('error'),
-      error: TraceError,
+      stream: z.string().describe('Stream being reported on.'),
+      status: z.literal('start'),
+      time_range: z
+        .object({
+          gte: z.string().optional().describe('Inclusive lower bound (ISO 8601).'),
+          lt: z.string().optional().describe('Exclusive upper bound (ISO 8601).'),
+        })
+        .optional()
+        .describe('Full backfill time span for this stream.'),
     }),
     z.object({
-      trace_type: z.literal('stream_status'),
-      stream_status: TraceStreamStatus,
+      stream: z.string().describe('Stream being reported on.'),
+      status: z.literal('range_complete'),
+      range_complete: z
+        .object({
+          gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+          lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+        })
+        .describe('The sub-range that finished.'),
     }),
     z.object({
-      trace_type: z.literal('estimate'),
-      estimate: TraceEstimate,
+      stream: z.string().describe('Stream being reported on.'),
+      status: z.literal('complete'),
     }),
     z.object({
-      trace_type: z.literal('progress'),
-      progress: TraceProgress,
+      stream: z.string().describe('Stream being reported on.'),
+      status: z.literal('error'),
+      error: z.string().describe('Human-readable error description.'),
+    }),
+    z.object({
+      stream: z.string().describe('Stream being reported on.'),
+      status: z.literal('skip'),
+      reason: z.string().describe('Why the stream was skipped.'),
     }),
   ])
   .describe(
-    'Diagnostic/status payload with subtypes for error, stream status, estimates, and progress.'
+    'Stream lifecycle event. Sources emit these; the engine tracks stream progress from them.'
   )
-export type TracePayload = z.infer<typeof TracePayload>
+export type StreamStatusPayload = z.infer<typeof StreamStatusPayload>
 
-// MARK: - EOF payload (depends on TraceProgress)
+// MARK: - Progress payload (top-level message type)
 
-export const EofStreamProgress = z
+export const StreamProgress = z
   .object({
     status: z
-      .enum([
-        'started',
-        'running',
-        'complete',
-        'transient_error',
-        'system_error',
-        'config_error',
-        'auth_error',
-      ])
-      .describe('Final stream status.'),
-    cumulative_record_count: z
-      .number()
-      .int()
-      .describe('Cumulative records synced for this stream across all runs.'),
-    run_record_count: z.number().int().describe('Records synced in this run.'),
-    records_per_second: z
-      .number()
+      .enum(['not_started', 'started', 'completed', 'skipped', 'errored'])
+      .describe('Current state, derived from stream_status events.'),
+    state_count: z.number().int().describe('Number of state checkpoints for this stream.'),
+    record_count: z.number().int().describe('Records synced for this stream in this run.'),
+    message: z
+      .string()
       .optional()
-      .describe('Average records/sec for this stream over the run.'),
-    requests_per_second: z
-      .number()
+      .describe('Human-readable status message (error reason, skip reason, etc).'),
+    total_range: z
+      .object({
+        gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+        lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
+      })
       .optional()
-      .describe('Average requests/sec for this stream over the run.'),
-    errors: z
+      .describe('Full backfill time span for this stream.'),
+    completed_ranges: z
       .array(
         z.object({
-          message: z.string().describe('Human-readable error description.'),
-          failure_type: z
-            .enum(['config_error', 'system_error', 'transient_error', 'auth_error'])
-            .optional()
-            .describe('Error category matching TraceError.failure_type.'),
+          gte: z.string().describe('Inclusive lower bound (ISO 8601).'),
+          lt: z.string().describe('Exclusive upper bound (ISO 8601).'),
         })
       )
       .optional()
-      .describe('All accumulated errors for this stream during this run.'),
+      .describe('Completed time sub-ranges within the total_range.'),
   })
-  .describe('End-of-sync summary for a single stream.')
-export type EofStreamProgress = z.infer<typeof EofStreamProgress>
+  .describe('Per-stream progress snapshot.')
+  .meta({ id: 'StreamProgress' })
+export type StreamProgress = z.infer<typeof StreamProgress>
+
+export const RunStatus = z
+  .enum(['started', 'succeeded', 'failed'])
+  .describe(
+    'succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.'
+  )
+  .meta({ id: 'RunStatus' })
+export type RunStatus = z.infer<typeof RunStatus>
+
+export const ProgressPayload = z
+  .object({
+    started_at: z
+      .string()
+      .describe('When this sync started (ISO 8601); generally equals time_ceiling.'),
+    elapsed_ms: z.number().int().describe('Wall-clock milliseconds since the sync run started.'),
+    global_state_count: z.number().int().describe('Total source_state messages observed so far.'),
+    connection_status: ConnectionStatusPayload.optional().describe(
+      'Set when source or destination emits connection_status: failed.'
+    ),
+    derived: z
+      .object({
+        status: RunStatus,
+        records_per_second: z.number().describe('Overall throughput for the entire run.'),
+        states_per_second: z.number().describe('State checkpoints per second.'),
+      })
+      .describe('Computed aggregates.'),
+    streams: z
+      .record(z.string(), StreamProgress)
+      .describe('Per-stream progress, keyed by stream name.'),
+  })
+  .describe(
+    'Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement.'
+  )
+  .meta({ id: 'ProgressPayload' })
+export type ProgressPayload = z.infer<typeof ProgressPayload>
+
+// MARK: - Sync run state
+
+export const SyncRunState = z
+  .object({
+    run_id: z
+      .string()
+      .optional()
+      .describe('Identifies a finite backfill run. Omit for continuous sync.'),
+    time_ceiling: z
+      .string()
+      .optional()
+      .describe(
+        'Frozen upper bound (ISO 8601). Set on first invocation when run_id is present; reused on continuation.'
+      ),
+    progress: ProgressPayload.describe('Accumulated progress from prior requests in this run.'),
+  })
+  .describe('Engine-managed run state — run identity, frozen bounds, accumulated progress.')
+export type SyncRunState = z.infer<typeof SyncRunState>
+
+export const SyncState = z
+  .object({
+    source: SourceState.describe(
+      'Source connector state — cursors, backfill progress, events cursors.'
+    ),
+    destination: z.record(z.string(), z.unknown()).describe('Destination connector state.'),
+    sync_run: SyncRunState.describe(
+      'Engine-managed run state — run_id, time_ceiling, accumulated progress.'
+    ),
+  })
+  .describe(
+    'Full sync checkpoint with separate sections for source, destination, and sync run. ' +
+      'Connectors only see their own section; the engine manages routing.'
+  )
+  .meta({ id: 'SyncState' })
+export type SyncState = z.infer<typeof SyncState>
 
 export const EofPayload = z
   .object({
-    reason: z
-      .enum(['complete', 'state_limit', 'time_limit', 'error', 'aborted'])
-      .describe('Why the sync run ended.'),
-    cutoff: z
-      .enum(['soft', 'hard'])
-      .optional()
+    status: RunStatus.describe('Terminal run status derived from stream outcomes.'),
+    has_more: z
+      .boolean()
       .describe(
-        'Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.'
+        'Whether the client should continue with another request. ' +
+          'true when cut off by limits; false when the source iterator exhausted naturally.'
       ),
-    elapsed_ms: z
-      .number()
-      .optional()
-      .describe(
-        'Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted.'
-      ),
-    state: SyncState.optional().describe(
-      'Full sync state at the end of the run. source: accumulated from source_state messages; ' +
-        'engine: updated cumulative record counts; destination: reserved. ' +
-        'Consumers can persist this directly and pass it back on resume.'
+    ending_state: SyncState.optional().describe(
+      'Full sync state at the end of this request. ' +
+        'Round-trip this as starting_state on the next request.'
     ),
-    global_progress: TraceProgress.optional().describe(
-      'Final global aggregates. Same shape as trace/progress.'
+    run_progress: ProgressPayload.describe(
+      'Accumulated progress across all requests in this sync run.'
     ),
-    stream_progress: z
-      .record(z.string(), EofStreamProgress)
-      .optional()
-      .describe(
-        'Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages.'
-      ),
+    request_progress: ProgressPayload.describe('Progress for this specific request only.'),
   })
-  .describe(
-    'Terminal message with two nested sections: ' +
-      'global_progress (same shape as trace/progress) and ' +
-      'stream_progress (final per-stream detail including accumulated errors).'
-  )
+  .describe('Terminal message signaling end of this request.')
+  .meta({ id: 'EofPayload' })
 export type EofPayload = z.infer<typeof EofPayload>
 
 // MARK: - Envelope messages (the wire format)
@@ -504,12 +497,6 @@ export const LogMessage = MessageBase.extend({
 }).meta({ id: 'LogMessage' })
 export type LogMessage = z.infer<typeof LogMessage>
 
-export const TraceMessage = MessageBase.extend({
-  type: z.literal('trace'),
-  trace: TracePayload,
-}).meta({ id: 'TraceMessage' })
-export type TraceMessage = z.infer<typeof TraceMessage>
-
 export const SpecMessage = MessageBase.extend({
   type: z.literal('spec'),
   spec: ConnectorSpecification,
@@ -521,6 +508,18 @@ export const ConnectionStatusMessage = MessageBase.extend({
   connection_status: ConnectionStatusPayload,
 }).meta({ id: 'ConnectionStatusMessage' })
 export type ConnectionStatusMessage = z.infer<typeof ConnectionStatusMessage>
+
+export const StreamStatusMessage = MessageBase.extend({
+  type: z.literal('stream_status'),
+  stream_status: StreamStatusPayload,
+}).meta({ id: 'StreamStatusMessage' })
+export type StreamStatusMessage = z.infer<typeof StreamStatusMessage>
+
+export const ProgressMessage = MessageBase.extend({
+  type: z.literal('progress'),
+  progress: ProgressPayload,
+}).meta({ id: 'ProgressMessage' })
+export type ProgressMessage = z.infer<typeof ProgressMessage>
 
 export const ControlMessage = MessageBase.extend({
   type: z.literal('control'),
@@ -555,6 +554,13 @@ export const PipelineConfig = z.object({
         sync_mode: z.enum(['incremental', 'full_refresh']).optional(),
         fields: z.array(z.string()).optional(),
         backfill_limit: z.number().int().positive().optional(),
+        time_range: z
+          .object({
+            gte: z.string().optional().describe('Inclusive lower bound (ISO 8601).'),
+            lt: z.string().optional().describe('Exclusive upper bound (ISO 8601).'),
+          })
+          .optional()
+          .describe('Optional time window to restrict the sync to a specific range.'),
       })
     )
     .optional(),
@@ -563,48 +569,9 @@ export type PipelineConfig = z.infer<typeof PipelineConfig>
 
 // MARK: - Message unions
 
-/** The subset of messages the destination receives on stdin. */
-export const DestinationInput = z.discriminatedUnion('type', [RecordMessage, SourceStateMessage])
-export type DestinationInput = z.infer<typeof DestinationInput>
-
-/** Messages the destination yields back to the orchestrator (one per NDJSON line). */
-export const DestinationOutput = z
-  .discriminatedUnion('type', [SourceStateMessage, TraceMessage, LogMessage, EofMessage])
-  .meta({ id: 'DestinationOutput' })
-export type DestinationOutput = z.infer<typeof DestinationOutput>
-
-/** Output of pipeline_sync(): destination output plus source signals (controls, logs, traces). */
-export const SyncOutput = z
-  .discriminatedUnion('type', [
-    SourceStateMessage,
-    TraceMessage,
-    LogMessage,
-    EofMessage,
-    ControlMessage,
-  ])
-  .meta({ id: 'SyncOutput' })
-export type SyncOutput = z.infer<typeof SyncOutput>
-
-/** Any message flowing through the engine. One message per NDJSON line. */
-export const Message = z
-  .discriminatedUnion('type', [
-    RecordMessage,
-    SourceStateMessage,
-    CatalogMessage,
-    LogMessage,
-    TraceMessage,
-    SpecMessage,
-    ConnectionStatusMessage,
-    ControlMessage,
-    EofMessage,
-  ])
-  .meta({ id: 'Message' })
-export type Message = z.infer<typeof Message>
-
+/** Core connector messages — the fundamental types that sources and destinations emit. */
 /**
- * Wire envelope for a single source input item (e.g. a webhook event payload).
- * `source_input` carries the connector-specific payload; connectors narrow its type via
- * `Source<TConfig, TStreamState, TInput>`.
+ * Extended message types (engine-level, not emitted by connectors directly).
  */
 export const SourceInputMessage = MessageBase.extend({
   type: z.literal('source_input'),
@@ -612,35 +579,112 @@ export const SourceInputMessage = MessageBase.extend({
 }).meta({ id: 'SourceInputMessage' })
 export type SourceInputMessage = z.infer<typeof SourceInputMessage>
 
+/**
+ * The single message union. All other message types are derived from this via Extract.
+ * One Zod schema = one TypeScript type = no structural mismatches.
+ */
+export const Message = z
+  .discriminatedUnion('type', [
+    RecordMessage,
+    SourceStateMessage,
+    CatalogMessage,
+    LogMessage,
+    SpecMessage,
+    ConnectionStatusMessage,
+    StreamStatusMessage,
+    ControlMessage,
+    ProgressMessage,
+    EofMessage,
+    SourceInputMessage,
+  ])
+  .meta({ id: 'Message' })
+export type Message = z.infer<typeof Message>
+
+// MARK: - Derived message subsets
+//
+// All derived from the single Message union. Types use Extract for structural
+// compatibility. Runtime schemas share the same underlying Zod member schemas
+// so parsed values are assignable to Message without casts.
+
+/** Core connector messages — record, state, lifecycle, logs. */
+export const CoreMessage = z
+  .discriminatedUnion('type', [
+    RecordMessage,
+    SourceStateMessage,
+    CatalogMessage,
+    LogMessage,
+    SpecMessage,
+    ConnectionStatusMessage,
+    StreamStatusMessage,
+    ControlMessage,
+  ])
+  .meta({ id: 'CoreMessage' })
+export type CoreMessage = z.infer<typeof CoreMessage>
+
+/** Extended messages — engine-level (progress, eof, source input). */
+export type ExtendedMessage = Extract<
+  Message,
+  { type: 'progress' } | { type: 'eof' } | { type: 'source_input' }
+>
+
+/**
+ * Messages the destination receives on stdin. Destinations must handle `record`
+ * and `source_state`; all other message types must be yielded back as pass-through.
+ */
+export const DestinationInput = Message
+export type DestinationInput = Message
+
+/**
+ * Messages the destination yields back to the orchestrator. Includes both
+ * destination-originated messages (logs, connection_status) and pass-through
+ * messages from the source that the destination doesn't handle.
+ */
+export const DestinationOutput = Message.meta({ id: 'DestinationOutput' })
+export type DestinationOutput = Message
+
+/** Output of pipeline_sync streamed to the client. */
+export const SyncOutput = z
+  .discriminatedUnion('type', [
+    SourceStateMessage,
+    StreamStatusMessage,
+    ProgressMessage,
+    ConnectionStatusMessage,
+    LogMessage,
+    EofMessage,
+    ControlMessage,
+  ])
+  .meta({ id: 'SyncOutput' })
+export type SyncOutput = z.infer<typeof SyncOutput>
+
 // MARK: - Per-command output types
 
-/** Output of spec(): the connector's specification, plus optional logs/traces. */
+/** Output of spec(): the connector's specification, plus optional logs. */
 export const SpecOutput = z
-  .discriminatedUnion('type', [SpecMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [SpecMessage, LogMessage])
   .meta({ id: 'SpecOutput' })
 export type SpecOutput = z.infer<typeof SpecOutput>
 
-/** Output of check(): connection status, plus optional logs/traces. */
+/** Output of check(): connection status, plus optional logs. */
 export const CheckOutput = z
-  .discriminatedUnion('type', [ConnectionStatusMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [ConnectionStatusMessage, LogMessage])
   .meta({ id: 'CheckOutput' })
 export type CheckOutput = z.infer<typeof CheckOutput>
 
-/** Output of discover(): catalog of streams, plus optional logs/traces. */
+/** Output of discover(): catalog of streams, plus optional logs. */
 export const DiscoverOutput = z
-  .discriminatedUnion('type', [CatalogMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [CatalogMessage, LogMessage])
   .meta({ id: 'DiscoverOutput' })
 export type DiscoverOutput = z.infer<typeof DiscoverOutput>
 
-/** Output of setup(): config update controls, plus optional logs/traces. */
+/** Output of setup(): config update controls, plus optional logs. */
 export const SetupOutput = z
-  .discriminatedUnion('type', [ControlMessage, LogMessage, TraceMessage])
+  .discriminatedUnion('type', [ControlMessage, LogMessage])
   .meta({ id: 'SetupOutput' })
 export type SetupOutput = z.infer<typeof SetupOutput>
 
-/** Output of teardown(): optional logs/traces. */
+/** Output of teardown(): optional logs. */
 export const TeardownOutput = z
-  .discriminatedUnion('type', [LogMessage, TraceMessage])
+  .discriminatedUnion('type', [LogMessage])
   .meta({ id: 'TeardownOutput' })
 export type TeardownOutput = z.infer<typeof TeardownOutput>
 
@@ -661,14 +705,14 @@ export type TeardownOutput = z.infer<typeof TeardownOutput>
  *
  * Type parameters:
  *   TConfig      — connector's configuration type, inferred from its Zod spec
- *   TSourceStreamState — per-stream checkpoint shape (opaque to the orchestrator)
+ *   TSourceState       — per-stream checkpoint shape (opaque to the engine)
  *   TInput       — serializable data passed to read() for event-driven reads
  *                  (e.g. a single webhook event). When absent, read() performs
  *                  a pull-based backfill.
  */
 export interface Source<
   TConfig extends Record<string, unknown> = Record<string, unknown>,
-  TStreamState = unknown,
+  TSourceState = unknown,
   TInput = unknown,
 > {
   /** Emit the connector's specification (config JSON Schema, etc.). */
@@ -690,7 +734,7 @@ export interface Source<
     params: {
       config: TConfig
       catalog: ConfiguredCatalog
-      state?: SourceState
+      state?: { streams: Record<string, TSourceState>; global: Record<string, unknown> }
     },
     $stdin?: AsyncIterable<TInput>
   ): AsyncIterable<Message>
@@ -744,10 +788,3 @@ export interface Destination<TConfig extends Record<string, unknown> = Record<st
   /** Clean up downstream resources. Called when a sync is deleted. */
   teardown?(params: { config: TConfig }): AsyncIterable<TeardownOutput>
 }
-
-// MARK: - Deprecated aliases (for migration)
-
-/** @deprecated Use ConnectionStatusPayload */
-export const CheckResult = ConnectionStatusPayload
-/** @deprecated Use ConnectionStatusPayload */
-export type CheckResult = ConnectionStatusPayload

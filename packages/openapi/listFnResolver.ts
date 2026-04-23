@@ -237,6 +237,7 @@ export class StripeApiRequestError extends Error {
 /** Headers worth surfacing in error messages for debugging. */
 const DEBUG_HEADERS = [
   'request-id',
+  'retry-after',
   'stripe-should-retry',
   'stripe-action-id',
   'stripe-server-environment',
@@ -302,7 +303,13 @@ async function readJson(response: Response): Promise<unknown> {
 
 function assertOk(response: Response, body: unknown, method: string, path: string): void {
   if (!response.ok) {
-    throw new StripeApiRequestError(response.status, body, method, path, pickDebugHeaders(response.headers))
+    throw new StripeApiRequestError(
+      response.status,
+      body,
+      method,
+      path,
+      pickDebugHeaders(response.headers)
+    )
   }
 }
 

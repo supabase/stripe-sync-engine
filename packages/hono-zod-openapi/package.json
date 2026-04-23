@@ -17,8 +17,8 @@
     "test": "vitest --passWithNoTests"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",

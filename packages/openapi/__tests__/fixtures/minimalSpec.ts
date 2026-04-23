@@ -231,6 +231,138 @@ const rawSpec: OpenApiSpec = {
           name: { type: 'string' },
         },
       },
+      // Webhook event schemas — used by discoverWebhookUpdatableResourceIds.
+      // Each has x-stripeEvent and properties.object pointing to the resource schema.
+      'customer.created': {
+        'x-stripeEvent': { type: 'customer.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/customer' } },
+      },
+      'customer.updated': {
+        'x-stripeEvent': { type: 'customer.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/customer' } },
+      },
+      'customer.deleted': {
+        'x-stripeEvent': { type: 'customer.deleted' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/customer' } },
+      },
+      'plan.created': {
+        'x-stripeEvent': { type: 'plan.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/plan' } },
+      },
+      'plan.updated': {
+        'x-stripeEvent': { type: 'plan.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/plan' } },
+      },
+      'plan.deleted': {
+        'x-stripeEvent': { type: 'plan.deleted' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/plan' } },
+      },
+      'price.created': {
+        'x-stripeEvent': { type: 'price.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/price' } },
+      },
+      'price.updated': {
+        'x-stripeEvent': { type: 'price.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/price' } },
+      },
+      'price.deleted': {
+        'x-stripeEvent': { type: 'price.deleted' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/price' } },
+      },
+      'product.created': {
+        'x-stripeEvent': { type: 'product.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/product' } },
+      },
+      'product.updated': {
+        'x-stripeEvent': { type: 'product.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/product' } },
+      },
+      'product.deleted': {
+        'x-stripeEvent': { type: 'product.deleted' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/product' } },
+      },
+      'subscription_item.created': {
+        'x-stripeEvent': { type: 'subscription_item.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/subscription_item' } },
+      },
+      'subscription_item.updated': {
+        'x-stripeEvent': { type: 'subscription_item.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/subscription_item' } },
+      },
+      'subscription_item.deleted': {
+        'x-stripeEvent': { type: 'subscription_item.deleted' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/subscription_item' } },
+      },
+      'checkout.session.created': {
+        'x-stripeEvent': { type: 'checkout.session.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/checkout_session' } },
+      },
+      'checkout.session.updated': {
+        'x-stripeEvent': { type: 'checkout.session.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/checkout_session' } },
+      },
+      'radar.early_fraud_warning.created': {
+        'x-stripeEvent': { type: 'radar.early_fraud_warning.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/early_fraud_warning' } },
+      },
+      'radar.early_fraud_warning.updated': {
+        'x-stripeEvent': { type: 'radar.early_fraud_warning.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/early_fraud_warning' } },
+      },
+      'entitlements.active_entitlement.created': {
+        'x-stripeEvent': { type: 'entitlements.active_entitlement.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/active_entitlement' } },
+      },
+      'entitlements.feature.created': {
+        'x-stripeEvent': { type: 'entitlements.feature.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/entitlements_feature' } },
+      },
+      'entitlements.feature.updated': {
+        'x-stripeEvent': { type: 'entitlements.feature.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/entitlements_feature' } },
+      },
+      'v2.core.account.created': {
+        'x-stripeEvent': { type: 'v2.core.account.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/v2_core_account' } },
+      },
+      'v2.core.account.updated': {
+        'x-stripeEvent': { type: 'v2.core.account.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/v2_core_account' } },
+      },
+      'v2.core.event_destination.created': {
+        'x-stripeEvent': { type: 'v2.core.event_destination.created' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/v2_core_event_destination' } },
+      },
+      'v2.core.event_destination.updated': {
+        'x-stripeEvent': { type: 'v2.core.event_destination.updated' },
+        type: 'object',
+        properties: { object: { $ref: '#/components/schemas/v2_core_event_destination' } },
+      },
     },
   },
 }

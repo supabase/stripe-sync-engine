@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm -r run build",
     "clean": "rimraf --glob \"packages/*/dist\" \"apps/*/dist\" \"packages/**/*.tsbuildinfo\" \"apps/**/*.tsbuildinfo\"",
+    "check:sync-efficiency": "node --conditions bun --import tsx scripts/check-sync-efficiency.ts",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
@@ -42,7 +43,11 @@
   },
   "pnpm": {
     "overrides": {
-      "esbuild": "^0.28.0"
+      "@types/react": "19.2.14",
+      "@types/react-dom": "19.2.3",
+      "esbuild": "^0.28.0",
+      "react": "19.2.5",
+      "react-dom": "19.2.5"
     }
   },
   "engines": {

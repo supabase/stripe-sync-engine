@@ -58,6 +58,126 @@ export interface paths {
         patch: operations["pipelines.update"];
         trace?: never;
     };
+    "/pipelines/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync for a pipeline
+         * @description Triggers an ad-hoc sync run for the pipeline and streams NDJSON messages (records, state, progress, eof) back to the client. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.
+         */
+        post: operations["pipelines.sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check pipeline connectivity
+         * @description Runs the `check()` method on source and/or destination connectors and streams back NDJSON messages (connection_status, log, trace). Pass ?only=source or ?only=destination to check a single side.
+         */
+        post: operations["pipelines.check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run pipeline setup hooks
+         * @description Runs the `setup()` method on source and/or destination connectors (e.g. creating destination tables). Streams NDJSON messages (control, log, trace). Pass ?only=source or ?only=destination to run a single side.
+         */
+        post: operations["pipelines.setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run pipeline teardown hooks
+         * @description Runs the `teardown()` method on source and/or destination connectors (e.g. dropping destination tables). Streams NDJSON messages (log, trace). Pass ?only=source or ?only=destination to run a single side.
+         */
+        post: operations["pipelines.teardown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/simulate_webhook_sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate webhook sync by fetching events from the Stripe API
+         * @description Fetches events from /v1/events using the pipeline's Stripe API key, then pipes them as input into the sync engine's push mode. This exercises the same code path as real webhooks without needing webhook delivery.
+         */
+        post: operations["pipelines.simulate_webhook_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pipelines/{id}/sync_workflow_test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync using the workflow backfill loop (no Temporal)
+         * @description Exercises the same backfill loop code that the Temporal workflow uses, but runs inline without a Temporal server. Useful for testing the full workflow logic end-to-end.
+         */
+        post: operations["pipelines.sync_workflow_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/{pipeline_id}": {
         parameters: {
             query?: never;
@@ -92,6 +212,8 @@ export interface components {
             api_key: string;
             /** @description Stripe account ID (resolved from API if omitted) */
             account_id?: string;
+            /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
+            account_created?: number;
             /** @description Whether this is a live mode sync */
             livemode?: boolean;
             /** @enum {string} */
@@ -118,7 +240,7 @@ export interface components {
             revalidate_objects?: string[];
             /** @description Max objects to backfill per stream (useful for testing) */
             backfill_limit?: number;
-            /** @description Max Stripe API requests per second (default: 25) */
+            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
             rate_limit?: number;
         };
         DestinationConfig: {
@@ -131,22 +253,14 @@ export interface components {
             google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
         };
         DestinationPostgresConfig: {
-            /** @description Postgres connection string (alias for connection_string) */
-            url?: string;
             /** @description Postgres connection string */
+            url?: string;
+            /** @description Deprecated alias for url; prefer url */
             connection_string?: string;
-            /** @description Postgres host (required for AWS IAM) */
-            host?: string;
             /**
-             * @description Postgres port
-             * @default 5432
+             * @description Target schema name (e.g. "stripe")
+             * @default public
              */
-            port: number;
-            /** @description Database name (required for AWS IAM) */
-            database?: string;
-            /** @description Database user (required for AWS IAM) */
-            user?: string;
-            /** @description Target schema name (e.g. "stripe_sync") */
             schema: string;
             /**
              * @description Records to buffer before flushing
@@ -155,6 +269,17 @@ export interface components {
             batch_size: number;
             /** @description AWS RDS IAM authentication config */
             aws?: {
+                /** @description Postgres host for RDS IAM auth */
+                host: string;
+                /**
+                 * @description Postgres port for RDS IAM auth
+                 * @default 5432
+                 */
+                port: number;
+                /** @description Database name for RDS IAM auth */
+                database: string;
+                /** @description Database user for RDS IAM auth */
+                user: string;
                 /** @description AWS region for RDS instance */
                 region: string;
                 /** @description IAM role ARN to assume (cross-account) */
@@ -170,8 +295,7 @@ export interface components {
             client_id?: string;
             /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
             client_secret?: string;
-            /** @description OAuth2 access token */
-            access_token: string;
+            access_token?: string | null;
             /** @description OAuth2 refresh token */
             refresh_token: string;
             /** @description Target spreadsheet ID (created if omitted) */
@@ -187,41 +311,129 @@ export interface components {
              */
             batch_size: number;
         };
-        /** @description Full sync checkpoint with separate sections for source, destination, and engine. Connectors only see their own section; the engine manages routing. */
+        /** @description Full sync checkpoint with separate sections for source, destination, and sync run. Connectors only see their own section; the engine manages routing. */
         SyncState: {
-            /** @description Source connector state — cursors, backfill progress, events cursors. */
-            source: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Destination connector state — reserved for future use. */
+            source: components["schemas"]["SourceState"];
+            /** @description Destination connector state. */
             destination: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
+                [key: string]: unknown;
             };
-            /** @description Engine-managed state — cumulative record counts, sync metadata not owned by connectors. */
-            engine: {
-                /** @description Per-stream checkpoint data, keyed by stream name. */
-                streams: {
-                    [key: string]: unknown;
-                };
-                /** @description Section-wide state shared across all streams. */
-                global: {
-                    [key: string]: unknown;
-                };
+            /** @description Engine-managed run state — run_id, time_ceiling, accumulated progress. */
+            sync_run: {
+                /** @description Identifies a finite backfill run. Omit for continuous sync. */
+                run_id?: string;
+                /** @description Frozen upper bound (ISO 8601). Set on first invocation when run_id is present; reused on continuation. */
+                time_ceiling?: string;
+                /** @description Accumulated progress from prior requests in this run. */
+                progress: components["schemas"]["ProgressPayload"];
             };
+        };
+        /** @description Source connector state — cursors, backfill progress, events cursors. */
+        SourceState: {
+            /** @description Per-stream checkpoint data, keyed by stream name. */
+            streams: {
+                [key: string]: unknown;
+            };
+            /** @description Source-wide state shared across all streams. */
+            global: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description succeeded = all streams completed/skipped; failed = connection_status failed OR any stream errored.
+         * @enum {string}
+         */
+        RunStatus: "started" | "succeeded" | "failed";
+        /** @description Per-stream progress snapshot. */
+        StreamProgress: {
+            /**
+             * @description Current state, derived from stream_status events.
+             * @enum {string}
+             */
+            status: "not_started" | "started" | "completed" | "skipped" | "errored";
+            /** @description Number of state checkpoints for this stream. */
+            state_count: number;
+            /** @description Records synced for this stream in this run. */
+            record_count: number;
+            /** @description Human-readable status message (error reason, skip reason, etc). */
+            message?: string;
+            /** @description Full backfill time span for this stream. */
+            total_range?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string;
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string;
+            };
+            /** @description Completed time sub-ranges within the total_range. */
+            completed_ranges?: {
+                /** @description Inclusive lower bound (ISO 8601). */
+                gte: string;
+                /** @description Exclusive upper bound (ISO 8601). */
+                lt: string;
+            }[];
+        };
+        /** @description Periodic sync progress emitted by the engine as a top-level message. Each emission is a full replacement. */
+        ProgressPayload: {
+            /** @description When this sync started (ISO 8601); generally equals time_ceiling. */
+            started_at: string;
+            /** @description Wall-clock milliseconds since the sync run started. */
+            elapsed_ms: number;
+            /** @description Total source_state messages observed so far. */
+            global_state_count: number;
+            /** @description Set when source or destination emits connection_status: failed. */
+            connection_status?: {
+                /**
+                 * @description Whether the connection check passed.
+                 * @enum {string}
+                 */
+                status: "succeeded" | "failed";
+                /** @description Human-readable explanation of the check result. */
+                message?: string;
+            };
+            /** @description Computed aggregates. */
+            derived: {
+                status: components["schemas"]["RunStatus"];
+                /** @description Overall throughput for the entire run. */
+                records_per_second: number;
+                /** @description State checkpoints per second. */
+                states_per_second: number;
+            };
+            /** @description Per-stream progress, keyed by stream name. */
+            streams: {
+                [key: string]: components["schemas"]["StreamProgress"];
+            };
+        };
+        Pipeline: {
+            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+            id: string;
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            /** @description Selected streams to sync. All streams synced if omitted. */
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+            /**
+             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
+             * @default active
+             * @enum {string}
+             */
+            desired_status: "active" | "paused" | "deleted";
+            /**
+             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
+             * @default setup
+             * @enum {string}
+             */
+            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
+            /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
+            sync_state?: components["schemas"]["SyncState"];
         };
     };
     responses: never;
@@ -272,94 +484,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: {
-                            /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                            id: string;
-                            source: components["schemas"]["SourceConfig"];
-                            destination: components["schemas"]["DestinationConfig"];
-                            /** @description Selected streams to sync. All streams synced if omitted. */
-                            streams?: {
-                                /** @description Stream (table) name to sync. */
-                                name: string;
-                                /**
-                                 * @description How the source reads this stream. Defaults to full_refresh.
-                                 * @enum {string}
-                                 */
-                                sync_mode?: "incremental" | "full_refresh";
-                                /** @description Cap backfill to this many records, then mark the stream complete. */
-                                backfill_limit?: number;
-                            }[];
-                            /**
-                             * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                             * @default active
-                             * @enum {string}
-                             */
-                            desired_status: "active" | "paused" | "deleted";
-                            /**
-                             * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                             * @default setup
-                             * @enum {string}
-                             */
-                            status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                            /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                            progress?: {
-                                /**
-                                 * @description Why the sync run ended.
-                                 * @enum {string}
-                                 */
-                                reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                                /**
-                                 * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                                 * @enum {string}
-                                 */
-                                cutoff?: "soft" | "hard";
-                                /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                                elapsed_ms?: number;
-                                /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                                state?: components["schemas"]["SyncState"];
-                                /** @description Final global aggregates. Same shape as trace/progress. */
-                                global_progress?: {
-                                    /** @description Wall-clock milliseconds since the sync run started. */
-                                    elapsed_ms: number;
-                                    /** @description Total records synced across all streams in this run. */
-                                    run_record_count: number;
-                                    /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                    rows_per_second: number;
-                                    /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                    window_rows_per_second: number;
-                                    /** @description Total source_state messages observed so far in this sync run. */
-                                    state_checkpoint_count: number;
-                                };
-                                /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                                stream_progress?: {
-                                    [key: string]: {
-                                        /**
-                                         * @description Final stream status.
-                                         * @enum {string}
-                                         */
-                                        status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
-                                        /** @description Cumulative records synced for this stream across all runs. */
-                                        cumulative_record_count: number;
-                                        /** @description Records synced in this run. */
-                                        run_record_count: number;
-                                        /** @description Average records/sec for this stream over the run. */
-                                        records_per_second?: number;
-                                        /** @description Average requests/sec for this stream over the run. */
-                                        requests_per_second?: number;
-                                        /** @description All accumulated errors for this stream during this run. */
-                                        errors?: {
-                                            /** @description Human-readable error description. */
-                                            message: string;
-                                            /**
-                                             * @description Error category matching TraceError.failure_type.
-                                             * @enum {string}
-                                             */
-                                            failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
-                                        }[];
-                                    };
-                                };
-                            };
-                        }[];
+                        data: components["schemas"]["Pipeline"][];
                         has_more: boolean;
                     };
                 };
@@ -368,7 +493,10 @@ export interface operations {
     };
     "pipelines.create": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Skip connector validation checks */
+                skip_check?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -376,6 +504,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+                    id?: string;
                     source: components["schemas"]["SourceConfig"];
                     destination: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
@@ -400,98 +530,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
-                            };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
-                                [key: string]: {
-                                    /**
-                                     * @description Final stream status.
-                                     * @enum {string}
-                                     */
-                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
-                                    }[];
-                                };
-                            };
-                        };
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Invalid input */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline id already exists */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -508,6 +562,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -520,94 +575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
-                            };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
-                                [key: string]: {
-                                    /**
-                                     * @description Final stream status.
-                                     * @enum {string}
-                                     */
-                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
-                                    }[];
-                                };
-                            };
-                        };
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Not found */
@@ -628,6 +596,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -665,6 +634,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
                 id: string;
             };
             cookie?: never;
@@ -672,6 +642,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** @description Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123). */
+                    id?: string;
                     source?: components["schemas"]["SourceConfig"];
                     destination?: components["schemas"]["DestinationConfig"];
                     /** @description Selected streams to sync. All streams synced if omitted. */
@@ -701,94 +673,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Unique pipeline identifier (e.g. pipe_abc123). */
-                        id: string;
-                        source: components["schemas"]["SourceConfig"];
-                        destination: components["schemas"]["DestinationConfig"];
-                        /** @description Selected streams to sync. All streams synced if omitted. */
-                        streams?: {
-                            /** @description Stream (table) name to sync. */
-                            name: string;
-                            /**
-                             * @description How the source reads this stream. Defaults to full_refresh.
-                             * @enum {string}
-                             */
-                            sync_mode?: "incremental" | "full_refresh";
-                            /** @description Cap backfill to this many records, then mark the stream complete. */
-                            backfill_limit?: number;
-                        }[];
-                        /**
-                         * @description User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.
-                         * @default active
-                         * @enum {string}
-                         */
-                        desired_status: "active" | "paused" | "deleted";
-                        /**
-                         * @description Workflow-controlled execution state. Updated by the Temporal workflow.
-                         * @default setup
-                         * @enum {string}
-                         */
-                        status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
-                        /** @description Latest read-only sync progress snapshot from the engine. Updated when a bounded sync run completes and safe for dashboards to poll. */
-                        progress?: {
-                            /**
-                             * @description Why the sync run ended.
-                             * @enum {string}
-                             */
-                            reason: "complete" | "state_limit" | "time_limit" | "error" | "aborted";
-                            /**
-                             * @description Present when reason is time_limit. soft = stopped gracefully between messages; hard = forcibly interrupted a blocked operation.
-                             * @enum {string}
-                             */
-                            cutoff?: "soft" | "hard";
-                            /** @description Wall-clock milliseconds elapsed since the stream started. Always present when reason is time_limit or aborted. */
-                            elapsed_ms?: number;
-                            /** @description Full sync state at the end of the run. source: accumulated from source_state messages; engine: updated cumulative record counts; destination: reserved. Consumers can persist this directly and pass it back on resume. */
-                            state?: components["schemas"]["SyncState"];
-                            /** @description Final global aggregates. Same shape as trace/progress. */
-                            global_progress?: {
-                                /** @description Wall-clock milliseconds since the sync run started. */
-                                elapsed_ms: number;
-                                /** @description Total records synced across all streams in this run. */
-                                run_record_count: number;
-                                /** @description Overall throughput for the entire run: run_record_count / elapsed seconds. */
-                                rows_per_second: number;
-                                /** @description Instantaneous throughput: total records in last window / window duration. Measures only the most recent reporting interval. */
-                                window_rows_per_second: number;
-                                /** @description Total source_state messages observed so far in this sync run. */
-                                state_checkpoint_count: number;
-                            };
-                            /** @description Per-stream end-of-sync summary. Errors only appear here, not in stream_status messages. */
-                            stream_progress?: {
-                                [key: string]: {
-                                    /**
-                                     * @description Final stream status.
-                                     * @enum {string}
-                                     */
-                                    status: "started" | "running" | "complete" | "transient_error" | "system_error" | "config_error" | "auth_error";
-                                    /** @description Cumulative records synced for this stream across all runs. */
-                                    cumulative_record_count: number;
-                                    /** @description Records synced in this run. */
-                                    run_record_count: number;
-                                    /** @description Average records/sec for this stream over the run. */
-                                    records_per_second?: number;
-                                    /** @description Average requests/sec for this stream over the run. */
-                                    requests_per_second?: number;
-                                    /** @description All accumulated errors for this stream during this run. */
-                                    errors?: {
-                                        /** @description Human-readable error description. */
-                                        message: string;
-                                        /**
-                                         * @description Error category matching TraceError.failure_type.
-                                         * @enum {string}
-                                         */
-                                        failure_type?: "config_error" | "system_error" | "transient_error" | "auth_error";
-                                    }[];
-                                };
-                            };
-                        };
-                    };
+                    "application/json": components["schemas"]["Pipeline"];
                 };
             };
             /** @description Bad request */
@@ -815,6 +700,282 @@ export interface operations {
             };
             /** @description Invalid status transition */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.sync": {
+        parameters: {
+            query?: {
+                /** @description Stop after N seconds */
+                time_limit?: number;
+                /** @description Sync run identifier (resumes or starts fresh) */
+                run_id?: string;
+                /** @description Ignore persisted sync state and start fresh (ending state is still saved) */
+                reset_state?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    source?: components["schemas"]["SourceConfig"];
+                    destination?: components["schemas"]["DestinationConfig"];
+                    streams?: {
+                        /** @description Stream (table) name to sync. */
+                        name: string;
+                        /**
+                         * @description How the source reads this stream. Defaults to full_refresh.
+                         * @enum {string}
+                         */
+                        sync_mode?: "incremental" | "full_refresh";
+                        /** @description Cap backfill to this many records, then mark the stream complete. */
+                        backfill_limit?: number;
+                    }[];
+                    /** @description Explicit sync checkpoint override for resumed ad-hoc runs */
+                    sync_state?: components["schemas"]["SyncState"];
+                };
+            };
+        };
+        responses: {
+            /** @description Streaming NDJSON sync output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.check": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON check output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.setup": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON setup output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.teardown": {
+        parameters: {
+            query?: {
+                /** @description Run only the source or destination side */
+                only?: "source" | "destination";
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON teardown output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.simulate_webhook_sync": {
+        parameters: {
+            query?: {
+                /** @description Only fetch events created after this Unix timestamp (default: 24 hours ago) */
+                created_after?: number;
+                /** @description Max events to fetch (default: all) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Streaming NDJSON sync output */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline source is not Stripe */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.sync_workflow_test": {
+        parameters: {
+            query?: {
+                /** @description Time limit per iteration (seconds) */
+                time_limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backfill result with final eof and sync state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        eof: {
+                            [key: string]: unknown;
+                        };
+                        sync_state?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

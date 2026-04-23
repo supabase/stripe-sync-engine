@@ -1,3 +1,5 @@
+import { log } from './logger.js'
+
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_MAX_MS = 32000
 const MAX_RETRIES = 5
@@ -53,6 +55,20 @@ function getNestedErrorCode(err: unknown): string | undefined {
   }
 
   return undefined
+}
+
+/**
+ * Extract Retry-After delay in milliseconds from a StripeApiRequestError.
+ * Stripe sends Retry-After as seconds (integer).
+ */
+function getRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const headers = (err as { responseHeaders?: Record<string, string> }).responseHeaders
+  const value = headers?.['retry-after']
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined
+  return seconds * 1000
 }
 
 export function isRetryableHttpError(err: unknown): boolean {
@@ -127,14 +143,27 @@ export async function withHttpRetry<T>(
       }
 
       const status = getHttpErrorStatus(err)
+      const retryAfterMs = getRetryAfterMs(err)
+      const actualDelay = retryAfterMs ?? delayMs
       const errName = err instanceof Error ? err.name : 'UnknownError'
       const errMsg = err instanceof Error ? err.message : String(err)
       const labelPart = opts.label ? ` ${opts.label}` : ''
-      console.error(
-        `[source-stripe] retry${labelPart} attempt=${attempt + 1}/${maxRetries} delay=${delayMs}ms status=${status ?? 'n/a'} error=${errName}: ${errMsg}`
+      const retrySource = retryAfterMs ? ' (retry-after)' : ''
+      log.warn(
+        {
+          attempt: attempt + 1,
+          max_retries: maxRetries,
+          delay_ms: actualDelay,
+          status: status ?? null,
+          error_name: errName,
+          error_message: errMsg,
+          retry_after: retryAfterMs != null,
+          label: opts.label,
+        },
+        `Retrying Stripe request${labelPart}${retrySource}`
       )
 
-      await sleep(delayMs, opts.signal)
+      await sleep(actualDelay, opts.signal)
       delayMs = Math.min(delayMs * 2, maxDelayMs)
     }
   }

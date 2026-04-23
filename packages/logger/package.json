@@ -1,0 +1,43 @@
+{
+  "name": "@stripe/sync-logger",
+  "version": "0.2.5",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "sync-pretty-log": "./dist/bin/pretty.js"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./progress": {
+      "bun": "./src/format/progress.tsx",
+      "types": "./dist/format/progress.d.ts",
+      "import": "./dist/format/progress.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ink": "^7",
+    "pino": "^10",
+    "react": "^19"
+  },
+  "peerDependencies": {
+    "@stripe/sync-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@stripe/sync-protocol": "workspace:*",
+    "@types/node": "^24.5.0",
+    "@types/react": "^19",
+    "vitest": "^3.2.4"
+  },
+  "files": [
+    "src",
+    "dist"
+  ]
+}

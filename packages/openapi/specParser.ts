@@ -140,17 +140,20 @@ export class SpecParser {
   /**
    * Scan the spec's `paths` for GET endpoints that return Stripe list objects,
    * and resolve each listed resource's x-resourceId into a table name.
+   * Only includes resources that also have webhook create/update/delete events.
    */
   private discoverAllowedTables(
     spec: OpenApiSpec,
     aliases: Record<string, string>,
     excluded: Set<string>
   ): Set<string> {
-    const resourceIds = this.discoverListableResourceIds(spec, {
+    const listableIds = this.discoverListableResourceIds(spec, {
       includeNested: true,
     })
+    const webhookIds = this.discoverWebhookUpdatableResourceIds(spec)
     const tables = new Set<string>()
-    for (const resourceId of resourceIds) {
+    for (const resourceId of listableIds) {
+      if (!webhookIds.has(resourceId)) continue
       const tableName = this.resolveTableName(resourceId, aliases)
       if (!excluded.has(tableName)) {
         tables.add(tableName)
@@ -196,6 +199,45 @@ export class SpecParser {
       if (!schema || '$ref' in schema) continue
 
       const resourceId = schema['x-resourceId']
+      if (resourceId && typeof resourceId === 'string') {
+        resourceIds.add(resourceId)
+      }
+    }
+
+    return resourceIds
+  }
+
+  /**
+   * Extract x-resourceId values for every schema that has at least one webhook
+   * event for create, update, or delete operations. Event schemas are identified
+   * by the `x-stripeEvent` extension with a type ending in `.created`, `.updated`,
+   * or `.deleted`. The referenced resource is resolved via `properties.object.$ref`.
+   */
+  discoverWebhookUpdatableResourceIds(spec: OpenApiSpec): Set<string> {
+    const resourceIds = new Set<string>()
+    const schemas = spec.components?.schemas
+    if (!schemas) return resourceIds
+
+    const CRUD_SUFFIXES = ['.created', '.updated', '.deleted']
+
+    for (const schema of Object.values(schemas)) {
+      if (!schema || '$ref' in schema) continue
+
+      const stripeEvent = schema['x-stripeEvent']
+      if (!stripeEvent || typeof stripeEvent !== 'object') continue
+
+      const eventType = stripeEvent.type
+      if (!eventType || !CRUD_SUFFIXES.some((suffix) => eventType.endsWith(suffix))) continue
+
+      const objectProp = schema.properties?.object
+      if (!objectProp || !this.isReference(objectProp)) continue
+      if (!objectProp.$ref.startsWith(SCHEMA_REF_PREFIX)) continue
+
+      const schemaName = objectProp.$ref.slice(SCHEMA_REF_PREFIX.length)
+      const refSchema = schemas[schemaName]
+      if (!refSchema || '$ref' in refSchema) continue
+
+      const resourceId = refSchema['x-resourceId']
       if (resourceId && typeof resourceId === 'string') {
         resourceIds.add(resourceId)
       }

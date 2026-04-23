@@ -24,7 +24,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -447,7 +447,20 @@ jobs:
             ghcr.io/${{ github.repository }}-service:${{ github.sha }}-arm64
 
       - name: Docker smoke test
-        run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+        run: |
+          docker run -d --name smoke -p 3000:3000 ghcr.io/${{ github.repository }}:${{ github.sha }}
+          trap 'docker rm -f smoke 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            body=$(curl -sf http://localhost:3000/health 2>/dev/null || true)
+            if echo "$body" | grep -q '"ok":true'; then
+              echo "health check passed: $body"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "health check timed out"
+          docker logs smoke
+          exit 1
 
   # ---------------------------------------------------------------------------
   # E2E Docker — Docker image smoke + engine tests (runs on every push/PR)

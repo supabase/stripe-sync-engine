@@ -1,21 +1,18 @@
 import pg from 'pg'
 import type { PoolConfig } from 'pg'
-import type { Destination, DestinationInput, LogMessage } from '@stripe/sync-protocol'
+import type { Destination } from '@stripe/sync-protocol'
 import {
   sql,
   sslConfigFromConnectionString,
   stripSslParams,
-  upsert,
+  upsertWithStats,
   withPgConnectProxy,
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import { buildCreateTableDDL } from './schemaProjection.js'
 import defaultSpec from './spec.js'
+import { log } from './logger.js'
 import type { Config } from './spec.js'
-
-function logMsg(message: string, level: LogMessage['log']['level'] = 'info'): LogMessage {
-  return { type: 'log', log: { level, message } }
-}
 
 // MARK: - Spec
 
@@ -23,45 +20,49 @@ export { configSchema, type Config } from './spec.js'
 
 export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   if (config.aws) {
-    if (!config.host || !config.database || !config.user) {
-      throw new Error('host, database, and user are required when using AWS IAM auth')
-    }
     const { buildRdsIamPasswordFn } = await import('./aws.js')
     const passwordFn = await buildRdsIamPasswordFn({
-      host: config.host,
-      port: config.port,
-      user: config.user,
+      host: config.aws.host,
+      port: config.aws.port,
+      user: config.aws.user,
       region: config.aws.region,
       roleArn: config.aws.role_arn,
       externalId: config.aws.external_id,
     })
     return withPgConnectProxy({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
+      host: config.aws.host,
+      port: config.aws.port,
+      database: config.aws.database,
+      user: config.aws.user,
       password: passwordFn,
       ssl: true,
     })
   }
 
-  const connStr = config.connection_string ?? config.url
-  if (connStr) {
+  const connectionString = config.url ?? config.connection_string
+  if (connectionString) {
     return withPgConnectProxy({
-      connectionString: stripSslParams(connStr),
-      ssl: sslConfigFromConnectionString(connStr, { sslCaPem: config.ssl_ca_pem }),
+      connectionString: stripSslParams(connectionString),
+      ssl: sslConfigFromConnectionString(connectionString, { sslCaPem: config.ssl_ca_pem }),
     })
   }
 
-  throw new Error('Either connection_string (or url) or aws config is required')
+  throw new Error('Either url/connection_string or aws config is required')
 }
 
 // MARK: - upsertMany
 
+export interface UpsertManyResult {
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  skipped_count: number
+}
+
 /**
  * Upsert records into a Postgres table using the _raw_data jsonb pattern.
- * Delegates to util-postgres `upsert()` which batches all rows into a single
- * multi-row INSERT ... ON CONFLICT statement.
+ * Delegates to util-postgres `upsertWithStats()` which batches all rows into a
+ * single multi-row INSERT ... ON CONFLICT statement and returns write stats.
  */
 export async function upsertMany(
   pool: pg.Pool,
@@ -69,17 +70,21 @@ export async function upsertMany(
   table: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entries: Record<string, any>[],
-  keyColumns: string[] = ['id']
-): Promise<void> {
-  if (!entries.length) return
-  await upsert(
+  primaryKeyColumns: string[] = ['id'],
+  newerThanField?: string
+): Promise<UpsertManyResult> {
+  if (!entries.length)
+    return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+  return await upsertWithStats(
     pool,
     entries.map((e) => ({ _raw_data: e })),
     {
       schema,
       table,
-      keyColumns,
-    }
+      primaryKeyColumns,
+      ...(newerThanField && { newerThanColumn: newerThanField }),
+    },
+    `"_raw_data"->>'deleted' = 'true'`
   )
 }
 
@@ -100,20 +105,6 @@ export {
 // MARK: - Default export
 
 /** Check if an error looks transient (connection refused, timeout, etc.). */
-function isTransient(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  const msg = err.message.toLowerCase()
-  const code = ((err as NodeJS.ErrnoException).code ?? '').toLowerCase()
-  return (
-    msg.includes('econnrefused') ||
-    msg.includes('timeout') ||
-    msg.includes('connection') ||
-    code.includes('econnrefused') ||
-    code.includes('etimedout') ||
-    code.includes('econnreset')
-  )
-}
-
 function errorMessage(err: unknown): string {
   if (!(err instanceof Error)) return String(err)
   if (err.message) return err.message
@@ -124,9 +115,77 @@ function createPool(config: PoolConfig): pg.Pool {
   const pool = new pg.Pool(config)
   // Destination connectors should surface pool failures without crashing the host process.
   pool.on('error', (err) => {
-    console.error('Postgres destination pool error:', err)
+    log.error({ err }, 'Postgres destination pool error')
   })
   return pool
+}
+
+function poolStats(pool: pg.Pool) {
+  return {
+    total_count: pool.totalCount,
+    idle_count: pool.idleCount,
+    waiting_count: pool.waitingCount,
+  }
+}
+
+function describePoolConfig(config: PoolConfig) {
+  return {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    has_connection_string: Boolean(config.connectionString),
+    ssl: config.ssl === true ? true : config.ssl ? 'custom' : false,
+    max: config.max,
+    min: config.min,
+    connection_timeout_millis: config.connectionTimeoutMillis,
+    idle_timeout_millis: config.idleTimeoutMillis,
+    allow_exit_on_idle: config.allowExitOnIdle,
+  }
+}
+
+async function createInstrumentedPool(config: Config, operation: string): Promise<pg.Pool> {
+  const configStartedAt = Date.now()
+  log.debug({ operation }, 'dest postgres: building pool config')
+  const poolConfig = await buildPoolConfig(config)
+  log.debug(
+    {
+      operation,
+      duration_ms: Date.now() - configStartedAt,
+      pool_config: describePoolConfig(poolConfig),
+    },
+    'dest postgres: built pool config'
+  )
+
+  const pool = withQueryLogging(createPool(poolConfig), log)
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool created')
+  return pool
+}
+
+async function connectAndRelease(pool: pg.Pool, operation: string): Promise<void> {
+  const startedAt = Date.now()
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.connect start')
+  const client = await pool.connect()
+  try {
+    log.debug(
+      {
+        operation,
+        duration_ms: Date.now() - startedAt,
+        ...poolStats(pool),
+      },
+      'dest postgres: pool.connect complete'
+    )
+  } finally {
+    client.release()
+    log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.connect released')
+  }
+}
+
+async function endPool(pool: pg.Pool, operation: string): Promise<void> {
+  const startedAt = Date.now()
+  log.debug({ operation, ...poolStats(pool) }, 'dest postgres: pool.end start')
+  await pool.end()
+  log.debug({ operation, duration_ms: Date.now() - startedAt }, 'dest postgres: pool.end complete')
 }
 
 const destination = {
@@ -135,8 +194,9 @@ const destination = {
   },
 
   async *check({ config }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = await createInstrumentedPool(config, 'check')
     try {
+      await connectAndRelease(pool, 'check')
       await pool.query('SELECT 1')
       yield {
         type: 'connection_status' as const,
@@ -151,15 +211,19 @@ const destination = {
         },
       }
     } finally {
-      await pool.end()
+      await endPool(pool, 'check')
     }
   },
 
   async *setup({ config, catalog }) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    log.debug({ schema: config.schema }, 'dest setup: connecting to pool')
+    const pool = await createInstrumentedPool(config, 'setup')
     try {
-      yield logMsg(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
+      await connectAndRelease(pool, 'setup')
+      log.info(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
+      log.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
+      log.debug('dest setup: creating trigger function')
       await pool.query(sql`
         CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
             LANGUAGE plpgsql
@@ -173,6 +237,7 @@ const destination = {
         END;
         $$;
       `)
+      log.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
       await Promise.all(
         catalog.streams.map(async (cs) => {
           await pool.query(
@@ -183,8 +248,9 @@ const destination = {
           )
         })
       )
+      log.debug('dest setup: complete')
     } finally {
-      await pool.end()
+      await endPool(pool, 'setup')
     }
   },
 
@@ -195,16 +261,17 @@ const destination = {
         `Refusing to drop protected schema "${config.schema}" — teardown only drops user-created schemas`
       )
     }
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = await createInstrumentedPool(config, 'teardown')
     try {
+      await connectAndRelease(pool, 'teardown')
       await pool.query(sql`DROP SCHEMA IF EXISTS "${config.schema}" CASCADE`)
     } finally {
-      await pool.end()
+      await endPool(pool, 'teardown')
     }
   },
 
   async *write({ config, catalog }, $stdin) {
-    const pool = withQueryLogging(createPool(await buildPoolConfig(config)))
+    const pool = await createInstrumentedPool(config, 'write')
     const batchSize = config.batch_size
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamBuffers = new Map<string, Record<string, any>[]>()
@@ -214,30 +281,92 @@ const destination = {
         cs.stream.primary_key?.map((pk) => pk[0]) ?? ['id'],
       ])
     )
+    const streamNewerThanField = new Map(
+      catalog.streams
+        .filter((cs) => cs.stream.newer_than_field)
+        .map((cs) => [cs.stream.name, cs.stream.newer_than_field!])
+    )
 
-    const flushStream = async (streamName: string) => {
+    const failedStreams = new Set<string>()
+
+    /** Flush and return error message if failed, undefined if ok. */
+    const flushStream = async (streamName: string): Promise<string | undefined> => {
+      if (failedStreams.has(streamName)) return undefined
       const buffer = streamBuffers.get(streamName)
-      if (!buffer || buffer.length === 0) return
-      await upsertMany(
-        pool,
-        config.schema,
-        streamName,
-        buffer,
-        streamKeyColumns.get(streamName) ?? ['id']
+      if (!buffer || buffer.length === 0) return undefined
+      const pk = streamKeyColumns.get(streamName) ?? ['id']
+      const newerThan = streamNewerThanField.get(streamName)
+      const startedAt = Date.now()
+      log.debug(
+        {
+          stream: streamName,
+          batch_size: buffer.length,
+          schema: config.schema,
+          primary_key: pk,
+          newer_than_field: newerThan,
+          ...poolStats(pool),
+        },
+        'dest write: flush start'
       )
+      try {
+        const stats = await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
+        log.info(
+          {
+            stream: streamName,
+            schema: config.schema,
+            table: `${config.schema}.${streamName}`,
+            batch_size: buffer.length,
+            inserted: stats.created_count,
+            updated: stats.updated_count,
+            deleted: stats.deleted_count,
+            skipped: stats.skipped_count,
+            duration_ms: Date.now() - startedAt,
+            ...poolStats(pool),
+          },
+          `dest write: upsert ${config.schema}.${streamName}`
+        )
+      } catch (err) {
+        const detail =
+          `stream=${streamName} table=${config.schema}.${streamName} ` +
+          `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
+        const errMsg = errorMessage(err)
+        log.error(
+          {
+            stream: streamName,
+            batch_size: buffer.length,
+            schema: config.schema,
+            duration_ms: Date.now() - startedAt,
+            error: errMsg,
+            err,
+            ...poolStats(pool),
+          },
+          'dest write: flush failed'
+        )
+        failedStreams.add(streamName)
+        streamBuffers.set(streamName, [])
+        return `${errMsg} (${detail})`
+      }
       streamBuffers.set(streamName, [])
+      return undefined
     }
 
-    const flushAll = async () => {
-      for (const streamName of streamBuffers.keys()) {
-        await flushStream(streamName)
+    function streamError(stream: string, error: string) {
+      return {
+        type: 'stream_status' as const,
+        stream_status: { stream, status: 'error' as const, error },
       }
     }
 
     try {
-      for await (const msg of $stdin as AsyncIterable<DestinationInput>) {
+      await connectAndRelease(pool, 'write')
+      for await (const msg of $stdin) {
         if (msg.type === 'record') {
           const { stream, data } = msg.record
+
+          if (failedStreams.has(stream)) {
+            log.debug({ stream }, 'dest write: skipping record for failed stream')
+            continue
+          }
 
           if (!streamBuffers.has(stream)) {
             streamBuffers.set(stream, [])
@@ -247,48 +376,62 @@ const destination = {
           buffer.push(data as Record<string, unknown>)
 
           if (buffer.length >= batchSize) {
-            await flushStream(stream)
+            const err = await flushStream(stream)
+            if (err) {
+              log.error(
+                { stream, error: err },
+                'dest write: yielding stream_status error (batch flush)'
+              )
+              yield streamError(stream, err)
+              continue
+            }
           }
+          yield msg
         } else if (msg.type === 'source_state') {
           if (msg.source_state.state_type !== 'global') {
-            await flushStream(msg.source_state.stream)
+            const stream = msg.source_state.stream
+            if (failedStreams.has(stream)) {
+              log.debug({ stream }, 'dest write: skipping source_state for failed stream')
+              continue
+            }
+            const err = await flushStream(stream)
+            if (err) {
+              log.error(
+                { stream, error: err },
+                'dest write: yielding stream_status error (state flush)'
+              )
+              yield streamError(stream, err)
+              continue
+            }
           }
+          yield msg
+        } else {
           yield msg
         }
       }
 
-      await flushAll()
-
-      yield {
-        type: 'log' as const,
-        log: {
-          level: 'info' as const,
-          message: `Postgres destination: wrote to schema "${config.schema}"`,
-        },
-      }
-    } catch (err: unknown) {
-      try {
-        await flushAll()
-      } catch {
-        // ignore flush errors during error handling
+      // Final flush for all remaining buffers
+      for (const streamName of streamBuffers.keys()) {
+        const err = await flushStream(streamName)
+        if (err) {
+          log.error(
+            { stream: streamName, error: err },
+            'dest write: yielding stream_status error (final flush)'
+          )
+          yield streamError(streamName, err)
+        }
       }
 
-      yield {
-        type: 'trace' as const,
-        trace: {
-          trace_type: 'error' as const,
-          error: {
-            failure_type: isTransient(err)
-              ? ('transient_error' as const)
-              : ('system_error' as const),
-            message: errorMessage(err),
-            stack_trace: err instanceof Error ? err.stack : undefined,
-          },
-        },
+      if (failedStreams.size > 0) {
+        log.error(
+          { failed_streams: [...failedStreams], schema: config.schema },
+          `Postgres destination: completed with ${failedStreams.size} failed stream(s) in schema "${config.schema}"`
+        )
+      } else {
+        log.info(`Postgres destination: wrote to schema "${config.schema}"`)
       }
-      throw err
     } finally {
-      await pool.end()
+      await endPool(pool, 'write')
     }
   },
 } satisfies Destination<Config>

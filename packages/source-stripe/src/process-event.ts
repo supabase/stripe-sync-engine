@@ -4,9 +4,9 @@ import type {
   RecordMessage,
   SourceStateMessage,
 } from '@stripe/sync-protocol'
-import { toRecordMessage, stateMsg } from '@stripe/sync-protocol'
 import type { StripeEvent } from './spec.js'
 import type { Config } from './index.js'
+import { msg } from './index.js'
 import type { ResourceConfig } from './types.js'
 import { normalizeStripeObjectName } from './resourceRegistry.js'
 
@@ -63,8 +63,13 @@ export function fromStripeEvent(
   const data = accountId
     ? { ...(dataObject as Record<string, unknown>), _account_id: accountId }
     : (dataObject as Record<string, unknown>)
-  const record = toRecordMessage(config.tableName, data)
-  const state: SourceStateMessage = stateMsg({
+  const record = msg.record({
+    stream: config.tableName,
+    data,
+    emitted_at: new Date().toISOString(),
+  })
+  const state: SourceStateMessage = msg.source_state({
+    state_type: 'stream',
     stream: config.tableName,
     data: {
       eventId: event.id,
@@ -116,17 +121,22 @@ export async function* processStripeEvent(
       }
     }
     for (const e of summary.entitlements.data) {
-      yield toRecordMessage('active_entitlements', {
-        id: e.id,
-        object: e.object,
-        feature: typeof e.feature === 'string' ? e.feature : e.feature.id,
-        customer: summary.customer,
-        livemode: e.livemode,
-        lookup_key: e.lookup_key,
-        ...(accountId ? { _account_id: accountId } : {}),
+      yield msg.record({
+        stream: 'active_entitlements',
+        emitted_at: new Date().toISOString(),
+        data: {
+          id: e.id,
+          object: e.object,
+          feature: typeof e.feature === 'string' ? e.feature : e.feature.id,
+          customer: summary.customer,
+          livemode: e.livemode,
+          lookup_key: e.lookup_key,
+          ...(accountId ? { _account_id: accountId } : {}),
+        },
       })
     }
-    yield stateMsg({
+    yield msg.source_state({
+      state_type: 'stream',
       stream: 'active_entitlements',
       data: { eventId: event.id, eventCreated: event.created },
     })
@@ -142,12 +152,17 @@ export async function* processStripeEvent(
 
   // 4. Delete events — yield record with deleted: true
   if (isDeleteEvent(event)) {
-    yield toRecordMessage(resourceConfig.tableName, {
-      ...dataObject,
-      deleted: true,
-      ...(accountId ? { _account_id: accountId } : {}),
+    yield msg.record({
+      stream: resourceConfig.tableName,
+      emitted_at: new Date().toISOString(),
+      data: {
+        ...dataObject,
+        deleted: true,
+        ...(accountId ? { _account_id: accountId } : {}),
+      },
     })
-    yield stateMsg({
+    yield msg.source_state({
+      state_type: 'stream',
       stream: resourceConfig.tableName,
       data: { eventId: event.id, eventCreated: event.created },
     })
@@ -166,19 +181,25 @@ export async function* processStripeEvent(
 
   // 6. Yield main record
   const recordData = accountId ? { ...data, _account_id: accountId } : data
-  yield toRecordMessage(resourceConfig.tableName, recordData)
+  yield msg.record({
+    stream: resourceConfig.tableName,
+    data: recordData,
+    emitted_at: new Date().toISOString(),
+  })
 
   // 7. Yield subscription items if applicable
   if (objectType === 'subscriptions' && (data as { items?: { data?: unknown[] } }).items?.data) {
     for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
-      yield toRecordMessage(
-        'subscription_items',
-        accountId ? { ...item, _account_id: accountId } : item
-      )
+      yield msg.record({
+        stream: 'subscription_items',
+        data: accountId ? { ...item, _account_id: accountId } : item,
+        emitted_at: new Date().toISOString(),
+      })
     }
   }
 
-  yield stateMsg({
+  yield msg.source_state({
+    state_type: 'stream',
     stream: resourceConfig.tableName,
     data: { eventId: event.id, eventCreated: event.created },
   })

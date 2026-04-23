@@ -1,11 +1,15 @@
 import pg from 'pg'
+import { createLogger } from '@stripe/sync-logger'
 import {
   sql,
   sslConfigFromConnectionString,
   stripSslParams,
   withPgConnectProxy,
+  withQueryLogging,
 } from '@stripe/sync-util-postgres'
 import type { SourceState } from '@stripe/sync-protocol'
+
+const logger = createLogger({ name: 'state-store' })
 
 /** Reserved stream name for global state in the _sync_state table. */
 const GLOBAL_KEY = '_global'
@@ -109,11 +113,16 @@ export async function setupStateStore(config: {
   schema?: string
   ssl_ca_pem?: string
 }): Promise<void> {
-  const pool = new pg.Pool(
-    withPgConnectProxy({
-      connectionString: stripSslParams(config.connection_string),
-      ssl: sslConfigFromConnectionString(config.connection_string, { sslCaPem: config.ssl_ca_pem }),
-    })
+  const pool = withQueryLogging(
+    new pg.Pool(
+      withPgConnectProxy({
+        connectionString: stripSslParams(config.connection_string),
+        ssl: sslConfigFromConnectionString(config.connection_string, {
+          sslCaPem: config.ssl_ca_pem,
+        }),
+      })
+    ),
+    logger
   )
   const schema = config.schema ?? 'public'
   try {
@@ -140,11 +149,16 @@ export function createStateStore(
   config: { connection_string: string; schema?: string; ssl_ca_pem?: string },
   syncId = 'default'
 ): ScopedStateStore & { close(): Promise<void> } {
-  const pool = new pg.Pool(
-    withPgConnectProxy({
-      connectionString: stripSslParams(config.connection_string),
-      ssl: sslConfigFromConnectionString(config.connection_string, { sslCaPem: config.ssl_ca_pem }),
-    })
+  const pool = withQueryLogging(
+    new pg.Pool(
+      withPgConnectProxy({
+        connectionString: stripSslParams(config.connection_string),
+        ssl: sslConfigFromConnectionString(config.connection_string, {
+          sslCaPem: config.ssl_ca_pem,
+        }),
+      })
+    ),
+    logger
   )
   const scoped = createScopedPgStateStore(pool, config.schema ?? 'public', syncId)
   return {

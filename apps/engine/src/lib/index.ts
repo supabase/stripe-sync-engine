@@ -1,5 +1,5 @@
 export * from '@stripe/sync-protocol'
-export { enforceCatalog, log, filterType, persistState, collect, pipe } from './pipeline.js'
+export { enforceCatalog, tapLog, filterType, collect, pipe } from './pipeline.js'
 export { createEngine, buildCatalog } from './engine.js'
 export { SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
 export type { Engine } from './engine.js'
@@ -26,9 +26,6 @@ export { sourceTest, sourceTestSpec } from './source-test.js'
 export type { SourceTestConfig } from './source-test.js'
 export { destinationTest, destinationTestSpec } from './destination-test.js'
 export type { DestinationTestConfig } from './destination-test.js'
-export { readonlyStateStore } from './state-store.js'
-export type { StateStore } from './state-store.js'
-export { maybeDestinationStateStore, selectStateStore } from './select-state-store.js'
 export {
   createConnectorSchemas,
   connectorSchemaName,

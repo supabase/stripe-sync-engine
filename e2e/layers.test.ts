@@ -160,6 +160,8 @@ describe('service isolation', () => {
 
 describe('standalone packages', () => {
   const STANDALONE = ['util-postgres', 'openapi', 'ts-cli']
+  // Logger is a leaf utility — allowed as a dependency of standalone packages
+  const ALLOWED_WORKSPACE_DEPS = new Set(['@stripe/sync-logger'])
 
   for (const dir of STANDALONE) {
     it(`packages/${dir} does not import any @stripe/sync-* workspace package`, () => {
@@ -168,7 +170,7 @@ describe('standalone packages', () => {
       const violations: string[] = []
       for (const file of files) {
         for (const imp of extractImports(file)) {
-          if (imp.startsWith('@stripe/sync-')) {
+          if (imp.startsWith('@stripe/sync-') && !ALLOWED_WORKSPACE_DEPS.has(imp)) {
             const rel = relative(ROOT, file)
             violations.push(`${rel} imports ${imp}`)
           }

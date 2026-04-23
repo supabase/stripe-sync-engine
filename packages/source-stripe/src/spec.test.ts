@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import spec, { configSchema } from './spec.js'
+import { z } from 'zod'
+import spec, { configSchema, streamStateSpec } from './spec.js'
 import { BUNDLED_API_VERSION, SUPPORTED_API_VERSIONS } from '@stripe/sync-openapi'
 
 describe('configSchema api_version field', () => {
@@ -30,5 +31,42 @@ describe('configSchema api_version field', () => {
 
     expect(versions).toContain(BUNDLED_API_VERSION)
     expect(versions.length).toBeGreaterThan(0)
+  })
+})
+
+describe('streamStateSpec JSON Schema round-trip', () => {
+  it('accounted_range survives toJSONSchema → fromJSONSchema round-trip', () => {
+    // The engine converts streamStateSpec to JSON Schema (spec export) then back
+    // to Zod (z.fromJSONSchema). State with accounted_range must survive this
+    // round-trip or parseSyncState discards all state, breaking incremental sync.
+    const jsonSchema = z.toJSONSchema(streamStateSpec)
+    const zodFromJson = z.fromJSONSchema(jsonSchema)
+
+    const stateWithAccounted = {
+      accounted_range: { gte: '2019-08-21T20:19:01.000Z', lt: '2026-04-19T22:10:49.000Z' },
+      remaining: [],
+    }
+    expect(zodFromJson.safeParse(stateWithAccounted).success).toBe(true)
+  })
+
+  it('accepts state without accounted_range (first checkpoint)', () => {
+    const jsonSchema = z.toJSONSchema(streamStateSpec)
+    const zodFromJson = z.fromJSONSchema(jsonSchema)
+
+    expect(zodFromJson.safeParse({ remaining: [] }).success).toBe(true)
+  })
+
+  it('accepts state with remaining ranges and accounted_range', () => {
+    const jsonSchema = z.toJSONSchema(streamStateSpec)
+    const zodFromJson = z.fromJSONSchema(jsonSchema)
+
+    const stateInProgress = {
+      accounted_range: { gte: '2019-01-01T00:00:00.000Z', lt: '2026-01-01T00:00:00.000Z' },
+      remaining: [
+        { gte: '2019-01-01T00:00:00.000Z', lt: '2023-01-01T00:00:00.000Z', cursor: null },
+        { gte: '2025-06-01T00:00:00.000Z', lt: '2025-06-02T00:00:00.000Z', cursor: 'cur_abc' },
+      ],
+    }
+    expect(zodFromJson.safeParse(stateInProgress).success).toBe(true)
   })
 })

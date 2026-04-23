@@ -12,6 +12,22 @@ const compat = new FlatCompat({
   allConfig: js.configs.all,
 })
 
+const consoleAllowedFiles = [
+  '**/src/cli.{ts,tsx,js,mjs,cjs}',
+  '**/src/cli/**',
+  '**/src/bin.{ts,tsx,js,mjs,cjs}',
+  '**/src/bin/**',
+  '**/scripts/**',
+  '**/demo/**',
+  '**/docs/**',
+  '**/e2e/**',
+  'apps/supabase/**',
+  'apps/**/e2e/**',
+  '**/__tests__/**',
+  '**/*.{test,spec}.{ts,tsx,js,mjs,cjs}',
+  '**/*.test.sh',
+]
+
 export default [
   ...compat.extends('plugin:@typescript-eslint/recommended', 'plugin:prettier/recommended'),
   {
@@ -23,6 +39,31 @@ export default [
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-console': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'pino',
+              message: 'Import from @stripe/sync-logger instead of pino directly.',
+            },
+          ],
+        },
+      ],
+      'prettier/prettier': 'warn',
+    },
+  },
+  {
+    files: ['packages/logger/**'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
+  {
+    files: consoleAllowedFiles,
+    rules: {
+      'no-console': 'off',
     },
   },
 ]

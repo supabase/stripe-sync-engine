@@ -12,7 +12,7 @@ import {
   type SourceState,
   type SyncOutput,
 } from '@stripe/sync-engine'
-import { expandState, type BackfillState, type StripeStreamState } from '@stripe/sync-source-stripe'
+import { type StreamState } from '@stripe/sync-source-stripe'
 import { BUNDLED_API_VERSION } from '@stripe/sync-openapi'
 import {
   ENGINE_URL,
@@ -44,39 +44,34 @@ describe('test-server sync via Docker engine', () => {
     return { ...harness.productTemplate, id, created }
   }
 
-  function mkBackfill(overrides: Partial<BackfillState> = {}): BackfillState {
+  function toIso(unix: number): string {
+    return new Date(unix * 1000).toISOString()
+  }
+
+  function buildSegmentRanges(numSegments: number): Array<{ gte: number; lt: number }> {
+    const span = RANGE_END - RANGE_START
+    const segSize = Math.max(1, Math.ceil(span / numSegments))
+    const ranges: Array<{ gte: number; lt: number }> = []
+    for (let i = 0; i < numSegments; i++) {
+      const gte = RANGE_START + i * segSize
+      const lt = i === numSegments - 1 ? RANGE_END : RANGE_START + (i + 1) * segSize
+      if (gte >= RANGE_END) break
+      ranges.push({ gte, lt })
+    }
+    return ranges
+  }
+
+  function pendingState(): StreamState {
     return {
-      range: { gte: RANGE_START, lt: RANGE_END },
-      num_segments: 5,
-      completed: [],
-      in_flight: [],
-      ...overrides,
+      remaining: [{ gte: toIso(RANGE_START), lt: toIso(RANGE_END), cursor: null }],
     }
   }
 
-  function pendingState(overrides: Partial<BackfillState> = {}): StripeStreamState {
-    return {
-      page_cursor: null,
-      status: 'pending',
-      backfill: mkBackfill(overrides),
-    }
+  function completeState(): StreamState {
+    return { remaining: [] }
   }
 
-  function completeState(overrides: Partial<BackfillState> = {}): StripeStreamState {
-    return {
-      page_cursor: null,
-      status: 'complete',
-      backfill: {
-        range: { gte: RANGE_START, lt: RANGE_END },
-        num_segments: 5,
-        completed: [{ gte: RANGE_START, lt: RANGE_END }],
-        in_flight: [],
-        ...overrides,
-      },
-    }
-  }
-
-  function sourceState(streams: Record<string, StripeStreamState>): SourceState {
+  function sourceState(streams: Record<string, StreamState>): SourceState {
     return { streams, global: {} }
   }
 
@@ -150,14 +145,13 @@ describe('test-server sync via Docker engine', () => {
           api_key: 'sk_test_fake',
           api_version: '2025-04-30.basil',
           base_url: harness.testServerContainerUrl(),
-          rate_limit: 10_000,
           ...opts.sourceOverrides,
         },
       },
       destination: {
         type: 'postgres',
         postgres: {
-          connection_string: harness.destPgContainerUrl(),
+          url: harness.destPgContainerUrl(),
           schema: opts.destSchema,
           batch_size: 100,
         },
@@ -171,7 +165,6 @@ describe('test-server sync via Docker engine', () => {
     streams?: PipelineConfig['streams']
     sourceOverrides?: Record<string, unknown>
     state?: SourceState
-    state_limit?: number
     time_limit?: number
   }): Promise<{ messages: Message[]; state: SourceState }> {
     const pipeline = makePipelineConfig(opts)
@@ -179,8 +172,7 @@ describe('test-server sync via Docker engine', () => {
     const state = cloneSourceState(opts.state)
 
     for await (const msg of engine.pipeline_read(pipeline, {
-      state: opts.state,
-      state_limit: opts.state_limit,
+      state: wrapSyncState(opts.state),
       time_limit: opts.time_limit,
     })) {
       messages.push(msg)
@@ -192,12 +184,28 @@ describe('test-server sync via Docker engine', () => {
     return { messages, state }
   }
 
+  function wrapSyncState(source?: SourceState) {
+    if (!source) return undefined
+    return {
+      source,
+      destination: {},
+      sync_run: {
+        progress: {
+          started_at: new Date().toISOString(),
+          elapsed_ms: 0,
+          global_state_count: 0,
+          derived: { status: 'started' as const, records_per_second: 0, states_per_second: 0 },
+          streams: {},
+        },
+      },
+    }
+  }
+
   async function runSync(opts: {
     destSchema: string
     streams?: PipelineConfig['streams']
     sourceOverrides?: Record<string, unknown>
     state?: SourceState
-    state_limit?: number
     time_limit?: number
   }): Promise<{ messages: SyncOutput[]; state: SourceState }> {
     const pipeline = makePipelineConfig(opts)
@@ -210,8 +218,7 @@ describe('test-server sync via Docker engine', () => {
     }
 
     for await (const msg of engine.pipeline_sync(pipeline, {
-      state: opts.state,
-      state_limit: opts.state_limit,
+      state: wrapSyncState(opts.state),
       time_limit: opts.time_limit,
     })) {
       messages.push(msg)
@@ -258,11 +265,11 @@ describe('test-server sync via Docker engine', () => {
     await harness?.close()
   }, 60_000)
 
-  it('created filter boundaries: objects at segment edges are not lost or duplicated', async () => {
+  it('created filter boundaries: objects at range edges are not lost or duplicated', async () => {
     const CONC = 5
     const destSchema = uniqueSchema('boundary')
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const internalBoundaries = segments.slice(0, -1).map((segment) => segment.lt)
+    const ranges = buildSegmentRanges(CONC)
+    const internalBoundaries = ranges.slice(0, -1).map((r) => r.lt)
 
     const boundaryCustomers = internalBoundaries.flatMap((boundary, i) => [
       makeCustomer(`cus_b${i}_at`, boundary),
@@ -284,7 +291,7 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     const destIds = new Set(await listIds(destSchema, 'customers'))
@@ -296,9 +303,8 @@ describe('test-server sync via Docker engine', () => {
     }
     expect(destIds.size).toBe(expected.length)
 
-    const finalState = state.streams.customers as StripeStreamState
-    expect(finalState.backfill?.range).toEqual({ gte: RANGE_START, lt: RANGE_END })
-    expect(finalState.backfill?.num_segments).toBe(CONC)
+    const finalState = state.streams.customers as StreamState
+    expect(finalState.remaining).toEqual([])
   }, 120_000)
 
   it('out-of-range objects are excluded by created filter', async () => {
@@ -319,7 +325,7 @@ describe('test-server sync via Docker engine', () => {
     await seedCustomers([...inRange, ...outOfRange])
     await runSync({
       destSchema,
-      state: sourceState({ customers: pendingState({ num_segments: 1 }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     const ids = new Set(await listIds(destSchema, 'customers'))
@@ -346,11 +352,11 @@ describe('test-server sync via Docker engine', () => {
     expect(messages.filter((msg) => msg.type === 'source_state').length).toBeGreaterThan(1)
   }, 120_000)
 
-  it('no duplicate record IDs emitted by source across segments', async () => {
+  it('no duplicate record IDs emitted by source across ranges', async () => {
     const CONC = 5
     const destSchema = uniqueSchema('dupcheck')
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const boundaries = segments.slice(0, -1).map((segment) => segment.lt)
+    const ranges = buildSegmentRanges(CONC)
+    const boundaries = ranges.slice(0, -1).map((r) => r.lt)
 
     const boundaryObjects = boundaries.flatMap((boundary, i) => [
       makeCustomer(`cus_d${i}_at`, boundary),
@@ -369,7 +375,7 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages } = await runRead({
       destSchema,
-      state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     const recordIds = messages
@@ -381,57 +387,62 @@ describe('test-server sync via Docker engine', () => {
     expect(recordIds.length).toBe(objects.length)
   }, 120_000)
 
-  it('resume from partially-completed state skips completed segments', async () => {
+  it('resume from partially-completed state skips completed ranges', async () => {
     const destSchema = uniqueSchema('resume')
     const CONC = 5
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const PER_SEGMENT = 2000
+    const ranges = buildSegmentRanges(CONC)
+    const PER_RANGE = 2000
 
-    const objects = segments.flatMap((segment, segIdx) => {
-      const step = Math.max(1, Math.floor((segment.lt - segment.gte - 2) / PER_SEGMENT))
-      return Array.from({ length: PER_SEGMENT }, (_, i) =>
-        makeCustomer(`cus_seg${segIdx}_${String(i).padStart(4, '0')}`, segment.gte + 1 + i * step)
+    const objects = ranges.flatMap((range, rangeIdx) => {
+      const step = Math.max(1, Math.floor((range.lt - range.gte - 2) / PER_RANGE))
+      return Array.from({ length: PER_RANGE }, (_, i) =>
+        makeCustomer(`cus_seg${rangeIdx}_${String(i).padStart(4, '0')}`, range.gte + 1 + i * step)
       )
     })
 
     await seedCustomers(objects)
 
-    const completedRange = { gte: segments[0].gte, lt: segments[2].lt }
+    // Only the last 2 ranges remain — first 3 already completed
+    const remainingRanges = ranges.slice(3).map((r) => ({
+      gte: toIso(r.gte),
+      lt: toIso(r.lt),
+      cursor: null,
+    }))
+
     await runSync({
       destSchema,
       state: sourceState({
-        customers: pendingState({
-          num_segments: CONC,
-          completed: [completedRange],
-        }),
+        customers: { remaining: remainingRanges },
       }),
     })
 
     const destIds = new Set(await listIds(destSchema, 'customers'))
-    for (const segIdx of [3, 4]) {
-      for (let i = 0; i < PER_SEGMENT; i++) {
-        const id = `cus_seg${segIdx}_${String(i).padStart(4, '0')}`
+    for (const rangeIdx of [3, 4]) {
+      for (let i = 0; i < PER_RANGE; i++) {
+        const id = `cus_seg${rangeIdx}_${String(i).padStart(4, '0')}`
         expect(destIds.has(id), `missing ${id}`).toBe(true)
       }
     }
-    for (const segIdx of [0, 1, 2]) {
-      expect(destIds.has(`cus_seg${segIdx}_0000`), `unexpected cus_seg${segIdx}_0000`).toBe(false)
+    for (const rangeIdx of [0, 1, 2]) {
+      expect(destIds.has(`cus_seg${rangeIdx}_0000`), `unexpected cus_seg${rangeIdx}_0000`).toBe(
+        false
+      )
     }
-    expect(destIds.size).toBe(PER_SEGMENT * 2)
+    expect(destIds.size).toBe(PER_RANGE * 2)
   }, 120_000)
 
-  it('empty segments complete without hanging', async () => {
+  it('empty ranges complete without hanging', async () => {
     const destSchema = uniqueSchema('empty')
     const CONC = 5
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const populatedSegments = [0, 2, 4]
-    const perSegment = Math.ceil(10_000 / populatedSegments.length)
+    const ranges = buildSegmentRanges(CONC)
+    const populatedRanges = [0, 2, 4]
+    const perRange = Math.ceil(10_000 / populatedRanges.length)
 
-    const objects = populatedSegments.flatMap((segIdx) => {
-      const segment = segments[segIdx]
-      const step = Math.max(1, Math.floor((segment.lt - segment.gte - 2) / perSegment))
-      return Array.from({ length: perSegment }, (_, i) =>
-        makeCustomer(`cus_e${segIdx}_${String(i).padStart(4, '0')}`, segment.gte + 1 + i * step)
+    const objects = populatedRanges.flatMap((rangeIdx) => {
+      const range = ranges[rangeIdx]
+      const step = Math.max(1, Math.floor((range.lt - range.gte - 2) / perRange))
+      return Array.from({ length: perRange }, (_, i) =>
+        makeCustomer(`cus_e${rangeIdx}_${String(i).padStart(4, '0')}`, range.gte + 1 + i * step)
       )
     })
 
@@ -439,11 +450,11 @@ describe('test-server sync via Docker engine', () => {
 
     const { state } = await runSync({
       destSchema,
-      state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(objects.length)
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('second sync after completion emits zero records', async () => {
@@ -530,8 +541,8 @@ describe('test-server sync via Docker engine', () => {
 
     expect(await countRows(destSchema, 'customers')).toBe(customers.length)
     expect(await countRows(destSchema, 'products')).toBe(products.length)
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
-    expect((state.streams.products as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
+    expect((state.streams.products as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('zero objects: empty source completes cleanly with no records', async () => {
@@ -544,7 +555,7 @@ describe('test-server sync via Docker engine', () => {
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(0)
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('single object: exactly one record syncs correctly', async () => {
@@ -558,7 +569,7 @@ describe('test-server sync via Docker engine', () => {
 
     const ids = await listIds(destSchema, 'customers')
     expect(ids).toEqual(['cus_only_one'])
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
   it('data integrity: destination _raw_data matches source objects', async () => {
@@ -587,16 +598,16 @@ describe('test-server sync via Docker engine', () => {
     }
   }, 120_000)
 
-  it('multi-page pagination across multiple concurrent segments', async () => {
+  it('multi-page pagination across multiple concurrent ranges', async () => {
     const destSchema = uniqueSchema('multipageseg')
     const CONC = 3
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const PER_SEGMENT = 3334
+    const ranges = buildSegmentRanges(CONC)
+    const PER_RANGE = 3334
 
-    const objects = segments.flatMap((segment, segIdx) => {
-      const step = Math.max(1, Math.floor((segment.lt - segment.gte - 2) / PER_SEGMENT))
-      return Array.from({ length: PER_SEGMENT }, (_, i) =>
-        makeCustomer(`cus_mps${segIdx}_${String(i).padStart(4, '0')}`, segment.gte + 1 + i * step)
+    const objects = ranges.flatMap((range, rangeIdx) => {
+      const step = Math.max(1, Math.floor((range.lt - range.gte - 2) / PER_RANGE))
+      return Array.from({ length: PER_RANGE }, (_, i) =>
+        makeCustomer(`cus_mps${rangeIdx}_${String(i).padStart(4, '0')}`, range.gte + 1 + i * step)
       )
     })
 
@@ -604,41 +615,25 @@ describe('test-server sync via Docker engine', () => {
 
     const { messages, state } = await runSync({
       destSchema,
-      state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     expect(await countRows(destSchema, 'customers')).toBe(objects.length)
     expect(messages.filter((msg) => msg.type === 'source_state').length).toBeGreaterThan(CONC)
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 120_000)
 
-  it('stress: 50 segments with 25k objects at 1000 req/s', async () => {
+  it('stress: 25k objects synced successfully', async () => {
     const destSchema = uniqueSchema('stress')
-    const CONC = 50
     const TOTAL = 25_000
-    const segments = expandState(mkBackfill({ num_segments: CONC }))
-    const perSegment = Math.ceil(TOTAL / segments.length)
-    const objects: Record<string, unknown>[] = []
 
-    for (let segIdx = 0; segIdx < segments.length; segIdx++) {
-      const segment = segments[segIdx]!
-      const step = Math.max(1, Math.floor((segment.lt - segment.gte - 2) / perSegment))
-      for (let i = 0; i < perSegment && objects.length < TOTAL; i++) {
-        objects.push(
-          makeCustomer(
-            `cus_s_${String(objects.length).padStart(6, '0')}`,
-            segment.gte + 1 + i * step
-          )
-        )
-      }
-    }
+    const objects = generateCustomers(TOTAL, 'cus_s_')
 
     await seedCustomers(objects)
 
     const { state } = await runSync({
       destSchema,
-      sourceOverrides: { rate_limit: 1_000 },
-      state: sourceState({ customers: pendingState({ num_segments: CONC }) }),
+      state: sourceState({ customers: pendingState() }),
     })
 
     const destIds = new Set(await listIds(destSchema, 'customers'))
@@ -652,7 +647,7 @@ describe('test-server sync via Docker engine', () => {
     ).toBe(0)
     expect(unexpected.length, `unexpected ${unexpected.length} objects`).toBe(0)
     expect(destIds.size).toBe(TOTAL)
-    expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+    expect((state.streams.customers as StreamState).remaining).toEqual([])
   }, 600_000)
 
   it('multiple keys: concurrent syncs with different API keys do not interfere', async () => {
@@ -682,7 +677,7 @@ describe('test-server sync via Docker engine', () => {
         expect(destIds.has(expected), `key ${apiKey}: missing ${expected}`).toBe(true)
       }
 
-      expect((state.streams.customers as StripeStreamState).status).toBe('complete')
+      expect((state.streams.customers as StreamState).remaining).toEqual([])
     }
   }, 180_000)
 
@@ -712,6 +707,6 @@ describe('test-server sync via Docker engine', () => {
       expect(destIds.has(object.id), `missing v2 object ${object.id}`).toBe(true)
     }
     expect(destIds.size).toBe(v2Objects.length)
-    expect((state.streams[STREAM] as StripeStreamState).status).toBe('complete')
+    expect((state.streams[STREAM] as StreamState).remaining).toEqual([])
   }, 120_000)
 })

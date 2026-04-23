@@ -1,5 +1,6 @@
 import net from 'node:net'
 import { Duplex } from 'node:stream'
+import { sslConfigFromConnectionString, stripSslParams } from './sslConfigFromConnectionString.js'
 
 type PgTargetConfig = {
   host?: string
@@ -155,14 +156,68 @@ export function createPgHttpConnectStreamFactory(options: PgProxyOptions) {
   return (config: PgTargetConfig) => new HttpConnectStream(config, options)
 }
 
+function getTargetHost(config: Record<string, unknown>): string | undefined {
+  if (typeof config.host === 'string') return config.host
+  if (typeof config.connectionString === 'string') {
+    try {
+      return new URL(config.connectionString).hostname
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+function shouldBypassPgProxy(targetHost: string | undefined, env: PgProxyEnv): boolean {
+  if (!targetHost) return false
+  const noProxy = env.PG_NO_PROXY?.trim()
+  if (!noProxy) return false
+  const entries = noProxy.split(',').map((s) => s.trim().toLowerCase())
+  return entries.includes(targetHost.toLowerCase())
+}
+
+/**
+ * Normalize SSL config for a node-postgres connection.
+ *
+ * node-postgres parses connectionString last (`Object.assign({}, config, parse(connectionString))`),
+ * so `sslmode` in the URL always overwrites any `ssl` key on the config object. This function
+ * strips SSL params from the connection string and translates `sslmode` to Node.js TLS options,
+ * but only when the caller hasn't already set an explicit `ssl` key.
+ *
+ * Gated by `PG_NORMALIZE_SSL=1` env var. This area has been repeatedly tricky (proxy + SSL +
+ * node-postgres interactions) and needs thorough testing across RDS, local Docker, and tunneled
+ * connections. Enable it for testing, but verify before making it the default.
+ */
+export function normalizePgSslConfig<T extends object>(config: T): T {
+  if (!process.env.PG_NORMALIZE_SSL) return config
+  const raw = config as Record<string, unknown>
+  if (typeof raw.connectionString !== 'string') return config
+
+  let result = { ...config, connectionString: stripSslParams(raw.connectionString) } as T
+  if (!('ssl' in raw)) {
+    const ssl = sslConfigFromConnectionString(raw.connectionString)
+    if (ssl !== false) {
+      result = { ...result, ssl } as T
+    }
+  }
+  return result
+}
+
 export function withPgConnectProxy<T extends object>(config: T, env: PgProxyEnv = process.env): T {
+  const normalized = normalizePgSslConfig(config)
+
   const proxyHost = env.PG_PROXY_HOST?.trim()
   if (!proxyHost) {
-    return config
+    return normalized
+  }
+
+  const targetHost = getTargetHost(normalized as Record<string, unknown>)
+  if (shouldBypassPgProxy(targetHost, env)) {
+    return normalized
   }
 
   return {
-    ...config,
+    ...normalized,
     stream: createPgHttpConnectStreamFactory({
       proxyHost,
       proxyPort: parsePositiveInteger('PG_PROXY_PORT', env.PG_PROXY_PORT, 10072),

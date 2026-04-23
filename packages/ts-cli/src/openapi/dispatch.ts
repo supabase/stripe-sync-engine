@@ -51,28 +51,38 @@ export function buildRequest(
 
   // Build body
   let body: string | undefined
-  const contentType = operation.ndjsonRequest ? 'application/x-ndjson' : 'application/json'
 
   if (operation.bodySchema) {
-    // If body schema has top-level properties, collect --flag values
-    const props = operation.bodySchema.properties
-    if (props && !operation.ndjsonRequest) {
-      const bodyObj: Record<string, unknown> = {}
-      for (const propName of Object.keys(props)) {
-        const flagName = toOptName(propName)
-        const value = opts[flagName]
-        if (value !== undefined) {
-          bodyObj[propName] = tryJsonParse(value)
-        }
+    if (operation.ndjsonRequest) {
+      // NDJSON route: pass --body raw
+      if (opts['body'] !== undefined) {
+        body = opts['body']
+        headers.set('Content-Type', 'application/x-ndjson')
       }
-      if (Object.keys(bodyObj).length > 0) {
-        body = JSON.stringify(bodyObj)
+    } else {
+      // JSON route: collect per-property flags into a JSON object
+      const props = operation.bodySchema.properties
+      if (props && typeof props === 'object') {
+        const bodyObj: Record<string, unknown> = {}
+        for (const propName of Object.keys(props)) {
+          const flagName = toOptName(propName)
+          const value = opts[flagName]
+          if (value !== undefined) {
+            try {
+              bodyObj[propName] = JSON.parse(value)
+            } catch {
+              bodyObj[propName] = value
+            }
+          }
+        }
+        if (Object.keys(bodyObj).length > 0) {
+          body = JSON.stringify(bodyObj)
+          headers.set('Content-Type', 'application/json')
+        }
+      } else if (opts['body'] !== undefined) {
+        body = opts['body']
         headers.set('Content-Type', 'application/json')
       }
-    } else if (opts['body'] !== undefined) {
-      // Complex/NDJSON body: pass raw via --body
-      body = opts['body']
-      headers.set('Content-Type', contentType)
     }
   }
 
@@ -93,7 +103,13 @@ export async function handleResponse(
 ): Promise<void> {
   if (!response.ok) {
     const text = await response.text()
-    process.stderr.write(`Error ${response.status}: ${text}\n`)
+    let formatted = text
+    try {
+      formatted = JSON.stringify(JSON.parse(text), null, 2)
+    } catch {
+      // not JSON, use raw text
+    }
+    process.stderr.write(`Error ${response.status}: ${formatted}\n`)
     process.exit(1)
   }
 
@@ -147,12 +163,4 @@ export function toOptName(name: string): string {
 
 function hasBody(method: string): boolean {
   return ['post', 'put', 'patch'].includes(method.toLowerCase())
-}
-
-function tryJsonParse(value: string): unknown {
-  try {
-    return JSON.parse(value)
-  } catch {
-    return value
-  }
 }

@@ -194,7 +194,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
         type: 'stripe',
         stripe: { api_key: STRIPE_API_KEY, backfill_limit: 5 },
       },
-      destination: { type: 'postgres', postgres: { connection_string: POSTGRES_URL, schema } },
+      destination: { type: 'postgres', postgres: { url: POSTGRES_URL, schema } },
       streams: [{ name: 'products' }],
     }
 

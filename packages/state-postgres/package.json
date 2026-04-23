@@ -10,8 +10,8 @@
     }
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "scripts": {
     "build": "tsc",
@@ -21,6 +21,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-util-postgres": "workspace:*",
     "pg": "^8.16.3"

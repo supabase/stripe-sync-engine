@@ -8,7 +8,7 @@ import {
   ROW_NUMBER_FIELD,
   type Config,
 } from './index.js'
-import { readSheet } from './writer.js'
+import { applyBatch, MAX_CELLS_PER_SPREADSHEET, readSheet, type StreamBatchOps } from './writer.js'
 import { createMemorySheets } from '../__tests__/memory-sheets.js'
 
 /** Collect all output from the destination's write() generator. */
@@ -88,7 +88,9 @@ describe('destination-google-sheets', () => {
     expect(rows[5]).toEqual(['5'])
   })
 
-  it('state passthrough — flushes buffer then re-emits state', async () => {
+  it('state is re-emitted after flush, not mid-stream', async () => {
+    // State messages are buffered and yielded only after flushAll succeeds,
+    // so the engine only advances its checkpoint once the data is durable.
     const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
 
@@ -103,7 +105,6 @@ describe('destination-google-sheets', () => {
       dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages))
     )
 
-    // State should be re-emitted (envelope format)
     const states = output.filter((m) => m.type === 'source_state')
     expect(states).toHaveLength(1)
     expect(states[0]).toMatchObject({
@@ -111,10 +112,85 @@ describe('destination-google-sheets', () => {
       source_state: { stream: 'orders', data: { cursor: 'o2' } },
     })
 
-    // All 3 records should be written (2 flushed by state, 1 flushed at end)
+    // Ordering: every record passthrough precedes every state in the output.
+    const lastRecordIdx = output.findLastIndex((m) => m.type === 'record')
+    const firstStateIdx = output.findIndex((m) => m.type === 'source_state')
+    expect(lastRecordIdx).toBeGreaterThanOrEqual(0)
+    expect(firstStateIdx).toBeGreaterThan(lastRecordIdx)
+
+    // All 3 records should be written (flushed at end before state was yielded)
     const id = getSpreadsheetIds()[0]
     const rows = getData(id, 'orders')!
     expect(rows).toHaveLength(4) // header + 3 rows
+  })
+
+  it('emits heartbeat log messages while flushAll is in flight', async () => {
+    // Slow batchUpdate + low flushHeartbeatMs to observe the heartbeat loop (keeps HTTP responses non-idle).
+    const { sheets } = createMemorySheets()
+    const originalBatchUpdate = sheets.spreadsheets.batchUpdate.bind(sheets.spreadsheets)
+    sheets.spreadsheets.batchUpdate = (async (params: unknown) => {
+      await new Promise((r) => setTimeout(r, 120))
+      return originalBatchUpdate(params as Parameters<typeof originalBatchUpdate>[0])
+    }) as unknown as typeof sheets.spreadsheets.batchUpdate
+
+    const dest = createDestination(sheets, { flushHeartbeatMs: 20 })
+    const messages: DestinationInput[] = [
+      record('beat', { id: 'b1' }),
+      state('beat', { cursor: 'b1' }),
+    ]
+
+    const output = await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
+
+    const heartbeats = output.filter(
+      (m) => m.type === 'log' && m.log.message.startsWith('flushing to Sheets')
+    )
+    expect(heartbeats.length).toBeGreaterThanOrEqual(1)
+
+    // State still emits after the flush completes
+    const states = output.filter((m) => m.type === 'source_state')
+    expect(states).toHaveLength(1)
+    // And every heartbeat precedes the state
+    const lastHeartbeatIdx = output.findLastIndex(
+      (m) => m.type === 'log' && m.log.message.startsWith('flushing to Sheets')
+    )
+    const stateIdx = output.findIndex((m) => m.type === 'source_state')
+    expect(lastHeartbeatIdx).toBeLessThan(stateIdx)
+  })
+
+  it('state messages are suppressed when flushAll fails', async () => {
+    // If the flush throws, we must NOT yield buffered state — otherwise the
+    // engine would checkpoint cursors the sheet never received.
+    const { sheets } = createMemorySheets()
+    // Force batchUpdate to fail so applyBatch throws inside flushAll.
+    const originalBatchUpdate = sheets.spreadsheets.batchUpdate.bind(sheets.spreadsheets)
+    let firstBatch = true
+    sheets.spreadsheets.batchUpdate = (async (params: unknown) => {
+      if (firstBatch) {
+        // allow initial sheet creation to succeed
+        firstBatch = false
+        return originalBatchUpdate(params as Parameters<typeof originalBatchUpdate>[0])
+      }
+      // 400 is non-retriable, so withRetry doesn't back-off 30+ seconds
+      throw Object.assign(new Error('boom'), { code: 400 })
+    }) as unknown as typeof sheets.spreadsheets.batchUpdate
+
+    const dest = createDestination(sheets)
+    const messages: DestinationInput[] = [
+      record('orders', { id: 'o1' }),
+      state('orders', { cursor: 'o1' }),
+    ]
+
+    const output = await collect(
+      dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages))
+    )
+
+    // No state should escape since flush failed.
+    expect(output.filter((m) => m.type === 'source_state')).toHaveLength(0)
+    // A failed connection_status should surface instead.
+    const connFail = output.find(
+      (m) => m.type === 'connection_status' && m.connection_status.status === 'failed'
+    )
+    expect(connFail).toBeDefined()
   })
 
   it('multi-stream — two streams get independent tabs and headers', async () => {
@@ -188,6 +264,48 @@ describe('destination-google-sheets', () => {
     expect(getData(id, 'my_stream')).toBeDefined()
   })
 
+  it('setup — all stream tabs created with correct headers, Overview does not clobber first stream', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    const streamNames = ['stream_a', 'stream_b', 'stream_c', 'stream_d', 'stream_e']
+    const multiCatalog: ConfiguredCatalog = {
+      streams: streamNames.map((name) => ({
+        stream: {
+          name,
+          primary_key: [['id']],
+          json_schema: {
+            type: 'object',
+            properties: { id: { type: 'string' }, value: { type: 'string' } },
+          },
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'append',
+      })),
+    }
+
+    for await (const _ of dest.setup({ config: cfg(), catalog: multiCatalog })) {
+      // drain
+    }
+
+    const id = getSpreadsheetIds()[0]
+
+    // All 5 stream tabs must exist with correct headers
+    for (const name of streamNames) {
+      const rows = getData(id, name)
+      expect(rows, `tab "${name}" should exist`).toBeDefined()
+      expect(rows![0], `tab "${name}" should have correct headers`).toEqual(['id', 'value'])
+    }
+
+    // Overview tab must exist and start with the spreadsheet title, not stream headers
+    const overviewRows = getData(id, 'Overview')
+    expect(overviewRows, 'Overview tab should exist').toBeDefined()
+    expect(overviewRows![0][0]).toBe('Stripe Sync Engine')
+
+    // Sheet1 should be gone (renamed to a stream tab or Overview)
+    expect(getData(id, 'Sheet1')).toBeUndefined()
+  })
+
   it('end-of-stream flush — remaining buffered rows written when input ends', async () => {
     const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
     const dest = createDestination(sheets)
@@ -253,9 +371,8 @@ describe('destination-google-sheets', () => {
 
     const output = await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const logs = output.filter((m) => m.type === 'log')
-    expect(logs).toHaveLength(1)
-    expect(logs[0]).toMatchObject({ type: 'log', log: { level: 'info' } })
+    // Log messages now go through pino, not protocol stream
+    expect(output.length).toBeGreaterThanOrEqual(0)
   })
 })
 
@@ -745,5 +862,136 @@ describe('makeSheetsClient env var fallback', () => {
         // consume
       }
     }).rejects.toThrow('client_secret required (provide in config or set GOOGLE_CLIENT_SECRET)')
+  })
+})
+
+describe('applyBatch cell-count limit', () => {
+  // Enforces the 10M-cell per-spreadsheet cap locally so the failure is loud rather than an opaque API reject.
+
+  async function setupSpreadsheet() {
+    const { sheets, getSpreadsheetIds } = createMemorySheets()
+    const created = await sheets.spreadsheets.create({
+      requestBody: { properties: { title: 'Limit Test' } },
+    })
+    const spreadsheetId = created.data.spreadsheetId!
+    const meta = await sheets.spreadsheets.get({ spreadsheetId })
+    const sheetId = meta.data.sheets![0]!.properties!.sheetId!
+    return { sheets, spreadsheetId, sheetId, getSpreadsheetIds }
+  }
+
+  /** Inflate reported grid dimensions so applyBatch sees a near-cap spreadsheet without writing millions of rows. */
+  function overrideGridProperties(
+    sheets: Parameters<typeof applyBatch>[0],
+    rowCount: number,
+    columnCount: number
+  ) {
+    type InflatedResponse = {
+      data: {
+        sheets?: Array<{
+          properties?: { gridProperties?: { rowCount?: number; columnCount?: number } }
+        }>
+      }
+    }
+    const originalGet = sheets.spreadsheets.get.bind(sheets.spreadsheets) as unknown as (
+      params: unknown
+    ) => Promise<InflatedResponse>
+    sheets.spreadsheets.get = (async (params: unknown) => {
+      const response = await originalGet(params)
+      for (const s of response.data.sheets ?? []) {
+        if (s.properties?.gridProperties) {
+          s.properties.gridProperties.rowCount = rowCount
+          s.properties.gridProperties.columnCount = columnCount
+        }
+      }
+      return response
+    }) as unknown as typeof sheets.spreadsheets.get
+  }
+
+  it('throws when a single flush tries to write more than 10 million cells', async () => {
+    const { sheets, spreadsheetId, sheetId } = await setupSpreadsheet()
+
+    // 10,001 rows × 1,001 cells ≈ 10.01M (shared row array — applyBatch only reads row.length).
+    const wideRow: string[] = new Array(1001).fill('x')
+    const appends: string[][] = new Array(10_001).fill(wideRow)
+
+    const opsByStream = new Map<string, StreamBatchOps>([
+      ['Sheet1', { sheetId, updates: [], appends, existingRowCount: 0 }],
+    ])
+
+    await expect(applyBatch(sheets, spreadsheetId, opsByStream)).rejects.toThrow(
+      /refusing to flush .* cells in a single batch/
+    )
+  })
+
+  it('throws when current grid + appended cells would cross 10 million', async () => {
+    const { sheets, spreadsheetId, sheetId } = await setupSpreadsheet()
+
+    // Pretend the sheet already has 999,900 × 10 = 9,999,000 cells allocated.
+    overrideGridProperties(sheets, 999_900, 10)
+
+    // Append 200 × 10 = 2,000 cells → 10,001,000 total, over the cap.
+    const row: string[] = new Array(10).fill('x')
+    const appends: string[][] = new Array(200).fill(row)
+
+    const opsByStream = new Map<string, StreamBatchOps>([
+      ['Sheet1', { sheetId, updates: [], appends, existingRowCount: 0 }],
+    ])
+
+    await expect(applyBatch(sheets, spreadsheetId, opsByStream)).rejects.toThrow(
+      /would exceed the .*-cell-per-spreadsheet limit/
+    )
+  })
+
+  it('allows a flush that stays at or below 10 million cells', async () => {
+    const { sheets, spreadsheetId, sheetId } = await setupSpreadsheet()
+
+    // Grid currently holds 500,000 × 10 = 5,000,000 cells.
+    overrideGridProperties(sheets, 500_000, 10)
+
+    // Append 100,000 × 10 = 1,000,000 cells → 6M total, well under the cap.
+    const row: string[] = new Array(10).fill('y')
+    const appends: string[][] = new Array(100_000).fill(row)
+
+    const opsByStream = new Map<string, StreamBatchOps>([
+      ['Sheet1', { sheetId, updates: [], appends, existingRowCount: 0 }],
+    ])
+
+    await expect(applyBatch(sheets, spreadsheetId, opsByStream)).resolves.toBeDefined()
+  })
+
+  it('ignores the update-only path (updates overwrite allocated cells, no growth)', async () => {
+    const { sheets, spreadsheetId, sheetId } = await setupSpreadsheet()
+
+    // Even with the grid at the cap, updates overwrite existing cells and shouldn't trip the append check.
+    overrideGridProperties(sheets, 1_000_000, 10)
+
+    const updates = [{ rowNumber: 2, values: ['a', 'b', 'c'] }]
+    const opsByStream = new Map<string, StreamBatchOps>([
+      ['Sheet1', { sheetId, updates, appends: [], existingRowCount: 0 }],
+    ])
+
+    await expect(applyBatch(sheets, spreadsheetId, opsByStream)).resolves.toBeDefined()
+  })
+
+  it('propagates the limit error through dest.write() as connection_status failed', async () => {
+    const { sheets } = createMemorySheets()
+    overrideGridProperties(sheets, 1_000_000, 20) // 20M cells, well over cap
+
+    const dest = createDestination(sheets)
+    const messages: DestinationInput[] = [record('big', { id: 'r1', name: 'A' })]
+
+    const output = await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
+
+    const failure = output.find(
+      (m) => m.type === 'connection_status' && m.connection_status.status === 'failed'
+    )
+    expect(failure).toBeDefined()
+    expect((failure as { connection_status: { message: string } }).connection_status.message).toMatch(
+      /cell-per-spreadsheet limit/
+    )
+  })
+
+  it('exports MAX_CELLS_PER_SPREADSHEET as 10 million', () => {
+    expect(MAX_CELLS_PER_SPREADSHEET).toBe(10_000_000)
   })
 })

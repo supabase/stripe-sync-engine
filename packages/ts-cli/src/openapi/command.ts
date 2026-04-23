@@ -27,6 +27,10 @@ export interface CreateCliFromSpecOptions {
   meta?: { name?: string; description?: string; version?: string }
   /** Extra args to declare on the root command (e.g. --data-dir for help text) */
   rootArgs?: Record<string, ArgDef>
+  /** Descriptions for tag groups (used with groupByTag). Keyed by tag name (after any renaming). */
+  tagDescriptions?: Record<string, string>
+  /** Custom response formatter. Replaces default handleResponse for all JSON responses. */
+  responseFormatter?: (response: Response, operation: ParsedOperation) => Promise<void>
 }
 
 /** Returns a citty CommandDef with subcommands for each API operation. */
@@ -41,7 +45,16 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
     ndjsonBodyStream,
     meta,
     rootArgs,
+    tagDescriptions = {},
+    responseFormatter,
   } = opts
+
+  // Build tag description lookup: explicit tagDescriptions override spec-level tags
+  const specTagDescs: Record<string, string> = {}
+  for (const t of spec.tags ?? []) {
+    if (t.description) specTagDescs[t.name] = t.description
+  }
+  const tagDescs = { ...specTagDescs, ...tagDescriptions }
 
   const operations = parseSpec(spec).filter(
     (op) => !op.operationId || !exclude.includes(op.operationId)
@@ -68,22 +81,44 @@ export function createCliFromSpec(opts: CreateCliFromSpecOptions): CommandDef {
       const groupSubCommands: Record<string, CommandDef> = {}
       for (const op of ops) {
         const name = getOpName(op, nameOperation)
-        groupSubCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+        groupSubCommands[name] = buildCommand(
+          op,
+          handler,
+          baseUrl,
+          nameOperation,
+          ndjsonBodyStream,
+          responseFormatter
+        )
       }
-      subCommands[toCliFlag(tag)] = defineCommand({
-        meta: { name: toCliFlag(tag) },
+      const cliTag = toCliFlag(tag)
+      subCommands[cliTag] = defineCommand({
+        meta: { name: cliTag, description: tagDescs[tag] ?? tagDescs[cliTag] },
         subCommands: groupSubCommands,
       })
     }
 
     for (const op of ungrouped) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+      subCommands[name] = buildCommand(
+        op,
+        handler,
+        baseUrl,
+        nameOperation,
+        ndjsonBodyStream,
+        responseFormatter
+      )
     }
   } else {
     for (const op of operations) {
       const name = getOpName(op, nameOperation)
-      subCommands[name] = buildCommand(op, handler, baseUrl, nameOperation, ndjsonBodyStream)
+      subCommands[name] = buildCommand(
+        op,
+        handler,
+        baseUrl,
+        nameOperation,
+        ndjsonBodyStream,
+        responseFormatter
+      )
     }
   }
 
@@ -116,21 +151,14 @@ function getOpName(
     : defaultOperationName(op.method, op.path, rawOp)
 }
 
-function hasAlternativeJsonHeader(operation: ParsedOperation, propName: string): boolean {
-  const normalizedProp = toCliFlag(propName)
-  return operation.headerParams.some((param) => {
-    if (!param.content?.['application/json']) return false
-    return toCliFlag(param.name).replace(/^x-/, '') === normalizedProp
-  })
-}
-
 /** Build a single citty CommandDef from a ParsedOperation. */
 export function buildCommand(
   operation: ParsedOperation,
   handler: Handler,
   baseUrl = 'http://localhost',
   nameOverride?: (method: string, path: string, op: OpenAPIOperation) => string,
-  ndjsonBodyStream?: () => ReadableStream | null | undefined
+  ndjsonBodyStream?: () => ReadableStream | null | undefined,
+  responseFormatter?: (response: Response, operation: ParsedOperation) => Promise<void>
 ): CommandDef {
   const rawOp: OpenAPIOperation = {
     operationId: operation.operationId,
@@ -179,34 +207,42 @@ export function buildCommand(
     }
   }
 
-  // Body: per-property flags for flat objects, --body for complex/NDJSON
+  // Body handling depends on content type:
+  // - NDJSON routes: single --body flag (streaming)
+  // - JSON routes: per-property --flags for flat body schemas, --body for complex ones
   if (operation.bodySchema) {
-    const props = operation.bodySchema.properties
-    if (props && !operation.ndjsonRequest) {
-      const requiredFields = operation.bodySchema.required ?? []
-      for (const [propName, propSchema] of Object.entries(props)) {
-        const key = toOptName(propName)
-        args[key] = {
-          type: 'string',
-          required:
-            requiredFields.includes(propName) && !hasAlternativeJsonHeader(operation, propName),
-          description: propSchema.description ?? '',
-        }
-      }
-    } else {
-      // Complex or NDJSON body: single --body flag.
-      // When ndjsonBodyStream is provided, --body is optional for NDJSON operations.
-      const bodyOptional = operation.ndjsonRequest && ndjsonBodyStream !== undefined
+    if (operation.ndjsonRequest) {
+      const bodyOptional = ndjsonBodyStream !== undefined
       args['body'] = {
         type: 'string',
         required: operation.bodyRequired === true && !bodyOptional,
         description: 'Request body as JSON string',
       }
+    } else {
+      // JSON route — create per-property flags from the body schema
+      const props = operation.bodySchema.properties
+      if (props && typeof props === 'object') {
+        const requiredFields = new Set(operation.bodySchema.required ?? [])
+        for (const [propName, propSchema] of Object.entries(props)) {
+          const key = toOptName(propName)
+          args[key] = {
+            type: 'string',
+            required: requiredFields.has(propName),
+            description: (propSchema as { description?: string }).description ?? '',
+          }
+        }
+      } else {
+        args['body'] = {
+          type: 'string',
+          required: operation.bodyRequired === true,
+          description: 'Request body as JSON string',
+        }
+      }
     }
   }
 
   return defineCommand({
-    meta: { name },
+    meta: { name, description: operation.summary },
     args,
     async run({ args: cmdArgs }) {
       // Extract positionals in path-param order, options from flat args object
@@ -234,7 +270,11 @@ export function buildCommand(
       }
 
       const response = await handler(request)
-      await handleResponse(response, operation)
+      if (responseFormatter) {
+        await responseFormatter(response, operation)
+      } else {
+        await handleResponse(response, operation)
+      }
     },
   })
 }

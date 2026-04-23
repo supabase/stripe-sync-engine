@@ -2,12 +2,11 @@ import { defineSignal, proxyActivities } from '@temporalio/workflow'
 
 import type { SyncActivities } from '../activities/index.js'
 import { retryPolicy } from '../../lib/utils.js'
-import { DesiredStatus } from '../../lib/createSchemas.js'
 import { SourceInputMessage } from '@stripe/sync-protocol'
 
 export const sourceInputSignal = defineSignal<[SourceInputMessage]>('source_input')
-/** Carries the new desired_status value — workflow updates its local state directly. */
-export const desiredStatusSignal = defineSignal<[DesiredStatus]>('desired_status')
+/** Pause or resume the pipeline. true = paused, false = active. */
+export const pausedSignal = defineSignal<[boolean]>('paused')
 
 export const { pipelineSetup, pipelineTeardown } = proxyActivities<SyncActivities>({
   startToCloseTimeout: '2m',

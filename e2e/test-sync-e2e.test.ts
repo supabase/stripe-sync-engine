@@ -40,7 +40,7 @@ describe('test-server sync via Docker service: 10k customers', () => {
           destination: {
             type: 'postgres',
             postgres: {
-              connection_string: harness.destPgContainerUrl(),
+              url: harness.destPgContainerUrl(),
               schema: destSchema,
             },
           },
@@ -53,16 +53,19 @@ describe('test-server sync via Docker service: 10k customers', () => {
       const id = created.id
       expect(id).toMatch(/^pipe_/)
 
-      await pollUntil(async () => {
-        try {
-          const r = await harness.destPool.query(
-            `SELECT count(*)::int AS n FROM "${destSchema}"."customers"`
-          )
-          return r.rows[0].n === harness.expectedIds.length
-        } catch {
-          return false
-        }
-      })
+      await pollUntil(
+        async () => {
+          try {
+            const r = await harness.destPool.query(
+              `SELECT count(*)::int AS n FROM "${destSchema}"."customers"`
+            )
+            return r.rows[0].n === harness.expectedIds.length
+          } catch {
+            return false
+          }
+        },
+        { timeout: 600_000 }
+      )
 
       const { rows } = await harness.destPool.query(
         `SELECT id FROM "${destSchema}"."customers" ORDER BY id`

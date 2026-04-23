@@ -18,10 +18,11 @@
     "test": "vitest"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "googleapis": "^148.0.0",
     "zod": "^4.3.6"

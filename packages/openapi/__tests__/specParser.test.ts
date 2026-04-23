@@ -266,6 +266,70 @@ describe('SpecParser', () => {
     })
   })
 
+  describe('discoverWebhookUpdatableResourceIds', () => {
+    it('discovers resource ids that have create/update/delete webhook events', () => {
+      const parser = new SpecParser()
+      const ids = parser.discoverWebhookUpdatableResourceIds(minimalStripeOpenApiSpec)
+
+      expect(ids).toContain('customer')
+      expect(ids).toContain('plan')
+      expect(ids).toContain('price')
+      expect(ids).toContain('product')
+      expect(ids).toContain('subscription_item')
+      expect(ids).toContain('checkout.session')
+      expect(ids).toContain('radar.early_fraud_warning')
+      expect(ids).toContain('entitlements.active_entitlement')
+      expect(ids).toContain('entitlements.feature')
+      expect(ids).toContain('v2.core.account')
+      expect(ids).toContain('v2.core.event_destination')
+    })
+
+    it('excludes resources that have no create/update/delete webhook events', () => {
+      const parser = new SpecParser()
+      const ids = parser.discoverWebhookUpdatableResourceIds(minimalStripeOpenApiSpec)
+
+      // recipient, exchange_rate, deprecated_widget have no webhook event schemas
+      expect(ids).not.toContain('recipient')
+      expect(ids).not.toContain('exchange_rate')
+      expect(ids).not.toContain('deprecated_widget')
+    })
+
+    it('ignores webhook events that are not create/update/delete', () => {
+      const parser = new SpecParser()
+      const spec: OpenApiSpec = {
+        ...minimalStripeOpenApiSpec,
+        components: {
+          schemas: {
+            ...minimalStripeOpenApiSpec.components?.schemas,
+            customer_no_crud_events: {
+              'x-resourceId': 'customer_no_crud_events',
+              type: 'object',
+              properties: { id: { type: 'string' } },
+            },
+            'customer_no_crud_events.authorized': {
+              'x-stripeEvent': { type: 'customer_no_crud_events.authorized' },
+              type: 'object',
+              properties: {
+                object: { $ref: '#/components/schemas/customer_no_crud_events' },
+              },
+            },
+          },
+        },
+      }
+      const ids = parser.discoverWebhookUpdatableResourceIds(spec)
+      expect(ids).not.toContain('customer_no_crud_events')
+    })
+
+    it('returns empty set when spec has no schemas', () => {
+      const parser = new SpecParser()
+      const spec: OpenApiSpec = {
+        ...minimalStripeOpenApiSpec,
+        components: { schemas: {} },
+      }
+      expect(parser.discoverWebhookUpdatableResourceIds(spec)).toEqual(new Set())
+    })
+  })
+
   describe('auto-discovery via paths (no allowedTables)', () => {
     it('creates tables only for resources with list endpoints', () => {
       const parser = new SpecParser()
@@ -335,6 +399,11 @@ describe('SpecParser', () => {
                 id: { type: 'string' },
               },
             },
+            'person.created': {
+              'x-stripeEvent': { type: 'person.created' },
+              type: 'object' as const,
+              properties: { object: { $ref: '#/components/schemas/person' } },
+            },
           },
         },
       }
@@ -367,6 +436,24 @@ describe('SpecParser', () => {
       expect(tableNames).toEqual(['customers', 'products'])
       expect(tableNames).not.toContain('plans')
       expect(tableNames).not.toContain('subscription_items')
+    })
+
+    it('excludes resources that have a list endpoint but no webhook events', () => {
+      const parser = new SpecParser()
+      // Build a spec where 'product' has a list endpoint but its webhook events are removed
+      const schemasWithoutProductEvents = Object.fromEntries(
+        Object.entries(minimalStripeOpenApiSpec.components?.schemas ?? {}).filter(
+          ([k]) => !k.startsWith('product.')
+        )
+      )
+      const spec: OpenApiSpec = {
+        ...minimalStripeOpenApiSpec,
+        components: { schemas: schemasWithoutProductEvents },
+      }
+      const parsed = parser.parse(spec)
+      const tableNames = parsed.tables.map((t) => t.tableName)
+      expect(tableNames).not.toContain('products')
+      expect(tableNames).toContain('customers')
     })
 
     it('resolves table name aliases from x-resourceId during discovery', () => {

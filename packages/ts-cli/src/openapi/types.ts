@@ -5,6 +5,7 @@ export interface OpenAPISpec {
   components?: {
     schemas?: Record<string, OpenAPISchema>
   }
+  tags?: Array<{ name: string; description?: string }>
   info?: { title?: string; version?: string }
 }
 
@@ -12,6 +13,7 @@ export interface OpenAPIOperation {
   operationId?: string
   tags?: string[]
   summary?: string
+  description?: string
   parameters?: OpenAPIParameter[]
   requestBody?: OpenAPIRequestBody
   responses?: Record<string, OpenAPIResponse>

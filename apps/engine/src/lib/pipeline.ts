@@ -1,6 +1,11 @@
-import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import type { StateStore } from './state-store.js'
-import { logger } from '../logger.js'
+import type {
+  ConfiguredCatalog,
+  DestinationOutput,
+  EofMessage,
+  Message,
+} from '@stripe/sync-protocol'
+import { withoutLogCapture } from '@stripe/sync-logger'
+import { log } from '../logger.js'
 
 // MARK: - enforceCatalog
 
@@ -8,16 +13,16 @@ import { logger } from '../logger.js'
  * Drop messages for streams not in the catalog and apply per-stream field filtering.
  * Passes non-data messages (log, trace, catalog) through unchanged.
  */
-export function enforceCatalog(
+export function enforceCatalog<T extends Message>(
   catalog: ConfiguredCatalog
-): (msgs: AsyncIterable<Message>) => AsyncIterable<Message> {
+): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
   const streamMap = new Map(catalog.streams.map((cs) => [cs.stream.name, cs]))
-  return async function* (messages) {
+  return async function* (messages: AsyncIterable<T>) {
     for await (const msg of messages) {
       if (msg.type === 'record') {
         const cs = streamMap.get(msg.record.stream)
         if (!cs) {
-          logger.error({ stream: msg.record.stream }, 'Unknown stream not in catalog')
+          log.error({ stream: msg.record.stream }, 'Unknown stream not in catalog')
           continue
         }
         const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
@@ -40,7 +45,7 @@ export function enforceCatalog(
         } else {
           const cs = streamMap.get(msg.source_state.stream)
           if (!cs) {
-            logger.error({ stream: msg.source_state.stream }, 'Unknown stream not in catalog')
+            log.error({ stream: msg.source_state.stream }, 'Unknown stream not in catalog')
             continue
           }
           yield msg
@@ -57,20 +62,22 @@ export function enforceCatalog(
 /**
  * Tap stage: logs diagnostics to stderr and passes ALL messages through unchanged.
  */
-export async function* log(messages: AsyncIterable<Message>): AsyncIterable<Message> {
+export async function* tapLog<T extends Message>(messages: AsyncIterable<T>): AsyncIterable<T> {
   for await (const msg of messages) {
-    if (msg.type === 'log') logger[msg.log.level](msg.log.message)
-    else if (msg.type === 'trace') {
-      if (msg.trace.trace_type === 'error') {
-        logger.error(
-          { stream: msg.trace.error.stream, failure_type: msg.trace.error.failure_type },
-          msg.trace.error.message
-        )
-      } else if (msg.trace.trace_type === 'stream_status') {
-        logger.info(
-          { stream: msg.trace.stream_status.stream, status: msg.trace.stream_status.status },
-          'stream_status'
-        )
+    if (msg.type === 'log') {
+      withoutLogCapture(() =>
+        msg.log.data
+          ? log[msg.log.level](msg.log.data, msg.log.message)
+          : log[msg.log.level](msg.log.message)
+      )
+    } else if (msg.type === 'stream_status') {
+      log.debug(
+        { stream: msg.stream_status.stream, status: msg.stream_status.status },
+        'stream_status'
+      )
+    } else if (msg.type === 'connection_status') {
+      if (msg.connection_status.status === 'failed') {
+        log.error({ message: msg.connection_status.message }, 'connection_status: failed')
       }
     }
     yield msg
@@ -93,99 +100,55 @@ export function filterType<T extends Message['type']>(
   }
 }
 
-// MARK: - persistState
-
-/**
- * Tap on DestinationOutput: persists state messages via the provided store,
- * then passes all messages through unchanged.
- */
-export function persistState(
-  store: StateStore
-): (msgs: AsyncIterable<DestinationOutput>) => AsyncIterable<DestinationOutput> {
-  return async function* (messages) {
-    for await (const msg of messages) {
-      if (msg.type === 'source_state') {
-        if (msg.source_state.state_type === 'global') {
-          await store.setGlobal(msg.source_state.data)
-        } else {
-          await store.set(msg.source_state.stream, msg.source_state.data)
-        }
-      }
-      yield msg
-    }
-  }
-}
-
 // MARK: - takeLimits
 
 export interface TakeLimitsOptions {
-  state_limit?: number
   time_limit?: number
+  soft_time_limit?: number
   signal?: AbortSignal
 }
-
-const DEADLINE_BUFFER_MS = 1000
 
 /**
  * Applies stream limits and emits an `eof` terminal message as the final item.
  *
- * - `state_limit`: stop after N state messages (state message boundary)
- * - `time_limit`: two-phase wall-clock deadline:
- *     - **soft** (deadline − 1 s): checked between messages, graceful return
- *     - **hard** (deadline + 1 s): `Promise.race` forces return even if upstream blocks
- *   For short time limits (< 2 s) soft = hard = deadline.
- * - `signal`: external `AbortSignal` (e.g. client disconnect). When aborted the
- *   stream terminates immediately with `reason: 'aborted'`.
+ * - `soft_time_limit`: between-message cooperative deadline. Closes the
+ *   iterator via `return()`, letting upstream `finally` blocks run.
+ * - `time_limit`: hard deadline enforced via `Promise.race`. Forces eof even
+ *   if upstream is blocked.
+ * - `signal`: external `AbortSignal` (e.g. client disconnect). Terminates
+ *   immediately.
  *
  * When multiple limits are set, whichever fires first wins.
- * The last yielded item is always `{ type: 'eof', eof: { reason, ... } }`.
+ * The last yielded item is always `{ type: 'eof', eof: { has_more } }`.
  */
-export function takeLimits<T extends Message>(
+export function takeLimits<T extends { type: string }>(
   opts: TakeLimitsOptions = {}
-): (msgs: AsyncIterable<T>) => AsyncIterable<T> {
+): (msgs: AsyncIterable<T>) => AsyncIterable<T | EofMessage> {
   return async function* (messages) {
     const startedAt = Date.now()
-    let stateCount = 0
 
-    const hasTimeLimit = opts.time_limit != null && opts.time_limit > 0
-    const nominalDeadline = hasTimeLimit ? startedAt + opts.time_limit! * 1000 : undefined
     const softDeadline =
-      nominalDeadline != null
-        ? opts.time_limit! >= 2
-          ? nominalDeadline - DEADLINE_BUFFER_MS
-          : nominalDeadline
+      opts.soft_time_limit != null && opts.soft_time_limit > 0
+        ? startedAt + opts.soft_time_limit * 1000
         : undefined
     const hardDeadline =
-      nominalDeadline != null
-        ? opts.time_limit! >= 2
-          ? nominalDeadline + DEADLINE_BUFFER_MS
-          : nominalDeadline
+      opts.time_limit != null && opts.time_limit > 0
+        ? startedAt + opts.time_limit * 1000
         : undefined
 
     const needsRace = hardDeadline != null || opts.signal != null
+    const needsSlowPath = needsRace || softDeadline != null
 
-    function makeEof(
-      reason: 'complete' | 'state_limit' | 'time_limit' | 'aborted',
-      extra?: { cutoff?: 'soft' | 'hard' }
-    ): T {
-      const eof: Record<string, unknown> = { reason }
-      if (reason === 'time_limit' && extra?.cutoff) eof.cutoff = extra.cutoff
-      if (reason === 'time_limit' || reason === 'aborted') {
-        eof.elapsed_ms = Date.now() - startedAt
-      }
-      return { type: 'eof' as const, eof } as T
+    function makeEof(hasMore: boolean): EofMessage {
+      return { type: 'eof' as const, eof: { has_more: hasMore } } as EofMessage
     }
 
-    // Fast path: no time limit and no signal — simple cooperative loop
-    if (!needsRace) {
+    // Fast path: no limits and no signal — simple cooperative loop
+    if (!needsSlowPath) {
       for await (const msg of messages) {
         yield msg
-        if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof('state_limit')
-          return
-        }
       }
-      yield makeEof('complete')
+      yield makeEof(false)
       return
     }
 
@@ -228,8 +191,8 @@ export function takeLimits<T extends Message>(
         // Check if already aborted before starting the race
         if (opts.signal?.aborted) {
           cleanup()
-          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof('aborted')
+          log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
+          yield makeEof(true)
           await closeIterator()
           return
         }
@@ -257,7 +220,7 @@ export function takeLimits<T extends Message>(
         cleanup()
 
         if (winner.kind === 'hard_deadline') {
-          logger.warn(
+          log.warn(
             {
               elapsed_ms: Date.now() - startedAt,
               time_limit: opts.time_limit,
@@ -265,15 +228,14 @@ export function takeLimits<T extends Message>(
             },
             'SYNC_TIME_LIMIT_HARD'
           )
-          yield makeEof('time_limit', { cutoff: 'hard' })
-          // Fire-and-forget: don't await return() since the iterator may be blocked
+          yield makeEof(true)
           closeIteratorInBackground()
           return
         }
 
         if (winner.kind === 'aborted') {
-          logger.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
-          yield makeEof('aborted')
+          log.warn({ elapsed_ms: Date.now() - startedAt, event: 'SYNC_ABORTED' }, 'SYNC_ABORTED')
+          yield makeEof(true)
           await closeIterator()
           return
         }
@@ -281,31 +243,23 @@ export function takeLimits<T extends Message>(
         // kind === 'next'
         const { result } = winner
         if (result.done) {
-          yield makeEof('complete')
+          yield makeEof(false)
           return
         }
 
         const msg = result.value
         yield msg
 
-        // Check soft deadline between messages
         if (softDeadline != null && Date.now() >= softDeadline) {
-          logger.warn(
+          log.warn(
             {
               elapsed_ms: Date.now() - startedAt,
-              time_limit: opts.time_limit,
+              soft_time_limit: opts.soft_time_limit,
               event: 'SYNC_TIME_LIMIT_SOFT',
             },
             'SYNC_TIME_LIMIT_SOFT'
           )
-          yield makeEof('time_limit', { cutoff: 'soft' })
-          await closeIterator()
-          return
-        }
-
-        // Check state limit
-        if (msg.type === 'source_state' && opts.state_limit && ++stateCount >= opts.state_limit) {
-          yield makeEof('state_limit')
+          yield makeEof(true)
           await closeIterator()
           return
         }
@@ -314,6 +268,54 @@ export function takeLimits<T extends Message>(
       cleanup()
       await closeIterator()
     }
+  }
+}
+
+// MARK: - limitSource
+
+/**
+ * Handle returned by {@link limitSource}. Read `stopped` *after* draining the
+ * iterable to decide whether the upstream stopped because of a limit (used to
+ * set `eof.has_more`).
+ */
+export interface LimitSourceHandle<T> {
+  iterable: AsyncIterable<T>
+  /** True once a limit fired (soft_time_limit, time_limit, or signal). */
+  readonly stopped: boolean
+}
+
+/**
+ * Source-side graceful stop. Wraps {@link takeLimits} and hides its synthetic
+ * terminal `eof` marker — when a limit fires, `stopped` flips true and the
+ * iterable returns done, letting downstream stages (e.g. destination
+ * `write()`) run their `finally` blocks and yield post-teardown messages
+ * naturally (such as flushed state updates).
+ *
+ * Typical usage:
+ *   const gate = limitSource(sourceOutput, { soft_time_limit, signal })
+ *   const destOutput = destination.write(cfg, pipe(gate.iterable, ...))
+ *   for await (const msg of destOutput) { ... }
+ *   // Use gate.stopped to populate eof.has_more
+ */
+export function limitSource<T extends { type: string }>(
+  source: AsyncIterable<T>,
+  opts: TakeLimitsOptions = {}
+): LimitSourceHandle<T> {
+  const state = { stopped: false }
+  async function* gate(): AsyncIterable<T> {
+    for await (const msg of takeLimits<T>(opts)(source)) {
+      if (msg.type === 'eof') {
+        state.stopped = (msg as EofMessage).eof.has_more
+        return
+      }
+      yield msg as T
+    }
+  }
+  return {
+    iterable: gate(),
+    get stopped() {
+      return state.stopped
+    },
   }
 }
 

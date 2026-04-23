@@ -2,7 +2,10 @@ import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest'
 import type { WorkflowClient } from '@temporalio/client'
 import { TestWorkflowEnvironment } from '@temporalio/testing'
 import { Worker } from '@temporalio/worker'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import path from 'node:path'
+import { z } from 'zod'
 import {
   createConnectorResolver,
   sourceTest,
@@ -10,10 +13,11 @@ import {
   type ConnectorResolver,
 } from '@stripe/sync-engine'
 import destinationGoogleSheets from '@stripe/sync-destination-google-sheets'
-import type { SyncActivities, RunResult } from '../temporal/activities/index.js'
+import type { SyncActivities } from '../temporal/activities/index.js'
 import { createApp } from './app.js'
 import { memoryPipelineStore } from '../lib/stores-memory.js'
 import type { PipelineStore } from '../lib/stores.js'
+import type { CheckOutput, Destination, Source } from '@stripe/sync-protocol'
 
 let resolver: ConnectorResolver
 
@@ -27,7 +31,6 @@ beforeAll(async () => {
 // Lightweight app for spec/health tests (no Temporal needed)
 function app() {
   return createApp({
-    temporal: { client: {} as WorkflowClient, taskQueue: 'unused' },
     resolver,
     pipelineStore: memoryPipelineStore(),
   })
@@ -84,14 +87,34 @@ describe('GET /health', () => {
 // ---------------------------------------------------------------------------
 
 const workflowsPath = path.resolve(process.cwd(), 'dist/temporal/workflows')
-const emptyState = { streams: {}, global: {} }
-const noErrors: RunResult = { errors: [], state: emptyState }
+const successEof = {
+  has_more: false,
+  ending_state: {
+    source: { streams: {}, global: {} },
+    destination: { streams: {}, global: {} },
+    engine: { streams: {}, global: {} },
+  },
+  run_progress: {
+    started_at: new Date().toISOString(),
+    elapsed_ms: 100,
+    global_state_count: 1,
+    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    streams: {},
+  },
+  request_progress: {
+    started_at: new Date().toISOString(),
+    elapsed_ms: 100,
+    global_state_count: 1,
+    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    streams: {},
+  },
+}
 
 function stubActivities(): SyncActivities {
   return {
     discoverCatalog: async () => ({ streams: [] }),
     pipelineSetup: async () => ({}),
-    pipelineSync: async () => noErrors,
+    pipelineSync: async () => ({ eof: successEof }),
     pipelineTeardown: async () => {},
     updatePipelineStatus: async () => {},
   }
@@ -128,6 +151,63 @@ function liveApp() {
   })
 }
 
+function createStripeCheckSource(checkImpl: Source['check']): Source<Record<string, unknown>> {
+  return {
+    async *spec() {
+      yield {
+        type: 'spec',
+        spec: {
+          config: z.toJSONSchema(
+            z.object({
+              api_key: z.string(),
+              api_version: z.string(),
+            })
+          ),
+        },
+      }
+    },
+    check: checkImpl,
+    async *discover() {
+      yield { type: 'catalog', catalog: { streams: [] } }
+    },
+    async *read() {},
+  }
+}
+
+function createPostgresCheckDestination(
+  checkImpl: Destination['check']
+): Destination<Record<string, unknown>> {
+  return {
+    async *spec() {
+      yield {
+        type: 'spec',
+        spec: {
+          config: z.toJSONSchema(
+            z.object({
+              url: z.string(),
+              schema: z.string().default('public'),
+            })
+          ),
+        },
+      }
+    },
+    check: checkImpl,
+    async *write() {},
+  }
+}
+
+function mockTemporalClient() {
+  return {
+    start: vi.fn(async () => undefined),
+    getHandle: vi.fn(() => ({
+      signal: vi.fn(async () => undefined),
+      query: vi.fn(async () => ({})),
+      terminate: vi.fn(async () => undefined),
+    })),
+    list: vi.fn(async function* () {}),
+  } as unknown as WorkflowClient & { start: ReturnType<typeof vi.fn> }
+}
+
 /** Poll GET /pipelines/:id until the workflow is queryable (not 404). */
 async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
@@ -143,6 +223,216 @@ async function waitForPipeline(a: ReturnType<typeof liveApp>, id: string, timeou
 }
 
 describe('pipeline CRUD', () => {
+  it('create succeeds without temporal configured', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const pipeline = await res.json()
+    expect(pipeline.id).toMatch(/^pipe_/)
+    expect(await pipelineStore.list()).toHaveLength(1)
+  })
+
+  it('create accepts a caller-provided pipeline id', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'friendly-sync-1',
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const pipeline = await res.json()
+    expect(pipeline.id).toBe('friendly-sync-1')
+    expect((await pipelineStore.get('friendly-sync-1')).id).toBe('friendly-sync-1')
+  })
+
+  it('create rejects duplicate caller-provided pipeline ids', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const body = JSON.stringify({
+      id: 'friendly-sync-1',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+    })
+
+    const first = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+    expect(first.status).toBe(201)
+
+    const second = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      error: 'Pipeline friendly-sync-1 already exists',
+    })
+  })
+
+  it('create validates caller-provided pipeline id format', async () => {
+    const temporalFreeApp = createApp({
+      resolver,
+      pipelineStore: memoryPipelineStore(),
+    })
+
+    const res = await temporalFreeApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'Not Friendly',
+        source: { type: 'test', test: {} },
+        destination: { type: 'test', test: {} },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const payload = await res.json()
+    expect(payload.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['id'],
+        }),
+      ])
+    )
+  })
+
+  it('runs stripe and postgres checks before creating a pipeline', async () => {
+    const stripeCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
+    )
+    const postgresCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
+    )
+    const checkedResolver = await createConnectorResolver({
+      sources: { stripe: createStripeCheckSource(stripeCheck) },
+      destinations: { postgres: createPostgresCheckDestination(postgresCheck) },
+    })
+    const pipelineStore = memoryPipelineStore()
+    const temporalClient = mockTemporalClient()
+    const checkedApp = createApp({
+      temporal: { client: temporalClient, taskQueue: 'test-checks' },
+      resolver: checkedResolver,
+      pipelineStore,
+    })
+
+    const res = await checkedApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          type: 'stripe',
+          stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+        },
+        destination: {
+          type: 'postgres',
+          postgres: { url: 'postgres://localhost/db' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    expect(stripeCheck).toHaveBeenCalledWith({
+      config: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+    })
+    expect(postgresCheck).toHaveBeenCalledWith({
+      config: { url: 'postgres://localhost/db', schema: 'public' },
+    })
+    expect(temporalClient.start).toHaveBeenCalledOnce()
+    expect(await pipelineStore.list()).toHaveLength(1)
+  })
+
+  it('returns 400 and does not create a pipeline when stripe check fails', async () => {
+    const stripeCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'failed' as const, message: 'invalid api key' },
+        }
+      })()
+    )
+    const postgresCheck = vi.fn(() =>
+      (async function* (): AsyncIterable<CheckOutput> {
+        yield {
+          type: 'connection_status',
+          connection_status: { status: 'succeeded' as const },
+        }
+      })()
+    )
+    const checkedResolver = await createConnectorResolver({
+      sources: { stripe: createStripeCheckSource(stripeCheck) },
+      destinations: { postgres: createPostgresCheckDestination(postgresCheck) },
+    })
+    const pipelineStore = memoryPipelineStore()
+    const temporalClient = mockTemporalClient()
+    const checkedApp = createApp({
+      temporal: { client: temporalClient, taskQueue: 'test-checks' },
+      resolver: checkedResolver,
+      pipelineStore,
+    })
+
+    const res = await checkedApp.request('/pipelines', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          type: 'stripe',
+          stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+        },
+        destination: {
+          type: 'postgres',
+          postgres: { url: 'postgres://localhost/db' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'Source check failed (stripe): invalid api key',
+    })
+    expect(temporalClient.start).not.toHaveBeenCalled()
+    expect(await pipelineStore.list()).toEqual([])
+  })
+
   it('create returns full pipeline', async () => {
     const res = await liveApp().request('/pipelines', {
       method: 'POST',
@@ -158,6 +448,242 @@ describe('pipeline CRUD', () => {
     expect(pipeline.id).toMatch(/^pipe_/)
     expect(pipeline.source.type).toBe('test')
     expect(pipeline.destination.type).toBe('test')
+  })
+
+  it('sync applies stream overrides and persists sync_state', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const initialSyncState = {
+      source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    }
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      streams: [{ name: 'original' }],
+      desired_status: 'active',
+      status: 'ready',
+      sync_state: initialSyncState,
+    } as Pipeline)
+
+    let seenPipeline: Record<string, unknown> | undefined
+    let seenState: Record<string, unknown> | undefined
+    let seenQuery: URLSearchParams | undefined
+
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      if (req.method !== 'POST' || url.pathname !== '/pipeline_sync') {
+        res.writeHead(404)
+        res.end('not found')
+        return
+      }
+
+      seenPipeline = JSON.parse(String(req.headers['x-pipeline']))
+      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
+      seenQuery = url.searchParams
+
+      const runProgress = {
+        ...successEof.run_progress,
+        global_state_count: 2,
+      }
+      const endingState = {
+        source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+        destination: {},
+        sync_run: { run_id: 'run_demo', progress: runProgress },
+      }
+
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end(
+        [
+          JSON.stringify({ type: 'progress', progress: runProgress }),
+          JSON.stringify({
+            type: 'eof',
+            eof: {
+              has_more: false,
+              ending_state: endingState,
+              run_progress: runProgress,
+              request_progress: runProgress,
+            },
+          }),
+        ].join('\n') + '\n'
+      )
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const engineUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?run_id=run_demo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ streams: [{ name: 'customers' }] }),
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+
+    expect(seenPipeline).toMatchObject({
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      streams: [{ name: 'customers' }],
+    })
+    expect(seenState).toEqual(initialSyncState)
+    expect(seenQuery?.get('run_id')).toBe('run_demo')
+
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.sync_state).toEqual({
+      source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+      destination: {},
+      sync_run: {
+        run_id: 'run_demo',
+        progress: { ...successEof.run_progress, global_state_count: 2 },
+      },
+    })
+
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve()))
+    )
+  })
+
+  it('sync with reset_state does not read or persist sync_state', async () => {
+    const pipelineStore = memoryPipelineStore()
+    const initialSyncState = {
+      source: { streams: { customers: { cursor: 'cus_initial' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    }
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      desired_status: 'active',
+      status: 'ready',
+      sync_state: initialSyncState,
+    } as Pipeline)
+
+    let seenState: Record<string, unknown> | undefined
+
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      if (req.method !== 'POST' || url.pathname !== '/pipeline_sync') {
+        res.writeHead(404)
+        res.end('not found')
+        return
+      }
+
+      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
+
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.end(
+        JSON.stringify({
+          type: 'eof',
+          eof: {
+            has_more: false,
+            ending_state: {
+              source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+              destination: {},
+              sync_run: { progress: successEof.run_progress },
+            },
+            run_progress: successEof.run_progress,
+            request_progress: successEof.run_progress,
+          },
+        }) + '\n'
+      )
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const engineUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync?reset_state=true', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ streams: [{ name: 'customers' }] }),
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+
+    // reset_state means don't read stored state — engine sees no state
+    expect(seenState).toBeUndefined()
+
+    // But ending state IS still persisted back
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.sync_state).toEqual({
+      source: { streams: { customers: { cursor: 'cus_final' } }, global: {} },
+      destination: {},
+      sync_run: { progress: successEof.run_progress },
+    })
+
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve()))
+    )
+  })
+
+  it('sync runs in-process when engineUrl is not configured', async () => {
+    const pipelineStore = memoryPipelineStore()
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      desired_status: 'active',
+      status: 'ready',
+    } as Pipeline)
+
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('"type":"eof"')
+
+    const updated = await pipelineStore.get('pipe_sync')
+    expect(updated.sync_state).toBeDefined()
+  })
+
+  it('sync emits an error log message when the engine request fails', async () => {
+    const pipelineStore = memoryPipelineStore()
+    await pipelineStore.set('pipe_sync', {
+      id: 'pipe_sync',
+      source: {
+        type: 'stripe',
+        stripe: { api_key: 'sk_test_123', api_version: '2025-03-31.basil' },
+      },
+      destination: {
+        type: 'postgres',
+        postgres: { url: 'postgres://localhost/db', schema: 'public' },
+      },
+      desired_status: 'active',
+      status: 'ready',
+    } as Pipeline)
+
+    const syncApp = createApp({
+      resolver,
+      pipelineStore,
+      engineUrl: 'http://127.0.0.1:1',
+    })
+
+    const res = await syncApp.request('/pipelines/pipe_sync/sync', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('"type":"log"')
+    expect(body).toContain('"level":"error"')
   })
 
   it('update returns updated pipeline with status', async () => {

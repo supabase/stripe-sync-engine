@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ConfiguredCatalog, DestinationOutput, Message } from '@stripe/sync-protocol'
-import { enforceCatalog, filterType, log, persistState, pipe, takeLimits } from './pipeline.js'
-import type { StateStore } from './state-store.js'
+import { enforceCatalog, filterType, tapLog, pipe, takeLimits, limitSource } from './pipeline.js'
 
 vi.mock('../logger.js', () => ({
-  logger: {
+  log: {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
@@ -13,7 +12,7 @@ vi.mock('../logger.js', () => ({
   },
 }))
 
-import { logger } from '../logger.js'
+import { log } from '../logger.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -165,8 +164,8 @@ describe('enforceCatalog()', () => {
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(logger.error).toHaveBeenCalledOnce()
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(log.error).toHaveBeenCalledOnce()
+    expect(log.error).toHaveBeenCalledWith(
       { stream: 'unknown_stream' },
       'Unknown stream not in catalog'
     )
@@ -181,7 +180,7 @@ describe('enforceCatalog()', () => {
     ]
     const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
     expect(result).toHaveLength(0)
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(log.error).toHaveBeenCalledWith(
       { stream: 'nonexistent' },
       'Unknown stream not in catalog'
     )
@@ -203,22 +202,16 @@ describe('enforceCatalog()', () => {
     })
   })
 
-  it('passes non-data messages (log, trace) through unchanged', async () => {
+  it('passes non-data messages (log, connection_status, stream_status) through unchanged', async () => {
     const msgs: Message[] = [
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'complete' },
       },
     ]
     const result = await drain(
@@ -226,8 +219,8 @@ describe('enforceCatalog()', () => {
     )
     expect(result).toHaveLength(3)
     expect(result[0]).toMatchObject({ type: 'log' })
-    expect(result[1]).toMatchObject({ type: 'trace' })
-    expect(result[2]).toMatchObject({ type: 'trace' })
+    expect(result[1]).toMatchObject({ type: 'connection_status' })
+    expect(result[2]).toMatchObject({ type: 'stream_status' })
   })
 })
 
@@ -235,7 +228,7 @@ describe('enforceCatalog()', () => {
 // log()
 // ---------------------------------------------------------------------------
 
-describe('log()', () => {
+describe('tapLog()', () => {
   it('passes all message types through unchanged', async () => {
     const msgs: Message[] = [
       {
@@ -252,67 +245,40 @@ describe('log()', () => {
       },
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'customers', status: 'complete' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'customers', status: 'complete' },
       },
     ]
-    const result = await drain(log(toAsync(msgs)))
+    const result = await drain(tapLog(toAsync(msgs)))
     expect(result).toHaveLength(5)
     expect(result[0]).toMatchObject({ type: 'record' })
     expect(result[1]).toMatchObject({ type: 'source_state' })
     expect(result[2]).toMatchObject({ type: 'log' })
-    expect(result[3]).toMatchObject({ type: 'trace' })
-    expect(result[4]).toMatchObject({ type: 'trace' })
+    expect(result[3]).toMatchObject({ type: 'connection_status' })
+    expect(result[4]).toMatchObject({ type: 'stream_status' })
   })
 
   it('logs log messages via logger at the correct level', async () => {
-    const msgs: Message[] = [{ type: 'log', log: { level: 'warn', message: 'careful' } }]
-    await drain(log(toAsync(msgs)))
-    expect(logger.warn).toHaveBeenCalledWith('careful')
+    const msgs: Message[] = [
+      { type: 'log', log: { level: 'warn', message: 'careful', data: { stream: 'customers' } } },
+    ]
+    await drain(tapLog(toAsync(msgs)))
+    expect(log.warn).toHaveBeenCalledWith({ stream: 'customers' }, 'careful')
   })
 
-  it('logs trace error messages via logger.error', async () => {
+  it('logs top-level stream_status messages via log.debug', async () => {
     const msgs: Message[] = [
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'transient_error', message: 'retry' },
-        },
+        type: 'stream_status',
+        stream_status: { stream: 'orders', status: 'start' },
       },
     ]
-    await drain(log(toAsync(msgs)))
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ failure_type: 'transient_error' }),
-      'retry'
-    )
-  })
-
-  it('logs trace stream_status messages via logger.info', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'trace',
-        trace: {
-          trace_type: 'stream_status',
-          stream_status: { stream: 'orders', status: 'running' },
-        },
-      },
-    ]
-    await drain(log(toAsync(msgs)))
-    expect(logger.info).toHaveBeenCalledWith(
-      { stream: 'orders', status: 'running' },
-      'stream_status'
-    )
+    await drain(tapLog(toAsync(msgs)))
+    expect(log.debug).toHaveBeenCalledWith({ stream: 'orders', status: 'start' }, 'stream_status')
   })
 
   it('does not log record or state messages', async () => {
@@ -330,10 +296,10 @@ describe('log()', () => {
         source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
       },
     ]
-    await drain(log(toAsync(msgs)))
-    expect(logger.info).not.toHaveBeenCalled()
-    expect(logger.error).not.toHaveBeenCalled()
-    expect(logger.warn).not.toHaveBeenCalled()
+    await drain(tapLog(toAsync(msgs)))
+    expect(log.info).not.toHaveBeenCalled()
+    expect(log.error).not.toHaveBeenCalled()
+    expect(log.warn).not.toHaveBeenCalled()
   })
 })
 
@@ -379,11 +345,8 @@ describe('filterType()', () => {
       },
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
     ]
     const result = await drain(filterType('record', 'source_state')(toAsync(msgs)))
@@ -396,11 +359,8 @@ describe('filterType()', () => {
     const msgs: Message[] = [
       { type: 'log', log: { level: 'info', message: 'hello' } },
       {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
+        type: 'connection_status',
+        connection_status: { status: 'failed', message: 'oops' },
       },
     ]
     const result = await drain(filterType('record')(toAsync(msgs)))
@@ -409,194 +369,10 @@ describe('filterType()', () => {
 })
 
 // ---------------------------------------------------------------------------
-// persistState()
-// ---------------------------------------------------------------------------
-
-describe('persistState()', () => {
-  it('calls store.set for stream state messages', async () => {
-    const calls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        calls.push({ stream, data })
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toEqual([{ stream: 'customers', data: { cursor: 'abc' } }])
-  })
-
-  it('yields all messages through unchanged', async () => {
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async () => {},
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'abc' } },
-      },
-      { type: 'log', log: { level: 'info', message: 'done' } },
-    ]
-    const result = await drain(persistState(store)(toAsync(msgs)))
-    expect(result).toHaveLength(2)
-    expect(result[0]).toMatchObject({ type: 'source_state' })
-    expect(result[1]).toMatchObject({ type: 'log' })
-  })
-
-  it('does not call store.set for non-state messages', async () => {
-    const calls: Array<unknown> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (...args) => {
-        calls.push(args)
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      { type: 'log', log: { level: 'info', message: 'hello' } },
-      {
-        type: 'trace',
-        trace: {
-          trace_type: 'error',
-          error: { failure_type: 'system_error', message: 'oops' },
-        },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toHaveLength(0)
-  })
-
-  it('calls store.setGlobal for global state messages', async () => {
-    const globalCalls: unknown[] = []
-    const setCalls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        setCalls.push({ stream, data })
-      },
-      setGlobal: async (data) => {
-        globalCalls.push(data)
-      },
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'global', data: { events_cursor: 'evt_123' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(globalCalls).toEqual([{ events_cursor: 'evt_123' }])
-    expect(setCalls).toHaveLength(0)
-  })
-
-  it('persists multiple state messages in order', async () => {
-    const calls: Array<{ stream: string; data: unknown }> = []
-    const store: StateStore = {
-      get: async () => undefined,
-      set: async (stream, data) => {
-        calls.push({ stream, data })
-      },
-      setGlobal: async () => {},
-    }
-    const msgs: DestinationOutput[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'invoices', data: { cursor: '2' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '3' } },
-      },
-    ]
-    await drain(persistState(store)(toAsync(msgs)))
-    expect(calls).toEqual([
-      { stream: 'customers', data: { cursor: '1' } },
-      { stream: 'invoices', data: { cursor: '2' } },
-      { stream: 'customers', data: { cursor: '3' } },
-    ])
-  })
-})
-
-// ---------------------------------------------------------------------------
 // takeLimits()
 // ---------------------------------------------------------------------------
 
 describe('takeLimits()', () => {
-  it('stops after N state messages and emits eof with state_limit reason', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_2' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 1 })(toAsync(msgs)))
-    expect(result).toHaveLength(3)
-    expect(result[0]).toMatchObject({ type: 'record', record: { data: { id: 'cus_1' } } })
-    expect(result[1]).toMatchObject({
-      type: 'source_state',
-      source_state: { data: { cursor: '1' } },
-    })
-    expect(result[2]).toMatchObject({
-      type: 'eof',
-      eof: { reason: 'state_limit' },
-    })
-  })
-
-  it('emits eof with complete reason when source exhausts', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 5 })(toAsync(msgs)))
-    expect(result).toHaveLength(3)
-    expect(result[2]).toMatchObject({
-      type: 'eof',
-      eof: { reason: 'complete' },
-    })
-  })
-
   it('emits eof complete with no limits set', async () => {
     const msgs: Message[] = [
       {
@@ -606,58 +382,7 @@ describe('takeLimits()', () => {
     ]
     const result = await drain(takeLimits()(toAsync(msgs)))
     expect(result).toHaveLength(2)
-    expect(result[1]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
-  })
-
-  it('counts state messages across multiple streams', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'a' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'products',
-          data: { id: 'prod_1' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'products', data: { cursor: 'b' } },
-      },
-      {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_2' },
-          emitted_at: '2024-01-01T00:00:00.000Z',
-        },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'c' } },
-      },
-    ]
-    const result = await drain(takeLimits({ state_limit: 2 })(toAsync(msgs)))
-    expect(result).toHaveLength(5)
-    expect(result[3]).toMatchObject({
-      type: 'source_state',
-      source_state: { state_type: 'stream', stream: 'products' },
-    })
-    expect(result[4]).toMatchObject({
-      type: 'eof',
-      eof: { reason: 'state_limit' },
-    })
+    expect(result[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
 
   it('stops on time limit at any message boundary (short time_limit)', async () => {
@@ -686,11 +411,11 @@ describe('takeLimits()', () => {
     }
 
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
-    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { reason: 'time_limit' } })
+    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { has_more: true } })
     expect(result.length).toBeLessThanOrEqual(3)
   })
 
-  it('soft cutoff: emits eof with cutoff=soft between messages when deadline-1s crossed', async () => {
+  it('soft_time_limit: stops between messages cooperatively', async () => {
     async function* fastMessages(): AsyncIterable<Message> {
       let i = 0
       while (true) {
@@ -707,18 +432,15 @@ describe('takeLimits()', () => {
     }
 
     const start = Date.now()
-    const result = await drain(takeLimits({ time_limit: 3 })(fastMessages()))
+    const result = await drain(takeLimits({ soft_time_limit: 0.5 })(fastMessages()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'soft' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(1500)
-    expect(eof.eof.elapsed_ms).toBeLessThan(4000)
-    // Soft deadline fires at ~2s (deadline - 1s buffer)
-    expect(elapsed).toBeGreaterThan(1500)
-    expect(elapsed).toBeLessThan(4000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    expect(elapsed).toBeGreaterThanOrEqual(500)
+    expect(elapsed).toBeLessThan(1500)
   })
 
-  it('hard cutoff: forces return when source blocks past deadline+1s', async () => {
+  it('time_limit: hard cutoff forces return even if upstream is blocked', async () => {
     async function* blockingSource(): AsyncIterable<Message> {
       yield {
         type: 'record',
@@ -728,7 +450,6 @@ describe('takeLimits()', () => {
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
       }
-      // Block for 10 seconds — way past the hard deadline
       await new Promise((r) => setTimeout(r, 10_000))
       yield {
         type: 'record',
@@ -741,16 +462,40 @@ describe('takeLimits()', () => {
     }
 
     const start = Date.now()
-    const result = await drain(takeLimits({ time_limit: 2 })(blockingSource()))
+    const result = await drain(takeLimits({ time_limit: 0.5 })(blockingSource()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'time_limit', cutoff: 'hard' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(2000)
-    expect(eof.eof.elapsed_ms).toBeLessThan(5000)
-    // Hard deadline fires at ~3s (deadline + 1s), NOT at 10s
-    expect(elapsed).toBeGreaterThan(2000)
-    expect(elapsed).toBeLessThan(5000)
-  }, 10_000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    expect(elapsed).toBeGreaterThanOrEqual(400)
+    expect(elapsed).toBeLessThan(2000)
+  }, 5_000)
+
+  it('soft and hard together: soft wins when reached first', async () => {
+    async function* fastMessages(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+
+    const start = Date.now()
+    const result = await drain(
+      takeLimits({ soft_time_limit: 0.3, time_limit: 2 })(fastMessages())
+    )
+    const elapsed = Date.now() - start
+    const eof = result.at(-1) as any
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
+    expect(elapsed).toBeGreaterThanOrEqual(300)
+    expect(elapsed).toBeLessThan(1500)
+  })
 
   it('abort signal: terminates immediately when signal is aborted', async () => {
     async function* infiniteSource(): AsyncIterable<Message> {
@@ -775,9 +520,7 @@ describe('takeLimits()', () => {
     const result = await drain(takeLimits({ signal: ac.signal })(infiniteSource()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
-    expect(eof).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
-    expect(eof.eof.elapsed_ms).toBeGreaterThan(300)
-    expect(eof.eof.elapsed_ms).toBeLessThan(2000)
+    expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })
     expect(elapsed).toBeGreaterThan(300)
     expect(elapsed).toBeLessThan(2000)
   })
@@ -797,10 +540,10 @@ describe('takeLimits()', () => {
     ]
     const result = await drain(takeLimits({ signal: ac.signal })(toAsync(msgs)))
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'aborted' } })
+    expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: true } })
   })
 
-  it('elapsed_ms is included in time_limit eof', async () => {
+  it('time_limit eof sets has_more: true', async () => {
     async function* slowMessages(): AsyncIterable<Message> {
       yield {
         type: 'record',
@@ -831,49 +574,71 @@ describe('takeLimits()', () => {
     }
     const result = await drain(takeLimits({ time_limit: 0.03 })(slowMessages()))
     const eof = result.at(-1) as any
-    expect(eof.eof.reason).toBe('time_limit')
-    expect(typeof eof.eof.elapsed_ms).toBe('number')
-    expect(eof.eof.elapsed_ms).toBeGreaterThanOrEqual(0)
-  })
-
-  it('elapsed_ms is NOT included in complete or state_limit eof', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-    ]
-    const completeResult = await drain(takeLimits()(toAsync(msgs)))
-    expect((completeResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
-
-    const limitResult = await drain(takeLimits({ state_limit: 1 })(toAsync(msgs)))
-    expect((limitResult.at(-1) as any).eof.elapsed_ms).toBeUndefined()
-  })
-
-  it('time limit and state limit: whichever fires first wins', async () => {
-    const msgs: Message[] = [
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '2' } },
-      },
-      {
-        type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '3' } },
-      },
-    ]
-    // State limit of 1 fires before any time limit
-    const result = await drain(takeLimits({ state_limit: 1, time_limit: 60 })(toAsync(msgs)))
-    expect(result.at(-1)).toMatchObject({ type: 'eof', eof: { reason: 'state_limit' } })
+    expect(eof.eof.has_more).toBe(true)
   })
 
   it('emits eof for empty stream', async () => {
     const result = await drain(takeLimits()(toAsync([])))
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ type: 'eof', eof: { reason: 'complete' } })
+    expect(result[0]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// limitSource()
+// ---------------------------------------------------------------------------
+
+describe('limitSource()', () => {
+  it('passes messages through and reports stopped=false on natural completion', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1' },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      {
+        type: 'source_state',
+        source_state: { state_type: 'stream', stream: 'customers', data: { cursor: '1' } },
+      },
+    ]
+    const gate = limitSource(toAsync(msgs))
+    const result = await drain(gate.iterable)
+    expect(result).toHaveLength(2)
+    expect(gate.stopped).toBe(false)
+  })
+
+  it('reports stopped=true when a limit fires, and never yields the synthetic eof', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const gate = limitSource<Message>(toAsync([]), { signal: ac.signal })
+    const result = await drain(gate.iterable)
+    expect(result).toHaveLength(0)
+    expect(gate.stopped).toBe(true)
+  })
+
+  it('reports stopped=true when soft_time_limit fires between messages', async () => {
+    async function* fastMessages(): AsyncIterable<Message> {
+      let i = 0
+      while (true) {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: `cus_${++i}` },
+            emitted_at: '2024-01-01T00:00:00.000Z',
+          },
+        }
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+    const gate = limitSource<Message>(fastMessages(), { soft_time_limit: 0.2 })
+    const result = await drain(gate.iterable)
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.every((m) => m.type !== 'eof')).toBe(true)
+    expect(gate.stopped).toBe(true)
   })
 })
 

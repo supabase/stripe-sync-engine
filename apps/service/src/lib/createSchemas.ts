@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ConnectorResolver } from '@stripe/sync-engine'
 import { connectorSchemaName, connectorUnionId } from '@stripe/sync-engine'
-import { EofPayload } from '@stripe/sync-protocol'
+import { SyncState } from '@stripe/sync-protocol'
 
 // MARK: - Pipeline status enums
 
@@ -14,6 +14,16 @@ export const PipelineStatus = z
   .enum(['setup', 'backfill', 'ready', 'paused', 'teardown', 'error'])
   .describe('Workflow-controlled execution state.')
 export type PipelineStatus = z.infer<typeof PipelineStatus>
+
+export const PipelineId = z
+  .string()
+  .min(3)
+  .max(64)
+  .regex(
+    /^[a-zA-Z][a-zA-Z0-9_-]*$/,
+    'Pipeline id must start with a letter and contain only letters, numbers, underscores, or hyphens.'
+  )
+  .describe('Unique pipeline identifier (e.g. pipe_abc123).')
 
 /**
  * Derive user-facing status from the two independent fields.
@@ -102,27 +112,32 @@ export function createSchemas(resolver: ConnectorResolver) {
       : z.object({ type: z.string() }).catchall(z.unknown())
 
   // Composed schemas
-  const Pipeline = z.object({
-    id: z.string().describe('Unique pipeline identifier (e.g. pipe_abc123).'),
-    source: SourceConfig,
-    destination: DestinationConfig,
-    streams: z
-      .array(StreamConfig)
-      .optional()
-      .describe('Selected streams to sync. All streams synced if omitted.'),
-    desired_status: DesiredStatus.default('active').describe(
-      'User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.'
-    ),
-    status: PipelineStatus.default('setup').describe(
-      'Workflow-controlled execution state. Updated by the Temporal workflow.'
-    ),
-    progress: EofPayload.optional().describe(
-      'Latest read-only sync progress snapshot from the engine. ' +
-        'Updated when a bounded sync run completes and safe for dashboards to poll.'
-    ),
-  })
+  const Pipeline = z
+    .object({
+      id: PipelineId,
+      source: SourceConfig,
+      destination: DestinationConfig,
+      streams: z
+        .array(StreamConfig)
+        .optional()
+        .describe('Selected streams to sync. All streams synced if omitted.'),
+      desired_status: DesiredStatus.default('active').describe(
+        'User-controlled lifecycle state. Set via PATCH to pause, resume, or delete.'
+      ),
+      status: PipelineStatus.default('setup').describe(
+        'Workflow-controlled execution state. Updated by the Temporal workflow.'
+      ),
+      sync_state: SyncState.optional().describe(
+        'Latest full sync checkpoint emitted by the engine. ' +
+          'Includes source, destination, and sync-run state for the next request.'
+      ),
+    })
+    .meta({ id: 'Pipeline' })
 
   const CreatePipeline = z.object({
+    id: PipelineId.optional().describe(
+      'Optional pipeline identifier. If omitted, the service generates one (e.g. pipe_abc123).'
+    ),
     source: SourceConfig,
     destination: DestinationConfig,
     streams: z

@@ -4,8 +4,9 @@ import type {
   SpecOutput,
   CheckOutput,
   DiscoverOutput,
-  Message,
+  CoreMessage,
 } from '@stripe/sync-protocol'
+import { log } from '../logger.js'
 
 export const spec = z.object({
   /** Stream definitions: name -> { primary_key? }. Used for catalog discovery only. */
@@ -49,20 +50,15 @@ export const sourceTest = {
   async *read(
     { config }: { config: SourceTestConfig },
     $stdin?: AsyncIterable<unknown>
-  ): AsyncIterable<Message> {
+  ): AsyncIterable<CoreMessage> {
     if (!$stdin) return
     let recordCount = 0
-    for await (const msg of $stdin as AsyncIterable<Message>) {
+    for await (const msg of $stdin as AsyncIterable<CoreMessage>) {
       if (config.auth_error_after != null && recordCount >= config.auth_error_after) {
+        log.error('Simulated auth error')
         yield {
-          type: 'trace' as const,
-          trace: {
-            trace_type: 'error' as const,
-            error: {
-              failure_type: 'auth_error' as const,
-              message: 'Simulated auth error',
-            },
-          },
+          type: 'connection_status' as const,
+          connection_status: { status: 'failed' as const, message: 'Simulated auth error' },
         }
         return
       }

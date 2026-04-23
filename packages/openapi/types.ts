@@ -14,6 +14,7 @@ export type OpenApiSchemaObject = {
   'x-expansionResources'?: {
     oneOf?: OpenApiSchemaOrReference[]
   }
+  'x-stripeEvent'?: { type?: string }
 }
 
 export type OpenApiReferenceObject = {

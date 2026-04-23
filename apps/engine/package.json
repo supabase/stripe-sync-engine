@@ -28,18 +28,23 @@
       "bun": "./src/api/openapi-utils.ts",
       "types": "./dist/api/openapi-utils.d.ts",
       "import": "./dist/api/openapi-utils.js"
+    },
+    "./progress": {
+      "bun": "./src/lib/progress/index.ts",
+      "types": "./dist/lib/progress/index.d.ts",
+      "import": "./dist/lib/progress/index.js"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/__generated__ dist/__generated__",
     "x:watch": "sh -c 'if command -v bun > /dev/null 2>&1; then bun --watch \"$@\"; else tsx --watch --conditions bun \"$@\"; fi' --",
-    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} LOG_PRETTY=${LOG_PRETTY:-true} DANGEROUSLY_VERBOSE_LOGGING=true pnpm x:watch src/bin/serve.ts",
+    "dev": "LOG_LEVEL=${LOG_LEVEL:-trace} pnpm x:watch src/bin/serve.ts",
     "test": "vitest run",
     "generate:types": "openapi-typescript src/__generated__/openapi.json -o src/__generated__/openapi.d.ts"
   },
   "files": [
-    "dist",
-    "src"
+    "src",
+    "dist"
   ],
   "dependencies": {
     "@hono/node-server": "^1",
@@ -47,20 +52,19 @@
     "@stripe/sync-destination-google-sheets": "workspace:*",
     "@stripe/sync-destination-postgres": "workspace:*",
     "@stripe/sync-hono-zod-openapi": "workspace:*",
-    "@stripe/sync-integration-supabase": "workspace:*",
+    "@stripe/sync-logger": "workspace:*",
     "@stripe/sync-protocol": "workspace:*",
     "@stripe/sync-source-stripe": "workspace:*",
-    "@stripe/sync-state-postgres": "workspace:*",
     "@stripe/sync-ts-cli": "workspace:*",
     "@stripe/sync-util-postgres": "workspace:*",
     "citty": "^0.1.6",
     "dotenv": "^16.4.7",
     "googleapis": "^148.0.0",
     "hono": "^4",
+    "ink": "^7.0.1",
     "openapi-fetch": "^0.17.0",
     "pg": "^8.16.3",
-    "pino": "^10",
-    "pino-pretty": "^13",
+    "react": "19.2.5",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -68,6 +72,7 @@
     "@hyperjump/json-schema": "^1.17.5",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.4",
+    "@types/react": "19.2.14",
     "openapi-typescript": "^7.13.0",
     "vitest": "^3.2.4"
   },

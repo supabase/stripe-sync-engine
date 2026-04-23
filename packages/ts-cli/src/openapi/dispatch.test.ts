@@ -86,37 +86,18 @@ describe('buildRequest', () => {
     expect(req.headers.get('x-api-key')).toBe('sk_test_123')
   })
 
-  it('serializes flat body properties as JSON', () => {
+  it('passes --body as NDJSON for body schema', async () => {
     const op: ParsedOperation = {
       ...baseOperation,
       method: 'post',
-      path: '/syncs',
-      bodySchema: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          active: { type: 'boolean' },
-        },
-      },
+      path: '/write',
+      bodySchema: { type: 'string' },
+      ndjsonRequest: true,
     }
-    const req = buildRequest(op, [], { name: 'my sync', active: 'true' })
-    expect(req.headers.get('content-type')).toBe('application/json')
-    return req.json().then((body) => {
-      expect(body).toEqual({ name: 'my sync', active: true })
-    })
-  })
-
-  it('passes --body as raw JSON for complex body', async () => {
-    const op: ParsedOperation = {
-      ...baseOperation,
-      method: 'post',
-      path: '/syncs',
-      bodySchema: { type: 'object' }, // no properties → use --body
-    }
-    const req = buildRequest(op, [], { body: '{"foo":"bar"}' })
-    expect(req.headers.get('content-type')).toBe('application/json')
-    const body = await req.json()
-    expect(body).toEqual({ foo: 'bar' })
+    const req = buildRequest(op, [], { body: '{"type":"record"}\n' })
+    expect(req.headers.get('content-type')).toBe('application/x-ndjson')
+    const text = await req.text()
+    expect(text).toBe('{"type":"record"}\n')
   })
 
   it('uses provided baseUrl', () => {

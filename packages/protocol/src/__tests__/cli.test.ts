@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createConnectorCli } from '../cli.js'
-import type { Source, Destination, ConnectorSpecification, CheckResult } from '../protocol.js'
+import type {
+  Source,
+  Destination,
+  ConnectorSpecification,
+  ConnectionStatusPayload,
+} from '../protocol.js'
 
 const mockSpec: ConnectorSpecification = {
   config: { type: 'object', properties: { api_key: { type: 'string' } } },
@@ -8,7 +13,7 @@ const mockSpec: ConnectorSpecification = {
 
 const mockSource: Source = {
   spec: () => mockSpec,
-  check: async () => ({ status: 'succeeded' }) as CheckResult,
+  check: async () => ({ status: 'succeeded' }) as ConnectionStatusPayload,
   discover: async () => ({ type: 'catalog', streams: [] }),
   async *read() {
     yield {
@@ -28,7 +33,7 @@ const mockSourceWithSetup: Source = {
 
 const mockDestination: Destination = {
   spec: () => mockSpec,
-  check: async () => ({ status: 'succeeded' }) as CheckResult,
+  check: async () => ({ status: 'succeeded' }) as ConnectionStatusPayload,
   async *write(_params, $stdin) {
     for await (const msg of $stdin) {
       if (msg.type === 'source_state') yield msg

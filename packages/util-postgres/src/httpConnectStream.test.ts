@@ -1,7 +1,11 @@
 import net from 'node:net'
 import { once } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createPgHttpConnectStreamFactory, withPgConnectProxy } from './httpConnectStream.js'
+import {
+  createPgHttpConnectStreamFactory,
+  normalizePgSslConfig,
+  withPgConnectProxy,
+} from './httpConnectStream.js'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -11,7 +15,7 @@ describe('withPgConnectProxy', () => {
   it('returns the original config when PG_PROXY_HOST is not set', () => {
     const config = { connectionString: 'postgres://user:pass@localhost:5432/mydb' }
 
-    expect(withPgConnectProxy(config)).toBe(config)
+    expect(withPgConnectProxy(config, {})).toBe(config)
   })
 
   it('adds a stream factory when PG_PROXY_HOST is set', () => {
@@ -22,6 +26,50 @@ describe('withPgConnectProxy', () => {
 
     expect(proxied).not.toBe(config)
     expect(typeof (proxied as { stream?: unknown }).stream).toBe('function')
+  })
+})
+
+describe('normalizePgSslConfig', () => {
+  it('is a no-op when PG_NORMALIZE_SSL is not set', () => {
+    const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=require' }
+    expect(normalizePgSslConfig(config)).toBe(config)
+  })
+
+  it('translates sslmode=require to ssl:{rejectUnauthorized:false} and strips it from the URL', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
+    const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=require' }
+    const result = normalizePgSslConfig(config)
+
+    expect(result.ssl).toEqual({ rejectUnauthorized: false })
+    expect(result.connectionString).not.toContain('sslmode')
+  })
+
+  it('translates sslmode=verify-full to ssl:{rejectUnauthorized:true}', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
+    const config = { connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full' }
+    const result = normalizePgSslConfig(config)
+
+    expect(result.ssl).toEqual({ rejectUnauthorized: true })
+    expect(result.connectionString).not.toContain('sslmode')
+  })
+
+  it('respects explicit ssl when caller provides it alongside connectionString with sslmode', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
+    const explicitSsl = { rejectUnauthorized: false, ca: 'custom-ca' }
+    const config = {
+      connectionString: 'postgres://user:pass@host:5432/mydb?sslmode=verify-full',
+      ssl: explicitSsl,
+    }
+    const result = normalizePgSslConfig(config)
+
+    expect(result.ssl).toBe(explicitSsl)
+    expect(result.connectionString).not.toContain('sslmode')
+  })
+
+  it('returns config unchanged when no connectionString', () => {
+    vi.stubEnv('PG_NORMALIZE_SSL', '1')
+    const config = { host: 'localhost', port: 5432 }
+    expect(normalizePgSslConfig(config)).toEqual(config)
   })
 })
 
