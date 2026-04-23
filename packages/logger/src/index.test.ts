@@ -32,6 +32,7 @@ describe('@stripe/sync-logger', () => {
     runWithLogContext(
       {
         engineRequestId: 'req_123',
+        action_id: 'act_123',
         onLog(entry) {
           entries.push(entry)
         },
@@ -48,6 +49,7 @@ describe('@stripe/sync-logger', () => {
         data: {
           name: 'logger-test',
           engine_request_id: 'req_123',
+          action_id: 'act_123',
           stream: 'customers',
           attempt: 2,
         },
@@ -125,6 +127,7 @@ describe('@stripe/sync-logger', () => {
       })(),
       {
         engineRequestId: 'req_stream',
+        action_id: 'act_stream',
         onLog(entry) {
           entries.push(entry)
         },
@@ -142,6 +145,7 @@ describe('@stripe/sync-logger', () => {
         data: {
           name: 'logger-test',
           engine_request_id: 'req_stream',
+          action_id: 'act_stream',
           stream: 'customers',
         },
       },

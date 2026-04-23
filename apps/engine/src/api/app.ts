@@ -80,7 +80,8 @@ export async function createApp(resolver: ConnectorResolver) {
 
   app.use('*', async (c, next) => {
     const engineRequestId = crypto.randomUUID()
-    await runWithEngineRequestContext({ engineRequestId }, async () => {
+    const action_id = c.req.header('X-Action-Id')?.trim() || undefined
+    await runWithEngineRequestContext({ engineRequestId, action_id }, async () => {
       const start = Date.now()
       log.info({ method: c.req.method, path: c.req.path }, 'request start')
       await next()

@@ -19,6 +19,7 @@ const DEFAULT_REDACT_CENSOR = '[redacted]'
 
 export type LoggerContext = {
   engineRequestId?: string
+  action_id?: string
   onLog?: (entry: RoutedLogEntry) => void
   protocolLogDestinations?: DestinationStream[]
   suppressProtocolStdout?: boolean
@@ -268,6 +269,8 @@ function extractCapturedData(
 
   const engineRequestId = getEngineRequestId()
   if (engineRequestId) data.engine_request_id = engineRequestId
+  const actionId = getLoggerContext()?.action_id
+  if (actionId) data.action_id = actionId
 
   const first = args[0]
   if (first instanceof Error) {
@@ -424,8 +427,12 @@ export function createLogger(
       },
       mixin(...args) {
         const base = userMixin ? userMixin.apply(this, args) : {}
-        const engineRequestId = getEngineRequestId()
-        return engineRequestId ? { ...base, engine_request_id: engineRequestId } : base
+        const context = getLoggerContext()
+        return {
+          ...base,
+          ...(context?.engineRequestId ? { engine_request_id: context.engineRequestId } : {}),
+          ...(context?.action_id ? { action_id: context.action_id } : {}),
+        }
       },
     },
     destination

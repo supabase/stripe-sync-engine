@@ -397,6 +397,7 @@ describe('engine request id header', () => {
     }
 
     const app = await createApp(bridgeResolver)
+    const actionId = 'act_bridge_123'
     const res = await app.request('/pipeline_read', {
       method: 'POST',
       headers: {
@@ -404,6 +405,7 @@ describe('engine request id header', () => {
           source: { type: 'bridge', bridge: {} },
           destination: { type: 'test', test: {} },
         }),
+        'X-Action-Id': actionId,
       },
     })
 
@@ -431,8 +433,120 @@ describe('engine request id header', () => {
         engine_request_id: expect.stringMatching(
           /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
         ),
+        action_id: actionId,
       })
     )
+  })
+
+  it('keeps action ids isolated across concurrent streaming requests', async () => {
+    const bridgeLogger = createLogger({ name: 'bridge-source', level: 'debug' })
+    const bridgeMsg = createSourceMessageFactory<
+      Record<string, never>,
+      Record<string, never>,
+      Record<string, unknown>
+    >()
+
+    let releaseBothReads!: () => void
+    const bothReadsStarted = new Promise<void>((resolve) => {
+      releaseBothReads = resolve
+    })
+    let readCount = 0
+
+    const bridgeSource = {
+      async *spec() {
+        yield { type: 'spec' as const, spec: { config: z.toJSONSchema(z.object({})) } }
+      },
+      async *check() {
+        yield {
+          type: 'connection_status' as const,
+          connection_status: { status: 'succeeded' as const },
+        }
+      },
+      async *discover() {
+        yield {
+          type: 'catalog' as const,
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        bridgeLogger.info('before barrier')
+        readCount += 1
+        if (readCount === 2) releaseBothReads()
+        await bothReadsStarted
+        bridgeLogger.info('after barrier')
+        yield bridgeMsg.record({
+          stream: 'customers',
+          data: { id: `cus_${readCount}` },
+          emitted_at: new Date().toISOString(),
+        })
+      },
+    } satisfies Source<Record<string, never>>
+
+    const destConfigSchema = await getRawConfigJsonSchema(destinationTest)
+    const bridgeResolver: ConnectorResolver = {
+      resolveSource: async () => bridgeSource,
+      resolveDestination: async () => destinationTest,
+      sources: () =>
+        new Map([
+          [
+            'bridge',
+            {
+              connector: bridgeSource,
+              configSchema: {} as any,
+              rawConfigJsonSchema: z.toJSONSchema(z.object({})),
+            },
+          ],
+        ]),
+      destinations: () =>
+        new Map([
+          [
+            'test',
+            {
+              connector: destinationTest,
+              configSchema: {} as any,
+              rawConfigJsonSchema: destConfigSchema,
+            },
+          ],
+        ]),
+    }
+
+    const app = await createApp(bridgeResolver)
+    const actionA = 'act_concurrent_a'
+    const actionB = 'act_concurrent_b'
+    const requestHeaders = (actionId: string) => ({
+      'X-Pipeline': JSON.stringify({
+        source: { type: 'bridge', bridge: {} },
+        destination: { type: 'test', test: {} },
+      }),
+      'X-Action-Id': actionId,
+    })
+
+    const [resA, resB] = await Promise.all([
+      app.request('/pipeline_read', {
+        method: 'POST',
+        headers: requestHeaders(actionA),
+      }),
+      app.request('/pipeline_read', {
+        method: 'POST',
+        headers: requestHeaders(actionB),
+      }),
+    ])
+
+    const [eventsA, eventsB] = await Promise.all([readNdjson<Message>(resA), readNdjson<Message>(resB)])
+
+    const actionIdsA = eventsA
+      .filter((event): event is Extract<Message, { type: 'log' }> => event.type === 'log')
+      .map((event) => event.log.data?.action_id)
+    const actionIdsB = eventsB
+      .filter((event): event is Extract<Message, { type: 'log' }> => event.type === 'log')
+      .map((event) => event.log.data?.action_id)
+
+    expect(actionIdsA).toEqual(expect.arrayContaining([actionA]))
+    expect(actionIdsB).toEqual(expect.arrayContaining([actionB]))
+    expect(actionIdsA.every((actionId) => actionId === actionA)).toBe(true)
+    expect(actionIdsB.every((actionId) => actionId === actionB)).toBe(true)
+    expect(actionIdsA).not.toContain(actionB)
+    expect(actionIdsB).not.toContain(actionA)
   })
 })
 
