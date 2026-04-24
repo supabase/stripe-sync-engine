@@ -243,11 +243,12 @@ export function createDestination(
         ? config.spreadsheet_id
         : await createSpreadsheet(sheets, config.spreadsheet_title)
 
-      // Per-stream state: column headers plus buffered appends/updates.
+      // Per-stream state: column headers plus buffered appends/updates/deletes.
       const streamHeaders = new Map<string, string[]>()
       const sheetIds = new Map<string, number>()
       const appendBuffers = new Map<string, Array<{ row: string[]; rowKey?: string }>>()
       const updateBuffers = new Map<string, Array<{ rowNumber: number; values: string[] }>>()
+      const deleteBuffers = new Map<string, Array<{ rowKey?: string; rowNumber?: number }>>()
       const rowAssignments: Record<string, Record<string, number>> = {}
       // Pending append index: rowKey → index in appendBuffers for O(1) in-batch dedup
       const appendKeyIndex = new Map<string, Map<string, number>>()
@@ -287,6 +288,7 @@ export function createDestination(
           appendBuffers.set(streamName, [])
           appendKeyIndex.set(streamName, new Map())
           updateBuffers.set(streamName, [])
+          deleteBuffers.set(streamName, [])
         }
 
         const next = extendHeaders(headers, cleanData)
@@ -304,21 +306,28 @@ export function createDestination(
         const flushStart = Date.now()
         let totalBufferedAppends = 0
         let totalBufferedUpdates = 0
+        let totalBufferedDeletes = 0
         for (const [, arr] of appendBuffers) totalBufferedAppends += arr.length
         for (const [, arr] of updateBuffers) totalBufferedUpdates += arr.length
+        for (const [, arr] of deleteBuffers) totalBufferedDeletes += arr.length
         log.debug(
           {
             appends: totalBufferedAppends,
             updates: totalBufferedUpdates,
+            deletes: totalBufferedDeletes,
             streams: appendBuffers.size,
           },
           'flushAll start'
         )
 
         const opsByStream = new Map<string, StreamBatchOps>()
-        const streamNames = [...new Set([...appendBuffers.keys(), ...updateBuffers.keys()])]
+        const streamNames = [
+          ...new Set([...appendBuffers.keys(), ...updateBuffers.keys(), ...deleteBuffers.keys()]),
+        ]
 
-        // Only streams with keyed appends need a read-before-flush pass for dedup.
+        // Streams with keyed appends or any deletes need a read-before-flush
+        // pass: appends for dedupe, deletes for rowKey → rowNumber resolution
+        // and last-row-swap donor values.
         type StreamPrep = {
           streamName: string
           sheetId: number
@@ -326,13 +335,22 @@ export function createDestination(
           primaryKey: string[][] | undefined
           appends: Array<{ row: string[]; rowKey?: string }>
           bufferedUpdates: Array<{ rowNumber: number; values: string[] }>
+          bufferedDeletes: Array<{ rowNumber?: number; rowKey?: string }>
           needsRead: boolean
         }
         const prepInputs: StreamPrep[] = []
         for (const streamName of streamNames) {
-          const bufferedAppends = appendBuffers.get(streamName) ?? []
+          const bufferedAppends = (appendBuffers.get(streamName) ?? []).slice()
           const bufferedUpdates = (updateBuffers.get(streamName) ?? []).slice()
-          if (bufferedAppends.length === 0 && bufferedUpdates.length === 0) continue
+          const bufferedDeletes = (deleteBuffers.get(streamName) ?? []).slice()
+
+          if (
+            bufferedAppends.length === 0 &&
+            bufferedUpdates.length === 0 &&
+            bufferedDeletes.length === 0
+          ) {
+            continue
+          }
 
           const sheetId = sheetIds.get(streamName)
           if (sheetId === undefined) continue
@@ -343,15 +361,16 @@ export function createDestination(
             !!primaryKey &&
             primaryKey.length > 0 &&
             headers.length > 0 &&
-            bufferedAppends.some((e) => e.rowKey)
+            (bufferedAppends.some((e) => e.rowKey) || bufferedDeletes.length > 0)
 
           prepInputs.push({
             streamName,
             sheetId,
             headers,
             primaryKey,
-            appends: bufferedAppends.slice(),
+            appends: bufferedAppends,
             bufferedUpdates,
+            bufferedDeletes,
             needsRead,
           })
         }
@@ -365,7 +384,11 @@ export function createDestination(
         for (const prep of prepInputs) {
           if (!prep.needsRead || !prep.primaryKey) continue
           const pkFields = prep.primaryKey.map((p) => p[0])
-          const pkIsFirstN = pkFields.every((field, i) => prep.headers[i] === field)
+          // Tail-swap donor rows need full row values, not just the PK slice;
+          // suppress narrow reads whenever a stream has deletes.
+          const pkIsFirstN =
+            prep.bufferedDeletes.length === 0 &&
+            pkFields.every((field, i) => prep.headers[i] === field)
           narrowByStream.set(prep.streamName, pkIsFirstN)
           streamsToRead.push({
             name: prep.streamName,
@@ -400,7 +423,15 @@ export function createDestination(
         // Per-stream prep from pre-fetched rows. Stream order is preserved
         // so row_assignments tracking matches the previous sequential impl.
         for (const prep of prepInputs) {
-          const { streamName, sheetId, headers, primaryKey, bufferedUpdates, needsRead } = prep
+          const {
+            streamName,
+            sheetId,
+            headers,
+            primaryKey,
+            bufferedUpdates,
+            bufferedDeletes,
+            needsRead,
+          } = prep
           let appends = prep.appends
           let existingRowCount = 0
 
@@ -435,6 +466,118 @@ export function createDestination(
                   },
                   'dedup: converted appends to updates'
                 )
+              }
+
+              // Delete handling. Each delete resolves to a sheet rowNumber;
+              // we then fill those rows in two phases:
+              //   Phase 1 — donate pending appends: overwrite a deleted row
+              //             with an append's values instead of adding that
+              //             append at the bottom.
+              //   Phase 2 — tail-row swap: for surplus deletes, copy the
+              //             sheet's bottom-most surviving rows into the
+              //             deleted slots and blank the donor rows.
+              if (bufferedDeletes.length > 0) {
+                // In-batch reconcile by rowKey: a delete and a pending
+                // append for the same key cancel out — the row isn't in
+                // the sheet yet (we'd be about to append it) and the delete
+                // would immediately overwrite it. Drop both sides.
+                for (let i = bufferedDeletes.length - 1; i >= 0; i--) {
+                  const key = bufferedDeletes[i].rowKey
+                  if (key === undefined) continue
+                  const appendIdx = appends.findIndex((a) => a.rowKey === key)
+                  if (appendIdx >= 0) {
+                    appends.splice(appendIdx, 1)
+                    bufferedDeletes.splice(i, 1)
+                  }
+                }
+
+                const deleteRowNumbers = new Set<number>()
+                for (const entry of bufferedDeletes) {
+                  let rowNumber: number | undefined
+                  if (typeof entry.rowNumber === 'number') rowNumber = entry.rowNumber
+                  else if (entry.rowKey) rowNumber = freshMap.get(entry.rowKey)
+                  // Row 1 is the header row; data rows are [2, existingRowCount].
+                  if (rowNumber !== undefined && rowNumber >= 2 && rowNumber <= existingRowCount) {
+                    deleteRowNumbers.add(rowNumber)
+                  }
+                }
+
+                if (deleteRowNumbers.size > 0) {
+                  const blankRow = new Array<string>(headers.length).fill('')
+                  const deleteList = [...deleteRowNumbers].sort((a, b) => a - b)
+
+                  // Phase 1 — donate pending appends into deleted slots. If
+                  // the donor had a rowKey, record its new home in
+                  // rowAssignments (it no longer lands at the bottom).
+                  let donated = 0
+                  while (donated < deleteList.length && appends.length > 0) {
+                    const targetRow = deleteList[donated]
+                    const donor = appends.shift()!
+                    bufferedUpdates.push({ rowNumber: targetRow, values: donor.row })
+                    if (donor.rowKey) {
+                      rowAssignments[streamName] ??= {}
+                      rowAssignments[streamName][donor.rowKey] = targetRow
+                    }
+                    donated++
+                  }
+
+                  // Phase 2 — surplus deletes pull from the sheet tail.
+                  const remainingDeletes = deleteList.slice(donated)
+                  const K = remainingDeletes.length
+                  let swapped = 0
+                  let blanked = 0
+                  if (K > 0 && !isNarrow) {
+                    const tailStart = existingRowCount - K + 1
+                    const survivorDonors: number[] = []
+                    for (let r = tailStart; r <= existingRowCount; r++) {
+                      if (!deleteRowNumbers.has(r)) survivorDonors.push(r)
+                    }
+                    // Body deletes get a tail survivor's values; |survivors|
+                    // == |body deletes| by construction (both equal K − k
+                    // where k is the count of deletes already in the tail).
+                    const bodyDeletes = remainingDeletes.filter((r) => r < tailStart)
+                    const tailDeletes = remainingDeletes.filter((r) => r >= tailStart)
+                    for (let i = 0; i < bodyDeletes.length; i++) {
+                      const deletedRow = bodyDeletes[i]
+                      const donorRow = survivorDonors[i]
+                      // Full read: row 1 is headers, sheet row R ↔ allRows[R-1].
+                      const donorValues = (allRows[donorRow - 1] ?? []).map((v) =>
+                        v == null ? '' : String(v)
+                      )
+                      bufferedUpdates.push({ rowNumber: deletedRow, values: donorValues })
+                      bufferedUpdates.push({ rowNumber: donorRow, values: blankRow })
+                      swapped++
+                    }
+                    // Deletes already in the trailing range just get cleared.
+                    for (const deletedRow of tailDeletes) {
+                      bufferedUpdates.push({ rowNumber: deletedRow, values: blankRow })
+                      blanked++
+                    }
+                  } else if (K > 0 && isNarrow) {
+                    // Defensive: narrow reads are suppressed for streams
+                    // with deletes, so we shouldn't hit this. Fall back to
+                    // blanking without a tail swap so behavior stays sane.
+                    log.warn(
+                      { streamName, count: K },
+                      'deletes present on narrow-read stream; blanking without swap'
+                    )
+                    for (const rowNumber of remainingDeletes) {
+                      bufferedUpdates.push({ rowNumber, values: blankRow })
+                      blanked++
+                    }
+                  }
+
+                  log.debug(
+                    {
+                      streamName,
+                      deletes: deleteRowNumbers.size,
+                      donatedFromAppends: donated,
+                      swapped,
+                      blanked,
+                    },
+                    'delete handling'
+                  )
+                }
               }
             }
           }
@@ -484,6 +627,7 @@ export function createDestination(
           appendBuffers.set(streamName, [])
           appendKeyIndex.get(streamName)?.clear()
           updateBuffers.set(streamName, [])
+          deleteBuffers.set(streamName, [])
         }
 
         log.info({ durationMs: Date.now() - flushStart }, 'flushAll done')
@@ -517,7 +661,9 @@ export function createDestination(
                   ? serializeRowKey(primaryKey, cleanData)
                   : undefined
 
-            if (rowNumber !== undefined) {
+            if (cleanData['deleted'] === true) {
+              deleteBuffers.get(stream)!.push({ rowKey, rowNumber })
+            } else if (rowNumber !== undefined) {
               // 1. Explicit _row_number (backwards compat with service layer)
               updateBuffers.get(stream)!.push({ rowNumber, values: row })
             } else if (rowKey) {

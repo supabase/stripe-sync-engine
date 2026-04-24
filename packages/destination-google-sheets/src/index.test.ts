@@ -788,6 +788,564 @@ describe('native upsert', () => {
   })
 })
 
+describe('delete handling', () => {
+  const catalogWith = (primaryKey: string[][] = [['id']]): ConfiguredCatalog => ({
+    streams: [
+      {
+        stream: {
+          name: 'customers',
+          primary_key: primaryKey,
+          json_schema: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              deleted: { type: 'boolean' },
+              _account_id: { type: 'string' },
+            },
+          },
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'append',
+      },
+    ],
+  })
+
+  /**
+   * Seed the sheet with N customers `cus_1..cus_N`. Records only carry `id`
+   * and `name`, mirroring what the Stripe source actually emits for
+   * non-delete events. Headers start as `['id', 'name']`; the second write's
+   * `deleted: true` record extends them to `['id', 'name', 'deleted']` on the
+   * fly, which leaves seeded data rows 2-wide and newly-written rows 3-wide.
+   */
+  async function seedCustomers(
+    dest: ReturnType<typeof createDestination>,
+    cat: ConfiguredCatalog,
+    names: Array<[string, string]>
+  ): Promise<void> {
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter(names.map(([id, name]) => record('customers', { id, name })))
+      )
+    )
+  }
+
+  /** Extract the row_assignments meta message from a write() output stream. */
+  function extractRowAssignments(
+    output: DestinationOutput[]
+  ): Record<string, Record<string, number>> {
+    const metaLog = output.find(
+      (m) =>
+        m.type === 'log' &&
+        m.log.level === 'debug' &&
+        typeof m.log.message === 'string' &&
+        m.log.message.startsWith('__sync_engine_google_sheets__:')
+    )
+    if (!metaLog) return {}
+    const parsed = parseGoogleSheetsMetaLog((metaLog as { log: { message: string } }).log.message)
+    return parsed?.assignments ?? {}
+  }
+
+  // MARK: - routing
+
+  it('record with deleted:true is routed to the delete path (no row appended)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // Against an empty sheet, the delete target can't resolve, so the delete
+    // is a silent no-op and the record must not leak into the append path.
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: true })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([['id', 'name', 'deleted']])
+  })
+
+  it('deleted:false is treated as a normal append (strict === true check)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: false })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice', 'false'],
+    ])
+  })
+
+  // MARK: - Phase 2 (tail swap)
+
+  it('body delete, no appends → tail donor swapped into the hole', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+    ])
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_2', name: 'Bob', deleted: true })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    // Seeded rows are 2-wide; blank rows written by delete compaction are
+    // 3-wide because the header was extended on the delete record's arrival.
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice'],
+      ['cus_3', 'Charlie'], // was cus_2; donor (row 4) swapped in
+      ['', '', ''], // donor row blanked
+    ])
+  })
+
+  it('tail delete, no appends → blanked in place, no swap needed', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+    ])
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_3', name: 'Charlie', deleted: true })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['', '', ''],
+    ])
+  })
+
+  it('multiple body deletes → multiple tail-swaps with paired survivors', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_a', 'Alice'],
+      ['cus_b', 'Bob'],
+      ['cus_c', 'Charlie'],
+      ['cus_d', 'Dave'],
+      ['cus_e', 'Eve'],
+    ])
+
+    // Deleting the first two body rows pairs delete-row-2 ↔ donor-row-5 and
+    // delete-row-3 ↔ donor-row-6 (bodyDeletes asc × survivorDonors asc).
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_a', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_b', name: 'Bob', deleted: true }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_d', 'Dave'], // was cus_a; donor (row 5)
+      ['cus_e', 'Eve'], // was cus_b; donor (row 6)
+      ['cus_c', 'Charlie'], // unchanged
+      ['', '', ''],
+      ['', '', ''],
+    ])
+  })
+
+  it('mix of body and tail deletes → body swapped, tail blanked', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_a', 'Alice'],
+      ['cus_b', 'Bob'],
+      ['cus_c', 'Charlie'],
+      ['cus_d', 'Dave'],
+    ])
+
+    // Delete middle (body) + last (tail). Tail survivor row 4 (c) fills row 3;
+    // both donor row 4 and delete-tail row 5 end up blank.
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_b', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_d', name: 'Dave', deleted: true }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_a', 'Alice'],
+      ['cus_c', 'Charlie'], // was cus_b; donor (row 4)
+      ['', '', ''], // donor row 4 blanked
+      ['', '', ''], // tail delete row 5
+    ])
+  })
+
+  it('deleting every data row → all data rows blanked (edge: no survivors)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+    ])
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_3', name: 'Charlie', deleted: true }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['', '', ''],
+      ['', '', ''],
+      ['', '', ''],
+    ])
+  })
+
+  // MARK: - Phase 1 (donation)
+
+  it('single delete + single append → append donates into the hole', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+    ])
+
+    const out = await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: false }),
+        ])
+      )
+    )
+
+    // No tail swap — the pending append fills the deleted slot directly.
+    // Nothing gets blanked, row count is unchanged. The donated append
+    // includes `deleted: false` so its row is 3-wide; the untouched seeded
+    // rows stay 2-wide.
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice'],
+      ['cus_4', 'Dave', 'false'], // donated into cus_2's slot
+      ['cus_3', 'Charlie'],
+    ])
+
+    // Donated append's new home is recorded in row_assignments so the
+    // service layer knows where to find it on the next sync.
+    expect(extractRowAssignments(out)).toEqual({ customers: { '["cus_4"]': 3 } })
+  })
+
+  it('1 delete + 2 appends → one donated, one appended to bottom; both in row_assignments', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+    ])
+
+    const out = await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: false }),
+          record('customers', { id: 'cus_5', name: 'Eve', deleted: false }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice'],
+      ['cus_4', 'Dave', 'false'], // donated into cus_2's slot (row 3)
+      ['cus_3', 'Charlie'],
+      ['cus_5', 'Eve', 'false'], // appended at bottom (row 5)
+    ])
+
+    expect(extractRowAssignments(out)).toEqual({
+      customers: { '["cus_4"]': 3, '["cus_5"]': 5 },
+    })
+  })
+
+  // MARK: - in-batch reconciliation
+
+  it('append and delete of the same rowKey in one batch cancel each other out', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    // Empty sheet — the row was never in the sheet. Append would be wasted,
+    // the subsequent delete would immediately overwrite it: drop both.
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: false }),
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([['id', 'name', 'deleted']])
+  })
+
+  // MARK: - no-ops and edges
+
+  it('delete of a rowKey that is not in the sheet is a silent no-op', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+    ])
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_missing', name: '', deleted: true })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    // The delete record's `deleted: true` extends the header to 3 cols, but
+    // the untouched seeded data rows stay 2-wide.
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+    ])
+  })
+
+  it('delete-only batch (no appends, no updates) still processes the delete', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+    ])
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', deleted: true })])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_2', 'Bob'], // donor (row 3, seeded 2-wide) swapped into row 2
+      ['', '', ''], // row 3 blanked
+    ])
+  })
+
+  // MARK: - cross-cutting
+
+  it('deletes on one stream do not affect rows on a sibling stream', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const multiCat: ConfiguredCatalog = {
+      streams: [
+        catalogWith().streams[0],
+        {
+          stream: {
+            name: 'invoices',
+            primary_key: [['id']],
+            json_schema: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                amount: { type: 'number' },
+                deleted: { type: 'boolean' },
+              },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+      ],
+    }
+
+    // Seed both streams
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: multiCat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: false }),
+          record('customers', { id: 'cus_2', name: 'Bob', deleted: false }),
+          record('invoices', { id: 'inv_1', amount: 100, deleted: false }),
+        ])
+      )
+    )
+
+    // Second write: delete on customers, append on invoices
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: multiCat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('invoices', { id: 'inv_2', amount: 200, deleted: false }),
+        ])
+      )
+    )
+
+    const customers = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(customers).toEqual([
+      ['id', 'name', 'deleted'],
+      ['cus_2', 'Bob', 'false'], // donor swapped in
+      ['', '', ''],
+    ])
+
+    const invoices = getData(getSpreadsheetIds()[0], 'invoices')!
+    expect(invoices).toEqual([
+      ['id', 'amount', 'deleted'],
+      ['inv_1', '100', 'false'], // unaffected by the customers delete
+      ['inv_2', '200', 'false'],
+    ])
+  })
+
+  it('composite primary key — delete resolves on the full key', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith([['id'], ['_account_id']])
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_1',
+            _account_id: 'acct_A',
+            name: 'Alice',
+            deleted: false,
+          }),
+        ])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', {
+            id: 'cus_1',
+            _account_id: 'acct_A',
+            name: 'Alice',
+            deleted: true,
+          }),
+        ])
+      )
+    )
+
+    // Composite rowKey = '["cus_1","acct_A"]' matches the seeded row → tail blanked.
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    expect(rows).toEqual([
+      ['id', '_account_id', 'name', 'deleted'],
+      ['', '', '', ''],
+    ])
+  })
+
+  // MARK: - invariants
+
+  it('scattered deletes still produce a gap-free block of survivors at the top', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat = catalogWith()
+
+    await seedCustomers(dest, cat, [
+      ['cus_1', 'Alice'],
+      ['cus_2', 'Bob'],
+      ['cus_3', 'Charlie'],
+      ['cus_4', 'Dave'],
+      ['cus_5', 'Eve'],
+    ])
+
+    // Delete 3 rows scattered through body and tail: rows 2, 4, 5.
+    // Only row 6 (cus_5) is a tail survivor; it fills body delete at row 2.
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice', deleted: true }),
+          record('customers', { id: 'cus_3', name: 'Charlie', deleted: true }),
+          record('customers', { id: 'cus_4', name: 'Dave', deleted: true }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const dataRows = rows.slice(1) // skip header
+    const nonBlankRows = dataRows.filter((r) => r.some((cell) => cell !== ''))
+    const firstBlankIdx = dataRows.findIndex((r) => r.every((cell) => cell === ''))
+
+    // Invariant: all non-blank rows precede all blank rows — no gaps.
+    expect(firstBlankIdx).toBe(nonBlankRows.length)
+
+    // Spot-check: surviving data is {cus_2, cus_5}; originally 5 rows, 3 deletes → 2 remain.
+    const survivingIds = nonBlankRows.map((r) => r[0]).sort()
+    expect(survivingIds).toEqual(['cus_2', 'cus_5'])
+  })
+})
+
 describe('envVars', () => {
   it('exports env var mapping', () => {
     expect(envVars.client_id).toBe('GOOGLE_CLIENT_ID')
