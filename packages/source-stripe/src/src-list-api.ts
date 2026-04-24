@@ -362,6 +362,10 @@ async function* paginateSequential(opts: {
       if (supportsForwardPagination && supportsLimit) nextParams.limit = 100
       if (supportsForwardPagination) nextParams.starting_after = nextCursor
       prefetchedResponse = listFn(nextParams as Parameters<typeof listFn>[0])
+      // Attach a no-op catch to prevent unhandled rejection when the generator
+      // returns early (e.g. pipeline shutdown via abort signal). The actual error
+      // is still available via the original promise stored in the map.
+      prefetchedResponse.catch(() => {})
     }
 
     log.trace({
