@@ -111,10 +111,13 @@ export interface TakeLimitsOptions {
 /**
  * Applies stream limits and emits an `eof` terminal message as the final item.
  *
- * - `soft_time_limit`: between-message cooperative deadline. Closes the
- *   iterator via `return()`, letting upstream `finally` blocks run.
- * - `time_limit`: hard deadline enforced via `Promise.race`. Forces eof even
- *   if upstream is blocked.
+ * - `soft_time_limit`: wall-clock deadline raced against `iterator.next()`.
+ *   Fires even if the source is idle (no messages in flight). Closes the
+ *   iterator via `return()`, letting upstream `finally` blocks run so the
+ *   destination can flush its buffer.
+ * - `time_limit`: hard deadline also raced via `Promise.race`. Forces eof
+ *   even if upstream is blocked; downstream generators get a cold
+ *   `.return()` rather than a graceful drain.
  * - `signal`: external `AbortSignal` (e.g. client disconnect). Terminates
  *   immediately.
  *
@@ -136,10 +139,10 @@ export function takeLimits<T extends { type: string }>(
         ? startedAt + opts.time_limit * 1000
         : undefined
 
-    const needsRace = hardDeadline != null || opts.signal != null
-    const needsSlowPath = needsRace || softDeadline != null
+    const needsSlowPath = softDeadline != null || hardDeadline != null || opts.signal != null
 
     let iterator: AsyncIterator<T> | undefined
+    let softTimer: ReturnType<typeof setTimeout> | undefined
     let hardTimer: ReturnType<typeof setTimeout> | undefined
     let iteratorClosed = false
 
@@ -175,11 +178,18 @@ export function takeLimits<T extends { type: string }>(
       return
     }
 
-    // Slow path: manual iterator + Promise.race for hard deadline / signal
+    // Slow path: manual iterator + Promise.race for soft/hard deadlines / signal
     iterator = messages[Symbol.asyncIterator]()
 
     function cleanup() {
-      if (hardTimer != null) clearTimeout(hardTimer)
+      if (softTimer != null) {
+        clearTimeout(softTimer)
+        softTimer = undefined
+      }
+      if (hardTimer != null) {
+        clearTimeout(hardTimer)
+        hardTimer = undefined
+      }
     }
 
     async function closeIterator() {
@@ -215,9 +225,19 @@ export function takeLimits<T extends { type: string }>(
         const nextP = iterator.next()
         const racers: Promise<
           | { kind: 'next'; result: IteratorResult<T> }
+          | { kind: 'soft_deadline' }
           | { kind: 'hard_deadline' }
           | { kind: 'aborted' }
         >[] = [nextP.then((result) => ({ kind: 'next' as const, result }))]
+
+        if (softDeadline != null) {
+          const remainingMs = Math.max(0, softDeadline - Date.now())
+          racers.push(
+            new Promise((resolve) => {
+              softTimer = setTimeout(() => resolve({ kind: 'soft_deadline' as const }), remainingMs)
+            })
+          )
+        }
 
         if (hardDeadline != null) {
           const remainingMs = Math.max(0, hardDeadline - Date.now())
@@ -232,6 +252,19 @@ export function takeLimits<T extends { type: string }>(
 
         const winner = await Promise.race(racers)
         cleanup()
+
+        if (winner.kind === 'soft_deadline') {
+          log.warn(
+            {
+              elapsed_ms: Date.now() - startedAt,
+              soft_time_limit: opts.soft_time_limit,
+              event: 'SYNC_TIME_LIMIT_SOFT',
+            },
+            'SYNC_TIME_LIMIT_SOFT'
+          )
+          yield closeIteratorAndMakeEof({ has_more: true })
+          return
+        }
 
         if (winner.kind === 'hard_deadline') {
           log.warn(
@@ -259,21 +292,7 @@ export function takeLimits<T extends { type: string }>(
           return
         }
 
-        const msg = result.value
-        yield msg
-
-        if (softDeadline != null && Date.now() >= softDeadline) {
-          log.warn(
-            {
-              elapsed_ms: Date.now() - startedAt,
-              soft_time_limit: opts.soft_time_limit,
-              event: 'SYNC_TIME_LIMIT_SOFT',
-            },
-            'SYNC_TIME_LIMIT_SOFT'
-          )
-          yield closeIteratorAndMakeEof({ has_more: true })
-          return
-        }
+        yield result.value
       }
     } finally {
       cleanup()

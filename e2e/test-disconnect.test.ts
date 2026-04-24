@@ -471,8 +471,22 @@ for (const runtime of runtimes) {
       await waitForLog(engine, 'SYNC_TIME_LIMIT_SOFT')
     }, 30_000)
 
-    it('hard time limit forces return when source blocks', async () => {
-      // Use a mock with very long delay (5s per page) so the source blocks past the hard deadline
+    it('soft time limit forces return when source blocks', async () => {
+      // Regression test for the soft-limit wall-clock racer: before the fix,
+      // soft_time_limit was only evaluated *after* a yielded message, so a
+      // source blocked on a slow upstream call never triggered it — the hard
+      // deadline had to step in. Now soft fires on wall-clock regardless of
+      // source activity, which is what lets the pipeline stop the source
+      // cooperatively and give the destination a drain window (rather than
+      // being force-terminated by hard).
+      //
+      // This test only has a source (pipeline_read), so the drain itself is
+      // covered by the pipeline.test.ts unit tests. Here we just prove soft
+      // actually fires when the source is blocked end-to-end through the
+      // HTTP boundary.
+      //
+      // time_limit=2 → defaultSoftTimeLimit=0.8*2=1.6s → soft wins against the
+      // 2s hard deadline and against the 5s-per-page blocked source.
       const slowMock = await startMockStripeApi({
         delayMs: 5000,
         port: runtime.name === 'docker' ? 18889 : 0,
@@ -489,7 +503,7 @@ for (const runtime of runtimes) {
         })
         if (!res.ok) {
           const body = await res.text().catch(() => '')
-          console.error(`hard time limit test: pipeline_read returned ${res.status}: ${body}`)
+          console.error(`soft time limit test: pipeline_read returned ${res.status}: ${body}`)
         }
         expect(res.status).toBe(200)
 
@@ -503,11 +517,11 @@ for (const runtime of runtimes) {
 
         expect(eof).toBeDefined()
         expect(eof.eof.has_more).toBe(true)
-        // Hard deadline = 2s + 1s = 3s. Allow generous CI slack.
-        expect(elapsed).toBeGreaterThan(2000)
+        // Soft deadline = 1.6s. Allow generous CI slack on both sides.
+        expect(elapsed).toBeGreaterThan(1600)
         expect(elapsed).toBeLessThan(15000)
 
-        // The key assertion: the response completed in ~3s, NOT in 5s+ (a full page delay).
+        // The key assertion: the response completed in ~1.6s, NOT in 5s+ (a full page delay).
         // The connector may have launched concurrent requests before the hard deadline,
         // so we don't assert request count — we assert elapsed time above.
         const countAtEof = slowMock.requestCount()
@@ -517,7 +531,7 @@ for (const runtime of runtimes) {
         const countAfterWait = slowMock.requestCount()
         expect(countAfterWait - countAtEof).toBeLessThanOrEqual(1)
 
-        await waitForLog(engine, 'SYNC_TIME_LIMIT_HARD')
+        await waitForLog(engine, 'SYNC_TIME_LIMIT_SOFT')
       } finally {
         await slowMock.close()
       }
