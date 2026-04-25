@@ -918,7 +918,7 @@ describe('engine.pipeline_sync() pipeline', () => {
 
     const eof = output.find((m) => m.type === 'eof')!
     expect(eof.eof.ending_state?.sync_run.run_id).toBe('same-run')
-    expect(eof.eof.ending_state?.sync_run.progress?.global_state_count).toBe(4)
+    expect(eof.eof.ending_state?.sync_run.progress?.global_state_count).toBe(3)
     expect(eof.eof.ending_state?.sync_run.progress?.elapsed_ms).toBeGreaterThan(5000)
   })
 

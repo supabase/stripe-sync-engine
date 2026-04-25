@@ -78,7 +78,7 @@ describe('progressReducer — records', () => {
 })
 
 describe('progressReducer — source_state', () => {
-  it('increments global_state_count', () => {
+  it('increments global_state_count only for global state_type', () => {
     let p = createInitialProgress()
     p = progressReducer(
       p,
@@ -87,14 +87,15 @@ describe('progressReducer — source_state', () => {
         source_state: { state_type: 'stream', stream: 'customers', data: {} },
       })
     )
+    expect(p.global_state_count).toBe(0)
     p = progressReducer(
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'global', data: { events_cursor: 1 } },
       })
     )
-    expect(p.global_state_count).toBe(2)
+    expect(p.global_state_count).toBe(1)
   })
 
   it('marks stream as started on first source_state for that stream', () => {
@@ -147,7 +148,7 @@ describe('progressReducer — source_state', () => {
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'global', data: { events_cursor: 1 } },
       })
     )
     expect(p.global_state_count).toBe(0)
@@ -500,7 +501,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'global', data: { events_cursor: 1 } },
         _ts: '2024-01-01T00:00:00.000Z',
       })
     )
@@ -508,7 +509,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'global', data: { events_cursor: 2 } },
         _ts: '2024-01-01T00:00:04.000Z',
       })
     )

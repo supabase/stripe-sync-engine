@@ -166,7 +166,7 @@ describe('stateReducer message events', () => {
     const msg: Message = {
       _ts: TS,
       type: 'source_state',
-      source_state: { state_type: 'stream', stream: 'customers', data: { cursor: 'x' } },
+      source_state: { state_type: 'global', data: { events_cursor: 'evt_1' } },
     }
     const next = stateReducer(state, msg)
     expect(next.sync_run.progress.global_state_count).toBe(1)

@@ -1,6 +1,8 @@
 name: Stripe Database Monitor
 
 on:
+  push:
+    branches: [fix-e2e]
   schedule:
     - cron: '0 * * * *' # Every hour
   workflow_dispatch:
@@ -10,11 +12,21 @@ permissions:
 
 jobs:
   monitor:
-    name: Create DB & monitor sync progress
+    name: E2E — ${{ matrix.env }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: prod
+            api_key: STRIPE_SK_GOLDILOCKS_PROD
+            api_base: https://api.stripe.com
+          - env: qa
+            api_key: STRIPE_SK_GOLDILOCKS_QA
+            api_base: https://qa-api.stripe.com
     env:
-      STRIPE_API_KEY: ${{ secrets.GOLDI_LIVE_KEY }}
+      STRIPE_API_KEY: ${{ secrets[matrix.api_key] }}
 
     steps:
       - name: Checkout repository
@@ -35,11 +47,22 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/stripe.list
           sudo apt-get update -qq && sudo apt-get install -y -qq stripe
 
+      - name: Validate API key
+        run: |
+          if [ -z "$STRIPE_API_KEY" ]; then
+            echo "::error::STRIPE_API_KEY is empty — check that the ${{ matrix.api_key }} secret is set"
+            exit 1
+          fi
+          if ! stripe customers list --limit 1 --api-base ${{ matrix.api_base }} >/dev/null 2>&1; then
+            echo "::error::STRIPE_API_KEY (${{ matrix.api_key }}) is invalid or expired — rotate it in the Stripe Dashboard and update the GitHub secret"
+            exit 1
+          fi
+
       - name: Create Stripe database
         id: create-db
         run: |
           echo "Creating Stripe database..."
-          RESULT=$(stripe databases create --live)
+          RESULT=$(stripe databases create --live --api-base ${{ matrix.api_base }})
 
           DB_ID=$(echo "$RESULT" | grep -oE 'db_[A-Za-z0-9]+' | head -1)
           DB_STRING=$(echo "$RESULT" | grep -oE 'postgresql://[^[:space:]]+')
@@ -71,64 +94,8 @@ jobs:
         env:
           DB_STRING: ${{ steps.create-db.outputs.db_string }}
           DB_ID: ${{ steps.create-db.outputs.db_id }}
-        run: |
-          POLL_INTERVAL=15
-          MAX_POLLS=240
-          PREV_TOTAL=0
-          PREV_TIME=$(date +%s)
-          START_TIME=$PREV_TIME
-
-          for i in $(seq 1 $MAX_POLLS); do
-            STATUS=$(stripe databases retrieve "$DB_ID" 2>&1 | grep -oE 'backfilling|ready|error|failed' | head -1)
-
-            SUM_EXPR=$(psql "$DB_STRING" -t -A -c "
-              SELECT COALESCE(
-                string_agg('(SELECT count(*) FROM public.' || quote_ident(table_name) || ')', ' + '),
-                '0'
-              ) FROM information_schema.tables
-              WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-            " 2>/dev/null || echo "0")
-            TOTAL=$(psql "$DB_STRING" -t -A -c "SELECT $SUM_EXPR" 2>/dev/null || echo "0")
-
-            NOW=$(date +%s)
-            ELAPSED=$((NOW - PREV_TIME))
-            if [ "$ELAPSED" -gt 0 ] && [ "$PREV_TOTAL" -gt 0 ]; then
-              DELTA=$((TOTAL - PREV_TOTAL))
-              RPS=$((DELTA / ELAPSED))
-              echo "[poll $i] status=$STATUS  total_rows=$TOTAL  delta=$DELTA  rows_per_sec=$RPS"
-            else
-              echo "[poll $i] status=$STATUS  total_rows=$TOTAL  (baseline)"
-            fi
-
-            if [ "$STATUS" = "ready" ]; then
-              TOTAL_ELAPSED=$(( NOW - START_TIME ))
-              echo ""
-              echo "Sync complete in ${TOTAL_ELAPSED}s"
-              break
-            fi
-            if [ "$STATUS" = "error" ] || [ "$STATUS" = "failed" ]; then
-              echo "::error::Database entered $STATUS state"
-              exit 1
-            fi
-
-            PREV_TOTAL=$TOTAL
-            PREV_TIME=$NOW
-            sleep $POLL_INTERVAL
-          done
-
-          if [ "$STATUS" != "ready" ]; then
-            echo "::error::Timed out waiting for sync to complete"
-            exit 1
-          fi
-
-          echo ""
-          echo "=== Final table breakdown ==="
-          psql "$DB_STRING" -c "
-            SELECT relname AS table_name, n_live_tup AS row_count
-            FROM pg_stat_user_tables
-            WHERE schemaname = 'public'
-            ORDER BY n_live_tup DESC;
-          "
+          STRIPE_API_BASE: ${{ matrix.api_base }}
+        run: ./scripts/monitor-sync-progress.sh
 
       - name: Sigma validation
         env:
@@ -146,4 +113,4 @@ jobs:
         if: always() && steps.create-db.outputs.db_id
         run: |
           echo "Deleting database ${{ steps.create-db.outputs.db_id }}..."
-          echo "remove StripeDB" | stripe databases delete ${{ steps.create-db.outputs.db_id }}
+          stripe databases delete ${{ steps.create-db.outputs.db_id }} --yes --api-base ${{ matrix.api_base }}

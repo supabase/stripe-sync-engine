@@ -96,7 +96,10 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       const next = {
         ...progress,
         elapsed_ms: elapsedMs,
-        global_state_count: progress.global_state_count + 1,
+        global_state_count:
+          msg.source_state.state_type === 'global'
+            ? progress.global_state_count + 1
+            : progress.global_state_count,
       }
       if (msg.source_state.state_type === 'stream') {
         const stream = msg.source_state.stream

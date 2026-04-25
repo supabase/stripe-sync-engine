@@ -4,8 +4,8 @@
 # Usage:
 #   source scripts/mitmweb-forward-proxy.sh
 #
-# Starts a forward proxy on http://127.0.0.1:8080 with mitmweb UI on
-# http://127.0.0.1:8081 and logs in tmp/mitmweb-forward-proxy-8080.log.
+# Starts a forward proxy on http://127.0.0.1:9080 with mitmweb UI on
+# http://127.0.0.1:9081 and logs in tmp/mitmweb-forward-proxy-9080.log.
 #
 # Requires mitmproxy 12+ for store_streamed_bodies support.
 # Install or upgrade with:
@@ -19,10 +19,10 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   exit 1
 fi
 
-MITM_PROXY="http://127.0.0.1:8080"
-MITM_WEB="http://127.0.0.1:8081"
+MITM_PROXY="http://127.0.0.1:9080"
+MITM_WEB="http://127.0.0.1:9081"
 MITM_CA="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
-MITM_LOG_FILE="tmp/mitmweb-forward-proxy-8080.log"
+MITM_LOG_FILE="tmp/mitmweb-forward-proxy-9080.log"
 MITM_MIN_MAJOR=12
 mkdir -p tmp
 
@@ -83,18 +83,18 @@ _kill_mitmweb_listener() {
 
 _abort_bad_mitmweb || return 1 2>/dev/null || exit 1
 
-if _port_listening 8080 || _port_listening 8081; then
-  _kill_mitmweb_listener 8080 || return 1 2>/dev/null || exit 1
-  _kill_mitmweb_listener 8081 || return 1 2>/dev/null || exit 1
+if _port_listening 9080 || _port_listening 9081; then
+  _kill_mitmweb_listener 9080 || return 1 2>/dev/null || exit 1
+  _kill_mitmweb_listener 9081 || return 1 2>/dev/null || exit 1
   sleep 0.5
 fi
 
-if ! _port_listening 8080; then
+if ! _port_listening 9080; then
   UPSTREAM="${https_proxy:-${http_proxy:-}}"
 
   MITM_ARGS=(
-    --listen-port 8080
-    --web-port 8081
+    --listen-port 9080
+    --web-port 9081
     --no-web-open-browser
     --ssl-insecure
     --set connection_strategy=lazy
@@ -113,12 +113,12 @@ if ! _port_listening 8080; then
   mitmweb "${MITM_ARGS[@]}" >>"$MITM_LOG_FILE" 2>&1 &
 
   for i in $(seq 1 10); do
-    _port_listening 8080 && break
+    _port_listening 9080 && break
     sleep 0.5
   done
 
-  if ! _port_listening 8080; then
-    echo "ERROR: mitmweb failed to start (proxy port 8080)." >&2
+  if ! _port_listening 9080; then
+    echo "ERROR: mitmweb failed to start (proxy port 9080)." >&2
     return 1 2>/dev/null || exit 1
   fi
 
