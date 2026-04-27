@@ -45,3 +45,7 @@ Connectors must emit `LogMessage` or `TraceMessage` during long-running operatio
 ## 11. Stripe polymorphism pattern
 
 Polymorphic objects use `{type, [type]: payload}` where the `type` value names the sub-hash key. This is Stripe's standard API polymorphism pattern (see Trailhead: `api-design/polymorphism-in-the-stripe-api`). Examples: `PipelineConfig.source` uses `{type: 'stripe', stripe: {...}}`, `ControlPayload` uses `{control_type: 'source_config', source_config: {...}}`, `TracePayload` uses `{trace_type: 'error', error: {...}}`.
+
+## 12. Destinations never own `_updated_at`
+
+Source is the single writer; destinations only store and gate. See [DDR-009](./decisions.md#ddr-009-source-synthesised-_updated_at-for-staleness-gating).

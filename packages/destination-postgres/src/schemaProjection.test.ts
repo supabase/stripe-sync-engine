@@ -50,6 +50,14 @@ describe('jsonSchemaToColumns', () => {
     expect(customerCol.expression).toContain('jsonb_typeof')
     expect(customerCol.expression).toContain("->>'id'")
   })
+
+  it('skips _updated_at (kept as a legacy hardcoded timestamptz column, not generated)', () => {
+    const schema = {
+      type: 'object',
+      properties: { _updated_at: { type: 'integer' } },
+    }
+    expect(jsonSchemaToColumns(schema).find((c) => c.name === '_updated_at')).toBeUndefined()
+  })
 })
 
 describe('buildCreateTableWithSchema', () => {
@@ -80,9 +88,14 @@ describe('buildCreateTableWithSchema', () => {
     // No indexes by default (no system_columns with index: true)
     expect(stmts.some((s) => s.includes('CREATE INDEX'))).toBe(false)
 
-    // Trigger
-    expect(stmts.some((s) => s.includes('handle_updated_at'))).toBe(true)
-    expect(stmts.some((s) => s.includes('set_updated_at()'))).toBe(true)
+    // _updated_at keeps its legacy timestamptz shape so existing
+    // deployments don't need a column migration. upsertMany writes the
+    // source-stamped value explicitly per row (DDR-009); the legacy
+    // trigger is dropped, and no new trigger is created.
+    expect(stmts[0]).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
+    expect(stmts.some((s) => s.includes('DROP TRIGGER IF EXISTS handle_updated_at'))).toBe(true)
+    expect(stmts.some((s) => s.includes('CREATE TRIGGER handle_updated_at'))).toBe(false)
+    expect(stmts.some((s) => s.includes('set_updated_at()'))).toBe(false)
   })
 
   it('adds system columns and indexes when system_columns is provided', () => {
@@ -145,6 +158,31 @@ describe('buildCreateTableWithSchema', () => {
     const second = buildCreateTableWithSchema('mydata', 'customers', SAMPLE_JSON_SCHEMA)
     expect(second).toEqual(first)
   })
+
+  it('emits a single _updated_at column even when declared in json_schema.properties', () => {
+    // DDR-009: source declares `_updated_at: {type: 'integer'}` (unix seconds)
+    // on the wire. The destination keeps the legacy hardcoded
+    // `timestamptz NOT NULL DEFAULT now()` shape for backward compat;
+    // jsonSchemaToColumns must skip it to avoid a duplicate generated column.
+    const schemaWithUpdatedAt: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        ...(SAMPLE_JSON_SCHEMA.properties as Record<string, unknown>),
+        _updated_at: { type: 'integer' },
+      },
+    }
+    const stmts = buildCreateTableWithSchema('stripe', 'customers', schemaWithUpdatedAt)
+
+    expect(stmts[0]).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
+    expect(stmts[0]).not.toContain('"_updated_at" bigint')
+    expect(stmts[0]).not.toContain('"_updated_at" timestamptz GENERATED ALWAYS')
+
+    const alter = stmts.find((s) => s.includes('ADD COLUMN IF NOT EXISTS')) ?? ''
+    expect(alter).not.toContain('"_updated_at"')
+
+    const occurrences = (stmts[0].match(/"_updated_at"/g) || []).length
+    expect(occurrences).toBe(1)
+  })
 })
 
 describe('buildCreateTableDDL', () => {
@@ -164,8 +202,9 @@ describe('buildCreateTableDDL', () => {
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "metadata"')
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
 
+    expect(ddl).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
     expect(ddl).toContain('DROP TRIGGER IF EXISTS handle_updated_at')
-    expect(ddl).toContain('CREATE TRIGGER handle_updated_at')
+    expect(ddl).not.toContain('CREATE TRIGGER handle_updated_at')
   })
 
   it('wraps every DDL statement in exception handlers', () => {
@@ -177,9 +216,11 @@ describe('buildCreateTableDDL', () => {
     expect(ddl).toContain('CREATE INDEX')
     expect(ddl).toContain('"_account_id"')
 
-    // Count exception handlers: CREATE TABLE, ALTER, CREATE INDEX, CREATE TRIGGER = 4
+    // Count exception handlers: CREATE TABLE, ALTER, CREATE INDEX = 3.
+    // (DROP TRIGGER IF EXISTS is unwrapped — no CREATE TRIGGER anymore now
+    // that `_updated_at` is a generated column.)
     const exceptionCount = (ddl.match(/EXCEPTION WHEN/g) || []).length
-    expect(exceptionCount).toBe(4)
+    expect(exceptionCount).toBe(3)
   })
 
   it('contains every SQL statement from buildCreateTableWithSchema', () => {

@@ -42,6 +42,7 @@ export const sourceTest = {
       ? Object.entries(config.streams).map(([name, def]) => ({
           name,
           primary_key: def.primary_key ?? [['id']],
+          newer_than_field: '_updated_at',
         }))
       : []
     yield { type: 'catalog', catalog: { streams } }

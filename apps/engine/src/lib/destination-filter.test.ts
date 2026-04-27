@@ -11,7 +11,12 @@ function makeCatalog(
 ): ConfiguredCatalog {
   return {
     streams: streams.map((s) => ({
-      stream: { name: s.name, primary_key: [['id']], json_schema: s.json_schema },
+      stream: {
+        name: s.name,
+        primary_key: [['id']],
+        newer_than_field: '_updated_at',
+        json_schema: s.json_schema,
+      },
       sync_mode: 'full_refresh' as const,
       destination_sync_mode: 'append' as const,
       fields: s.fields,

@@ -66,7 +66,9 @@ export function jsonSchemaToColumns(jsonSchema: Record<string, unknown>): Column
 
   const columns: ColumnDef[] = []
   for (const [name, prop] of Object.entries(properties)) {
-    if (name === 'id') continue // id is always generated from _raw_data
+    if (name === 'id') continue
+    // `_updated_at` is hardcoded below; upsertMany writes it (DDR-009).
+    if (name === '_updated_at') continue
 
     const isExpandableRef = prop['x-expandable-reference'] === true
     const pgType = isExpandableRef ? 'text' : jsonSchemaTypeToPg(prop)
@@ -133,7 +135,7 @@ export function buildCreateTableWithSchema(
     const escapedField = field.replace(/'/g, "''")
     return `${quoteIdent(field)} text GENERATED ALWAYS AS ((_raw_data->>'${escapedField}')::text) STORED`
   })
-
+  // `_updated_at` kept as legacy non-generated timestamptz for BC; upsertMany writes it (DDR-009).
   const columnDefs = [
     '"_raw_data" jsonb NOT NULL',
     '"_last_synced_at" timestamptz',
@@ -162,10 +164,8 @@ export function buildCreateTableWithSchema(
     }
   }
 
-  stmts.push(
-    `DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`,
-    `CREATE TRIGGER handle_updated_at BEFORE UPDATE ON ${quotedSchema}.${quotedTable} FOR EACH ROW EXECUTE FUNCTION ${quotedSchema}.set_updated_at();`
-  )
+  // Drop the legacy trigger; `_updated_at` is now written explicitly by upsertMany.
+  stmts.push(`DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`)
 
   return stmts
 }

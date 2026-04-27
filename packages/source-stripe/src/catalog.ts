@@ -5,8 +5,7 @@ import { parsedTableToJsonSchema } from '@stripe/sync-openapi'
 
 /**
  * Derive a CatalogPayload by merging OpenAPI-parsed tables with registry metadata.
- * Each stream gets json_schema from the parsed OpenAPI spec, with `_account_id`
- * injected so downstream consumers see the full data shape.
+ * `_account_id` (PK) and `_updated_at` (staleness, see DDR-009) are injected into properties.
  */
 export function catalogFromOpenApi(
   tables: ParsedResourceTable[],
@@ -22,6 +21,7 @@ export function catalogFromOpenApi(
       const stream: Stream = {
         name: cfg.tableName,
         primary_key: [['id'], ['_account_id']],
+        newer_than_field: '_updated_at',
         metadata: { resource_name: name },
       }
 
@@ -30,19 +30,17 @@ export function catalogFromOpenApi(
         const properties = (jsonSchema.properties ?? {}) as Record<string, unknown>
         properties._account_id = { type: 'string' }
         jsonSchema.properties = properties
-
+        properties._updated_at = { type: 'integer' }
         const required = Array.isArray(jsonSchema.required) ? [...jsonSchema.required] : []
         if (!required.includes('_account_id')) {
           required.push('_account_id')
         }
+        if (!required.includes('_updated_at')) {
+          required.push('_updated_at')
+        }
         jsonSchema.required = required
 
         stream.json_schema = jsonSchema
-
-        // Only set newer_than_field if the column will actually be projected
-        if (cfg.supportsCreatedFilter && 'updated' in properties) {
-          stream.newer_than_field = 'updated'
-        }
       }
 
       return stream

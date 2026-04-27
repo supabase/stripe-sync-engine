@@ -66,6 +66,7 @@ function makeListFn(
     return {
       data,
       has_more: filtered.length > data.length,
+      responseAt: Math.floor(Date.now() / 1000),
     }
   }
 }
@@ -109,6 +110,7 @@ function buildSyntheticSource(counters: { requests: number }): Source<Record<str
           streams: streamNames.map((name) => ({
             name,
             primary_key: [['id']],
+            newer_than_field: '_updated_at',
           })),
         },
       }

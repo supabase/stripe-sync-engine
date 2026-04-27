@@ -14,19 +14,7 @@ export async function ensureSchema(
 ): Promise<void> {
   const q = quoteIdentifier
   await pool.query(`CREATE SCHEMA IF NOT EXISTS ${q(schema)}`)
-  await pool.query(`
-    CREATE OR REPLACE FUNCTION ${q(schema)}.set_updated_at() RETURNS trigger
-        LANGUAGE plpgsql
-    AS $$
-    BEGIN
-      NEW := jsonb_populate_record(
-        NEW,
-        jsonb_build_object('updated_at', now(), '_updated_at', now())
-      );
-      RETURN NEW;
-    END;
-    $$;
-  `)
+  // No trigger needed; tests either use defaults or destination upsertMany.
 }
 
 export async function ensureObjectTable(
@@ -83,8 +71,7 @@ export async function upsertObjects(
       VALUES ${placeholders.join(', ')}
       ON CONFLICT ("id")
       DO UPDATE SET
-        "_raw_data" = EXCLUDED."_raw_data",
-        "_updated_at" = now()
+        "_raw_data" = EXCLUDED."_raw_data"
     `,
     values
   )

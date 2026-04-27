@@ -49,16 +49,6 @@ beforeAll(async () => {
     if (i === 29) throw new Error('Postgres did not become ready in time')
   }
 
-  // Create the trigger function that destination-postgres expects
-  await pool.query(`
-    CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN
-      NEW := jsonb_populate_record(NEW, jsonb_build_object('updated_at', now(), '_updated_at', now()));
-      RETURN NEW;
-    END;
-    $$;
-  `)
-
   console.log(`\n  Postgres: ${connectionString}`)
 }, 60_000)
 

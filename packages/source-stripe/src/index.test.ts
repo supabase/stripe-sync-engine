@@ -129,10 +129,20 @@ function makeConfig(
 }
 
 /** Build a ConfiguredCatalog from stream specs for tests. */
-function catalog(...streams: Array<{ name: string; primary_key?: string[][] }>): ConfiguredCatalog {
+function catalog(...streams: Array<{ name: string; primary_key?: string[][] }>): {
+  streams: Array<{
+    stream: { name: string; primary_key: string[][]; newer_than_field: string }
+    sync_mode: 'full_refresh'
+    destination_sync_mode: 'overwrite'
+  }>
+} {
   return {
     streams: streams.map((s) => ({
-      stream: { name: s.name, primary_key: s.primary_key },
+      stream: {
+        name: s.name,
+        primary_key: s.primary_key ?? [['id']],
+        newer_than_field: '_updated_at',
+      },
       sync_mode: 'full_refresh' as const,
       destination_sync_mode: 'overwrite' as const,
     })),
@@ -556,7 +566,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1', object: 'customer', name: 'Alice' },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
 
       expect(result).not.toBeNull()
       expect(result!.record.type).toBe('record')
@@ -585,7 +595,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'unknown_1', object: 'unknown_type' },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
       expect(result).toBeNull()
     })
 
@@ -599,7 +609,7 @@ describe('StripeSource', () => {
         dataObject: { object: 'invoice', amount_due: 5000 },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
       expect(result).toBeNull()
     })
 
@@ -613,7 +623,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1', object: 'customer', deleted: true },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
 
       expect(result).not.toBeNull()
       expect(result!.record.record.data).toMatchObject({
@@ -632,7 +642,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'cus_1' },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
       expect(result).toBeNull()
     })
 
@@ -651,7 +661,7 @@ describe('StripeSource', () => {
         dataObject: { id: 'inv_1', object: 'invoice', amount_paid: 1000 },
       })
 
-      const result = fromStripeEvent(event, registry)
+      const result = fromStripeEvent(event, registry, '_updated_at')
 
       expect(result).not.toBeNull()
       expect(result!.record.record.stream).toBe('invoices')
@@ -879,12 +889,17 @@ describe('StripeSource', () => {
         '/v1/test_helpers/test_clocks',
         'only available in testmode',
       ],
-      ['testmode-only resource', 'This object is only available in testmode', '/v1/invoices', 'testmode'],
+      [
+        'testmode-only resource',
+        'This object is only available in testmode',
+        '/v1/invoices',
+        'testmode',
+      ],
       [
         'v2 core accounts in test mode',
         "Accounts v2 isn't available in test mode. Switch to a sandbox to test.",
         '/v2/core/accounts',
-        'isn\'t available in test mode',
+        "isn't available in test mode",
       ],
       [
         'sigma scheduled_query_runs testmode',
@@ -2447,7 +2462,7 @@ describe('StripeSource', () => {
           catalog: {
             streams: [
               {
-                stream: { name: 'customers' },
+                stream: { name: 'customers', newer_than_field: '_updated_at' },
                 time_range: { gte: TEST_RANGE_GTE, lt: TEST_RANGE_LT },
               },
             ],
@@ -2620,7 +2635,10 @@ describe('StripeSource', () => {
       const messages = await collect(
         listApiBackfill({
           catalog: {
-            streams: [{ stream: { name: 'customers' } }, { stream: { name: 'tax_ids' } }],
+            streams: [
+              { stream: { name: 'customers', newer_than_field: '_updated_at' } },
+              { stream: { name: 'tax_ids', newer_than_field: '_updated_at' } },
+            ],
           },
           state: undefined,
           registry,
@@ -2682,7 +2700,10 @@ describe('StripeSource', () => {
       const messagesPromise = collect(
         listApiBackfill({
           catalog: {
-            streams: [{ stream: { name: 'customers' } }, { stream: { name: 'invoices' } }],
+            streams: [
+              { stream: { name: 'customers', newer_than_field: '_updated_at' } },
+              { stream: { name: 'invoices', newer_than_field: '_updated_at' } },
+            ],
           },
           state: undefined,
           registry,

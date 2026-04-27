@@ -95,11 +95,13 @@ function stringify(value: unknown): string {
   return JSON.stringify(value)
 }
 
-/** Check if an error looks transient (rate limit or server error). */
-function isTransient(err: unknown): boolean {
-  if (!(err instanceof Error) || !('code' in err)) return false
-  const code = (err as { code: number }).code
-  return code === 429 || code >= 500
+/** Stale-write check: numeric compare for finite numbers, else lex; empty `existing` always loses. */
+function isStrictlyNewer(incoming: string, existing: string | undefined | null): boolean {
+  if (existing === '' || existing == null) return true
+  const a = Number(incoming)
+  const b = Number(existing)
+  if (Number.isFinite(a) && Number.isFinite(b)) return a > b
+  return incoming > existing
 }
 
 function extendHeaders(
@@ -237,6 +239,10 @@ export function createDestination(
           configuredStream.stream.name,
           configuredStream.stream.primary_key,
         ])
+      )
+
+      const streamNewerThanField = new Map(
+        catalog.streams.map((cs) => [cs.stream.name, cs.stream.newer_than_field])
       )
 
       const spreadsheetId = config.spreadsheet_id
@@ -384,15 +390,20 @@ export function createDestination(
         for (const prep of prepInputs) {
           if (!prep.needsRead || !prep.primaryKey) continue
           const pkFields = prep.primaryKey.map((p) => p[0])
-          // Tail-swap donor rows need full row values, not just the PK slice;
-          // suppress narrow reads whenever a stream has deletes.
-          const pkIsFirstN =
-            prep.bufferedDeletes.length === 0 &&
-            pkFields.every((field, i) => prep.headers[i] === field)
-          narrowByStream.set(prep.streamName, pkIsFirstN)
+          const newerThanField = streamNewerThanField.get(prep.streamName)
+          const newerThanIdx = newerThanField ? prep.headers.indexOf(newerThanField) : -1
+          const pkIsFirstN = pkFields.every((field, i) => prep.headers[i] === field)
+          const canReadPrefix = prep.bufferedDeletes.length === 0 && pkIsFirstN
+          const columnCount =
+            canReadPrefix && newerThanIdx >= 0
+              ? Math.max(pkFields.length, newerThanIdx + 1)
+              : canReadPrefix
+                ? pkFields.length
+                : undefined
+          narrowByStream.set(prep.streamName, columnCount !== undefined)
           streamsToRead.push({
             name: prep.streamName,
-            ...(pkIsFirstN ? { columnCount: pkFields.length } : {}),
+            ...(columnCount ? { columnCount } : {}),
           })
         }
 
@@ -444,11 +455,25 @@ export function createDestination(
               const freshMap = isNarrow
                 ? buildRowMapFromPkColumns(allRows, primaryKey)
                 : buildRowMapFromRows(allRows, headers, primaryKey)
+
+              const newerThanField = streamNewerThanField.get(streamName)
+              const newerThanIdx = newerThanField ? headers.indexOf(newerThanField) : -1
               const remaining: typeof appends = []
               let converted = 0
+              let staleSkipped = 0
               for (const entry of appends) {
                 const existing = entry.rowKey ? freshMap.get(entry.rowKey) : undefined
                 if (existing !== undefined) {
+                  if (newerThanIdx >= 0) {
+                    const existingRow = allRows[isNarrow ? existing - 2 : existing - 1] ?? []
+                    const existingCell = existingRow[newerThanIdx]
+                    const existingValue = existingCell == null ? '' : String(existingCell)
+                    const incomingValue = entry.row[newerThanIdx] ?? ''
+                    if (!isStrictlyNewer(incomingValue, existingValue)) {
+                      staleSkipped++
+                      continue
+                    }
+                  }
                   bufferedUpdates.push({ rowNumber: existing, values: entry.row })
                   converted++
                 } else {
@@ -456,13 +481,14 @@ export function createDestination(
                 }
               }
               appends = remaining
-              if (converted > 0) {
+              if (converted > 0 || staleSkipped > 0) {
                 log.debug(
                   {
                     streamName,
                     existingRows: existingRowCount,
                     keys: freshMap.size,
                     converted,
+                    staleSkipped,
                   },
                   'dedup: converted appends to updates'
                 )
@@ -648,7 +674,16 @@ export function createDestination(
           if (msg.type === 'record') {
             recordCount++
             const { stream, data } = msg.record
-            const cleanData = stripSystemFields(data)
+            const cleanData: Record<string, unknown> = stripSystemFields(data)
+            const newerThanField = streamNewerThanField.get(stream)
+            if (
+              newerThanField !== undefined &&
+              (!(newerThanField in cleanData) || cleanData[newerThanField] === undefined)
+            ) {
+              throw new Error(
+                `stream "${stream}" record missing newer_than_field "${newerThanField}"; source must stamp this field on every record per DDR-009`
+              )
+            }
             const headers = await ensureHeadersForRecord(stream, cleanData)
             const row = headers.map((header) => stringify(cleanData[header]))
             const rowNumber =
@@ -673,6 +708,30 @@ export function createDestination(
               const keyIdx = appendKeyIndex.get(stream)!
               const pendingIdx = keyIdx.get(rowKey)
               if (pendingIdx !== undefined) {
+                if (newerThanField !== undefined) {
+                  const newerThanIdx = headers.indexOf(newerThanField)
+                  const incomingValue = row[newerThanIdx]
+                  const pendingValue = buffer[pendingIdx].row[newerThanIdx]
+                  if (incomingValue === undefined || pendingValue === undefined) {
+                    throw new Error(
+                      `stream "${stream}" record missing newer_than_field "${newerThanField}" (header index ${newerThanIdx}); source must stamp this field on every record per DDR-009`
+                    )
+                  }
+                  if (!isStrictlyNewer(incomingValue, pendingValue)) {
+                    log.debug(
+                      {
+                        stream,
+                        rowKey,
+                        newerThanField,
+                        incomingValue,
+                        pendingValue,
+                      },
+                      'in-batch dedup: ignoring stale record'
+                    )
+                    yield msg
+                    continue
+                  }
+                }
                 buffer[pendingIdx] = { row, rowKey }
               } else {
                 keyIdx.set(rowKey, buffer.length)

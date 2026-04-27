@@ -489,8 +489,8 @@ export function buildRowMapFromRows(
 }
 
 /**
- * Like `buildRowMapFromRows` but for a header-less PK-only slice
- * (see `batchReadSheets` with `columnCount`). Row i → sheet row i + 2.
+ * Like `buildRowMapFromRows` but for a header-less leading-column slice.
+ * Primary key fields must be the first columns. Row i → sheet row i + 2.
  */
 export function buildRowMapFromPkColumns(
   pkRows: unknown[][],
@@ -566,7 +566,7 @@ export interface BatchReadRequest {
  * catalogs (otherwise blows the 300/min read limit). Missing tabs map to
  * empty arrays so callers can always `.get()` safely.
  *
- * With `columnCount` set: response is PK-only, header-less — use with
+ * With `columnCount` set: response is a leading-column, header-less slice — use with
  * {@link buildRowMapFromPkColumns}. Without: whole tab — use with
  * {@link buildRowMapFromRows}.
  */

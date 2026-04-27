@@ -39,7 +39,7 @@ describe('events polling (integration — stripe-mock)', () => {
   const catalog: ConfiguredCatalog = {
     streams: [
       {
-        stream: { name: 'customers', primary_key: [['id']] },
+        stream: { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
         sync_mode: 'incremental',
         destination_sync_mode: 'append_dedup',
       },

@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
 
   const catalog = {
     streams: DEFAULT_SYNC_OBJECTS.map((name) => ({
-      stream: { name, primary_key: [['id']] },
+      stream: { name, primary_key: [['id']], newer_than_field: '_updated_at' },
       sync_mode: 'full_refresh' as const,
       destination_sync_mode: 'append_dedup' as const,
     })),

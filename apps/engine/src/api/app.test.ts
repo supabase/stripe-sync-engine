@@ -355,7 +355,11 @@ describe('engine request id header', () => {
       async *discover() {
         yield {
           type: 'catalog' as const,
-          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
+          },
         }
       },
       async *read() {
@@ -465,7 +469,11 @@ describe('engine request id header', () => {
       async *discover() {
         yield {
           type: 'catalog' as const,
-          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
+          },
         }
       },
       async *read() {

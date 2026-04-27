@@ -11,6 +11,25 @@ import {
 import { applyBatch, MAX_CELLS_PER_SPREADSHEET, readSheet, type StreamBatchOps } from './writer.js'
 import { createMemorySheets } from '../__tests__/memory-sheets.js'
 
+/**
+ * Strip the source-provided `_updated_at` column from a 2D rows array.
+ *
+ * The source stamps every record with `_updated_at` (unix seconds, from
+ * `event.created` for webhooks or the HTTP `Date` header for backfill);
+ * the destination passes the value through verbatim. Most tests don't
+ * care about its exact value and just want to assert on source data;
+ * use this helper at the assertion site to drop the column before
+ * comparing. Tests that exercise the column itself stay in the
+ * `_updated_at column` describe block at the bottom of this file.
+ */
+function stripUpdatedAt(rows: unknown[][] | undefined): unknown[][] {
+  if (!rows || rows.length === 0) return rows ?? []
+  const header = rows[0] as unknown[]
+  const idx = header.indexOf('_updated_at')
+  if (idx < 0) return rows
+  return rows.map((row) => row.filter((_, i) => i !== idx))
+}
+
 /** Collect all output from the destination's write() generator. */
 async function collect(iter: AsyncIterable<DestinationOutput>): Promise<DestinationOutput[]> {
   const out: DestinationOutput[] = []
@@ -24,9 +43,13 @@ async function* toAsyncIter<T>(items: T[]): AsyncIterableIterator<T> {
 }
 
 const now = new Date().toISOString()
+let nextRecordTs = Math.floor(Date.now() / 1000)
 
 function record(stream: string, data: Record<string, unknown>): DestinationInput {
-  return { type: 'record', record: { stream, data, emitted_at: now } }
+  return {
+    type: 'record',
+    record: { stream, data: { _updated_at: nextRecordTs++, ...data }, emitted_at: now },
+  }
 }
 
 function state(stream: string, data: unknown): DestinationInput {
@@ -61,7 +84,7 @@ describe('destination-google-sheets', () => {
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
-    const rows = getData(id, 'users')!
+    const rows = stripUpdatedAt(getData(id, 'users')!)
     expect(rows[0]).toEqual(['id', 'name', 'email'])
     expect(rows[1]).toEqual(['u1', 'Alice', 'alice@test.invalid'])
   })
@@ -81,7 +104,7 @@ describe('destination-google-sheets', () => {
     await collect(dest.write({ config: cfg({ batch_size: 3 }), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
-    const rows = getData(id, 'items')!
+    const rows = stripUpdatedAt(getData(id, 'items')!)
     // header + 5 data rows (batch at 3, then remaining 2 flushed at end)
     expect(rows).toHaveLength(6)
     expect(rows[0]).toEqual(['id'])
@@ -120,7 +143,7 @@ describe('destination-google-sheets', () => {
 
     // All 3 records should be written (flushed at end before state was yielded)
     const id = getSpreadsheetIds()[0]
-    const rows = getData(id, 'orders')!
+    const rows = stripUpdatedAt(getData(id, 'orders')!)
     expect(rows).toHaveLength(4) // header + 3 rows
   })
 
@@ -208,11 +231,11 @@ describe('destination-google-sheets', () => {
 
     const id = getSpreadsheetIds()[0]
 
-    const customerRows = getData(id, 'customers')!
+    const customerRows = stripUpdatedAt(getData(id, 'customers')!)
     expect(customerRows[0]).toEqual(['id', 'name'])
     expect(customerRows).toHaveLength(3) // header + 2
 
-    const invoiceRows = getData(id, 'invoices')!
+    const invoiceRows = stripUpdatedAt(getData(id, 'invoices')!)
     expect(invoiceRows[0]).toEqual(['id', 'amount', 'customer'])
     expect(invoiceRows).toHaveLength(3) // header + 2
   })
@@ -274,6 +297,7 @@ describe('destination-google-sheets', () => {
         stream: {
           name,
           primary_key: [['id']],
+          newer_than_field: '_updated_at',
           json_schema: {
             type: 'object',
             properties: { id: { type: 'string' }, value: { type: 'string' } },
@@ -319,7 +343,7 @@ describe('destination-google-sheets', () => {
     await collect(dest.write({ config: cfg({ batch_size: 100 }), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
-    const rows = getData(id, 'events')!
+    const rows = stripUpdatedAt(getData(id, 'events')!)
     expect(rows).toHaveLength(3) // header + 2 rows
   })
 
@@ -340,7 +364,7 @@ describe('destination-google-sheets', () => {
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
     const id = getSpreadsheetIds()[0]
-    const rows = getData(id, 'types')!
+    const rows = stripUpdatedAt(getData(id, 'types')!)
     expect(rows[1]).toEqual(['hello', '42', 'true', '', '{"nested":true}'])
   })
 
@@ -355,7 +379,9 @@ describe('destination-google-sheets', () => {
 
     await collect(dest.write({ config: cfg(), catalog }, toAsyncIter(messages)))
 
-    const rows = await readSheet(sheets, getSpreadsheetIds()[0], 'test')
+    const rows = stripUpdatedAt(
+      (await readSheet(sheets, getSpreadsheetIds()[0], 'test')) as unknown[][]
+    )
     expect(rows).toEqual([
       ['a', 'b'],
       ['1', '2'],
@@ -419,6 +445,7 @@ describe('check', () => {
           stream: {
             name: 'customers',
             primary_key: [['id']],
+            newer_than_field: '_updated_at',
             json_schema: {
               type: 'object',
               properties: {
@@ -468,7 +495,7 @@ describe('check', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -510,7 +537,7 @@ describe('check', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows[0]).toEqual(['id', 'name', 'email'])
     expect(rows[1]).toEqual(['cus_1', 'Alice'])
     expect(rows[2]).toEqual(['cus_2', 'Bob', 'bob@test.invalid'])
@@ -524,6 +551,7 @@ describe('native upsert', () => {
         stream: {
           name: 'customers',
           primary_key: primaryKey,
+          newer_than_field: '_updated_at',
           json_schema: {
             type: 'object',
             properties: { id: { type: 'string' }, name: { type: 'string' } },
@@ -556,7 +584,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -582,7 +610,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -600,13 +628,13 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg({ batch_size: 1 }), catalog: cat },
         toAsyncIter([
-          record('customers', { id: 'cus_1', name: 'Alice' }),
-          record('customers', { id: 'cus_1', name: 'Alice Updated' }),
+          record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
         ])
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -623,13 +651,13 @@ describe('native upsert', () => {
       dest.write(
         { config: cfg(), catalog: cat },
         toAsyncIter([
-          record('customers', { id: 'cus_1', name: 'Alice' }),
-          record('customers', { id: 'cus_1', name: 'Alice Updated' }),
+          record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1 }),
+          record('customers', { id: 'cus_1', name: 'Alice Updated', _updated_at: 2 }),
         ])
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -660,7 +688,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice Updated'],
@@ -691,8 +719,8 @@ describe('native upsert', () => {
     expect(ids).toHaveLength(2)
     expect(ids[0]).not.toBe(ids[1])
 
-    const rowsA = getData(ids[0], 'customers')!
-    const rowsB = getData(ids[1], 'customers')!
+    const rowsA = stripUpdatedAt(getData(ids[0], 'customers')!)
+    const rowsB = stripUpdatedAt(getData(ids[1], 'customers')!)
     expect(rowsA).toHaveLength(2)
     expect(rowsB).toHaveLength(2)
 
@@ -736,7 +764,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -759,7 +787,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name'],
       ['cus_1', 'Alice'],
@@ -782,7 +810,7 @@ describe('native upsert', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // id should be first column despite being last in the record
     expect(rows[0]).toEqual(['id', 'name', 'email'])
   })
@@ -795,6 +823,7 @@ describe('delete handling', () => {
         stream: {
           name: 'customers',
           primary_key: primaryKey,
+          newer_than_field: '_updated_at',
           json_schema: {
             type: 'object',
             properties: {
@@ -863,7 +892,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([['id', 'name', 'deleted']])
   })
 
@@ -879,7 +908,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice', 'false'],
@@ -906,7 +935,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // Seeded rows are 2-wide; blank rows written by delete compaction are
     // 3-wide because the header was extended on the delete record's arrival.
     expect(rows).toEqual([
@@ -935,7 +964,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -969,7 +998,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_d', 'Dave'], // was cus_a; donor (row 5)
@@ -1004,7 +1033,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_a', 'Alice'],
@@ -1036,7 +1065,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['', '', ''],
@@ -1072,7 +1101,7 @@ describe('delete handling', () => {
     // Nothing gets blanked, row count is unchanged. The donated append
     // includes `deleted: false` so its row is 3-wide; the untouched seeded
     // rows stay 2-wide.
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -1107,7 +1136,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_1', 'Alice'],
@@ -1140,7 +1169,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([['id', 'name', 'deleted']])
   })
 
@@ -1163,7 +1192,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     // The delete record's `deleted: true` extends the header to 3 cols, but
     // the untouched seeded data rows stay 2-wide.
     expect(rows).toEqual([
@@ -1190,7 +1219,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_2', 'Bob'], // donor (row 3, seeded 2-wide) swapped into row 2
@@ -1210,6 +1239,7 @@ describe('delete handling', () => {
           stream: {
             name: 'invoices',
             primary_key: [['id']],
+            newer_than_field: '_updated_at',
             json_schema: {
               type: 'object',
               properties: {
@@ -1248,14 +1278,14 @@ describe('delete handling', () => {
       )
     )
 
-    const customers = getData(getSpreadsheetIds()[0], 'customers')!
+    const customers = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(customers).toEqual([
       ['id', 'name', 'deleted'],
       ['cus_2', 'Bob', 'false'], // donor swapped in
       ['', '', ''],
     ])
 
-    const invoices = getData(getSpreadsheetIds()[0], 'invoices')!
+    const invoices = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'invoices')!)
     expect(invoices).toEqual([
       ['id', 'amount', 'deleted'],
       ['inv_1', '100', 'false'], // unaffected by the customers delete
@@ -1297,7 +1327,7 @@ describe('delete handling', () => {
     )
 
     // Composite rowKey = '["cus_1","acct_A"]' matches the seeded row → tail blanked.
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     expect(rows).toEqual([
       ['id', '_account_id', 'name', 'deleted'],
       ['', '', '', ''],
@@ -1332,7 +1362,7 @@ describe('delete handling', () => {
       )
     )
 
-    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
     const dataRows = rows.slice(1) // skip header
     const nonBlankRows = dataRows.filter((r) => r.some((cell) => cell !== ''))
     const firstBlankIdx = dataRows.findIndex((r) => r.every((cell) => cell === ''))
@@ -1544,12 +1574,274 @@ describe('applyBatch cell-count limit', () => {
       (m) => m.type === 'connection_status' && m.connection_status.status === 'failed'
     )
     expect(failure).toBeDefined()
-    expect((failure as { connection_status: { message: string } }).connection_status.message).toMatch(
-      /cell-per-spreadsheet limit/
-    )
+    expect(
+      (failure as { connection_status: { message: string } }).connection_status.message
+    ).toMatch(/cell-per-spreadsheet limit/)
   })
 
   it('exports MAX_CELLS_PER_SPREADSHEET as 10 million', () => {
     expect(MAX_CELLS_PER_SPREADSHEET).toBe(10_000_000)
+  })
+})
+
+describe('newer_than_field stale write prevention', () => {
+  // Mirrors destination-postgres' newer_than_field suite. The Sheets path
+  // gates conversions from append → update by comparing the incoming
+  // record's timestamp against the existing sheet row's value.
+  const newerThanCatalog: ConfiguredCatalog = {
+    streams: [
+      {
+        stream: {
+          name: 'customers',
+          primary_key: [['id']],
+          json_schema: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              updated: { type: 'integer' },
+            },
+          },
+          newer_than_field: 'updated',
+        },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'append',
+      },
+    ],
+  }
+
+  it('fails loud when an incoming record is missing newer_than_field', async () => {
+    const { sheets } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    const output = await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice' })])
+      )
+    )
+
+    expect(output).toContainEqual({
+      type: 'connection_status',
+      connection_status: {
+        status: 'failed',
+        message:
+          'stream "customers" record missing newer_than_field "updated"; source must stamp this field on every record per DDR-009',
+      },
+    })
+  })
+
+  it('skips upsert when incoming record is older than existing (across batches)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 })])
+      )
+    )
+
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
+    expect(rows).toEqual([
+      ['id', 'name', 'updated'],
+      ['cus_1', 'Alice v2', '200'],
+    ])
+  })
+
+  it('applies upsert when incoming record is newer than existing (across batches)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 })])
+      )
+    )
+
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
+    expect(rows).toEqual([
+      ['id', 'name', 'updated'],
+      ['cus_1', 'Alice v2', '200'],
+    ])
+  })
+
+  it('in-batch newer-then-older — older record is dropped', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
+          record('customers', { id: 'cus_1', name: 'Alice v1 (stale)', updated: 100 }),
+        ])
+      )
+    )
+
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
+    expect(rows).toEqual([
+      ['id', 'name', 'updated'],
+      ['cus_1', 'Alice v2', '200'],
+    ])
+  })
+
+  it('in-batch older-then-newer — newer record replaces pending entry', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 }),
+          record('customers', { id: 'cus_1', name: 'Alice v2', updated: 200 }),
+        ])
+      )
+    )
+
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
+    expect(rows).toEqual([
+      ['id', 'name', 'updated'],
+      ['cus_1', 'Alice v2', '200'],
+    ])
+  })
+
+  it('legacy row with empty updated cell — incoming update applies (missing-as-oldest)', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    // Seed a "legacy" row that predates newer_than_field — its `updated`
+    // cell is an empty string. The incoming record (any timestamp) should
+    // still be applied because the existing value can't gate against it.
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice legacy', updated: '' })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: newerThanCatalog },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice v1', updated: 100 })])
+      )
+    )
+
+    const rows = stripUpdatedAt(getData(getSpreadsheetIds()[0], 'customers')!)
+    expect(rows).toEqual([
+      ['id', 'name', 'updated'],
+      ['cus_1', 'Alice v1', '100'],
+    ])
+  })
+})
+
+describe('_updated_at column (source-owned, passthrough)', () => {
+  // The Stripe source stamps `_updated_at`; Sheets passes it through and
+  // uses it for stale-write gating, but never invents its own timestamp.
+  it('only writes a _updated_at column when the source provides the value', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog },
+        toAsyncIter([
+          {
+            type: 'record',
+            record: {
+              stream: 'users',
+              data: { id: 'u1', name: 'Alice' },
+              emitted_at: now,
+            },
+          },
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'users')!
+    expect(rows[0]).toEqual(['id', 'name'])
+    expect(rows[0]).not.toContain('_updated_at')
+  })
+
+  it('passes the source-provided _updated_at through verbatim', async () => {
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog },
+        toAsyncIter([
+          record('users', { id: 'u1', name: 'Alice', _updated_at: 1700000000 }),
+          record('users', { id: 'u2', name: 'Bob', _updated_at: 1700000005 }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'users')!
+    const updatedAtIdx = (rows[0] as string[]).indexOf('_updated_at')
+    expect(updatedAtIdx).toBeGreaterThanOrEqual(0)
+    expect(rows.slice(1).map((r) => String(r[updatedAtIdx]))).toEqual(['1700000000', '1700000005'])
+  })
+
+  it('does not refresh _updated_at on its own when the row is updated', async () => {
+    // Without a source-provided value on the second write, the cell
+    // stays as whatever was originally written. The destination must
+    // not invent a new timestamp.
+    const { sheets, getData, getSpreadsheetIds } = createMemorySheets()
+    const dest = createDestination(sheets)
+    const cat: ConfiguredCatalog = {
+      streams: [
+        {
+          stream: {
+            name: 'customers',
+            primary_key: [['id']],
+            newer_than_field: '_updated_at',
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, name: { type: 'string' } },
+            },
+          },
+          sync_mode: 'full_refresh',
+          destination_sync_mode: 'append',
+        },
+      ],
+    }
+
+    await collect(
+      dest.write(
+        { config: cfg(), catalog: cat },
+        toAsyncIter([record('customers', { id: 'cus_1', name: 'Alice', _updated_at: 1700000000 })])
+      )
+    )
+
+    await collect(
+      dest.write(
+        { config: cfg({ spreadsheet_id: getSpreadsheetIds()[0] }), catalog: cat },
+        toAsyncIter([
+          record('customers', { id: 'cus_1', name: 'Alice v2', _updated_at: 1700000010 }),
+        ])
+      )
+    )
+
+    const rows = getData(getSpreadsheetIds()[0], 'customers')!
+    const updatedAtIdx = (rows[0] as string[]).indexOf('_updated_at')
+    expect(String(rows[1][updatedAtIdx])).toBe('1700000010')
   })
 })

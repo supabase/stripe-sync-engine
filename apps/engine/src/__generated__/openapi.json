@@ -1094,8 +1094,8 @@
                       "additionalProperties": {}
                     },
                     "newer_than_field": {
-                      "description": "Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. \"updated\").",
-                      "type": "string"
+                      "type": "string",
+                      "description": "Field whose value increases monotonically. Destination uses it to skip stale writes (e.g. \"updated\")."
                     },
                     "soft_delete_field": {
                       "description": "Field in record data that signals a soft delete (e.g. \"deleted\"). Destination uses this to classify upserts as deletes when the field is truthy.",
@@ -1104,7 +1104,8 @@
                   },
                   "required": [
                     "name",
-                    "primary_key"
+                    "primary_key",
+                    "newer_than_field"
                   ],
                   "description": "A named collection of records — analogous to a table or API resource."
                 },

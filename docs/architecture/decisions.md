@@ -71,3 +71,102 @@ Short records of key architectural choices and why they were made.
 - _Generic metadata bag_ (`metadata: Record<string, unknown>` on `ConnectorSpecification`): Untyped, hard for clients to discover without documentation.
 
 **Consequence:** The version list is static — updated when the connector package is released. The `SUPPORTED_API_VERSIONS` constant in `@stripe/sync-openapi` is the source of truth. Versions not in the enum are rejected at config validation time.
+
+## DDR-009: Source-synthesised `_updated_at` for staleness gating
+
+**Decision:** Every stream in the Stripe source catalog declares
+`newer_than_field = '_updated_at'` and includes
+`_updated_at: { type: 'integer' }` in `json_schema.properties`. The
+source stamps every record with a unix-seconds value on that field.
+Destinations project `_updated_at` from `_raw_data` as a queryable
+column (e.g. Postgres timestamptz via `to_timestamp(...)`); they never
+compute or rewrite the value.
+
+The source's stamping ladder, by code path:
+
+- **Webhook / events API / WebSocket** (`process-event.ts`):
+  `dataObject.updated` if Stripe provides one, else `event.created`.
+- **List-API backfill** (`src-list-api.ts`):
+  `record.updated` if present, else `response.responseAt` — the HTTP `Date`
+  header on the page response, which falls back to local `now()` inside
+  `@stripe/sync-openapi/listFnResolver.ts` so it is never undefined.
+
+**Rationale:** Stripe declares a native `updated` field on roughly 8 of
+~100 resources. The remaining ~95% (customer, charge, invoice,
+subscription, …) have no source-side staleness signal at all, so
+out-of-order webhook deliveries — or a backfill page racing a live
+webhook — silently overwrote newer rows with older. Synthesising one
+canonical column in the source gives the whole catalog one uniform gate
+that destinations can rely on without per-resource branching.
+
+**Alternatives considered:**
+
+- _Destination-side wall clock_ (previous behaviour): each destination
+  stamped its own `_updated_at = now()`. Two destinations writing the
+  same record produced different timestamps, and a re-delivered event
+  always looked "newer" than the original — defeating the gate.
+- _Per-stream catalog overrides_: declare `newer_than_field = 'updated'`
+  on the resources that have it, leave it unset elsewhere. Loses
+  protection on the long tail and forces destinations into a "no gate"
+  fallback.
+- _`event.created` only_: simpler, but discards the more accurate
+  `record.updated` value where Stripe provides it, and offers nothing
+  for backfill rows.
+- _Destination-owned column not in `json_schema.properties`_: required
+  the engine's `enforceCatalog` to learn an exemption for
+  `newer_than_field`. Declaring `_updated_at` in the catalog as
+  `{type: 'integer'}` keeps the wire contract honest and the engine's
+  field filter generic.
+- _`_updated_at` as a `GENERATED ALWAYS` column_: cleaner per-table model
+  but breaks existing deployments — the legacy column was a non-generated
+  `timestamptz NOT NULL DEFAULT now()` and Postgres requires a column
+  drop+recreate to switch a non-generated column to generated. Kept the
+  legacy shape and explicit write in `upsertMany` to avoid a forced
+  schema migration.
+
+**Cross-layer plumbing this requires:**
+
+1. **Catalog declaration** (`source-stripe/src/catalog.ts`): every
+   stream sets `newer_than_field = '_updated_at'` and adds
+   `_updated_at: { type: 'integer' }` to `json_schema.properties` plus
+   `json_schema.required`. The field is part of the wire schema, so the
+   engine's `enforceCatalog` lets it through naturally without a per-field
+   exemption.
+2. **Postgres column shape** (`destination-postgres/src/schemaProjection.ts`):
+   `_updated_at` is a hardcoded non-generated `timestamptz NOT NULL
+   DEFAULT now()` column at the top of every table. This shape is kept
+   for backward compat: existing deployments need no column migration.
+   `jsonSchemaToColumns` skips `_updated_at` so it's never also emitted
+   as a generated column on top of the hardcoded one. The
+   `handle_updated_at` trigger is dropped at setup; the column is now
+   maintained by `upsertMany`, not by a row trigger.
+3. **Postgres write**
+   (`destination-postgres/src/index.ts`, `upsertMany`): the only writer of
+   the column. It reads the source-stamped unix seconds at
+   `record.data[newer_than_field]`, converts to ISO per row, and INSERTs
+   into the `_updated_at` column. The staleness gate is hardcoded as
+   `newerThanColumn: '_updated_at'` regardless of what the catalog calls
+   `newer_than_field` — the source field name maps to a fixed destination
+   column. Records arriving without a numeric `newer_than_field` value
+   throw a loud error with a DDR-009 reference (principle #5).
+4. **Sheets explicit write**
+   (`destination-google-sheets/src/index.ts`): the source value is
+   written into the `_updated_at` cell verbatim, and in-batch dedup
+   compares it. Missing values throw with a DDR-009 reference; stale
+   in-batch dupes are dropped with a debug log.
+
+**Consequence:**
+
+- Destinations never compute or refresh `_updated_at`; the source is the
+  single writer. See principle #12.
+- The legacy auto-update mechanism is removed in two places:
+  `DROP TRIGGER IF EXISTS handle_updated_at` per table inside
+  `buildCreateTableWithSchema`, and
+  `DROP FUNCTION IF EXISTS set_updated_at() CASCADE` once at setup; the
+  `CASCADE` cleans up orphan triggers from older deployments.
+- The same Stripe object stamps to the same value regardless of delivery
+  path (webhook re-delivery, backfill, WebSocket), so duplicates collapse
+  cleanly through the gate.
+- `_updated_at` is part of the published wire schema. Tools that
+  consume the catalog (introspection, OpenAPI generation, custom
+  destinations) see the field and can decide their own projection.

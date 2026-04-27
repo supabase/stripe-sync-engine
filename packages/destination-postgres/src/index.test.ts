@@ -76,8 +76,18 @@ beforeEach(async () => {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Monotonically increasing seconds so consecutive `makeRecord` calls produce
+// strictly-newer `_updated_at` values; the staleness gate rejects equal stamps.
+let nextRecordTs = Math.floor(Date.now() / 1000)
 function makeRecord(stream: string, data: Record<string, unknown>): RecordMessage {
-  return { type: 'record', record: { stream, data, emitted_at: new Date().toISOString() } }
+  return {
+    type: 'record',
+    record: {
+      stream,
+      data: { _updated_at: nextRecordTs++, ...data },
+      emitted_at: new Date().toISOString(),
+    },
+  }
 }
 
 function makeState(stream: string, data: unknown): SourceStateMessage {
@@ -103,7 +113,12 @@ async function collectOutputs(
 const catalog: ConfiguredCatalog = {
   streams: [
     {
-      stream: { name: 'customers', primary_key: [['id']], metadata: {} },
+      stream: {
+        name: 'customers',
+        primary_key: [['id']],
+        newer_than_field: '_updated_at',
+        metadata: {},
+      },
       sync_mode: 'full_refresh',
       destination_sync_mode: 'overwrite',
     },
@@ -312,6 +327,79 @@ describe('newer_than_field stale write prevention', () => {
   })
 })
 
+describe('_updated_at column write-through', () => {
+  // `_updated_at` is the legacy hardcoded `timestamptz` column; upsertMany
+  // writes the source-stamped unix-seconds value into it (DDR-009).
+  const updatedAtCatalog: ConfiguredCatalog = {
+    streams: [
+      {
+        stream: { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+        sync_mode: 'full_refresh',
+        destination_sync_mode: 'overwrite',
+      },
+    ],
+  }
+
+  beforeEach(async () => {
+    await drain(destination.setup!({ config: makeConfig(), catalog: updatedAtCatalog }))
+  })
+
+  it('writes source-stamped _updated_at into the timestamptz column', async () => {
+    const ts = 1_700_000_000 // 2023-11-14T22:13:20Z
+    const batch = toAsyncIter([
+      makeRecord('customers', { id: 'cus_1', name: 'Alice', _updated_at: ts }),
+    ])
+    await collectOutputs(
+      destination.write({ config: makeConfig(), catalog: updatedAtCatalog }, batch)
+    )
+
+    const { rows } = await pool.query<{
+      raw: string
+      column_ts: Date
+    }>(
+      `SELECT _raw_data->>'_updated_at' AS raw, _updated_at AS column_ts
+       FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+    )
+    expect(rows[0].raw).toBe(String(ts))
+    // Column is timestamptz; verify the unix-seconds → Date conversion
+    // landed on the exact second we asked for (no millisecond drift).
+    expect(rows[0].column_ts.getTime()).toBe(ts * 1000)
+  })
+
+  it('blocks stale writes via the _updated_at gate for objects without native updated', async () => {
+    const newer = 1_700_000_200
+    const older = 1_700_000_100
+
+    await collectOutputs(
+      destination.write(
+        { config: makeConfig(), catalog: updatedAtCatalog },
+        toAsyncIter([
+          makeRecord('customers', { id: 'cus_1', name: 'Alice v2', _updated_at: newer }),
+        ])
+      )
+    )
+    await collectOutputs(
+      destination.write(
+        { config: makeConfig(), catalog: updatedAtCatalog },
+        toAsyncIter([
+          makeRecord('customers', {
+            id: 'cus_1',
+            name: 'Alice v1 (stale)',
+            _updated_at: older,
+          }),
+        ])
+      )
+    )
+
+    const { rows } = await pool.query<{ name: string; ts: Date }>(
+      `SELECT _raw_data->>'name' AS name, _updated_at AS ts
+       FROM "${SCHEMA}".customers WHERE id = 'cus_1'`
+    )
+    expect(rows[0].name).toBe('Alice v2')
+    expect(rows[0].ts.getTime()).toBe(newer * 1000)
+  })
+})
+
 describe('multi-org sync (two account IDs)', () => {
   const multiOrgCatalog: ConfiguredCatalog = {
     streams: [
@@ -319,6 +407,7 @@ describe('multi-org sync (two account IDs)', () => {
         stream: {
           name: 'customers',
           primary_key: [['id'], ['_account_id']],
+          newer_than_field: '_updated_at',
           metadata: {},
         },
         sync_mode: 'full_refresh',
@@ -408,10 +497,18 @@ describe('upsertMany standalone', () => {
   it('inserts records directly via pool', async () => {
     const testPool = new pg.Pool({ connectionString })
     try {
-      await upsertMany(testPool, SCHEMA, 'customers', [
-        { id: 'cus_10', name: 'Direct' },
-        { id: 'cus_11', name: 'Insert' },
-      ])
+      const ts = Math.floor(Date.now() / 1000)
+      await upsertMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [
+          { id: 'cus_10', name: 'Direct', _updated_at: ts },
+          { id: 'cus_11', name: 'Insert', _updated_at: ts },
+        ],
+        ['id'],
+        '_updated_at'
+      )
 
       const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
       expect(rows[0].n).toBe(2)
@@ -423,7 +520,7 @@ describe('upsertMany standalone', () => {
   it('no-ops on empty array', async () => {
     const testPool = new pg.Pool({ connectionString })
     try {
-      await upsertMany(testPool, SCHEMA, 'customers', [])
+      await upsertMany(testPool, SCHEMA, 'customers', [], ['id'], '_updated_at')
       const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
       expect(rows[0].n).toBe(0)
     } finally {

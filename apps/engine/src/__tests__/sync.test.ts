@@ -77,12 +77,14 @@ async function* toAsync<T>(items: T[]): AsyncIterable<T> {
   }
 }
 
+// Monotonic seconds so consecutive records are strictly newer (staleness gate rejects equal stamps).
+let nextRecordTs = Math.floor(Date.now() / 1000)
 function record(stream: string, id: string, data?: Record<string, unknown>): RecordMessage {
   return {
     type: 'record',
     record: {
       stream,
-      data: { id, ...data },
+      data: { id, _updated_at: nextRecordTs++, ...data },
       emitted_at: new Date().toISOString(),
     },
   }

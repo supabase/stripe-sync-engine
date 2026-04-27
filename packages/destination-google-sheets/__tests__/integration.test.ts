@@ -24,6 +24,11 @@ describeWithEnv(
       return google.sheets({ version: 'v4', auth })
     }
 
+    function stripUpdatedAt(rows: unknown[][]): unknown[][] {
+      const idx = rows[0]?.indexOf('_updated_at') ?? -1
+      return idx < 0 ? rows : rows.map((row) => row.filter((_, i) => i !== idx))
+    }
+
     it.skip('writes records to an existing spreadsheet and reads them back', async () => {
       const sheets = makeSheetsClient()
       const dest = createDestination(sheets)
@@ -151,6 +156,7 @@ describeWithEnv(
         iso.slice(20, 23)
       const streamName = `upsert_${ts}`
       const emittedAt = new Date().toISOString()
+      let nextUpdatedAt = Math.floor(Date.now() / 1000)
 
       const config: Config = {
         client_id: GOOGLE_CLIENT_ID,
@@ -168,6 +174,7 @@ describeWithEnv(
             stream: {
               name: streamName,
               primary_key: [['id']],
+              newer_than_field: '_updated_at',
               json_schema: {
                 type: 'object',
                 properties: {
@@ -189,7 +196,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_1', name: 'Alice', balance: 100 },
+            data: { id: 'cus_1', name: 'Alice', balance: 100, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -197,7 +204,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_2', name: 'Bob', balance: 250 },
+            data: { id: 'cus_2', name: 'Bob', balance: 250, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -205,7 +212,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_3', name: 'Charlie', balance: 0 },
+            data: { id: 'cus_3', name: 'Charlie', balance: 0, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -218,7 +225,7 @@ describeWithEnv(
       expect(output1.filter((m) => m.type === 'trace')).toHaveLength(0)
 
       // Verify initial state
-      let rows = await readSheet(sheets, GOOGLE_SPREADSHEET_ID, streamName)
+      let rows = stripUpdatedAt(await readSheet(sheets, GOOGLE_SPREADSHEET_ID, streamName))
       expect(rows).toHaveLength(4) // header + 3 rows
       expect(rows[0]).toEqual(['id', 'name', 'balance']) // PK-first ordering
 
@@ -228,7 +235,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_1', name: 'Alice Updated', balance: 150 },
+            data: { id: 'cus_1', name: 'Alice Updated', balance: 150, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -236,7 +243,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_3', name: 'Charlie Updated', balance: 50 },
+            data: { id: 'cus_3', name: 'Charlie Updated', balance: 50, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -244,7 +251,7 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_4', name: 'Diana', balance: 300 },
+            data: { id: 'cus_4', name: 'Diana', balance: 300, _updated_at: nextUpdatedAt++ },
             emitted_at: emittedAt,
           },
         },
@@ -258,7 +265,7 @@ describeWithEnv(
       expect(output2.filter((m) => m.type === 'trace')).toHaveLength(0)
 
       // Verify upsert results
-      rows = await readSheet(sheets, GOOGLE_SPREADSHEET_ID, streamName)
+      rows = stripUpdatedAt(await readSheet(sheets, GOOGLE_SPREADSHEET_ID, streamName))
       expect(rows).toHaveLength(5) // header + 3 original + 1 new
       expect(rows[0]).toEqual(['id', 'name', 'balance'])
       expect(rows[1]).toEqual(['cus_1', 'Alice Updated', '150']) // updated in place

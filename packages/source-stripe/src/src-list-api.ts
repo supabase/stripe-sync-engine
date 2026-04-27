@@ -244,16 +244,18 @@ function isLegacyState(data: unknown): boolean {
 
 /**
  * Fetch one page for a time range — satisfies streamingSubdivide's fetchPage contract.
- * Mutates range.cursor in-place. Returns raw data + lastObserved for subdivision.
+ * Mutates range.cursor in-place. Returns stamped data + lastObserved.
  */
 async function fetchPageForRange(opts: {
   range: RemainingRange
   listFn: ListFn
   streamName: string
+  newerThanField: string
   supportsLimit: boolean
   supportsForwardPagination: boolean
 }): Promise<PageResult<Record<string, unknown>>> {
-  const { range, listFn, streamName, supportsLimit, supportsForwardPagination } = opts
+  const { range, listFn, streamName, newerThanField, supportsLimit, supportsForwardPagination } =
+    opts
 
   const created: Record<string, number> = {}
   if (range.gte) created.gte = toUnixSeconds(range.gte)
@@ -265,6 +267,8 @@ async function fetchPageForRange(opts: {
   if (supportsForwardPagination && range.cursor) params.starting_after = range.cursor
 
   const response = await listFn(params as Parameters<typeof listFn>[0])
+  const responseAt =
+    typeof response.responseAt === 'number' ? response.responseAt : Math.floor(Date.now() / 1000)
 
   const hasMore = supportsForwardPagination && response.has_more
   let nextCursor: string | null = null
@@ -277,9 +281,15 @@ async function fetchPageForRange(opts: {
   // lastObserved = oldest record's created timestamp on this page.
   // Stripe returns newest-first, so the last record is the oldest.
   let lastObserved: number | null = null
+  const data: Record<string, unknown>[] = []
   for (const item of response.data) {
-    const created = (item as Record<string, unknown>).created
+    const record = item as Record<string, unknown>
+    const created = record.created
     if (typeof created === 'number') lastObserved = created
+    data.push({
+      ...record,
+      [newerThanField]: typeof record.updated === 'number' ? record.updated : responseAt,
+    })
   }
 
   log.trace({
@@ -295,7 +305,12 @@ async function fetchPageForRange(opts: {
 
   range.cursor = hasMore ? nextCursor : null
 
-  return { range, data: response.data as Record<string, unknown>[], hasMore, lastObserved }
+  return {
+    range,
+    data,
+    hasMore,
+    lastObserved,
+  }
 }
 
 // MARK: - Sequential pagination (no subdivision)
@@ -309,6 +324,7 @@ async function* paginateSequential(opts: {
   accountedRange: { gte: string; lt: string }
   listFn: ListFn
   streamName: string
+  newerThanField: string
   accountId: string
   supportsLimit: boolean
   supportsForwardPagination: boolean
@@ -322,6 +338,7 @@ async function* paginateSequential(opts: {
     accountedRange,
     listFn,
     streamName,
+    newerThanField,
     accountId,
     supportsLimit,
     supportsForwardPagination,
@@ -345,6 +362,8 @@ async function* paginateSequential(opts: {
     const response = prefetchedResponse
       ? await prefetchedResponse
       : await listFn(params as Parameters<typeof listFn>[0])
+    const responseAt =
+      typeof response.responseAt === 'number' ? response.responseAt : Math.floor(Date.now() / 1000)
     prefetchedResponse = null
     totalApiCalls.count++
 
@@ -376,9 +395,14 @@ async function* paginateSequential(opts: {
     })
 
     for (const item of response.data) {
+      const record = item as Record<string, unknown>
       yield msg.record({
         stream: streamName,
-        data: { ...(item as Record<string, unknown>), _account_id: accountId },
+        data: {
+          ...record,
+          [newerThanField]: typeof record.updated === 'number' ? record.updated : responseAt,
+          _account_id: accountId,
+        },
         emitted_at: new Date().toISOString(),
       })
       totalEmitted.count++
@@ -411,6 +435,8 @@ async function* paginateSequential(opts: {
 
 async function* iterateStream(opts: {
   streamName: string
+  /** Catalog-declared staleness column (cs.stream.newer_than_field). */
+  newerThanField: string
   timeRange: { gte: string; lt: string }
   streamState: StreamState | undefined
   resourceConfig: ResourceConfig & { listFn: ListFn }
@@ -423,6 +449,7 @@ async function* iterateStream(opts: {
 }): AsyncGenerator<Message> {
   const {
     streamName,
+    newerThanField,
     timeRange,
     resourceConfig,
     accountId,
@@ -497,6 +524,7 @@ async function* iterateStream(opts: {
           range,
           listFn: rateLimitedListFn,
           streamName,
+          newerThanField,
           supportsLimit,
           supportsForwardPagination,
         }),
@@ -558,6 +586,7 @@ async function* iterateStream(opts: {
       accountedRange,
       listFn: rateLimitedListFn,
       streamName,
+      newerThanField,
       accountId,
       supportsLimit,
       supportsForwardPagination,
@@ -596,7 +625,7 @@ async function* iterateStream(opts: {
 export async function* listApiBackfill(opts: {
   catalog: {
     streams: Array<{
-      stream: { name: string }
+      stream: { name: string; newer_than_field: string }
       backfill_limit?: number | undefined
       time_range?: { gte?: string; lt?: string } | undefined
     }>
@@ -670,6 +699,7 @@ export async function* listApiBackfill(opts: {
         try {
           yield* iterateStream({
             streamName: stream.name,
+            newerThanField: stream.newer_than_field,
             timeRange,
             streamState,
             resourceConfig: { ...resourceConfig, listFn: resourceConfig.listFn! },

@@ -60,9 +60,8 @@ export interface UpsertManyResult {
 }
 
 /**
- * Upsert records into a Postgres table using the _raw_data jsonb pattern.
- * Delegates to util-postgres `upsertWithStats()` which batches all rows into a
- * single multi-row INSERT ... ON CONFLICT statement and returns write stats.
+ * Upsert records into a Postgres table; lifts `[newer_than_field]` from the
+ * source-stamped record into the legacy `_updated_at` timestamptz column (DDR-009).
  */
 export async function upsertMany(
   pool: pg.Pool,
@@ -71,19 +70,25 @@ export async function upsertMany(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entries: Record<string, any>[],
   primaryKeyColumns: string[] = ['id'],
-  newerThanField?: string
+  newerThanField: string
 ): Promise<UpsertManyResult> {
   if (!entries.length)
     return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+
+  const records = entries.map((e) => {
+    const ts = e[newerThanField] as unknown
+    if (typeof ts !== 'number' || !Number.isFinite(ts)) {
+      throw new Error(
+        `upsertMany: record missing source-stamped "${newerThanField}" (table=${schema}.${table}, id=${String(e.id)}). See DDR-009.`
+      )
+    }
+    return { _raw_data: e, _updated_at: new Date(ts * 1000).toISOString() }
+  })
+
   return await upsertWithStats(
     pool,
-    entries.map((e) => ({ _raw_data: e })),
-    {
-      schema,
-      table,
-      primaryKeyColumns,
-      ...(newerThanField && { newerThanColumn: newerThanField }),
-    },
+    records,
+    { schema, table, primaryKeyColumns, newerThanColumn: newerThanField },
     `"_raw_data"->>'deleted' = 'true'`
   )
 }
@@ -223,20 +228,9 @@ const destination = {
       log.info(`Creating schema "${config.schema}" (${catalog.streams.length} streams)`)
       log.debug('dest setup: creating schema')
       await pool.query(sql`CREATE SCHEMA IF NOT EXISTS "${config.schema}"`)
-      log.debug('dest setup: creating trigger function')
-      await pool.query(sql`
-        CREATE OR REPLACE FUNCTION "${config.schema}".set_updated_at() RETURNS trigger
-            LANGUAGE plpgsql
-        AS $$
-        BEGIN
-          NEW := jsonb_populate_record(
-            NEW,
-            jsonb_build_object('updated_at', now(), '_updated_at', now())
-          );
-          RETURN NEW;
-        END;
-        $$;
-      `)
+      // Backward-compat: drop legacy `set_updated_at()` (CASCADE removes any orphan `handle_updated_at` triggers from older deployments).
+      log.debug('dest setup: dropping legacy set_updated_at() function')
+      await pool.query(sql`DROP FUNCTION IF EXISTS "${config.schema}".set_updated_at() CASCADE`)
       log.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
       await Promise.all(
         catalog.streams.map(async (cs) => {
@@ -282,9 +276,7 @@ const destination = {
       ])
     )
     const streamNewerThanField = new Map(
-      catalog.streams
-        .filter((cs) => cs.stream.newer_than_field)
-        .map((cs) => [cs.stream.name, cs.stream.newer_than_field!])
+      catalog.streams.map((cs) => [cs.stream.name, cs.stream.newer_than_field])
     )
 
     const failedStreams = new Set<string>()
@@ -295,7 +287,7 @@ const destination = {
       const buffer = streamBuffers.get(streamName)
       if (!buffer || buffer.length === 0) return undefined
       const pk = streamKeyColumns.get(streamName) ?? ['id']
-      const newerThan = streamNewerThanField.get(streamName)
+      const newerThan = streamNewerThanField.get(streamName)!
       const startedAt = Date.now()
       log.debug(
         {
@@ -328,7 +320,7 @@ const destination = {
       } catch (err) {
         const detail =
           `stream=${streamName} table=${config.schema}.${streamName} ` +
-          `pk=[${pk}] newerThan=${newerThan ?? 'none'} records=${buffer.length}`
+          `pk=[${pk}] newerThan=${newerThan} records=${buffer.length}`
         const errMsg = errorMessage(err)
         log.error(
           {

@@ -191,7 +191,7 @@ describe('discoverListEndpoints', () => {
             data: [{ id: 'evt_123' }],
             next_page_url: '/v2/core/events?page=cur_next&limit=1',
           }),
-          { status: 200 }
+          { status: 200, headers: { date: 'Wed, 01 Jan 2025 00:00:00 GMT' } }
         )
     )
     const list = buildListFn('sk_test_fake', '/v2/core/events', fetchMock)
@@ -209,6 +209,7 @@ describe('discoverListEndpoints', () => {
       data: [{ id: 'evt_123' }],
       has_more: true,
       pageCursor: 'cur_next',
+      responseAt: 1735689600,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
