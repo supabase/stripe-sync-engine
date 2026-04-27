@@ -44,6 +44,17 @@ async function drain<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return result
 }
 
+/** Drain an async iterable, collecting items until it throws. Returns items + error. */
+async function drainUntilError<T>(iter: AsyncIterable<T>): Promise<{ items: T[]; error: Error }> {
+  const items: T[] = []
+  try {
+    for await (const item of iter) items.push(item)
+    throw new Error('expected iterator to throw')
+  } catch (err) {
+    return { items, error: err as Error }
+  }
+}
+
 /** Re-iterable async iterable from an array — each `for await` gets a fresh iterator. */
 function toAsync<T>(items: T[]): AsyncIterable<T> {
   return {
@@ -540,6 +551,94 @@ describe('engine message validation', () => {
     const engine = await createEngine(makeResolver(badSource, destinationTest))
 
     await expect(drain(engine.pipeline_read(defaultPipeline))).rejects.toThrow()
+  })
+
+  it('pipeline_read emits eof before throwing on source error', async () => {
+    const crashingSource: Source = {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: new Date().toISOString(),
+          },
+        } as Message
+        throw new Error('proxy CONNECT failed')
+      },
+    }
+    const engine = await createEngine(makeResolver(crashingSource, destinationTest))
+    const { items, error } = await drainUntilError(engine.pipeline_read(defaultPipeline))
+    expect(error.message).toMatch(/proxy CONNECT failed/)
+    const eof = items.find((m) => (m as { type: string }).type === 'eof')
+    expect(eof).toBeDefined()
+  })
+
+  it('pipeline_sync emits eof with status failed before throwing on source error', async () => {
+    const crashingSource: Source = {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: { streams: [{ name: 'customers', primary_key: [['id']] }] },
+        }
+      },
+      async *read() {
+        yield {
+          type: 'record',
+          record: {
+            stream: 'customers',
+            data: { id: 'cus_1' },
+            emitted_at: new Date().toISOString(),
+          },
+        } as Message
+        yield {
+          type: 'source_state',
+          source_state: { stream: 'customers', data: { cursor: '1' } },
+        } as Message
+        throw new Error('proxy CONNECT failed')
+      },
+    }
+    const engine = await createEngine(makeResolver(crashingSource, destinationTest))
+    const pipeline = {
+      source: { type: 'test', test: {} },
+      destination: { type: 'test', test: {} },
+      streams: [{ name: 'customers' }],
+    }
+    const { items, error } = await drainUntilError(engine.pipeline_sync(pipeline))
+    expect(error.message).toMatch(/proxy CONNECT failed/)
+    const eof = items.find((m) => (m as { type: string }).type === 'eof') as
+      | {
+          type: string
+          eof: {
+            status: string
+            has_more: boolean
+            request_progress?: { streams?: Record<string, { record_count: number }> }
+          }
+        }
+      | undefined
+    expect(eof).toBeDefined()
+    expect(eof!.eof.status).toBe('failed')
+    expect(eof!.eof.has_more).toBe(false)
+    // Progress should reflect the record that was processed before the crash
+    expect(eof!.eof.request_progress?.streams?.customers?.record_count).toBe(1)
   })
 
   it('destination output validation catches malformed messages via pipeline_write', async () => {

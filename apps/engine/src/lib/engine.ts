@@ -522,6 +522,7 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_read(pipeline, opts?, input?) {
       return withAbortOnReturn((signal) =>
         (async function* (): AsyncGenerator<Message> {
+          try {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
           const catalogWithRanges = withTimeRanges(p.catalog, p.state?.sync_run?.time_ceiling)
           const raw = p.source.connector.read(
@@ -534,6 +535,15 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             soft_time_limit: defaultSoftTimeLimit(opts?.time_limit, undefined),
             signal,
           })(parsed) as AsyncIterable<Message>
+          } catch (error) {
+            // Safety net for unexpected throws (proxy reject, connector crash, etc.).
+            // Normal errors should be yielded as messages and handled gracefully by
+            // takeLimits — if we land here, a connector is throwing instead of yielding.
+            // TODO: investigate why Postgres connection errors (e.g. proxy CONNECT 407)
+            // throw instead of yielding connection_status: failed.
+            yield engineMsg.eof({ status: 'failed', has_more: false, run_progress: createInitialProgress(), request_progress: createInitialProgress() }) as unknown as Message
+            throw error
+          }
         })()
       )
     },
@@ -562,6 +572,9 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
     pipeline_sync(pipeline, opts?, input?) {
       return withAbortOnReturn<SyncOutput>((signal) =>
         (async function* () {
+          let syncState: SyncState | undefined
+          let requestProgress = createInitialProgress()
+          try {
           const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
           const isContinuation = opts?.run_id != null && p.state?.sync_run.run_id === opts.run_id
@@ -571,12 +584,12 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
 
           // Run reducer first so time_ceiling is correct for a new run_id.
           const streamNames = activeFilteredCatalog.streams.map((s) => s.stream.name)
-          let syncState = stateReducer(p.state, {
+          syncState = stateReducer(p.state, {
             type: 'initialize',
             stream_names: streamNames,
             run_id: opts?.run_id,
           })
-          let requestProgress = createInitialProgress(streamNames)
+          requestProgress = createInitialProgress(streamNames)
 
           const catalogWithRanges = withTimeRanges(p.catalog, syncState.sync_run.time_ceiling)
           const activeCatalog = isContinuation
@@ -640,6 +653,16 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
               yield msg as SyncOutput
             }
             if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
+          }
+          } catch (error) {
+            // Safety net for unexpected throws (proxy reject, connector crash, etc.).
+            // Normal errors should be yielded as messages and handled gracefully by
+            // takeLimits — if we land here, a connector is throwing instead of yielding.
+            // TODO: investigate why Postgres connection errors (e.g. proxy CONNECT 407)
+            // throw instead of yielding connection_status: failed.
+            const runProgress = syncState?.sync_run.progress ?? createInitialProgress()
+            yield emit(engineMsg.eof({ status: 'failed', has_more: false, ending_state: syncState, run_progress: runProgress, request_progress: requestProgress }))
+            throw error
           }
         })()
       )
