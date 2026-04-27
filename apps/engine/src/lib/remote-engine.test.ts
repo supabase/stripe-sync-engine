@@ -136,7 +136,7 @@ describe('createRemoteEngine', () => {
   })
 
   describe('pipeline_read()', () => {
-    it('streams messages from input iterable', async () => {
+    it('streams messages from input', async () => {
       const engine = createRemoteEngine(engineUrl)
       const input: Message[] = [
         {
@@ -162,7 +162,6 @@ describe('createRemoteEngine', () => {
 
     it('returns eof:complete when called without input', async () => {
       const engine = createRemoteEngine(engineUrl)
-      // sourceTest yields nothing when $stdin is absent — only eof
       const messages = await collect(engine.pipeline_read(pipeline))
       const nonLog = messages.filter((m) => m.type !== 'log')
       expect(nonLog).toHaveLength(1)
@@ -212,14 +211,13 @@ describe('createRemoteEngine', () => {
         },
       ]
       const output = await collect(engine.pipeline_sync(pipeline, undefined, asIterable(input)))
-      // pipeline_sync now yields source signals alongside dest output
       const stateAndEof = output.filter((m) => m.type === 'source_state' || m.type === 'eof')
       expect(stateAndEof).toHaveLength(2)
       expect(stateAndEof[0]!.type).toBe('source_state')
       expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
     })
 
-    it('returns eof:complete without input (no source data)', async () => {
+    it('returns eof:complete without input', async () => {
       const engine = createRemoteEngine(engineUrl)
       const output = await collect(engine.pipeline_sync(pipeline))
       const eofMsgs = output.filter((m) => m.type === 'eof')

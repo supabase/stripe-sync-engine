@@ -79,7 +79,8 @@ echo "==> Reading from Stripe (/pipeline_read)"
 READ_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
 
 STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_read" \
-  -H "X-Pipeline: $READ_PARAMS")
+  -H "Content-Type: application/json" \
+  -d "{\"pipeline\":$READ_PARAMS}")
 
 RECORD_COUNT=$(echo "$STRIPE_OUTPUT" | grep -c '"type":"record"' || true)
 echo "    Got $RECORD_COUNT record(s)"
@@ -92,10 +93,11 @@ if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
   SHEETS_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s"}},"destination":{"type":"google_sheets","google_sheets":{"client_id":"%s","client_secret":"%s","access_token":"unused","refresh_token":"%s","spreadsheet_id":"%s"}}}' \
     "$STRIPE_API_KEY" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REFRESH_TOKEN" "$GOOGLE_SPREADSHEET_ID")
 
-  SHEETS_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
-    -H "X-Pipeline: $SHEETS_PARAMS" \
-    -H "Content-Type: application/x-ndjson" \
-    --data-binary @-)
+  # Convert NDJSON output to JSON array for stdin field
+  RECORDS_ARRAY=$(echo "$STRIPE_OUTPUT" | grep -v '^$' | jq -s '.')
+  SHEETS_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --argjson p "$SHEETS_PARAMS" --argjson m "$RECORDS_ARRAY" '{"pipeline":$p,"stdin":$m}')")
 
   echo "$SHEETS_OUTPUT" | head -3 || true
   echo "    Sheet: https://docs.google.com/spreadsheets/d/$GOOGLE_SPREADSHEET_ID"
@@ -112,13 +114,14 @@ if [ -n "${POSTGRES_URL:-}" ]; then
     "$STRIPE_API_KEY" "$DOCKER_PG_URL")
 
   curl -sf --max-time 30 -X POST "http://localhost:$PORT/pipeline_setup" \
-    -H "X-Pipeline: $PG_PARAMS" && echo "    OK" || echo "    setup returned non-204 (may be fine)"
+    -H "Content-Type: application/json" \
+    -d "{\"pipeline\":$PG_PARAMS}" && echo "    OK" || echo "    setup returned non-204 (may be fine)"
 
   echo "==> Writing to Postgres (/pipeline_write)"
-  PG_WRITE_OUTPUT=$(echo "$STRIPE_OUTPUT" | curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
-    -H "X-Pipeline: $PG_PARAMS" \
-    -H "Content-Type: application/x-ndjson" \
-    --data-binary @-)
+  PG_RECORDS_ARRAY=$(echo "$STRIPE_OUTPUT" | grep -v '^$' | jq -s '.')
+  PG_WRITE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_write" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --argjson p "$PG_PARAMS" --argjson m "$PG_RECORDS_ARRAY" '{"pipeline":$p,"stdin":$m}')")
   echo "$PG_WRITE_OUTPUT" | head -3 || true
   echo "    Database: $POSTGRES_URL schema=stripe_docker_test"
 else

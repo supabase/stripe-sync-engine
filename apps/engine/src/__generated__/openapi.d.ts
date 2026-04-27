@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Check connector connection
-         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass ?only=source or ?only=destination to check a single side.
+         * @description Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass only=source or only=destination to check a single side.
          */
         post: operations["pipeline_check"];
         delete?: never;
@@ -52,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Set up destination schema
-         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.
+         * @description Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass only=destination to run destination setup alone (e.g. optimistic table creation) or only=source to isolate the source.
          */
         post: operations["pipeline_setup"];
         delete?: never;
@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Tear down destination schema
-         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.
+         * @description Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass only=destination or only=source to run a single side.
          */
         post: operations["pipeline_teardown"];
         delete?: never;
@@ -112,7 +112,7 @@ export interface paths {
         put?: never;
         /**
          * Read records from source
-         * @description Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.
+         * @description Streams NDJSON messages (records, state, catalog).
          */
         post: operations["pipeline_read"];
         delete?: never;
@@ -132,7 +132,7 @@ export interface paths {
         put?: never;
         /**
          * Write records to destination
-         * @description Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.
+         * @description Writes messages to the destination. Pass an array of messages in the request body.
          */
         post: operations["pipeline_write"];
         delete?: never;
@@ -152,7 +152,7 @@ export interface paths {
         put?: never;
         /**
          * Run sync pipeline (read → write)
-         * @description Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).
+         * @description Reads from the source connector and writes to the destination (backfill mode).
          */
         post: operations["pipeline_sync"];
         delete?: never;
@@ -250,6 +250,132 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PipelineConfig: {
+            source: components["schemas"]["SourceConfig"];
+            destination: components["schemas"]["DestinationConfig"];
+            streams?: {
+                /** @description Stream (table) name to sync. */
+                name: string;
+                /**
+                 * @description How the source reads this stream. Defaults to full_refresh.
+                 * @enum {string}
+                 */
+                sync_mode?: "incremental" | "full_refresh";
+                /** @description If set, only these fields are synced. */
+                fields?: string[];
+                /** @description Cap backfill to this many records, then mark the stream complete. */
+                backfill_limit?: number;
+            }[];
+        };
+        SourceConfig: {
+            /** @constant */
+            type: "stripe";
+            stripe: components["schemas"]["SourceStripeConfig"];
+        };
+        SourceStripeConfig: {
+            /** @description Stripe API key (sk_test_... or sk_live_...) */
+            api_key: string;
+            /** @description Stripe account ID (resolved from API if omitted) */
+            account_id?: string;
+            /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
+            account_created?: number;
+            /** @description Whether this is a live mode sync */
+            livemode?: boolean;
+            /** @enum {string} */
+            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
+            /**
+             * Format: uri
+             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
+             */
+            base_url?: string;
+            /**
+             * Format: uri
+             * @description URL for managed webhook endpoint registration
+             */
+            webhook_url?: string;
+            /** @description Webhook signing secret (whsec_...) for signature verification */
+            webhook_secret?: string;
+            /** @description Enable WebSocket streaming for live events */
+            websocket?: boolean;
+            /** @description Enable events API polling for incremental sync after backfill */
+            poll_events?: boolean;
+            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
+            webhook_port?: number;
+            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
+            revalidate_objects?: string[];
+            /** @description Max objects to backfill per stream (useful for testing) */
+            backfill_limit?: number;
+            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
+            rate_limit?: number;
+        };
+        DestinationConfig: {
+            /** @constant */
+            type: "postgres";
+            postgres: components["schemas"]["DestinationPostgresConfig"];
+        } | {
+            /** @constant */
+            type: "google_sheets";
+            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
+        };
+        DestinationPostgresConfig: {
+            /** @description Postgres connection string */
+            url?: string;
+            /** @description Deprecated alias for url; prefer url */
+            connection_string?: string;
+            /**
+             * @description Target schema name (e.g. "stripe")
+             * @default public
+             */
+            schema: string;
+            /**
+             * @description Records to buffer before flushing
+             * @default 100
+             */
+            batch_size: number;
+            /** @description AWS RDS IAM authentication config */
+            aws?: {
+                /** @description Postgres host for RDS IAM auth */
+                host: string;
+                /**
+                 * @description Postgres port for RDS IAM auth
+                 * @default 5432
+                 */
+                port: number;
+                /** @description Database name for RDS IAM auth */
+                database: string;
+                /** @description Database user for RDS IAM auth */
+                user: string;
+                /** @description AWS region for RDS instance */
+                region: string;
+                /** @description IAM role ARN to assume (cross-account) */
+                role_arn?: string;
+                /** @description External ID for STS AssumeRole */
+                external_id?: string;
+            };
+            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
+            ssl_ca_pem?: string;
+        };
+        DestinationGoogleSheetsConfig: {
+            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
+            client_id?: string;
+            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
+            client_secret?: string;
+            access_token?: string | null;
+            /** @description OAuth2 refresh token */
+            refresh_token: string;
+            /** @description Target spreadsheet ID (created if omitted) */
+            spreadsheet_id?: string;
+            /**
+             * @description Title when creating a new spreadsheet
+             * @default Stripe Sync
+             */
+            spreadsheet_title: string;
+            /**
+             * @description Rows per Sheets API append call
+             * @default 50
+             */
+            batch_size: number;
+        };
         RecordMessage: {
             /** @description Who emitted this message: "source/{type}", "destination/{type}", or "engine". Set by the engine. */
             _emitted_by?: string;
@@ -660,144 +786,6 @@ export interface components {
             type: "source_input";
             source_input: unknown;
         };
-        SourceStripeInput: {
-            /** @description Unique identifier for the object. */
-            id: string;
-            /** @constant */
-            object: "event";
-            /** @description The connected account that originates the event. */
-            account?: string;
-            api_version: string | null;
-            /** @description Time at which the object was created. Measured in seconds since the Unix epoch. */
-            created: number;
-            data: {
-                object: {
-                    [key: string]: unknown;
-                };
-                previous_attributes?: {
-                    [key: string]: unknown;
-                };
-            };
-            /** @description Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode. */
-            livemode: boolean;
-            /** @description Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify. */
-            pending_webhooks: number;
-            request: {
-                id: string | null;
-                idempotency_key: string | null;
-            } | null;
-            /** @description Description of the event (for example, `invoice.created` or `charge.refunded`). */
-            type: string;
-        };
-        SourceConfig: {
-            /** @constant */
-            type: "stripe";
-            stripe: components["schemas"]["SourceStripeConfig"];
-        };
-        SourceStripeConfig: {
-            /** @description Stripe API key (sk_test_... or sk_live_...) */
-            api_key: string;
-            /** @description Stripe account ID (resolved from API if omitted) */
-            account_id?: string;
-            /** @description Stripe account creation timestamp in unix seconds (resolved from API if omitted) */
-            account_created?: number;
-            /** @description Whether this is a live mode sync */
-            livemode?: boolean;
-            /** @enum {string} */
-            api_version?: "2026-03-25.dahlia" | "2026-02-25.clover" | "2026-01-28.clover" | "2025-12-15.clover" | "2025-11-17.clover" | "2025-10-29.clover" | "2025-09-30.clover" | "2025-08-27.basil" | "2025-07-30.basil" | "2025-06-30.basil" | "2025-05-28.basil" | "2025-04-30.basil" | "2025-03-31.basil" | "2025-02-24.acacia" | "2025-01-27.acacia" | "2024-12-18.acacia" | "2024-11-20.acacia" | "2024-10-28.acacia" | "2024-09-30.acacia" | "2024-06-20" | "2024-04-10" | "2024-04-03" | "2023-10-16" | "2023-08-16" | "2022-11-15" | "2022-08-01" | "2020-08-27" | "2020-03-02" | "2019-12-03" | "2019-11-05" | "2019-10-17" | "2019-10-08" | "2019-09-09" | "2019-08-14" | "2019-05-16" | "2019-03-14" | "2019-02-19" | "2019-02-11" | "2018-11-08" | "2018-10-31" | "2018-09-24" | "2018-09-06" | "2018-08-23" | "2018-07-27" | "2018-05-21" | "2018-02-28" | "2018-02-06" | "2018-02-05" | "2018-01-23" | "2017-12-14" | "2017-08-15";
-            /**
-             * Format: uri
-             * @description Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)
-             */
-            base_url?: string;
-            /**
-             * Format: uri
-             * @description URL for managed webhook endpoint registration
-             */
-            webhook_url?: string;
-            /** @description Webhook signing secret (whsec_...) for signature verification */
-            webhook_secret?: string;
-            /** @description Enable WebSocket streaming for live events */
-            websocket?: boolean;
-            /** @description Enable events API polling for incremental sync after backfill */
-            poll_events?: boolean;
-            /** @description Port for built-in webhook HTTP listener (e.g. 4242) */
-            webhook_port?: number;
-            /** @description Object types to re-fetch from Stripe API on webhook (e.g. ["subscription"]) */
-            revalidate_objects?: string[];
-            /** @description Max objects to backfill per stream (useful for testing) */
-            backfill_limit?: number;
-            /** @description Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test). */
-            rate_limit?: number;
-        };
-        DestinationConfig: {
-            /** @constant */
-            type: "postgres";
-            postgres: components["schemas"]["DestinationPostgresConfig"];
-        } | {
-            /** @constant */
-            type: "google_sheets";
-            google_sheets: components["schemas"]["DestinationGoogleSheetsConfig"];
-        };
-        DestinationPostgresConfig: {
-            /** @description Postgres connection string */
-            url?: string;
-            /** @description Deprecated alias for url; prefer url */
-            connection_string?: string;
-            /**
-             * @description Target schema name (e.g. "stripe")
-             * @default public
-             */
-            schema: string;
-            /**
-             * @description Records to buffer before flushing
-             * @default 100
-             */
-            batch_size: number;
-            /** @description AWS RDS IAM authentication config */
-            aws?: {
-                /** @description Postgres host for RDS IAM auth */
-                host: string;
-                /**
-                 * @description Postgres port for RDS IAM auth
-                 * @default 5432
-                 */
-                port: number;
-                /** @description Database name for RDS IAM auth */
-                database: string;
-                /** @description Database user for RDS IAM auth */
-                user: string;
-                /** @description AWS region for RDS instance */
-                region: string;
-                /** @description IAM role ARN to assume (cross-account) */
-                role_arn?: string;
-                /** @description External ID for STS AssumeRole */
-                external_id?: string;
-            };
-            /** @description PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA) */
-            ssl_ca_pem?: string;
-        };
-        DestinationGoogleSheetsConfig: {
-            /** @description Google OAuth2 client ID (env: GOOGLE_CLIENT_ID) */
-            client_id?: string;
-            /** @description Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET) */
-            client_secret?: string;
-            access_token?: string | null;
-            /** @description OAuth2 refresh token */
-            refresh_token: string;
-            /** @description Target spreadsheet ID (created if omitted) */
-            spreadsheet_id?: string;
-            /**
-             * @description Title when creating a new spreadsheet
-             * @default Stripe Sync
-             */
-            spreadsheet_title: string;
-            /**
-             * @description Rows per Sheets API append call
-             * @default 50
-             */
-            batch_size: number;
-        };
         Message: components["schemas"]["RecordMessage"] | components["schemas"]["SourceStateMessage"] | components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"] | components["schemas"]["SpecMessage"] | components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["StreamStatusMessage"] | components["schemas"]["ControlMessage"] | components["schemas"]["ProgressMessage"] | components["schemas"]["EofMessage"] | components["schemas"]["SourceInputMessage"];
         DiscoverOutput: components["schemas"]["CatalogMessage"] | components["schemas"]["LogMessage"];
         DestinationOutput: components["schemas"]["Message"];
@@ -805,28 +793,6 @@ export interface components {
         CheckOutput: components["schemas"]["ConnectionStatusMessage"] | components["schemas"]["LogMessage"];
         SetupOutput: components["schemas"]["ControlMessage"] | components["schemas"]["LogMessage"];
         TeardownOutput: components["schemas"]["LogMessage"];
-        TypedSourceInputMessage: {
-            /** @constant */
-            type: "source_input";
-            source_input: components["schemas"]["SourceStripeInput"];
-        };
-        PipelineConfig: {
-            source: components["schemas"]["SourceConfig"];
-            destination: components["schemas"]["DestinationConfig"];
-            streams?: {
-                /** @description Stream (table) name to sync. */
-                name: string;
-                /**
-                 * @description How the source reads this stream. Defaults to full_refresh.
-                 * @enum {string}
-                 */
-                sync_mode?: "incremental" | "full_refresh";
-                /** @description If set, only these fields are synced. */
-                fields?: string[];
-                /** @description Cap backfill to this many records, then mark the stream complete. */
-                backfill_limit?: number;
-            }[];
-        };
     };
     responses: never;
     parameters: never;
@@ -865,18 +831,23 @@ export interface operations {
     };
     pipeline_check: {
         parameters: {
-            query?: {
-                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
-                only?: "source" | "destination";
-            };
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.
+                     * @enum {string}
+                     */
+                    only?: "source" | "destination";
+                };
+            };
+        };
         responses: {
             /** @description NDJSON stream of check messages */
             200: {
@@ -902,18 +873,23 @@ export interface operations {
     };
     pipeline_setup: {
         parameters: {
-            query?: {
-                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
-                only?: "source" | "destination";
-            };
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.
+                     * @enum {string}
+                     */
+                    only?: "source" | "destination";
+                };
+            };
+        };
         responses: {
             /** @description NDJSON stream of setup messages */
             200: {
@@ -939,18 +915,23 @@ export interface operations {
     };
     pipeline_teardown: {
         parameters: {
-            query?: {
-                /** @description Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging. */
-                only?: "source" | "destination";
-            };
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.
+                     * @enum {string}
+                     */
+                    only?: "source" | "destination";
+                };
+            };
+        };
         responses: {
             /** @description NDJSON stream of teardown messages */
             200: {
@@ -977,14 +958,22 @@ export interface operations {
     source_discover: {
         parameters: {
             query?: never;
-            header: {
-                /** @description JSON-encoded source config ({ type, ...config }) */
-                "x-source": string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Source config ({ type, ...config }) */
+                    source: {
+                        type: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description NDJSON stream of discover messages */
             200: {
@@ -1010,26 +999,35 @@ export interface operations {
     };
     pipeline_read: {
         parameters: {
-            query?: {
-                /** @description Stop streaming after N seconds. */
-                time_limit?: number;
-                /** @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires. */
-                soft_time_limit?: number;
-                /** @description Optional sync run identifier used to track bounded sync progress. */
-                run_id?: string;
-            };
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-                /** @description JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
-                "x-state"?: string;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Stop streaming after N seconds.
+                     * @example 300
+                     */
+                    time_limit?: number;
+                    /**
+                     * @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.
+                     * @example 150
+                     */
+                    soft_time_limit?: number;
+                    /**
+                     * @description Optional sync run identifier used to track bounded sync progress.
+                     * @example run_demo
+                     */
+                    run_id?: string;
+                    /** @description Optional array of input messages (push mode). Without stdin, reads from the source connector (backfill mode). */
+                    stdin?: components["schemas"]["Message"][];
+                    /** @description SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
+                    state?: components["schemas"]["SyncState"];
+                };
             };
         };
         responses: {
@@ -1058,16 +1056,17 @@ export interface operations {
     pipeline_write: {
         parameters: {
             query?: never;
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/x-ndjson": components["schemas"]["Message"];
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /** @description Array of messages to write to the destination. */
+                    stdin: components["schemas"]["Message"][];
+                };
             };
         };
         responses: {
@@ -1095,26 +1094,35 @@ export interface operations {
     };
     pipeline_sync: {
         parameters: {
-            query?: {
-                /** @description Stop streaming after N seconds. */
-                time_limit?: number;
-                /** @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires. */
-                soft_time_limit?: number;
-                /** @description Optional sync run identifier used to track bounded sync progress. */
-                run_id?: string;
-            };
-            header: {
-                /** @description JSON-encoded PipelineConfig */
-                "x-pipeline": string;
-                /** @description JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
-                "x-state"?: string;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/x-ndjson": components["schemas"]["SourceInputMessage"];
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Stop streaming after N seconds.
+                     * @example 300
+                     */
+                    time_limit?: number;
+                    /**
+                     * @description Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.
+                     * @example 150
+                     */
+                    soft_time_limit?: number;
+                    /**
+                     * @description Optional sync run identifier used to track bounded sync progress.
+                     * @example run_demo
+                     */
+                    run_id?: string;
+                    /** @description Optional array of input messages (push mode). Without stdin, reads from the source connector (backfill mode). */
+                    stdin?: components["schemas"]["Message"][];
+                    /** @description SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
+                    state?: components["schemas"]["SyncState"];
+                };
             };
         };
         responses: {

@@ -165,10 +165,3 @@ export function createConnectionAbort(c: any, onDisconnect?: () => void): AbortC
 
   return ac
 }
-
-export async function* verboseInput(
-  _label: string,
-  iter: AsyncIterable<unknown>
-): AsyncIterable<unknown> {
-  yield* iter
-}

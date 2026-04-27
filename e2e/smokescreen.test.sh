@@ -140,7 +140,8 @@ READ_PARAMS=$(printf \
   '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"products"}]}' \
   "$STRIPE_API_KEY")
 OUTPUT=$(ecurl -s --max-time 90 -w '\n%{http_code}' -X POST "${ENGINE_URL}/pipeline_read" \
-  -H "X-Pipeline: $READ_PARAMS")
+  -H "Content-Type: application/json" \
+  -d "{\"pipeline\":$READ_PARAMS}")
 HTTP_CODE=$(echo "$OUTPUT" | tail -1)
 OUTPUT=$(echo "$OUTPUT" | sed '$d')
 if [ "$HTTP_CODE" != "200" ]; then
@@ -159,11 +160,12 @@ PG_PARAMS=$(printf \
   '{"source":{"type":"stripe","stripe":{"api_key":"%s"}},"destination":{"type":"postgres","postgres":{"url":"%s","schema":"stripe_smokescreen_test"}}}' \
   "$STRIPE_API_KEY" "$PG_URL")
 ecurl -sf --max-time 30 -X POST "${ENGINE_URL}/pipeline_setup" \
-  -H "X-Pipeline: $PG_PARAMS" && echo "    setup OK" || echo "    setup returned non-204 (may be fine)"
-echo "$OUTPUT" | ecurl -sf --max-time 90 -X POST "${ENGINE_URL}/pipeline_write" \
-  -H "X-Pipeline: $PG_PARAMS" \
-  -H "Content-Type: application/x-ndjson" \
-  --data-binary @- | head -3 || true
+  -H "Content-Type: application/json" \
+  -d "{\"pipeline\":$PG_PARAMS}" && echo "    setup OK" || echo "    setup returned non-204 (may be fine)"
+PG_RECORDS=$(echo "$OUTPUT" | grep -v '^$' | jq -s '.')
+ecurl -sf --max-time 90 -X POST "${ENGINE_URL}/pipeline_write" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n --argjson p "$PG_PARAMS" --argjson m "$PG_RECORDS" '{"pipeline":$p,"stdin":$m}')" | head -3 || true
 echo "    dest-pg OK"
 
 echo "==> All smokescreen tests passed"

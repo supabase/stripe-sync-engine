@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Engine",
     "version": "1.0.0",
-    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via the `X-Pipeline` header (JSON-encoded PipelineConfig). Optional cursor state can be provided via `X-State`.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /pipeline_check | Check connector connection |\n| POST | /pipeline_setup | Set up destination schema |\n| POST | /pipeline_teardown | Tear down destination schema |\n| POST | /source_discover | Discover available streams |\n| POST | /pipeline_read | Read records from source |\n| POST | /pipeline_write | Write records to destination |\n| POST | /pipeline_sync | Run sync pipeline (read → write) |\n| GET | /meta/sources | List available source connectors |\n| GET | /meta/sources/{type} | Get source connector spec |\n| GET | /meta/destinations | List available destination connectors |\n| GET | /meta/destinations/{type} | Get destination connector spec |\n| POST | /internal/query | Run a SQL query against a Postgres connection |"
+    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via a JSON request body.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /pipeline_check | Check connector connection |\n| POST | /pipeline_setup | Set up destination schema |\n| POST | /pipeline_teardown | Tear down destination schema |\n| POST | /source_discover | Discover available streams |\n| POST | /pipeline_read | Read records from source |\n| POST | /pipeline_write | Write records to destination |\n| POST | /pipeline_sync | Run sync pipeline (read → write) |\n| GET | /meta/sources | List available source connectors |\n| GET | /meta/sources/{type} | Get source connector spec |\n| GET | /meta/destinations | List available destination connectors |\n| GET | /meta/destinations/{type} | Get destination connector spec |\n| POST | /internal/query | Run a SQL query against a Postgres connection |"
   },
   "paths": {
     "/health": {
@@ -57,36 +57,33 @@
           "Stateless Sync API"
         ],
         "summary": "Check connector connection",
-        "description": "Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass ?only=source or ?only=destination to check a single side.",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "only",
-            "schema": {
-              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
-              "example": "destination",
-              "type": "string",
-              "enum": [
-                "source",
-                "destination"
-              ]
-            },
-            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
-          },
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
+        "description": "Validates the source/destination config and tests connectivity. Streams NDJSON messages (connection_status, log, trace) tagged with _emitted_by. Pass only=source or only=destination to check a single side.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "only": {
+                    "description": "Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.",
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "destination"
+                    ]
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
               }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "NDJSON stream of check messages",
@@ -125,36 +122,33 @@
           "Stateless Sync API"
         ],
         "summary": "Set up destination schema",
-        "description": "Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass ?only=destination to run destination setup alone (e.g. optimistic table creation) or ?only=source to isolate the source.",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "only",
-            "schema": {
-              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
-              "example": "destination",
-              "type": "string",
-              "enum": [
-                "source",
-                "destination"
-              ]
-            },
-            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
-          },
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
+        "description": "Creates destination tables and applies migrations. Streams NDJSON messages (control, log, trace) tagged with _emitted_by. Pass only=destination to run destination setup alone (e.g. optimistic table creation) or only=source to isolate the source.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "only": {
+                    "description": "Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.",
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "destination"
+                    ]
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
               }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "NDJSON stream of setup messages",
@@ -193,36 +187,33 @@
           "Stateless Sync API"
         ],
         "summary": "Tear down destination schema",
-        "description": "Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass ?only=destination or ?only=source to run a single side.",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "only",
-            "schema": {
-              "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging.",
-              "example": "destination",
-              "type": "string",
-              "enum": [
-                "source",
-                "destination"
-              ]
-            },
-            "description": "Run only the source or destination side. Useful for optimistic destination setup (e.g. creating tables early in a UI) or isolating a connector when debugging."
-          },
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
+        "description": "Drops destination tables. Streams NDJSON messages (log, trace) tagged with _emitted_by. Pass only=destination or only=source to run a single side.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "only": {
+                    "description": "Run only the source or destination side. Useful for optimistic destination setup or isolating a connector when debugging.",
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "destination"
+                    ]
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
               }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "NDJSON stream of teardown messages",
@@ -262,30 +253,34 @@
         ],
         "summary": "Discover available streams",
         "description": "Streams NDJSON messages (catalog, logs, traces) for the configured source.",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-source",
-            "required": true,
-            "description": "JSON-encoded source config ({ type, ...config })",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type"
-                  ],
-                  "additionalProperties": {}
-                }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": {},
+                    "description": "Source config ({ type, ...config })"
+                  }
+                },
+                "required": [
+                  "source"
+                ]
               }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "NDJSON stream of discover messages",
@@ -324,93 +319,49 @@
           "Stateless Sync API"
         ],
         "summary": "Read records from source",
-        "description": "Streams NDJSON messages (records, state, catalog). Optional NDJSON body provides live events as input.",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "time_limit",
-            "schema": {
-              "description": "Stop streaming after N seconds.",
-              "example": "300",
-              "type": "number",
-              "exclusiveMinimum": 0
-            },
-            "description": "Stop streaming after N seconds."
-          },
-          {
-            "in": "query",
-            "name": "soft_time_limit",
-            "schema": {
-              "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
-              "example": "150",
-              "type": "number",
-              "exclusiveMinimum": 0
-            },
-            "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires."
-          },
-          {
-            "in": "query",
-            "name": "run_id",
-            "schema": {
-              "description": "Optional sync run identifier used to track bounded sync progress.",
-              "example": "run_demo",
-              "type": "string"
-            },
-            "description": "Optional sync run identifier used to track bounded sync progress."
-          },
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
-              }
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-state",
-            "required": false,
-            "description": "JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "default": {
-                    "source": {
-                      "streams": {},
-                      "global": {}
-                    },
-                    "destination": {},
-                    "sync_run": {
-                      "progress": {
-                        "started_at": "1970-01-01T00:00:00.000Z",
-                        "elapsed_ms": 0,
-                        "global_state_count": 0,
-                        "derived": {
-                          "status": "started",
-                          "records_per_second": 0,
-                          "states_per_second": 0
-                        },
-                        "streams": {}
-                      }
+        "description": "Streams NDJSON messages (records, state, catalog).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "time_limit": {
+                    "description": "Stop streaming after N seconds.",
+                    "example": 300,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "soft_time_limit": {
+                    "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
+                    "example": 150,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "run_id": {
+                    "description": "Optional sync run identifier used to track bounded sync progress.",
+                    "example": "run_demo",
+                    "type": "string"
+                  },
+                  "stdin": {
+                    "description": "Optional array of input messages (push mode). Without stdin, reads from the source connector (backfill mode).",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Message"
                     }
                   },
-                  "$ref": "#/components/schemas/SyncState"
-                }
-              }
-            }
-          }
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/x-ndjson": {
-              "schema": {
-                "$ref": "#/components/schemas/SourceInputMessage"
+                  "state": {
+                    "description": "SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.",
+                    "$ref": "#/components/schemas/SyncState"
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
               }
             }
           }
@@ -453,28 +404,29 @@
           "Stateless Sync API"
         ],
         "summary": "Write records to destination",
-        "description": "Reads NDJSON messages from the request body and writes them to the destination. Pipe /read output as input.",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
-              }
-            }
-          }
-        ],
+        "description": "Writes messages to the destination. Pass an array of messages in the request body.",
         "requestBody": {
           "required": true,
           "content": {
-            "application/x-ndjson": {
+            "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Message"
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "stdin": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Message"
+                    },
+                    "description": "Array of messages to write to the destination."
+                  }
+                },
+                "required": [
+                  "pipeline",
+                  "stdin"
+                ]
               }
             }
           }
@@ -517,93 +469,49 @@
           "Stateless Sync API"
         ],
         "summary": "Run sync pipeline (read → write)",
-        "description": "Without a request body, reads from the source connector and writes to the destination (backfill mode). With an NDJSON request body, uses the provided messages as input instead of reading from the source (push mode — e.g. piped webhook events).",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "time_limit",
-            "schema": {
-              "description": "Stop streaming after N seconds.",
-              "example": "300",
-              "type": "number",
-              "exclusiveMinimum": 0
-            },
-            "description": "Stop streaming after N seconds."
-          },
-          {
-            "in": "query",
-            "name": "soft_time_limit",
-            "schema": {
-              "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
-              "example": "150",
-              "type": "number",
-              "exclusiveMinimum": 0
-            },
-            "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires."
-          },
-          {
-            "in": "query",
-            "name": "run_id",
-            "schema": {
-              "description": "Optional sync run identifier used to track bounded sync progress.",
-              "example": "run_demo",
-              "type": "string"
-            },
-            "description": "Optional sync run identifier used to track bounded sync progress."
-          },
-          {
-            "in": "header",
-            "name": "x-pipeline",
-            "required": true,
-            "description": "JSON-encoded PipelineConfig",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PipelineConfig"
-                }
-              }
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-state",
-            "required": false,
-            "description": "JSON-encoded SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "default": {
-                    "source": {
-                      "streams": {},
-                      "global": {}
-                    },
-                    "destination": {},
-                    "sync_run": {
-                      "progress": {
-                        "started_at": "1970-01-01T00:00:00.000Z",
-                        "elapsed_ms": 0,
-                        "global_state_count": 0,
-                        "derived": {
-                          "status": "started",
-                          "records_per_second": 0,
-                          "states_per_second": 0
-                        },
-                        "streams": {}
-                      }
+        "description": "Reads from the source connector and writes to the destination (backfill mode).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "time_limit": {
+                    "description": "Stop streaming after N seconds.",
+                    "example": 300,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "soft_time_limit": {
+                    "description": "Soft wall-clock deadline in seconds. Stops reading from the source between messages; the destination continues to drain and flush until time_limit fires.",
+                    "example": 150,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "run_id": {
+                    "description": "Optional sync run identifier used to track bounded sync progress.",
+                    "example": "run_demo",
+                    "type": "string"
+                  },
+                  "stdin": {
+                    "description": "Optional array of input messages (push mode). Without stdin, reads from the source connector (backfill mode).",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Message"
                     }
                   },
-                  "$ref": "#/components/schemas/SyncState"
-                }
-              }
-            }
-          }
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/x-ndjson": {
-              "schema": {
-                "$ref": "#/components/schemas/SourceInputMessage"
+                  "state": {
+                    "description": "SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.",
+                    "$ref": "#/components/schemas/SyncState"
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
               }
             }
           }
@@ -920,6 +828,366 @@
   },
   "components": {
     "schemas": {
+      "PipelineConfig": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SourceConfig"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/DestinationConfig"
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Stream (table) name to sync."
+                },
+                "sync_mode": {
+                  "description": "How the source reads this stream. Defaults to full_refresh.",
+                  "type": "string",
+                  "enum": [
+                    "incremental",
+                    "full_refresh"
+                  ]
+                },
+                "fields": {
+                  "description": "If set, only these fields are synced.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "backfill_limit": {
+                  "description": "Cap backfill to this many records, then mark the stream complete.",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "source",
+          "destination"
+        ]
+      },
+      "SourceConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "stripe"
+              },
+              "stripe": {
+                "$ref": "#/components/schemas/SourceStripeConfig"
+              }
+            },
+            "required": [
+              "type",
+              "stripe"
+            ]
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "type"
+        }
+      },
+      "SourceStripeConfig": {
+        "type": "object",
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "description": "Stripe API key (sk_test_... or sk_live_...)"
+          },
+          "account_id": {
+            "type": "string",
+            "description": "Stripe account ID (resolved from API if omitted)"
+          },
+          "account_created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Stripe account creation timestamp in unix seconds (resolved from API if omitted)"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "Whether this is a live mode sync"
+          },
+          "api_version": {
+            "type": "string",
+            "enum": [
+              "2026-03-25.dahlia",
+              "2026-02-25.clover",
+              "2026-01-28.clover",
+              "2025-12-15.clover",
+              "2025-11-17.clover",
+              "2025-10-29.clover",
+              "2025-09-30.clover",
+              "2025-08-27.basil",
+              "2025-07-30.basil",
+              "2025-06-30.basil",
+              "2025-05-28.basil",
+              "2025-04-30.basil",
+              "2025-03-31.basil",
+              "2025-02-24.acacia",
+              "2025-01-27.acacia",
+              "2024-12-18.acacia",
+              "2024-11-20.acacia",
+              "2024-10-28.acacia",
+              "2024-09-30.acacia",
+              "2024-06-20",
+              "2024-04-10",
+              "2024-04-03",
+              "2023-10-16",
+              "2023-08-16",
+              "2022-11-15",
+              "2022-08-01",
+              "2020-08-27",
+              "2020-03-02",
+              "2019-12-03",
+              "2019-11-05",
+              "2019-10-17",
+              "2019-10-08",
+              "2019-09-09",
+              "2019-08-14",
+              "2019-05-16",
+              "2019-03-14",
+              "2019-02-19",
+              "2019-02-11",
+              "2018-11-08",
+              "2018-10-31",
+              "2018-09-24",
+              "2018-09-06",
+              "2018-08-23",
+              "2018-07-27",
+              "2018-05-21",
+              "2018-02-28",
+              "2018-02-06",
+              "2018-02-05",
+              "2018-01-23",
+              "2017-12-14",
+              "2017-08-15"
+            ]
+          },
+          "base_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)"
+          },
+          "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL for managed webhook endpoint registration"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "description": "Webhook signing secret (whsec_...) for signature verification"
+          },
+          "websocket": {
+            "type": "boolean",
+            "description": "Enable WebSocket streaming for live events"
+          },
+          "poll_events": {
+            "type": "boolean",
+            "description": "Enable events API polling for incremental sync after backfill"
+          },
+          "webhook_port": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Port for built-in webhook HTTP listener (e.g. 4242)"
+          },
+          "revalidate_objects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Object types to re-fetch from Stripe API on webhook (e.g. [\"subscription\"])"
+          },
+          "backfill_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Max objects to backfill per stream (useful for testing)"
+          },
+          "rate_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "additionalProperties": false
+      },
+      "DestinationConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "postgres"
+              },
+              "postgres": {
+                "$ref": "#/components/schemas/DestinationPostgresConfig"
+              }
+            },
+            "required": [
+              "type",
+              "postgres"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "google_sheets"
+              },
+              "google_sheets": {
+                "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
+              }
+            },
+            "required": [
+              "type",
+              "google_sheets"
+            ]
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "type"
+        }
+      },
+      "DestinationPostgresConfig": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Postgres connection string"
+          },
+          "connection_string": {
+            "type": "string",
+            "description": "Deprecated alias for url; prefer url"
+          },
+          "schema": {
+            "default": "public",
+            "type": "string",
+            "description": "Target schema name (e.g. \"stripe\")"
+          },
+          "batch_size": {
+            "default": 100,
+            "type": "number",
+            "description": "Records to buffer before flushing"
+          },
+          "aws": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Postgres host for RDS IAM auth"
+              },
+              "port": {
+                "default": 5432,
+                "type": "number",
+                "description": "Postgres port for RDS IAM auth"
+              },
+              "database": {
+                "type": "string",
+                "description": "Database name for RDS IAM auth"
+              },
+              "user": {
+                "type": "string",
+                "description": "Database user for RDS IAM auth"
+              },
+              "region": {
+                "type": "string",
+                "description": "AWS region for RDS instance"
+              },
+              "role_arn": {
+                "type": "string",
+                "description": "IAM role ARN to assume (cross-account)"
+              },
+              "external_id": {
+                "type": "string",
+                "description": "External ID for STS AssumeRole"
+              }
+            },
+            "required": [
+              "host",
+              "database",
+              "user",
+              "region"
+            ],
+            "additionalProperties": false,
+            "description": "AWS RDS IAM authentication config"
+          },
+          "ssl_ca_pem": {
+            "type": "string",
+            "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DestinationGoogleSheetsConfig": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)"
+          },
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "OAuth2 refresh token"
+          },
+          "spreadsheet_id": {
+            "type": "string",
+            "description": "Target spreadsheet ID (created if omitted)"
+          },
+          "spreadsheet_title": {
+            "default": "Stripe Sync",
+            "type": "string",
+            "description": "Title when creating a new spreadsheet"
+          },
+          "batch_size": {
+            "default": 50,
+            "type": "number",
+            "description": "Rows per Sheets API append call"
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "additionalProperties": false
+      },
       "RecordMessage": {
         "type": "object",
         "properties": {
@@ -1860,430 +2128,6 @@
           "source_input"
         ]
       },
-      "SourceStripeInput": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Unique identifier for the object."
-          },
-          "object": {
-            "type": "string",
-            "const": "event"
-          },
-          "account": {
-            "type": "string",
-            "description": "The connected account that originates the event."
-          },
-          "api_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "created": {
-            "type": "number",
-            "description": "Time at which the object was created. Measured in seconds since the Unix epoch."
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "object": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
-              },
-              "previous_attributes": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
-              }
-            },
-            "required": [
-              "object"
-            ],
-            "additionalProperties": false
-          },
-          "livemode": {
-            "type": "boolean",
-            "description": "Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode."
-          },
-          "pending_webhooks": {
-            "type": "number",
-            "description": "Number of webhooks that haven't been successfully delivered (for example, to return a 20x response) to the URLs you specify."
-          },
-          "request": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "idempotency_key": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "idempotency_key"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "type": {
-            "type": "string",
-            "description": "Description of the event (for example, `invoice.created` or `charge.refunded`)."
-          }
-        },
-        "required": [
-          "id",
-          "object",
-          "api_version",
-          "created",
-          "data",
-          "livemode",
-          "pending_webhooks",
-          "request",
-          "type"
-        ],
-        "additionalProperties": false
-      },
-      "SourceConfig": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "stripe"
-              },
-              "stripe": {
-                "$ref": "#/components/schemas/SourceStripeConfig"
-              }
-            },
-            "required": [
-              "type",
-              "stripe"
-            ]
-          }
-        ],
-        "type": "object",
-        "discriminator": {
-          "propertyName": "type"
-        }
-      },
-      "SourceStripeConfig": {
-        "type": "object",
-        "properties": {
-          "api_key": {
-            "type": "string",
-            "description": "Stripe API key (sk_test_... or sk_live_...)"
-          },
-          "account_id": {
-            "type": "string",
-            "description": "Stripe account ID (resolved from API if omitted)"
-          },
-          "account_created": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Stripe account creation timestamp in unix seconds (resolved from API if omitted)"
-          },
-          "livemode": {
-            "type": "boolean",
-            "description": "Whether this is a live mode sync"
-          },
-          "api_version": {
-            "type": "string",
-            "enum": [
-              "2026-03-25.dahlia",
-              "2026-02-25.clover",
-              "2026-01-28.clover",
-              "2025-12-15.clover",
-              "2025-11-17.clover",
-              "2025-10-29.clover",
-              "2025-09-30.clover",
-              "2025-08-27.basil",
-              "2025-07-30.basil",
-              "2025-06-30.basil",
-              "2025-05-28.basil",
-              "2025-04-30.basil",
-              "2025-03-31.basil",
-              "2025-02-24.acacia",
-              "2025-01-27.acacia",
-              "2024-12-18.acacia",
-              "2024-11-20.acacia",
-              "2024-10-28.acacia",
-              "2024-09-30.acacia",
-              "2024-06-20",
-              "2024-04-10",
-              "2024-04-03",
-              "2023-10-16",
-              "2023-08-16",
-              "2022-11-15",
-              "2022-08-01",
-              "2020-08-27",
-              "2020-03-02",
-              "2019-12-03",
-              "2019-11-05",
-              "2019-10-17",
-              "2019-10-08",
-              "2019-09-09",
-              "2019-08-14",
-              "2019-05-16",
-              "2019-03-14",
-              "2019-02-19",
-              "2019-02-11",
-              "2018-11-08",
-              "2018-10-31",
-              "2018-09-24",
-              "2018-09-06",
-              "2018-08-23",
-              "2018-07-27",
-              "2018-05-21",
-              "2018-02-28",
-              "2018-02-06",
-              "2018-02-05",
-              "2018-01-23",
-              "2017-12-14",
-              "2017-08-15"
-            ]
-          },
-          "base_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "Override the Stripe API base URL (e.g. http://localhost:12111 for stripe-mock)"
-          },
-          "webhook_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "URL for managed webhook endpoint registration"
-          },
-          "webhook_secret": {
-            "type": "string",
-            "description": "Webhook signing secret (whsec_...) for signature verification"
-          },
-          "websocket": {
-            "type": "boolean",
-            "description": "Enable WebSocket streaming for live events"
-          },
-          "poll_events": {
-            "type": "boolean",
-            "description": "Enable events API polling for incremental sync after backfill"
-          },
-          "webhook_port": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Port for built-in webhook HTTP listener (e.g. 4242)"
-          },
-          "revalidate_objects": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Object types to re-fetch from Stripe API on webhook (e.g. [\"subscription\"])"
-          },
-          "backfill_limit": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Max objects to backfill per stream (useful for testing)"
-          },
-          "rate_limit": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Override max requests per second (default: auto-derived from API key mode — 20 live, 10 test)."
-          }
-        },
-        "required": [
-          "api_key"
-        ],
-        "additionalProperties": false
-      },
-      "DestinationConfig": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "postgres"
-              },
-              "postgres": {
-                "$ref": "#/components/schemas/DestinationPostgresConfig"
-              }
-            },
-            "required": [
-              "type",
-              "postgres"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "const": "google_sheets"
-              },
-              "google_sheets": {
-                "$ref": "#/components/schemas/DestinationGoogleSheetsConfig"
-              }
-            },
-            "required": [
-              "type",
-              "google_sheets"
-            ]
-          }
-        ],
-        "type": "object",
-        "discriminator": {
-          "propertyName": "type"
-        }
-      },
-      "DestinationPostgresConfig": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "Postgres connection string"
-          },
-          "connection_string": {
-            "type": "string",
-            "description": "Deprecated alias for url; prefer url"
-          },
-          "schema": {
-            "default": "public",
-            "type": "string",
-            "description": "Target schema name (e.g. \"stripe\")"
-          },
-          "batch_size": {
-            "default": 100,
-            "type": "number",
-            "description": "Records to buffer before flushing"
-          },
-          "aws": {
-            "type": "object",
-            "properties": {
-              "host": {
-                "type": "string",
-                "description": "Postgres host for RDS IAM auth"
-              },
-              "port": {
-                "default": 5432,
-                "type": "number",
-                "description": "Postgres port for RDS IAM auth"
-              },
-              "database": {
-                "type": "string",
-                "description": "Database name for RDS IAM auth"
-              },
-              "user": {
-                "type": "string",
-                "description": "Database user for RDS IAM auth"
-              },
-              "region": {
-                "type": "string",
-                "description": "AWS region for RDS instance"
-              },
-              "role_arn": {
-                "type": "string",
-                "description": "IAM role ARN to assume (cross-account)"
-              },
-              "external_id": {
-                "type": "string",
-                "description": "External ID for STS AssumeRole"
-              }
-            },
-            "required": [
-              "host",
-              "database",
-              "user",
-              "region"
-            ],
-            "additionalProperties": false,
-            "description": "AWS RDS IAM authentication config"
-          },
-          "ssl_ca_pem": {
-            "type": "string",
-            "description": "PEM-encoded CA certificate for SSL verification (required for verify-ca / verify-full with a private CA)"
-          }
-        },
-        "additionalProperties": false
-      },
-      "DestinationGoogleSheetsConfig": {
-        "type": "object",
-        "properties": {
-          "client_id": {
-            "type": "string",
-            "description": "Google OAuth2 client ID (env: GOOGLE_CLIENT_ID)"
-          },
-          "client_secret": {
-            "type": "string",
-            "description": "Google OAuth2 client secret (env: GOOGLE_CLIENT_SECRET)"
-          },
-          "access_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "refresh_token": {
-            "type": "string",
-            "description": "OAuth2 refresh token"
-          },
-          "spreadsheet_id": {
-            "type": "string",
-            "description": "Target spreadsheet ID (created if omitted)"
-          },
-          "spreadsheet_title": {
-            "default": "Stripe Sync",
-            "type": "string",
-            "description": "Title when creating a new spreadsheet"
-          },
-          "batch_size": {
-            "default": 50,
-            "type": "number",
-            "description": "Rows per Sheets API append call"
-          }
-        },
-        "required": [
-          "refresh_token"
-        ],
-        "additionalProperties": false
-      },
       "Message": {
         "oneOf": [
           {
@@ -2446,76 +2290,6 @@
             "log": "#/components/schemas/LogMessage"
           }
         }
-      },
-      "TypedSourceInputMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "source_input"
-          },
-          "source_input": {
-            "$ref": "#/components/schemas/SourceStripeInput"
-          }
-        },
-        "required": [
-          "type",
-          "source_input"
-        ],
-        "additionalProperties": false
-      },
-      "PipelineConfig": {
-        "type": "object",
-        "properties": {
-          "source": {
-            "$ref": "#/components/schemas/SourceConfig"
-          },
-          "destination": {
-            "$ref": "#/components/schemas/DestinationConfig"
-          },
-          "streams": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Stream (table) name to sync."
-                },
-                "sync_mode": {
-                  "description": "How the source reads this stream. Defaults to full_refresh.",
-                  "type": "string",
-                  "enum": [
-                    "incremental",
-                    "full_refresh"
-                  ]
-                },
-                "fields": {
-                  "description": "If set, only these fields are synced.",
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "backfill_limit": {
-                  "description": "Cap backfill to this many records, then mark the stream complete.",
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "name"
-              ],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": [
-          "source",
-          "destination"
-        ],
-        "additionalProperties": false
       }
     }
   }

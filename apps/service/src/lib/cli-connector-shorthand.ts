@@ -262,8 +262,8 @@ export function wrapPipelineConnectorShorthand(
         resolvedArgs = { ...resolvedArgs, skipCheck: 'true' }
       }
 
-      // --x-pipeline provides the full PipelineConfig (same format as the engine's
-      // X-Pipeline header): { source: { type, [type]: {...} }, destination: {...}, streams?: [...] }
+      // --x-pipeline provides the full PipelineConfig:
+      // { source: { type, [type]: {...} }, destination: {...}, streams?: [...] }
       const xPipeline = resolvedArgs['x-pipeline'] as string | undefined
       if (xPipeline) {
         const { parseJsonOrFile } = await import('@stripe/sync-ts-cli')

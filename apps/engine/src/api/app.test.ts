@@ -60,10 +60,10 @@ import { beforeAll } from 'vitest'
 const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined)
 const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-const syncParams = JSON.stringify({
+const testPipeline = {
   source: { type: 'test', test: { streams: { customers: {} } } },
   destination: { type: 'test', test: {} },
-})
+}
 
 /** Read an NDJSON response body into an array of parsed lines. */
 async function readNdjson<T>(res: Response): Promise<T[]> {
@@ -74,16 +74,12 @@ async function readNdjson<T>(res: Response): Promise<T[]> {
     .map((line) => JSON.parse(line) as T)
 }
 
-/** Build NDJSON string from array of objects. */
-function toNdjson(items: unknown[]): string {
-  return items.map((item) => JSON.stringify(item)).join('\n')
-}
-
-/** Headers for a request body: Content-Type + Content-Length (required for hasBody()). */
-function bodyHeaders(body: string): Record<string, string> {
+/** Build a JSON POST request init. */
+function jsonBody(body: unknown, extraHeaders?: Record<string, string>): RequestInit {
   return {
-    'Content-Type': 'application/x-ndjson',
-    'Content-Length': String(new TextEncoder().encode(body).length),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(body),
   }
 }
 
@@ -208,7 +204,7 @@ describe('GET /openapi.json', () => {
     expect(setupOp.responses['204']).toBeUndefined()
   })
 
-  it('/write spec documents a required NDJSON request body', async () => {
+  it('/write spec documents a required JSON request body', async () => {
     const app = await createApp(resolver)
     const res = await app.request('/openapi.json')
     const spec = (await res.json()) as any
@@ -217,12 +213,11 @@ describe('GET /openapi.json', () => {
     const body = writeOp.requestBody
     expect(body).toBeDefined()
     expect(body.required).toBe(true)
-    const ndjsonContent = body.content?.['application/x-ndjson']
-    expect(ndjsonContent).toBeDefined()
-    expect(ndjsonContent.schema.$ref).toBe('#/components/schemas/Message')
+    const jsonContent = body.content?.['application/json']
+    expect(jsonContent).toBeDefined()
   })
 
-  it('/read and /sync spec documents an optional NDJSON request body', async () => {
+  it('/read and /sync spec documents a required JSON request body', async () => {
     const app = await createApp(resolver)
     const res = await app.request('/openapi.json')
     const spec = (await res.json()) as any
@@ -232,23 +227,24 @@ describe('GET /openapi.json', () => {
       expect(op).toBeDefined()
       const body = op.requestBody
       expect(body).toBeDefined()
-      expect(body.required).toBe(false)
-      expect(body.content?.['application/x-ndjson']).toBeDefined()
+      expect(body.required).toBe(true)
+      expect(body.content?.['application/json']).toBeDefined()
     }
   })
 
-  it('documents the X-Pipeline header on sync routes', async () => {
+  it('sync routes use JSON request body (not headers)', async () => {
     const app = await createApp(resolver)
     const res = await app.request('/openapi.json')
     const spec = (await res.json()) as any
 
-    // /check is a POST with X-Pipeline header
+    // /check is a POST with JSON body, no X-Pipeline header
     const checkOp = spec.paths['/pipeline_check']?.post
     expect(checkOp).toBeDefined()
+    expect(checkOp.requestBody?.content?.['application/json']).toBeDefined()
     const headerParam = checkOp.parameters?.find(
       (p: any) => p.in === 'header' && p.name === 'x-pipeline'
     )
-    expect(headerParam).toBeDefined()
+    expect(headerParam).toBeUndefined()
   })
 })
 
@@ -402,16 +398,18 @@ describe('engine request id header', () => {
 
     const app = await createApp(bridgeResolver)
     const actionId = 'act_bridge_123'
-    const res = await app.request('/pipeline_read', {
-      method: 'POST',
-      headers: {
-        'X-Pipeline': JSON.stringify({
-          source: { type: 'bridge', bridge: {} },
-          destination: { type: 'test', test: {} },
-        }),
-        'X-Action-Id': actionId,
-      },
-    })
+    const res = await app.request(
+      '/pipeline_read',
+      jsonBody(
+        {
+          pipeline: {
+            source: { type: 'bridge', bridge: {} },
+            destination: { type: 'test', test: {} },
+          },
+        },
+        { 'X-Action-Id': actionId }
+      )
+    )
 
     expect(res.status).toBe(200)
     expect(res.headers.get('sync-engine-request-id')).toMatch(
@@ -521,23 +519,20 @@ describe('engine request id header', () => {
     const app = await createApp(bridgeResolver)
     const actionA = 'act_concurrent_a'
     const actionB = 'act_concurrent_b'
-    const requestHeaders = (actionId: string) => ({
-      'X-Pipeline': JSON.stringify({
-        source: { type: 'bridge', bridge: {} },
-        destination: { type: 'test', test: {} },
-      }),
-      'X-Action-Id': actionId,
-    })
+    const bridgePipeline = {
+      source: { type: 'bridge', bridge: {} },
+      destination: { type: 'test', test: {} },
+    }
 
     const [resA, resB] = await Promise.all([
-      app.request('/pipeline_read', {
-        method: 'POST',
-        headers: requestHeaders(actionA),
-      }),
-      app.request('/pipeline_read', {
-        method: 'POST',
-        headers: requestHeaders(actionB),
-      }),
+      app.request(
+        '/pipeline_read',
+        jsonBody({ pipeline: bridgePipeline }, { 'X-Action-Id': actionA })
+      ),
+      app.request(
+        '/pipeline_read',
+        jsonBody({ pipeline: bridgePipeline }, { 'X-Action-Id': actionB })
+      ),
     ])
 
     const [eventsA, eventsB] = await Promise.all([
@@ -569,10 +564,7 @@ describe('POST /setup', () => {
   it('streams NDJSON setup messages', async () => {
     const app = await createApp(resolver)
 
-    const res = await app.request('/pipeline_setup', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams },
-    })
+    const res = await app.request('/pipeline_setup', jsonBody({ pipeline: testPipeline }))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
     const events = await readNdjson<Message>(res)
@@ -597,10 +589,7 @@ describe('POST /teardown', () => {
   it('streams NDJSON teardown messages', async () => {
     const app = await createApp(resolver)
 
-    const res = await app.request('/pipeline_teardown', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams },
-    })
+    const res = await app.request('/pipeline_teardown', jsonBody({ pipeline: testPipeline }))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
     // sourceTest and destinationTest have no teardown(), so stream is empty
@@ -613,10 +602,7 @@ describe('POST /check', () => {
   it('streams connection_status messages for source and destination', async () => {
     const app = await createApp(resolver)
 
-    const res = await app.request('/pipeline_check', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams },
-    })
+    const res = await app.request('/pipeline_check', jsonBody({ pipeline: testPipeline }))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
     const events = await readNdjson<Record<string, unknown>>(res)
@@ -630,7 +616,7 @@ describe('POST /read', () => {
   it('streams messages as NDJSON', async () => {
     const app = await createApp(resolver)
 
-    const body = toNdjson([
+    const stdin = [
       {
         type: 'record',
         record: {
@@ -640,12 +626,8 @@ describe('POST /read', () => {
         },
       },
       { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
-    ])
-    const res = await app.request('/pipeline_read', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
-      body,
-    })
+    ]
+    const res = await app.request('/pipeline_read', jsonBody({ pipeline: testPipeline, stdin }))
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
@@ -657,145 +639,13 @@ describe('POST /read', () => {
     expect(dataEvents[1]!.type).toBe('source_state')
     expect(dataEvents[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
-
-  describe('SourceInputMessage validation (source with input schema)', () => {
-    // Build a resolver where the source has rawInputJsonSchema.
-    // The input schema matches the Message record shape so sourceTest can echo it
-    // and the engine's Message.parse() succeeds downstream.
-    let inputApp: Awaited<ReturnType<typeof createApp>>
-    const inputSchema = {
-      type: 'object',
-      properties: {
-        type: { type: 'string' },
-        record: { type: 'object' },
-        state: { type: 'object' },
-      },
-      required: ['type'],
-    }
-
-    beforeAll(async () => {
-      const [srcConfigSchema, destConfigSchema] = await Promise.all([
-        getRawConfigJsonSchema(sourceTest),
-        getRawConfigJsonSchema(destinationTest),
-      ])
-      const inputResolver: ConnectorResolver = {
-        resolveSource: async () => sourceTest,
-        resolveDestination: async () => destinationTest,
-        sources: () =>
-          new Map([
-            [
-              'test',
-              {
-                connector: sourceTest,
-                configSchema: {} as any,
-                rawConfigJsonSchema: srcConfigSchema,
-                rawInputJsonSchema: inputSchema,
-              },
-            ],
-          ]),
-        destinations: () =>
-          new Map([
-            [
-              'test',
-              {
-                connector: destinationTest,
-                configSchema: {} as any,
-                rawConfigJsonSchema: destConfigSchema,
-              },
-            ],
-          ]),
-      }
-      inputApp = await createApp(inputResolver)
-    })
-
-    it('spec uses SourceInputMessage schema for /read and /sync request body when source has input schema', async () => {
-      const res = await inputApp.request('/openapi.json')
-      const spec = (await res.json()) as any
-
-      for (const path of ['/pipeline_read', '/pipeline_sync'] as const) {
-        const body = spec.paths[path]?.post?.requestBody
-        expect(body).toBeDefined()
-        expect(body.required).toBe(false)
-        expect(body.content?.['application/x-ndjson']?.schema?.$ref).toBe(
-          '#/components/schemas/SourceInputMessage'
-        )
-      }
-    })
-
-    it('accepts valid wrapped input and passes unwrapped data to source', async () => {
-      const record = {
-        type: 'record',
-        record: {
-          stream: 'customers',
-          data: { id: 'cus_1' },
-          emitted_at: new Date().toISOString(),
-        },
-      }
-      const body = toNdjson([{ type: 'source_input', source_input: record }])
-      const res = await inputApp.request('/pipeline_read', {
-        method: 'POST',
-        headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
-        body,
-      })
-      expect(res.status).toBe(200)
-      const events = await readNdjson<Message>(res)
-      // sourceTest echoes the unwrapped record, engine parses it as Message
-      expect(events.some((e) => e.type === 'record')).toBe(true)
-    })
-
-    it('rejects input that fails the SourceInputMessage schema', async () => {
-      // Missing required 'type' field in the inner payload
-      const body = toNdjson([{ type: 'source_input', source_input: { noTypeField: true } }])
-      const res = await inputApp.request('/pipeline_read', {
-        method: 'POST',
-        headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
-        body,
-      })
-      // SourceInputMessage.parse() throws — error propagates through the NDJSON stream
-      expect(res.status).toBe(200)
-      const text = await res.text()
-      expect(text).toContain('error')
-    })
-
-    it('pipeline_sync: unwraps SourceInputMessage envelope and produces output', async () => {
-      // pipeline_sync unwraps { type: 'source_input', source_input: ... } just like pipeline_read.
-      const body = toNdjson([
-        {
-          type: 'source_input',
-          source_input: {
-            type: 'record',
-            record: {
-              stream: 'customers',
-              data: { id: 'cus_1' },
-              emitted_at: new Date().toISOString(),
-            },
-          },
-        },
-        {
-          type: 'source_input',
-          source_input: {
-            type: 'source_state',
-            source_state: { stream: 'customers', data: {} },
-          },
-        },
-      ])
-      const res = await inputApp.request('/pipeline_sync', {
-        method: 'POST',
-        headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
-        body,
-      })
-      expect(res.status).toBe(200)
-      const events = await readNdjson<Record<string, unknown>>(res)
-      expect(events.some((e) => e.type === 'source_state' || e.type === 'eof')).toBe(true)
-    })
-  })
 })
 
 describe('POST /write', () => {
-  it('accepts NDJSON records, streams NDJSON state back', async () => {
+  it('accepts messages array, streams NDJSON state back', async () => {
     const app = await createApp(resolver)
 
-    const records: Message[] = [
+    const messages: Message[] = [
       {
         type: 'record',
         record: {
@@ -813,12 +663,13 @@ describe('POST /write', () => {
       },
     ]
 
-    const writeBody = toNdjson(records)
-    const res = await app.request('/pipeline_write', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(writeBody) },
-      body: writeBody,
-    })
+    const res = await app.request(
+      '/pipeline_write',
+      jsonBody({
+        pipeline: testPipeline,
+        stdin: messages,
+      })
+    )
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
@@ -832,13 +683,8 @@ describe('POST /write', () => {
   it('returns 400 when body is missing', async () => {
     const app = await createApp(resolver)
 
-    const res = await app.request('/pipeline_write', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams },
-    })
+    const res = await app.request('/pipeline_write', { method: 'POST' })
     expect(res.status).toBe(400)
-    const body = await res.json()
-    expect(body.error).toContain('body required')
   })
 })
 
@@ -846,7 +692,7 @@ describe('POST /sync', () => {
   it('runs full pipeline, streams NDJSON state', async () => {
     const app = await createApp(resolver)
 
-    const runBody = toNdjson([
+    const stdin = [
       {
         type: 'record',
         record: {
@@ -856,18 +702,13 @@ describe('POST /sync', () => {
         },
       },
       { type: 'source_state', source_state: { stream: 'customers', data: { status: 'complete' } } },
-    ])
-    const res = await app.request('/pipeline_sync', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(runBody) },
-      body: runBody,
-    })
+    ]
+    const res = await app.request('/pipeline_sync', jsonBody({ pipeline: testPipeline, stdin }))
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
 
     const events = await readNdjson<Record<string, unknown>>(res)
-    // pipeline_sync now yields source signals alongside dest output
     const stateAndEof = events.filter((e) => e.type === 'source_state' || e.type === 'eof')
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]!.type).toBe('source_state')
@@ -883,7 +724,7 @@ describe('time_limit and run_id', () => {
   it('POST /pipeline_sync forwards run_id into the emitted sync state', async () => {
     const app = await createApp(resolver)
 
-    const body = toNdjson([
+    const stdin = [
       {
         type: 'record',
         record: {
@@ -893,15 +734,15 @@ describe('time_limit and run_id', () => {
         },
       },
       { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '1' } } },
-    ])
-    const res = await app.request('/pipeline_sync?run_id=run_demo', {
-      method: 'POST',
-      headers: {
-        'X-Pipeline': syncParams,
-        ...bodyHeaders(body),
-      },
-      body,
-    })
+    ]
+    const res = await app.request(
+      '/pipeline_sync',
+      jsonBody({
+        pipeline: testPipeline,
+        run_id: 'run_demo',
+        stdin,
+      })
+    )
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
@@ -915,7 +756,7 @@ describe('time_limit and run_id', () => {
   it('POST /read without limits returns all messages plus eof:complete', async () => {
     const app = await createApp(resolver)
 
-    const body = toNdjson([
+    const stdin = [
       {
         type: 'record',
         record: {
@@ -934,12 +775,8 @@ describe('time_limit and run_id', () => {
         },
       },
       { type: 'source_state', source_state: { stream: 'customers', data: { cursor: '2' } } },
-    ])
-    const res = await app.request('/pipeline_read', {
-      method: 'POST',
-      headers: { 'X-Pipeline': syncParams, ...bodyHeaders(body) },
-      body,
-    })
+    ]
+    const res = await app.request('/pipeline_read', jsonBody({ pipeline: testPipeline, stdin }))
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Message>(res)
@@ -950,26 +787,18 @@ describe('time_limit and run_id', () => {
 })
 
 describe('error handling', () => {
-  it('returns 400 when X-Pipeline header is missing', async () => {
+  it('returns 400 when body is missing', async () => {
     const app = await createApp(resolver)
 
     const res = await app.request('/pipeline_check', { method: 'POST' })
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when X-Pipeline header is invalid JSON', async () => {
+  it('returns 400 when body has invalid pipeline config', async () => {
     const app = await createApp(resolver)
 
-    const res = await app.request('/pipeline_check', {
-      method: 'POST',
-      headers: { 'X-Pipeline': 'not-json' },
-    })
+    const res = await app.request('/pipeline_check', jsonBody({ pipeline: 'not-valid' }))
     expect(res.status).toBe(400)
-    const body = await res.json()
-    // Zod transform issues are returned as an array from the defaultHook
-    expect(body.error).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: 'Invalid JSON' })])
-    )
   })
 })
 
@@ -980,15 +809,13 @@ describe('error handling', () => {
 describe('POST /source_discover', () => {
   it('streams a catalog message from a working source', async () => {
     const app = await createApp(resolver)
-    const source = JSON.stringify({
-      type: 'test',
-      test: { streams: { customers: {}, products: {} } },
-    })
 
-    const res = await app.request('/source_discover', {
-      method: 'POST',
-      headers: { 'X-Source': source },
-    })
+    const res = await app.request(
+      '/source_discover',
+      jsonBody({
+        source: { type: 'test', test: { streams: { customers: {}, products: {} } } },
+      })
+    )
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/x-ndjson')
@@ -1016,10 +843,12 @@ describe('POST /source_discover', () => {
     }
     const app = await createApp(failingResolver)
 
-    const res = await app.request('/source_discover', {
-      method: 'POST',
-      headers: { 'X-Source': JSON.stringify({ type: 'test', test: {} }) },
-    })
+    const res = await app.request(
+      '/source_discover',
+      jsonBody({
+        source: { type: 'test', test: {} },
+      })
+    )
 
     expect(res.status).toBe(200)
     const events = await readNdjson<Record<string, unknown>>(res)
@@ -1027,7 +856,7 @@ describe('POST /source_discover', () => {
     expect(logs.length).toBeGreaterThanOrEqual(0)
   })
 
-  it('returns 400 when X-Source header is missing', async () => {
+  it('returns 400 when body is missing', async () => {
     const app = await createApp(resolver)
     const res = await app.request('/source_discover', { method: 'POST' })
     expect(res.status).toBe(400)

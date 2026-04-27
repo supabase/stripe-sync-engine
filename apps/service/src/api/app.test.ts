@@ -469,7 +469,7 @@ describe('pipeline CRUD', () => {
 
     let seenPipeline: Record<string, unknown> | undefined
     let seenState: Record<string, unknown> | undefined
-    let seenQuery: URLSearchParams | undefined
+    let seenBody: Record<string, unknown> | undefined
 
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
@@ -479,9 +479,11 @@ describe('pipeline CRUD', () => {
         return
       }
 
-      seenPipeline = JSON.parse(String(req.headers['x-pipeline']))
-      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
-      seenQuery = url.searchParams
+      const chunks: Buffer[] = []
+      for await (const chunk of req) chunks.push(chunk)
+      seenBody = JSON.parse(Buffer.concat(chunks).toString())
+      seenPipeline = seenBody!.pipeline as Record<string, unknown>
+      seenState = seenBody!.state as Record<string, unknown> | undefined
 
       const runProgress = {
         ...successEof.run_progress,
@@ -532,7 +534,7 @@ describe('pipeline CRUD', () => {
       streams: [{ name: 'customers' }],
     })
     expect(seenState).toEqual(initialSyncState)
-    expect(seenQuery?.get('run_id')).toBe('run_demo')
+    expect(seenBody?.run_id).toBe('run_demo')
 
     const updated = await pipelineStore.get('pipe_sync')
     expect(updated.sync_state).toEqual({
@@ -575,7 +577,10 @@ describe('pipeline CRUD', () => {
         return
       }
 
-      seenState = req.headers['x-state'] ? JSON.parse(String(req.headers['x-state'])) : undefined
+      const chunks: Buffer[] = []
+      for await (const chunk of req) chunks.push(chunk)
+      const reqBody = JSON.parse(Buffer.concat(chunks).toString())
+      seenState = reqBody.state
 
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       res.end(

@@ -1,7 +1,5 @@
-// TODO: skipped — X-State header grows to ~17KB during backfill (200 segments × ~85 bytes each),
-// exceeding Node's default 16KB maxHeaderSize → HTTP 431. Fix: raise serverOptions.maxHeaderSize
-// in the engine serve() call and strip segments from final state once backfill completes.
-// Stash: "fix: 431 maxHeaderSize + strip segments on complete"
+// TODO: skipped — state was previously too large for HTTP headers. Now that config/state are in
+// JSON body this size limit is gone, but the test still needs to be re-enabled and validated.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Connection, Client } from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'

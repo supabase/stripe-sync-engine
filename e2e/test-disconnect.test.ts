@@ -282,7 +282,7 @@ async function waitForLog(engine: EngineProcess, needle: string, timeout = 5_000
 
 // ── NDJSON helpers ─────────────────────────────────────────────
 
-function makePipelineHeader(mockStripeUrl: string): string {
+function makePipelineConfig(mockStripeUrl: string): string {
   return JSON.stringify({
     source: {
       type: 'stripe',
@@ -396,7 +396,7 @@ for (const runtime of runtimes) {
     })
 
     it('client disconnect stops the engine from making further API calls', async () => {
-      const pipelineHeader = makePipelineHeader(
+      const pipelineConfig = makePipelineConfig(
         normalizeMockUrlForRuntime(runtime.name, mockApi.url)
       )
       const ac = new AbortController()
@@ -404,7 +404,8 @@ for (const runtime of runtimes) {
       // Start a streaming sync request
       const fetchPromise = fetch(`${engine.url}/pipeline_read`, {
         method: 'POST',
-        headers: { 'X-Pipeline': pipelineHeader },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pipeline: JSON.parse(pipelineConfig) }),
         signal: ac.signal,
       })
         .then(async (res) => {
@@ -438,14 +439,15 @@ for (const runtime of runtimes) {
     }, 30_000)
 
     it('soft time limit returns eof with cutoff=soft and elapsed_ms', async () => {
-      const pipelineHeader = makePipelineHeader(
+      const pipelineConfig = makePipelineConfig(
         normalizeMockUrlForRuntime(runtime.name, mockApi.url)
       )
 
       const start = Date.now()
-      const res = await fetch(`${engine.url}/pipeline_read?time_limit=3`, {
+      const res = await fetch(`${engine.url}/pipeline_read`, {
         method: 'POST',
-        headers: { 'X-Pipeline': pipelineHeader },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pipeline: JSON.parse(pipelineConfig), time_limit: 3 }),
       })
       if (!res.ok) {
         const body = await res.text().catch(() => '')
@@ -492,14 +494,15 @@ for (const runtime of runtimes) {
         port: runtime.name === 'docker' ? 18889 : 0,
       })
       try {
-        const pipelineHeader = makePipelineHeader(
+        const pipelineConfig = makePipelineConfig(
           normalizeMockUrlForRuntime(runtime.name, slowMock.url)
         )
 
         const start = Date.now()
-        const res = await fetch(`${engine.url}/pipeline_read?time_limit=2`, {
+        const res = await fetch(`${engine.url}/pipeline_read`, {
           method: 'POST',
-          headers: { 'X-Pipeline': pipelineHeader },
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pipeline: JSON.parse(pipelineConfig), time_limit: 2 }),
         })
         if (!res.ok) {
           const body = await res.text().catch(() => '')
