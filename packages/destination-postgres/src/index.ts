@@ -302,7 +302,7 @@ const destination = {
       )
       try {
         const stats = await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
-        log.info(
+        log.debug(
           {
             stream: streamName,
             schema: config.schema,
@@ -420,7 +420,7 @@ const destination = {
           `Postgres destination: completed with ${failedStreams.size} failed stream(s) in schema "${config.schema}"`
         )
       } else {
-        log.info(`Postgres destination: wrote to schema "${config.schema}"`)
+        log.debug(`Postgres destination: wrote to schema "${config.schema}"`)
       }
     } finally {
       await endPool(pool, 'write')

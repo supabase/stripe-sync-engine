@@ -141,7 +141,7 @@ async function* uploadToSheet(
     await Promise.race([flushP, new Promise((r) => setTimeout(r, heartbeatMs))])
     if (flushState.done) break
     const elapsedSec = Math.round((Date.now() - flushStartedAt) / 1000)
-    log.info(`flushing to Sheets (in progress, ${elapsedSec}s)`)
+    log.debug(`flushing to Sheets (in progress, ${elapsedSec}s)`)
     yield {
       type: 'log' as const,
       log: {
