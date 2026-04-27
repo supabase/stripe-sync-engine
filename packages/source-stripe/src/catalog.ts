@@ -5,7 +5,9 @@ import { parsedTableToJsonSchema } from '@stripe/sync-openapi'
 
 /**
  * Derive a CatalogPayload by merging OpenAPI-parsed tables with registry metadata.
- * `_account_id` (PK) and `_updated_at` (staleness, see DDR-009) are injected into properties.
+ * `_account_id` and `_updated_at` (staleness, see DDR-009) are injected into properties.
+ * The returned catalog is account-agnostic — call {@link stampAccountIdEnum} to
+ * add the per-pipeline allow-list before handing it to destinations.
  */
 export function catalogFromOpenApi(
   tables: ParsedResourceTable[],
@@ -47,4 +49,28 @@ export function catalogFromOpenApi(
     })
 
   return { streams }
+}
+
+/**
+ * Deep-clone a catalog and stamp `_account_id.enum` on every stream's
+ * JSON Schema. This keeps the cached catalog account-agnostic while
+ * producing a per-pipeline catalog that destinations can use for
+ * CHECK constraint generation.
+ */
+export function stampAccountIdEnum(
+  catalog: CatalogPayload,
+  allowedAccountIds: string[]
+): CatalogPayload {
+  if (allowedAccountIds.length === 0) {
+    throw new Error('stampAccountIdEnum requires non-empty allowedAccountIds')
+  }
+  return {
+    ...catalog,
+    streams: catalog.streams.map((s) => {
+      if (!s.json_schema) return s
+      const props = { ...(s.json_schema.properties as Record<string, unknown>) }
+      props._account_id = { type: 'string', enum: allowedAccountIds }
+      return { ...s, json_schema: { ...s.json_schema, properties: props } }
+    }),
+  }
 }

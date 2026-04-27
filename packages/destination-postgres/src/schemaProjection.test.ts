@@ -139,11 +139,10 @@ describe('buildCreateTableWithSchema', () => {
       primary_key: [['id'], ['_account_id']],
     })
 
-    // Both PK columns present as generated columns
+    // Both PK columns present as generated columns.
+    // Since SAMPLE_JSON_SCHEMA has no enum for _account_id, it defaults to text.
     expect(stmts[0]).toContain(`"id" text GENERATED ALWAYS AS ((_raw_data->>'id')::text) STORED`)
-    expect(stmts[0]).toContain(
-      `"_account_id" text GENERATED ALWAYS AS ((_raw_data->>'_account_id')::text) STORED`
-    )
+    expect(stmts[0]).toContain(`"_account_id" text GENERATED ALWAYS AS`)
 
     // Composite PRIMARY KEY
     expect(stmts[0]).toContain('PRIMARY KEY ("id", "_account_id")')
@@ -186,6 +185,49 @@ describe('buildCreateTableWithSchema', () => {
 })
 
 describe('buildCreateTableDDL', () => {
+  it('buildCreateTableDDL emits CHECK with IN list for any column with enum in JSON Schema', () => {
+    const ddl = buildCreateTableDDL(
+      'stripe',
+      'charges',
+      {
+        properties: {
+          id: { type: 'string' },
+          _account_id: { type: 'string', enum: ['acct_a', 'acct_b'] },
+        },
+      },
+      { primary_key: [['id'], ['_account_id']] }
+    )
+
+    expect(ddl).toContain('"_account_id" text GENERATED ALWAYS AS')
+    expect(ddl).toContain(
+      `CHECK ((_raw_data->>'_account_id') IS NOT NULL AND (_raw_data->>'_account_id') IN ('acct_a', 'acct_b'))`
+    )
+    expect(ddl).not.toContain('NOT VALID')
+    expect(ddl).toContain('EXCEPTION WHEN duplicate_object')
+    expect(ddl.indexOf('DO $check$')).toBeGreaterThan(ddl.indexOf('$ddl$;'))
+  })
+
+  it('buildCreateTableDDL emits CHECK for non-account enum columns too', () => {
+    const ddl = buildCreateTableDDL('stripe', 'events', {
+      properties: {
+        id: { type: 'string' },
+        status: { type: 'string', enum: ['active', 'paused', 'cancelled'] },
+      },
+    })
+
+    expect(ddl).toContain(
+      `CHECK ((_raw_data->>'status') IS NOT NULL AND (_raw_data->>'status') IN ('active', 'paused', 'cancelled'))`
+    )
+    expect(ddl).not.toContain('NOT VALID')
+  })
+
+  it('buildCreateTableDDL skips CHECK when no enum is present in JSON Schema', () => {
+    const ddl = buildCreateTableDDL('stripe', 'charges', SAMPLE_JSON_SCHEMA, {
+      primary_key: [['id'], ['_account_id']],
+    })
+    expect(ddl).toContain('"_account_id" text GENERATED ALWAYS AS')
+    expect(ddl).not.toContain('DO $check$')
+  })
   it('returns a single DO block containing all DDL', () => {
     const ddl = buildCreateTableDDL('mydata', 'repos', SAMPLE_JSON_SCHEMA)
 
@@ -216,9 +258,8 @@ describe('buildCreateTableDDL', () => {
     expect(ddl).toContain('CREATE INDEX')
     expect(ddl).toContain('"_account_id"')
 
-    // Count exception handlers: CREATE TABLE, ALTER, CREATE INDEX = 3.
-    // (DROP TRIGGER IF EXISTS is unwrapped — no CREATE TRIGGER anymore now
-    // that `_updated_at` is a generated column.)
+    // Exception handlers: CREATE TABLE, ALTER, CREATE INDEX in $ddl$ (3).
+    // No CHECK constraint since SAMPLE_JSON_SCHEMA has no enum on _account_id.
     const exceptionCount = (ddl.match(/EXCEPTION WHEN/g) || []).length
     expect(exceptionCount).toBe(3)
   })

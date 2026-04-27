@@ -132,7 +132,13 @@ describeWithEnv(
             stripe: {
               api_key: STRIPE_API_KEY,
               api_version: BUNDLED_API_VERSION,
-              ...(stripeMockUrl ? { base_url: stripeMockUrl } : {}),
+              ...(stripeMockUrl
+                ? {
+                    base_url: stripeMockUrl,
+                    account_id: 'acct_mock',
+                    account_created: 1_700_000_000,
+                  }
+                : {}),
             },
           },
           destination: {

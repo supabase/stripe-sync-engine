@@ -69,9 +69,7 @@ describe('subdivideRanges', () => {
   it('emits single segment when older remainder is 30 second', () => {
     const remaining: Range[] = [{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }]
     const out = subdivideRanges(remaining, new Map([[remaining[0], 1001]]), N)
-    expect(out).toEqual([
-      { gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }
-    ])
+    expect(out).toEqual([{ gte: iso(1000), lt: iso(1002), cursor: 'cur_tail' }])
   })
 
   it('N segments for a splittable range', () => {

@@ -220,6 +220,9 @@ describe('StripeSource', () => {
 
       expect(cat.streams).toHaveLength(2)
       expect(cat.streams.map((s) => s.name)).toEqual(['customers', 'invoices'])
+      expect(
+        (cat.streams[0].json_schema?.properties as Record<string, unknown>)._account_id
+      ).toEqual({ type: 'string', enum: ['acct_test_fake123'] })
     })
 
     it('excludes resources with sync: false', async () => {

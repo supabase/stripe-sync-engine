@@ -235,7 +235,12 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_1', name: 'Alice Updated', balance: 150, _updated_at: nextUpdatedAt++ },
+            data: {
+              id: 'cus_1',
+              name: 'Alice Updated',
+              balance: 150,
+              _updated_at: nextUpdatedAt++,
+            },
             emitted_at: emittedAt,
           },
         },
@@ -243,7 +248,12 @@ describeWithEnv(
           type: 'record',
           record: {
             stream: streamName,
-            data: { id: 'cus_3', name: 'Charlie Updated', balance: 50, _updated_at: nextUpdatedAt++ },
+            data: {
+              id: 'cus_3',
+              name: 'Charlie Updated',
+              balance: 50,
+              _updated_at: nextUpdatedAt++,
+            },
             emitted_at: emittedAt,
           },
         },

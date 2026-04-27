@@ -104,6 +104,12 @@ export interface SpreadsheetMeta {
   }>
 }
 
+export interface EnumValidationRule {
+  allowedValues: string[]
+}
+
+export type StreamEnumValidationRules = Map<string, Map<string, EnumValidationRule>>
+
 /** Fetch spreadsheet metadata once for reuse by ensureSheets, ensureIntroSheet, protectSheets. */
 export async function getSpreadsheetMeta(
   sheets: sheets_v4.Sheets,
@@ -266,6 +272,131 @@ export async function readHeaderRow(
   )
   const [headerRow] = res.data.values ?? []
   return Array.isArray(headerRow) ? headerRow.map((value) => String(value)) : []
+}
+
+function columnLabel(index: number): string {
+  let value = index
+  let label = ''
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    label = String.fromCharCode(65 + remainder) + label
+    value = Math.floor((value - 1) / 26)
+  }
+  return label || 'A'
+}
+
+function cloneEnumValidationRule(rule: EnumValidationRule): EnumValidationRule {
+  return { allowedValues: [...rule.allowedValues] }
+}
+
+function toDataValidationRule(rule: EnumValidationRule): Record<string, unknown> {
+  return {
+    condition: {
+      type: 'ONE_OF_LIST',
+      values: rule.allowedValues.map((value) => ({ userEnteredValue: value })),
+    },
+    strict: true,
+    showCustomUi: true,
+  }
+}
+
+function parseEnumValidationRule(dataValidation: unknown): EnumValidationRule | undefined {
+  const condition = (dataValidation as { condition?: { type?: string; values?: unknown[] } })
+    ?.condition
+  if (condition?.type !== 'ONE_OF_LIST') return undefined
+  const allowedValues = (condition.values ?? [])
+    .map((value) => (value as { userEnteredValue?: string })?.userEnteredValue)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+  return allowedValues.length > 0 ? { allowedValues } : undefined
+}
+
+function validationReadRange(streamName: string, columnCount: number): string {
+  return `'${streamName}'!A2:${columnLabel(columnCount)}2`
+}
+
+export async function setEnumValidations(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  sheetIds: Map<string, number>,
+  streamHeaders: Array<{ streamName: string; headers: string[] }>,
+  desiredRules: StreamEnumValidationRules
+): Promise<void> {
+  const requests: sheets_v4.Schema$Request[] = []
+
+  for (const { streamName, headers } of streamHeaders) {
+    const sheetId = sheetIds.get(streamName)
+    if (sheetId === undefined) {
+      throw new Error(`Missing sheetId for "${streamName}" while applying enum validations`)
+    }
+    const streamRules = desiredRules.get(streamName)
+    for (let columnIndex = 0; columnIndex < headers.length; columnIndex++) {
+      const header = headers[columnIndex]
+      const rule = streamRules?.get(header)
+      requests.push({
+        setDataValidation: {
+          range: {
+            sheetId,
+            startRowIndex: 1,
+            startColumnIndex: columnIndex,
+            endColumnIndex: columnIndex + 1,
+          },
+          ...(rule ? { rule: toDataValidationRule(rule) } : {}),
+        },
+      })
+    }
+  }
+
+  if (requests.length === 0) return
+
+  await withRetry(
+    () =>
+      sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      }),
+    'setEnumValidations'
+  )
+}
+
+export async function readEnumValidations(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  streamHeaders: Array<{ streamName: string; headers: string[] }>
+): Promise<StreamEnumValidationRules> {
+  const targets = streamHeaders.filter(({ headers }) => headers.length > 0)
+  if (targets.length === 0) return new Map()
+
+  const response = await withRetry(
+    () =>
+      sheets.spreadsheets.get({
+        spreadsheetId,
+        ranges: targets.map(({ streamName, headers }) =>
+          validationReadRange(streamName, headers.length)
+        ),
+        fields: 'sheets(properties(title,sheetId),data(rowData(values(dataValidation))))',
+      }),
+    'readEnumValidations'
+  )
+
+  const headersByStream = new Map(targets.map(({ streamName, headers }) => [streamName, headers]))
+  const out: StreamEnumValidationRules = new Map()
+
+  for (const sheet of response.data.sheets ?? []) {
+    const streamName = sheet.properties?.title
+    if (!streamName) continue
+    const headers = headersByStream.get(streamName)
+    if (!headers) continue
+    const cells = sheet.data?.[0]?.rowData?.[0]?.values ?? []
+    const streamRules = new Map<string, EnumValidationRule>()
+    for (let index = 0; index < headers.length; index++) {
+      const header = headers[index]
+      const rule = parseEnumValidationRule(cells[index]?.dataValidation)
+      if (rule) streamRules.set(header, cloneEnumValidationRule(rule))
+    }
+    if (streamRules.size > 0) out.set(streamName, streamRules)
+  }
+
+  return out
 }
 
 /** Look up the numeric sheetId for a tab by name. Returns undefined if not found. */

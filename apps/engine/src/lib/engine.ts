@@ -523,25 +523,30 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
       return withAbortOnReturn((signal) =>
         (async function* (): AsyncGenerator<Message> {
           try {
-          const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
-          const catalogWithRanges = withTimeRanges(p.catalog, p.state?.sync_run?.time_ceiling)
-          const raw = p.source.connector.read(
-            { config: p.source.config, catalog: catalogWithRanges, state: p.state?.source },
-            input
-          )
-          const parsed = map(raw, (msg) => Message.parse(msg))
-          yield* takeLimits({
-            time_limit: opts?.time_limit,
-            soft_time_limit: defaultSoftTimeLimit(opts?.time_limit, undefined),
-            signal,
-          })(parsed) as AsyncIterable<Message>
+            const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
+            const catalogWithRanges = withTimeRanges(p.catalog, p.state?.sync_run?.time_ceiling)
+            const raw = p.source.connector.read(
+              { config: p.source.config, catalog: catalogWithRanges, state: p.state?.source },
+              input
+            )
+            const parsed = map(raw, (msg) => Message.parse(msg))
+            yield* takeLimits({
+              time_limit: opts?.time_limit,
+              soft_time_limit: defaultSoftTimeLimit(opts?.time_limit, undefined),
+              signal,
+            })(parsed) as AsyncIterable<Message>
           } catch (error) {
             // Safety net for unexpected throws (proxy reject, connector crash, etc.).
             // Normal errors should be yielded as messages and handled gracefully by
             // takeLimits — if we land here, a connector is throwing instead of yielding.
             // TODO: investigate why Postgres connection errors (e.g. proxy CONNECT 407)
             // throw instead of yielding connection_status: failed.
-            yield engineMsg.eof({ status: 'failed', has_more: false, run_progress: createInitialProgress(), request_progress: createInitialProgress() }) as unknown as Message
+            yield engineMsg.eof({
+              status: 'failed',
+              has_more: false,
+              run_progress: createInitialProgress(),
+              request_progress: createInitialProgress(),
+            }) as unknown as Message
             throw error
           }
         })()
@@ -575,85 +580,90 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           let syncState: SyncState | undefined
           let requestProgress = createInitialProgress()
           try {
-          const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
+            const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
 
-          const isContinuation = opts?.run_id != null && p.state?.sync_run.run_id === opts.run_id
-          const activeFilteredCatalog = isContinuation
-            ? excludeTerminalStreams(p.filteredCatalog, p.state?.sync_run.progress)
-            : p.filteredCatalog
+            const isContinuation = opts?.run_id != null && p.state?.sync_run.run_id === opts.run_id
+            const activeFilteredCatalog = isContinuation
+              ? excludeTerminalStreams(p.filteredCatalog, p.state?.sync_run.progress)
+              : p.filteredCatalog
 
-          // Run reducer first so time_ceiling is correct for a new run_id.
-          const streamNames = activeFilteredCatalog.streams.map((s) => s.stream.name)
-          syncState = stateReducer(p.state, {
-            type: 'initialize',
-            stream_names: streamNames,
-            run_id: opts?.run_id,
-          })
-          requestProgress = createInitialProgress(streamNames)
+            // Run reducer first so time_ceiling is correct for a new run_id.
+            const streamNames = activeFilteredCatalog.streams.map((s) => s.stream.name)
+            syncState = stateReducer(p.state, {
+              type: 'initialize',
+              stream_names: streamNames,
+              run_id: opts?.run_id,
+            })
+            requestProgress = createInitialProgress(streamNames)
 
-          const catalogWithRanges = withTimeRanges(p.catalog, syncState.sync_run.time_ceiling)
-          const activeCatalog = isContinuation
-            ? excludeTerminalStreams(catalogWithRanges, p.state?.sync_run.progress)
-            : catalogWithRanges
+            const catalogWithRanges = withTimeRanges(p.catalog, syncState.sync_run.time_ceiling)
+            const activeCatalog = isContinuation
+              ? excludeTerminalStreams(catalogWithRanges, p.state?.sync_run.progress)
+              : catalogWithRanges
 
-          // Source → destination pipeline. The destination is the sole consumer,
-          // giving natural pull-based backpressure with zero intermediate buffering.
-          const sourceOutput = p.source.connector.read(
-            { config: p.source.config, catalog: activeCatalog, state: p.state?.source },
-            input
-          )
+            // Source → destination pipeline. The destination is the sole consumer,
+            // giving natural pull-based backpressure with zero intermediate buffering.
+            const sourceOutput = p.source.connector.read(
+              { config: p.source.config, catalog: activeCatalog, state: p.state?.source },
+              input
+            )
 
-          // Graceful close: soft_time_limit stops reading from the source
-          // between messages while the destination drains/flushes until
-          // time_limit fires on destOutput. Default: 80% of time_limit;
-          // destinations can override via spec.soft_limit_fraction
-          // (e.g. Sheets: 0.5).
-          const softTimeLimit =
-            opts?.soft_time_limit ??
-            defaultSoftTimeLimit(opts?.time_limit, p.destination.softLimitFraction)
-          // signal is enforced on destOutput's takeLimits below — don't duplicate here.
-          const sourceGate = limitSource(sourceOutput, { soft_time_limit: softTimeLimit })
+            // Graceful close: soft_time_limit stops reading from the source
+            // between messages while the destination drains/flushes until
+            // time_limit fires on destOutput. Default: 80% of time_limit;
+            // destinations can override via spec.soft_limit_fraction
+            // (e.g. Sheets: 0.5).
+            const softTimeLimit =
+              opts?.soft_time_limit ??
+              defaultSoftTimeLimit(opts?.time_limit, p.destination.softLimitFraction)
+            // signal is enforced on destOutput's takeLimits below — don't duplicate here.
+            const sourceGate = limitSource(sourceOutput, { soft_time_limit: softTimeLimit })
 
-          const destInput = pipe(sourceGate.iterable, enforceCatalog(activeFilteredCatalog), tapLog)
-          const destOutput = p.destination.connector.write(
-            { config: p.destination.config, catalog: activeFilteredCatalog },
-            destInput
-          )
-          // Apply limits (takeLimits appends eof)
-          const limited = takeLimits({
-            time_limit: opts?.time_limit,
-            signal,
-          })(destOutput)
+            const destInput = pipe(
+              sourceGate.iterable,
+              enforceCatalog(activeFilteredCatalog),
+              tapLog
+            )
+            const destOutput = p.destination.connector.write(
+              { config: p.destination.config, catalog: activeFilteredCatalog },
+              destInput
+            )
+            // Apply limits (takeLimits appends eof)
+            const limited = takeLimits({
+              time_limit: opts?.time_limit,
+              signal,
+            })(destOutput)
 
-          for await (const raw of limited) {
-            // takeLimits appends a minimal eof signal ({ type: 'eof', eof: { has_more } })
-            if (raw.type === 'eof') {
-              const hasMore = (raw as { eof: { has_more: boolean } }).eof.has_more
-              const runProgress = syncState.sync_run.progress
-              yield emit(
-                engineMsg.eof({
-                  status: runProgress.derived.status,
-                  has_more: hasMore || sourceGate.stopped,
-                  ending_state: syncState,
-                  run_progress: runProgress,
-                  request_progress: requestProgress,
-                })
-              )
-              return
+            for await (const raw of limited) {
+              // takeLimits appends a minimal eof signal ({ type: 'eof', eof: { has_more } })
+              if (raw.type === 'eof') {
+                const hasMore = (raw as { eof: { has_more: boolean } }).eof.has_more
+                const runProgress = syncState.sync_run.progress
+                yield emit(
+                  engineMsg.eof({
+                    status: runProgress.derived.status,
+                    has_more: hasMore || sourceGate.stopped,
+                    ending_state: syncState,
+                    run_progress: runProgress,
+                    request_progress: requestProgress,
+                  })
+                )
+                return
+              }
+
+              const msg = {
+                ...raw,
+                _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString(),
+              } as Message
+              syncState = stateReducer(syncState, msg)
+              requestProgress = progressReducer(requestProgress, msg)
+
+              if (msg.type !== 'record') {
+                yield msg as SyncOutput
+              }
+              if (isProgressTrigger(msg))
+                yield emit(engineMsg.progress(syncState.sync_run.progress))
             }
-
-            const msg = {
-              ...raw,
-              _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString(),
-            } as Message
-            syncState = stateReducer(syncState, msg)
-            requestProgress = progressReducer(requestProgress, msg)
-
-            if (msg.type !== 'record') {
-              yield msg as SyncOutput
-            }
-            if (isProgressTrigger(msg)) yield emit(engineMsg.progress(syncState.sync_run.progress))
-          }
           } catch (error) {
             // Safety net for unexpected throws (proxy reject, connector crash, etc.).
             // Normal errors should be yielded as messages and handled gracefully by
@@ -661,7 +671,15 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
             // TODO: investigate why Postgres connection errors (e.g. proxy CONNECT 407)
             // throw instead of yielding connection_status: failed.
             const runProgress = syncState?.sync_run.progress ?? createInitialProgress()
-            yield emit(engineMsg.eof({ status: 'failed', has_more: false, ending_state: syncState, run_progress: runProgress, request_progress: requestProgress }))
+            yield emit(
+              engineMsg.eof({
+                status: 'failed',
+                has_more: false,
+                ending_state: syncState,
+                run_progress: runProgress,
+                request_progress: requestProgress,
+              })
+            )
             throw error
           }
         })()

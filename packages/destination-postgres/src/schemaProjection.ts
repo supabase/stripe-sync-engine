@@ -18,6 +18,11 @@ function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`
 }
 
+/** Standard SQL string literal quoting — escape single quotes by doubling. */
+function quoteLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
+}
+
 function safeIdentifier(name: string): string {
   if (Buffer.byteLength(name) <= PG_IDENTIFIER_MAX_BYTES) {
     return name
@@ -27,6 +32,11 @@ function safeIdentifier(name: string): string {
   const maxBaseBytes = PG_IDENTIFIER_MAX_BYTES - Buffer.byteLength(suffix)
   const truncatedBase = Buffer.from(name).subarray(0, maxBaseBytes).toString('utf8')
   return `${truncatedBase}${suffix}`
+}
+
+/** Deterministic name of a per-table per-column enum CHECK constraint. */
+export function enumCheckConstraintName(tableName: string, columnName: string): string {
+  return safeIdentifier(`chk_${tableName}_${columnName}`)
 }
 
 function jsonSchemaTypeToPg(prop: Record<string, unknown>): string {
@@ -164,6 +174,19 @@ export function buildCreateTableWithSchema(
     }
   }
 
+  const properties = jsonSchema.properties as Record<string, { enum?: string[] }> | undefined
+  if (properties) {
+    for (const [colName, prop] of Object.entries(properties)) {
+      if (!Array.isArray(prop?.enum) || prop.enum.length === 0) continue
+      const qn = quoteIdent(enumCheckConstraintName(tableName, colName))
+      const escapedCol = colName.replace(/'/g, "''")
+      const list = prop.enum.map(quoteLiteral).join(', ')
+      stmts.push(
+        `DO $check$\nBEGIN\n  ALTER TABLE ${quotedSchema}.${quotedTable} ADD CONSTRAINT ${qn} CHECK ((_raw_data->>'${escapedCol}') IS NOT NULL AND (_raw_data->>'${escapedCol}') IN (${list}));\nEXCEPTION WHEN duplicate_object OR undefined_table THEN NULL;\nEND;\n$check$;`
+      )
+    }
+  }
+
   // Drop the legacy trigger; `_updated_at` is now written explicitly by upsertMany.
   stmts.push(`DROP TRIGGER IF EXISTS handle_updated_at ON ${quotedSchema}.${quotedTable};`)
 
@@ -193,8 +216,72 @@ export function buildCreateTableDDL(
   options: BuildTableOptions = {}
 ): string {
   const stmts = buildCreateTableWithSchema(schema, tableName, jsonSchema, options)
-  const blocks = stmts.map((stmt) => (/^DROP\s/i.test(stmt) ? stmt : wrapAdditive(stmt)))
-  return `DO $ddl$\nBEGIN\n  ${blocks.join('\n  ')}\nEND;\n$ddl$;`
+  const isStandalone = (s: string) => /^DO\s/i.test(s)
+  const blocks = stmts
+    .filter((s) => !isStandalone(s))
+    .map((s) => (/^DROP\s/i.test(s) ? s : wrapAdditive(s)))
+  return [
+    `DO $ddl$\nBEGIN\n  ${blocks.join('\n  ')}\nEND;\n$ddl$;`,
+    ...stmts.filter(isStandalone),
+  ].join('\n')
+}
+
+/**
+ * For each requested table, return the set of enum values currently enforced
+ * by `chk_<table>_<column>` CHECK constraints. Tables/columns with no such
+ * constraint are absent from the map.
+ *
+ * Used by destination setup to detect mismatched allow-lists and fail loud
+ * — re-running setup with a different list would otherwise no-op via the
+ * `EXCEPTION WHEN duplicate_object` clause and leave the old predicate.
+ *
+ * @returns Map<tableName, Map<columnName, Set<values>>>
+ */
+export async function getExistingEnumAllowLists(
+  client: PgClient,
+  schema: string,
+  tableNames: string[],
+  columnNames: string[]
+): Promise<Map<string, Map<string, Set<string>>>> {
+  if (tableNames.length === 0 || columnNames.length === 0) return new Map()
+  const constraintLookup = new Map<string, { table: string; column: string }>()
+  for (const t of tableNames) {
+    for (const c of columnNames) {
+      constraintLookup.set(enumCheckConstraintName(t, c), { table: t, column: c })
+    }
+  }
+  const result = await client.query(
+    `SELECT c.conname AS conname, pg_get_constraintdef(c.oid) AS def
+     FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     WHERE n.nspname = $1 AND c.contype = 'c' AND c.conname = ANY($2::text[])`,
+    [schema, [...constraintLookup.keys()]]
+  )
+  const out = new Map<string, Map<string, Set<string>>>()
+  for (const row of result.rows) {
+    const info = constraintLookup.get(row.conname as string)
+    if (!info) continue
+    const def = row.def as string
+    const vals = new Set<string>()
+    // Extract values from the IN (...) or ANY (ARRAY[...]) clause only,
+    // skipping column references like '_account_id'::text in the expression.
+    const inMatch = def.match(/\bIN\s*\(([^)]+)\)/i) ?? def.match(/\bARRAY\[([^\]]+)\]/i)
+    if (inMatch) {
+      for (const m of inMatch[1].matchAll(/'((?:[^']|'')*)'/g)) {
+        vals.add(m[1].replaceAll("''", "'"))
+      }
+    }
+    if (vals.size > 0) {
+      let tableMap = out.get(info.table)
+      if (!tableMap) {
+        tableMap = new Map()
+        out.set(info.table, tableMap)
+      }
+      tableMap.set(info.column, vals)
+    }
+  }
+  return out
 }
 
 /**
@@ -339,7 +426,9 @@ export async function applySchemaFromCatalog(
   const syncSchema = config.syncSchema ?? dataSchema
   const apiVersion = config.apiVersion ?? '2020-08-27'
 
-  // Compute fingerprint of all json_schemas
+  // The fingerprint is taken over the full json_schema of every stream,
+  // which includes any enum arrays, so allow-list changes roll into the
+  // hash naturally — no separate extraction needed.
   const schemasPayload = streams
     .filter((s) => s.json_schema)
     .map((s) => ({ name: s.name, json_schema: s.json_schema }))

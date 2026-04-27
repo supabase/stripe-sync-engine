@@ -12,7 +12,7 @@ import defaultSpec from './spec.js'
 import type { Config } from './spec.js'
 import type { StripeEvent } from './spec.js'
 import { buildResourceRegistry } from './resourceRegistry.js'
-import { catalogFromOpenApi } from './catalog.js'
+import { catalogFromOpenApi, stampAccountIdEnum } from './catalog.js'
 import {
   BUNDLED_API_VERSION,
   resolveOpenApiSpec,
@@ -50,8 +50,20 @@ function makeApiFetch(signal?: AbortSignal): typeof globalThis.fetch {
     })
 }
 
-/** In-memory cache of discover results keyed by api_version. */
+/** In-memory cache of discover results. */
 export const discoverCache = new Map<string, CatalogPayload>()
+
+function deepFreeze<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object' || Object.isFrozen(obj)) return obj
+  for (const key of Reflect.ownKeys(obj)) {
+    deepFreeze((obj as Record<PropertyKey, unknown>)[key])
+  }
+  return Object.freeze(obj)
+}
+
+function resolveAllowedAccountIds(accountId: string, _config: Config): string[] {
+  return [accountId]
+}
 
 // MARK: - Spec
 
@@ -128,19 +140,26 @@ export function createStripeSource(
       }
     },
 
-    // For the default api_version (bundled), discover is CPU-only — no HTTP.
-    // resolveOpenApiSpec serves the bundled spec from the filesystem, so the
-    // cost is SpecParser.parse + catalogFromOpenApi (pure computation). We
-    // cache the result in-memory keyed by api_version so that pipeline_sync
-    // (which calls discover twice — once in pipeline_read, once in
-    // pipeline_write) doesn't repeat the work.
-    // TODO: Custom objects (not yet supported) would require a more specific cache
-    // since they aren't discoverable from the OpenAPI spec alone.
+    // Discover stamps the catalog with the per-pipeline `_account_id`
+    // allow-list so destinations can derive write-time tenancy constraints.
+    // We trust `config.account_id` when set (populated by `setup()`); only
+    // fall back to a live `GET /v1/account` when it's missing, otherwise
+    // pipeline_sync would pay an HTTP roundtrip on every read+write cycle.
     async *discover({ config }): AsyncGenerator<DiscoverOutput> {
       const apiVersion = config.api_version ?? BUNDLED_API_VERSION
+      let accountId = config.account_id
+      if (!accountId) {
+        const client = makeClient({ ...config, api_version: apiVersion })
+        accountId = (await client.getAccount({ maxRetries: 0 })).id
+      }
+      const allowedAccountIds = resolveAllowedAccountIds(accountId, config)
+
       const cached = discoverCache.get(apiVersion)
       if (cached) {
-        yield { type: 'catalog' as const, catalog: cached }
+        yield {
+          type: 'catalog' as const,
+          catalog: stampAccountIdEnum(cached, allowedAccountIds),
+        }
         return
       }
 
@@ -156,8 +175,12 @@ export function createStripeSource(
         resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
       })
       const catalog = catalogFromOpenApi(parsed.tables, registry)
-      discoverCache.set(apiVersion, catalog)
-      yield { type: 'catalog' as const, catalog }
+      const frozenCatalog = deepFreeze(catalog)
+      discoverCache.set(apiVersion, frozenCatalog)
+      yield {
+        type: 'catalog' as const,
+        catalog: stampAccountIdEnum(frozenCatalog, allowedAccountIds),
+      }
     },
 
     async *setup({ config, catalog: _catalog }): AsyncGenerator<SetupOutput> {
@@ -301,14 +324,7 @@ export function createStripeSource(
                 )
               } else {
                 const event = stripeEventSchema.parse(input)
-                yield* processStripeEvent(
-                  event,
-                  config,
-                  catalog,
-                  registry,
-                  streamNames,
-                  accountId
-                )
+                yield* processStripeEvent(event, config, catalog, registry, streamNames, accountId)
               }
             }
             return

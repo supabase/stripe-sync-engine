@@ -9,7 +9,11 @@ import {
   withPgConnectProxy,
   withQueryLogging,
 } from '@stripe/sync-util-postgres'
-import { buildCreateTableDDL } from './schemaProjection.js'
+import {
+  enumCheckConstraintName,
+  buildCreateTableDDL,
+  getExistingEnumAllowLists,
+} from './schemaProjection.js'
 import defaultSpec from './spec.js'
 import { log } from './logger.js'
 import type { Config } from './spec.js'
@@ -108,6 +112,50 @@ export {
 } from './schemaProjection.js'
 
 // MARK: - Default export
+
+/** Throw if any stream's catalog enum allow-list disagrees with an existing CHECK constraint. */
+async function assertEnumConstraintsConsistent(
+  pool: pg.Pool,
+  schema: string,
+  streams: ReadonlyArray<{ stream: { name: string; json_schema?: Record<string, unknown> } }>
+): Promise<void> {
+  // Collect all enum column names across all streams
+  const enumColumns = new Set<string>()
+  for (const { stream } of streams) {
+    const props = stream.json_schema?.properties as Record<string, { enum?: string[] }> | undefined
+    if (!props) continue
+    for (const [col, prop] of Object.entries(props)) {
+      if (Array.isArray(prop?.enum) && prop.enum.length > 0) enumColumns.add(col)
+    }
+  }
+  if (enumColumns.size === 0) return
+
+  const existing = await getExistingEnumAllowLists(
+    pool,
+    schema,
+    streams.map((s) => s.stream.name),
+    [...enumColumns]
+  )
+  for (const { stream } of streams) {
+    const tableConstraints = existing.get(stream.name)
+    if (!tableConstraints) continue
+    const props = stream.json_schema?.properties as Record<string, { enum?: string[] }> | undefined
+    if (!props) continue
+    for (const [col, existingVals] of tableConstraints) {
+      const newVals = new Set(props[col]?.enum ?? [])
+      if (newVals.size === 0) continue
+      if (existingVals.size === newVals.size && [...existingVals].every((v) => newVals.has(v)))
+        continue
+      const c = enumCheckConstraintName(stream.name, col)
+      const fmt = (s: Set<string>) => [...s].sort().join(', ')
+      throw new Error(
+        `Postgres destination: enum values changed for "${schema}"."${stream.name}"."${col}". ` +
+          `Existing CHECK "${c}" allows [${fmt(existingVals)}]; new catalog wants [${fmt(newVals)}]. ` +
+          `Drop manually before re-running setup: ALTER TABLE "${schema}"."${stream.name}" DROP CONSTRAINT "${c}";`
+      )
+    }
+  }
+}
 
 /** Check if an error looks transient (connection refused, timeout, etc.). */
 function errorMessage(err: unknown): string {
@@ -231,6 +279,11 @@ const destination = {
       // Backward-compat: drop legacy `set_updated_at()` (CASCADE removes any orphan `handle_updated_at` triggers from older deployments).
       log.debug('dest setup: dropping legacy set_updated_at() function')
       await pool.query(sql`DROP FUNCTION IF EXISTS "${config.schema}".set_updated_at() CASCADE`)
+
+      // The DO $check$ block uses ADD CONSTRAINT + EXCEPTION WHEN duplicate_object,
+      // which silently no-ops on a changed enum list — surface it loudly instead.
+      await assertEnumConstraintsConsistent(pool, config.schema, catalog.streams)
+
       log.debug({ streamCount: catalog.streams.length }, 'dest setup: creating tables')
       await Promise.all(
         catalog.streams.map(async (cs) => {

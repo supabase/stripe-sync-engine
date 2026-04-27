@@ -9,7 +9,7 @@ import { resolveOpenApiSpec, BUNDLED_API_VERSION } from '@stripe/sync-openapi'
  * the webhook filter. Catches unintentional changes to what we sync.
  */
 describe('catalogFromOpenApi stream list', () => {
-  const resolved = resolveOpenApiSpec({ apiVersion: BUNDLED_API_VERSION })
+  const resolved = resolveOpenApiSpec({ apiVersion: BUNDLED_API_VERSION }, fetch)
   const parser = new SpecParser()
 
   it('default: only tables with webhook events', async () => {

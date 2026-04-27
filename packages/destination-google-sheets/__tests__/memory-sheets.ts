@@ -9,6 +9,7 @@ import type { sheets_v4 } from 'googleapis'
 interface SheetTab {
   sheetId: number
   values: unknown[][]
+  dataValidations: Map<number, unknown>
 }
 
 interface Spreadsheet {
@@ -50,6 +51,25 @@ export function createMemorySheets() {
     return match ? Number(match[1]) : 1
   }
 
+  function parseRangeBounds(range: string): {
+    startCol: number
+    startRow: number
+    endCol: number
+    endRow: number
+  } {
+    const bang = range.indexOf('!')
+    const a1 = bang >= 0 ? range.slice(bang + 1) : range
+    const match = a1.match(/^([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?$/)
+    if (!match) {
+      return { startCol: 0, startRow: 0, endCol: 0, endRow: 0 }
+    }
+    const startCol = columnIndex(match[1])
+    const startRow = match[2] ? Number(match[2]) - 1 : 0
+    const endCol = match[3] !== undefined ? columnIndex(match[3]) : startCol
+    const endRow = match[4] !== undefined ? Number(match[4]) - 1 : startRow
+    return { startCol, startRow, endCol, endRow }
+  }
+
   function columnLabel(index: number): string {
     let value = index
     let label = ''
@@ -61,17 +81,15 @@ export function createMemorySheets() {
     return label || 'A'
   }
 
+  function columnIndex(label: string): number {
+    return [...label].reduce((value, ch) => value * 26 + (ch.charCodeAt(0) - 64), 0) - 1
+  }
+
   // Slice `values` to an A1 range. `'Name'` → whole tab; `'Name'!A2:C[100]` → bounded.
   function sliceByRange(values: unknown[][], range: string): unknown[][] {
     const bang = range.indexOf('!')
     if (bang < 0) return values
-    const m = range.slice(bang + 1).match(/^([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?$/)
-    if (!m) return values
-    const colIdx = (s: string) => [...s].reduce((v, ch) => v * 26 + (ch.charCodeAt(0) - 64), 0) - 1
-    const startCol = colIdx(m[1])
-    const startRow = m[2] ? Number(m[2]) - 1 : 0
-    const endCol = m[3] !== undefined ? colIdx(m[3]) : Infinity
-    const endRow = m[4] !== undefined ? Number(m[4]) - 1 : values.length - 1
+    const { startCol, startRow, endCol, endRow } = parseRangeBounds(range)
     const out: unknown[][] = []
     for (let r = startRow; r <= Math.min(endRow, values.length - 1); r++) {
       const src = values[r] ?? []
@@ -111,14 +129,42 @@ export function createMemorySheets() {
       async create(params: { requestBody?: { properties?: { title?: string } }; fields?: string }) {
         const title = params.requestBody?.properties?.title ?? 'Untitled'
         const id = `mem_ss_${nextSpreadsheetId++}`
-        const defaultTab: SheetTab = { sheetId: nextSheetId++, values: [] }
+        const defaultTab: SheetTab = {
+          sheetId: nextSheetId++,
+          values: [],
+          dataValidations: new Map(),
+        }
         const ss: Spreadsheet = { title, sheets: new Map([['Sheet1', defaultTab]]) }
         store.set(id, ss)
         return { data: { spreadsheetId: id } }
       },
 
-      async get(params: { spreadsheetId: string; fields?: string }) {
+      async get(params: { spreadsheetId: string; fields?: string; ranges?: string[] }) {
         const ss = getSpreadsheet(params.spreadsheetId)
+        if (params.ranges && params.ranges.length > 0) {
+          const sheetsData = params.ranges.map((range) => {
+            const tab = getTab(params.spreadsheetId, range)
+            const name = parseSheetName(range)
+            const { startCol, startRow, endCol, endRow } = parseRangeBounds(range)
+            const rowData: Array<{ values: Array<{ dataValidation?: unknown }> }> = []
+            for (let row = startRow; row <= endRow; row++) {
+              const values: Array<{ dataValidation?: unknown }> = []
+              for (let col = startCol; col <= endCol; col++) {
+                values.push({ dataValidation: row >= 1 ? tab.dataValidations.get(col) : undefined })
+              }
+              rowData.push({ values })
+            }
+            return {
+              properties: {
+                sheetId: tab.sheetId,
+                title: name,
+                gridProperties: { rowCount: 1000, columnCount: 26 },
+              },
+              data: [{ rowData }],
+            }
+          })
+          return { data: { sheets: sheetsData } }
+        }
         const sheetsMeta = Array.from(ss.sheets.entries()).map(([name, tab]) => ({
           properties: {
             sheetId: tab.sheetId,
@@ -143,7 +189,7 @@ export function createMemorySheets() {
               throw Object.assign(new Error(`Sheet already exists: ${name}`), { code: 400 })
             }
             const sheetId = nextSheetId++
-            ss.sheets.set(name, { sheetId, values: [] })
+            ss.sheets.set(name, { sheetId, values: [], dataValidations: new Map() })
             replies.push({ addSheet: { properties: { sheetId, title: name } } })
           } else if (req.updateSheetProperties) {
             const update = req.updateSheetProperties as {
@@ -156,6 +202,29 @@ export function createMemorySheets() {
                 ss.sheets.delete(oldName)
                 ss.sheets.set(update.properties.title, tab)
                 break
+              }
+            }
+            replies.push({})
+          } else if (req.setDataValidation) {
+            const sdv = req.setDataValidation as {
+              range?: {
+                sheetId?: number
+                startColumnIndex?: number
+                endColumnIndex?: number
+              }
+              rule?: unknown
+            }
+            const sheetId = sdv.range?.sheetId
+            if (sheetId != null) {
+              const tab = getTabBySheetId(params.spreadsheetId, sheetId)
+              const startColumnIndex = sdv.range?.startColumnIndex ?? 0
+              const endColumnIndex = sdv.range?.endColumnIndex ?? startColumnIndex + 1
+              for (let col = startColumnIndex; col < endColumnIndex; col++) {
+                if (sdv.rule === undefined) {
+                  tab.dataValidations.delete(col)
+                } else {
+                  tab.dataValidations.set(col, structuredClone(sdv.rule))
+                }
               }
             }
             replies.push({})

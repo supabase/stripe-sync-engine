@@ -492,9 +492,7 @@ describe('takeLimits()', () => {
     }
 
     const start = Date.now()
-    const result = await drain(
-      takeLimits({ soft_time_limit: 0.3, time_limit: 2 })(fastMessages())
-    )
+    const result = await drain(takeLimits({ soft_time_limit: 0.3, time_limit: 2 })(fastMessages()))
     const elapsed = Date.now() - start
     const eof = result.at(-1) as any
     expect(eof).toMatchObject({ type: 'eof', eof: { has_more: true } })

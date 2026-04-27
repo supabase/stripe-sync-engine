@@ -142,9 +142,9 @@ for (const id of newlyExcluded) {
 }
 
 console.log()
-const passedBoth = [...allResourceIds].filter(
-  (id) => listableIds.has(id) && webhookIds.has(id)
-).sort()
+const passedBoth = [...allResourceIds]
+  .filter((id) => listableIds.has(id) && webhookIds.has(id))
+  .sort()
 console.log(`── Passes both filters (${passedBoth.length}) ──────────────────────────────`)
 for (const id of passedBoth) {
   console.log(`  ${id}`)

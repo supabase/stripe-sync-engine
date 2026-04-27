@@ -258,7 +258,7 @@ describe('Stripe failure handling via Docker engine', () => {
     await harness?.close()
   }, 60_000)
 
-  it('emits Invalid API Key trace before records when account lookup is unauthorized', async () => {
+  it('emits Invalid API Key error before records when list-API call is unauthorized', async () => {
     const destSchema = uniqueSchema('sync_invalid_key')
     await seedCustomers([makeCustomer('cus_auth_001', RANGE_START + 1)])
 
@@ -266,26 +266,25 @@ describe('Stripe failure handling via Docker engine', () => {
       auth: { expectedBearerToken: 'sk_test_valid' },
     })
 
+    // account_id/account_created pre-set so discover() skips its live
+    // /v1/account fetch. The 401 surfaces from the first list-API call.
     const { messages, state } = await runRead({
       destSchema,
       baseUrl: server.url,
       sourceOverrides: {
         api_key: 'sk_test_bad',
+        account_id: 'acct_test_fake',
+        account_created: 1_700_000_000,
       },
     })
 
-    // Auth error during account resolution emits connection_status: failed
-    const connStatus = messages.find(
-      (msg) => msg.type === 'connection_status' && msg.connection_status.status === 'failed'
+    const streamErr = messages.find(
+      (msg) => msg.type === 'stream_status' && msg.stream_status.status === 'error'
     )
-    expect(connStatus).toBeDefined()
-    expect(connStatus).toMatchObject({
-      type: 'connection_status',
-      connection_status: {
-        status: 'failed',
-        message: expect.stringContaining('Invalid API Key'),
-      },
-    })
+    expect(streamErr).toBeDefined()
+    expect((streamErr as { stream_status: { error: string } }).stream_status.error).toContain(
+      'Invalid API Key'
+    )
     expect(messages.filter((msg) => msg.type === 'record')).toHaveLength(0)
     expect(state.streams.customers).toBeUndefined()
   }, 120_000)
