@@ -581,7 +581,23 @@ export async function createApp(resolver: ConnectorResolver) {
       { state, time_limit, soft_time_limit, run_id },
       input
     )
-    return ndjsonResponse(logApiStream('Engine API /pipeline_sync', output, context, startedAt), {
+
+    const heartbeat = setInterval(() => {
+      log.info(
+        { ...context, run_id, elapsed_ms: Date.now() - startedAt },
+        'pipeline_sync heartbeat'
+      )
+    }, 1_000)
+
+    const cleaned = (async function* () {
+      try {
+        yield* output
+      } finally {
+        clearInterval(heartbeat)
+      }
+    })()
+
+    return ndjsonResponse(logApiStream('Engine API /pipeline_sync', cleaned, context, startedAt), {
       signal: ac.signal,
     })
   })
