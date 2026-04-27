@@ -48,8 +48,9 @@ describe('@stripe/sync-logger', () => {
         message: 'connector logger message',
         data: {
           name: 'logger-test',
-          engine_request_id: 'req_123',
+          sync_engine_request_id: 'req_123',
           action_id: 'act_123',
+          run_id: null,
           stream: 'customers',
           attempt: 2,
         },
@@ -144,8 +145,9 @@ describe('@stripe/sync-logger', () => {
         message: 'from stream',
         data: {
           name: 'logger-test',
-          engine_request_id: 'req_stream',
+          sync_engine_request_id: 'req_stream',
           action_id: 'act_stream',
+          run_id: null,
           stream: 'customers',
         },
       },
@@ -176,6 +178,38 @@ describe('@stripe/sync-logger', () => {
       },
     })
     expect(parsed._ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('writes to both stdout and onLog bridge by default', () => {
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk))
+      return true
+    })
+
+    const entries: RoutedLogEntry[] = []
+    const log = createLogger({ name: 'logger-test' })
+
+    runWithLogContext(
+      {
+        onLog(entry) {
+          entries.push(entry)
+        },
+      },
+      () => {
+        log.info({ stream: 'customers' }, 'dual output')
+      }
+    )
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.message).toBe('dual output')
+
+    expect(writes).toHaveLength(1)
+    const parsed = JSON.parse(writes[0]!)
+    expect(parsed).toMatchObject({
+      type: 'log',
+      log: { level: 'info', message: 'dual output' },
+    })
   })
 
   it('suppresses default stdout protocol logs inside async-local context', () => {

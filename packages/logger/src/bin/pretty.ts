@@ -34,7 +34,7 @@ const STATUS_ICON: Record<string, { symbol: string; color: string }> = {
 }
 
 // Keys to omit from log data display
-const SKIP_DATA_KEYS = new Set(['name', 'engine_request_id'])
+const SKIP_DATA_KEYS = new Set(['name', 'sync_engine_request_id'])
 
 function typeLabel(label: string, color: string): string {
   return `${color}${label}:${RESET}`

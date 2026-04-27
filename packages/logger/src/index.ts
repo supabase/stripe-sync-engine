@@ -18,12 +18,19 @@ const DEFAULT_REDACT_PATHS = ['*.api_key', '*.connection_string', '*.password', 
 const DEFAULT_REDACT_CENSOR = '[redacted]'
 
 export type LoggerContext = {
-  engineRequestId?: string
-  action_id?: string
+  engineRequestId: string | null
+  action_id: string | null
+  run_id: string | null
   onLog?: (entry: RoutedLogEntry) => void
   protocolLogDestinations?: DestinationStream[]
   suppressProtocolStdout?: boolean
   suppressLogCapture?: boolean
+}
+
+const emptyContext: LoggerContext = {
+  engineRequestId: null,
+  action_id: null,
+  run_id: null,
 }
 
 const storage = new AsyncLocalStorage<LoggerContext>()
@@ -32,13 +39,13 @@ export function getLoggerContext(): Readonly<LoggerContext> | undefined {
   return storage.getStore()
 }
 
-export function getEngineRequestId(): string | undefined {
-  return storage.getStore()?.engineRequestId
+export function getEngineRequestId(): string | null {
+  return storage.getStore()?.engineRequestId ?? null
 }
 
 export function runWithLogContext<T>(patch: Partial<LoggerContext>, fn: () => T): T {
-  const current = storage.getStore() ?? {}
-  return storage.run({ ...current, ...patch }, fn)
+  const current = storage.getStore() ?? emptyContext
+  return storage.run({ ...current, ...patch } as LoggerContext, fn)
 }
 
 export function withoutLogCapture<T>(fn: () => T): T {
@@ -49,7 +56,7 @@ export function bindLogContext<T>(
   iterable: AsyncIterable<T>,
   patch: Partial<LoggerContext>
 ): AsyncIterable<T> {
-  const base = storage.getStore() ?? {}
+  const base = storage.getStore() ?? emptyContext
 
   return {
     [Symbol.asyncIterator]() {
@@ -267,10 +274,10 @@ function extractCapturedData(
 
   if (loggerName) data.name = loggerName
 
-  const engineRequestId = getEngineRequestId()
-  if (engineRequestId) data.engine_request_id = engineRequestId
-  const actionId = getLoggerContext()?.action_id
-  if (actionId) data.action_id = actionId
+  const context = getLoggerContext()
+  data.sync_engine_request_id = context?.engineRequestId ?? null
+  data.action_id = context?.action_id ?? null
+  data.run_id = context?.run_id ?? null
 
   const first = args[0]
   if (first instanceof Error) {
@@ -430,8 +437,9 @@ export function createLogger(
         const context = getLoggerContext()
         return {
           ...base,
-          ...(context?.engineRequestId ? { engine_request_id: context.engineRequestId } : {}),
-          ...(context?.action_id ? { action_id: context.action_id } : {}),
+          sync_engine_request_id: context?.engineRequestId ?? null,
+          action_id: context?.action_id ?? null,
+          run_id: context?.run_id ?? null,
         }
       },
     },

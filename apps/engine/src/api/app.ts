@@ -80,11 +80,13 @@ export async function createApp(resolver: ConnectorResolver) {
 
   app.use('*', async (c, next) => {
     const engineRequestId = crypto.randomUUID()
-    const action_id = c.req.header('X-Action-Id')?.trim() || undefined
-    await runWithEngineRequestContext({ engineRequestId, action_id }, async () => {
+    const action_id = c.req.header('X-Action-Id')?.trim() || null
+    const run_id = new URL(c.req.url).searchParams.get('run_id')
+    await runWithEngineRequestContext({ engineRequestId, action_id, run_id }, async () => {
       const start = Date.now()
       log.info({ method: c.req.method, path: c.req.path }, 'request start')
       await next()
+
       c.res.headers.set(ENGINE_REQUEST_ID_HEADER, engineRequestId)
       let error: string | undefined
       if (c.res.status >= 400) {
@@ -583,10 +585,7 @@ export async function createApp(resolver: ConnectorResolver) {
     )
 
     const heartbeat = setInterval(() => {
-      log.info(
-        { ...context, run_id, elapsed_ms: Date.now() - startedAt },
-        'pipeline_sync heartbeat'
-      )
+      log.info({ ...context, elapsed_ms: Date.now() - startedAt }, 'pipeline_sync heartbeat')
     }, 1_000)
 
     const cleaned = (async function* () {
