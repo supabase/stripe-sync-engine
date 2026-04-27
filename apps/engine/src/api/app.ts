@@ -365,7 +365,10 @@ export async function createApp(resolver: ConnectorResolver) {
 
     const input = stdin
       ? (async function* () {
-          for (const m of stdin) yield m
+          for (const m of stdin) {
+            const msg = MessageSchema.parse(m)
+            yield msg.type === 'source_input' ? msg.source_input : msg
+          }
         })()
       : undefined
 
@@ -459,7 +462,10 @@ export async function createApp(resolver: ConnectorResolver) {
 
     const input = stdin
       ? (async function* () {
-          for (const m of stdin) yield m
+          for (const m of stdin) {
+            const msg = MessageSchema.parse(m)
+            yield msg.type === 'source_input' ? msg.source_input : msg
+          }
         })()
       : undefined
 

@@ -199,5 +199,85 @@ describeWithEnv(
       const { error: getAfter } = await c.GET('/pipelines/{id}', { params: { path: { id } } })
       expect(getAfter).toBeDefined()
     }, 240_000)
+
+    it('simulate_webhook_sync → events land in Postgres', async () => {
+      const c = api()
+      const stripeMockUrl = process.env.STRIPE_MOCK_URL
+
+      // With a real Stripe key, create a product so there's a known event to sync.
+      // stripe-mock's /v1/events returns canned fixtures and doesn't track
+      // dynamically created objects, so we skip the specific-ID check there.
+      let createdProductId: string | undefined
+      let createdAfter: number | undefined
+      if (!stripeMockUrl) {
+        createdAfter = Math.floor(Date.now() / 1000) - 5
+        const productRes = await fetch('https://api.stripe.com/v1/products', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${STRIPE_API_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: 'name=SimulateWebhookSyncTest',
+        })
+        expect(productRes.ok).toBe(true)
+        const product = (await productRes.json()) as { id: string }
+        createdProductId = product.id
+        console.log(`\n  Created product: ${product.id}`)
+      }
+
+      // Create pipeline
+      const { data: created, error: createErr } = await c.POST('/pipelines', {
+        body: {
+          source: {
+            type: 'stripe',
+            stripe: {
+              api_key: STRIPE_API_KEY,
+              api_version: BUNDLED_API_VERSION,
+              ...(stripeMockUrl ? { base_url: stripeMockUrl } : {}),
+            },
+          },
+          destination: {
+            type: 'postgres',
+            postgres: { url: POSTGRES_CONTAINER_URL, schema },
+          },
+          streams: [{ name: 'products' }],
+        },
+        params: { query: { skip_check: true } },
+      })
+      expect(createErr).toBeUndefined()
+      const id = created!.id
+      console.log(`  Pipeline: ${id}`)
+
+      // Setup destination tables
+      const setupRes = await fetch(`${SERVICE_URL}/pipelines/${id}/setup?only=destination`, {
+        method: 'POST',
+      })
+      expect(setupRes.status).toBe(200)
+      await setupRes.text()
+
+      // Run simulate_webhook_sync
+      const url = createdAfter
+        ? `${SERVICE_URL}/pipelines/${id}/simulate_webhook_sync?created_after=${createdAfter}`
+        : `${SERVICE_URL}/pipelines/${id}/simulate_webhook_sync`
+      const syncRes = await fetch(url, { method: 'POST' })
+      expect(syncRes.status).toBe(200)
+      const syncBody = await syncRes.text()
+      expect(syncBody).toContain('"type":"eof"')
+
+      if (createdProductId) {
+        // Real Stripe: assert the specific product row landed in Postgres
+        const { rows } = await pool.query(`SELECT id FROM "${schema}"."products" WHERE id = $1`, [
+          createdProductId,
+        ])
+        expect(rows).toHaveLength(1)
+        console.log(`  Product ${createdProductId} found in Postgres ✓`)
+      } else {
+        // stripe-mock: just assert the endpoint ran end-to-end (events piped through engine)
+        console.log('  stripe-mock: verified simulate_webhook_sync ran end-to-end ✓')
+      }
+
+      // Cleanup
+      await c.DELETE('/pipelines/{id}', { params: { path: { id } } })
+    }, 120_000)
   }
 )

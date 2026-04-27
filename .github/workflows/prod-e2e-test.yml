@@ -2,7 +2,7 @@ name: Stripe Database Monitor
 
 on:
   push:
-    branches: [fix-e2e]
+    branches: [fix-e2e, webhook-e2e]
   schedule:
     - cron: '0 * * * *' # Every hour
   workflow_dispatch:
@@ -95,12 +95,21 @@ jobs:
       - name: Install psql
         run: sudo apt-get install -y -qq postgresql-client
 
-      - name: Monitor sync progress
+      - name: Verify backfill
+        if: always() && steps.create-db.outputs.db_id != ''
         env:
           DB_STRING: ${{ steps.create-db.outputs.db_string }}
           DB_ID: ${{ steps.create-db.outputs.db_id }}
           STRIPE_API_BASE: ${{ matrix.api_base }}
-        run: ./scripts/monitor-sync-progress.sh
+        run: bash scripts/verify-backfill.sh
+
+      - name: Verify live sync
+        if: always() && steps.create-db.outputs.db_id != ''
+        env:
+          DB_STRING: ${{ steps.create-db.outputs.db_string }}
+          DB_ID: ${{ steps.create-db.outputs.db_id }}
+          STRIPE_API_BASE: ${{ matrix.api_base }}
+        run: bash scripts/verify-live-sync.sh
 
       # TODO: Make Sigma validation a hard failure once selective sync is available
       # and the DB consistently reaches ready state.

@@ -639,6 +639,42 @@ describe('POST /read', () => {
     expect(dataEvents[1]!.type).toBe('source_state')
     expect(dataEvents[2]).toMatchObject({ type: 'eof', eof: { has_more: false } })
   })
+
+  it('unwraps source_input envelopes before passing to source', async () => {
+    const app = await createApp(resolver)
+
+    const record = {
+      type: 'record',
+      record: {
+        stream: 'customers',
+        data: { id: 'cus_wrapped' },
+        emitted_at: new Date().toISOString(),
+      },
+    }
+    const state = {
+      type: 'source_state',
+      source_state: { stream: 'customers', data: { cursor: '1' } },
+    }
+
+    const res = await app.request(
+      '/pipeline_read',
+      jsonBody({
+        pipeline: testPipeline,
+        stdin: [
+          { type: 'source_input', source_input: record },
+          { type: 'source_input', source_input: state },
+        ],
+      })
+    )
+
+    expect(res.status).toBe(200)
+    const events = (await readNdjson<Message>(res)).filter((e) => e.type !== 'log')
+    // envelope stripped — no source_input messages in output
+    expect(events.every((e) => e.type !== 'source_input')).toBe(true)
+    // inner record flowed through to source
+    expect(events.some((e) => e.type === 'record')).toBe(true)
+    expect(events.some((e) => e.type === 'eof')).toBe(true)
+  })
 })
 
 describe('POST /write', () => {
@@ -713,6 +749,42 @@ describe('POST /sync', () => {
     expect(stateAndEof).toHaveLength(2)
     expect(stateAndEof[0]!.type).toBe('source_state')
     expect(stateAndEof[1]).toMatchObject({ type: 'eof', eof: { has_more: false } })
+  })
+
+  it('unwraps source_input envelopes before passing to source', async () => {
+    const app = await createApp(resolver)
+
+    const record = {
+      type: 'record',
+      record: {
+        stream: 'customers',
+        data: { id: 'cus_wrapped' },
+        emitted_at: new Date().toISOString(),
+      },
+    }
+    const state = {
+      type: 'source_state',
+      source_state: { stream: 'customers', data: { cursor: '1' } },
+    }
+
+    const res = await app.request(
+      '/pipeline_sync',
+      jsonBody({
+        pipeline: testPipeline,
+        stdin: [
+          { type: 'source_input', source_input: record },
+          { type: 'source_input', source_input: state },
+        ],
+      })
+    )
+
+    expect(res.status).toBe(200)
+    const events = (await readNdjson<Message>(res)).filter((e) => e.type !== 'log')
+    // envelope stripped — no source_input messages in output
+    expect(events.every((e) => e.type !== 'source_input')).toBe(true)
+    // inner record flowed through to source and out the other side
+    expect(events.some((e) => e.type === 'source_state')).toBe(true)
+    expect(events.some((e) => e.type === 'eof')).toBe(true)
   })
 })
 

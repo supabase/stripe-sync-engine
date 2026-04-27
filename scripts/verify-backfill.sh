@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Monitor Stripe database sync progress by polling status and row counts.
-# Required env: DB_STRING, DB_ID
+# Verify Stripe database backfill: polls sync status and row counts until ready.
+# Required env: STRIPE_API_KEY, DB_STRING, DB_ID, STRIPE_API_BASE
 
+: "${STRIPE_API_KEY:?STRIPE_API_KEY is required}"
 : "${DB_STRING:?DB_STRING is required}"
 : "${DB_ID:?DB_ID is required}"
 
