@@ -10,9 +10,9 @@
       "import": "./dist/index.js"
     },
     "./browser": {
-      "bun": "./src/openapi/browser.ts",
-      "types": "./dist/openapi/browser.d.ts",
-      "import": "./dist/openapi/browser.js"
+      "bun": "./src/browser.ts",
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
     },
     "./client": {
       "bun": "./src/client.ts",
