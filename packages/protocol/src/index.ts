@@ -17,7 +17,7 @@ export {
   drain,
 } from './helpers.js'
 export { parseNdjsonChunks, writeLine } from './ndjson.js'
-export { takeThroughStates } from './iter-utils/takeThroughStates.js'
+export { takeThroughStates, type TakeThroughStatesOptions } from './iter-utils/takeThroughStates.js'
 export { merge, map, withAbortOnReturn, mergeAsync } from './utils/async-iterable.js'
 export {
   subdivideRanges,

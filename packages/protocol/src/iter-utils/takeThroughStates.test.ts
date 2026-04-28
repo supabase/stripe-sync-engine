@@ -5,9 +5,7 @@ import { destinationTest } from '../../../../apps/engine/src/lib/destination-tes
 import { sourceTest } from '../../../../apps/engine/src/lib/source-test.js'
 import { takeThroughStates } from './takeThroughStates.js'
 
-function generateMessages(
-  pattern: string
-): [
+function generateMessages(pattern: string): [
   AsyncIterable<Message>,
   {
     next: ReturnType<typeof vi.fn>
@@ -94,14 +92,19 @@ function generateMessages(
 async function sync(
   sourceInput: AsyncIterable<Message>,
   stateLimit: number
-): Promise<{ recordCount: number; stateCount: number }> {
+): Promise<{ recordCount: number; stateCount: number; hasMore: boolean }> {
+  const onLimitReached = vi.fn()
   const sourceIterable = AsyncIterableX.from(
     sourceTest.read({ config: {} }, sourceInput) as AsyncIterable<Message>
   )
   const downstream = sourceIterable.pipe(
     (messages: AsyncIterable<Message>) =>
       destinationTest.write({ config: {}, catalog: {} }, messages),
-    takeThroughStates(stateLimit)
+    takeThroughStates(stateLimit, {
+      onLimitReached: () => {
+        onLimitReached()
+      },
+    })
   )
   let recordCount = 0
   let stateCount = 0
@@ -114,7 +117,11 @@ async function sync(
     }
   }
 
-  return { recordCount, stateCount }
+  return {
+    recordCount,
+    stateCount,
+    hasMore: onLimitReached.mock.calls.length > 0,
+  }
 }
 
 function expectSpyCounts(
@@ -180,7 +187,7 @@ describe('generateMessages()', () => {
 })
 
 describe('takeThroughStates()', () => {
-  it('pipes source to destination and stops after the first 3 states', async () => {
+  it('stops after the first 3 states', async () => {
     const [messages, spies] = generateMessages(`
       R,R,S
       R,R,S
@@ -188,7 +195,11 @@ describe('takeThroughStates()', () => {
       R,R,S
     `)
 
-    await expect(sync(messages, 3)).resolves.toEqual({ recordCount: 6, stateCount: 3 })
+    await expect(sync(messages, 3)).resolves.toEqual({
+      recordCount: 6,
+      stateCount: 3,
+      hasMore: true,
+    })
     expectSpyCounts(spies, { next: 10, return: 1, throw: 0, finally: 1 })
   })
 
@@ -200,7 +211,25 @@ describe('takeThroughStates()', () => {
       R,R,S
     `)
 
-    await expect(sync(messages, 99)).resolves.toEqual({ recordCount: 8, stateCount: 4 })
+    await expect(sync(messages, 99)).resolves.toEqual({
+      recordCount: 8,
+      stateCount: 4,
+      hasMore: false,
+    })
     expectSpyCounts(spies, { next: 13, return: 0, throw: 0, finally: 1 })
+  })
+
+  it('treats exact exhaustion at the state limit as limit reached', async () => {
+    const [messages, spies] = generateMessages(`
+      R,R,S
+      R,R,S
+    `)
+
+    await expect(sync(messages, 2)).resolves.toEqual({
+      recordCount: 4,
+      stateCount: 2,
+      hasMore: true,
+    })
+    expectSpyCounts(spies, { next: 7, return: 0, throw: 0, finally: 1 })
   })
 })
