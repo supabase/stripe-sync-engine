@@ -5,6 +5,7 @@ import type { Config, WebhookInput } from './index.js'
 import type { ResourceConfig } from './types.js'
 import { processStripeEvent } from './process-event.js'
 import { verifyWebhookSignature } from './webhookVerify.js'
+import { log } from './logger.js'
 
 // MARK: - processWebhookInput
 
@@ -26,6 +27,7 @@ export async function* processWebhookInput(
   }
   const signature = (input.headers['stripe-signature'] as string) ?? ''
   const event = verifyWebhookSignature(input.body, signature, config.webhook_secret)
+  log.info({ eventId: event.id, eventType: event.type }, 'webhook signature verified')
   yield* processStripeEvent(event, config, catalog, registry, streamNames, accountId)
 }
 

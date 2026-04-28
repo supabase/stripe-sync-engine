@@ -7,6 +7,7 @@ import type {
 import type { StripeEvent } from './spec.js'
 import type { Config } from './index.js'
 import { msg } from './index.js'
+import { log } from './logger.js'
 import type { ResourceConfig } from './types.js'
 import { normalizeStripeObjectName } from './resourceRegistry.js'
 
@@ -106,6 +107,8 @@ export async function* processStripeEvent(
   streamNames: Set<string>,
   accountId?: string
 ): AsyncGenerator<Message> {
+  log.info({ eventId: event.id, eventType: event.type }, 'webhook event received')
+
   // 1. Extract object
   const dataObject = event.data?.object as unknown as
     | { id?: string; object?: string; deleted?: boolean; [key: string]: unknown }

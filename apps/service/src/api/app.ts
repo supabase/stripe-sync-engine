@@ -891,7 +891,8 @@ export function createApp(options: AppOptions) {
       const body = await c.req.text()
       const signature = c.req.header('stripe-signature') ?? ''
       try {
-        verifyWebhookSignature(body, signature, webhookSecret)
+        const event = verifyWebhookSignature(body, signature, webhookSecret)
+        log.info({ eventId: event.id, eventType: event.type, pipeline_id }, 'webhook event ingested')
       } catch (err) {
         if (err instanceof WebhookSignatureError) {
           return c.text('webhook signature verification failed', 401)
