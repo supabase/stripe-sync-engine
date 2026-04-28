@@ -129,12 +129,14 @@ const SKIPPABLE_ERROR_MESSAGES = [
   'Unrecognized request URL (GET: /v1/treasury/financial_accounts)',
 
   // v2_core_accounts
-  // Variant 1:
   // "Accounts v2 is not enabled for your platform. If you're interested in using this API with
   //  your integration, please visit
   //  https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup.
   //  [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}"
-  'Accounts v2 is not enabled for your platform',
+  // "Accounts v2 is not enabled for your livemode merchant acct_1NIFdXLd02PKGbD5. Please visit
+  //  https://docs.stripe.com/connect/use-accounts-as-customers to enable Accounts v2.
+  //  [GET /v2/core/accounts (400)] {request-id=req_v2yowYQ7yMNDkuvFi, stripe-should-retry=false}"
+  'Accounts v2 is not enabled',
   // Variant 2 (test mode / sandbox):
   // "Accounts v2 isn't available in test mode. Switch to a sandbox to test.
   //  [GET /v2/core/accounts (400)] {request-id=..., stripe-should-retry=false}"
@@ -157,7 +159,7 @@ const SKIPPABLE_ERROR_MESSAGES = [
   'Your account is not set up to use Identity',
 ]
 
-function isSkippableError(err: unknown): boolean {
+export function isSkippableError(err: unknown): boolean {
   if (!(err instanceof StripeApiRequestError)) return false
   const body = err.body as { error?: { message?: string } } | undefined
   const message = (body?.error?.message ?? '').toLowerCase()
