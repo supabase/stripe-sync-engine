@@ -729,9 +729,9 @@ export async function createProgram() {
       meta: { name: 'sync_batch', description: 'Run sync for a pipeline (batch, returns JSON)' },
       args: {
         id: { type: 'positional', required: true, description: 'Pipeline ID' },
-        'chunk-time-limit': {
+        'state-limit': {
           type: 'string',
-          description: 'Time limit in seconds',
+          description: 'Stop after N source_state messages',
         },
         'run-id': {
           type: 'string',
@@ -762,7 +762,7 @@ export async function createProgram() {
         }
 
         const params = new URLSearchParams()
-        if (args['chunk-time-limit']) params.set('time_limit', args['chunk-time-limit'])
+        if (args['state-limit']) params.set('state_limit', args['state-limit'])
         if (args['run-id']) params.set('run_id', args['run-id'])
         if (args['reset-state']) params.set('reset_state', 'true')
         const qs = params.toString() ? `?${params}` : ''

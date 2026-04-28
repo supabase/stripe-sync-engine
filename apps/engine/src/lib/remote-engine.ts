@@ -1,6 +1,12 @@
 import createClient from 'openapi-fetch'
 import type { paths } from '../__generated__/openapi.js'
-import type { Engine, SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
+import type {
+  Engine,
+  SourceReadOptions,
+  BatchSyncOptions,
+  ConnectorInfo,
+  ConnectorListItem,
+} from './engine.js'
 import { parseNdjsonStream } from './ndjson.js'
 import type {
   CheckOutput,
@@ -189,21 +195,13 @@ export function createRemoteEngine(engineUrl: string): Engine {
 
     async pipeline_sync_batch(
       pipeline: PipelineConfig,
-      opts?: SourceReadOptions,
-      input?: AsyncIterable<unknown>
+      opts?: BatchSyncOptions
     ): Promise<EofPayload> {
-      let stdin: unknown[] | undefined
-      if (input) {
-        stdin = []
-        for await (const m of input) stdin.push(m)
-      }
       const res = await post('/pipeline_sync_batch', {
         pipeline,
         state: opts?.state,
-        time_limit: opts?.time_limit,
-        soft_time_limit: opts?.soft_time_limit,
         run_id: opts?.run_id,
-        stdin,
+        state_limit: opts?.state_limit,
       })
       return (await res.json()) as EofPayload
     },

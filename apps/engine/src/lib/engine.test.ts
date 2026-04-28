@@ -2374,3 +2374,76 @@ describe('engine.pipeline_setup() timeout', () => {
     expect(nonLog).toHaveLength(0)
   })
 })
+
+describe('engine.pipeline_sync_batch()', () => {
+  function makeBatchSource(stateCursors: string[]): Source {
+    return {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [{ name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' }],
+          },
+        }
+      },
+      async *read() {
+        for (const cursor of stateCursors) {
+          yield {
+            type: 'record',
+            record: {
+              stream: 'customers',
+              data: { id: `cus_${cursor}` },
+              emitted_at: '2024-01-01T00:00:00.000Z',
+            },
+          }
+          yield {
+            type: 'source_state',
+            source_state: {
+              state_type: 'stream',
+              stream: 'customers',
+              data: { cursor },
+            },
+          }
+        }
+      },
+    }
+  }
+
+  it('stops after state_limit and reports has_more=true', async () => {
+    const engine = await createEngine(makeResolver(makeBatchSource(['1', '2', '3']), destinationTest))
+
+    const eof = await engine.pipeline_sync_batch(defaultPipeline, {
+      run_id: 'run_batch',
+      state_limit: 2,
+    })
+
+    expect(eof).toMatchObject({
+      has_more: true,
+      ending_state: {
+        source: { streams: { customers: { cursor: '2' } } },
+        sync_run: { run_id: 'run_batch' },
+      },
+    })
+  })
+
+  it('reports has_more when the source exhausts exactly at state_limit', async () => {
+    const engine = await createEngine(makeResolver(makeBatchSource(['1', '2']), destinationTest))
+
+    const eof = await engine.pipeline_sync_batch(defaultPipeline, {
+      state_limit: 2,
+    })
+
+    expect(eof).toMatchObject({
+      has_more: true,
+      ending_state: {
+        source: { streams: { customers: { cursor: '2' } } },
+      },
+    })
+  })
+})

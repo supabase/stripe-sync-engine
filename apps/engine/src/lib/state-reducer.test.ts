@@ -125,6 +125,18 @@ describe('stateReducer initialize event', () => {
     expect(state.sync_run.progress.elapsed_ms).toBe(5000)
     expect(state.sync_run.progress.streams['customers'].record_count).toBe(500)
   })
+
+  it('preserves the prior progress object on continuation', () => {
+    const prior = init(['customers'], 'same-run')
+    const next = stateReducer(prior, {
+      type: 'initialize',
+      stream_names: ['customers'],
+      run_id: 'same-run',
+    })
+
+    expect(next.sync_run.progress).toBe(prior.sync_run.progress)
+    expect(next.sync_run.run_id).toBe('same-run')
+  })
 })
 
 describe('stateReducer message events', () => {

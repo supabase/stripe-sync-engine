@@ -98,4 +98,19 @@ describe('Engine OpenAPI spec', () => {
     // SyncState should still be a named component
     expect(spec.components.schemas).toHaveProperty('SyncState')
   })
+
+  it('pipeline_sync_batch uses the narrowed batch request schema', async () => {
+    const spec = await getSpec()
+    const op = (spec.paths as Record<string, any>)['/pipeline_sync_batch']?.post
+    const bodySchema = op?.requestBody?.content?.['application/json']?.schema
+
+    expect(bodySchema?.properties?.state).toMatchObject({
+      $ref: '#/components/schemas/SyncState',
+    })
+    expect(bodySchema?.properties).toHaveProperty('run_id')
+    expect(bodySchema?.properties).toHaveProperty('state_limit')
+    expect(bodySchema?.properties).not.toHaveProperty('stdin')
+    expect(bodySchema?.properties).not.toHaveProperty('time_limit')
+    expect(bodySchema?.properties).not.toHaveProperty('soft_time_limit')
+  })
 })

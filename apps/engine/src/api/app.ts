@@ -163,6 +163,22 @@ export async function createApp(resolver: ConnectorResolver) {
     }),
   })
 
+  const syncBatchRequestBody = z.object({
+    pipeline: TypedPipelineConfig,
+    run_id: z.string().optional().meta({
+      description: 'Optional sync run identifier used to track bounded sync progress.',
+      example: 'run_demo',
+    }),
+    state_limit: z.number().int().positive().optional().meta({
+      description: 'Stop after yielding N source_state messages, inclusive.',
+      example: 100,
+    }),
+    state: SyncState.optional().meta({
+      description:
+        'SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.',
+    }),
+  })
+
   const writeRequestBody = z.object({
     pipeline: TypedPipelineConfig,
     stdin: z.array(MessageSchema).meta({
@@ -513,7 +529,7 @@ export async function createApp(resolver: ConnectorResolver) {
       'Runs the full read → write pipeline and returns the final EofPayload as a single JSON response.',
     requestBody: {
       required: true,
-      content: { 'application/json': { schema: syncRequestBody } },
+      content: { 'application/json': { schema: syncBatchRequestBody } },
     },
     responses: {
       200: {
@@ -524,26 +540,13 @@ export async function createApp(resolver: ConnectorResolver) {
     },
   })
   app.openapi(pipelineSyncBatchRoute, async (c) => {
-    const { pipeline, state, time_limit, soft_time_limit, run_id, stdin } = c.req.valid('json')
-
-    const input = stdin
-      ? (async function* () {
-          for (const m of stdin) {
-            const msg = MessageSchema.parse(m)
-            yield msg.type === 'source_input' ? msg.source_input : msg
-          }
-        })()
-      : undefined
+    const { pipeline, state, run_id, state_limit } = c.req.valid('json')
 
     const context = { path: '/pipeline_sync_batch', ...syncRequestContext(pipeline) }
     const startedAt = Date.now()
     log.info(context, 'Engine API /pipeline_sync_batch started')
 
-    const result = await engine.pipeline_sync_batch(
-      pipeline,
-      { state, time_limit, soft_time_limit, run_id },
-      input
-    )
+    const result = await engine.pipeline_sync_batch(pipeline, { state, run_id, state_limit })
 
     log.info(
       { ...context, durationMs: Date.now() - startedAt, status: result.status },

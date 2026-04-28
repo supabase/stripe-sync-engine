@@ -1,7 +1,7 @@
 export * from '@stripe/sync-protocol'
 export { enforceCatalog, tapLog, filterType, collect, pipe } from './pipeline.js'
 export { createEngine, buildCatalog } from './engine.js'
-export { SourceReadOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
+export { SourceReadOptions, BatchSyncOptions, ConnectorInfo, ConnectorListItem } from './engine.js'
 export type { Engine } from './engine.js'
 export { parseNdjson, parseNdjsonChunks, parseNdjsonStream, toNdjsonStream } from './ndjson.js'
 export { createRemoteEngine } from './remote-engine.js'

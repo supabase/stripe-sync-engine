@@ -415,6 +415,21 @@ export function createApp(options: AppOptions) {
       'Explicit sync checkpoint override for resumed ad-hoc runs'
     ),
   })
+  const SyncBatchQueryParams = z.object({
+    state_limit: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .meta({ description: 'Stop after N source_state messages' }),
+    run_id: z
+      .string()
+      .optional()
+      .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
+    reset_state: z.coerce.boolean().optional().meta({
+      description: 'Ignore persisted sync state and start fresh (ending state is still saved)',
+    }),
+  })
 
   app.openapi(
     createRoute({
@@ -504,7 +519,7 @@ export function createApp(options: AppOptions) {
       description:
         'Runs the full sync pipeline and returns the final EofPayload as a single JSON response. ' +
         'Persists the ending sync_state on the pipeline so the next run resumes where this one left off.',
-      requestParams: { path: PipelineIdParam, query: SyncQueryParams },
+      requestParams: { path: PipelineIdParam, query: SyncBatchQueryParams },
       requestBody: {
         required: false,
         content: { 'application/json': { schema: SyncBodySchema } },
@@ -522,7 +537,7 @@ export function createApp(options: AppOptions) {
     }),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { time_limit, run_id, reset_state } = c.req.valid('query')
+      const { state_limit, run_id, reset_state } = c.req.valid('query')
       const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
         {}) as z.infer<typeof SyncBodySchema>
 
@@ -546,8 +561,8 @@ export function createApp(options: AppOptions) {
       }
       const eof = await engine.pipeline_sync_batch(config, {
         state: reset_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
-        time_limit,
         run_id,
+        state_limit,
       })
 
       if (eof.ending_state) {
