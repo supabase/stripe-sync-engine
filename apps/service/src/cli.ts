@@ -647,6 +647,11 @@ export async function createProgram() {
           default: false,
           description: 'Plain text output (no Ink/ANSI)',
         },
+        raw: {
+          type: 'boolean',
+          default: false,
+          description: 'Output raw NDJSON to stdout',
+        },
       },
       async run({ args }) {
         const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
@@ -663,6 +668,49 @@ export async function createProgram() {
             destination: overrides.destination ? pipeline.destination : undefined,
           }
         }
+
+        if (args.raw) {
+          const params = new URLSearchParams()
+          if (args['chunk-time-limit']) params.set('time_limit', args['chunk-time-limit'])
+          if (args['run-id']) params.set('run_id', args['run-id'])
+          if (args['reset-state']) params.set('reset_state', 'true')
+          const qs = params.toString() ? `?${params}` : ''
+
+          const body = {
+            ...(parseStreamsArg(args.streams) ? { streams: parseStreamsArg(args.streams) } : {}),
+            ...(connectorOverrides?.source ? { source: connectorOverrides.source } : {}),
+            ...(connectorOverrides?.destination
+              ? { destination: connectorOverrides.destination }
+              : {}),
+          }
+
+          const res = await handler(
+            new Request(`http://localhost/pipelines/${args.id}/sync${qs}`, {
+              method: 'POST',
+              ...(Object.keys(body).length > 0
+                ? {
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify(body),
+                  }
+                : {}),
+            })
+          )
+
+          if (!res.ok) {
+            process.stderr.write(`Error ${res.status}: ${await res.text()}\n`)
+            process.exit(1)
+          }
+
+          const reader = res.body!.getReader()
+          const decoder = new TextDecoder()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            process.stdout.write(decoder.decode(value, { stream: true }))
+          }
+          return
+        }
+
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,
@@ -674,6 +722,84 @@ export async function createProgram() {
           plain: args.plain || !process.stderr.isTTY,
           connectorOverrides,
         })
+      },
+    }) as CommandDef
+
+    pipelineSubCommands['sync_batch'] = defineCommand({
+      meta: { name: 'sync_batch', description: 'Run sync for a pipeline (batch, returns JSON)' },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        'chunk-time-limit': {
+          type: 'string',
+          description: 'Time limit in seconds',
+        },
+        'run-id': {
+          type: 'string',
+          description: 'Sync run identifier (resumes or starts fresh)',
+        },
+        streams: {
+          type: 'string',
+          description: 'Stream override as comma-separated names or JSON array',
+        },
+        'reset-state': {
+          type: 'boolean',
+          default: false,
+          description: 'Ignore persisted sync state and start fresh',
+        },
+      },
+      async run({ args }) {
+        const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
+        let connectorOverrides = overrides
+        if (overrides.source || overrides.destination) {
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
+          connectorOverrides = {
+            source: overrides.source ? pipeline.source : undefined,
+            destination: overrides.destination ? pipeline.destination : undefined,
+          }
+        }
+
+        const params = new URLSearchParams()
+        if (args['chunk-time-limit']) params.set('time_limit', args['chunk-time-limit'])
+        if (args['run-id']) params.set('run_id', args['run-id'])
+        if (args['reset-state']) params.set('reset_state', 'true')
+        const qs = params.toString() ? `?${params}` : ''
+
+        const body = {
+          ...(parseStreamsArg(args.streams) ? { streams: parseStreamsArg(args.streams) } : {}),
+          ...(connectorOverrides?.source ? { source: connectorOverrides.source } : {}),
+          ...(connectorOverrides?.destination
+            ? { destination: connectorOverrides.destination }
+            : {}),
+        }
+
+        const res = await handler(
+          new Request(`http://localhost/pipelines/${args.id}/sync_batch${qs}`, {
+            method: 'POST',
+            ...(Object.keys(body).length > 0
+              ? {
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify(body),
+                }
+              : {}),
+          })
+        )
+
+        if (!res.ok) {
+          const text = await res.text()
+          try {
+            const json = JSON.parse(text)
+            process.stderr.write(`Error ${res.status}: ${JSON.stringify(json, null, 2)}\n`)
+          } catch {
+            process.stderr.write(`Error ${res.status}: ${text}\n`)
+          }
+          process.exit(1)
+        }
+
+        const eof = await res.json()
+        process.stdout.write(JSON.stringify(eof, null, 2) + '\n')
       },
     }) as CommandDef
 

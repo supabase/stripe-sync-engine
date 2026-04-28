@@ -19,6 +19,7 @@ import {
   map,
   withAbortOnReturn,
   EofMessage,
+  EofPayload,
 } from '@stripe/sync-protocol'
 
 const engineMsg = createEngineMessageFactory()
@@ -153,6 +154,16 @@ export interface Engine {
     opts?: SourceReadOptions,
     input?: AsyncIterable<unknown>
   ): AsyncIterable<SyncOutput>
+
+  /**
+   * Batch sync: runs the full read → write pipeline and returns
+   * the final {@link EofPayload} as a single value (no streaming).
+   */
+  pipeline_sync_batch(
+    pipeline: PipelineConfig,
+    opts?: SourceReadOptions,
+    input?: AsyncIterable<unknown>
+  ): Promise<EofPayload>
 }
 
 /**
@@ -684,6 +695,15 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           }
         })()
       )
+    },
+
+    async pipeline_sync_batch(pipeline, opts?, input?) {
+      let eof: EofPayload | undefined
+      for await (const msg of engine.pipeline_sync(pipeline, opts, input)) {
+        if (msg.type === 'eof') eof = (msg as EofMessage).eof
+      }
+      if (!eof) throw new Error('pipeline_sync_batch ended without eof message')
+      return eof
     },
   }
   return engine

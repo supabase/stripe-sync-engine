@@ -22,6 +22,7 @@ import {
   TeardownOutput as TeardownOutputSchema,
   SyncState,
   emptySyncState,
+  EofPayload as EofPayloadSchema,
 } from '@stripe/sync-protocol'
 
 // Raw $refs for NDJSON content schemas — avoids zod-openapi generating *Output
@@ -500,6 +501,56 @@ export async function createApp(resolver: ConnectorResolver) {
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', cleaned, context, startedAt), {
       signal: ac.signal,
     })
+  })
+
+  const pipelineSyncBatchRoute = createRoute({
+    operationId: 'pipeline_sync_batch',
+    method: 'post',
+    path: '/pipeline_sync_batch',
+    tags: ['Stateless Sync API'],
+    summary: 'Run sync pipeline (batch, returns JSON)',
+    description:
+      'Runs the full read → write pipeline and returns the final EofPayload as a single JSON response.',
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: syncRequestBody } },
+    },
+    responses: {
+      200: {
+        description: 'Sync result',
+        content: { 'application/json': { schema: EofPayloadSchema } },
+      },
+      400: errorResponse,
+    },
+  })
+  app.openapi(pipelineSyncBatchRoute, async (c) => {
+    const { pipeline, state, time_limit, soft_time_limit, run_id, stdin } = c.req.valid('json')
+
+    const input = stdin
+      ? (async function* () {
+          for (const m of stdin) {
+            const msg = MessageSchema.parse(m)
+            yield msg.type === 'source_input' ? msg.source_input : msg
+          }
+        })()
+      : undefined
+
+    const context = { path: '/pipeline_sync_batch', ...syncRequestContext(pipeline) }
+    const startedAt = Date.now()
+    log.info(context, 'Engine API /pipeline_sync_batch started')
+
+    const result = await engine.pipeline_sync_batch(
+      pipeline,
+      { state, time_limit, soft_time_limit, run_id },
+      input
+    )
+
+    log.info(
+      { ...context, durationMs: Date.now() - startedAt, status: result.status },
+      'Engine API /pipeline_sync_batch completed'
+    )
+
+    return c.json(result, 200)
   })
 
   app.openapi(
