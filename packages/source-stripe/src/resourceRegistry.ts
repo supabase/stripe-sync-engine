@@ -1,8 +1,13 @@
 import type { ResourceConfig } from './types.js'
-import type { ListFn, ListParams, OpenApiSpec, NestedEndpoint } from '@stripe/sync-openapi'
+import type {
+  ListFn,
+  ListParams,
+  OpenApiSpec,
+  NestedEndpoint,
+  ParsedResourceTable,
+} from '@stripe/sync-openapi'
 import {
-  discoverListEndpoints,
-  discoverNestedEndpoints,
+  SpecParser,
   buildListFn,
   buildRetrieveFn,
   isV2Path,
@@ -101,10 +106,13 @@ export function buildResourceRegistry(
   apiVersion: string,
   baseUrl?: string,
   allowedTables?: Set<string>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  parsedTables?: ParsedResourceTable[]
 ): Record<string, ResourceConfig> {
-  const endpoints = discoverListEndpoints(spec)
-  const nestedEndpoints = discoverNestedEndpoints(spec, endpoints)
+  const parser = new SpecParser()
+  const endpoints = parser.discoverListEndpoints(spec)
+  const nestedEndpoints = parser.discoverNestedEndpoints(spec, endpoints)
+  const tableMap = new Map(parsedTables?.map((t) => [t.tableName, t]))
   const registry: Record<string, ResourceConfig> = {}
   const seenNested = new Set<string>()
 
@@ -128,6 +136,7 @@ export function buildResourceRegistry(
     const config: ResourceConfig = {
       order: 1,
       tableName,
+      parsedTable: tableMap.get(tableName),
       supportsCreatedFilter: endpoint.supportsCreatedFilter,
       supportsLimit: endpoint.supportsLimit,
       supportsForwardPagination: isV2 || endpoint.supportsStartingAfter,

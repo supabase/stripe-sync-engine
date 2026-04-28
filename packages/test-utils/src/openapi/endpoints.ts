@@ -1,6 +1,5 @@
 import {
   BUNDLED_API_VERSION,
-  discoverListEndpoints,
   isV2Path,
   resolveOpenApiSpec,
   SpecParser,
@@ -50,11 +49,11 @@ export async function resolveEndpointSet(options: {
     fetchImpl
   )
 
-  const discovered = discoverListEndpoints(resolved.spec)
+  const parser = new SpecParser()
+  const discovered = parser.discoverListEndpoints(resolved.spec)
 
   const jsonSchemaMap = new Map<string, Record<string, unknown>>()
   try {
-    const parser = new SpecParser()
     const parsed = parser.parse(resolved.spec, {
       resourceAliases: OPENAPI_RESOURCE_TABLE_ALIASES,
     })

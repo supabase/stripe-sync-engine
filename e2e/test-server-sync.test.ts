@@ -143,7 +143,7 @@ describe('test-server sync via Docker engine', () => {
         type: 'stripe',
         stripe: {
           api_key: 'sk_test_fake',
-          api_version: '2025-04-30.basil',
+          api_version: BUNDLED_API_VERSION,
           base_url: harness.testServerContainerUrl(),
           ...opts.sourceOverrides,
         },

@@ -1,4 +1,4 @@
-import type { ListFn, RetrieveFn } from '@stripe/sync-openapi'
+import type { ListFn, RetrieveFn, ParsedResourceTable } from '@stripe/sync-openapi'
 import type { RevalidateEntityName } from './resourceRegistry.js'
 
 /**
@@ -32,6 +32,8 @@ export type BaseResourceConfig = {
 export type ResourceConfig = BaseResourceConfig & {
   listFn?: ListFn
   retrieveFn?: RetrieveFn
+  /** Parsed OpenAPI schema for this resource (used to build catalog json_schema) */
+  parsedTable?: ParsedResourceTable
   /** Whether the list API supports the `limit` parameter */
   supportsLimit?: boolean
   /** Whether the list API supports forward cursor pagination for repeated page fetches. */
@@ -49,97 +51,3 @@ export type ResourceConfig = BaseResourceConfig & {
 }
 
 export type RevalidateEntity = RevalidateEntityName
-
-export const SUPPORTED_WEBHOOK_EVENTS: string[] = [
-  'charge.captured',
-  'charge.expired',
-  'charge.failed',
-  'charge.pending',
-  'charge.refunded',
-  'charge.succeeded',
-  'charge.updated',
-  'customer.deleted',
-  'customer.created',
-  'customer.updated',
-  'coupon.created',
-  'coupon.deleted',
-  'coupon.updated',
-  'checkout.session.async_payment_failed',
-  'checkout.session.async_payment_succeeded',
-  'checkout.session.completed',
-  'checkout.session.expired',
-  'customer.subscription.created',
-  'customer.subscription.deleted',
-  'customer.subscription.paused',
-  'customer.subscription.pending_update_applied',
-  'customer.subscription.pending_update_expired',
-  'customer.subscription.trial_will_end',
-  'customer.subscription.resumed',
-  'customer.subscription.updated',
-  'customer.tax_id.updated',
-  'customer.tax_id.created',
-  'customer.tax_id.deleted',
-  'invoice.created',
-  'invoice.deleted',
-  'invoice.finalized',
-  'invoice.finalization_failed',
-  'invoice.paid',
-  'invoice.payment_action_required',
-  'invoice.payment_failed',
-  'invoice.payment_succeeded',
-  'invoice.upcoming',
-  'invoice.sent',
-  'invoice.voided',
-  'invoice.marked_uncollectible',
-  'invoice.updated',
-  'product.created',
-  'product.updated',
-  'product.deleted',
-  'price.created',
-  'price.updated',
-  'price.deleted',
-  'plan.created',
-  'plan.updated',
-  'plan.deleted',
-  'setup_intent.canceled',
-  'setup_intent.created',
-  'setup_intent.requires_action',
-  'setup_intent.setup_failed',
-  'setup_intent.succeeded',
-  'subscription_schedule.aborted',
-  'subscription_schedule.canceled',
-  'subscription_schedule.completed',
-  'subscription_schedule.created',
-  'subscription_schedule.expiring',
-  'subscription_schedule.released',
-  'subscription_schedule.updated',
-  'payment_method.attached',
-  'payment_method.automatically_updated',
-  'payment_method.detached',
-  'payment_method.updated',
-  'charge.dispute.created',
-  'charge.dispute.funds_reinstated',
-  'charge.dispute.funds_withdrawn',
-  'charge.dispute.updated',
-  'charge.dispute.closed',
-  'payment_intent.amount_capturable_updated',
-  'payment_intent.canceled',
-  'payment_intent.created',
-  'payment_intent.partially_funded',
-  'payment_intent.payment_failed',
-  'payment_intent.processing',
-  'payment_intent.requires_action',
-  'payment_intent.succeeded',
-  'credit_note.created',
-  'credit_note.updated',
-  'credit_note.voided',
-  'radar.early_fraud_warning.created',
-  'radar.early_fraud_warning.updated',
-  'refund.created',
-  'refund.failed',
-  'refund.updated',
-  'charge.refund.updated',
-  'review.closed',
-  'review.opened',
-  'entitlements.active_entitlement_summary.updated',
-]

@@ -1,51 +1,43 @@
 import type { CatalogPayload, Stream } from '@stripe/sync-protocol'
 import type { ResourceConfig } from './types.js'
-import type { ParsedResourceTable } from '@stripe/sync-openapi'
 import { parsedTableToJsonSchema } from '@stripe/sync-openapi'
 
 /**
- * Derive a CatalogPayload by merging OpenAPI-parsed tables with registry metadata.
- * `_account_id` and `_updated_at` (staleness, see DDR-009) are injected into properties.
- * The returned catalog is account-agnostic — call {@link stampAccountIdEnum} to
- * add the per-pipeline allow-list before handing it to destinations.
+ * Derive a CatalogPayload from the registry. Each syncable ResourceConfig must
+ * carry a `parsedTable`; throws if one is missing (ghost-table guard).
  */
-export function catalogFromOpenApi(
-  tables: ParsedResourceTable[],
-  registry: Record<string, ResourceConfig>
-): CatalogPayload {
-  const tableMap = new Map(tables.map((t) => [t.tableName, t]))
-
+export function catalogFromOpenApi(registry: Record<string, ResourceConfig>): CatalogPayload {
   const streams: Stream[] = Object.entries(registry)
     .filter(([, cfg]) => cfg.sync !== false)
     .sort(([, a], [, b]) => a.order - b.order)
     .map(([name, cfg]) => {
-      const table = tableMap.get(cfg.tableName)
-      const stream: Stream = {
+      if (!cfg.parsedTable) {
+        throw new Error(
+          `catalogFromOpenApi: registry entry "${cfg.tableName}" has no parsedTable. ` +
+            `Pass parsedTables to buildResourceRegistry so every entry carries its schema.`
+        )
+      }
+
+      const jsonSchema = parsedTableToJsonSchema(cfg.parsedTable)
+      const properties = (jsonSchema.properties ?? {}) as Record<string, unknown>
+      properties._account_id = { type: 'string' }
+      properties._updated_at = { type: 'integer' }
+      jsonSchema.properties = properties
+      const required = Array.isArray(jsonSchema.required) ? [...jsonSchema.required] : []
+      if (!required.includes('_account_id')) required.push('_account_id')
+      if (!required.includes('_updated_at')) required.push('_updated_at')
+      jsonSchema.required = required
+
+      return {
         name: cfg.tableName,
         primary_key: [['id'], ['_account_id']],
         newer_than_field: '_updated_at',
-        metadata: { resource_name: name },
+        metadata: {
+          resource_name: name,
+          supports_realtime_sync: true,
+        },
+        json_schema: jsonSchema,
       }
-
-      if (table) {
-        const jsonSchema = parsedTableToJsonSchema(table)
-        const properties = (jsonSchema.properties ?? {}) as Record<string, unknown>
-        properties._account_id = { type: 'string' }
-        jsonSchema.properties = properties
-        properties._updated_at = { type: 'integer' }
-        const required = Array.isArray(jsonSchema.required) ? [...jsonSchema.required] : []
-        if (!required.includes('_account_id')) {
-          required.push('_account_id')
-        }
-        if (!required.includes('_updated_at')) {
-          required.push('_updated_at')
-        }
-        jsonSchema.required = required
-
-        stream.json_schema = jsonSchema
-      }
-
-      return stream
     })
 
   return { streams }

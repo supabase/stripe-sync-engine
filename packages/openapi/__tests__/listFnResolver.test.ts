@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildListFn, buildRetrieveFn, discoverListEndpoints } from '../listFnResolver'
+import { buildListFn, buildRetrieveFn } from '../listFnResolver'
+import { SpecParser } from '../specParser'
 import { isDeprecatedOperation } from '../specCleaning'
 import { minimalStripeOpenApiSpec } from './fixtures/minimalSpec'
 
-describe('discoverListEndpoints', () => {
+describe('SpecParser.discoverListEndpoints', () => {
+  const parser = new SpecParser()
+
   it('maps table names to their API paths', () => {
-    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const endpoints = parser.discoverListEndpoints(minimalStripeOpenApiSpec)
 
     expect(endpoints.get('customers')).toEqual({
       tableName: 'customers',
@@ -37,7 +40,7 @@ describe('discoverListEndpoints', () => {
   })
 
   it('discovers v2 list endpoints using next_page_url format', () => {
-    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const endpoints = parser.discoverListEndpoints(minimalStripeOpenApiSpec)
 
     expect(endpoints.get('v2_core_accounts')).toEqual({
       tableName: 'v2_core_accounts',
@@ -89,35 +92,37 @@ describe('discoverListEndpoints', () => {
         },
       },
     }
-    const endpoints = discoverListEndpoints(spec)
+    const endpoints = parser.discoverListEndpoints(spec)
     const paths = Array.from(endpoints.values()).map((e) => e.apiPath)
     expect(paths).not.toContain('/v1/customers/{customer}/sources')
   })
 
   it('skips endpoints with deprecated: true on the operation', () => {
-    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const endpoints = parser.discoverListEndpoints(minimalStripeOpenApiSpec)
     const tables = Array.from(endpoints.keys())
     expect(tables).not.toContain('deprecated_widgets')
   })
 
   it('skips endpoints with [Deprecated] in the description', () => {
-    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const endpoints = parser.discoverListEndpoints(minimalStripeOpenApiSpec)
     const tables = Array.from(endpoints.keys())
     expect(tables).not.toContain('exchange_rates')
   })
 
   it('skips endpoints that appear in the generated global deprecated paths set', () => {
-    const endpoints = discoverListEndpoints(minimalStripeOpenApiSpec)
+    const endpoints = parser.discoverListEndpoints(minimalStripeOpenApiSpec)
     const tables = Array.from(endpoints.keys())
     expect(tables).not.toContain('recipients')
     expect(tables).toContain('customers')
   })
 
   it('returns empty map when spec has no paths', () => {
-    const endpoints = discoverListEndpoints({ openapi: '3.0.0' })
+    const endpoints = parser.discoverListEndpoints({ openapi: '3.0.0' })
     expect(endpoints.size).toBe(0)
   })
+})
 
+describe('buildListFn / buildRetrieveFn', () => {
   it('uses the injected fetch for list and retrieve calls', async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ data: [], has_more: false }), { status: 200 })

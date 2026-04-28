@@ -470,3 +470,56 @@ describe('SpecParser', () => {
     })
   })
 })
+
+describe('SpecParser.discoverSyncableTables', () => {
+  const parser = new SpecParser()
+
+  it('returns the intersection of listable and webhook-updatable resources, resolved to table names', () => {
+    const tables = parser.discoverSyncableTables(minimalStripeOpenApiSpec)
+
+    expect(tables).toContain('customers')
+    expect(tables).toContain('products')
+    expect(tables).toContain('plans')
+    expect(tables).toContain('checkout_sessions')
+    expect(tables).toContain('early_fraud_warnings')
+  })
+
+  it('excludes resources that are listable but have no webhook events', () => {
+    const tables = parser.discoverSyncableTables(minimalStripeOpenApiSpec)
+
+    expect(tables).not.toContain('exchange_rates')
+    expect(tables).not.toContain('recipients')
+  })
+
+  it('honors the excluded option', () => {
+    const baseline = parser.discoverSyncableTables(minimalStripeOpenApiSpec)
+    expect(baseline).toContain('customers')
+
+    const filtered = parser.discoverSyncableTables(minimalStripeOpenApiSpec, {
+      excluded: new Set(['customers']),
+    })
+    expect(filtered).not.toContain('customers')
+    expect(filtered).toContain('products')
+  })
+
+  it('honors caller-provided aliases over the defaults', () => {
+    const tables = parser.discoverSyncableTables(minimalStripeOpenApiSpec, {
+      aliases: { customer: 'patrons' },
+    })
+    expect(tables).toContain('patrons')
+    expect(tables).not.toContain('customers')
+  })
+
+  it('returns the same set that SpecParser.parse uses internally', () => {
+    const parsed = parser.parse(minimalStripeOpenApiSpec)
+    const parsedTables = new Set(parsed.tables.map((t) => t.tableName))
+    const syncable = parser.discoverSyncableTables(minimalStripeOpenApiSpec)
+
+    expect(syncable).toEqual(parsedTables)
+  })
+
+  it('returns empty set when spec has no paths', () => {
+    const spec: OpenApiSpec = { ...minimalStripeOpenApiSpec, paths: {} }
+    expect(parser.discoverSyncableTables(spec)).toEqual(new Set())
+  })
+})

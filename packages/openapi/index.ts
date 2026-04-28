@@ -1,5 +1,6 @@
 export type * from './types.js'
-export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES } from './specParser.js'
+export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES, resolveTableName } from './specParser.js'
+export type { ListEndpoint, NestedEndpoint } from './specParser.js'
 export { OPENAPI_COMPATIBILITY_COLUMNS } from './runtimeMappings.js'
 
 export {
@@ -8,23 +9,13 @@ export {
   SUPPORTED_API_VERSIONS,
 } from './specFetchHelper.js'
 export {
-  discoverListEndpoints,
-  discoverNestedEndpoints,
   isV2Path,
   buildListFn,
   buildRetrieveFn,
-  resolveTableName,
   StripeApiRequestError,
   pickDebugHeaders,
 } from './listFnResolver.js'
-export type {
-  ListEndpoint,
-  NestedEndpoint,
-  ListFn,
-  ListResult,
-  RetrieveFn,
-  ListParams,
-} from './listFnResolver.js'
+export type { ListFn, ListResult, RetrieveFn, ListParams } from './listFnResolver.js'
 export { parsedTableToJsonSchema } from './jsonSchemaConverter.js'
 export { generateObjectsFromSchema, findSchemaNameByResourceId } from './objectGenerator.js'
 export type { GenerateObjectsOptions } from './objectGenerator.js'

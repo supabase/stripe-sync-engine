@@ -124,6 +124,12 @@ function makeConfig(
     supportsCreatedFilter: false,
     listFn: (() => Promise.resolve({ data: [], has_more: false })) as ResourceConfig['listFn'],
     retrieveFn: (() => Promise.resolve({})) as ResourceConfig['retrieveFn'],
+    parsedTable: {
+      tableName: overrides.tableName,
+      resourceId: overrides.tableName,
+      sourceSchemaName: overrides.tableName,
+      columns: [{ name: 'id', type: 'text' as const, nullable: false }],
+    },
     ...overrides,
   } as ResourceConfig
 }
