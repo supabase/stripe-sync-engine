@@ -103,11 +103,10 @@ export function progressReducer(progress: ProgressPayload, msg: Message): Progre
       }
       if (msg.source_state.state_type === 'stream') {
         const stream = msg.source_state.stream
-        if (!progress.streams[stream]) {
-          next.streams = {
-            ...next.streams,
-            [stream]: { status: 'started', state_count: 0, record_count: 0 },
-          }
+        const sp = getStream(progress, stream)
+        next.streams = {
+          ...next.streams,
+          [stream]: { ...sp, state_count: sp.state_count + 1 },
         }
       }
       next.derived = computeDerived(next, elapsedMs)
