@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Service",
     "version": "1.0.0",
-    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/check | Check pipeline connectivity |\n| POST | /pipelines/{id}/setup | Run pipeline setup hooks |\n| POST | /pipelines/{id}/teardown | Run pipeline teardown hooks |\n| POST | /pipelines/{id}/simulate_webhook_sync | Simulate webhook sync by fetching events from the Stripe API |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
+    "description": "Stripe Sync Service — manage pipelines and webhook ingress.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| GET | /pipelines | List pipelines |\n| POST | /pipelines | Create pipeline |\n| GET | /pipelines/{id} | Retrieve pipeline |\n| PATCH | /pipelines/{id} | Update pipeline |\n| DELETE | /pipelines/{id} | Delete pipeline |\n| POST | /pipelines/{id}/sync | Run sync for a pipeline |\n| POST | /pipelines/{id}/sync_batch | Run sync for a pipeline (batch, returns JSON) |\n| POST | /pipelines/{id}/check | Check pipeline connectivity |\n| POST | /pipelines/{id}/setup | Run pipeline setup hooks |\n| POST | /pipelines/{id}/teardown | Run pipeline teardown hooks |\n| POST | /pipelines/{id}/simulate_webhook_sync | Simulate webhook sync by fetching events from the Stripe API |\n| POST | /pipelines/{id}/sync_workflow_test | Run sync using the workflow backfill loop (no Temporal) |\n| POST | /webhooks/{pipeline_id} | Ingest a Stripe webhook event |"
   },
   "paths": {
     "/health": {
@@ -580,6 +580,141 @@
                   "type": "object",
                   "properties": {},
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipelines/{id}/sync_batch": {
+      "post": {
+        "operationId": "pipelines.sync_batch",
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Run sync for a pipeline (batch, returns JSON)",
+        "description": "Runs the full sync pipeline and returns the final EofPayload as a single JSON response. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+              "description": "Unique pipeline identifier (e.g. pipe_abc123).",
+              "example": "pipe_abc123"
+            },
+            "required": true,
+            "description": "Unique pipeline identifier (e.g. pipe_abc123)."
+          },
+          {
+            "in": "query",
+            "name": "state_limit",
+            "schema": {
+              "description": "Stop after N source_state messages",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": "Stop after N source_state messages"
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "schema": {
+              "description": "Sync run identifier (resumes or starts fresh)",
+              "type": "string"
+            },
+            "description": "Sync run identifier (resumes or starts fresh)"
+          },
+          {
+            "in": "query",
+            "name": "reset_state",
+            "schema": {
+              "description": "Ignore persisted sync state and start fresh (ending state is still saved)",
+              "type": "boolean"
+            },
+            "description": "Ignore persisted sync state and start fresh (ending state is still saved)"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "$ref": "#/components/schemas/SourceConfig"
+                  },
+                  "destination": {
+                    "$ref": "#/components/schemas/DestinationConfig"
+                  },
+                  "streams": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Stream (table) name to sync."
+                        },
+                        "sync_mode": {
+                          "description": "How the source reads this stream. Defaults to full_refresh.",
+                          "type": "string",
+                          "enum": [
+                            "incremental",
+                            "full_refresh"
+                          ]
+                        },
+                        "backfill_limit": {
+                          "description": "Cap backfill to this many records, then mark the stream complete.",
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ]
+                    }
+                  },
+                  "sync_state": {
+                    "description": "Explicit sync checkpoint override for resumed ad-hoc runs",
+                    "$ref": "#/components/schemas/SyncState"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EofPayload"
                 }
               }
             }
@@ -1545,12 +1680,26 @@
               "states_per_second": {
                 "type": "number",
                 "description": "State checkpoints per second."
+              },
+              "total_record_count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Total records across all streams."
+              },
+              "total_state_count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Total source_state messages across all streams."
               }
             },
             "required": [
               "status",
               "records_per_second",
-              "states_per_second"
+              "states_per_second",
+              "total_record_count",
+              "total_state_count"
             ],
             "description": "Computed aggregates."
           },
@@ -1657,6 +1806,39 @@
           "status"
         ],
         "additionalProperties": false
+      },
+      "EofPayload": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Terminal run status derived from stream outcomes.",
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether the client should continue with another request. true when cut off by limits; false when the source iterator exhausted naturally."
+          },
+          "ending_state": {
+            "description": "Full sync state at the end of this request. Round-trip this as starting_state on the next request.",
+            "$ref": "#/components/schemas/SyncState"
+          },
+          "run_progress": {
+            "description": "Accumulated progress across all requests in this sync run.",
+            "$ref": "#/components/schemas/ProgressPayload"
+          },
+          "request_progress": {
+            "description": "Progress for this specific request only.",
+            "$ref": "#/components/schemas/ProgressPayload"
+          }
+        },
+        "required": [
+          "status",
+          "has_more",
+          "run_progress",
+          "request_progress"
+        ],
+        "additionalProperties": false,
+        "description": "Terminal message signaling end of this request."
       }
     }
   }

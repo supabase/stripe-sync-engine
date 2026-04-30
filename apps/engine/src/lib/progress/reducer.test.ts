@@ -98,7 +98,7 @@ describe('progressReducer — source_state', () => {
     expect(p.global_state_count).toBe(1)
   })
 
-  it('marks stream as started on first source_state for that stream', () => {
+  it('increments state_count on first source_state for that stream', () => {
     let p = createInitialProgress()
     p = progressReducer(
       p,
@@ -107,7 +107,8 @@ describe('progressReducer — source_state', () => {
         source_state: { state_type: 'stream', stream: 'customers', data: {} },
       })
     )
-    expect(p.streams['customers']?.status).toBe('started')
+    expect(p.streams['customers']?.state_count).toBe(1)
+    expect(p.streams['customers']?.status).toBe('not_started')
   })
 
   it('does not overwrite existing stream status', () => {

@@ -51,7 +51,13 @@ describe('stateReducer initialize event', () => {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,
           global_state_count: 3,
-          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          derived: {
+            status: 'started',
+            records_per_second: 10,
+            states_per_second: 1,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
@@ -70,7 +76,13 @@ describe('stateReducer initialize event', () => {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,
           global_state_count: 3,
-          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          derived: {
+            status: 'started',
+            records_per_second: 10,
+            states_per_second: 1,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
@@ -93,7 +105,13 @@ describe('stateReducer initialize event', () => {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,
           global_state_count: 3,
-          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          derived: {
+            status: 'started',
+            records_per_second: 10,
+            states_per_second: 1,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
@@ -116,7 +134,13 @@ describe('stateReducer initialize event', () => {
           started_at: '2024-01-01T00:00:00Z',
           elapsed_ms: 5000,
           global_state_count: 3,
-          derived: { status: 'started', records_per_second: 10, states_per_second: 1 },
+          derived: {
+            status: 'started',
+            records_per_second: 10,
+            states_per_second: 1,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: { customers: { status: 'started', state_count: 2, record_count: 500 } },
         },
       },
@@ -124,6 +148,18 @@ describe('stateReducer initialize event', () => {
     const state = init(['customers'], 'same-run', prior)
     expect(state.sync_run.progress.elapsed_ms).toBe(5000)
     expect(state.sync_run.progress.streams['customers'].record_count).toBe(500)
+  })
+
+  it('preserves the prior progress object on continuation', () => {
+    const prior = init(['customers'], 'same-run')
+    const next = stateReducer(prior, {
+      type: 'initialize',
+      stream_names: ['customers'],
+      run_id: 'same-run',
+    })
+
+    expect(next.sync_run.progress).toBe(prior.sync_run.progress)
+    expect(next.sync_run.run_id).toBe('same-run')
   })
 })
 

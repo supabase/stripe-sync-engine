@@ -647,6 +647,11 @@ export async function createProgram() {
           default: false,
           description: 'Plain text output (no Ink/ANSI)',
         },
+        raw: {
+          type: 'boolean',
+          default: false,
+          description: 'Output raw NDJSON to stdout',
+        },
       },
       async run({ args }) {
         const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
@@ -663,6 +668,49 @@ export async function createProgram() {
             destination: overrides.destination ? pipeline.destination : undefined,
           }
         }
+
+        if (args.raw) {
+          const params = new URLSearchParams()
+          if (args['chunk-time-limit']) params.set('time_limit', args['chunk-time-limit'])
+          if (args['run-id']) params.set('run_id', args['run-id'])
+          if (args['reset-state']) params.set('reset_state', 'true')
+          const qs = params.toString() ? `?${params}` : ''
+
+          const body = {
+            ...(parseStreamsArg(args.streams) ? { streams: parseStreamsArg(args.streams) } : {}),
+            ...(connectorOverrides?.source ? { source: connectorOverrides.source } : {}),
+            ...(connectorOverrides?.destination
+              ? { destination: connectorOverrides.destination }
+              : {}),
+          }
+
+          const res = await handler(
+            new Request(`http://localhost/pipelines/${args.id}/sync${qs}`, {
+              method: 'POST',
+              ...(Object.keys(body).length > 0
+                ? {
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify(body),
+                  }
+                : {}),
+            })
+          )
+
+          if (!res.ok) {
+            process.stderr.write(`Error ${res.status}: ${await res.text()}\n`)
+            process.exit(1)
+          }
+
+          const reader = res.body!.getReader()
+          const decoder = new TextDecoder()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            process.stdout.write(decoder.decode(value, { stream: true }))
+          }
+          return
+        }
+
         const { renderPipelineSync } = await import('./cli/pipeline-sync.js')
         await renderPipelineSync({
           handler,
@@ -674,6 +722,124 @@ export async function createProgram() {
           plain: args.plain || !process.stderr.isTTY,
           connectorOverrides,
         })
+      },
+    }) as CommandDef
+
+    pipelineSubCommands['sync_batch'] = defineCommand({
+      meta: { name: 'sync_batch', description: 'Run sync for a pipeline (batch, returns JSON)' },
+      args: {
+        id: { type: 'positional', required: true, description: 'Pipeline ID' },
+        'time-limit': {
+          type: 'string',
+          description: 'Stop after N seconds per request',
+        },
+        'state-limit': {
+          type: 'string',
+          description: 'Stop after N source_state messages per request',
+        },
+        'run-id': {
+          type: 'string',
+          description: 'Sync run identifier (resumes or starts fresh)',
+        },
+        streams: {
+          type: 'string',
+          description: 'Stream override as comma-separated names or JSON array',
+        },
+        'reset-state': {
+          type: 'boolean',
+          default: false,
+          description: 'Ignore persisted sync state and start fresh',
+        },
+        loop: {
+          type: 'string',
+          default: '1',
+          description: 'Number of iterations (0 = loop until has_more is false)',
+        },
+        raw: {
+          type: 'boolean',
+          default: false,
+          description: 'Output raw JSON to stdout (no progress rendering)',
+        },
+      },
+      async run({ args }) {
+        const overrides = extractConnectorOverrides(args as Record<string, unknown>, {
+          sources: sourceNames,
+          destinations: destinationNames,
+        })
+        let connectorOverrides = overrides
+        if (overrides.source || overrides.destination) {
+          const pipeline = await fetchAndMergeOverrides(args.id as string, overrides)
+          connectorOverrides = {
+            source: overrides.source ? pipeline.source : undefined,
+            destination: overrides.destination ? pipeline.destination : undefined,
+          }
+        }
+
+        const bodyBase = {
+          ...(parseStreamsArg(args.streams) ? { streams: parseStreamsArg(args.streams) } : {}),
+          ...(connectorOverrides?.source ? { source: connectorOverrides.source } : {}),
+          ...(connectorOverrides?.destination
+            ? { destination: connectorOverrides.destination }
+            : {}),
+        }
+
+        const raw = args.raw === true
+        const maxIterations = parseInt(args.loop ?? '1')
+        const { formatProgress } = await import('@stripe/sync-logger/progress')
+        let prevProgress: import('@stripe/sync-protocol').ProgressPayload | undefined
+        let isFirstIteration = true
+        let iteration = 0
+
+        while (true) {
+          iteration++
+          const params = new URLSearchParams()
+          if (args['time-limit']) params.set('time_limit', args['time-limit'])
+          if (args['state-limit']) params.set('state_limit', args['state-limit'])
+          if (args['run-id']) params.set('run_id', args['run-id'])
+          if (args['reset-state'] && isFirstIteration) params.set('reset_state', 'true')
+          const qs = params.toString() ? `?${params}` : ''
+
+          const res = await handler(
+            new Request(`http://localhost/pipelines/${args.id}/sync_batch${qs}`, {
+              method: 'POST',
+              ...(Object.keys(bodyBase).length > 0
+                ? {
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify(bodyBase),
+                  }
+                : {}),
+            })
+          )
+
+          if (!res.ok) {
+            const text = await res.text()
+            try {
+              const json = JSON.parse(text)
+              process.stderr.write(`Error ${res.status}: ${JSON.stringify(json, null, 2)}\n`)
+            } catch {
+              process.stderr.write(`Error ${res.status}: ${text}\n`)
+            }
+            process.exit(1)
+          }
+
+          const eof = (await res.json()) as import('@stripe/sync-protocol').EofPayload
+
+          if (raw) {
+            process.stdout.write(JSON.stringify(eof) + '\n')
+          } else {
+            if (maxIterations !== 1) process.stderr.write(`--- iteration ${iteration} ---\n`)
+            process.stderr.write(formatProgress(eof.run_progress, prevProgress) + '\n')
+            prevProgress = eof.run_progress
+          }
+
+          const reachedLimit = maxIterations > 0 && iteration >= maxIterations
+          if (reachedLimit || !eof.has_more) {
+            if (!raw) process.stderr.write(`Final status: ${eof.status}\n`)
+            break
+          }
+
+          isFirstIteration = false
+        }
       },
     }) as CommandDef
 

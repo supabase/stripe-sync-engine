@@ -22,6 +22,7 @@ import {
   TeardownOutput as TeardownOutputSchema,
   SyncState,
   emptySyncState,
+  EofPayload as EofPayloadSchema,
 } from '@stripe/sync-protocol'
 
 // Raw $refs for NDJSON content schemas — avoids zod-openapi generating *Output
@@ -155,6 +156,22 @@ export async function createApp(resolver: ConnectorResolver) {
     stdin: z.array(MessageSchema).optional().meta({
       description:
         'Optional array of input messages (push mode). Without stdin, reads from the source connector (backfill mode).',
+    }),
+    state: SyncState.optional().meta({
+      description:
+        'SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.',
+    }),
+  })
+
+  const syncBatchRequestBody = z.object({
+    pipeline: TypedPipelineConfig,
+    run_id: z.string().optional().meta({
+      description: 'Optional sync run identifier used to track bounded sync progress.',
+      example: 'run_demo',
+    }),
+    state_limit: z.number().int().positive().optional().meta({
+      description: 'Stop after yielding N source_state messages, inclusive.',
+      example: 100,
     }),
     state: SyncState.optional().meta({
       description:
@@ -500,6 +517,43 @@ export async function createApp(resolver: ConnectorResolver) {
     return ndjsonResponse(logApiStream('Engine API /pipeline_sync', cleaned, context, startedAt), {
       signal: ac.signal,
     })
+  })
+
+  const pipelineSyncBatchRoute = createRoute({
+    operationId: 'pipeline_sync_batch',
+    method: 'post',
+    path: '/pipeline_sync_batch',
+    tags: ['Stateless Sync API'],
+    summary: 'Run sync pipeline (batch, returns JSON)',
+    description:
+      'Runs the full read → write pipeline and returns the final EofPayload as a single JSON response.',
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: syncBatchRequestBody } },
+    },
+    responses: {
+      200: {
+        description: 'Sync result',
+        content: { 'application/json': { schema: EofPayloadSchema } },
+      },
+      400: errorResponse,
+    },
+  })
+  app.openapi(pipelineSyncBatchRoute, async (c) => {
+    const { pipeline, state, run_id, state_limit } = c.req.valid('json')
+
+    const context = { path: '/pipeline_sync_batch', ...syncRequestContext(pipeline) }
+    const startedAt = Date.now()
+    log.info(context, 'Engine API /pipeline_sync_batch started')
+
+    const result = await engine.pipeline_sync_batch(pipeline, { state, run_id, state_limit })
+
+    log.info(
+      { ...context, durationMs: Date.now() - startedAt, status: result.status },
+      'Engine API /pipeline_sync_batch completed'
+    )
+
+    return c.json(result, 200)
   })
 
   app.openapi(

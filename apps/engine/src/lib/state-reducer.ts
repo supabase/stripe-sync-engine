@@ -33,19 +33,22 @@ export function stateReducer(state: SyncState | undefined, event: StateEvent): S
         },
       }
     }
-    const isContinuation = event.run_id != null && state.sync_run.run_id === event.run_id
+    if (event.run_id != null && state.sync_run.run_id === event.run_id) {
+      return {
+        ...state,
+        sync_run: {
+          ...state.sync_run,
+          run_id: event.run_id,
+        },
+      }
+    }
+
     return {
       ...state,
       sync_run: {
         run_id: event.run_id,
-        time_ceiling: isContinuation
-          ? state.sync_run.time_ceiling
-          : event.run_id
-            ? new Date().toISOString()
-            : state.sync_run.time_ceiling,
-        progress: isContinuation
-          ? state.sync_run.progress
-          : createInitialProgress(event.stream_names),
+        time_ceiling: event.run_id ? new Date().toISOString() : state.sync_run.time_ceiling,
+        progress: createInitialProgress(event.stream_names),
       },
     }
   }

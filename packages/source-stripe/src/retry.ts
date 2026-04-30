@@ -71,6 +71,16 @@ function getRetryAfterMs(err: unknown): number | undefined {
   return seconds * 1000
 }
 
+/**
+ * Extract Stripe-Rate-Limited-Reason header from a StripeApiRequestError.
+ * Values: global-rate, endpoint-rate, global-concurrency, endpoint-concurrency, resource-specific.
+ */
+function getRateLimitReason(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const headers = (err as { responseHeaders?: Record<string, string> }).responseHeaders
+  return headers?.['stripe-rate-limited-reason'] ?? undefined
+}
+
 export function isRetryableHttpError(err: unknown): boolean {
   const status = getHttpErrorStatus(err)
   if (status === 429 || (status !== undefined && status >= 500)) {
@@ -144,6 +154,7 @@ export async function withHttpRetry<T>(
 
       const status = getHttpErrorStatus(err)
       const retryAfterMs = getRetryAfterMs(err)
+      const rateLimitReason = getRateLimitReason(err)
       const actualDelay = retryAfterMs ?? delayMs
       const errName = err instanceof Error ? err.name : 'UnknownError'
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -158,9 +169,10 @@ export async function withHttpRetry<T>(
           error_name: errName,
           error_message: errMsg,
           retry_after: retryAfterMs != null,
+          rate_limit_reason: rateLimitReason ?? null,
           label: opts.label,
         },
-        `Retrying Stripe request${labelPart}${retrySource}`
+        `Retrying Stripe request${labelPart}${retrySource}${rateLimitReason ? ` (${rateLimitReason})` : ''}`
       )
 
       await sleep(actualDelay, opts.signal)

@@ -123,7 +123,7 @@ describe('isSkippableError', () => {
   describe.each([
     [
       'v2_core_accounts (platform)',
-      'Accounts v2 is not enabled for your platform. If you\'re interested in using this API with your integration, please visit https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup. [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}',
+      "Accounts v2 is not enabled for your platform. If you're interested in using this API with your integration, please visit https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup. [GET /v2/core/accounts (400)] {request-id=req_v2HaQWYCiDgV6xQZ7, stripe-should-retry=false}",
       true,
     ],
     [

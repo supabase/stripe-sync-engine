@@ -161,6 +161,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipeline_sync_batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync pipeline (batch, returns JSON)
+         * @description Runs the full read → write pipeline and returns the final EofPayload as a single JSON response.
+         */
+        post: operations["pipeline_sync_batch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/meta/sources": {
         parameters: {
             query?: never;
@@ -676,6 +696,10 @@ export interface components {
                 records_per_second: number;
                 /** @description State checkpoints per second. */
                 states_per_second: number;
+                /** @description Total records across all streams. */
+                total_record_count: number;
+                /** @description Total source_state messages across all streams. */
+                total_state_count: number;
             };
             /** @description Per-stream progress, keyed by stream name. */
             streams: {
@@ -1133,6 +1157,55 @@ export interface operations {
                 };
                 content: {
                     "application/x-ndjson": components["schemas"]["SyncOutput"];
+                };
+            };
+            /** @description Invalid params */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    pipeline_sync_batch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    pipeline: components["schemas"]["PipelineConfig"];
+                    /**
+                     * @description Optional sync run identifier used to track bounded sync progress.
+                     * @example run_demo
+                     */
+                    run_id?: string;
+                    /**
+                     * @description Stop after yielding N source_state messages, inclusive.
+                     * @example 100
+                     */
+                    state_limit?: number;
+                    /** @description SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid. */
+                    state?: components["schemas"]["SyncState"];
+                };
+            };
+        };
+        responses: {
+            /** @description Sync result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EofPayload"];
                 };
             };
             /** @description Invalid params */

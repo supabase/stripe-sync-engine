@@ -214,7 +214,13 @@ function buildMockApp() {
         started_at: new Date().toISOString(),
         elapsed_ms: count * 100,
         global_state_count: count,
-        derived: { status: 'succeeded', records_per_second: 10, states_per_second: 1 },
+        derived: {
+          status: 'succeeded',
+          records_per_second: 10,
+          states_per_second: 1,
+          total_record_count: 0,
+          total_state_count: 0,
+        },
         streams: {},
       }
       const endingState = {
@@ -606,6 +612,8 @@ describe('generated pipeline CLI', () => {
               status: syncCount === 1 ? 'started' : 'succeeded',
               records_per_second: 10,
               states_per_second: 1,
+              total_record_count: 0,
+              total_state_count: 0,
             },
             streams: {
               charges: {

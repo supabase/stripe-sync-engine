@@ -148,7 +148,13 @@ describe('formatProgress', () => {
       started_at: '2026-01-01T00:00:00Z',
       elapsed_ms: 1000,
       global_state_count: 1,
-      derived: { status: 'started', records_per_second: 50, states_per_second: 1 },
+      derived: {
+        status: 'started',
+        records_per_second: 50,
+        states_per_second: 1,
+        total_record_count: 0,
+        total_state_count: 0,
+      },
       streams: {
         customers: {
           status: 'started',
@@ -176,7 +182,13 @@ describe('formatProgress', () => {
       started_at: '2026-01-01T00:00:00Z',
       elapsed_ms: 2000,
       global_state_count: 2,
-      derived: { status: 'started', records_per_second: 100, states_per_second: 1 },
+      derived: {
+        status: 'started',
+        records_per_second: 100,
+        states_per_second: 1,
+        total_record_count: 0,
+        total_state_count: 0,
+      },
       streams: {
         customers: { status: 'started', state_count: 1, record_count: 150 },
         invoices: { status: 'started', state_count: 1, record_count: 50 },

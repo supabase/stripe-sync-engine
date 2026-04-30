@@ -1,5 +1,6 @@
 import WebSocket from 'ws'
 import { tracedFetch, getHttpsProxyAgentForTarget } from './transport.js'
+import { log } from './logger.js'
 
 const CLI_VERSION = '1.33.0'
 
@@ -214,6 +215,10 @@ export async function createStripeWebSocketClient(
       ws.on('message', async (data: WebSocket.Data) => {
         try {
           const message = JSON.parse(data.toString()) as StripeWebhookEvent
+          log.info(
+            { webhookId: message.webhook_id, eventType: message.type },
+            'websocket event received'
+          )
 
           // Send acknowledgment IMMEDIATELY (before processing)
           const ack: EventAck = {

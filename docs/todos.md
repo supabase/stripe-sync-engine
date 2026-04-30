@@ -1,5 +1,11 @@
 # Todos
 
+- Fix: webhook pipeline_sync should not pre-populate all streams in progress, maybe separate pathway for webhooks instead of a single method
+- Explicit success / failure for various methods like setup / teardown. Switch to http 200/400/500 standard for error code
+- More robust serialization & deserliazation support in general. lots of bugs caused by those basic pieces missing still.
+
+---
+
 Short-term actionable items. Move to a dated plan in `docs/plans/` when scoped.
 
 ## Now

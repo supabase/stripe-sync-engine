@@ -23,14 +23,26 @@ const successEof = {
     started_at: new Date().toISOString(),
     elapsed_ms: 100,
     global_state_count: 1,
-    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    derived: {
+      status: 'succeeded' as const,
+      records_per_second: 10,
+      states_per_second: 1,
+      total_record_count: 0,
+      total_state_count: 0,
+    },
     streams: {},
   },
   request_progress: {
     started_at: new Date().toISOString(),
     elapsed_ms: 100,
     global_state_count: 1,
-    derived: { status: 'succeeded' as const, records_per_second: 10, states_per_second: 1 },
+    derived: {
+      status: 'succeeded' as const,
+      records_per_second: 10,
+      states_per_second: 1,
+      total_record_count: 0,
+      total_state_count: 0,
+    },
     streams: {},
   },
 }

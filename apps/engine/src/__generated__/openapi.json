@@ -3,7 +3,7 @@
   "info": {
     "title": "Stripe Sync Engine",
     "version": "1.0.0",
-    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via a JSON request body.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /pipeline_check | Check connector connection |\n| POST | /pipeline_setup | Set up destination schema |\n| POST | /pipeline_teardown | Tear down destination schema |\n| POST | /source_discover | Discover available streams |\n| POST | /pipeline_read | Read records from source |\n| POST | /pipeline_write | Write records to destination |\n| POST | /pipeline_sync | Run sync pipeline (read → write) |\n| GET | /meta/sources | List available source connectors |\n| GET | /meta/sources/{type} | Get source connector spec |\n| GET | /meta/destinations | List available destination connectors |\n| GET | /meta/destinations/{type} | Get destination connector spec |\n| POST | /internal/query | Run a SQL query against a Postgres connection |"
+    "description": "Stripe Sync Engine — stateless, one-shot source/destination sync over HTTP.\nAll sync endpoints accept configuration via a JSON request body.\n\n## Endpoints\n\n| Method | Path | Summary |\n|--------|------|---------|\n| GET | /health | Health check |\n| POST | /pipeline_check | Check connector connection |\n| POST | /pipeline_setup | Set up destination schema |\n| POST | /pipeline_teardown | Tear down destination schema |\n| POST | /source_discover | Discover available streams |\n| POST | /pipeline_read | Read records from source |\n| POST | /pipeline_write | Write records to destination |\n| POST | /pipeline_sync | Run sync pipeline (read → write) |\n| POST | /pipeline_sync_batch | Run sync pipeline (batch, returns JSON) |\n| GET | /meta/sources | List available source connectors |\n| GET | /meta/sources/{type} | Get source connector spec |\n| GET | /meta/destinations | List available destination connectors |\n| GET | /meta/destinations/{type} | Get destination connector spec |\n| POST | /internal/query | Run a SQL query against a Postgres connection |"
   },
   "paths": {
     "/health": {
@@ -523,6 +523,79 @@
               "application/x-ndjson": {
                 "schema": {
                   "$ref": "#/components/schemas/SyncOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid params",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {}
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipeline_sync_batch": {
+      "post": {
+        "operationId": "pipeline_sync_batch",
+        "tags": [
+          "Stateless Sync API"
+        ],
+        "summary": "Run sync pipeline (batch, returns JSON)",
+        "description": "Runs the full read → write pipeline and returns the final EofPayload as a single JSON response.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "$ref": "#/components/schemas/PipelineConfig"
+                  },
+                  "run_id": {
+                    "description": "Optional sync run identifier used to track bounded sync progress.",
+                    "example": "run_demo",
+                    "type": "string"
+                  },
+                  "state_limit": {
+                    "description": "Stop after yielding N source_state messages, inclusive.",
+                    "example": 100,
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "state": {
+                    "description": "SyncState ({ source, destination, sync_run }). Falls back to empty state if invalid.",
+                    "$ref": "#/components/schemas/SyncState"
+                  }
+                },
+                "required": [
+                  "pipeline"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EofPayload"
                 }
               }
             }
@@ -1862,12 +1935,26 @@
               "states_per_second": {
                 "type": "number",
                 "description": "State checkpoints per second."
+              },
+              "total_record_count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Total records across all streams."
+              },
+              "total_state_count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Total source_state messages across all streams."
               }
             },
             "required": [
               "status",
               "records_per_second",
-              "states_per_second"
+              "states_per_second",
+              "total_record_count",
+              "total_state_count"
             ],
             "description": "Computed aggregates."
           },

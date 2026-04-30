@@ -78,6 +78,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pipelines/{id}/sync_batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run sync for a pipeline (batch, returns JSON)
+         * @description Runs the full sync pipeline and returns the final EofPayload as a single JSON response. Persists the ending sync_state on the pipeline so the next run resumes where this one left off.
+         */
+        post: operations["pipelines.sync_batch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines/{id}/check": {
         parameters: {
             query?: never;
@@ -397,6 +417,10 @@ export interface components {
                 records_per_second: number;
                 /** @description State checkpoints per second. */
                 states_per_second: number;
+                /** @description Total records across all streams. */
+                total_record_count: number;
+                /** @description Total source_state messages across all streams. */
+                total_state_count: number;
             };
             /** @description Per-stream progress, keyed by stream name. */
             streams: {
@@ -434,6 +458,19 @@ export interface components {
             status: "setup" | "backfill" | "ready" | "paused" | "teardown" | "error";
             /** @description Latest full sync checkpoint emitted by the engine. Includes source, destination, and sync-run state for the next request. */
             sync_state?: components["schemas"]["SyncState"];
+        };
+        /** @description Terminal message signaling end of this request. */
+        EofPayload: {
+            /** @description Terminal run status derived from stream outcomes. */
+            status: components["schemas"]["RunStatus"];
+            /** @description Whether the client should continue with another request. true when cut off by limits; false when the source iterator exhausted naturally. */
+            has_more: boolean;
+            /** @description Full sync state at the end of this request. Round-trip this as starting_state on the next request. */
+            ending_state?: components["schemas"]["SyncState"];
+            /** @description Accumulated progress across all requests in this sync run. */
+            run_progress: components["schemas"]["ProgressPayload"];
+            /** @description Progress for this specific request only. */
+            request_progress: components["schemas"]["ProgressPayload"];
         };
     };
     responses: never;
@@ -759,6 +796,67 @@ export interface operations {
                     "application/x-ndjson": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Pipeline not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "pipelines.sync_batch": {
+        parameters: {
+            query?: {
+                /** @description Stop after N source_state messages */
+                state_limit?: number;
+                /** @description Sync run identifier (resumes or starts fresh) */
+                run_id?: string;
+                /** @description Ignore persisted sync state and start fresh (ending state is still saved) */
+                reset_state?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Unique pipeline identifier (e.g. pipe_abc123). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    source?: components["schemas"]["SourceConfig"];
+                    destination?: components["schemas"]["DestinationConfig"];
+                    streams?: {
+                        /** @description Stream (table) name to sync. */
+                        name: string;
+                        /**
+                         * @description How the source reads this stream. Defaults to full_refresh.
+                         * @enum {string}
+                         */
+                        sync_mode?: "incremental" | "full_refresh";
+                        /** @description Cap backfill to this many records, then mark the stream complete. */
+                        backfill_limit?: number;
+                    }[];
+                    /** @description Explicit sync checkpoint override for resumed ad-hoc runs */
+                    sync_state?: components["schemas"]["SyncState"];
+                };
+            };
+        };
+        responses: {
+            /** @description Sync result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EofPayload"];
                 };
             };
             /** @description Pipeline not found */

@@ -829,7 +829,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 0,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -884,7 +890,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 0,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -937,7 +949,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 0,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -993,7 +1011,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
               global_state_count: 3,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -1046,7 +1070,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
               global_state_count: 3,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -1117,7 +1147,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {
                 customers: { status: 'not_started', state_count: 0, record_count: 0 },
                 charges: {
@@ -1208,7 +1244,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 5000,
               global_state_count: 0,
-              derived: { status: 'failed', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'failed',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {
                 customers: { status: 'not_started', state_count: 0, record_count: 0 },
                 charges: {
@@ -1390,7 +1432,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 0,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -1454,7 +1502,13 @@ describe('engine.pipeline_sync() pipeline', () => {
           started_at: '2025-01-01T00:00:00Z',
           elapsed_ms: 0,
           global_state_count: 0,
-          derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+          derived: {
+            status: 'started',
+            records_per_second: 0,
+            states_per_second: 0,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: {},
         },
       },
@@ -1516,7 +1570,13 @@ describe('engine.pipeline_sync() pipeline', () => {
               started_at: '2025-01-01T00:00:00Z',
               elapsed_ms: 0,
               global_state_count: 0,
-              derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+              derived: {
+                status: 'started',
+                records_per_second: 0,
+                states_per_second: 0,
+                total_record_count: 0,
+                total_state_count: 0,
+              },
               streams: {},
             },
           },
@@ -1586,7 +1646,13 @@ describe('engine.pipeline_sync() pipeline', () => {
           started_at: '2025-01-01T00:00:00Z',
           elapsed_ms: 0,
           global_state_count: 0,
-          derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+          derived: {
+            status: 'started',
+            records_per_second: 0,
+            states_per_second: 0,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: {},
         },
       },
@@ -1655,7 +1721,13 @@ describe('engine.pipeline_sync() pipeline', () => {
           started_at: '2025-01-01T00:00:00Z',
           elapsed_ms: 0,
           global_state_count: 0,
-          derived: { status: 'started', records_per_second: 0, states_per_second: 0 },
+          derived: {
+            status: 'started',
+            records_per_second: 0,
+            states_per_second: 0,
+            total_record_count: 0,
+            total_state_count: 0,
+          },
           streams: {},
         },
       },
@@ -2372,5 +2444,82 @@ describe('engine.pipeline_setup() timeout', () => {
     // No setup output from the hanging source
     const nonLog = msgs.filter((m) => m.type !== 'log')
     expect(nonLog).toHaveLength(0)
+  })
+})
+
+describe('engine.pipeline_sync_batch()', () => {
+  function makeBatchSource(stateCursors: string[]): Source {
+    return {
+      async *spec(): AsyncIterable<SpecOutput> {
+        yield { type: 'spec', spec: { config: {} } }
+      },
+      async *check(): AsyncIterable<CheckOutput> {
+        yield { type: 'connection_status', connection_status: { status: 'succeeded' } }
+      },
+      async *discover(): AsyncIterable<DiscoverOutput> {
+        yield {
+          type: 'catalog',
+          catalog: {
+            streams: [
+              { name: 'customers', primary_key: [['id']], newer_than_field: '_updated_at' },
+            ],
+          },
+        }
+      },
+      async *read() {
+        for (const cursor of stateCursors) {
+          yield {
+            type: 'record',
+            record: {
+              stream: 'customers',
+              data: { id: `cus_${cursor}` },
+              emitted_at: '2024-01-01T00:00:00.000Z',
+            },
+          }
+          yield {
+            type: 'source_state',
+            source_state: {
+              state_type: 'stream',
+              stream: 'customers',
+              data: { cursor },
+            },
+          }
+        }
+      },
+    }
+  }
+
+  it('stops after state_limit and reports has_more=true', async () => {
+    const engine = await createEngine(
+      makeResolver(makeBatchSource(['1', '2', '3']), destinationTest)
+    )
+
+    const eof = await engine.pipeline_sync_batch(defaultPipeline, {
+      run_id: 'run_batch',
+      state_limit: 2,
+    })
+
+    expect(eof).toMatchObject({
+      has_more: true,
+      ending_state: {
+        source: { streams: { customers: { cursor: '2' } } },
+        sync_run: { run_id: 'run_batch' },
+      },
+    })
+  })
+
+  it('reports has_more when the source exhausts exactly at state_limit', async () => {
+    const engine = await createEngine(makeResolver(makeBatchSource(['1', '2']), destinationTest))
+
+    const eof = await engine.pipeline_sync_batch(defaultPipeline, {
+      state_limit: 2,
+    })
+
+    expect(eof).toMatchObject({
+      has_more: true,
+      ending_state: {
+        source: { streams: { customers: { cursor: '2' } } },
+      },
+    })
   })
 })

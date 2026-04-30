@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { AsyncIterableX } from 'ix/asynciterable'
+import { map as ixMap, tap as ixTap } from 'ix/asynciterable/operators'
 import {
   DestinationOutput,
   DiscoverOutput,
@@ -17,8 +19,10 @@ import {
   collectFirst,
   merge,
   map,
+  takeThroughStates,
   withAbortOnReturn,
   EofMessage,
+  EofPayload,
 } from '@stripe/sync-protocol'
 
 const engineMsg = createEngineMessageFactory()
@@ -50,6 +54,23 @@ export interface SourceReadOptions {
   time_limit?: number
   soft_time_limit?: number
   run_id?: string
+}
+
+export const BatchSyncOptions = z.object({
+  /** Sync state. Normalized at runtime to SyncState for backward compatibility. */
+  state: z.unknown().optional(),
+  /** Identifies the current sync run. If it differs from state.sync_run.run_id, run progress is reset. */
+  run_id: z.string().optional(),
+  /** Stop after yielding this many source_state messages, inclusive. */
+  state_limit: z.number().int().positive().optional(),
+})
+export interface BatchSyncOptions {
+  state?:
+    | SyncState
+    | { streams: Record<string, unknown>; global: Record<string, unknown> }
+    | Record<string, unknown>
+  run_id?: string
+  state_limit?: number
 }
 
 /** Metadata for a single connector type, including its configuration JSON Schema. */
@@ -153,6 +174,12 @@ export interface Engine {
     opts?: SourceReadOptions,
     input?: AsyncIterable<unknown>
   ): AsyncIterable<SyncOutput>
+
+  /**
+   * Batch sync: runs the full read → write pipeline and returns
+   * the final {@link EofPayload} as a single value (no streaming).
+   */
+  pipeline_sync_batch(pipeline: PipelineConfig, opts?: BatchSyncOptions): Promise<EofPayload>
 }
 
 /**
@@ -307,6 +334,7 @@ function tag<T extends Message>(emitter: string): (msg: T) => T {
 }
 
 const SETUP_TIME_LIMIT_S = 30
+const DEFAULT_BATCH_STATE_LIMIT = 1000
 
 /** Apply takeLimits and strip the eof marker, emitting an error log on timeout. */
 function withSetupTimeout<T extends { type: string }>(
@@ -684,6 +712,70 @@ export async function createEngine(resolver: ConnectorResolver): Promise<Engine>
           }
         })()
       )
+    },
+
+    async pipeline_sync_batch(pipeline, opts?) {
+      const p = await resolvePipeline(resolver, engine, pipeline, opts?.state)
+
+      let syncState = stateReducer(p.state, {
+        type: 'initialize',
+        stream_names: p.filteredCatalog.streams.map((s) => s.stream.name),
+        run_id: opts?.run_id,
+      })
+
+      const activeCatalog = excludeTerminalStreams(
+        withTimeRanges(p.filteredCatalog, syncState.sync_run.time_ceiling),
+        syncState.sync_run.progress
+      )
+      const streamNames = activeCatalog.streams.map((s) => s.stream.name)
+
+      let requestProgress = createInitialProgress(streamNames)
+
+      let hasMore = false
+      const stateLimit = opts?.state_limit ?? DEFAULT_BATCH_STATE_LIMIT
+      const destOutput = AsyncIterableX.from(
+        p.source.connector.read({
+          config: p.source.config,
+          catalog: activeCatalog,
+          state: p.state?.source,
+        })
+      ).pipe(
+        takeThroughStates(stateLimit, { onLimitReached: () => (hasMore = true) }),
+        enforceCatalog(activeCatalog),
+        tapLog,
+        (messages: AsyncIterable<Message>) =>
+          p.destination.connector.write(
+            { config: p.destination.config, catalog: activeCatalog },
+            messages
+          ),
+        ixMap((raw: DestinationOutput) => ({
+          ...raw,
+          _ts: (raw as { _ts?: string })._ts ?? new Date().toISOString(),
+        }))
+      )
+
+      for await (const msg of destOutput) {
+        syncState = stateReducer(syncState, msg)
+        requestProgress = progressReducer(requestProgress, msg)
+        if (msg.type === 'source_state') {
+          log.debug(
+            {
+              state_type: msg.source_state.state_type,
+              stream:
+                msg.source_state.state_type === 'stream' ? msg.source_state.stream : undefined,
+            },
+            'pipeline_sync_batch source_state'
+          )
+        }
+      }
+
+      return {
+        status: syncState.sync_run.progress.derived.status,
+        has_more: hasMore,
+        ending_state: syncState,
+        run_progress: syncState.sync_run.progress,
+        request_progress: requestProgress,
+      }
     },
   }
   return engine

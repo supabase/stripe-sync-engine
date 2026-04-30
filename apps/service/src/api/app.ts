@@ -8,6 +8,7 @@ import {
   createEngineMessageFactory,
   drain,
   emptySyncState,
+  EofPayload as EofPayloadSchema,
   SyncState,
 } from '@stripe/sync-protocol'
 
@@ -414,6 +415,21 @@ export function createApp(options: AppOptions) {
       'Explicit sync checkpoint override for resumed ad-hoc runs'
     ),
   })
+  const SyncBatchQueryParams = z.object({
+    state_limit: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .meta({ description: 'Stop after N source_state messages' }),
+    run_id: z
+      .string()
+      .optional()
+      .meta({ description: 'Sync run identifier (resumes or starts fresh)' }),
+    reset_state: z.coerce.boolean().optional().meta({
+      description: 'Ignore persisted sync state and start fresh (ending state is still saved)',
+    }),
+  })
 
   app.openapi(
     createRoute({
@@ -488,6 +504,72 @@ export function createApp(options: AppOptions) {
             message: err instanceof Error ? err.message : `Sync failed: ${String(err)}`,
           }),
       })
+    }
+  )
+
+  // MARK: - Pipeline sync (batch)
+
+  app.openapi(
+    createRoute({
+      operationId: 'pipelines.sync_batch',
+      method: 'post',
+      path: '/pipelines/{id}/sync_batch',
+      tags: ['Pipelines'],
+      summary: 'Run sync for a pipeline (batch, returns JSON)',
+      description:
+        'Runs the full sync pipeline and returns the final EofPayload as a single JSON response. ' +
+        'Persists the ending sync_state on the pipeline so the next run resumes where this one left off.',
+      requestParams: { path: PipelineIdParam, query: SyncBatchQueryParams },
+      requestBody: {
+        required: false,
+        content: { 'application/json': { schema: SyncBodySchema } },
+      },
+      responses: {
+        200: {
+          content: { 'application/json': { schema: EofPayloadSchema } },
+          description: 'Sync result',
+        },
+        404: {
+          content: { 'application/json': { schema: ErrorSchema } },
+          description: 'Pipeline not found',
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { state_limit, run_id, reset_state } = c.req.valid('query')
+      const body = ((c.req.valid('json') as z.infer<typeof SyncBodySchema> | undefined) ??
+        {}) as z.infer<typeof SyncBodySchema>
+
+      let pipeline: Pipeline
+      try {
+        pipeline = await pipelineStore.get(id)
+      } catch {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+      if (pipeline.desired_status === 'deleted') {
+        return c.json({ error: `Pipeline ${id} not found` }, 404)
+      }
+
+      const engine = options.engineUrl
+        ? createRemoteEngine(options.engineUrl)
+        : await localEnginePromise!
+      const config = {
+        source: body.source ?? pipeline.source,
+        destination: body.destination ?? pipeline.destination,
+        ...(body.streams !== undefined ? { streams: body.streams } : { streams: pipeline.streams }),
+      }
+      const eof = await engine.pipeline_sync_batch(config, {
+        state: reset_state ? body.sync_state : (body.sync_state ?? pipeline.sync_state),
+        run_id,
+        state_limit,
+      })
+
+      if (eof.ending_state) {
+        await pipelineStore.update(id, { sync_state: eof.ending_state })
+      }
+
+      return c.json(eof, 200)
     }
   )
 
@@ -891,7 +973,11 @@ export function createApp(options: AppOptions) {
       const body = await c.req.text()
       const signature = c.req.header('stripe-signature') ?? ''
       try {
-        verifyWebhookSignature(body, signature, webhookSecret)
+        const event = verifyWebhookSignature(body, signature, webhookSecret)
+        log.info(
+          { eventId: event.id, eventType: event.type, pipeline_id },
+          'webhook event ingested'
+        )
       } catch (err) {
         if (err instanceof WebhookSignatureError) {
           return c.text('webhook signature verification failed', 401)
