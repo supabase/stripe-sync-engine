@@ -614,7 +614,9 @@ export function createDestination(
                 }
 
                 if (deleteRowNumbers.size > 0) {
-                  const blankRow = new Array<string>(headers.length).fill('')
+                  // Google sheets API omits trailing blank cells, so we add 
+                  // an extra empty cell. 
+                  const blankRow = new Array<string>(headers.length + 1).fill('')
                   const deleteList = [...deleteRowNumbers].sort((a, b) => a - b)
 
                   // Phase 1 — donate pending appends into deleted slots. If
@@ -758,7 +760,7 @@ export function createDestination(
         for await (const msg of $stdin) {
           if (msg.type === 'record') {
             recordCount++
-            const { stream, data } = msg.record
+            const { stream, data, recordDeleted } = msg.record
             const cleanData: Record<string, unknown> = stripSystemFields(data)
             const newerThanField = streamNewerThanField.get(stream)
             if (
@@ -803,7 +805,7 @@ export function createDestination(
                   ? serializeRowKey(primaryKey, cleanData)
                   : undefined
 
-            if (cleanData['deleted'] === true) {
+            if (recordDeleted === true) {
               deleteBuffers.get(stream)!.push({ rowKey, rowNumber })
             } else if (rowNumber !== undefined) {
               // 1. Explicit _row_number (backwards compat with service layer)

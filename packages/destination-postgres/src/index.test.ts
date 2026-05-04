@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import pg from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import destination, { upsertMany, type Config } from './index.js'
+import destination, { deleteMany, upsertMany, writeMany, type Config } from './index.js'
 import type {
   ConfiguredCatalog,
   DestinationInput,
@@ -530,6 +530,161 @@ describe('upsertMany standalone', () => {
       await upsertMany(testPool, SCHEMA, 'customers', [], ['id'], '_updated_at')
       const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
       expect(rows[0].n).toBe(0)
+    } finally {
+      await testPool.end()
+    }
+  })
+})
+
+describe('deleteMany / writeMany', () => {
+  beforeEach(async () => {
+    await drain(destination.setup!({ config: makeConfig(), catalog }))
+  })
+
+  it('hard-deletes existing rows by primary key', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      const ts = Math.floor(Date.now() / 1000)
+      await upsertMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [
+          { id: 'cus_keep', name: 'Keep', _updated_at: ts },
+          { id: 'cus_drop', name: 'Drop', _updated_at: ts },
+        ],
+        ['id'],
+        '_updated_at'
+      )
+
+      const result = await deleteMany(testPool, SCHEMA, 'customers', [{ id: 'cus_drop' }], ['id'])
+      expect(result.deleted_count).toBe(1)
+
+      const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}".customers ORDER BY id`)
+      expect(rows).toEqual([{ id: 'cus_keep' }])
+    } finally {
+      await testPool.end()
+    }
+  })
+
+  it('deletes are terminal regardless of timestamp ordering', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      const ts = Math.floor(Date.now() / 1000)
+      await upsertMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [{ id: 'cus_fresh', name: 'Fresh', _updated_at: ts + 10 }],
+        ['id'],
+        '_updated_at'
+      )
+
+      const result = await deleteMany(testPool, SCHEMA, 'customers', [{ id: 'cus_fresh' }], ['id'])
+      expect(result.deleted_count).toBe(1)
+
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}".customers`)
+      expect(rows[0].n).toBe(0)
+    } finally {
+      await testPool.end()
+    }
+  })
+
+  it('writeMany routes a mixed batch to upsert and delete paths', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      const ts = Math.floor(Date.now() / 1000)
+      await upsertMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [{ id: 'cus_old', name: 'Old', _updated_at: ts }],
+        ['id'],
+        '_updated_at'
+      )
+
+      const result = await writeMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [
+          { data: { id: 'cus_new', name: 'New', _updated_at: ts + 1 } },
+          { recordDeleted: true, data: { id: 'cus_old', _updated_at: ts + 1 } },
+        ],
+        ['id'],
+        '_updated_at'
+      )
+      expect(result.created_count).toBe(1)
+      expect(result.deleted_count).toBe(1)
+
+      const { rows } = await pool.query(`SELECT id FROM "${SCHEMA}".customers ORDER BY id`)
+      expect(rows).toEqual([{ id: 'cus_new' }])
+    } finally {
+      await testPool.end()
+    }
+  })
+
+  it('deleteMany no-ops on empty array', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      const result = await deleteMany(testPool, SCHEMA, 'customers', [], ['id'])
+      expect(result).toEqual({ deleted_count: 0 })
+    } finally {
+      await testPool.end()
+    }
+  })
+
+  it('deletes only the matching tenant row for composite (id, _account_id) PK', async () => {
+    const testPool = new pg.Pool({ connectionString })
+    try {
+      const compositeCatalog: ConfiguredCatalog = {
+        streams: [
+          {
+            stream: {
+              name: 'customers',
+              primary_key: [['id'], ['_account_id']],
+              newer_than_field: '_updated_at',
+              json_schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  _account_id: { type: 'string' },
+                },
+              },
+            },
+            sync_mode: 'full_refresh',
+            destination_sync_mode: 'overwrite',
+          },
+        ],
+      }
+      await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`)
+      await drain(destination.setup!({ config: makeConfig(), catalog: compositeCatalog }))
+      const ts = Math.floor(Date.now() / 1000)
+      await upsertMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [
+          { id: 'cus_1', name: 'Alice (A)', _account_id: 'acct_AAA', _updated_at: ts },
+          { id: 'cus_1', name: 'Alice (B)', _account_id: 'acct_BBB', _updated_at: ts },
+        ],
+        ['id', '_account_id'],
+        '_updated_at'
+      )
+
+      const result = await deleteMany(
+        testPool,
+        SCHEMA,
+        'customers',
+        [{ id: 'cus_1', _account_id: 'acct_AAA' }],
+        ['id', '_account_id']
+      )
+      expect(result.deleted_count).toBe(1)
+
+      const { rows } = await pool.query(
+        `SELECT _account_id FROM "${SCHEMA}".customers ORDER BY _account_id`
+      )
+      expect(rows).toEqual([{ _account_id: 'acct_BBB' }])
     } finally {
       await testPool.end()
     }

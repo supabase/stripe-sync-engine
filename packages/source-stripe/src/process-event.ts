@@ -174,9 +174,9 @@ export async function* processStripeEvent(
     yield msg.record({
       stream: resourceConfig.tableName,
       emitted_at: new Date().toISOString(),
+      recordDeleted: true,
       data: {
         ...dataObject,
-        deleted: true,
         [newerThanField(resourceConfig.tableName)]: _updated_at,
         ...(accountId ? { _account_id: accountId } : {}),
       },

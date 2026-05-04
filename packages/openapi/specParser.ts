@@ -18,6 +18,7 @@ const RESERVED_COLUMNS = new Set([
   '_last_synced_at',
   '_updated_at',
   '_account_id',
+  'deleted',
 ])
 
 export { OPENAPI_RESOURCE_TABLE_ALIASES }

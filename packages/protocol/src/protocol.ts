@@ -184,6 +184,7 @@ export const RecordPayload = z
   .object({
     stream: z.string().describe('Stream (table) name this record belongs to.'),
     data: z.record(z.string(), z.unknown()).describe('The record payload as a key-value map.'),
+    recordDeleted: z.boolean().optional(),
     emitted_at: z
       .string()
       .datetime()

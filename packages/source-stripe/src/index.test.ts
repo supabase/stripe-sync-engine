@@ -1459,8 +1459,13 @@ describe('StripeSource', () => {
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'customers', data: { id: 'cus_1', object: 'customer', deleted: true } },
+        record: {
+          stream: 'customers',
+          recordDeleted: true,
+          data: { id: 'cus_1', object: 'customer' },
+        },
       })
+
       expect(messages[1]).toMatchObject({
         type: 'source_state',
         source_state: {
@@ -1476,7 +1481,7 @@ describe('StripeSource', () => {
       }
 
       vi.mocked(buildResourceRegistry).mockReturnValue(registry as any)
-      // product.deleted event — the object may not have deleted: true in its body
+      // product.deleted event: the object may not have deleted: true in its body.
       const event = makeEvent({
         id: 'evt_del_2',
         type: 'product.deleted',
@@ -1491,7 +1496,11 @@ describe('StripeSource', () => {
       expect(messages).toHaveLength(2)
       expect(messages[0]).toMatchObject({
         type: 'record',
-        record: { stream: 'products', data: { id: 'prod_1', object: 'product', deleted: true } },
+        record: {
+          stream: 'products',
+          recordDeleted: true,
+          data: { id: 'prod_1', object: 'product' },
+        },
       })
     })
 

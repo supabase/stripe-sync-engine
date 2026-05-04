@@ -10,7 +10,6 @@ const SAMPLE_JSON_SCHEMA: Record<string, unknown> = {
   properties: {
     id: { type: 'string' },
     created: { type: 'integer' },
-    deleted: { type: 'boolean' },
     metadata: { type: 'object' },
     expires_at: { type: 'string', format: 'date-time' },
   },
@@ -33,9 +32,10 @@ describe('jsonSchemaToColumns', () => {
     const byName = Object.fromEntries(columns.map((c) => [c.name, c]))
 
     expect(byName.created.pgType).toBe('bigint')
-    expect(byName.deleted.pgType).toBe('boolean')
     expect(byName.metadata.pgType).toBe('jsonb')
     expect(byName.expires_at.pgType).toBe('text') // date-time → text for safety
+    // `deleted` is intentionally filtered out — tombstones are consumed by deleteMany
+    expect(byName.deleted).toBeUndefined()
   })
 
   it('skips the id column (generated separately)', () => {
@@ -78,9 +78,9 @@ describe('buildCreateTableWithSchema', () => {
     const alterStmts = stmts.filter((s) => s.includes('ADD COLUMN IF NOT EXISTS'))
     expect(alterStmts.length).toBe(1)
     expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "created"')
-    expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "deleted"')
     expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "metadata"')
     expect(alterStmts[0]).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
+    expect(alterStmts[0]).not.toContain('"deleted"')
 
     // No FK constraint
     expect(stmts.some((s) => s.includes('FOREIGN KEY'))).toBe(false)
@@ -240,9 +240,9 @@ describe('buildCreateTableDDL', () => {
     expect(ddl).toContain('"created" bigint GENERATED ALWAYS AS')
 
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "created"')
-    expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "deleted"')
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "metadata"')
     expect(ddl).toContain('ADD COLUMN IF NOT EXISTS "expires_at"')
+    expect(ddl).not.toContain('"deleted"')
 
     expect(ddl).toContain('"_updated_at" timestamptz NOT NULL DEFAULT now()')
     expect(ddl).toContain('DROP TRIGGER IF EXISTS handle_updated_at')

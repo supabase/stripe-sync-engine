@@ -29,7 +29,6 @@ export const OPENAPI_COMPATIBILITY_COLUMNS: Record<string, ParsedColumn[]> = {
     { name: 'amount_discount', type: 'bigint', nullable: true },
     { name: 'amount_tax', type: 'bigint', nullable: true },
   ],
-  customers: [{ name: 'deleted', type: 'boolean', nullable: true }],
   early_fraud_warnings: [{ name: 'payment_intent', type: 'text', nullable: true }],
   features: [
     { name: 'object', type: 'text', nullable: true },
@@ -39,8 +38,5 @@ export const OPENAPI_COMPATIBILITY_COLUMNS: Record<string, ParsedColumn[]> = {
     { name: 'livemode', type: 'boolean', nullable: true },
     { name: 'metadata', type: 'json', nullable: true },
   ],
-  subscription_items: [
-    { name: 'deleted', type: 'boolean', nullable: true },
-    { name: 'subscription', type: 'text', nullable: true },
-  ],
+  subscription_items: [{ name: 'subscription', type: 'text', nullable: true }],
 }

@@ -2,6 +2,9 @@ import pg from 'pg'
 import type { PoolConfig } from 'pg'
 import type { Destination } from '@stripe/sync-protocol'
 import {
+  ident,
+  identList,
+  qualifiedTable,
   sql,
   sslConfigFromConnectionString,
   stripSslParams,
@@ -54,13 +57,44 @@ export async function buildPoolConfig(config: Config): Promise<PoolConfig> {
   throw new Error('Either url/connection_string or aws config is required')
 }
 
-// MARK: - upsertMany
+// MARK: - writeMany / upsertMany / deleteMany
 
 export interface UpsertManyResult {
   created_count: number
   updated_count: number
-  deleted_count: number
   skipped_count: number
+}
+
+export interface DeleteManyResult {
+  deleted_count: number
+}
+
+export interface WriteManyResult extends UpsertManyResult, DeleteManyResult {}
+
+/**
+ * Apply a mixed batch of live records and tombstones to a Postgres table.
+ * Records with `deleted: true` are routed to {@link deleteMany} (hard delete);
+ * everything else goes through {@link upsertMany}.
+ *
+ * Existing soft-deleted rows from prior deployments are intentionally not
+ * cleaned up — no production user is on the soft-delete code path.
+ */
+export async function writeMany(
+  pool: pg.Pool,
+  schema: string,
+  table: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  entries: Record<string, any>[],
+  primaryKeyColumns: string[] = ['id'],
+  newerThanField: string
+): Promise<WriteManyResult> {
+  const tombstones = entries.filter((e) => e.recordDeleted === true).map((r) => r.data)
+  const liveRecords = entries.filter((e) => e.recordDeleted !== true).map((r) => r.data)
+
+  const u = await upsertMany(pool, schema, table, liveRecords, primaryKeyColumns, newerThanField)
+  const d = await deleteMany(pool, schema, table, tombstones, primaryKeyColumns)
+
+  return { ...u, deleted_count: d.deleted_count }
 }
 
 /**
@@ -77,7 +111,11 @@ export async function upsertMany(
   newerThanField: string
 ): Promise<UpsertManyResult> {
   if (!entries.length)
-    return { created_count: 0, updated_count: 0, deleted_count: 0, skipped_count: 0 }
+    return {
+      created_count: 0,
+      updated_count: 0,
+      skipped_count: 0,
+    }
 
   const records = entries.map((e) => {
     const ts = e[newerThanField] as unknown
@@ -89,12 +127,45 @@ export async function upsertMany(
     return { _raw_data: e, _updated_at: new Date(ts * 1000).toISOString() }
   })
 
-  return await upsertWithStats(
-    pool,
-    records,
-    { schema, table, primaryKeyColumns, newerThanColumn: newerThanField },
-    `"_raw_data"->>'deleted' = 'true'`
-  )
+  return await upsertWithStats(pool, records, {
+    schema,
+    table,
+    primaryKeyColumns,
+    newerThanColumn: newerThanField,
+  })
+}
+
+/**
+ * Hard-delete rows by primary key. No `newer_than_field` guard: deletion is
+ * terminal — once an object is deleted it cannot be undeleted.
+ */
+export async function deleteMany(
+  pool: pg.Pool,
+  schema: string,
+  table: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  entries: Record<string, any>[],
+  primaryKeyColumns: string[] = ['id']
+): Promise<DeleteManyResult> {
+  if (!entries.length) return { deleted_count: 0 }
+
+  const params: unknown[] = []
+  const valueRows = entries.map((e) => {
+    const cells = primaryKeyColumns.map((pk) => {
+      params.push(String(e[pk]))
+      return `$${params.length}::text`
+    })
+    return `(${cells.join(', ')})`
+  })
+
+  const tbl = qualifiedTable(schema, table)
+  const pkJoin = primaryKeyColumns.map((c) => `t.${ident(c)} = d.${ident(c)}`).join(' AND ')
+  const stmt = `DELETE FROM ${tbl} t
+USING (VALUES ${valueRows.join(', ')}) AS d(${identList(primaryKeyColumns)})
+WHERE ${pkJoin}`
+
+  const result = await pool.query(stmt, params)
+  return { deleted_count: result.rowCount ?? 0 }
 }
 
 // MARK: - Named exports
@@ -354,7 +425,7 @@ const destination = {
         'dest write: flush start'
       )
       try {
-        const stats = await upsertMany(pool, config.schema, streamName, buffer, pk, newerThan)
+        const stats = await writeMany(pool, config.schema, streamName, buffer, pk, newerThan)
         log.debug(
           {
             stream: streamName,
@@ -406,7 +477,7 @@ const destination = {
       await connectAndRelease(pool, 'write')
       for await (const msg of $stdin) {
         if (msg.type === 'record') {
-          const { stream, data } = msg.record
+          const { stream } = msg.record
 
           if (failedStreams.has(stream)) {
             log.debug({ stream }, 'dest write: skipping record for failed stream')
@@ -418,7 +489,7 @@ const destination = {
           }
 
           const buffer = streamBuffers.get(stream)!
-          buffer.push(data as Record<string, unknown>)
+          buffer.push(msg.record as Record<string, unknown>)
 
           if (buffer.length >= batchSize) {
             const err = await flushStream(stream)

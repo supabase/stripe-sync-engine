@@ -1293,6 +1293,9 @@
                 "additionalProperties": {},
                 "description": "The record payload as a key-value map."
               },
+              "recordDeleted": {
+                "type": "boolean"
+              },
               "emitted_at": {
                 "type": "string",
                 "format": "date-time",

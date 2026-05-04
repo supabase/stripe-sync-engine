@@ -19,9 +19,9 @@ describe('SpecParser', () => {
     const customers = parsed.tables.find((table) => table.tableName === 'customers')
     expect(customers?.columns).toEqual([
       { name: 'created', type: 'bigint', nullable: false },
-      { name: 'deleted', type: 'boolean', nullable: false },
       { name: 'object', type: 'text', nullable: false },
     ])
+    expect(customers?.columns).not.toContainEqual(expect.objectContaining({ name: 'deleted' }))
 
     const checkoutSessions = parsed.tables.find((table) => table.tableName === 'checkout_sessions')
     expect(checkoutSessions?.columns).toContainEqual({
@@ -54,15 +54,13 @@ describe('SpecParser', () => {
       (table) => table.tableName === 'subscription_items'
     )
     expect(subscriptionItems?.columns).toContainEqual({
-      name: 'deleted',
-      type: 'boolean',
-      nullable: true,
-    })
-    expect(subscriptionItems?.columns).toContainEqual({
       name: 'subscription',
       type: 'text',
       nullable: true,
     })
+    expect(subscriptionItems?.columns).not.toContainEqual(
+      expect.objectContaining({ name: 'deleted' })
+    )
   })
 
   it('is deterministic regardless of schema key order', () => {

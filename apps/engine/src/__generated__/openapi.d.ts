@@ -417,6 +417,7 @@ export interface components {
                 data: {
                     [key: string]: unknown;
                 };
+                recordDeleted?: boolean;
                 /**
                  * Format: date-time
                  * @description ISO 8601 timestamp when the record was emitted by the source.

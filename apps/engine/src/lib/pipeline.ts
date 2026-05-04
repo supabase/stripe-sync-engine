@@ -9,6 +9,9 @@ import { log } from '../logger.js'
 
 // MARK: - enforceCatalog
 
+/** Fields that destinations never persist; tombstoning is signalled via `recordDeleted`. */
+const STRIPPED_RECORD_FIELDS = new Set(['deleted'])
+
 /**
  * Drop messages for streams not in the catalog and apply per-stream field filtering.
  * Passes non-data messages (log, trace, catalog) through unchanged.
@@ -26,19 +29,13 @@ export function enforceCatalog<T extends Message>(
           continue
         }
         const props = cs.stream.json_schema?.properties as Record<string, unknown> | undefined
-        if (props) {
-          yield {
-            ...msg,
-            record: {
-              ...msg.record,
-              data: Object.fromEntries(
-                Object.entries(msg.record.data).filter(([key]) => key in props)
-              ),
-            },
-          }
-        } else {
-          yield msg
+        const filtered: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(msg.record.data)) {
+          if (STRIPPED_RECORD_FIELDS.has(key)) continue
+          if (props && !(key in props)) continue
+          filtered[key] = value
         }
+        yield { ...msg, record: { ...msg.record, data: filtered } }
       } else if (msg.type === 'source_state') {
         if (msg.source_state.state_type === 'global') {
           yield msg // global state needs no catalog validation

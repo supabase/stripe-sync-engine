@@ -54,7 +54,12 @@ let nextRecordTs = Math.floor(Date.now() / 1000)
 function record(stream: string, data: Record<string, unknown>): DestinationInput {
   return {
     type: 'record',
-    record: { stream, data: { _updated_at: nextRecordTs++, ...data }, emitted_at: now },
+    record: {
+      stream,
+      data: { _updated_at: nextRecordTs++, ...data },
+      emitted_at: now,
+      recordDeleted: data.deleted === true,
+    },
   }
 }
 

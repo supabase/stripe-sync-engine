@@ -156,6 +156,52 @@ describe('enforceCatalog()', () => {
     })
   })
 
+  it('strips the `deleted` field from data even when no json_schema is configured', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          recordDeleted: true,
+          data: { id: 'cus_1', name: 'Alice', deleted: true },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+    ]
+    const result = await drain(enforceCatalog(catalog([{ name: 'customers' }]))(toAsync(msgs)))
+    expect(result).toHaveLength(1)
+    expect((result[0] as any).record.data).toEqual({ id: 'cus_1', name: 'Alice' })
+    expect((result[0] as any).record.recordDeleted).toBe(true)
+  })
+
+  it('strips the `deleted` field from data even when json_schema declares it', async () => {
+    const msgs: Message[] = [
+      {
+        type: 'record',
+        record: {
+          stream: 'customers',
+          data: { id: 'cus_1', deleted: false },
+          emitted_at: '2024-01-01T00:00:00.000Z',
+        },
+      },
+    ]
+    const result = await drain(
+      enforceCatalog(
+        catalog([
+          {
+            name: 'customers',
+            json_schema: {
+              type: 'object',
+              properties: { id: { type: 'string' }, deleted: { type: 'boolean' } },
+            },
+          },
+        ])
+      )(toAsync(msgs))
+    )
+    expect(result).toHaveLength(1)
+    expect((result[0] as any).record.data).toEqual({ id: 'cus_1' })
+  })
+
   it('drops record with unknown stream and logs error', async () => {
     const msgs: Message[] = [
       {

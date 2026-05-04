@@ -273,6 +273,7 @@ export function createMemorySheets() {
               const rowLines = raw.length === 0 ? [] : raw.split('\n')
               for (let i = 0; i < rowLines.length; i++) {
                 const cells = rowLines[i].split(delimiter)
+                if (cells[cells.length - 1] === '') cells.pop()
                 const target: unknown[] = (tab.values[rowIndex + i] ?? []).slice()
                 for (let j = 0; j < cells.length; j++) {
                   target[columnIndex + j] = cells[j]

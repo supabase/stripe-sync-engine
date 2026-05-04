@@ -188,7 +188,7 @@ export function createSourceMessageFactory<
   TRecordData extends Record<string, unknown>,
 >() {
   return {
-    record(payload: { stream: string; data: TRecordData; emitted_at: string }): RecordMessage {
+    record(payload: { stream: string; data: TRecordData; emitted_at: string, recordDeleted?: boolean }): RecordMessage {
       return { type: 'record', record: payload }
     },
 
