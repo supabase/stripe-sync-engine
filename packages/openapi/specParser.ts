@@ -7,7 +7,7 @@ import type {
   ParsedOpenApiSpec,
   ScalarType,
 } from './types.js'
-import { OPENAPI_COMPATIBILITY_COLUMNS, OPENAPI_RESOURCE_TABLE_ALIASES } from './runtimeMappings.js'
+import { OPENAPI_RESOURCE_TABLE_ALIASES } from './runtimeMappings.js'
 
 const SCHEMA_REF_PREFIX = '#/components/schemas/'
 const CRUD_SUFFIXES = ['.created', '.updated', '.deleted'] as const
@@ -15,6 +15,7 @@ const CRUD_SUFFIXES = ['.created', '.updated', '.deleted'] as const
 const RESERVED_COLUMNS = new Set([
   'id',
   '_raw_data',
+  '_synced_at',
   '_last_synced_at',
   '_updated_at',
   '_account_id',
@@ -25,7 +26,7 @@ export { OPENAPI_RESOURCE_TABLE_ALIASES }
 
 /**
  * Resolve a Stripe x-resourceId to a canonical table name.
- * Pure utility — depends only on aliases, not the spec.
+ * Singular, snake_cased, with version namespace dots converted to underscores.
  */
 export function resolveTableName(
   resourceId: string,
@@ -33,8 +34,7 @@ export function resolveTableName(
 ): string {
   const alias = aliases[resourceId]
   if (alias) return alias
-  const normalized = resourceId.toLowerCase().replace(/[.]/g, '_')
-  return normalized.endsWith('s') ? normalized : `${normalized}s`
+  return resourceId.toLowerCase().replace(/[.]/g, '_')
 }
 
 /** A list endpoint at a top-level path (`/v1/customers`). */
@@ -155,27 +155,6 @@ export class SpecParser {
       }
 
       tableMap.set(tableName, existing)
-    }
-
-    for (const tableName of Array.from(allowedTables).sort((a, b) => a.localeCompare(b))) {
-      const current =
-        tableMap.get(tableName) ??
-        ({
-          resourceId: tableName,
-          sourceSchemaName: 'compatibility_fallback',
-          columns: new Map<string, ColumnAccumulator>(),
-        } as const)
-      for (const compatibilityColumn of OPENAPI_COMPATIBILITY_COLUMNS[tableName] ?? []) {
-        const existing = current.columns.get(compatibilityColumn.name)
-        if (!existing) {
-          current.columns.set(compatibilityColumn.name, {
-            type: compatibilityColumn.type,
-            nullable: compatibilityColumn.nullable,
-            expandableReference: compatibilityColumn.expandableReference ?? false,
-          })
-        }
-      }
-      tableMap.set(tableName, current)
     }
 
     const tables = Array.from(tableMap.entries())
@@ -514,6 +493,50 @@ export class SpecParser {
     return false
   }
 
+  /**
+   * Detect whether a property schema is a list envelope.
+   * List envelopes ({data, has_more, url, object: "list"}) are transport wrappers,
+   * not part of the parent row shape per rule #9 of the schema spec.
+   */
+  private isListEnvelopeSchema(schema: OpenApiSchemaObject): boolean {
+    const dataProp = schema.properties?.data
+    if (!dataProp || !('type' in dataProp) || dataProp.type !== 'array') return false
+
+    const objectProp = schema.properties?.object
+    if (objectProp && 'enum' in objectProp && objectProp.enum?.includes('list')) return true
+
+    if (schema.properties?.next_page_url) return true
+
+    return false
+  }
+
+  /**
+   * Detect whether a composition (oneOf/anyOf/allOf) contains only list envelope schemas.
+   * If all branches are list envelopes, the entire property should be excluded.
+   */
+  private isListEnvelopeInComposition(
+    schema: OpenApiSchemaOrReference,
+    spec: OpenApiSpec
+  ): boolean {
+    if (this.isReference(schema)) {
+      return false
+    }
+
+    const compositions: (OpenApiSchemaOrReference[] | undefined)[] = [
+      schema.oneOf,
+      schema.anyOf,
+      schema.allOf,
+    ]
+    for (const composed of compositions) {
+      if (!composed) continue
+      const resolved = composed.map((s) => (this.isReference(s) ? this.resolveSchema(s, spec) : s))
+      if (resolved.length > 0 && resolved.every((s) => this.isListEnvelopeSchema(s))) {
+        return true
+      }
+    }
+    return false
+  }
+
   private parseColumns(
     propCandidates: Map<string, OpenApiSchemaOrReference[]>,
     spec: OpenApiSpec
@@ -653,12 +676,32 @@ export class SpecParser {
     }
 
     for (const [name, value] of Object.entries(schema.properties ?? {})) {
+      if (this.isReference(value)) {
+        const resolved = this.resolveSchema(value, spec)
+        if (this.isListEnvelopeSchema(resolved)) continue
+      } else if ('type' in value && value.type === 'object' && this.isListEnvelopeSchema(value)) {
+        continue
+      } else if (this.isListEnvelopeInComposition(value, spec)) {
+        continue
+      }
       pushProp(name, value)
     }
 
     for (const composed of [schema.allOf, schema.oneOf, schema.anyOf]) {
       if (!composed) continue
       for (const subSchema of composed) {
+        if (this.isReference(subSchema)) {
+          const resolved = this.resolveSchema(subSchema, spec)
+          if (this.isListEnvelopeSchema(resolved)) continue
+        } else if (
+          'type' in subSchema &&
+          subSchema.type === 'object' &&
+          this.isListEnvelopeSchema(subSchema)
+        ) {
+          continue
+        } else if (this.isListEnvelopeInComposition(subSchema, spec)) {
+          continue
+        }
         const subProps = this.collectPropertyCandidates(subSchema, spec, seenRefs, seenSchemas)
         for (const [name, candidates] of subProps.entries()) {
           for (const candidate of candidates) {

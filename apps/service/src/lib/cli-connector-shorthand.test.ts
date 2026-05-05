@@ -18,7 +18,7 @@ describe('cli connector shorthand', () => {
   it('parses JSON scalar and collection values', () => {
     expect(parseCliValue('true')).toBe(true)
     expect(parseCliValue('5432')).toBe(5432)
-    expect(parseCliValue('["customers"]')).toEqual(['customers'])
+    expect(parseCliValue('["customer"]')).toEqual(['customer'])
     expect(parseCliValue('plain-text')).toBe('plain-text')
   })
 

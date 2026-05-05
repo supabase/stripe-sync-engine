@@ -98,8 +98,8 @@ export async function writeMany(
 }
 
 /**
- * Upsert records into a Postgres table; lifts `[newer_than_field]` from the
- * source-stamped record into the legacy `_updated_at` timestamptz column (DDR-009).
+ * Upsert records into a Postgres table; `_updated_at` is source time and
+ * `_synced_at` is the destination write time.
  */
 export async function upsertMany(
   pool: pg.Pool,
@@ -117,6 +117,7 @@ export async function upsertMany(
       skipped_count: 0,
     }
 
+  const syncedAt = new Date().toISOString()
   const records = entries.map((e) => {
     const ts = e[newerThanField] as unknown
     if (typeof ts !== 'number' || !Number.isFinite(ts)) {
@@ -124,7 +125,7 @@ export async function upsertMany(
         `upsertMany: record missing source-stamped "${newerThanField}" (table=${schema}.${table}, id=${String(e.id)}). See DDR-009.`
       )
     }
-    return { _raw_data: e, _updated_at: new Date(ts * 1000).toISOString() }
+    return { _raw_data: e, _synced_at: syncedAt, _updated_at: new Date(ts * 1000).toISOString() }
   })
 
   return await upsertWithStats(pool, records, {

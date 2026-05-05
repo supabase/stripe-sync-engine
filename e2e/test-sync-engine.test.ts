@@ -109,11 +109,11 @@ describe('Stripe failure handling via Docker engine', () => {
   }
 
   async function seedCustomers(objects: Record<string, unknown>[]) {
-    await replaceTableObjects('customers', objects)
+    await replaceTableObjects('customer', objects)
   }
 
   async function seedProducts(objects: Record<string, unknown>[]) {
-    await replaceTableObjects('products', objects)
+    await replaceTableObjects('product', objects)
   }
 
   async function startInjectedServer(
@@ -156,7 +156,7 @@ describe('Stripe failure handling via Docker engine', () => {
           batch_size: 100,
         },
       },
-      streams: opts.streams ?? [{ name: 'customers', sync_mode: 'full_refresh' }],
+      streams: opts.streams ?? [{ name: 'customer', sync_mode: 'full_refresh' }],
     }
   }
 
@@ -286,7 +286,7 @@ describe('Stripe failure handling via Docker engine', () => {
       'Invalid API Key'
     )
     expect(messages.filter((msg) => msg.type === 'record')).toHaveLength(0)
-    expect(state.streams.customers).toBeUndefined()
+    expect(state.streams.customer).toBeUndefined()
   }, 120_000)
 
   it('continues syncing later streams after one stream returns a non-skippable auth error', async () => {
@@ -314,8 +314,8 @@ describe('Stripe failure handling via Docker engine', () => {
       destSchema,
       baseUrl: server.url,
       streams: [
-        { name: 'customers', sync_mode: 'full_refresh' },
-        { name: 'products', sync_mode: 'full_refresh' },
+        { name: 'customer', sync_mode: 'full_refresh' },
+        { name: 'product', sync_mode: 'full_refresh' },
       ],
     })
 
@@ -323,21 +323,21 @@ describe('Stripe failure handling via Docker engine', () => {
     const customerError = messages.find(
       (msg) =>
         msg.type === 'stream_status' &&
-        msg.stream_status.stream === 'customers' &&
+        msg.stream_status.stream === 'customer' &&
         msg.stream_status.status === 'error'
     )
     expect(customerError).toBeDefined()
     expect(customerError).toMatchObject({
       type: 'stream_status',
       stream_status: {
-        stream: 'customers',
+        stream: 'customer',
         status: 'error',
         error: expect.stringContaining('Invalid API Key'),
       },
     })
-    expect(await countRows(destSchema, 'customers')).toBe(0)
-    expect(await countRows(destSchema, 'products')).toBe(2)
-    expect(state.streams.products).toMatchObject({ remaining: [] })
+    expect(await countRows(destSchema, 'customer')).toBe(0)
+    expect(await countRows(destSchema, 'product')).toBe(2)
+    expect(state.streams.product).toMatchObject({ remaining: [] })
   }, 120_000)
 
   it('retries a later transient pagination failure and completes the stream', async () => {
@@ -364,8 +364,8 @@ describe('Stripe failure handling via Docker engine', () => {
       baseUrl: server.url,
     })
 
-    expect(getErrorTrace(messages, 'customers')).toBeUndefined()
-    expect(await countRows(destSchema, 'customers')).toBe(150)
-    expect(state.streams.customers).toMatchObject({ remaining: [] })
+    expect(getErrorTrace(messages, 'customer')).toBeUndefined()
+    expect(await countRows(destSchema, 'customer')).toBe(150)
+    expect(state.streams.customer).toMatchObject({ remaining: [] })
   }, 120_000)
 })

@@ -41,7 +41,7 @@ E -[#475569]> S : discover(source_config)
 S -[#475569]> E : available streams + schemas
 E -[#475569]> E : build configured_catalog\n(merge discover result + streams selection)
 
-E -[#16a34a]> C : progress {streams: {customers: {status: "not_started", ...}}}
+E -[#16a34a]> C : progress {streams: {customer: {status: "not_started", ...}}}
 note right of E #FEFFDD : first progress emitted immediately\nbefore source sends any data
 
 == Source & Destination start ==
@@ -51,27 +51,27 @@ E -[#475569]> D : write(dest_config, configured_catalog, dest_state)
 
 == Source & Destination stream concurrently ==
 
-S -[#94a3b8]> E : stream_status {stream: "customers", status: "start"}
+S -[#94a3b8]> E : stream_status {stream: "customer", status: "start"}
 
-S -[#2563eb]> E : record {stream: "customers", data: {...}}
+S -[#2563eb]> E : record {stream: "customer", data: {...}}
 E -[#2563eb]> D : record (forwarded)
 
-S -[#2563eb]> E : record {stream: "customers", data: {...}}
+S -[#2563eb]> E : record {stream: "customer", data: {...}}
 E -[#2563eb]> D : record (forwarded)
 
-S -[#7c3aed]> E : source_state {stream: "customers", data: {remaining: [...]}}
+S -[#7c3aed]> E : source_state {stream: "customer", data: {remaining: [...]}}
 E -[#7c3aed]> D : source_state (forwarded)
 
-S -[#94a3b8]> E : stream_status {stream: "customers", status: "range_complete"}
+S -[#94a3b8]> E : stream_status {stream: "customer", status: "range_complete"}
 E -[#94a3b8]> D : stream_status (forwarded)
 
-S -[#2563eb]> E : record {stream: "customers", data: {...}}
+S -[#2563eb]> E : record {stream: "customer", data: {...}}
 E -[#2563eb]> D : record (forwarded)
 
-S -[#7c3aed]> E : source_state {stream: "customers", data: {remaining: []}}
+S -[#7c3aed]> E : source_state {stream: "customer", data: {remaining: []}}
 E -[#7c3aed]> D : source_state (forwarded)
 
-S -[#94a3b8]> E : stream_status {stream: "customers", status: "complete"}
+S -[#94a3b8]> E : stream_status {stream: "customer", status: "complete"}
 E -[#94a3b8]> D : stream_status (forwarded)
 
 == Destination persists & re-emits ==
@@ -87,12 +87,12 @@ E -[#16a34a]> C : progress (streamed on response)
 
 == Stream error example ==
 
-S -[#dc2626]> E : log {level: "error", stream: "invoices", message: "403 forbidden"}
-S -[#94a3b8]> E : stream_status {stream: "invoices", status: "error"}
+S -[#dc2626]> E : log {level: "error", stream: "invoice", message: "403 forbidden"}
+S -[#94a3b8]> E : stream_status {stream: "invoice", status: "error"}
 E -[#94a3b8]> D : stream_status (forwarded)
 D -[#94a3b8]> E : stream_status (re-emitted)
 E -[#94a3b8]> C : stream_status (streamed on response)
-note right of E #FEFFDD : stream "invoices" stops,\nother streams continue
+note right of E #FEFFDD : stream "invoice" stops,\nother streams continue
 
 == EOF — time limit hit (source iterator NOT done) ==
 

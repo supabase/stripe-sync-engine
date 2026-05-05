@@ -18,17 +18,17 @@ The primary source. Reads from Stripe's core REST API.
 
 Interface tests:
 
-| Test                                                                                                 | Validates                  |
-| ---------------------------------------------------------------------------------------------------- | -------------------------- |
-| `discover()` returns `CatalogMessage` with known Stripe streams (customers, invoices, charges, etc.) | Schema discovery           |
-| `read()` in backfill mode emits `RecordMessage` + `StateMessage` in correct interleaving             | Message protocol           |
-| `read()` with prior state resumes from the cursor, does not re-emit already-checkpointed records     | Resumability               |
-| `read()` transitions from backfill → live without stopping                                           | Phase transition           |
-| Live mode via webhook emits one `RecordMessage` + one `StateMessage` per event                       | Fine-grained checkpointing |
-| Live mode via WebSocket emits the same messages as webhook mode                                      | Transport equivalence      |
-| `read()` emits `ErrorMessage` with `failure_type: 'transient_error'` on rate limit                   | Error protocol             |
-| `read()` emits `ErrorMessage` with `failure_type: 'config_error'` on bad API key                     | Error protocol             |
-| Source never imports from or references any destination module                                       | Architecture purity        |
+| Test                                                                                              | Validates                  |
+| ------------------------------------------------------------------------------------------------- | -------------------------- |
+| `discover()` returns `CatalogMessage` with known Stripe streams (customer, invoice, charge, etc.) | Schema discovery           |
+| `read()` in backfill mode emits `RecordMessage` + `StateMessage` in correct interleaving          | Message protocol           |
+| `read()` with prior state resumes from the cursor, does not re-emit already-checkpointed records  | Resumability               |
+| `read()` transitions from backfill → live without stopping                                        | Phase transition           |
+| Live mode via webhook emits one `RecordMessage` + one `StateMessage` per event                    | Fine-grained checkpointing |
+| Live mode via WebSocket emits the same messages as webhook mode                                   | Transport equivalence      |
+| `read()` emits `ErrorMessage` with `failure_type: 'transient_error'` on rate limit                | Error protocol             |
+| `read()` emits `ErrorMessage` with `failure_type: 'config_error'` on bad API key                  | Error protocol             |
+| Source never imports from or references any destination module                                    | Architecture purity        |
 
 ## Destinations
 

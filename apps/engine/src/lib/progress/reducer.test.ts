@@ -29,25 +29,25 @@ describe('progressReducer — records', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: { id: '1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: { id: '1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: { id: '2' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: { id: '2' }, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'record',
-        record: { stream: 'invoices', data: { id: '1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'invoice', data: { id: '1' }, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     )
-    expect(p.streams['customers']?.record_count).toBe(2)
-    expect(p.streams['invoices']?.record_count).toBe(1)
+    expect(p.streams['customer']?.record_count).toBe(2)
+    expect(p.streams['invoice']?.record_count).toBe(1)
   })
 
   it('initializes stream entry on first record', () => {
@@ -56,11 +56,11 @@ describe('progressReducer — records', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     )
-    expect(p.streams['customers']).toBeDefined()
-    expect(p.streams['customers']?.status).toBe('not_started')
+    expect(p.streams['customer']).toBeDefined()
+    expect(p.streams['customer']?.status).toBe('not_started')
   })
 
   it('does not mutate original state', () => {
@@ -69,11 +69,11 @@ describe('progressReducer — records', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     )
-    expect(p.streams['customers']).toBeUndefined()
-    expect(next.streams['customers']?.record_count).toBe(1)
+    expect(p.streams['customer']).toBeUndefined()
+    expect(next.streams['customer']?.record_count).toBe(1)
   })
 })
 
@@ -84,7 +84,7 @@ describe('progressReducer — source_state', () => {
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'stream', stream: 'customer', data: {} },
       })
     )
     expect(p.global_state_count).toBe(0)
@@ -104,11 +104,11 @@ describe('progressReducer — source_state', () => {
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'stream', stream: 'customer', data: {} },
       })
     )
-    expect(p.streams['customers']?.state_count).toBe(1)
-    expect(p.streams['customers']?.status).toBe('not_started')
+    expect(p.streams['customer']?.state_count).toBe(1)
+    expect(p.streams['customer']?.status).toBe('not_started')
   })
 
   it('does not overwrite existing stream status', () => {
@@ -117,17 +117,17 @@ describe('progressReducer — source_state', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'complete' },
+        stream_status: { stream: 'customer', status: 'complete' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'source_state',
-        source_state: { state_type: 'stream', stream: 'customers', data: {} },
+        source_state: { state_type: 'stream', stream: 'customer', data: {} },
       })
     )
-    expect(p.streams['customers']?.status).toBe('completed')
+    expect(p.streams['customer']?.status).toBe('completed')
   })
 
   it('does not create stream entry for global source_state', () => {
@@ -164,10 +164,10 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'start' },
+        stream_status: { stream: 'customer', status: 'start' },
       })
     )
-    expect(p.streams['customers']?.status).toBe('started')
+    expect(p.streams['customer']?.status).toBe('started')
   })
 
   it('maps complete → completed', () => {
@@ -176,10 +176,10 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'complete' },
+        stream_status: { stream: 'customer', status: 'complete' },
       })
     )
-    expect(p.streams['customers']?.status).toBe('completed')
+    expect(p.streams['customer']?.status).toBe('completed')
   })
 
   it('maps skip → skipped', () => {
@@ -188,10 +188,10 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'skip', reason: 'not available' },
+        stream_status: { stream: 'customer', status: 'skip', reason: 'not available' },
       })
     )
-    expect(p.streams['customers']?.status).toBe('skipped')
+    expect(p.streams['customer']?.status).toBe('skipped')
   })
 
   it('maps error → errored', () => {
@@ -200,10 +200,10 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'error', error: 'forbidden' },
+        stream_status: { stream: 'customer', status: 'error', error: 'forbidden' },
       })
     )
-    expect(p.streams['customers']?.status).toBe('errored')
+    expect(p.streams['customer']?.status).toBe('errored')
   })
 
   it('accumulates range_complete into completed_ranges', () => {
@@ -213,7 +213,7 @@ describe('progressReducer — stream_status', () => {
       at({
         type: 'stream_status',
         stream_status: {
-          stream: 'customers',
+          stream: 'customer',
           status: 'range_complete',
           range_complete: { gte: '2024-01', lt: '2024-06' },
         },
@@ -224,13 +224,13 @@ describe('progressReducer — stream_status', () => {
       at({
         type: 'stream_status',
         stream_status: {
-          stream: 'customers',
+          stream: 'customer',
           status: 'range_complete',
           range_complete: { gte: '2024-06', lt: '2025-01' },
         },
       })
     )
-    expect(p.streams['customers']?.completed_ranges).toEqual([{ gte: '2024-01', lt: '2025-01' }])
+    expect(p.streams['customer']?.completed_ranges).toEqual([{ gte: '2024-01', lt: '2025-01' }])
   })
 
   it('range_complete does not change stream status', () => {
@@ -239,7 +239,7 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'start' },
+        stream_status: { stream: 'customer', status: 'start' },
       })
     )
     p = progressReducer(
@@ -247,13 +247,13 @@ describe('progressReducer — stream_status', () => {
       at({
         type: 'stream_status',
         stream_status: {
-          stream: 'customers',
+          stream: 'customer',
           status: 'range_complete',
           range_complete: { gte: '2024-01', lt: '2024-06' },
         },
       })
     )
-    expect(p.streams['customers']?.status).toBe('started')
+    expect(p.streams['customer']?.status).toBe('started')
   })
 
   it('handles multiple streams independently', () => {
@@ -262,25 +262,25 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'start' },
+        stream_status: { stream: 'customer', status: 'start' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'invoices', status: 'complete' },
+        stream_status: { stream: 'invoice', status: 'complete' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'error', error: 'x' },
+        stream_status: { stream: 'customer', status: 'error', error: 'x' },
       })
     )
-    expect(p.streams['customers']?.status).toBe('errored')
-    expect(p.streams['invoices']?.status).toBe('completed')
+    expect(p.streams['customer']?.status).toBe('errored')
+    expect(p.streams['invoice']?.status).toBe('completed')
   })
 
   it('does not mutate original state', () => {
@@ -289,11 +289,11 @@ describe('progressReducer — stream_status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'start' },
+        stream_status: { stream: 'customer', status: 'start' },
       })
     )
-    expect(p.streams['customers']).toBeUndefined()
-    expect(next.streams['customers']?.status).toBe('started')
+    expect(p.streams['customer']).toBeUndefined()
+    expect(next.streams['customer']?.status).toBe('started')
   })
 })
 
@@ -347,7 +347,7 @@ describe('progressReducer — derived.status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'start' },
+        stream_status: { stream: 'customer', status: 'start' },
       })
     )
     p = progressReducer(
@@ -366,7 +366,7 @@ describe('progressReducer — derived.status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'error', error: 'x' },
+        stream_status: { stream: 'customer', status: 'error', error: 'x' },
       })
     )
     expect(p.derived.status).toBe('failed')
@@ -378,14 +378,14 @@ describe('progressReducer — derived.status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'complete' },
+        stream_status: { stream: 'customer', status: 'complete' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'invoices', status: 'error', error: 'x' },
+        stream_status: { stream: 'invoice', status: 'error', error: 'x' },
       })
     )
     expect(p.derived.status).toBe('failed')
@@ -397,14 +397,14 @@ describe('progressReducer — derived.status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'complete' },
+        stream_status: { stream: 'customer', status: 'complete' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'invoices', status: 'skip', reason: 'n/a' },
+        stream_status: { stream: 'invoice', status: 'skip', reason: 'n/a' },
       })
     )
     expect(p.derived.status).toBe('succeeded')
@@ -416,14 +416,14 @@ describe('progressReducer — derived.status', () => {
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'customers', status: 'complete' },
+        stream_status: { stream: 'customer', status: 'complete' },
       })
     )
     p = progressReducer(
       p,
       at({
         type: 'stream_status',
-        stream_status: { stream: 'invoices', status: 'start' },
+        stream_status: { stream: 'invoice', status: 'start' },
       })
     )
     expect(p.derived.status).toBe('started')
@@ -438,7 +438,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:00.000Z',
       })
     )
@@ -449,7 +449,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:05.000Z',
       })
     )
@@ -463,7 +463,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:00.000Z',
       })
     )
@@ -471,7 +471,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:02.000Z',
       })
     )
@@ -479,7 +479,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:02.000Z',
       })
     )
@@ -487,7 +487,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
       p,
       at({
         type: 'record',
-        record: { stream: 'invoices', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'invoice', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
         _ts: '2024-01-01T00:00:02.000Z',
       })
     )
@@ -523,7 +523,7 @@ describe('progressReducer — elapsed_ms and rates', () => {
     expect(() =>
       progressReducer(p, {
         type: 'record',
-        record: { stream: 'customers', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
+        record: { stream: 'customer', data: {}, emitted_at: '2024-01-01T00:00:00.000Z' },
       })
     ).toThrow('missing _ts')
   })

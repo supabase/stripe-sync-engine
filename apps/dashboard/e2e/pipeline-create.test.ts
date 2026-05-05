@@ -29,12 +29,12 @@ test('full pipeline creation flow: source → discover → streams → destinati
 
   // Expand Payments and select a stream
   await page.getByText('Payments').click()
-  const chargesCheckbox = page.locator('label').filter({ hasText: 'charges' }).locator('input')
+  const chargesCheckbox = page.locator('label').filter({ hasText: 'charge' }).locator('input')
   await chargesCheckbox.check()
 
   // Expand Customers and select
   await page.getByText('Customers').click()
-  const customersCheckbox = page.locator('label').filter({ hasText: 'customers' }).locator('input')
+  const customersCheckbox = page.locator('label').filter({ hasText: 'customer' }).locator('input')
   await customersCheckbox.check()
 
   // Verify search works
@@ -57,8 +57,8 @@ test('full pipeline creation flow: source → discover → streams → destinati
   await expect(page.getByText('stripe').first()).toBeVisible()
   await expect(page.getByText('postgres').first()).toBeVisible()
   await expect(page.getByText('2 tables selected')).toBeVisible()
-  await expect(page.getByText('charges')).toBeVisible()
-  await expect(page.getByText('customers')).toBeVisible()
+  await expect(page.getByText('charge')).toBeVisible()
+  await expect(page.getByText('customer')).toBeVisible()
 
   // The "Start sync" button should be visible
   await expect(page.getByRole('button', { name: /start sync/i })).toBeVisible()

@@ -20,7 +20,7 @@ const ts = new Date()
   .replace(/[-:T.Z]/g, '')
   .slice(0, 15)
 const SCHEMA = `e2e_${ts}`
-const STREAMS = ['products', 'prices']
+const STREAMS = ['product', 'price']
 const BACKFILL_LIMIT = 10
 
 // ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
         if (done) break
         if (
           value.type === 'source_state' &&
-          value.source_state.stream === 'products' &&
+          value.source_state.stream === 'product' &&
           (value.source_state.data as any)?.eventId
         )
           break
@@ -164,7 +164,7 @@ describeWithEnv('stripe → postgres e2e', ['STRIPE_API_KEY'], ({ STRIPE_API_KEY
 
       // Phase 4: verify the update landed in Postgres
       const { rows } = await pool.query(
-        `SELECT _raw_data->>'name' AS name FROM "${SCHEMA}"."products" WHERE id = $1`,
+        `SELECT _raw_data->>'name' AS name FROM "${SCHEMA}"."product" WHERE id = $1`,
         [product.id]
       )
       expect(rows[0].name).toBe(newName)

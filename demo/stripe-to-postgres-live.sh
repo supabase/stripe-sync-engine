@@ -31,6 +31,6 @@ echo "" >&2
 $RUN apps/engine/src/bin/sync-engine.ts sync \
   --stripe-api-key "$STRIPE_API_KEY" \
   --postgres-url "$POSTGRES_URL" \
-  --streams products,prices,customers \
+  --streams product,price,customer \
   --backfill-limit 10 \
   --live

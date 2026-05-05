@@ -13,7 +13,7 @@ export type UpsertOptions = {
   /**
    * Target table name.
    *
-   * Example: `"customers"` for a table storing Stripe customer objects.
+   * Example: `"customer"` for a table storing Stripe customer objects.
    */
   table: string
 
@@ -205,7 +205,7 @@ export function buildUpsertSql(
 
   if (newerThanColumn) {
     whereParts.push(
-      `EXCLUDED.${ident(newerThanColumn)} > ${ident(table)}.${ident(newerThanColumn)}`
+      `EXCLUDED.${ident(newerThanColumn)} >= ${ident(table)}.${ident(newerThanColumn)}`
     )
   }
 

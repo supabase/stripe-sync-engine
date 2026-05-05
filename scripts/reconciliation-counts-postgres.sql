@@ -8,79 +8,79 @@
 
 SELECT *
 FROM (
-  SELECT 'customers' AS resource, count(*) AS n
-  FROM public.customers
+  SELECT 'customer' AS resource, count(*) AS n
+  FROM public.customer
 
   UNION ALL
-  SELECT 'payment_intents', count(*)
-  FROM public.payment_intents
+  SELECT 'payment_intent', count(*)
+  FROM public.payment_intent
 
   UNION ALL
-  SELECT 'invoices', count(*)
-  FROM public.invoices
+  SELECT 'invoice', count(*)
+  FROM public.invoice
 
   UNION ALL
-  SELECT 'invoiceitems', count(*)
-  FROM public.invoiceitems
+  SELECT 'invoice_line_item', count(*)
+  FROM public.invoice_line_item
 
   UNION ALL
-  SELECT 'subscriptions', count(*)
-  FROM public.subscriptions
+  SELECT 'subscription', count(*)
+  FROM public.subscription
 
   UNION ALL
-  SELECT 'plans', count(*)
-  FROM public.plans
+  SELECT 'plan', count(*)
+  FROM public.plan
 
   UNION ALL
-  SELECT 'products', count(*)
-  FROM public.products
+  SELECT 'product', count(*)
+  FROM public.product
 
   UNION ALL
-  SELECT 'payment_links', count(*)
-  FROM public.payment_links
+  SELECT 'payment_link', count(*)
+  FROM public.payment_link
 
   UNION ALL
-  SELECT 'payment_method_domains', count(*)
-  FROM public.payment_method_domains
+  SELECT 'payment_method_domain', count(*)
+  FROM public.payment_method_domain
 
   UNION ALL
-  SELECT 'tax_rates', count(*)
-  FROM public.tax_rates
+  SELECT 'tax_rate', count(*)
+  FROM public.tax_rate
 
   UNION ALL
-  SELECT 'tax_ids', count(*)
-  FROM public.tax_ids
+  SELECT 'tax_id', count(*)
+  FROM public.tax_id
 
   UNION ALL
-  SELECT 'file_links', count(*)
-  FROM public.file_links
+  SELECT 'file_link', count(*)
+  FROM public.file_link
 
   UNION ALL
-  SELECT 'quotes', count(*)
-  FROM public.quotes
+  SELECT 'quote', count(*)
+  FROM public.quote
 
   UNION ALL
-  SELECT 'promotion_codes', count(*)
-  FROM public.promotion_codes
+  SELECT 'promotion_code', count(*)
+  FROM public.promotion_code
 
   UNION ALL
-  SELECT 'payment_methods', count(*)
-  FROM public.payment_methods
+  SELECT 'payment_method', count(*)
+  FROM public.payment_method
 
   UNION ALL
-  SELECT 'climate_orders', count(*)
-  FROM public.climate_orders
+  SELECT 'climate_order', count(*)
+  FROM public.climate_order
 
   UNION ALL
-  SELECT 'checkout_sessions', count(*)
-  FROM public.checkout_sessions
+  SELECT 'checkout_session', count(*)
+  FROM public.checkout_session
 
   UNION ALL
-  SELECT 'prices', count(*)
-  FROM public.prices
+  SELECT 'price', count(*)
+  FROM public.price
 
   UNION ALL
-  SELECT 'treasury_financial_accounts', count(*)
-  FROM public.treasury_financial_accounts
+  SELECT 'treasury_financial_account', count(*)
+  FROM public.treasury_financial_account
 ) q
 ORDER BY resource;

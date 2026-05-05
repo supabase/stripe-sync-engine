@@ -25,7 +25,7 @@ const ts = new Date()
   .toISOString()
   .replace(/[-:T.Z]/g, '')
   .slice(0, 15)
-const STREAM = 'customers'
+const STREAM = 'customer'
 const BACKFILL_LIMIT = 5
 
 // MARK: - Helpers
@@ -173,7 +173,7 @@ describeWithEnv('stripe customer.deleted → postgres', ['STRIPE_API_KEY'], ({ S
       console.log(`Waiting for customer ${customerId} to appear in Postgres...`)
       const appeared = await pollUntil(
         async () => {
-          const { rows } = await pool.query(`SELECT 1 FROM "${SCHEMA}"."customers" WHERE id = $1`, [
+          const { rows } = await pool.query(`SELECT 1 FROM "${SCHEMA}"."customer" WHERE id = $1`, [
             customerId,
           ])
           return rows.length > 0
@@ -189,7 +189,7 @@ describeWithEnv('stripe customer.deleted → postgres', ['STRIPE_API_KEY'], ({ S
 
       const removed = await pollUntil(
         async () => {
-          const { rows } = await pool.query(`SELECT 1 FROM "${SCHEMA}"."customers" WHERE id = $1`, [
+          const { rows } = await pool.query(`SELECT 1 FROM "${SCHEMA}"."customer" WHERE id = $1`, [
             customer.id,
           ])
           return rows.length === 0

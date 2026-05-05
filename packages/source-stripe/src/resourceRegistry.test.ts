@@ -92,7 +92,7 @@ describe('buildResourceRegistry', () => {
   it('keeps v2 created filter support when the spec advertises it', () => {
     const registry = buildResourceRegistry(v2CreatedSpec, 'sk_test_fake', '2026-03-25.dahlia')
 
-    expect(registry.v2_core_accounts?.supportsCreatedFilter).toBe(false)
-    expect(registry.v2_core_events?.supportsCreatedFilter).toBe(true)
+    expect(registry.v2_core_account?.supportsCreatedFilter).toBe(false)
+    expect(registry.v2_core_event?.supportsCreatedFilter).toBe(true)
   })
 })

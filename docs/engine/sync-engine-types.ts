@@ -9,7 +9,7 @@
 
 /** A named collection of records — analogous to a table or API resource. */
 export interface Stream {
-  /** Collection name (e.g. "customers", "invoices", "pg_public.users"). */
+  /** Collection name (e.g. "customer", "invoice", "pg_public.user"). */
   name: string
 
   /**

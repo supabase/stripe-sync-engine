@@ -17,8 +17,8 @@ Replace `X-State-Checkpoint-Limit` header with two query parameters and add an `
 Every NDJSON streaming response (`/read`, `/sync`) ends with an `eof` message:
 
 ```jsonl
-{"type":"record","stream":"customers","data":{"id":"cus_1"},"emitted_at":"..."}
-{"type":"state","stream":"customers","data":{"cursor":"cus_1"}}
+{"type":"record","stream":"customer","data":{"id":"cus_1"},"emitted_at":"..."}
+{"type":"state","stream":"customer","data":{"cursor":"cus_1"}}
 {"type":"eof","reason":"state_limit"}
 ```
 

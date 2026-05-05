@@ -76,7 +76,7 @@ done
 
 # --- 1) Read from Stripe ---
 echo "==> Reading from Stripe (/pipeline_read)"
-READ_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"products"}]}' "$STRIPE_API_KEY")
+READ_PARAMS=$(printf '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"product"}]}' "$STRIPE_API_KEY")
 
 STRIPE_OUTPUT=$(curl -s --max-time 60 -X POST "http://localhost:$PORT/pipeline_read" \
   -H "Content-Type: application/json" \

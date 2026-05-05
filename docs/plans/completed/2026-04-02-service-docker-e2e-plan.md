@@ -286,7 +286,7 @@ describeWithEnv(
             connection_string: POSTGRES_CONTAINER_URL,
             schema,
           },
-          streams: [{ name: 'products', backfill_limit: 500 }],
+          streams: [{ name: 'product', backfill_limit: 500 }],
         },
       })
       expect(createErr).toBeUndefined()
@@ -297,19 +297,19 @@ describeWithEnv(
       // --- Wait for data ---
       await pollUntil(async () => {
         try {
-          const r = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."products"`)
+          const r = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."product"`)
           return r.rows[0].n > 0
         } catch {
           return false
         }
       })
 
-      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."products"`)
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${schema}"."product"`)
       console.log(`  Synced:   ${rows[0].n} products`)
       expect(rows[0].n).toBeGreaterThan(0)
 
       // Verify shape
-      const { rows: sample } = await pool.query(`SELECT id FROM "${schema}"."products" LIMIT 1`)
+      const { rows: sample } = await pool.query(`SELECT id FROM "${schema}"."product" LIMIT 1`)
       expect(sample[0].id).toMatch(/^prod_/)
 
       // --- List includes the pipeline ---

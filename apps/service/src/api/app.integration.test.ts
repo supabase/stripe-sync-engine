@@ -181,7 +181,7 @@ describe('pipeline integration', () => {
           type: 'postgres',
           postgres: { url: POSTGRES_URL, schema: SCHEMA },
         },
-        streams: [{ name: 'products' }],
+        streams: [{ name: 'product' }],
       },
     })
     expect(createErr).toBeUndefined()
@@ -213,18 +213,18 @@ describe('pipeline integration', () => {
     // 5. Wait for backfill to land in Postgres
     await pollUntil(async () => {
       try {
-        const r = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}"."products"`)
+        const r = await pool.query(`SELECT count(*)::int AS n FROM "${SCHEMA}"."product"`)
         return r.rows[0].n > 0
       } catch {
         return false
       }
     })
     const { rows: backfillRows } = await pool.query(
-      `SELECT count(*)::int AS n FROM "${SCHEMA}"."products"`
+      `SELECT count(*)::int AS n FROM "${SCHEMA}"."product"`
     )
     console.log(`  Backfilled ${backfillRows[0].n} products`)
 
-    const { rows: sample } = await pool.query(`SELECT id FROM "${SCHEMA}"."products" LIMIT 1`)
+    const { rows: sample } = await pool.query(`SELECT id FROM "${SCHEMA}"."product" LIMIT 1`)
     expect(sample[0].id).toMatch(/^prod_/)
 
     // 6. Start whcli forward: webhook.site → local service
@@ -247,7 +247,7 @@ describe('pipeline integration', () => {
     await pollUntil(
       async () => {
         try {
-          const r = await pool.query(`SELECT name FROM "${SCHEMA}"."products" WHERE id = $1`, [
+          const r = await pool.query(`SELECT name FROM "${SCHEMA}"."product" WHERE id = $1`, [
             productId,
           ])
           return r.rows[0]?.name === marker
@@ -258,7 +258,7 @@ describe('pipeline integration', () => {
       { timeout: 30_000, interval: 2000 }
     )
     const { rows: updatedRows } = await pool.query(
-      `SELECT name FROM "${SCHEMA}"."products" WHERE id = $1`,
+      `SELECT name FROM "${SCHEMA}"."product" WHERE id = $1`,
       [productId]
     )
     expect(updatedRows[0].name).toBe(marker)

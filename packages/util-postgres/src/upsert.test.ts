@@ -531,7 +531,7 @@ describe('newerThanColumn', () => {
     expect(r[0]).toMatchObject({ id: '1', name: 'Alice v2', updated: 200 }) // unchanged
   })
 
-  it('skips update when incoming row has equal timestamp', async () => {
+  it('allows update when incoming row has equal timestamp', async () => {
     await upsert(pool, [{ id: '1', name: 'Alice', updated: 100 }], {
       table,
       primaryKeyColumns: ['id'],
@@ -544,10 +544,10 @@ describe('newerThanColumn', () => {
       returning: true,
     })
 
-    expect(result.rows).toHaveLength(0) // skipped — not strictly newer
+    expect(result.rows).toHaveLength(1) // updated — equal timestamp
 
     const r = await rows(table)
-    expect(r[0].name).toBe('Alice') // unchanged
+    expect(r[0].name).toBe('Same time') // changed
   })
 
   it('inserts normally when row does not exist', async () => {

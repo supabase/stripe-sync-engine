@@ -178,7 +178,7 @@ describeWithEnv(
 
         // Verify at least one data table has rows
         const counts: Record<string, number> = {}
-        for (const table of ['products', 'customers', 'coupons', 'prices']) {
+        for (const table of ['product', 'customer', 'coupon', 'price']) {
           try {
             const result = (await client.runSQL(
               `SELECT count(*) as count FROM stripe.${table}`

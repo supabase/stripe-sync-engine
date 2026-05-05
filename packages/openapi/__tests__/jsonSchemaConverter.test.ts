@@ -5,7 +5,7 @@ import type { ParsedResourceTable } from '../types'
 describe('parsedTableToJsonSchema', () => {
   it('maps scalar types and marks non-nullable columns as required', () => {
     const table: ParsedResourceTable = {
-      tableName: 'customers',
+      tableName: 'customer',
       resourceId: 'customer',
       sourceSchemaName: 'customer',
       columns: [
@@ -40,9 +40,33 @@ describe('parsedTableToJsonSchema', () => {
     expect(required).toEqual(['id', 'created', 'object'])
   })
 
+  it('annotates expandable reference columns with x-expandable-reference', () => {
+    const table: ParsedResourceTable = {
+      tableName: 'charge',
+      resourceId: 'charge',
+      sourceSchemaName: 'charge',
+      columns: [
+        { name: 'customer', type: 'json', nullable: true, expandableReference: true },
+        { name: 'invoice', type: 'json', nullable: false, expandableReference: true },
+      ],
+    }
+
+    const schema = parsedTableToJsonSchema(table)
+    const props = schema.properties as Record<string, Record<string, unknown>>
+
+    expect(props.customer).toEqual({
+      oneOf: [{ type: 'object' }, { type: 'null' }],
+      'x-expandable-reference': true,
+    })
+    expect(props.invoice).toEqual({
+      type: 'object',
+      'x-expandable-reference': true,
+    })
+  })
+
   it('always includes id as a required string', () => {
     const table: ParsedResourceTable = {
-      tableName: 'products',
+      tableName: 'product',
       resourceId: 'product',
       sourceSchemaName: 'product',
       columns: [],

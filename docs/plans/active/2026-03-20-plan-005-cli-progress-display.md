@@ -5,8 +5,8 @@
 The old monolith (`packages/sync-engine`) had a database-backed progress display: workers updated a `sync_obj_progress` table, and the CLI queried it every 1-2s to render progress bars with `pct_complete` and row counts using ANSI escape codes:
 
 ```
-  customers                [████████████░░░░░░░░] 50.0%  (1000 rows)
-  invoices                 [██████░░░░░░░░░░░░░░] 30.0%  (567 rows)
+  customer                [████████████░░░░░░░░] 50.0%  (1000 rows)
+  invoice                 [██████░░░░░░░░░░░░░░] 30.0%  (567 rows)
 ```
 
 That was deleted in the protocol refactor (commit `091cb7af`).
@@ -65,7 +65,7 @@ const streams = new Map<string, StreamProgress>()
 **Display** (stderr, TTY only):
 
 - After each callback, re-render the progress table using ANSI escapes (`\x1B[{n}A` move up, `\x1B[2K` clear line)
-- Format per stream: `  ✓ customers     1,234 records` / `  ⠋ invoices        567 records`
+- Format per stream: `  ✓ customer     1,234 records` / `  ⠋ invoice        567 records`
 - Simple spinner character cycle for active streams
 - Final summary line: `Synced 4 streams (12,345 total records)`
 

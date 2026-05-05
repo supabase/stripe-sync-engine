@@ -193,7 +193,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
         stripe: { api_key: STRIPE_API_KEY, backfill_limit: 5 },
       },
       destination: { type: 'postgres', postgres: { url: POSTGRES_URL, schema } },
-      streams: [{ name: 'products' }],
+      streams: [{ name: 'product' }],
     }
 
     await pipelineStore.set(pipelineId, pipeline as any)
@@ -219,7 +219,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       // --- Wait for backfill data ---
       await pollUntil(async () => {
         try {
-          const r = await infra.pool.query(`SELECT count(*) AS cnt FROM "${schema}"."products"`)
+          const r = await infra.pool.query(`SELECT count(*) AS cnt FROM "${schema}"."product"`)
           return parseInt(r.rows[0].cnt, 10) > 0
         } catch {
           return false
@@ -227,7 +227,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       })
 
       const { rows: countRows } = await infra.pool.query(
-        `SELECT count(*) AS cnt FROM "${schema}"."products"`
+        `SELECT count(*) AS cnt FROM "${schema}"."product"`
       )
       const backfillCount = parseInt(countRows[0].cnt, 10)
       console.log(`  Backfill: ${backfillCount} products`)
@@ -235,7 +235,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
 
       // Verify data shape
       const { rows: sampleRows } = await infra.pool.query(
-        `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."products" LIMIT 1`
+        `SELECT id, _raw_data->>'name' AS name FROM "${schema}"."product" LIMIT 1`
       )
       expect(sampleRows[0].id).toMatch(/^prod_/)
       console.log(`  Sample: ${sampleRows[0].id} → ${sampleRows[0].name}`)
@@ -256,7 +256,7 @@ describe.skip('temporal e2e: stripe → postgres', () => {
       await new Promise((r) => setTimeout(r, 5000))
 
       const { rows: updatedRows } = await infra.pool.query(
-        `SELECT _raw_data->>'name' AS name FROM "${schema}"."products" WHERE id = $1`,
+        `SELECT _raw_data->>'name' AS name FROM "${schema}"."product" WHERE id = $1`,
         [product.id]
       )
       expect(updatedRows.length).toBeGreaterThan(0)

@@ -252,7 +252,7 @@ Successful bounded sync:
 ```jsonl
 {"type":"log","log":{"level":"info","message":"starting sync"}}
 {"type":"progress","progress":{"derived":{"status":"started"}}}
-{"type":"source_state","source_state":{"state_type":"stream","stream":"customers","data":{"cursor":"cus_123"}}}
+{"type":"source_state","source_state":{"state_type":"stream","stream":"customer","data":{"cursor":"cus_123"}}}
 {"type":"eof","eof":{"reason":"time_limit","has_more":true,"ending_state":{},"run_progress":{},"request_progress":{}}}
 ```
 

@@ -38,7 +38,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
       () => {
-        log.info({ stream: 'customers', attempt: 2 }, 'connector logger message')
+        log.info({ stream: 'customer', attempt: 2 }, 'connector logger message')
       }
     )
 
@@ -51,7 +51,7 @@ describe('@stripe/sync-logger', () => {
           sync_engine_request_id: 'req_123',
           action_id: 'act_123',
           run_id: null,
-          stream: 'customers',
+          stream: 'customer',
           attempt: 2,
         },
       },
@@ -123,7 +123,7 @@ describe('@stripe/sync-logger', () => {
     const iter = bindLogContext(
       (async function* () {
         await Promise.resolve()
-        log.info({ stream: 'customers' }, 'from stream')
+        log.info({ stream: 'customer' }, 'from stream')
         yield getEngineRequestId()
       })(),
       {
@@ -148,7 +148,7 @@ describe('@stripe/sync-logger', () => {
           sync_engine_request_id: 'req_stream',
           action_id: 'act_stream',
           run_id: null,
-          stream: 'customers',
+          stream: 'customer',
         },
       },
     ])
@@ -162,7 +162,7 @@ describe('@stripe/sync-logger', () => {
     })
 
     const log = createLogger({ name: 'logger-test' })
-    log.info({ stream: 'customers' }, 'protocol stdout')
+    log.info({ stream: 'customer' }, 'protocol stdout')
 
     expect(writes).toHaveLength(1)
     const parsed = JSON.parse(writes[0]!)
@@ -173,7 +173,7 @@ describe('@stripe/sync-logger', () => {
         message: 'protocol stdout',
         data: {
           name: 'logger-test',
-          stream: 'customers',
+          stream: 'customer',
         },
       },
     })
@@ -197,7 +197,7 @@ describe('@stripe/sync-logger', () => {
         },
       },
       () => {
-        log.info({ stream: 'customers' }, 'dual output')
+        log.info({ stream: 'customer' }, 'dual output')
       }
     )
 
@@ -222,7 +222,7 @@ describe('@stripe/sync-logger', () => {
     const log = createLogger({ name: 'logger-test' })
 
     runWithLogContext({ suppressProtocolStdout: true }, () => {
-      log.info({ stream: 'customers' }, 'quiet log')
+      log.info({ stream: 'customer' }, 'quiet log')
     })
 
     expect(writes).toHaveLength(0)
@@ -244,7 +244,7 @@ describe('@stripe/sync-logger', () => {
         ],
       },
       () => {
-        log.info({ stream: 'customers' }, 'mirrored log')
+        log.info({ stream: 'customer' }, 'mirrored log')
       }
     )
 
@@ -257,7 +257,7 @@ describe('@stripe/sync-logger', () => {
         message: 'mirrored log',
         data: {
           name: 'logger-test',
-          stream: 'customers',
+          stream: 'customer',
         },
       },
     })

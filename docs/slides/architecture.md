@@ -148,7 +148,7 @@ const catalog = buildCatalog(
   await source.discover(), // all available streams
   params.streams // user selection
 )
-// catalog = { streams: [ { stream: { name: 'products' }, fields: [...] } ] }
+// catalog = { streams: [ { stream: { name: 'product' }, fields: [...] } ] }
 
 enforceCatalog(catalog)(messages)
 //  ↳ drops records for unlisted streams
@@ -164,7 +164,7 @@ enforceCatalog(catalog)(messages)
 flowchart TD
   E1["customer.updated"]
   E2["product.created"]
-  EC["enforceCatalog\n{streams: ['products']}"]
+  EC["enforceCatalog\n{streams: ['product']}"]
   E1 --> EC
   E2 --> EC
   EC -->|"in catalog"| Y["✓  product.created\n→ dest.write()"]
@@ -243,9 +243,9 @@ One endpoint serves all syncs under a credential.
 flowchart LR
   ST["Stripe"] -->|"POST /webhooks/:cred_id"| WH["Hono route"]
   WH --> PE["StatefulSync\npush_event()"]
-  PE --> QA["sync_A queue\n[products]"]
-  PE --> QB["sync_B queue\n[products, customers]"]
-  PE --> QC["sync_C queue\n[invoices]"]
+  PE --> QA["sync_A queue\n[product]"]
+  PE --> QB["sync_B queue\n[product, customer]"]
+  PE --> QC["sync_C queue\n[invoice]"]
   style PE fill:#fef9c3,stroke:#eab308
   style WH fill:#dbeafe,stroke:#3b82f6
 ```
@@ -261,11 +261,11 @@ Filtering happens **inside each source** against its own catalog.
 
 ```
 Record {
-  stream: "products"
+  stream: "product"
   data: { id: "prod_1", name: "Widget", ... }
 }
   ↓
-UPSERT INTO <schema>.products (id, _raw_data, ...)
+UPSERT INTO <schema>.product (id, _raw_data, ...)
   ON CONFLICT (id) DO UPDATE SET ...
 ```
 
@@ -282,7 +282,7 @@ UPSERT INTO <schema>.products (id, _raw_data, ...)
 flowchart LR
   RM["RecordMessage"]
   DW["dest.write()"]
-  DB[("schema.products\nid PK\n_raw_data JSONB\nname TEXT (generated)")]
+  DB[("schema.product\nid PK\n_raw_data JSONB\nname TEXT (generated)")]
   SM["StateMessage"]
   ST[("state store\ncursor per stream")]
   RM --> DW --> DB

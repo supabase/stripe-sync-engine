@@ -24,7 +24,7 @@ function generateMessages(pattern: string): [
       values.push({
         type: 'record',
         record: {
-          stream: 'customers',
+          stream: 'customer',
           data: { id: `cus_${recordCount}` },
           emitted_at: '2024-01-01T00:00:00.000Z',
         },
@@ -38,7 +38,7 @@ function generateMessages(pattern: string): [
         type: 'source_state',
         source_state: {
           state_type: 'stream',
-          stream: 'customers',
+          stream: 'customer',
           data: { cursor: `cursor_${stateCount}_${recordCount}` },
         },
       } satisfies SourceStateMessage)

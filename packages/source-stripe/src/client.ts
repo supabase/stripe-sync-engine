@@ -136,9 +136,9 @@ export function makeClient(
 
     async createWebhookEndpoint(params: {
       url: string
-      enabled_events: string[],
-      api_version: string,
-      metadata?: Record<string, string>,
+      enabled_events: string[]
+      api_version: string
+      metadata?: Record<string, string>
     }): Promise<StripeWebhookEndpoint> {
       const json = await requestWithRetry('POST', '/v1/webhook_endpoints', params)
       return StripeWebhookEndpointSchema.parse(json)

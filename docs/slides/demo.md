@@ -27,8 +27,8 @@ type Message =
 A source produces this stream. A destination consumes it. The simplest transport is stdio.
 
 ```bash
-{"type":"record","stream":"products","data":{"id":"prod_1","name":"Widget"},"emitted_at":"2024-01-01T00:00:00.000Z"}
-{"type":"state","stream":"products","data":{"cursor":"evt_123"}}
+{"type":"record","stream":"product","data":{"id":"prod_1","name":"Widget"},"emitted_at":"2024-01-01T00:00:00.000Z"}
+{"type":"state","stream":"product","data":{"cursor":"evt_123"}}
 {"type":"log","level":"info","message":"Fetched page 1"}
 ```
 
@@ -47,7 +47,7 @@ const states: AsyncIterable<StateMessage> = dest.write(messages)
 
 // Drain the pipeline
 for await (const state of states) {
-  //  { type: 'state', stream: 'products', data: { cursor: 'evt_123' } }
+  //  { type: 'state', stream: 'product', data: { cursor: 'evt_123' } }
 }
 ```
 
@@ -219,8 +219,8 @@ The source emits records for all its streams.
 ```ts {1-6,10}
 const catalog = {
   streams: [
-    { stream: { name: 'products' }, fields: ['id', 'name', 'active'] },
-    //  ↑ invoices not listed → all invoice records dropped
+    { stream: { name: 'product' }, fields: ['id', 'name', 'active'] },
+    //  ↑ invoice not listed → all invoice records dropped
   ],
 }
 
@@ -244,9 +244,9 @@ flowchart LR
   LOG["log"]
   FT["filterType"]
   DST["dest.write()"]
-  DROP["✗  invoices\n✗  unlisted fields"]
+  DROP["✗  invoice\n✗  unlisted fields"]
   SRC --> EC
-  EC -->|"products\n{id,name,active}"| LOG
+  EC -->|"product\n{id,name,active}"| LOG
   EC -.->|"other streams"| DROP
   LOG --> FT --> DST
   style SRC fill:#dcfce7,stroke:#22c55e
@@ -344,7 +344,7 @@ const engine = createEngine(
     source:      { name: 'stripe', api_key: 'sk_test_...' },
     destination: { name: 'postgres', connection_string: 'postgres://...' },
     streams: [
-      { name: 'products', fields: ['id', 'name', 'active'] },
+      { name: 'product', fields: ['id', 'name', 'active'] },
     ],
     state: await store.getAll(),  // resume from last run
   },
@@ -404,7 +404,7 @@ node dist/bin/sync-engine.js sync \
   --source-config '{"api_key":"sk_test_...","backfill_limit":50}' \
   --destination postgres \
   --destination-config '{"connection_string":"postgres://..."}' \
-  --streams '[{"name":"products"}]'
+  --streams '[{"name":"product"}]'
 ```
 
 Source and destination run **in-process**.
@@ -443,7 +443,7 @@ curl -X POST http://localhost:3000/sync \
   -H 'X-Sync-Params: {
     "source": { "name": "stripe", "api_key": "sk_test_...", "backfill_limit": 50 },
     "destination": { "name": "postgres", "connection_string": "postgres://..." },
-    "streams": [{ "name": "products" }]
+    "streams": [{ "name": "product" }]
   }'
 ```
 

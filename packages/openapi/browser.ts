@@ -3,7 +3,6 @@
 
 export { SpecParser, OPENAPI_RESOURCE_TABLE_ALIASES, resolveTableName } from './specParser.js'
 export type { ListEndpoint, NestedEndpoint } from './specParser.js'
-export { OPENAPI_COMPATIBILITY_COLUMNS } from './runtimeMappings.js'
 export { parsedTableToJsonSchema } from './jsonSchemaConverter.js'
 export type {
   ParsedColumn,

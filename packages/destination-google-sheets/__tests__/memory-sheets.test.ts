@@ -49,10 +49,10 @@ describe('createMemorySheets', () => {
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: id,
-      requestBody: { requests: [{ addSheet: { properties: { title: 'customers' } } }] },
+      requestBody: { requests: [{ addSheet: { properties: { title: 'customer' } } }] },
     })
 
-    expect(getData(id, 'customers')).toEqual([])
+    expect(getData(id, 'customer')).toEqual([])
   })
 
   it('batchUpdate addSheet — rejects duplicate tab names', async () => {

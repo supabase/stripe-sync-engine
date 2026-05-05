@@ -121,7 +121,7 @@ sync-engine sync \
 sync-engine sync \
   --stripe-api-key sk_test_... \
   --postgres-url postgres://localhost/mydb \
-  --streams customers,invoices
+  --streams customer,invoice
 
 # From a JSON config file (SyncParams shape)
 sync-engine sync --config sync.json
@@ -204,7 +204,7 @@ sync-engine sync --stripe-api-key sk_test_abc --postgres-url postgres://localhos
 sync-engine sync \
   --stripe-api-key sk_test_abc \
   --postgres-url postgres://... \
-  --streams customers,invoices
+  --streams customer,invoice
 
 # Level 3: live sync, custom schema
 sync-engine sync \

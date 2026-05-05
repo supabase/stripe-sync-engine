@@ -104,7 +104,7 @@ The destination only sees `RecordMessage` and `StateMessage`. The engine filters
 
 A **stream** is a named collection of records — a table, API resource, or object type. Streams carry:
 
-- `name` — collection name (e.g. `customers`, `pg_public.users`)
+- `name` — collection name (e.g. `customer`, `pg_public.user`)
 - `primary_key` — composite key paths for deduplication (e.g. `[["id"]]`)
 - `json_schema` — record shape, discovered at runtime
 - `metadata` — source-specific fields that apply to every record in the stream (e.g. `api_version`, `account_id`, `live_mode` for Stripe sources)
@@ -116,7 +116,7 @@ A single data record. The primary key is not a top-level field — it is extract
 ```json
 {
   "type": "record",
-  "stream": "customers",
+  "stream": "customer",
   "data": { "id": "cus_123", "name": "Acme" },
   "emitted_at": "2024-03-17T00:00:00.000Z"
 }
@@ -137,8 +137,8 @@ Properties:
 4. **Resumability is source-controlled.** The source decides checkpoint granularity. A source that emits state after every record gives fine-grained resume. A source that emits state once at the end gives all-or-nothing. If the source never emits a `StateMessage`, the sync works but is not resumable — a restart means starting over.
 
 ```json
-{"type":"state","stream":"customers","data":{"after":"cus_999"}}
-{"type":"state","stream":"invoices","data":{"after":"inv_500"}}
+{"type":"state","stream":"customer","data":{"after":"cus_999"}}
+{"type":"state","stream":"invoice","data":{"after":"inv_500"}}
 ```
 
 ### ErrorMessage
@@ -154,7 +154,7 @@ A structured error from a source or destination. The `failure_type` field lets t
   "type": "error",
   "failure_type": "transient_error",
   "message": "rate limited",
-  "stream": "customers"
+  "stream": "customer"
 }
 ```
 
@@ -163,7 +163,7 @@ A structured error from a source or destination. The `failure_type` field lets t
 Per-stream progress updates from a source. Enables progress reporting in the CLI and dashboard.
 
 ```json
-{ "type": "stream_status", "stream": "customers", "status": "running" }
+{ "type": "stream_status", "stream": "customer", "status": "running" }
 ```
 
 ## Engine
@@ -248,16 +248,16 @@ Source                    Engine                          Destination
   │                          │                              │
   ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
   ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
-  ├─ State{customers,cur:50} ►├─ State{customers,cur:50} ───►│
+  ├─ State{customer,cur:50} ►├─ State{customer,cur:50} ───►│
   ├─ LogMessage ─────────────►├── (route to logs)            │
   │                           │                              ├── (upsert + commit)
-  │                           │◄─ State{customers,cur:50} ───┤
+  │                           │◄─ State{customer,cur:50} ───┤
   │                           ├── (persist checkpoint)       │
   ├─ RecordMessage ──────────►├─ RecordMessage ─────────────►│
   ├─ ErrorMessage ───────────►├── (handle error)             │
-  ├─ State{invoices,cur:99} ─►├─ State{invoices,cur:99} ────►│
+  ├─ State{invoice,cur:99} ─►├─ State{invoice,cur:99} ────►│
   │                           │                              ├── (upsert + commit)
-  │                           │◄─ State{invoices,cur:99} ────┤
+  │                           │◄─ State{invoice,cur:99} ────┤
   │                           ├── (persist checkpoint)       │
   │                           │                              │
 ```
@@ -295,7 +295,7 @@ source.read(params)
   → RecordMessage  (backfill)
   → RecordMessage  (backfill)
   → ...
-  → StateMessage   {stream: "customers", data: {phase: "live", cursor: "2026-03-17T00:00:00Z"}}
+  → StateMessage   {stream: "customer", data: {phase: "live", cursor: "2026-03-17T00:00:00Z"}}
   → RecordMessage  (live)
   → RecordMessage  (live)
   → ...            (infinite)
@@ -328,7 +328,7 @@ State is kept in a separate store (not embedded in sync config). The four stores
 On resume, the engine loads the state map and passes it to `source.read()`:
 
 ```typescript
-// state = { customers: {"after":"cus_999"}, invoices: {"after":"inv_500"}, ... }
+// state = { customer: {"after":"cus_999"}, invoice: {"after":"inv_500"}, ... }
 source.read({ config, catalog, state })
 ```
 

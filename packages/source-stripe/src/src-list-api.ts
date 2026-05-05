@@ -100,13 +100,13 @@ export function errorToConnectionStatus(err: unknown): Message {
  * entry with a comment naming the exact stream and the full raw error message.
  */
 const SKIPPABLE_ERROR_MESSAGES = [
-  // forwarding_requests
+  // forwarding_request
   // "Your account is not authorized to send Forwarding requests in livemode. To enable access,
   //  please contact us via https://support.stripe.com/contact. [GET /v1/forwarding/requests (400)]
   //  {request-id=req_BJBACn1FDAJcUM}"
   'Your account is not authorized to send Forwarding requests in livemode',
 
-  // test_helpers_test_clocks
+  // test_helpers_test_clock
   // "This endpoint is only available in testmode. Try using your test keys instead.
   //  [GET /v1/test_helpers/test_clocks (400)] {request-id=req_OYx1Lh47ntlkvq}"
   'This endpoint is only available in testmode',
@@ -114,7 +114,7 @@ const SKIPPABLE_ERROR_MESSAGES = [
   // Other testmode-only list errors ("This object is only available in testmode", etc.)
   'only available in testmode',
 
-  // treasury_financial_accounts
+  // treasury_financial_account
   // Variant 1 (with hint):
   // "Unrecognized request URL (GET: /v1/treasury/financial_accounts). Please see
   //  https://stripe.com/docs or we can help at https://support.stripe.com/.
@@ -128,7 +128,7 @@ const SKIPPABLE_ERROR_MESSAGES = [
   //  [GET /v1/treasury/financial_accounts (400)] {request-id=req_...}"
   'Unrecognized request URL (GET: /v1/treasury/financial_accounts)',
 
-  // v2_core_accounts
+  // v2_core_account
   // "Accounts v2 is not enabled for your platform. If you're interested in using this API with
   //  your integration, please visit
   //  https://dashboard.stripe.com/acct_1DfwS2ClCIKljWvs/settings/connect/platform-setup.
@@ -142,17 +142,17 @@ const SKIPPABLE_ERROR_MESSAGES = [
   //  [GET /v2/core/accounts (400)] {request-id=..., stripe-should-retry=false}"
   "isn't available in test mode",
 
-  // sigma_scheduled_query_runs (test mode)
+  // scheduled_query_run (test mode)
   // "This API surface is not enabled for testmode usage. [GET /v1/sigma/scheduled_query_runs (400)] ..."
   'API surface is not enabled',
 
-  // issuing_authorizations, issuing_cardholders, issuing_cards, issuing_disputes, issuing_transactions
+  // issuing_authorization, issuing_cardholder, issuing_card, issuing_dispute, issuing_transaction
   // "Your account is not set up to use Issuing. Please visit
   //  https://dashboard.stripe.com/issuing/overview to get started.
   //  [GET /v1/issuing/authorizations (400)]"
   'Your account is not set up to use Issuing',
 
-  // identity_verification_reports, identity_verification_sessions
+  // identity_verification_report, identity_verification_session
   // "Your account is not set up to use Identity. Please have an account admin visit
   //  https://dashboard.stripe.com/identity to get started.
   //  [GET /v1/identity/verification_reports (400)]"

@@ -793,8 +793,12 @@ export function createDestination(
               }
             }
 
-            const headers = await ensureHeadersForRecord(stream, cleanData)
-            const row = headers.map((header) => stringify(cleanData[header]))
+            const syncedData: Record<string, unknown> = {
+              ...cleanData,
+              _synced_at: new Date().toISOString(),
+            }
+            const headers = await ensureHeadersForRecord(stream, syncedData)
+            const row = headers.map((header) => stringify(syncedData[header]))
             const rowNumber =
               typeof data[ROW_NUMBER_FIELD] === 'number' ? data[ROW_NUMBER_FIELD] : undefined
             const primaryKey = primaryKeys.get(stream)

@@ -121,7 +121,7 @@ export async function* processStripeEvent(
   // 2. Entitlements special case — the summary object type doesn't map to a
   //    registry entry, so we must handle it before the registry lookup.
   if (event.type === 'entitlements.active_entitlement_summary.updated') {
-    if (!streamNames.has('active_entitlements')) return
+    if (!streamNames.has('active_entitlement')) return
     const summary = dataObject as {
       customer: string
       entitlements: {
@@ -137,7 +137,7 @@ export async function* processStripeEvent(
     }
     for (const e of summary.entitlements.data) {
       yield msg.record({
-        stream: 'active_entitlements',
+        stream: 'active_entitlement',
         emitted_at: new Date().toISOString(),
         data: {
           id: e.id,
@@ -146,7 +146,7 @@ export async function* processStripeEvent(
           customer: summary.customer,
           livemode: e.livemode,
           lookup_key: e.lookup_key,
-          [newerThanField('active_entitlements')]:
+          [newerThanField('active_entitlement')]:
             typeof e.updated === 'number' ? e.updated : event.created,
           ...(accountId ? { _account_id: accountId } : {}),
         },
@@ -154,7 +154,7 @@ export async function* processStripeEvent(
     }
     yield msg.source_state({
       state_type: 'stream',
-      stream: 'active_entitlements',
+      stream: 'active_entitlement',
       data: { eventId: event.id, eventCreated: event.created },
     })
     return
@@ -212,13 +212,13 @@ export async function* processStripeEvent(
   })
 
   // 7. Yield subscription items if applicable.
-  if (objectType === 'subscriptions' && (data as { items?: { data?: unknown[] } }).items?.data) {
+  if (objectType === 'subscription' && (data as { items?: { data?: unknown[] } }).items?.data) {
     const subscriptionItemsNewerThanField =
-      catalog.streams.find((cs) => cs.stream.name === 'subscription_items')?.stream
+      catalog.streams.find((cs) => cs.stream.name === 'subscription_item')?.stream
         .newer_than_field ?? newerThanField(resourceConfig.tableName)
     for (const item of (data as { items: { data: Record<string, unknown>[] } }).items.data) {
       yield msg.record({
-        stream: 'subscription_items',
+        stream: 'subscription_item',
         data: {
           ...item,
           [subscriptionItemsNewerThanField]: _updated_at,

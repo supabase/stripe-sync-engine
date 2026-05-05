@@ -177,9 +177,9 @@ async function syncAllEndpointsForVersion(
   }
 
   try {
-    // v2_core_events uses ISO timestamps for created filter and opaque page tokens;
+    // v2_core_event uses ISO timestamps for created filter and opaque page tokens;
     // the test-server's V2 pagination + subdivision interaction is not yet verified.
-    const TEST_EXCLUDED = new Set([...EXCLUDED_TABLES, 'v2_core_events'])
+    const TEST_EXCLUDED = new Set([...EXCLUDED_TABLES, 'v2_core_event'])
     const syncableTables = new SpecParser().discoverSyncableTables(endpointSet.spec, {
       excluded: EXCLUDED_TABLES,
     })
@@ -353,7 +353,7 @@ describe('test-server API', () => {
   }, 60_000)
 
   it('retrieve returns object by ID, 404 for missing', async () => {
-    await replaceTableObjects('customers', [
+    await replaceTableObjects('customer', [
       { id: 'cus_ret_1', object: 'customer', created: RANGE_START + 100 },
     ])
 
@@ -374,7 +374,7 @@ describe('test-server API', () => {
   }, 120_000)
 
   it('unrecognized path returns 404, non-GET returns 405', async () => {
-    await replaceTableObjects('customers', [])
+    await replaceTableObjects('customer', [])
 
     const notFoundRes = await fetch(`${testServer.url}/v1/totally_fake_endpoint`, {
       headers: { Authorization: 'Bearer sk_test_fake' },

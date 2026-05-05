@@ -137,7 +137,7 @@ echo "    Confirmed: no direct internet access from isolated network"
 
 echo "==> src-stripe: read through smokescreen"
 READ_PARAMS=$(printf \
-  '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"products"}]}' \
+  '{"source":{"type":"stripe","stripe":{"api_key":"%s","backfill_limit":5}},"destination":{"type":"postgres","postgres":{"url":"postgres://unused:5432/db","schema":"stripe"}},"streams":[{"name":"product"}]}' \
   "$STRIPE_API_KEY")
 OUTPUT=$(ecurl -s --max-time 90 -w '\n%{http_code}' -X POST "${ENGINE_URL}/pipeline_read" \
   -H "Content-Type: application/json" \

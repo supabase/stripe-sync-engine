@@ -11,7 +11,7 @@ A sync run needs these values:
 | ------------- | ------------------------------------------------- | -------- |
 | `source`      | `{"name":"stripe","api_key":"sk_test_..."}`       | yes      |
 | `destination` | `{"name":"postgres","connection_string":"pg://"}` | yes      |
-| `streams`     | `["customers","invoices"]`                        | no       |
+| `streams`     | `["customer","invoice"]`                          | no       |
 
 ## Config sources (highest priority first)
 
@@ -23,7 +23,7 @@ Individual flags for each field:
 sync-engine \
   --source '{"name":"stripe","api_key":"sk_test_..."}' \
   --destination '{"name":"postgres","connection_string":"postgresql://..."}' \
-  --streams customers,invoices
+  --streams customer,invoice
 ```
 
 Or a single JSON blob:
@@ -38,8 +38,8 @@ sync-engine --params '{
 `--params` and individual flags can be mixed — individual flags win:
 
 ```sh
-# params.json has streams=["customers"], but CLI overrides to invoices
-sync-engine --params params.json --streams invoices
+# params.json has streams=["customer"], but CLI overrides to invoice
+sync-engine --params params.json --streams invoice
 ```
 
 ### 2. Environment variables
@@ -78,7 +78,7 @@ Where `sync.json`:
     "name": "postgres",
     "connection_string": "postgresql://localhost/mydb"
   },
-  "streams": ["customers", "invoices"]
+  "streams": ["customer", "invoice"]
 }
 ```
 
@@ -127,7 +127,7 @@ sync-engine
 {
   "source": { "name": "stripe" },
   "destination": { "name": "postgres" },
-  "streams": ["customers", "invoices"]
+  "streams": ["customer", "invoice"]
 }
 ```
 
@@ -143,7 +143,7 @@ sync-engine --config sync.json
 sync-engine \
   --source '{"name":"stripe","api_key":"sk_test_..."}' \
   --destination '{"name":"postgres","connection_string":"postgresql://..."}' \
-  --streams customers,invoices
+  --streams customer,invoice
 ```
 
 ### Single JSON blob (pipe-friendly)
@@ -155,7 +155,7 @@ cat sync-params.json | sync-engine --config -
 ### Override a config file field
 
 ```sh
-# sync.json says streams=["customers"], but we want all streams
+# sync.json says streams=["customer"], but we want all streams
 sync-engine --config sync.json --streams '*'
 ```
 

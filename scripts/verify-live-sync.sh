@@ -48,7 +48,7 @@ poll_deletion() {
   echo "Waiting for: product $product_id deletion reflected in DB"
   while [ "$elapsed" -lt "$POLL_TIMEOUT" ]; do
     result=$(psql "$DB_STRING" -t -A -c \
-      "SELECT COALESCE(_raw_data->>'deleted', 'false') FROM public.products WHERE id = '$product_id' LIMIT 1" \
+      "SELECT COALESCE(_raw_data->>'deleted', 'false') FROM public.product WHERE id = '$product_id' LIMIT 1" \
       2>/dev/null || echo "")
     # Row gone (empty) or explicitly marked deleted
     if [ -z "$result" ] || [ "$result" = "true" ]; then
@@ -79,7 +79,7 @@ echo "Created: $PRODUCT_ID (name=$RUN_TAG)"
 
 poll_db \
   "product $PRODUCT_ID appears in DB" \
-  "SELECT id FROM public.products WHERE id = '$PRODUCT_ID' LIMIT 1" \
+  "SELECT id FROM public.product WHERE id = '$PRODUCT_ID' LIMIT 1" \
   "$PRODUCT_ID"
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ echo "Updated: $PRODUCT_ID name → $UPDATED_NAME"
 
 poll_db \
   "name update reflected in DB" \
-  "SELECT _raw_data->>'name' FROM public.products WHERE id = '$PRODUCT_ID' LIMIT 1" \
+  "SELECT _raw_data->>'name' FROM public.product WHERE id = '$PRODUCT_ID' LIMIT 1" \
   "$UPDATED_NAME"
 
 # ---------------------------------------------------------------------------
