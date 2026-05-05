@@ -2,6 +2,7 @@ export type OpenApiSchemaObject = {
   type?: string
   format?: string
   nullable?: boolean
+  required?: string[]
   properties?: Record<string, OpenApiSchemaOrReference>
   items?: OpenApiSchemaOrReference
   oneOf?: OpenApiSchemaOrReference[]
@@ -43,6 +44,9 @@ export type OpenApiOperationObject = {
     required?: boolean
     schema?: OpenApiSchemaOrReference
   }[]
+  requestBody?: {
+    content?: Record<string, { schema?: OpenApiSchemaOrReference }>
+  }
   responses?: Record<string, OpenApiResponse>
 }
 

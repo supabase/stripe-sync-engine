@@ -98,6 +98,12 @@ function schemaForVersion(apiVersion: string): string {
 function getGithubToken(): string | null {
   if (githubToken !== undefined) return githubToken
 
+  const envToken = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+  if (envToken) {
+    githubToken = envToken
+    return githubToken
+  }
+
   try {
     const token = execSync('gh auth token', {
       cwd: new URL('..', import.meta.url).pathname,

@@ -522,6 +522,122 @@ describe('SpecParser', () => {
     })
   })
 
+  describe('discoverCreateEndpoints', () => {
+    it('discovers top-level POST create endpoints and request fields', () => {
+      const parser = new SpecParser()
+      const spec: OpenApiSpec = {
+        openapi: '3.0.0',
+        paths: {
+          '/v1/customers': {
+            get: {
+              responses: {
+                '200': {
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        properties: {
+                          object: { type: 'string', enum: ['list'] },
+                          data: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/customer' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            post: {
+              requestBody: {
+                content: {
+                  'application/x-www-form-urlencoded': {
+                    schema: { $ref: '#/components/schemas/customer_create' },
+                  },
+                },
+              },
+              responses: {},
+            },
+          },
+          '/v1/customers/{customer}/sources': {
+            get: {
+              responses: {
+                '200': {
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        properties: {
+                          object: { type: 'string', enum: ['list'] },
+                          data: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/card' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            post: {
+              requestBody: {
+                content: {
+                  'application/x-www-form-urlencoded': {
+                    schema: {
+                      type: 'object',
+                      properties: { source: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+              responses: {},
+            },
+          },
+        },
+        components: {
+          schemas: {
+            customer: {
+              'x-resourceId': 'customer',
+              type: 'object',
+              properties: { id: { type: 'string' } },
+            },
+            card: {
+              'x-resourceId': 'card',
+              type: 'object',
+              properties: { id: { type: 'string' } },
+            },
+            customer_create: {
+              type: 'object',
+              properties: {
+                email: { type: 'string' },
+                name: { type: 'string' },
+                metadata: {
+                  type: 'object',
+                  additionalProperties: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      }
+
+      const endpoints = parser.discoverCreateEndpoints(spec)
+
+      expect(Array.from(endpoints.keys())).toEqual(['customer'])
+      expect(endpoints.get('customer')).toMatchObject({
+        tableName: 'customer',
+        resourceId: 'customer',
+        apiPath: '/v1/customers',
+        bodyEncoding: 'form',
+      })
+      expect(endpoints.get('customer')?.requestFields).toEqual(
+        new Set(['email', 'metadata', 'name'])
+      )
+    })
+  })
+
   describe('discoverWebhookUpdatableResourceIds', () => {
     it('discovers resource ids that have create/update/delete webhook events', () => {
       const parser = new SpecParser()

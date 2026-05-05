@@ -17,6 +17,7 @@ export function applySelection(catalog: ConfiguredCatalog): ConfiguredCatalog {
       for (const path of cs.stream.primary_key) {
         if (path[0]) allowed.add(path[0])
       }
+      if (cs.stream.newer_than_field) allowed.add(cs.stream.newer_than_field)
       return {
         ...cs,
         stream: {

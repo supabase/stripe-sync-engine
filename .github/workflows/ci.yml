@@ -669,6 +669,8 @@ jobs:
             test-sync-engine.test.ts
         env:
           SKIP_SETUP: '1'
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Network interruption tests (pauses containers)
         run: |

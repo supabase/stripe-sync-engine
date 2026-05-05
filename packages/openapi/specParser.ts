@@ -58,6 +58,14 @@ export type NestedEndpoint = {
   supportsPagination: boolean
 }
 
+export type CreateEndpoint = {
+  tableName: string
+  resourceId: string
+  apiPath: string
+  requestFields: Set<string>
+  bodyEncoding: 'form' | 'json'
+}
+
 type ColumnAccumulator = {
   type: ScalarType
   nullable: boolean
@@ -291,6 +299,37 @@ export class SpecParser {
   }
 
   /**
+   * Discover top-level create endpoints whose POST path matches a list endpoint
+   * collection path, e.g. GET/POST `/v1/customers`.
+   */
+  discoverCreateEndpoints(
+    spec: OpenApiSpec,
+    aliases: Record<string, string> = OPENAPI_RESOURCE_TABLE_ALIASES
+  ): Map<string, CreateEndpoint> {
+    const endpoints = new Map<string, CreateEndpoint>()
+    for (const raw of this.iterListPaths(spec)) {
+      if (raw.isNested) continue
+      const postOp = spec.paths?.[raw.apiPath]?.post
+      if (!postOp) continue
+
+      const requestBody = this.createRequestBody(postOp, spec)
+      if (!requestBody || requestBody.requestFields.size === 0) continue
+
+      const tableName = resolveTableName(raw.resourceId, aliases)
+      if (endpoints.has(tableName)) continue
+
+      endpoints.set(tableName, {
+        tableName,
+        resourceId: raw.resourceId,
+        apiPath: raw.apiPath,
+        requestFields: requestBody.requestFields,
+        bodyEncoding: requestBody.bodyEncoding,
+      })
+    }
+    return endpoints
+  }
+
+  /**
    * Resolve the canonical table list for schema parsing.
    * Delegates to {@link discoverSyncableTables} so the parser and runtime
    * registry agree on what is syncable.
@@ -429,10 +468,10 @@ export class SpecParser {
 
   private collectEnabledEventTypes(spec: OpenApiSpec): Set<string> {
     const types = new Set<string>()
-    const op = spec.paths?.['/v1/webhook_endpoints']?.post as
-      | { requestBody?: { content?: Record<string, { schema?: OpenApiSchemaOrReference }> } }
-      | undefined
-    const schema = op?.requestBody?.content?.['application/x-www-form-urlencoded']?.schema
+    const schema =
+      spec.paths?.['/v1/webhook_endpoints']?.post?.requestBody?.content?.[
+        'application/x-www-form-urlencoded'
+      ]?.schema
     if (!schema || '$ref' in schema) return types
     const enabledEvents = schema.properties?.enabled_events
     if (!enabledEvents || '$ref' in enabledEvents) return types
@@ -444,6 +483,31 @@ export class SpecParser {
       if (typeof value === 'string') types.add(value)
     }
     return types
+  }
+
+  private createRequestBody(
+    operation: {
+      requestBody?: { content?: Record<string, { schema?: OpenApiSchemaOrReference }> }
+    },
+    spec: OpenApiSpec
+  ): { requestFields: Set<string>; bodyEncoding: 'form' | 'json' } | undefined {
+    const formSchema = operation.requestBody?.content?.['application/x-www-form-urlencoded']?.schema
+    if (formSchema) {
+      return {
+        requestFields: new Set(this.collectPropertyCandidates(formSchema, spec).keys()),
+        bodyEncoding: 'form',
+      }
+    }
+
+    const jsonSchema = operation.requestBody?.content?.['application/json']?.schema
+    if (jsonSchema) {
+      return {
+        requestFields: new Set(this.collectPropertyCandidates(jsonSchema, spec).keys()),
+        bodyEncoding: 'json',
+      }
+    }
+
+    return undefined
   }
 
   /** Match event types like `customer.created` or `v2.core.account.updated` against listable resource ids. */

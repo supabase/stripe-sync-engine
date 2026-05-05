@@ -40,6 +40,7 @@ describe('applySelection()', () => {
             id: { type: 'string' },
             name: { type: 'string' },
             email: { type: 'string' },
+            _updated_at: { type: 'string' },
             phone: { type: 'string' },
           },
         },
@@ -47,7 +48,7 @@ describe('applySelection()', () => {
     ])
 
     const filtered = applySelection(catalog)
-    expect(Object.keys(props(filtered))).toEqual(['id', 'name', 'email'])
+    expect(Object.keys(props(filtered))).toEqual(['id', 'name', 'email', '_updated_at'])
   })
 
   it('passes catalog through unchanged when no fields configured', () => {
